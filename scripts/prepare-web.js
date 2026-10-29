@@ -1,0 +1,1 @@
+const fs=require('fs');const path=require('path');const src=path.join(__dirname,'..','index.html');const dest=path.join(__dirname,'..','www');if(!fs.existsSync(src))throw new Error('index.html not found');fs.mkdirSync(dest,{recursive:true});fs.copyFileSync(src,path.join(dest,'index.html'));console.log('Prepared web app for Capacitor');
