@@ -17,4 +17,9 @@ if(!fs.existsSync(reconciliationSrc))throw new Error('Reconciliation bridge not 
 const featuresDest=path.join(dest,'src','features','payments');
 fs.mkdirSync(featuresDest,{recursive:true});
 fs.copyFileSync(reconciliationSrc,path.join(featuresDest,'reconciliation-bridge.js'));
+for(const name of ['reconciliation-panel.js']){
+ const source=path.join(root,'src','features','payments',name);
+ if(!fs.existsSync(source))throw new Error('Reconciliation UI not found: '+source);
+ fs.copyFileSync(source,path.join(featuresDest,name));
+}
 console.log('Prepared web app, settlement modules, and UPI reconciliation bridge for Capacitor');
