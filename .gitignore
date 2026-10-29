@@ -1,0 +1,34 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+local.properties
+*.keystore
+*.jks
+secrets/
+credentials/
+
+# Node / web tooling
+node_modules/
+dist/
+build/
+coverage/
+.npm/
+*.log
+
+# Android / Gradle build artifacts
+.gradle/
+.idea/
+*.iml
+app/build/
+*/build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
