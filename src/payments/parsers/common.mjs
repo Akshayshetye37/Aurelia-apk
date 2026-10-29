@@ -22,7 +22,7 @@ export function parseIndianDateTime(raw) {
       hour = Number(m[4]); minute = Number(m[5]); second = Number(m[6] || 0); hasTime = true;
       if (m[7]) hour = (hour % 12) + (m[7].toUpperCase() === "PM" ? 12 : 0);
     }
-  } else if ((m = value.match(/^(\d{1,2})[- ]([A-Za-z]{3})[- ](\d{2,4})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i))) {
+  } else if ((m = value.match(/^(\d{1,2})[- ]?([A-Za-z]{3})[- ]?(\d{2,4})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i))) {
     day = m[1]; month = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].indexOf(m[2].toLowerCase()) + 1; y = m[3];
     if (m[4] !== undefined) {
       hour = Number(m[4]); minute = Number(m[5]); second = Number(m[6] || 0); hasTime = true;
