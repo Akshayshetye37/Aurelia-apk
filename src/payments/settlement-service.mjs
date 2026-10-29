@@ -1,3 +1,4 @@
+import { assertAutoFolioSettlementEnabled } from "./settlement-gate.mjs";
 /**
  * Single mutation boundary for hotel folio payments.
  * The app state is currently local HTML/JS storage; this service provides
@@ -16,9 +17,6 @@ export function settlePayment({
   balanceDue,
   persist = () => {},
   audit = () => {},
-  assertAutoFolioSettlementEnabled = () => {
-    throw new Error("Automatic folio settlement is disabled");
-  },
   now = () => new Date().toISOString()
 } = {}) {
   // The automatic path must fail closed before validation or any mutation.
