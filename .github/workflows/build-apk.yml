@@ -22,7 +22,7 @@ on:
       - '.github/workflows/build-apk.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify-and-build:
@@ -67,10 +67,14 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: aurelia-pms-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
+      - name: Publish debug APK as a private-repository prerelease asset
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="aurelia-debug-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" android/app/build/outputs/apk/debug/app-debug.apk \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Aurelia PMS debug APK (run ${GITHUB_RUN_NUMBER})" \
+            --notes "Debug APK built from commit ${GITHUB_SHA}. This is not a production-signed release. Automatic folio settlement remains disabled."
