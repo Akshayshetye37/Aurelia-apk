@@ -636,7 +636,15 @@ function settlePayment(input){
  const b=input&&input.booking;
  if(!b)throw new Error('Booking not found');
  if(typeof window.aureliaSettlePayment!=='function')throw new Error('Settlement service is not ready; no payment was recorded');
- return window.aureliaSettlePayment({...input,state:S,balanceDue:dueB(b),persist,audit:(kind,detail)=>aud(kind,detail)});
+ const persistSettlement=()=>{
+  if(RECOVERY_CHECK_PENDING)throw new Error('Payment storage is paused during recovery');
+  persist();
+  let raw,saved;
+  try{raw=(window.__aureliaStorage||localStorage).getItem(SK);saved=raw?JSON.parse(raw):null}catch(e){throw new Error('Could not verify the saved payment record')}
+  const savedBooking=saved&&Array.isArray(saved.b)?saved.b.find(x=>x.id===b.id):null;
+  if(!savedBooking||Number(savedBooking.p)!==Number(b.p)||JSON.stringify(savedBooking.pays||[])!==JSON.stringify(b.pays||[])||JSON.stringify(savedBooking.payments||[])!==JSON.stringify(b.payments||[]))throw new Error('Payment could not be verified in device storage');
+ };
+ return window.aureliaSettlePayment({...input,state:S,balanceDue:dueB(b),persist:persistSettlement,audit:(kind,detail)=>aud(kind,detail)});
 }
 function addPay(b,a,m,r,auto){return settlePayment({booking:b,amount:a,method:m,reference:r||'',source:auto?'auto':'manual',idempotencyKey:r?('ref:'+r):undefined})}
 let mchips=id=>`<div class="chips" id="${id}">${PM.map((p,k)=>`<button class="chip ${k?'':'on'}" onclick="$$('#${id} .chip').forEach(c=>c.classList.remove('on'));this.classList.add('on')">${p}</button>`).join('')}</div>`;
