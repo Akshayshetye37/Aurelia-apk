@@ -3253,7 +3253,9 @@ window.printGuestPreview=function(){
 };
 </script>
 
+<section id="aurelia-upi-reconciliation" aria-label="UPI notification reconciliation"></section>
 <script src="./src/features/payments/reconciliation-bridge.js"></script>
+<script src="./src/features/payments/reconciliation-panel.js"></script>
 <script type="module">
 import { settlePayment as settlePaymentCore } from './src/payments/settlement-service.mjs';
 window.aureliaSettlePayment = settlePaymentCore;
