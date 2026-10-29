@@ -120,7 +120,12 @@ export function scoreEvidence(candidate, bankEvent, options = {}) {
   }
 
   const candidateTime = Date.parse(candidate.timestamp || candidate.receivedAt || "");
-  const bankTime = Date.parse(bankEvent.timestamp || bankEvent.receivedAt || "");
+  // Date-only SMS timestamps cannot be compared as midnight; use SMS arrival time
+  // for correlation while preserving the transaction timestamp precision separately.
+  const bankTimeSource = bankEvent.timestampPrecision === "date_only"
+    ? (bankEvent.receivedAt || "")
+    : (bankEvent.timestamp || bankEvent.receivedAt || "");
+  const bankTime = Date.parse(bankTimeSource);
   const withinWindow = Number.isFinite(candidateTime) && Number.isFinite(bankTime) &&
     Math.abs(bankTime - candidateTime) <= windowMs;
   if (withinWindow) {
