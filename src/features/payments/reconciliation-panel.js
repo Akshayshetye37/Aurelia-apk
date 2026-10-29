@@ -22,11 +22,15 @@
       if (busy) return;
       busy = true; status.textContent = "Loading evidence…";
       try {
+        const accessEnabled = window.AureliaUPIReconciliation.notificationAccessEnabled();
         const rows = window.AureliaUPIReconciliation.fetchPendingEvidence();
         if (!rows.length) items.innerHTML = "<p>No pending evidence.</p>";
         else items.innerHTML = rows.map(row =>
           '<article class="aurelia-upi-evidence" data-id="' + row.id + '">' +
           '<h3>' + escapeHtml(row.amountRupees.toFixed(2)) + ' INR</h3>' +
+          '<p><strong>Queue status:</strong> ' + escapeHtml(row.status || "pending") + '</p>' +
+          (row.status === "conflict" ? '<p><strong>Conflict:</strong> This UTR was captured with a different amount. Verify manually.</p>' : '') +
+          (row.possibleExistingFolioMatch ? '<p><strong>Possible existing folio payment:</strong> ' + escapeHtml(row.matchedRoom || row.matchedBookingId || "booking not identified") + '. Do not post again until the existing payment is verified.</p>' : '') +
           '<p><strong>App:</strong> ' + escapeHtml(row.sourcePackage) + '</p>' +
           '<p><strong>Reference:</strong> ' + escapeHtml(row.utr || "Not detected") + '</p>' +
           '<p><strong>Captured:</strong> ' + escapeHtml(new Date(row.receivedAt).toLocaleString()) + '</p>' +
@@ -36,7 +40,8 @@
           '<button type="button" data-status="reviewed">Mark verified/reviewed</button> ' +
           '<button type="button" data-status="rejected">Reject evidence</button></article>'
         ).join("");
-        status.textContent = rows.length + " pending evidence record(s). No folio payment was posted.";
+        status.textContent = (accessEnabled ? "Notification access enabled. " : "WARNING: Notification access is disabled. Open Settings to enable capture. ") +
+          rows.length + " evidence record(s) shown. No folio payment was posted.";
       } catch (error) {
         status.textContent = "Could not load evidence: " + error.message;
       } finally { busy = false; }
