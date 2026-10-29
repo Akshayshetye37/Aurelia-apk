@@ -4,6 +4,38 @@ import { createPaymentEvent, matchBankEvent, createPendingQueue } from "../src/p
 import { parseBobCreditSms } from "../src/payments/parsers/bob.mjs";
 import { parseSbiCreditSms } from "../src/payments/parsers/sbi.mjs";
 
+import { parseIciciCreditSms } from "../src/payments/parsers/icici.mjs";
+import { parseHdfcCreditSms } from "../src/payments/parsers/hdfc.mjs";
+import { parseAxisCreditSms } from "../src/payments/parsers/axis.mjs";
+import { parseIndianDateTime } from "../src/payments/parsers/common.mjs";
+
+test("ICICI observed incoming UPI credit format extracts payer and reference", () => {
+  const r = parseIciciCreditSms("Dear Customer, Acct XX922 is credited with Rs 500.00 on 07-Jun-25 from PRASHANT SHARMA. UPI:515853359128-ICICI Bank.", { eventId: "icici-1" });
+  assert.equal(r.ok, true); assert.equal(r.event.amountPaise, 50000);
+  assert.equal(r.event.payerName, "PRASHANT SHARMA"); assert.equal(r.event.utr, "515853359128");
+});
+test("HDFC observed UPI credit format extracts VPA, reference and account suffix", () => {
+  const r = parseHdfcCreditSms("HDFC Bank: Rs. 1.00 credited to a/c XXXXXX2002 on 23-01-24 by a/c linked to VPA 9777777711@fam (UPI Ref No 408888887329).", { eventId: "hdfc-1" });
+  assert.equal(r.ok, true); assert.equal(r.event.amountPaise, 100);
+  assert.equal(r.event.upiId, "9777777711@fam"); assert.equal(r.event.utr, "408888887329");
+  assert.equal(r.event.accountSuffix, "2002");
+});
+test("Axis parser accepts explicit UPI credit and rejects generic credit without UPI evidence", () => {
+  const r = parseAxisCreditSms("Rs.500.00 credited to A/c XX1234 on 27-04-2026 17:13 by VPA guest@okaxis UPI Ref 528871234567", { eventId: "axis-1" });
+  assert.equal(r.ok, true); assert.equal(r.event.amountPaise, 50000);
+  assert.equal(r.event.utr, "528871234567"); assert.equal(r.event.upiId, "guest@okaxis");
+  assert.equal(parseAxisCreditSms("Rs.500.00 credited to A/c XX1234 on 27-04-2026 17:13. Avl Bal Rs.12,450").ok, false);
+});
+test("shared date parser interprets local bank clock time as IST", () => {
+  assert.deepEqual(parseIndianDateTime("2026-04-05 07:52:40 AM"), { timestamp: "2026-04-05T02:22:40.000Z", precision: "exact" });
+  assert.deepEqual(parseIndianDateTime("24Jun25"), { timestamp: "2025-06-23T18:30:00.000Z", precision: "date_only" });
+});
+test("temporary HDFC credit under review is rejected for manual review", () => {
+  const r = parseHdfcCreditSms("INR 70,900.00 deposited in HDFC Bank Account No. XXX8261 on 14-Sep-23 for TEMP CR UPI CRM 31721058 under review. Avl bal INR 87686.12");
+  assert.equal(r.ok, false); assert.equal(r.reason, "hdfc_credit_requires_manual_review");
+});
+
+
 const gpay = (name, amount, timestamp, eventId = "gpay-1") => createPaymentEvent({
   eventId, source: "gpay_notification", eventType: "payment_notification",
   payerName: name, amount, timestamp, receivedAt: timestamp
