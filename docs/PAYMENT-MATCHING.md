@@ -70,4 +70,4 @@ Adopted parser rules:
 
 ## Current parser coverage
 
-BOB and SBI observed examples remain supported. Added conservative ICICI, HDFC and Axis parsers with shared date parsing. Real redacted samples from the target bank/device must be added before enabling a parser for live reconciliation. Public sample formats alone are not sufficient to certify a parser.
+BOB and SBI observed examples remain supported. Added conservative ICICI, HDFC, Axis, Kotak and UCO parsers with shared date parsing. Real redacted samples from the target bank/device must be added before enabling a parser for live reconciliation. Public sample formats alone are not sufficient to certify a parser.
