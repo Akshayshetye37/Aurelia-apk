@@ -5,12 +5,21 @@
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
     }[c]));
   }
+  function getBusinessName() {
+    try {
+      const getState = window.aureliaGetAppState;
+      const state = typeof getState === "function" ? getState() : null;
+      const name = state && state.set && typeof state.set.name === "string" ? state.set.name.trim() : "";
+      return name || "Hotel";
+    } catch (_) { return "Hotel"; }
+  }
   function mount() {
     const root = document.getElementById("aurelia-upi-reconciliation");
     if (!root || !window.AureliaUPIReconciliation) return;
+    const businessName = getBusinessName();
     root.innerHTML = '<section class="aurelia-upi-panel" aria-labelledby="aurelia-upi-title">' +
-      '<h2 id="aurelia-upi-title">UPI notification evidence</h2>' +
-      '<p>Notifications are unverified evidence. Verify each payment independently before marking it reviewed. This panel never posts a folio payment.</p>' +
+      '<h2 id="aurelia-upi-title">UPI notification evidence · ' + escapeHtml(businessName) + '</h2>' +
+      '<p>Payment evidence for ' + escapeHtml(businessName) + '. Notifications are unverified evidence. Verify each payment independently before marking it reviewed. This panel never posts a folio payment.</p>' +
       '<button type="button" data-action="notification-settings">Notification access settings</button> ' +
       '<button type="button" data-action="refresh">Refresh evidence</button>' +
       '<p role="status" data-role="status" aria-live="polite">Ready</p>' +
@@ -30,7 +39,7 @@
           '<h3>' + escapeHtml(row.amountRupees.toFixed(2)) + ' INR</h3>' +
           '<p><strong>Queue status:</strong> ' + escapeHtml(row.status || "pending") + '</p>' +
           (row.status === "conflict" ? '<p><strong>Conflict:</strong> This UTR was captured with a different amount. Verify manually.</p>' : '') +
-          (row.possibleExistingFolioMatch ? '<p><strong>Possible existing folio payment:</strong> ' + escapeHtml(row.matchedRoom || row.matchedBookingId || "booking not identified") + '. Do not post again until the existing payment is verified.</p>' : '') +
+          (row.possibleExistingFolioMatch ? '<p><strong>Possible existing folio payment for ' + escapeHtml(getBusinessName()) + ':</strong> ' + escapeHtml(row.matchedRoom || row.matchedBookingId || "booking not identified") + '. Do not post again until the existing payment is verified.</p>' : '') +
           '<p><strong>App:</strong> ' + escapeHtml(row.sourcePackage) + '</p>' +
           '<p><strong>Reference:</strong> ' + escapeHtml(row.utr || "Not detected") + '</p>' +
           '<p><strong>Captured:</strong> ' + escapeHtml(new Date(row.receivedAt).toLocaleString()) + '</p>' +
