@@ -97,6 +97,12 @@ export function scoreEvidence(candidate, bankEvent, options = {}) {
   if (candidate.amountPaise !== bankEvent.amountPaise) {
     return { score: 0, reasons: ["amount_mismatch"], eligibleForAutoMatch: false };
   }
+  if (candidate.utr && bankEvent.utr && String(candidate.utr).replace(/\\s+/g, "").toUpperCase() !== String(bankEvent.utr).replace(/\\s+/g, "").toUpperCase()) {
+    return { score: 0, reasons: ["utr_conflict"], eligibleForAutoMatch: false };
+  }
+  if (candidate.upiId && bankEvent.upiId && normalizeUpiId(candidate.upiId) !== normalizeUpiId(bankEvent.upiId)) {
+    return { score: 0, reasons: ["upi_id_conflict"], eligibleForAutoMatch: false };
+  }
 
   let score = 25;
   reasons.push("exact_amount");
@@ -208,6 +214,12 @@ export function matchBankEvent(bankEvent, candidates, options = {}) {
   if (scored.length === 0) return { decision: "pending", reason: "no_candidate", matches: [] };
   const top = scored[0];
   const second = scored[1];
+  if (scored.some(item => item.reasons.includes("utr_conflict") || item.reasons.includes("upi_id_conflict"))) {
+    return { decision: "review", reason: "conflicting_transaction_identity", matches: scored };
+  }
+  if (scored.filter(item => item.eligibleForAutoMatch).length > 1) {
+    return { decision: "review", reason: "multiple_strong_candidates", matches: scored };
+  }
   if (second && second.score === top.score) return { decision: "review", reason: "ambiguous_top_score", matches: scored };
   if (top.eligibleForAutoMatch) return { decision: "matched", reason: "strong_unique_match", matches: scored };
   return { decision: "review", reason: "insufficient_identity_evidence", matches: scored };
