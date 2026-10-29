@@ -20,7 +20,7 @@ export function parseHdfcCreditSms(raw, options = {}) {
   const utrMatch = text.match(/(?:UPI\s+Ref(?:erence)?\s+No\.?|UPI\s*[:#]|RRN\s*[:#]?)\s*([A-Z0-9]{6,})/i);
   const vpaMatch = text.match(/(?:VPA|a\/c\s+linked\s+to\s+VPA)\s*[:=]?\s*([A-Z0-9._-]+@[A-Z0-9.-]+)/i);
   const payerMatch = text.match(/\bfrom\s+(.+?)(?=\s*(?:\(|UPI|RRN|Avl\.?\s*bal|Available Balance|$))/i);
-  const accountMatch = text.match(/(?:A\/c|account)\s+(?:No\.?\s*)?([Xx*\d]*\d{2,4})/i);
+  const accountMatch = text.match(/(?:A\/c|account)\s+(?:No\.?\s*)?([Xx*\d]*?(\d{2,4}))(?!\d)/i);
   if (!amountMatch || !/\bcredit(?:ed)?\b/i.test(text) || !/(?:\bUPI\b|\bVPA\b|\bRRN\b)/i.test(text)) {
     return { ok: false, reason: "hdfc_not_recognized_upi_credit" };
   }
@@ -29,6 +29,6 @@ export function parseHdfcCreditSms(raw, options = {}) {
     utr: normalizeReference(utrMatch?.[1]),
     payerName: payerMatch?.[1]?.trim().replace(/[.;,]+$/, "") || null,
     upiId: vpaMatch?.[1] || null,
-    accountSuffix: accountMatch?.[1] || null,
+    accountSuffix: accountMatch?.[2] || null,
   });
 }
