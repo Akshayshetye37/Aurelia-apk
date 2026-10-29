@@ -28,6 +28,24 @@ let main = fs.readFileSync(mainPath, "utf8");
 const marker = "  private class AureliaBridge {";
 if (!main.includes("fetchUnprocessedSignals()")) {
   const methods = `
+    @JavascriptInterface public boolean isNotificationListenerAccessEnabled() {
+      String enabled = android.provider.Settings.Secure.getString(
+          MainActivity.this.getContentResolver(), "enabled_notification_listeners");
+      return enabled != null && enabled.contains(MainActivity.this.getPackageName());
+    }
+    @JavascriptInterface public boolean launchNotificationAccessSettingsControl() {
+      try {
+        android.content.Intent intent = new android.content.Intent(
+            "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS");
+        startActivity(intent);
+        return true;
+      } catch (Exception e) {
+        try {
+          startActivity(new android.content.Intent(android.provider.Settings.ACTION_SETTINGS));
+          return false;
+        } catch (Exception ignored) { return false; }
+      }
+    }
     @JavascriptInterface public String fetchUnprocessedSignals() {
       try {
         NotificationQueueDb db = new NotificationQueueDb(MainActivity.this);
@@ -56,7 +74,10 @@ if (!main.includes("fetchUnprocessedSignals()")) {
       }
     }
 `;
-  if (!main.includes(marker)) throw new Error("AureliaBridge insertion marker not found");
+  if (!main.includes(marker)) throw new Error("BUILD_CRITICAL_FAILURE: AureliaBridge insertion marker not found");
+  if (!main.includes("fetchUnprocessedSignals()") && !main.includes(marker)) {
+    throw new Error("BUILD_CRITICAL_FAILURE: Native bridge injection point missing");
+  }
   main = main.replace(marker, marker + methods);
   fs.writeFileSync(mainPath, main);
 }
@@ -67,4 +88,14 @@ for (const [target, templatePath] of [
   const content = fs.readFileSync(templatePath, "utf8");
   fs.writeFileSync(target, content);
 }
-console.log("Installed UPI evidence queue, notification listener, manifest registration and native bridge.");
+const verifiedMain = fs.readFileSync(mainPath, "utf8");
+for (const required of ["fetchUnprocessedSignals()", "markSignalProcessed(", "isNotificationListenerAccessEnabled()", "launchNotificationAccessSettingsControl()"]) {
+  if (!verifiedMain.includes(required)) {
+    throw new Error("BUILD_CRITICAL_FAILURE: Android native bridge validation failed: " + required);
+  }
+}
+if (!fs.existsSync(queuePath) || !fs.existsSync(listenerPath) ||
+    !fs.readFileSync(manifestPath, "utf8").includes("com.aurelia.pms.UPINotificationListener")) {
+  throw new Error("BUILD_CRITICAL_FAILURE: UPI native source or manifest registration is missing");
+}
+console.log("Validated UPI evidence queue, notification listener, manifest registration and native bridge.");
