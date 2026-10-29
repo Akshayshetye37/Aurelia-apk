@@ -25,7 +25,7 @@ cd android
 ./gradlew --no-daemon assembleDebug
 ```
 
-The GitHub Actions workflow runs the tests before preparing the app and building the debug APK. Successful builds upload an artifact named `aurelia-pms-debug-apk` for 14 days. This is a debug APK, not a release-signed production build.
+The GitHub Actions workflow runs the tests before preparing the app and building the debug APK. Because the repository's Actions artifact storage quota is exhausted, successful push/manual builds publish the APK as a prerelease asset in the private repository. This is a debug APK, not a release-signed production build.
 
 ## Direct UPI reconciliation status
 
