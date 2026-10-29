@@ -382,6 +382,7 @@ const IC={home:'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',stays:
 const TABS=[['home','Home'],['stays','Stays'],['rooms','Rooms'],['dining','Dining']];
 const types=[['Standard',850],['Deluxe',1200],['Executive Suite',1800],['Family Chalet',2200]],rn=[['101','102','103','104'],['201','202','203','204'],['301','302'],['401','402']];
 let id=0;const S={tab:'home',f:'all',tb:3,rooms:[],b:[],t:[],g:[],exp:[],inv:[],aud:[],cancelled:[],financialLedger:[],sig:[],sales:[],menu:{},today:23650,hist:[41200,38600,52400,47900,61300,56800],set:{name:'Hari Om Retreat',tag:'Peace, comfort and mindful hospitality.',cur:'₹',upi:'',phone:'',addr:''},au:{},bk:{}};
+window.aureliaGetAppState = () => S;
 types.forEach((t,i)=>rn[i].forEach(n=>S.rooms.push({n,t:t[0],r:t[1],s:'ready'})));
 const B=(g,room,i,o,st,ch=[])=>S.b.push({id:++id,g,room,in:i,out:o,st,ch});
 B('Mwila Chanda','102',-2,0,'in');B('Natasha Banda','201',-1,2,'in',[['Dinner · Seared Kafue bream',260]]);B('James Whitfield','301',-3,1,'in',[['Breakfast for two',180]]);B('Sofia Marchetti','302',-1,4,'in');B('Chileshe Mulenga','401',-2,1,'in');B('Peter Zulu','103',-1,2,'in');B('Grace Tembo','202',-2,3,'in');
