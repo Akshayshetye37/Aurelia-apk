@@ -12,4 +12,9 @@ for(const name of ['settlement-service.mjs','settlement-gate.mjs']){
  if(!fs.existsSync(source))throw new Error('Payment module not found: '+source);
  fs.copyFileSync(source,path.join(settlementDest,name));
 }
-console.log('Prepared web app and payment settlement modules for Capacitor');
+const reconciliationSrc=path.join(root,'src','features','payments','reconciliation-bridge.js');
+if(!fs.existsSync(reconciliationSrc))throw new Error('Reconciliation bridge not found: '+reconciliationSrc);
+const featuresDest=path.join(dest,'src','features','payments');
+fs.mkdirSync(featuresDest,{recursive:true});
+fs.copyFileSync(reconciliationSrc,path.join(featuresDest,'reconciliation-bridge.js'));
+console.log('Prepared web app, settlement modules, and UPI reconciliation bridge for Capacitor');
