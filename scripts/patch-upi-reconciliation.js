@@ -65,6 +65,6 @@ for (const [target, templatePath] of [
   [listenerPath, path.join(root, "android", "templates", "UPINotificationListener.java")]
 ]) {
   const content = fs.readFileSync(templatePath, "utf8");
-  if (!fs.existsSync(target)) fs.writeFileSync(target, content);
+  fs.writeFileSync(target, content);
 }
 console.log("Installed UPI evidence queue, notification listener, manifest registration and native bridge.");
