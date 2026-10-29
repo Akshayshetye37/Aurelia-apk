@@ -51,3 +51,41 @@ test("updateEvidenceStatus rejects unsupported statuses", () => {
   });
   assert.throws(() => bridge.updateEvidenceStatus(1, "settled", ""), /Invalid evidence status/);
 });
+
+test("possible existing folio match stays visible for staff recovery", () => {
+  const state = { b: [{ id: 17, room: "A1", pays: [{ r: "UTR12345678", a: 125.5 }] }] };
+  let statusUpdates = 0;
+  const bridge = loadBridge({
+    fetchUnprocessedSignals: () => JSON.stringify([{
+      id: 9, sourcePackage: "com.phonepe.app", utr: "UTR12345678",
+      amountPaise: 12550, notificationText: "Money received ₹125.50",
+      receivedAt: 1770000000000, status: "pending"
+    }]),
+    markSignalProcessed: () => { statusUpdates++; return JSON.stringify({ ok: true }); }
+  });
+  // The bridge shares the same window object, so attach the accessor before loading it.
+  // This test explicitly asserts advisory recovery never auto-acknowledges queue evidence.
+  assert.equal(typeof bridge.fetchPendingEvidence, "function");
+  const window = { AureliaNative: {
+    fetchUnprocessedSignals: () => JSON.stringify([{
+      id: 9, sourcePackage: "com.phonepe.app", utr: "UTR12345678",
+      amountPaise: 12550, notificationText: "Money received ₹125.50",
+      receivedAt: 1770000000000, status: "pending"
+    }]),
+    markSignalProcessed: () => { statusUpdates++; return JSON.stringify({ ok: true }); }
+  }, aureliaGetAppState: () => state };
+  vm.runInNewContext(source, { window, JSON, Number, String, Error });
+  const rows = window.AureliaUPIReconciliation.fetchPendingEvidence();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].possibleExistingFolioMatch, true);
+  assert.equal(rows[0].matchedRoom, "A1");
+  assert.equal(statusUpdates, 0);
+});
+
+test("conflict status can be moved to staff review", () => {
+  const bridge = loadBridge({
+    fetchUnprocessedSignals: () => "[]",
+    markSignalProcessed: (_id, status) => JSON.stringify({ ok: true, status })
+  });
+  assert.equal(bridge.updateEvidenceStatus(4, "conflict", "amount mismatch").ok, true);
+});
