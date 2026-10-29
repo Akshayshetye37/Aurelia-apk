@@ -38,23 +38,28 @@ Name normalization handles case, accents, punctuation and repeated whitespace. I
 - The current SBI example contains amount, remitter name, date and reference.
 - SMS parsing is best-effort and must be tested against real redacted examples for each bank.
 
-## Pending queue and duplicate handling
+## Evidence persistence and duplicate handling
 
-The in-memory queue rejects duplicate event IDs and duplicate UTRs. Production persistence must enforce these rules with database unique constraints and transactional ledger posting. Do not treat the in-memory queue as durable storage.
+The in-memory queue rejects repeated event IDs and bank/account-scoped UTRs within one process. The IndexedDB evidence journal adds local persistence across app/process restarts on the same installation, stores raw evidence and review decisions, and uses atomic transactions for evidence plus deduplication keys.
+
+This local journal is a P0 development foundation only. It is not a server-side source of truth, does not synchronize devices, and can be cleared with app/browser storage. A production deployment still needs authenticated server-side persistence, database-level unique constraints, backups, access control, and operational recovery. UTR deduplication should be scoped by bank and account identity where available; missing identity must not be fabricated.
 
 ## Settlement boundary
 
-This implementation does not write to a guest folio. Production settlement should occur only after a unique, sufficiently corroborated match and must be idempotent by canonical bank transaction ID/UTR. Store evidence, match decision, reviewer/action, and timestamps in an append-only audit trail. Reversals should be represented as adjustment entries rather than deleting history.
+Automatic folio settlement is explicitly disabled by `src/payments/settlement-gate.mjs`. This implementation does not write to a guest folio. A match result is not a posting authorization.
+
+Production settlement should occur only after the evidence and reconciliation layers are verified end to end. The posting operation must atomically enforce idempotency by canonical bank transaction ID/UTR, create the ledger entry, update the folio, and append an audit record. Reversals should be represented as adjustment entries rather than deleting history. The local IndexedDB journal is not sufficient for production accounting.
 
 ## Tests
 
-Run with Node.js 18+:
+Run with Node.js 20+:
 
 ```sh
-node --test tests/payments.test.mjs
+npm install
+npm test
 ```
 
-The tests cover normalized amounts, BOB and SBI parsing, strong remitter matching, amount-only review behavior, duplicate detection, and amount mismatch.
+The suite covers bank parsers, amount/date normalization, matching decisions, account-scoped duplicate UTR handling, local evidence persistence across store reopen, review-decision storage, unknown-format retention, and the disabled settlement gate. GitHub Actions runs this suite before attempting the APK build. Passing unit tests do not replace real redacted SMS fixtures or Android end-to-end testing.
 
 ## Research findings: observed format drift
 
