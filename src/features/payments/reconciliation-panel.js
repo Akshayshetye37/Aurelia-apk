@@ -11,6 +11,7 @@
     root.innerHTML = '<section class="aurelia-upi-panel" aria-labelledby="aurelia-upi-title">' +
       '<h2 id="aurelia-upi-title">UPI notification evidence</h2>' +
       '<p>Notifications are unverified evidence. Verify each payment independently before marking it reviewed. This panel never posts a folio payment.</p>' +
+      '<button type="button" data-action="notification-settings">Notification access settings</button> ' +
       '<button type="button" data-action="refresh">Refresh evidence</button>' +
       '<p role="status" data-role="status" aria-live="polite">Ready</p>' +
       '<div data-role="items"></div></section>';
@@ -62,6 +63,12 @@
       }
     });
     root.querySelector('[data-action="refresh"]').addEventListener("click", refresh);
+    root.querySelector('[data-action="notification-settings"]').addEventListener("click", function () {
+      try {
+        window.AureliaUPIReconciliation.openNotificationAccessSettings();
+        status.textContent = "Opened Android settings. Enable Aurelia notification access, return, then refresh.";
+      } catch (error) { status.textContent = error.message; }
+    });
     refresh();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
