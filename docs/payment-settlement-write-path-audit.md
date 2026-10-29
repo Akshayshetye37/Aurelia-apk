@@ -1,48 +1,47 @@
 # Payment / folio settlement write-path audit
 
 **Branch:** `feature/direct-upi-reconciliation`  
-**Baseline:** Phase A hotfix commit `0dcf0e319f0c6c0fa3bc16383482dcb479110b88`  
-**Status:** Audit snapshot; Phase B centralization is not yet implemented. Do not enable automatic settlement.
+**Phase A hotfix:** `0dcf0e319f0c6c0fa3bc16383482dcb479110b88`  
+**Phase B implementation commits:** `5433111`, `9a684ca`, `b0d9f28`, `233df47`, `bdaf590`, `d3a2948`, `418beb0`, `c8afa7f`, `fde1fd0`  
+**Status:** Runtime settlement writes are centralized in the new service. Full repository test/build execution and APK/device verification are still pending. Automatic settlement must remain disabled.
 
-## Scope and invariants
+## Settlement invariants
 
-The folio's current paid amount is represented redundantly by `booking.pays` (payment rows), `booking.p` (paid total), and in some UI/history paths `booking.payments` (legacy history rows). `paid(booking)` sums `booking.pays`; `dueB(booking)` computes `tt(booking) - booking.p`. Any write that updates only one of these fields can create inconsistent balances, receipts, or reports.
+The folio has three related representations: `booking.pays` (canonical payment rows), `booking.p` (paid total used by balance calculations), and `booking.payments` (legacy/history rows). Runtime changes to these fields must be made only by `src/payments/settlement-service.mjs` through `settlePayment()`. `addPay()` is now a compatibility adapter, not a writer.
 
-Target invariant: **one `settlePayment()` API owns every runtime mutation of `booking.pays`, `booking.p`, and payment-history rows.** It must validate amount and booking, apply source-specific authorization, deduplicate idempotency keys, update accounting totals once, and persist through the app's existing persistence mechanism. Automatic settlement remains disabled.
+The settlement service validates booking membership, amount, method, balance limit and source; deduplicates by idempotency key and non-empty reference; updates payment rows, paid total, history, daily total and audit once; and attempts in-memory rollback if persistence throws. This is not a true transaction across app storage and IndexedDB evidence.
 
-## Current payment write-path table
+## Frozen write-path table
 
-| Site | Current behavior | Risk / Phase B action |
+| Site / route | Classification | Current disposition |
 |---|---|---|
-| `index.html:635` `addPay(b,a,m,r,auto)` | Appends `b.pays`, recalculates `b.p`, increments `S.today`, writes audit entry. | Current central mutation function, but accepts an `auto` flag and has no source authorization or idempotency. Replace internals with the single `settlePayment()` implementation; keep only a compatibility adapter if required. |
-| `index.html:658` `sigA(id,i)` | Staff taps Apply; directly calls `addPay()`, then marks signal matched. | Route through `settlePayment({source:'staff_review', idempotencyKey: signal.id})`. Mark matched only after settlement succeeds. Validate signal and booking before mutation. |
-| `index.html:2488` final `pay(i)` assignment | Current manual-payment UI validates amount/method/confirmation and calls `addPay()`; persists and refreshes UI. | Route through `settlePayment({source:'manual'})`; preserve existing validation and confirmation. |
-| `index.html:2890–2896` final `pay(i)` wrapper | Wraps the preceding `pay`; after observing a changed `b.p`, appends to `b.payments`, persists, and opens invoice. This is the active history wrapper at end of file. | Remove duplicate accounting/history mutation from wrapper. History rows must be emitted by `settlePayment()` exactly once; UI wrapper may only render/persist after success. |
-| `index.html:2157–2163` earlier `pay(i)` wrapper | Wraps an earlier `pay` and appends `b.payments` after observing a changed total. It is later superseded by the assignment at line 2488, but remains confusing dead wrapper code. | Remove during cleanup; do not treat this superseded wrapper as an independent active route. |
-| `index.html:729` reservation creation | Creates a booking with `pays:[]`; if a booking advance is entered, calls `addPay(booking, amount, 'Cash', 'Booking advance', false)`. | Route the advance through the same settlement API with `source:'manual'` and a deterministic booking-advance idempotency key. Ensure reservation initialization does not double-count the advance. |
-| `index.html:493` demo initialization | Sets `S.b[1].p=1000` directly. | Demo/bootstrap data only, but violates runtime single-writer rule. Initialize consistent demo payment rows and totals in one seed helper, clearly separated from runtime settlement. |
-| `index.html:625–626` demo initialization | Resets each booking's `pays=[]`, then seeds a payment row on `S.b[1]`. | Demo/bootstrap only; keep seed data internally consistent with `b.p`. Do not use this pattern for live bookings. |
-| `index.html:1224` guest/booking export | Reads paid/balance values and exports a snapshot; no settlement mutation. | Read-only; no change needed. |
-| `index.html:635` audit write | `aud()` records a payment audit row after the payment write. | Audit must occur only after successful settlement and exactly once. |
-| State import/restore paths around `index.html:1000–1077` (prior audit) | Can replace imported application state, including bookings and payment fields. | Treat as a privileged state-replacement boundary, not a normal payment path. Validate imported booking totals/rows and document whether legacy snapshots are normalized before being accepted. |
+| `src/payments/settlement-service.mjs` — `settlePayment()` | **Canonical settlement writer** | Sole runtime writer of `booking.pays`, `booking.p`, `booking.payments`, `state.today`, and payment audit entry. Automatic source calls the canonical `assertAutoFolioSettlementEnabled()` before mutation. |
+| `index.html` — `addPay(b,a,m,r,auto)` | Compatibility alias | Thin adapter to `settlePayment()`. `auto=true` routes to source `auto`, which fails closed while the gate is false. Current search found no remaining call sites beyond the adapter definition. |
+| Manual folio payment handlers, including the final `pay(i)` assignment | Manual settlement | Call `settlePayment({source:'manual'})`; UI validates selected method, amount and receipt confirmation. Duplicate history writes were removed from superseded wrappers. |
+| `sigA(id,i)` | Staff-reviewed settlement | Calls `settlePayment({source:'staff_review'})`; signal is marked matched only after the service returns successfully. Uses UTR/reference or signal ID as an idempotency key. |
+| Reservation creation / booking advance | Settlement at booking creation | Calls `settlePayment({source:'reservation_advance'})` with `booking-advance:<booking id>` idempotency key. |
+| `addSig(o)` and `window.aureliaNativePaymentSignal` | Evidence / suggestion only | Creates a signal, deduplicates repeated notifications, and may set `pending_review` plus `suggestedBookingId`. Does not call `addPay()` or `settlePayment()`. |
+| `src/payments/reconciliation-service.mjs`, `payment-engine.mjs`, `evidence-store.mjs` | Evidence ingestion, matching and persistence | No folio writes. Reconciliation service returns match suggestions and rejects staff decisions marked posted/settled. |
+| Demo/bootstrap initialization (`index.html`, around original lines 493 and 625–626) | Seed data, not runtime settlement | Seeds demo paid totals/payment rows. Keep these values consistent; they are the remaining direct field assignments outside the runtime settlement service. |
+| State import/restore paths (prior audit: around `index.html:1000–1077`) | Privileged state replacement / migration | May replace booking/payment state as a whole; not a normal payment path. Imported legacy totals/rows still need validation and normalization policy. |
+| `addC()`, `dcApply()`, restaurant-to-room posting | Charge / discount operations | Separate folio mutations; must not change payment rows or paid totals. |
+| Restaurant sales (`recordRestPay()`) | Independent restaurant ledger | Does not settle a hotel folio. |
+| Cancellation/refund journal (`commitCancellationRefund()`) | Separate accounting workflow | Writes cancellation/refund journals and refund statuses, not a hotel payment settlement. |
+| Export / invoice / reports | Read-only consumers | Read paid totals and payment rows; no payment mutation. |
 
-## Related financial writes that are not payment settlement
+## Build integration
 
-| Site | Behavior | Boundary |
-|---|---|---|
-| `index.html:509` `addC()` | Adds a folio charge to `booking.ch`. | Charge API; must not change paid totals. |
-| `index.html:643` `dcApply()` | Changes `booking.dc` discount. | Discount API; must not change payment rows or paid totals. |
-| `index.html:1191–1193` (prior audit) | Posts restaurant charges to a hotel room folio. | Charge-posting API; must not create a payment. |
-| `index.html:2834–2857` (prior audit) | Records independent restaurant sales. | Restaurant sales ledger; must not mutate hotel folio payments. |
-| `index.html:3093–3118` | Creates cancellation/refund journal entries and updates refund-status fields. | Separate cancellation accounting workflow; do not route through `settlePayment()`. |
-| Import/restore | May replace the whole state object. | State migration/restore boundary, not a normal payment API. |
+`index.html` loads `./src/payments/settlement-service.mjs`. `scripts/prepare-web.js` now copies both `settlement-service.mjs` and `settlement-gate.mjs` into `www/src/payments/` so the module import remains available in the Capacitor APK.
 
-## Required Phase B acceptance checks
+## Tests added
 
-1. Search the complete source for every assignment/push to `pays`, `p`, and `payments`; classify each as settlement, seed/migration, or restore.
-2. Runtime mutation of those payment fields occurs only inside `settlePayment()`.
-3. Manual UI and staff review call `settlePayment()` with `source:'manual'` and `source:'staff_review'` respectively.
-4. Notification ingestion (`addSig`) only creates evidence/review candidates and never posts a folio.
-5. Automatic source is rejected while `AUTO_FOLIO_SETTLEMENT_ENABLED === false`; do not flip the flag as part of Phase B.
-6. Tests cover manual success, invalid amount, overpayment, idempotency, staff-review idempotency, evidence-only notification, and automatic-source rejection.
-7. Run `npm test` and `npm run build`; report actual results before any production approval.
+`tests/settlement-service.test.mjs` covers manual success, staff-review success, idempotency/UTR dedupe, automatic-source rejection with the gate disabled, overpayment rejection, rollback after a thrown persistence error, evidence-only `addSig`, and manual/staff route wiring.
+
+**Not yet verified:** complete `npm test`, `npm run build`, Android sync/build, and device/APK smoke tests. Do not claim production readiness until those run against the actual branch.
+
+## Gate and product stance
+
+- `AUTO_FOLIO_SETTLEMENT_ENABLED` remains `false`.
+- UI label is **“Suggest matches”**, not “Auto settle.”
+- Phase A blocks silent notification-to-folio posting.
+- Phase B centralizes runtime payment writes, but cross-store atomicity, reconciliation quality, evidence fixtures, APK/device verification, and production approval remain outstanding.
