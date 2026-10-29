@@ -23,7 +23,7 @@ test("BOB parser extracts amount, timestamp and UTR but does not invent payer", 
 });
 
 test("SBI parser extracts amount, remitter and reference using the same event schema", () => {
-  const result = parseSbiCreditSms("Dear SBI User, your A/c X3522-credited by Rs.40 on 24Jun25 transfer from VAJE CHINMAY SURESH Ref No 106988076220 -SBI", { eventId: "sbi-1" });
+  const result = parseSbiCreditSms("Dear SBI User, your A/c X3522-credited by Rs.40 on 24Jun25 transfer from VAJE CHINMAY SURESH Ref No 106988076220 -SBI", { eventId: "sbi-1", receivedAt: "2025-06-24T10:02:00Z" });
   assert.equal(result.ok, true);
   assert.equal(result.event.amountPaise, 4000);
   assert.equal(result.event.payerName, "VAJE CHINMAY SURESH");
@@ -36,7 +36,7 @@ test("SBI remitter and amount produce a strong match inside the time window", ()
   const bank = createPaymentEvent({
     eventId: "sbi-2", source: "bank_sms", eventType: "credit",
     payerName: "VAJE CHINMAY SURESH", amount: "40",
-    utr: "106988076220", timestamp: "2025-06-24T10:02:00Z"
+    utr: "106988076220", timestamp: "2025-06-24T10:02:00Z", receivedAt: "2025-06-24T10:02:00Z"
   });
   const result = matchBankEvent(bank, [candidate]);
   assert.equal(result.decision, "matched");
