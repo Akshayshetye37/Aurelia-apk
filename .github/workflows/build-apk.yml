@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - 'index.html'
+      - 'README.md'
       - 'package.json'
       - 'capacitor.config.json'
       - 'scripts/**'
