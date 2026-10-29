@@ -16,10 +16,10 @@
   function mount() {
     const root = document.getElementById("aurelia-upi-reconciliation");
     if (!root || !window.AureliaUPIReconciliation) return;
-    const businessName = getBusinessName();
+    let businessName = getBusinessName();
     root.innerHTML = '<section class="aurelia-upi-panel" aria-labelledby="aurelia-upi-title">' +
       '<h2 id="aurelia-upi-title">UPI notification evidence · ' + escapeHtml(businessName) + '</h2>' +
-      '<p>Payment evidence for ' + escapeHtml(businessName) + '. Notifications are unverified evidence. Verify each payment independently before marking it reviewed. This panel never posts a folio payment.</p>' +
+      '<p data-role="business-copy">Payment evidence for ' + escapeHtml(businessName) + '. Notifications are unverified evidence. Verify each payment independently before marking it reviewed. This panel never posts a folio payment.</p>' +
       '<button type="button" data-action="notification-settings">Notification access settings</button> ' +
       '<button type="button" data-action="refresh">Refresh evidence</button>' +
       '<p role="status" data-role="status" aria-live="polite">Ready</p>' +
@@ -31,6 +31,9 @@
       if (busy) return;
       busy = true; status.textContent = "Loading evidence…";
       try {
+        businessName = getBusinessName();
+        root.querySelector("#aurelia-upi-title").textContent = "UPI notification evidence · " + businessName;
+        root.querySelector("[data-role=\"business-copy\"]").textContent = "Payment evidence for " + businessName + ". Notifications are unverified evidence. Verify each payment independently before marking it reviewed. This panel never posts a folio payment.";
         const accessEnabled = window.AureliaUPIReconciliation.notificationAccessEnabled();
         const rows = window.AureliaUPIReconciliation.fetchPendingEvidence();
         if (!rows.length) items.innerHTML = "<p>No pending evidence.</p>";
