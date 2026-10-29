@@ -55,3 +55,19 @@ node --test tests/payments.test.mjs
 ```
 
 The tests cover normalized amounts, BOB and SBI parsing, strong remitter matching, amount-only review behavior, duplicate detection, and amount mismatch.
+
+## Research findings: observed format drift
+
+Public examples from 2020–2021, 2024, 2025 and 2026 show that bank SMS is not a stable API. Examples include SBI's compact `UPI frm A/c... on 27Jun21 RefNo ...` and `credited by Rs... on 04Feb24 by (Ref no ...)`; Union Bank's `A/c *9172 Credited for Rs:... on DD-MM-YYYY HH:MM:SS by Mob Bk ref no ...`; HDFC's `Rs. ... credited to a/c ... by a/c linked to VPA ... (UPI Ref No ...)`; and ICICI's `Acct XX... is credited with Rs ... on DD-Mon-YY from NAME. UPI:...`. Newer generic examples also use ISO date/time and vary between `UPI:`, `UPI Ref No`, `Ref No`, `Refno`, and `RRN`. These are observed public examples, not guaranteed official templates.
+
+Adopted parser rules:
+- Accept `Rs`, `Rs.`, `INR`, `₹`, comma-grouped amounts and optional decimals.
+- Support compact month dates, numeric dates and ISO date/time.
+- Interpret a bank-local timestamp without timezone as IST and store UTC ISO; date-only values retain `date_only` precision.
+- Require explicit credit wording and UPI/VPA/reference evidence for new parsers. Unknown wording fails closed as unparsed.
+- Reject temporary/provisional credits under review, and never confuse debits, OTPs, marketing, refunds/reversals or non-UPI credits with a settled incoming UPI payment.
+- SMS alerts can be suppressed below bank-specific thresholds. Missing SMS is not proof that a payment did not occur.
+
+## Current parser coverage
+
+BOB and SBI observed examples remain supported. Added conservative ICICI, HDFC and Axis parsers with shared date parsing. Real redacted samples from the target bank/device must be added before enabling a parser for live reconciliation. Public sample formats alone are not sufficient to certify a parser.
