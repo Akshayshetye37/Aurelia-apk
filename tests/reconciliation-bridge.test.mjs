@@ -55,17 +55,7 @@ test("updateEvidenceStatus rejects unsupported statuses", () => {
 test("possible existing folio match stays visible for staff recovery", () => {
   const state = { b: [{ id: 17, room: "A1", pays: [{ r: "UTR12345678", a: 125.5 }] }] };
   let statusUpdates = 0;
-  const bridge = loadBridge({
-    fetchUnprocessedSignals: () => JSON.stringify([{
-      id: 9, sourcePackage: "com.phonepe.app", utr: "UTR12345678",
-      amountPaise: 12550, notificationText: "Money received ₹125.50",
-      receivedAt: 1770000000000, status: "pending"
-    }]),
-    markSignalProcessed: () => { statusUpdates++; return JSON.stringify({ ok: true }); }
-  });
-  // The bridge shares the same window object, so attach the accessor before loading it.
   // This test explicitly asserts advisory recovery never auto-acknowledges queue evidence.
-  assert.equal(typeof bridge.fetchPendingEvidence, "function");
   const window = { AureliaNative: {
     fetchUnprocessedSignals: () => JSON.stringify([{
       id: 9, sourcePackage: "com.phonepe.app", utr: "UTR12345678",
