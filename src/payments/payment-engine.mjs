@@ -60,6 +60,7 @@ export function createPaymentEvent(input) {
     upiId: input.upiId ? String(input.upiId).trim() : null,
     upiIdNormalized: normalizeUpiId(input.upiId || ""),
     bank: input.bank ? String(input.bank).trim().toUpperCase() : null,
+    accountScope: input.accountScope ? String(input.accountScope).trim() : null,
     accountSuffix: input.accountSuffix ? String(input.accountSuffix).trim() : null,
     evidenceId: String(input.evidenceId || input.eventId || cryptoSafeId()),
     rawEvidence: input.rawEvidence ? String(input.rawEvidence) : null,
@@ -86,20 +87,19 @@ export function validateBankCredit(event) {
 
 /**
  * Score a bank credit against a Google Pay candidate.
- * Amount/time-only evidence is intentionally capped below auto-match threshold.
- * Scores are explainability aids, not probabilities.
+ * Scores are explainability aids, not probabilities. A matched result is not
+ * authorization to post a folio; settlement is separately and explicitly gated.
  */
 export function scoreEvidence(candidate, bankEvent, options = {}) {
   const windowMs = options.windowMs ?? DEFAULT_MATCH_WINDOW_MS;
   const reasons = [];
   if (!candidate || !bankEvent) return { score: 0, reasons: ["missing_event"], eligibleForAutoMatch: false };
-
   if (candidate.amountPaise !== bankEvent.amountPaise) {
     return { score: 0, reasons: ["amount_mismatch"], eligibleForAutoMatch: false };
   }
+
   let score = 25;
   reasons.push("exact_amount");
-
   if (candidate.utr && bankEvent.utr && candidate.utr === bankEvent.utr) {
     score = 100;
     reasons.push("exact_utr");
@@ -120,8 +120,6 @@ export function scoreEvidence(candidate, bankEvent, options = {}) {
   }
 
   const candidateTime = Date.parse(candidate.timestamp || candidate.receivedAt || "");
-  // Date-only SMS timestamps cannot be compared as midnight; use SMS arrival time
-  // for correlation while preserving the transaction timestamp precision separately.
   const bankTimeSource = bankEvent.timestampPrecision === "date_only"
     ? (bankEvent.receivedAt || "")
     : (bankEvent.timestamp || bankEvent.receivedAt || "");
@@ -137,13 +135,20 @@ export function scoreEvidence(candidate, bankEvent, options = {}) {
     reasons.push("time_unavailable");
   }
 
-  // Auto-match requires stronger evidence than amount/time coincidence.
   const hasStrongIdentifier = reasons.includes("exact_utr") ||
     reasons.includes("exact_normalized_payer_name") ||
     reasons.includes("exact_upi_id");
   const eligibleForAutoMatch = score >= 85 && hasStrongIdentifier && withinWindow;
   if (!hasStrongIdentifier) reasons.push("weak_amount_time_only");
   return { score, reasons, eligibleForAutoMatch };
+}
+
+function scopedBankUtrKey(event) {
+  if (!event?.utr || !event?.bank) return null;
+  const bank = String(event.bank).trim().toUpperCase();
+  const scope = String(event.accountScope || event.accountSuffix || "UNSCOPED").trim().toUpperCase();
+  const utr = String(event.utr).replace(/\s+/g, "").toUpperCase();
+  return `${bank}|${scope}|${utr}`;
 }
 
 export function createPendingQueue() {
@@ -154,8 +159,9 @@ export function createPendingQueue() {
     add(event) {
       if (!event?.eventId) throw new TypeError("eventId is required");
       if (events.has(event.eventId)) return { added: false, reason: "duplicate_event", item: events.get(event.eventId) };
-      if (event.utr && bankUtrs.has(event.utr)) {
-        return { added: false, reason: "duplicate_utr", item: events.get(bankUtrs.get(event.utr)) || null };
+      const utrKey = scopedBankUtrKey(event);
+      if (utrKey && bankUtrs.has(utrKey)) {
+        return { added: false, reason: "duplicate_utr", item: events.get(bankUtrs.get(utrKey)) || null };
       }
       const item = {
         event,
@@ -166,7 +172,7 @@ export function createPendingQueue() {
         createdAt: new Date().toISOString(),
       };
       events.set(event.eventId, item);
-      if (event.utr) bankUtrs.set(event.utr, event.eventId);
+      if (utrKey) bankUtrs.set(utrKey, event.eventId);
       return { added: true, item };
     },
     update(eventId, patch) {
@@ -188,13 +194,11 @@ export function createPendingQueue() {
 /**
  * Returns a decision for one bank event against candidate notifications.
  * A unique amount/time-only candidate remains review-required because identity
- * cannot be proven when the bank message omits payer/transaction identifiers.
+ * cannot be established when the bank message omits payer/transaction identifiers.
  */
 export function matchBankEvent(bankEvent, candidates, options = {}) {
   const validation = validateBankCredit(bankEvent);
-  if (!validation.valid) {
-    return { decision: "reject", reason: validation.reasons.join(","), matches: [] };
-  }
+  if (!validation.valid) return { decision: "reject", reason: validation.reasons.join(","), matches: [] };
 
   const scored = (candidates || [])
     .filter(candidate => candidate && candidate.amountPaise === bankEvent.amountPaise)
@@ -202,14 +206,9 @@ export function matchBankEvent(bankEvent, candidates, options = {}) {
     .sort((a, b) => b.score - a.score);
 
   if (scored.length === 0) return { decision: "pending", reason: "no_candidate", matches: [] };
-
   const top = scored[0];
   const second = scored[1];
-  if (second && second.score === top.score) {
-    return { decision: "review", reason: "ambiguous_top_score", matches: scored };
-  }
-  if (top.eligibleForAutoMatch) {
-    return { decision: "matched", reason: "strong_unique_match", matches: scored };
-  }
+  if (second && second.score === top.score) return { decision: "review", reason: "ambiguous_top_score", matches: scored };
+  if (top.eligibleForAutoMatch) return { decision: "matched", reason: "strong_unique_match", matches: scored };
   return { decision: "review", reason: "insufficient_identity_evidence", matches: scored };
 }
