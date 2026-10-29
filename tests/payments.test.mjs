@@ -9,6 +9,20 @@ import { parseHdfcCreditSms } from "../src/payments/parsers/hdfc.mjs";
 import { parseAxisCreditSms } from "../src/payments/parsers/axis.mjs";
 import { parseIndianDateTime } from "../src/payments/parsers/common.mjs";
 
+import { parseKotakCreditSms } from "../src/payments/parsers/kotak.mjs";
+import { parseUcoCreditSms } from "../src/payments/parsers/uco.mjs";
+test("Kotak received-UPI variant extracts VPA and reference", () => {
+  const r = parseKotakCreditSms("Received Rs.50.00 in your Kotak Bank AC X8136 from abcd4321@oksbi on 03-02-24.UPI Ref:400653974000.", { eventId: "kotak-1" });
+  assert.equal(r.ok, true); assert.equal(r.event.amountPaise, 5000);
+  assert.equal(r.event.upiId, "abcd4321@oksbi"); assert.equal(r.event.utr, "400653974000");
+});
+test("UCO credit variant with UPI marker does not invent payer or UTR", () => {
+  const r = parseUcoCreditSms("A/c XX8360 Credited with Rs.6.00 on 07-02-2024 by UCO-UPI.", { eventId: "uco-1" });
+  assert.equal(r.ok, true); assert.equal(r.event.amountPaise, 600);
+  assert.equal(r.event.payerName, null); assert.equal(r.event.utr, null);
+});
+
+
 test("ICICI observed incoming UPI credit format extracts payer and reference", () => {
   const r = parseIciciCreditSms("Dear Customer, Acct XX922 is credited with Rs 500.00 on 07-Jun-25 from PRASHANT SHARMA. UPI:515853359128-ICICI Bank.", { eventId: "icici-1" });
   assert.equal(r.ok, true); assert.equal(r.event.amountPaise, 50000);
