@@ -29,17 +29,21 @@
   }
   function findCommittedPayment(row) {
     const getState = window.aureliaGetAppState;
-    if (typeof getState !== "function") return false;
+    if (typeof getState !== "function") return null;
     const state = getState();
-    if (!state || !Array.isArray(state.b)) return false;
+    if (!state || !Array.isArray(state.b)) return null;
     const ref = String(row.utr || "").trim();
-    if (!ref) return false;
+    if (!ref) return null;
     const amount = Number(row.amountPaise) / 100;
-    return state.b.some(booking => Array.isArray(booking.pays) &&
-      booking.pays.some(payment =>
-        String(payment.r || "").trim() === ref &&
-        Math.abs(Number(payment.a) - amount) < 0.005
-      ));
+    for (const booking of state.b) {
+      if (!Array.isArray(booking.pays)) continue;
+      const payment = booking.pays.find(item =>
+        String(item.r || "").trim() === ref &&
+        Math.abs(Number(item.a) - amount) < 0.005
+      );
+      if (payment) return { bookingId: booking.id == null ? null : String(booking.id), room: booking.room == null ? null : String(booking.room) };
+    }
+    return null;
   }
   function fetchPendingEvidence() {
     const result = parse(nativeBridge().fetchUnprocessedSignals(), "Fetch evidence");
@@ -55,19 +59,21 @@
       }
       return { ...row, id, amountPaise, amountRupees: amountPaise / 100, receivedAt, verified: false };
     });
-    // Crash recovery: only auto-ack when an exact UTR + amount already exists in folio history.
-    // If the native acknowledgement fails, retain the evidence in the returned list.
-    return validated.filter(row => {
-      if (!findCommittedPayment(row)) return true;
-      try {
-        updateEvidenceStatus(row.id, "reviewed", "Recovery: matching UTR and amount already exist in folio history");
-        return false;
-      } catch (_) { return true; }
+    // Recovery is advisory only: never auto-ack evidence based on a cross-booking UTR/amount match.
+    // Keep the record visible so staff can confirm the intended booking and persisted payment.
+    return validated.map(row => {
+      const match = findCommittedPayment(row);
+      return {
+        ...row,
+        possibleExistingFolioMatch: !!match,
+        matchedBookingId: match ? match.bookingId : null,
+        matchedRoom: match ? match.room : null
+      };
     });
   }
   function updateEvidenceStatus(id, status, note) {
     if (!Number.isSafeInteger(Number(id)) || Number(id) <= 0) throw new Error("Invalid evidence ID");
-    if (!["pending", "reviewed", "rejected"].includes(status)) throw new Error("Invalid evidence status");
+    if (!["pending", "conflict", "reviewed", "rejected"].includes(status)) throw new Error("Invalid evidence status");
     const result = parse(nativeBridge().markSignalProcessed(String(id), status, String(note || "")), "Update evidence");
     if (!result || result.ok !== true) throw new Error(result && result.error || "Evidence status update was not acknowledged");
     return result;
