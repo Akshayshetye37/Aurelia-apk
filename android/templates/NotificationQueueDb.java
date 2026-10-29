@@ -43,19 +43,29 @@ public final class NotificationQueueDb extends SQLiteOpenHelper {
             new String[]{utr.trim()})) {
           if (c.moveToFirst()) {
             JSONObject result = new JSONObject();
-            result.put("status", c.getLong(1) == paise ? "duplicate" : "conflict");
-            result.put("id", c.getLong(0));
-            result.put("existingAmountPaise", c.getLong(1));
-            result.put("incomingAmountPaise", paise);
-            db.setTransactionSuccessful();
-            return result;
+            if (c.getLong(1) == paise) {
+              JSONObject result = new JSONObject();
+              result.put("status", "duplicate");
+              result.put("id", c.getLong(0));
+              result.put("existingAmountPaise", c.getLong(1));
+              db.setTransactionSuccessful();
+              return result;
+            }
+            // Preserve the conflicting notification as a separate reviewable record below.
           }
         }
       }
       ContentValues v = new ContentValues();
       v.put("source_package", pkg); v.put("utr", utr); v.put("amount_paise", paise);
       v.put("notification_text", text); v.put("received_at", receivedAt);
-      v.put("status", PENDING); v.put("fingerprint", fingerprint);
+      boolean conflict = false;
+      if (utr != null && !utr.trim().isEmpty()) {
+        try (Cursor c = db.rawQuery("SELECT amount_paise FROM upi_notification_queue WHERE utr=? LIMIT 1",
+            new String[]{utr.trim()})) {
+          conflict = c.moveToFirst() && c.getLong(0) != paise;
+        }
+      }
+      v.put("status", conflict ? "conflict" : PENDING); v.put("fingerprint", fingerprint);
       long id = db.insertWithOnConflict("upi_notification_queue", null, v, SQLiteDatabase.CONFLICT_IGNORE);
       JSONObject result = new JSONObject();
       if (id == -1) {
@@ -75,7 +85,7 @@ public final class NotificationQueueDb extends SQLiteOpenHelper {
     int safeLimit = Math.max(1, Math.min(limit, 200));
     try (Cursor c = getReadableDatabase().rawQuery(
         "SELECT id,source_package,utr,amount_paise,notification_text,received_at,status " +
-        "FROM upi_notification_queue WHERE status='pending' ORDER BY received_at DESC LIMIT ?",
+        "FROM upi_notification_queue WHERE status IN ('pending','conflict') ORDER BY received_at DESC LIMIT ?",
         new String[]{String.valueOf(safeLimit)})) {
       while (c.moveToNext()) {
         JSONObject row = new JSONObject();
@@ -89,7 +99,7 @@ public final class NotificationQueueDb extends SQLiteOpenHelper {
   }
 
   public synchronized JSONObject updateStatus(long id, String status, String note) throws Exception {
-    if (!"pending".equals(status) && !"reviewed".equals(status) && !"rejected".equals(status)) {
+    if (!"pending".equals(status) && !"conflict".equals(status) && !"reviewed".equals(status) && !"rejected".equals(status)) {
       throw new IllegalArgumentException("Unsupported evidence status");
     }
     ContentValues v = new ContentValues();
