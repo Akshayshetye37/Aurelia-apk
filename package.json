@@ -2,9 +2,17 @@
   "name": "aurelia-pms",
   "version": "1.0.0",
   "private": true,
-  "description": "Aurelia PMS web app and Android build helpers",
+  "description": "Aurelia PMS Android wrapper",
   "scripts": {
-    "prepare:web": "node scripts/prepare-web.js",
-    "patch:android": "node scripts/patch-android.js"
+    "build": "node scripts/prepare-web.js",
+    "android:sync": "npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "sharp": "^0.34.3"
   }
 }
