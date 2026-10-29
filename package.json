@@ -1,0 +1,10 @@
+{
+  "name": "aurelia-pms",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aurelia PMS web app and Android build helpers",
+  "scripts": {
+    "prepare:web": "node scripts/prepare-web.js",
+    "patch:android": "node scripts/patch-android.js"
+  }
+}
