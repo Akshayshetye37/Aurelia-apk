@@ -1,0 +1,8 @@
+{
+  "appId": "com.aurelia.pms",
+  "appName": "Aurelia PMS",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}
