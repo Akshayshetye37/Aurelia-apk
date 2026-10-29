@@ -54,6 +54,7 @@
           Number(card.dataset.id), button.dataset.status, note
         );
         status.textContent = "Evidence status saved. No folio payment was posted.";
+        busy = false;
         refresh();
       } catch (error) {
         status.textContent = "Status update failed; evidence was not acknowledged: " + error.message;
