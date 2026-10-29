@@ -1,1 +1,11 @@
-const fs=require('fs');const path=require('path');const src=path.join(__dirname,'..','index.html');const dest=path.join(__dirname,'..','www');if(!fs.existsSync(src))throw new Error('index.html not found');fs.mkdirSync(dest,{recursive:true});fs.copyFileSync(src,path.join(dest,'index.html'));console.log('Prepared web app for Capacitor');
+const fs=require('fs');const path=require('path');
+const root=path.join(__dirname,'..'),src=path.join(root,'index.html'),dest=path.join(root,'www');
+if(!fs.existsSync(src))throw new Error('index.html not found');
+fs.mkdirSync(dest,{recursive:true});
+fs.copyFileSync(src,path.join(dest,'index.html'));
+const settlementSrc=path.join(root,'src','payments','settlement-service.mjs');
+if(!fs.existsSync(settlementSrc))throw new Error('Settlement service not found: '+settlementSrc);
+const settlementDest=path.join(dest,'src','payments');
+fs.mkdirSync(settlementDest,{recursive:true});
+fs.copyFileSync(settlementSrc,path.join(settlementDest,'settlement-service.mjs'));
+console.log('Prepared web app and settlement service for Capacitor');
