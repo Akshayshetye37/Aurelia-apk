@@ -632,13 +632,11 @@ const free=(n,a,z,ex)=>!S.b.some(b=>b.id!==ex&&b.room===n&&b.st!=='done'&&b.in<z
 const idMissing=g=>{if(!g)return'the guest profile is missing';if(!g.idn||!g.img)return'the primary guest has no ID photo or number';const o=(g.occ||[]).findIndex(x=>!x.idn||!x.img);return o>=0?`occupant ${o+1} has no ID photo or number`:''};
 function brand(){const s=S.set;document.title=s.name;$('#crest').innerHTML=(s.logo?`<img src="${s.logo}" alt="" style="width:34px;height:34px;border-radius:10px;object-fit:cover">`:'<svg viewBox="0 0 32 32"><path d="M16 3l3 7 7 1-5 5 1 8-6-4-6 4 1-8-5-5 7-1z"/></svg>')+`<span class="foil">${esc(s.name.toUpperCase())}</span>`}
 /* payments */
-const AUTO_FOLIO_SETTLEMENT_ENABLED=false;
-function assertAutoFolioSettlementEnabled(){if(!AUTO_FOLIO_SETTLEMENT_ENABLED)throw new Error('Automatic folio settlement is disabled');}
 function settlePayment(input){
  const b=input&&input.booking;
  if(!b)throw new Error('Booking not found');
  if(typeof window.aureliaSettlePayment!=='function')throw new Error('Settlement service is not ready; no payment was recorded');
- return window.aureliaSettlePayment({...input,state:S,balanceDue:dueB(b),persist,audit:(kind,detail)=>aud(kind,detail),assertAutoFolioSettlementEnabled});
+ return window.aureliaSettlePayment({...input,state:S,balanceDue:dueB(b),persist,audit:(kind,detail)=>aud(kind,detail)});
 }
 function addPay(b,a,m,r,auto){return settlePayment({booking:b,amount:a,method:m,reference:r||'',source:auto?'auto':'manual',idempotencyKey:r?('ref:'+r):undefined})}
 let mchips=id=>`<div class="chips" id="${id}">${PM.map((p,k)=>`<button class="chip ${k?'':'on'}" onclick="$$('#${id} .chip').forEach(c=>c.classList.remove('on'));this.classList.add('on')">${p}</button>`).join('')}</div>`;
