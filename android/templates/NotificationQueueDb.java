@@ -42,7 +42,6 @@ public final class NotificationQueueDb extends SQLiteOpenHelper {
         try (Cursor c = db.rawQuery("SELECT id, amount_paise FROM upi_notification_queue WHERE utr=? LIMIT 1",
             new String[]{utr.trim()})) {
           if (c.moveToFirst()) {
-            JSONObject result = new JSONObject();
             if (c.getLong(1) == paise) {
               JSONObject result = new JSONObject();
               result.put("status", "duplicate");
