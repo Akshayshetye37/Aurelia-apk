@@ -96,13 +96,17 @@ test("amount-only BOB SMS remains review-required even with one candidate", () =
   assert.equal(result.reason, "insufficient_identity_evidence");
 });
 
-test("queue rejects repeated UTR and event IDs", () => {
+test("queue rejects repeated UTR and event IDs within the same bank-account scope", () => {
   const queue = createPendingQueue();
-  const event = createPaymentEvent({ eventId: "bank-1", source: "bank_sms", eventType: "credit", amount: "40", utr: "123456" });
+  const event = createPaymentEvent({ eventId: "bank-1", source: "bank_sms", eventType: "credit", amount: "40", utr: "123456", bank: "SBI", accountSuffix: "3522" });
   assert.equal(queue.add(event).added, true);
   assert.equal(queue.add(event).reason, "duplicate_event");
-  const duplicate = createPaymentEvent({ eventId: "bank-2", source: "bank_sms", eventType: "credit", amount: "40", utr: "123456" });
+  const duplicate = createPaymentEvent({ eventId: "bank-2", source: "bank_sms", eventType: "credit", amount: "40", utr: "123456", bank: "SBI", accountSuffix: "3522" });
   assert.equal(queue.add(duplicate).reason, "duplicate_utr");
+  const otherBank = createPaymentEvent({ eventId: "bank-3", source: "bank_sms", eventType: "credit", amount: "40", utr: "123456", bank: "BOB", accountSuffix: "3522" });
+  assert.equal(queue.add(otherBank).added, true);
+  const otherAccount = createPaymentEvent({ eventId: "bank-4", source: "bank_sms", eventType: "credit", amount: "40", utr: "123456", bank: "SBI", accountSuffix: "7777" });
+  assert.equal(queue.add(otherAccount).added, true);
 });
 
 test("mismatched amounts never match", () => {
