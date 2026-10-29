@@ -1,4 +1,5 @@
-name: Build Aurelia PMS APK
+name: Build and verify Aurelia PMS APK
+
 on:
   workflow_dispatch:
   push:
@@ -7,36 +8,65 @@ on:
       - 'package.json'
       - 'capacitor.config.json'
       - 'scripts/**'
+      - 'src/**'
+      - 'tests/**'
       - '.github/workflows/build-apk.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'package.json'
+      - 'capacitor.config.json'
+      - 'scripts/**'
+      - 'src/**'
+      - 'tests/**'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
 jobs:
-  build:
+  verify-and-build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-      - name: Prepare app and install Capacitor
-        run: |
-          npm install
-          npm run build
-          npx cap add android
-          node scripts/patch-android.js
-          npx cap sync android
+
+      - name: Install Node dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run payment and evidence regression tests
+        run: npm test
+
+      - name: Prepare web app
+        run: npm run build
+
+      - name: Generate Android project
+        run: npx cap add android
+
+      - name: Install native backup and file bridge
+        run: node scripts/patch-android.js
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
       - name: Build debug APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew --no-daemon assembleDebug
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
