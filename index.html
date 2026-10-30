@@ -935,7 +935,7 @@ function testBackupServer(){if(!nat({type:'testBackupServer',requestId:'bst'+Dat
 function clearBackupServer(){if(!confirm('Remove the saved server destination and encrypted token? Local backups remain.'))return;nat({type:'clearBackupServerConfig',requestId:'bsd'+Date.now()});S.bk.serverConfigured=false;S.bk.serverUrl='';persist();render()}
 window.aureliaNativeBackupServerResult=(id,ok,message)=>{toast(message||(ok?'Server backup settings updated':'Server backup operation failed'));if(ok&&id.startsWith('bsc')){S.bk.serverConfigured=true;S.bk.serverUrl=$('#backup-server-url')?.value||'';persist();render()}};
 window.aureliaNativeBackupServerStatusResult=(id,configured,url)=>{S.bk.serverConfigured=!!configured;S.bk.serverUrl=url||'';persist()};
-function autoBackup(){if(S.au.backup!==false&&!BKB&&curHash()!==S.bk.hash)runBackup(true)}
+function autoBackup(){if(LOCAL_STATE_STATUS!=='invalid'&&S.au.backup!==false&&!BKB&&curHash()!==S.bk.hash)runBackup(true)}
 async function pickDir(){
  const requestId='bf'+Date.now();
  pendingBackupFolderRequestId=requestId;
@@ -1401,6 +1401,7 @@ loadAll();if(S.set&&/hari\s*om/i.test(String(S.set.name||''))){S.set.name='Aurel
 const _r3=render;render=function(){try{if(!S||typeof S!=='object')throw new Error('Saved app state is unavailable');['rooms','b','g','t','exp','inv','aud','cancelled','financialLedger'].forEach(k=>{if(!Array.isArray(S[k]))S[k]=[]});if(!S.set||typeof S.set!=='object')S.set={name:'Aurelia',tag:'Peace, comfort and mindful hospitality.',cur:'K'};if(!S.au||typeof S.au!=='object')S.au={};if(!S.bk||typeof S.bk!=='object')S.bk={folder:false,label:'',last:null,hash:'',hist:[]};if(!Array.isArray(types))throw new Error('Room type data is unavailable');syncT();_r3();brand();persist()}catch(err){console.error('Aurelia startup/render wrapper failed',err);const v=$('#v');if(v)v.innerHTML='<div class="card" style="margin:24px;padding:20px"><h2>Recovery needed</h2><p class="lab">A saved setting or room record prevented the screen from loading. Your existing records have not been intentionally deleted. Use Backup/Restore before clearing app data.</p><button class="btn" onclick="location.reload()">Reload app</button><button class="btn ghost" onclick="S.tab=\'more\';S.sub=\'backup\';location.reload()">Open backup after reload</button></div>'}};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)auto()});setInterval(auto,60000);
 nat({type:'deviceBackupStatus',requestId:'bs'+Date.now(),hash:curHash()});
+nat({type:'getBackupServerStatus',requestId:'bss'+Date.now()});
 window.addEventListener('DOMContentLoaded',()=>{render();auto();},{once:true});
 
 
