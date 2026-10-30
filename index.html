@@ -929,7 +929,7 @@ async function runBackup(auto){
 }
 function bkDone(ok,err){if(ok&&BKB){S.bk.verified=true;S.bk.hash=BKB.h;S.bk.last=new Date().toISOString();S.bk.hist.unshift({n:BKB.nm,at:S.bk.last});S.bk.hist.length=Math.min(S.bk.hist.length,8);S.bk.serverRetry=!!(err&&String(err).includes('Server/cloud copy failed'));toast(err&&String(err).startsWith('WARN:')?String(err).slice(5):'Backup saved')}else if(!ok)toast('Backup failed. '+(err||'Check the folder.'));BKB=null;persist();if(S.sub==='backup'&&!$('#sh').classList.contains('show'))render()}
 function toggleLocalAutoBackup(){S.au.backup=S.au.backup===false;persist();if(S.au.backup)autoBackup();render();toast('Automatic local backup '+(S.au.backup?'enabled':'disabled'))}
-function clearBackupFolder(){if(!confirm('Disconnect the optional SAF folder? Private local backups will continue.'))return;nat({type:'clearBackupFolder',requestId:'bcf'+Date.now()});S.bk.folder=false;S.bk.label='';persist();render()}
+function clearBackupFolder(purpose='drive'){if(!confirm('Disconnect this optional SAF folder? Private local backups will continue.'))return;nat({type:'clearBackupFolder',requestId:'bcf'+Date.now(),purpose});if(purpose==='shared')S.bk.sharedFolder=false;else S.bk.folder=false;S.bk.label='';persist();render()}
 function saveBackupServer(){const endpoint=$('#backup-server-url')?.value?.trim()||'',token=$('#backup-server-token')?.value||'';if(!/^https:\/\//i.test(endpoint)||!token){toast('Enter an HTTPS endpoint and server-issued bearer token');return}if(!nat({type:'saveBackupServerConfig',requestId:'bsc'+Date.now(),endpoint,token})){toast('Secure Android backup storage is unavailable');return}$('#backup-server-token').value='';toast('Saving encrypted server credentials…')}
 function restoreFromBackupServer(){if(!confirm('Download and validate the latest PMS backup from the configured server? You will review the restore before replacing current records.'))return;if(!nat({type:'restoreLatestServerBackup',requestId:'brs'+Date.now()}))toast('Native server restore is unavailable')}
 window.aureliaNativeServerRestoreResult=(id,ok,payload)=>{if(!ok){toast(payload||'Server restore failed');return}try{const file=new File([payload],'aurelia-server-restore.json',{type:'application/json'});restoreF({files:[file],value:''});toast('Server backup downloaded. Review the restore confirmation before applying it.')}catch(e){toast('Could not open downloaded backup: '+(e.message||'invalid file'))}};
@@ -941,13 +941,13 @@ function autoBackup(){if(LOCAL_STATE_STATUS!=='invalid'&&S.au.backup!==false&&!B
 async function pickDir(){
  const requestId='bf'+Date.now();
  pendingBackupFolderRequestId=requestId;
- if(nat({type:'chooseDeviceBackupFolder',requestId}))return;
+ if(nat({type:'chooseDeviceBackupFolder',requestId,purpose}))return;
  pendingBackupFolderRequestId=null;
  if(typeof window.showDirectoryPicker==='function'){
   try{
    const handle=await window.showDirectoryPicker({mode:'readwrite'});
    window.BKDIR=handle;
-   S.bk.folder=true;S.bk.verified=false;S.bk.label=handle.name||'Selected folder';
+   if(purpose==='shared')S.bk.sharedFolder=true;else S.bk.folder=true;S.bk.verified=false;S.bk.label=handle.name||'Selected folder';
    persist();render();toast('Backup folder selected');autoBackup();return;
   }catch(e){
    if(e&&e.name==='AbortError')return;
@@ -959,8 +959,8 @@ async function pickDir(){
  persist();render();
  toast('This app cannot select a folder in this view. Use Save backup file, or update the Android folder-picker bridge.');
 }
-let pendingBackupFolderRequestId=null;
-window.aureliaNativeBackupFolderResult=(id,ok,msg)=>{
+let pendingBackupFolderRequestId=null,pendingBackupFolderPurpose='drive';
+window.aureliaNativeBackupFolderResult=(id,ok,msg,purpose='drive')=>{
  if(!pendingBackupFolderRequestId||String(id)!==String(pendingBackupFolderRequestId))return;
  pendingBackupFolderRequestId=null;
  S.bk.folder=!!ok;
@@ -979,7 +979,7 @@ function requestNextAutomaticRecovery(){
  if(nat({type:'recoverLatestBackup',requestId,exclude:AUTO_RECOVERY_EXCLUDED}))return true;
  AUTO_RECOVERY_REQUEST_ID=null;return false;
 }
-window.aureliaNativeDeviceBackupStatusResult=(id,localReady,sel,backupExists)=>{
+window.aureliaNativeDeviceBackupStatusResult=(id,localReady,driveSel,sharedSel,backupExists)=>{
  if(pendingBackupFolderRequestId&&String(id)!==String(pendingBackupFolderRequestId))return;
  S.bk.folder=!!sel;
  if(sel&&LOCAL_STATE_STATUS==='valid'&&!(backupExists&&S.bk.verified&&S.bk.hash===curHash()))S.bk.verified=false;
