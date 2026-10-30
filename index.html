@@ -219,7 +219,26 @@ input[type=date]{max-width:100%;min-width:0}
  .avail input[type=date]::-webkit-calendar-picker-indicator{margin:0;padding:0;width:14px;height:14px}
  .avail>.btn{grid-column:1/-1;min-width:0;width:100%;min-height:46px;padding:8px 12px;white-space:normal;line-height:1.15}
 }
-</style></head><body>
+</style><style id="aurelia-native-layout-fix">
+html,body{width:100%;max-width:100%;overflow-x:hidden}
+.app{width:100%;max-width:980px;padding:14px 16px calc(220px + env(safe-area-inset-bottom,0px))}
+#v,.view,.card,.grid,.row{min-width:0;max-width:100%}
+.dock{bottom:calc(8px + env(safe-area-inset-bottom,0px));width:min(440px,calc(100% - 24px));padding:5px}
+.dock button{min-width:0;padding:8px 0 6px;font-size:11.5px}
+.dock svg{width:21px;height:21px}
+.fab{right:14px;bottom:calc(104px + env(safe-area-inset-bottom,0px));max-width:calc(100vw - 28px);white-space:nowrap}
+.payment-platform-card .provider-row{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:nowrap}
+.payment-platform-card .provider-row>span:first-child{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.payment-platform-card .provider-row .tag,.payment-platform-card .provider-row button{flex:0 0 auto;white-space:nowrap}
+.payment-platform-card details{min-width:0}
+@media(max-width:420px){
+ .app{padding-left:12px;padding-right:12px}
+ .fab{right:12px;padding:11px 16px;font-size:14px}
+ .payment-platform-card .provider-row{gap:7px}
+ .payment-platform-card .provider-row .tag{font-size:11px;padding:4px 8px}
+}
+</style>
+</head><body>
 
 <script id="guest-contact-actions-early">
 /* Define guest contact markup before the first Stays render can run. */
@@ -381,7 +400,7 @@ const D=n=>{const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()+n);ret
 const IC={home:'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',stays:'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',rooms:'M3 19V6M3 14h18v5M21 14v-2a3 3 0 0 0-3-3h-7v5M7 11h.01',dining:'M7 3v7M5 3v4a2 2 0 0 0 4 0V3M7 10v11M17 21V3c-2 1-3 4-3 7s1 4 3 4'};
 const TABS=[['home','Home'],['stays','Stays'],['rooms','Rooms'],['dining','Dining']];
 const types=[['Standard',850],['Deluxe',1200],['Executive Suite',1800],['Family Chalet',2200]],rn=[['101','102','103','104'],['201','202','203','204'],['301','302'],['401','402']];
-let id=0;const S={tab:'home',f:'all',tb:3,rooms:[],b:[],t:[],g:[],exp:[],inv:[],aud:[],cancelled:[],financialLedger:[],sig:[],sales:[],menu:{},today:23650,hist:[41200,38600,52400,47900,61300,56800],set:{name:'Hari Om Retreat',tag:'Peace, comfort and mindful hospitality.',cur:'₹',upi:'',phone:'',addr:''},au:{},bk:{}};
+let id=0;const S={tab:'home',f:'all',tb:3,rooms:[],b:[],t:[],g:[],exp:[],inv:[],aud:[],cancelled:[],financialLedger:[],sig:[],sales:[],menu:{},today:23650,hist:[41200,38600,52400,47900,61300,56800],set:{name:'Aurelia PMS',tag:'Peace, comfort and mindful hospitality.',cur:'₹',upi:'',phone:'',addr:''},au:{},bk:{}};
 window.aureliaGetAppState = () => S;
 types.forEach((t,i)=>rn[i].forEach(n=>S.rooms.push({n,t:t[0],r:t[1],s:'ready'})));
 const B=(g,room,i,o,st,ch=[])=>S.b.push({id:++id,g,room,in:i,out:o,st,ch});
@@ -397,7 +416,7 @@ const openS=h=>{$('#pan').innerHTML=h;$('#sh').classList.add('show')},closeS=()=
 const row=b=>`<div class="item"><div class="av">${esc(b.g[0])}</div><div class="f"><b>${esc(b.g)}</b><small>Room ${b.room} · ${fd(b.in)} to ${fd(b.out)}</small></div>`;
 function nav(){$('#dock').style.setProperty('--i',TABS.findIndex(t=>t[0]===S.tab));$('#dock').innerHTML=TABS.map(([k,l])=>`<button class="${k===S.tab?'on':''}" onclick="go('${k}')"><svg viewBox="0 0 24 24"><path d="${IC[k]}"/></svg>${l}</button>`).join('')}
 function go(t){S.tab=t;S.sub=null;try{closeS()}catch(e){}window.scrollTo({top:0,behavior:'auto'});render()}
-function render(){try{if(!S||typeof S!=='object')throw new Error('App state is unavailable');['rooms','b','g','t','exp','inv','aud','cancelled','financialLedger','sig','sales'].forEach(k=>{if(!Array.isArray(S[k]))S[k]=[]});if(!S.set||typeof S.set!=='object')S.set={name:'Hari Om Retreat',tag:'Peace, comfort and mindful hospitality.',cur:'₹',upi:'',phone:'',addr:''};if(!S.au||typeof S.au!=='object')S.au={};if(!S.menu||typeof S.menu!=='object')S.menu={};if(!S.bk||typeof S.bk!=='object')S.bk={};if(!V[S.tab])S.tab='home';nav();$('#v').innerHTML=`<div class="view">${V[S.tab]()}</div>`;$$('[data-c]').forEach(e=>{const to=+e.dataset.c,p=e.dataset.p||'',s=e.dataset.s||'',t0=performance.now();(function f(t){const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches,duration=reduced?0:420,x=duration?Math.min(1,(t-t0)/duration):1,v=to*(1-Math.pow(2,-10*x));e.textContent=p+Math.round(x>=1?to:v).toLocaleString('en-US')+s;if(x<1)requestAnimationFrame(f)})(t0)});requestAnimationFrame(()=>$$('[data-d]').forEach(e=>{try{e.setAttribute('stroke-dasharray',e.dataset.d)}catch(_){}}));if($('#cv'))motes()}catch(err){console.error('Aurelia render failed',err);const v=$('#v');if(v)v.innerHTML='<div class="card" style="margin:24px;padding:20px"><h2>Recovery needed</h2><p class="lab">Render failed. Error details:</p><pre style="white-space:pre-wrap;font-size:12px;color:#df7c70;max-height:180px;overflow:auto">'+String(err&&(err.stack||err.message||err)).replace(/</g,'&lt;')+'</pre><p class="lab">Your saved records were not intentionally deleted.</p><button class="btn" onclick="S.tab=\'home\';location.reload()">Reload app</button><button class="btn ghost" onclick="S.tab=\'more\';S.sub=\'backup\';location.reload()">Open backup after reload</button></div>'}}
+function render(){try{if(!S||typeof S!=='object')throw new Error('App state is unavailable');['rooms','b','g','t','exp','inv','aud','cancelled','financialLedger','sig','sales'].forEach(k=>{if(!Array.isArray(S[k]))S[k]=[]});if(!S.set||typeof S.set!=='object')S.set={name:'Aurelia PMS',tag:'Peace, comfort and mindful hospitality.',cur:'₹',upi:'',phone:'',addr:''};if(!S.au||typeof S.au!=='object')S.au={};if(!S.menu||typeof S.menu!=='object')S.menu={};if(!S.bk||typeof S.bk!=='object')S.bk={};if(!V[S.tab])S.tab='home';nav();$('#v').innerHTML=`<div class="view">${V[S.tab]()}</div>`;$$('[data-c]').forEach(e=>{const to=+e.dataset.c,p=e.dataset.p||'',s=e.dataset.s||'',t0=performance.now();(function f(t){const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches,duration=reduced?0:420,x=duration?Math.min(1,(t-t0)/duration):1,v=to*(1-Math.pow(2,-10*x));e.textContent=p+Math.round(x>=1?to:v).toLocaleString('en-US')+s;if(x<1)requestAnimationFrame(f)})(t0)});requestAnimationFrame(()=>$$('[data-d]').forEach(e=>{try{e.setAttribute('stroke-dasharray',e.dataset.d)}catch(_){}}));if($('#cv'))motes()}catch(err){console.error('Aurelia render failed',err);const v=$('#v');if(v)v.innerHTML='<div class="card" style="margin:24px;padding:20px"><h2>Recovery needed</h2><p class="lab">Render failed. Error details:</p><pre style="white-space:pre-wrap;font-size:12px;color:#df7c70;max-height:180px;overflow:auto">'+String(err&&(err.stack||err.message||err)).replace(/</g,'&lt;')+'</pre><p class="lab">Your saved records were not intentionally deleted.</p><button class="btn" onclick="S.tab=\'home\';location.reload()">Reload app</button><button class="btn ghost" onclick="S.tab=\'more\';S.sub=\'backup\';location.reload()">Open backup after reload</button></div>'}}
 const kpi=(l,v,p,s,n)=>`<div class="card"><div class="lab">${l}</div><div class="k" data-c="${v}" data-p="${p}" data-s="${s}">0</div><div class="up">${n}</div></div>`;
 function chart(v){const W=320,H=130,m=(Math.max(...v)*1.1)||1,P=v.map((y,i)=>[i*W/6,H-18-y/m*(H-36)]);let d=`M${P[0]}`;for(let i=1;i<7;i++){const a=P[i-1],b=P[i],x=(a[0]+b[0])/2;d+=`C${x},${a[1]} ${x},${b[1]} ${b}`}S.P=P;
 return `<svg class="chart" viewBox="0 0 ${W} ${H+14}" style="width:100%;touch-action:pan-y"><defs><linearGradient id="ar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9b76e" stop-opacity=".4"/><stop offset="1" stop-color="#d9b76e" stop-opacity="0"/></linearGradient></defs><path d="${d}L${W},${H}L0,${H}Z" fill="url(#ar)" style="animation:vin 1.6s .4s both"/><path d="${d}" fill="none" stroke="#e8c97f" stroke-width="2.4" pathLength="1" stroke-dasharray="1" style="animation:dr 2s cubic-bezier(.3,.7,.2,1) both"/><circle id="dot" cx="${P[6][0]}" cy="${P[6][1]}" r="5" fill="#fff2c9" stroke="#d9b76e" stroke-width="3"/>${['Mon','Tue','Wed','Thu','Fri','Sat','Today'].map((l,i)=>`<text x="${P[i][0]}" y="${H+10}" text-anchor="${i?i==6?'end':'middle':'start'}">${l}</text>`).join('')}</svg><style>@keyframes dr{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}</style>`}
@@ -489,7 +508,7 @@ try{render()}catch(bootErr){
 IC.more='M5 12h.01M12 12h.01M19 12h.01';TABS.push(['more','More']);
 const bk=i=>S.b.find(x=>x.id===i),aud=(a,d)=>S.aud.unshift({a,d,at:new Date()}),tt=b=>nts(b)*(rm(b.room)||{r:0}).r+b.ch.reduce((a,x)=>a+x[1],0)-(b.dc||0),dueB=b=>tt(b)-(b.p||0),on=k=>S.fe[k]!==false,tmf=d=>d.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
 const M=['Dashboard','Reservations','Bookings','Guests','Rooms','Folio','Invoices','Housekeeping','POS','Expenses','Reports','Audit','Import/Export','WhatsApp actions','Payment QR','Payment verification','Offline mode'],G={Payments:['GPay notification reader','Payer-name matching','Automatic reconciliation','Manual confirmation','Duplicate-payment detection','Payment retry and recovery','Payment announcement'],Restaurant:['Restaurant billing','Staying-guest billing','Walk-in billing','Add and remove food','Add to room folio','Bill PDF','WhatsApp sharing','Restaurant audit'],Inventory:['Purchase and add stock','Stock deduction on sale','Low-stock alerts','Inventory audit'],'Backup and recovery':['Automatic local backup','Recovery queue']};
-Object.assign(S,{sub:null,co:0,aud:[],fe:{},led:[],terms:'Check-in from 14:00 and check-out by 11:00. A valid ID is required for every adult guest. Quiet hours run from 22:00 to 06:00. Damage to property is billed to the room folio.',set:{name:'Hari Om Retreat',phone:'+91 98765 43210',addr:'Hari Om Retreat, India',tax:'',upi:'hariom@upi',cur:'₹'},exp:[{id:1,t:'Fresh produce',c:'Kitchen',a:1850,v:0,demo:1},{id:2,t:'Generator diesel',c:'Utilities',a:3200,v:0,demo:1}],inv:[{n:'Mosi lager',q:48,ro:24,u:45},{n:'Seared Kafue bream',q:9,ro:12,u:120},{n:'Cooking oil (5L)',q:6,ro:4,u:210},{n:'Bed linen sets',q:30,ro:20,u:0}]});
+Object.assign(S,{sub:null,co:0,aud:[],fe:{},led:[],terms:'Check-in from 14:00 and check-out by 11:00. A valid ID is required for every adult guest. Quiet hours run from 22:00 to 06:00. Damage to property is billed to the room folio.',set:{name:'Aurelia PMS',phone:'',addr:'',tax:'',upi:'',cur:'₹'},exp:[{id:1,t:'Fresh produce',c:'Kitchen',a:1850,v:0,demo:1},{id:2,t:'Generator diesel',c:'Utilities',a:3200,v:0,demo:1}],inv:[{n:'Mosi lager',q:48,ro:24,u:45},{n:'Seared Kafue bream',q:9,ro:12,u:120},{n:'Cooking oil (5L)',q:6,ro:4,u:210},{n:'Bed linen sets',q:30,ro:20,u:0}]});
 [...M,...Object.keys(G),...Object.values(G).flat()].forEach(k=>S.fe[k]=true);
 S.g=[...new Set(S.b.map(b=>b.g))].map((n,i)=>({n,ph:'+26097'+(7000000+i*91733),em:'',idt:'NRC',idn:'',occ:[],veh:[]}));S.b[1].p=1000;
 const hd=t=>`<div class="chips"><button class="chip" onclick="S.sub=null;render()">‹ More</button></div><h2 style="font-size:36px;margin:4px 0 12px">${t}</h2>`;
@@ -1267,7 +1286,7 @@ SUB.rest=()=>hd('Restaurant business')+`<div class="grid g2"><div class="card"><
 DK.push('restaurant','tableGuests','tableRooms');
 
 /* start */
-loadAll();RECOVERY_CHECK_PENDING=!!window.AureliaNative&&LOCAL_STATE_STATUS!=='valid';if(!window.AureliaNative)S.bk.folder=false;S.restaurant=Object.assign({name:'The Dining Room',phone:'',addr:'',tax:'',upi:'',cur:S.set.cur||'K',gst:0,qr:'',logo:''},S.restaurant||{});if(!S.restaurant.cur)S.restaurant.cur=S.set.cur||'K';S.tableGuests=S.tableGuests||{};S.tableRooms=S.tableRooms||{};cleanTableOrders();useMenu(S.menu);syncT();
+loadAll();if(S.set&&['Aurelia PMS','Aurelia PMS','Aurelia PMS'].includes(String(S.set.name||''))===false&&/hari\s*om/i.test(String(S.set.name||''))){S.set.name='Aurelia PMS';S.set.addr=String(S.set.addr||'').replace(/hari\s*om(?:\s+retreat)?/ig,'Aurelia PMS');persist()}RECOVERY_CHECK_PENDING=!!window.AureliaNative&&LOCAL_STATE_STATUS!=='valid';if(!window.AureliaNative)S.bk.folder=false;S.restaurant=Object.assign({name:'The Dining Room',phone:'',addr:'',tax:'',upi:'',cur:S.set.cur||'K',gst:0,qr:'',logo:''},S.restaurant||{});if(!S.restaurant.cur)S.restaurant.cur=S.set.cur||'K';S.tableGuests=S.tableGuests||{};S.tableRooms=S.tableRooms||{};cleanTableOrders();useMenu(S.menu);syncT();
 const _r3=render;render=function(){try{if(!S||typeof S!=='object')throw new Error('Saved app state is unavailable');['rooms','b','g','t','exp','inv','aud','cancelled','financialLedger'].forEach(k=>{if(!Array.isArray(S[k]))S[k]=[]});if(!S.set||typeof S.set!=='object')S.set={name:'Aurelia',tag:'Peace, comfort and mindful hospitality.',cur:'K'};if(!S.au||typeof S.au!=='object')S.au={};if(!S.bk||typeof S.bk!=='object')S.bk={folder:false,label:'',last:null,hash:'',hist:[]};if(!Array.isArray(types))throw new Error('Room type data is unavailable');syncT();_r3();brand();persist()}catch(err){console.error('Aurelia startup/render wrapper failed',err);const v=$('#v');if(v)v.innerHTML='<div class="card" style="margin:24px;padding:20px"><h2>Recovery needed</h2><p class="lab">A saved setting or room record prevented the screen from loading. Your existing records have not been intentionally deleted. Use Backup/Restore before clearing app data.</p><button class="btn" onclick="location.reload()">Reload app</button><button class="btn ghost" onclick="S.tab=\'more\';S.sub=\'backup\';location.reload()">Open backup after reload</button></div>'}};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)auto()});setInterval(auto,60000);
 nat({type:'deviceBackupStatus',requestId:'bs'+Date.now(),hash:curHash()});
@@ -3211,6 +3230,36 @@ SUB.rep=function(){
  return base+'<div class="card ca-report" style="margin-top:16px"><h2>Professional management accounts</h2><p class="lab">Period-based schedules for review by your accountant. Enter a period or leave dates blank for the available records.</p><div class="ca-period"><label class="fld"><span>From date</span><input id="ca-start" type="date" value="'+monthStart+'"></label><label class="fld"><span>To date</span><input id="ca-end" type="date" value="'+today+'"></label></div><div class="ca-actions"><button class="btn" onclick="exportCAReport(\'pl\')">Export Profit &amp; Loss</button><button class="btn ghost" onclick="exportCAReport(\'bs\')">Export Balance Sheet Schedule</button></div><div class="lab" style="margin-top:12px">Includes revenue categories, discounts, operating expenses, net operating profit/loss, recorded collections, guest receivables, stock valuation and pending refunds. A statutory balance sheet needs verified cash/bank balances, creditors, taxes, deposits, fixed assets, depreciation and opening capital.</div></div>';
 };
 
+/* Android hardware/system back: close the active sheet, return from a subview, then return Home. */
+window.aureliaHandleAndroidBack=function(){
+ try{const sheet=$('#sh');if(sheet&&sheet.classList.contains('show')){closeS();return true}
+ if(S&&S.sub){S.sub=null;render();return true}
+ if(S&&S.tab&&S.tab!=='home'){go('home');return true}
+ }catch(e){console.warn('Android back handler failed',e)}
+ return false;
+};
+/* Android Photo Picker supplies only the image selected by the user; no broad media permission is requested. */
+window.__aureliaImageInputs=window.__aureliaImageInputs||{};
+window.aureliaNativeImagePicked=function(requestId,payload,ok){
+ const input=window.__aureliaImageInputs[requestId];delete window.__aureliaImageInputs[requestId];
+ if(!input)return;
+ if(!ok){if(payload&&payload!=='Image selection cancelled.')toast(String(payload));return}
+ try{
+  const item=JSON.parse(payload),raw=atob(item.data||''),bytes=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+  const file=new File([bytes],item.name||'selected-image.jpg',{type:item.mime||'image/jpeg'});
+  const transfer=new DataTransfer();transfer.items.add(file);input.files=transfer.files;
+  input.dispatchEvent(new Event('change',{bubbles:true}));
+ }catch(error){console.error('Selected image could not be attached',error);toast('Could not load the selected image. Please choose it again.')}
+};
+document.addEventListener('click',function(event){
+ const input=event.target&&event.target.closest?event.target.closest('input[type="file"][accept*="image"]'):null;
+ if(!input||input.hasAttribute('capture')||!window.AureliaNative||typeof window.AureliaNative.postMessage!=='function')return;
+ event.preventDefault();event.stopImmediatePropagation();
+ const requestId='gallery-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+ window.__aureliaImageInputs[requestId]=input;
+ if(!nat({type:'pickImage',requestId})){delete window.__aureliaImageInputs[requestId];toast('Android photo picker is unavailable in this build.')}
+},true);
 /* Camera capture uses the Android system file chooser. The selected camera app handles its own permission; Aurelia requests no CAMERA permission. */</script>
 
 <style>
