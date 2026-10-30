@@ -54,9 +54,10 @@ export function validateProviderConfig(providerId, config = {}) {
 }
 
 export function getSingleConfiguredProvider(configuredProviders = {}) {
-  const active = Object.entries(configuredProviders).filter(([, config]) => config && config.configured === true);
-  if (active.length > 1) throw new Error("Aurelia supports one active payment provider per merchant account");
-  return active.length ? active[0][0] : null;
+  // Legacy builds allowed multiple provider records. Treat the first configured
+  // entry as the current selection; the next save migrates storage to one entry.
+  const active = Object.entries(configuredProviders).find(([, config]) => config && config.configured === true);
+  return active ? active[0] : null;
 }
 
 export function normalizeProviderEvent(providerId, event = {}) {
