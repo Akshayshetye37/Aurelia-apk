@@ -79,6 +79,10 @@ if (fs.existsSync(appGradleGroovy)) {
   }
 }
 
+const payBridgeTemplate = path.join(androidDir, 'templates', 'PayBridgeClient.java');
+if (!fs.existsSync(payBridgeTemplate)) throw new Error('PayBridgeClient.java template is missing.');
+fs.copyFileSync(payBridgeTemplate, path.join(javaDir, 'PayBridgeClient.java'));
+
 const javaPath = path.join(javaDir, 'MainActivity.java');
 const java = String.raw`
 package com.aurelia.pms;
@@ -125,7 +129,20 @@ public class MainActivity extends BridgeActivity {
   @Override public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     prefs = getSharedPreferences("aurelia_storage", MODE_PRIVATE);
+    payBridgeClient = new PayBridgeClient(this, status -> js("window.aureliaPayBridgeStatusChanged && window.aureliaPayBridgeStatusChanged(" + q(status) + ")"));
     bridge.getWebView().addJavascriptInterface(new AureliaBridge(), "AureliaNative");
+    payBridgeClient.connect();
+  }
+
+  @Override protected void onResume() {
+    super.onResume();
+    if (payBridgeClient != null) payBridgeClient.connect();
+  }
+
+  @Override protected void onDestroy() {
+    if (payBridgeClient != null) payBridgeClient.disconnect();
+    backupExecutor.shutdown();
+    super.onDestroy();
   }
 
   private void js(String script) {
@@ -411,6 +428,9 @@ public class MainActivity extends BridgeActivity {
   }
 
   private class AureliaBridge {
+    @JavascriptInterface public String getPayBridgeStatus() {
+      return payBridgeClient == null ? "{\\"authenticated\\":false,\\"state\\":\\"initializing\\"}" : payBridgeClient.statusJson();
+    }
     @JavascriptInterface public void postMessage(String raw) {
       String operationType = "", operationRequestId = "";
       try {
@@ -418,7 +438,11 @@ public class MainActivity extends BridgeActivity {
         final String type = obj.optString("type", "");
         final String requestId = obj.optString("requestId", "");
         operationType = type; operationRequestId = requestId;
-        if ("photoStore".equals(type)) {
+        if ("payBridgeConnect".equals(type)) {
+          if (payBridgeClient != null) payBridgeClient.connect();
+        } else if ("payBridgeDisconnect".equals(type)) {
+          if (payBridgeClient != null) payBridgeClient.disconnect();
+        } else if ("photoStore".equals(type)) {
           String key = obj.optString("key", "");
           String data = obj.optString("data", "");
           if (!data.startsWith("data:image/")) throw new IllegalArgumentException("Invalid photo data");
