@@ -3406,27 +3406,22 @@ document.addEventListener('click',function(event){
  }
  function platformHtml(){
   const platform=window.AureliaPaymentPlatform;
-  if(!platform)return '<div class="card payment-platform-card"><h2>Payment Provider</h2><p class="lab">Loading provider catalogue…</p></div>';
-  const connected=bridgeConnected(), active=platform.getSingleConfiguredProvider(S.set.paymentProviders||{});
-  const providers=providerNames().map(([id,name])=>{
-   const saved=(S.set.paymentProviders||{})[id]||{};
-   const definition=platform.PAYMENT_PROVIDERS[id];
-   const guide=platform.PROVIDER_INTEGRATION_GUIDES[id];
-   const guideHtml='<div class="lab" style="margin:8px 0 12px"><b>'+esc(definition.category)+' · '+esc(definition.integration)+'</b><p><b>Supported methods:</b> '+esc(definition.methods.join(', '))+'</p><ol style="padding-left:20px">'+guide.flow.map(step=>'<li style="margin:5px 0">'+esc(step)+'</li>').join('')+'</ol><b>Verification requirement:</b> '+esc(definition.verification)+'<div style="margin-top:8px"><b>Official documentation:</b><ul style="padding-left:20px">'+guide.docs.map(link=>'<li><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">'+esc(link.label)+'</a></li>').join('')+'</ul></div></div>';
-   return '<details'+(active===id?' open':'')+'><summary>'+esc(name)+' <span class="tag '+(active===id?'ready':'occ')+'" style="float:right">'+(active===id?'Selected':'Available')+'</span></summary>'+
-    guideHtml+
-    '<label class="fld"><span>'+esc(definition.identityLabel)+'</span><input data-provider="'+id+'" data-field="'+esc(definition.identityField)+'" value="'+esc(saved[definition.identityField]||'')+'" autocomplete="off"></label>'+
-    '<label class="fld"><span>Aurelia backend HTTPS URL</span><input data-provider="'+id+'" data-field="backendUrl" type="url" value="'+esc(saved.backendUrl||'')+'" placeholder="https://your-server.example"></label>'+
-    '<div class="lab">Selecting this provider replaces the previously selected provider for this merchant. Only public merchant identifiers are stored here. Secret keys, salts, tokens and webhook secrets must stay on your trusted backend.</div>'+
-    '<button class="btn sm" onclick="saveAureliaProvider(\''+id+'\')">Select and save this provider</button></details>';
+  if(!platform)return '<div class="card payment-platform-card"><h2>Payment Gateway</h2><p class="lab">Loading provider catalogue…</p></div>';
+  const status=bridgeStatus(),connected=bridgeConnected(),caps=Array.isArray(status.capabilities)?status.capabilities:[],canManage=connected&&caps.includes('provider.management'),active=platform.getSingleConfiguredProvider(S.set.paymentProviders||{});
+  const bridge=connected?'<div class="tag ready">Authenticated · protocol v'+esc(status.protocolVersion)+'</div><p class="lab">Signer fingerprint: '+esc(status.certificateSha256||'verified')+'<br>Capabilities: '+esc(caps.join(', ')||'handshake only')+'</p><button class="btn sm ghost" onclick="disconnectAureliaPayBridge()">Disconnect Pay Bridge</button>':'<div class="tag out">Not authenticated</div><p class="lab">'+esc(status.detail||'Separate Pay Bridge APK is not connected')+'</p><button class="btn sm" onclick="requestAureliaPayBridge()">Connect / Retry Pay Bridge</button>';
+  const names=providerNames();
+  const providers=names.map(([id,name])=>{
+   const saved=(S.set.paymentProviders||{})[id]||{},definition=platform.PAYMENT_PROVIDERS[id],guide=platform.PROVIDER_INTEGRATION_GUIDES[id];
+   const docs=guide.docs.map(link=>'<li><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">'+esc(link.label)+'</a></li>').join('');
+   const guideHtml='<p class="lab">'+esc(definition.category)+' · '+esc(definition.integration)+'<br>Methods: '+esc(definition.methods.join(', '))+'<br>'+esc(definition.verification)+'</p><ul>'+docs+'</ul>';
+   const fields=canManage?'<label class="fld"><span>'+esc(definition.identityLabel)+'</span><input data-provider="'+id+'" data-field="'+esc(definition.identityField)+'" value="'+esc(saved[definition.identityField]||'')+'"></label><label class="fld"><span>Trusted backend HTTPS URL</span><input data-provider="'+id+'" data-field="backendUrl" type="url" value="'+esc(saved.backendUrl||'')+'" placeholder="https://your-server.example"></label><button class="btn sm" onclick="saveAureliaProvider(\''+id+'\')">Save configuration</button>':'<p class="lab">Configuration locked. The authenticated Pay Bridge must advertise provider.management before this provider can be configured or activated.</p>';
+   return '<details><summary>'+esc(name)+(active===id?' · Selected':' · Catalogue')+'</summary>'+guideHtml+fields+'</details>';
   }).join('');
-  const bridge=connected?'<div class="tag ready">Pay Bridge authenticated · protocol v'+esc(bridgeStatus().protocolVersion)+'</div><button class="btn sm ghost" style="margin:10px 0" onclick="disconnectAureliaPayBridge()">Disconnect Pay Bridge</button>':'<div class="provider-row locked"><span><b>Aurelia Pay Bridge</b><small class="lab" style="display:block">'+esc(bridgeStatus().detail||'Separate Pay Bridge application is not connected')+' · live gateway execution unavailable</small></span><span class="tag out">Not connected</span></div><button class="btn sm" style="margin:10px 0" onclick="requestAureliaPayBridge()">Connect / Retry Pay Bridge</button>';
-  return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Provider</h2><div class="lab">Choose the one payment provider already approved for your business. Aurelia does not require every merchant to have every gateway. You can select one provider account only.</div>'+bridge+
-   (active?'<p class="lab"><b>Selected provider:</b> '+esc(platform.PAYMENT_PROVIDERS[active].name)+'</p>':'<p class="lab">No provider selected yet.</p>')+
-   providers+
-   '<p class="lab">Provider selection is configuration only. Actual payment collection requires a provider-specific backend adapter and authenticated Pay Bridge workflow. No payment is considered successful from a redirect, screenshot or client callback alone.</p></div>';
+  const catalogue=names.map(item=>esc(item[1])).join(' · ');
+  const providerBody=!connected?'<p class="lab">Authenticate Pay Bridge before viewing or configuring merchant provider settings.</p>':(canManage?providers:'<p class="lab">The PMS handshake is authenticated, but this Pay Bridge has not advertised provider.management. Configuration and activation remain locked. Available catalogue: '+catalogue+'</p>');
+  return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateway</h2><p class="lab">Provider management and Pay Bridge diagnostics are separate expandable sections.</p><details open><summary>Pay Bridge Connection</summary>'+bridge+'<p class="lab">Connection is green only after installed package identity, shared signer, signature permission and protocol nonce handshake are verified. Current PMS client supports handshake only.</p></details><details><summary>Provider Management</summary>'+providerBody+(active?'<p class="lab">Saved provider preference: '+esc(platform.PAYMENT_PROVIDERS[active].name)+'</p>':'')+'</details><p class="lab">Provider adapters, payment execution, backend webhook verification and transaction IPC remain future Pay Bridge/backend implementation. No unverified event may settle a folio.</p></div>';
  }
- window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;if(!native||typeof native.postMessage!=='function')throw new Error('Native Pay Bridge client is unavailable. Update the PMS APK.');native.postMessage(JSON.stringify({type:'payBridgeConnect'}));toast('Checking Pay Bridge installation, signing identity and native service…');setTimeout(()=>{try{render()}catch(_){ }},350)}catch(e){toast(e.message||'Could not start Pay Bridge connection')}};
+window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;if(!native||typeof native.postMessage!=='function')throw new Error('Native Pay Bridge client is unavailable. Update the PMS APK.');native.postMessage(JSON.stringify({type:'payBridgeConnect'}));toast('Checking Pay Bridge installation, signing identity and native service…');setTimeout(()=>{try{render()}catch(_){ }},350)}catch(e){toast(e.message||'Could not start Pay Bridge connection')}};
  window.disconnectAureliaPayBridge=function(){try{window.AureliaNative.postMessage(JSON.stringify({type:'payBridgeDisconnect'}));toast('Pay Bridge disconnected')}catch(_){toast('Native Pay Bridge client is unavailable')}};
  window.aureliaPayBridgeStatusChanged=function(){try{if(document.querySelector('.payment-platform-card'))render()}catch(_){ }};
  window.saveAureliaProvider=function(id){
@@ -3435,6 +3430,7 @@ document.addEventListener('click',function(event){
   try{
    const api=window.AureliaPaymentPlatform;
    if(!api)throw new Error('Payment platform is still loading');
+   const state=bridgeStatus();if(!bridgeConnected()||!Array.isArray(state.capabilities)||!state.capabilities.includes('provider.management'))throw new Error('Provider management is locked until authenticated Pay Bridge advertises provider.management.');
    const clean=api.validateProviderConfig(id,config);
    S.set.paymentProviders={[id]:{...clean,configured:true}};
    persist();aud('Payment provider selected',id+' selected as the merchant payment provider');render();
