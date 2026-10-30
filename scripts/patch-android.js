@@ -20,7 +20,7 @@ if (!manifest.includes('com.aurelia.paybridge.permission.BIND_PAY_BRIDGE')) {
   manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE" />\n    <application');
 }
 if (!manifest.includes('android.permission.INTERNET')) {
-  manifest = manifest.replace(/<application\\b/, '    <uses-permission android:name="android.permission.INTERNET" />\\n    <application');
+  manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="android.permission.INTERNET" />\n    <application');
 }
 // Use app-private storage and Android's Storage Access Framework. The WebView file picker
 // delegates camera capture to the selected camera app, so Aurelia itself needs no CAMERA
@@ -41,7 +41,7 @@ const permissionsToRemove = [
 ];
 for (const permission of permissionsToRemove) {
   const marker = '<uses-permission android:name="' + permission + '" tools:node="remove" />';
-  if (!manifest.includes(marker)) manifest = manifest.replace('</manifest>', '    ' + marker + '\\n</manifest>');
+  if (!manifest.includes(marker)) manifest = manifest.replace('</manifest>', '    ' + marker + '\n</manifest>');
 }
 fs.writeFileSync(manifestPath, manifest);
 
@@ -102,10 +102,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
-import android.Manifest;
-import android.content.pm.PackageManager;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 import android.provider.DocumentsContract;
 import android.database.Cursor;
 import android.util.Base64;
@@ -128,8 +124,6 @@ import java.util.concurrent.Executors;
 public class MainActivity extends BridgeActivity {
   private static final int PICK_BACKUP_FOLDER = 7101;
   private static final int CREATE_BACKUP_FILE = 7102;
-  private static final int REQUEST_CAMERA_PERMISSION = 7103;
-  private String cameraPermissionRequestId = "";
   private String folderRequestId = "";
   private String pendingFileRequestId = "";
   private byte[] pendingBytes = new byte[0];
