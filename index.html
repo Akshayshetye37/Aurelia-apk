@@ -914,28 +914,25 @@ async function decryptBackupEnvelope(envelope,filename){
  if(envelope.format!=='AURELIA-PMS-ENCRYPTED-BACKUP'||envelope.v!==1||envelope.application!=='com.aurelia.pms'||envelope.cipher!=='AES-256-GCM'||envelope.kdf!=='PBKDF2-HMAC-SHA256'||envelope.iterations!==BACKUP_KDF_ITERATIONS||typeof envelope.name!=='string'||(filename&&envelope.name!==filename))throw new Error('Encrypted backup header is invalid or unsupported.');
  const salt=backupUnB64(envelope.salt),iv=backupUnB64(envelope.iv),wrapIv=backupUnB64(envelope.wrapIv),wrappedKey=backupUnB64(envelope.wrappedKey),ciphertext=backupUnB64(envelope.ciphertext);
  if(salt.length!==16||iv.length!==12||wrapIv.length!==12||wrappedKey.length!==48||ciphertext.length<16||ciphertext.length>25*1024*1024)throw new Error('Encrypted backup has invalid cryptographic fields or size.');
+ const aad=new TextEncoder().encode('com.aurelia.pms|backup-v1|'+envelope.name);
  let vault=await readBackupVault(),key=null;
  if(vault&&vault.salt===envelope.salt&&vault.format===1)key=vault.key;
- if(!key){
-  const password=prompt('Enter the Aurelia backup recovery password. This password is required to decrypt this backup:');
-  if(password===null)throw new Error('Backup restore cancelled; no data was changed.');
-  if(password.length<1)throw new Error('A recovery password is required.');
-  try{
-   const kek=await backupPasswordKey(password,salt,envelope.iterations);
-   const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:wrapIv,additionalData:new TextEncoder().encode('com.aurelia.pms|backup-key-wrap|v1')},kek,wrappedKey);
-   key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
-   new Uint8Array(raw).fill(0);
-   await writeBackupVault({id:BACKUP_VAULT_ID,key,salt:envelope.salt,wrapIv:envelope.wrapIv,wrappedKey:envelope.wrappedKey,iterations:envelope.iterations,format:1});
-  }catch(_){throw new Error('Recovery password is incorrect or the backup key envelope is damaged.')}
+ if(key){
+  try{return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv,additionalData:aad},key,ciphertext))}
+  catch(_){key=null}
  }
+ const password=prompt('Enter the Aurelia backup recovery password. This password is required to decrypt this backup:');
+ if(password===null)throw new Error('Backup restore cancelled; no data was changed.');
+ if(password.length<1)throw new Error('A recovery password is required.');
  try{
-  const aad=new TextEncoder().encode('com.aurelia.pms|backup-v1|'+envelope.name);
+  const kek=await backupPasswordKey(password,salt,envelope.iterations);
+  const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:wrapIv,additionalData:new TextEncoder().encode('com.aurelia.pms|backup-key-wrap|v1')},kek,wrappedKey);
+  key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
+  new Uint8Array(raw).fill(0);
   const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv,additionalData:aad},key,ciphertext);
+  await writeBackupVault({id:BACKUP_VAULT_ID,key,salt:envelope.salt,wrapIv:envelope.wrapIv,wrappedKey:envelope.wrappedKey,iterations:envelope.iterations,format:1});
   return new TextDecoder().decode(plain);
- }catch(_){
-  if(vault&&vault.salt===envelope.salt)throw new Error('This backup does not match the recovery key stored on this device. Check the recovery password and backup file.');
-  throw new Error('Backup authentication failed. The file may be damaged or altered.');
- }
+ }catch(_){throw new Error('Recovery password is incorrect or the backup is damaged. No PMS records were changed.')}
 }
 async function decryptBackupPayload(payload,filename){
  let raw;
