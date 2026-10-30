@@ -1,1 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071522"/><stop offset="1" stop-color="#020a12"/></linearGradient><linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f8d35e"/><stop offset="1" stop-color="#d69b19"/></linearGradient><linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#36a77d"/><stop offset="1" stop-color="#08734f"/></linearGradient></defs><rect width="512" height="512" rx="104" fill="url(#bg)"/><path d="M58 390 C87 312 149 151 204 57 C216 36 238 37 250 61 L288 145 C266 183 240 231 216 279 C181 349 129 399 58 390Z" fill="url(#gold)"/><path d="M248 60 C262 37 283 42 294 66 L455 369 C468 394 448 414 421 410 C358 400 311 371 283 324 C254 277 243 222 252 166 C258 127 258 91 248 60Z" fill="url(#green)"/><path d="M247 62 C255 126 249 190 222 251" fill="none" stroke="#f9df85" stroke-width="7" stroke-linecap="round" opacity=".45"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#123a2a"/><stop offset=".58" stop-color="#082419"/><stop offset="1" stop-color="#04150e"/></linearGradient>
+ <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff0bd"/><stop offset=".42" stop-color="#e4c477"/><stop offset="1" stop-color="#a77a36"/></linearGradient>
+ <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d8bd78"/><stop offset="1" stop-color="#6b966c"/></linearGradient>
+</defs>
+<rect width="512" height="512" fill="url(#bg)"/>
+<circle cx="256" cy="256" r="205" fill="none" stroke="#d7bd7a" stroke-opacity=".24" stroke-width="2"/>
+<path d="M165 365 L248 151 Q256 132 264 151 L347 365" fill="none" stroke="url(#gold)" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M205 278 H307" fill="none" stroke="url(#gold)" stroke-width="18" stroke-linecap="round"/>
+<path d="M158 353 C136 324 137 296 157 279 C181 298 184 326 158 353Z" fill="url(#leaf)"/>
+<path d="M163 344 C174 315 191 297 214 286" fill="none" stroke="#d7bd7a" stroke-width="5" stroke-linecap="round"/>
+<path d="M354 353 C376 324 375 296 355 279 C331 298 328 326 354 353Z" fill="url(#leaf)"/>
+<path d="M349 344 C338 315 321 297 298 286" fill="none" stroke="#d7bd7a" stroke-width="5" stroke-linecap="round"/>
+</svg>
