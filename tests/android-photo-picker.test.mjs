@@ -10,7 +10,7 @@ test("Android image picker prefers Photo Picker without CATEGORY_OPENABLE", () =
   assert.ok(start >= 0 && end > start, "native image picker implementation must exist");
   const method = patcher.slice(start, end).split("\n").filter(line => !line.trim().startsWith("//")).join("\n");
   assert.match(method, /MediaStore\.ACTION_PICK_IMAGES/);
-  assert.doesNotMatch(method.slice(0, method.indexOf("// Reliable system document-picker fallback")), /CATEGORY_OPENABLE/);
+  const photoPickerBranch = method.slice(method.indexOf("MediaStore.ACTION_PICK_IMAGES"), method.indexOf("if (picker == null)"));\n  assert.ok(photoPickerBranch.length > 0, "Photo Picker branch must be present");\n  assert.doesNotMatch(photoPickerBranch, /CATEGORY_OPENABLE/);
 });
 
 test("Android image picker falls back to SAF and ACTION_GET_CONTENT", () => {
