@@ -954,7 +954,7 @@ public class MainActivity extends BridgeActivity {
         if ("photoStore".equals(operationType) || "photoLoad".equals(operationType) || "photoArchive".equals(operationType) || "photoRestore".equals(operationType)) photoResult(operationRequestId, false, message);
         else if ("backupDeviceNow".equals(operationType)) backupResult(operationRequestId, false, message);
         else if ("recoverLatestBackup".equals(operationType)) recoveryResult(operationRequestId, false, message, "");
-        else if ("deviceBackupStatus".equals(operationType)) js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(operationRequestId) + ",false,false,false)");
+        else if ("deviceBackupStatus".equals(operationType)) js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(operationRequestId) + ",false,false,false,false)");
         else if ("restoreLatestServerBackup".equals(operationType)) js("window.aureliaNativeServerRestoreResult && window.aureliaNativeServerRestoreResult(" + q(operationRequestId) + ",false," + q(message) + ")");
         else if ("saveBackupServerConfig".equals(operationType) || "clearBackupServerConfig".equals(operationType) || "testBackupServer".equals(operationType)) js("window.aureliaNativeBackupServerResult && window.aureliaNativeBackupServerResult(" + q(operationRequestId) + ",false," + q(message) + ")");
       }
