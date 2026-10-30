@@ -3388,7 +3388,7 @@ document.addEventListener('click',function(event){
 <script type="module" src="./src/payments/provider-platform.mjs"></script>
 <script>
 (function(){
- function providerNames(){const api=window.AureliaPaymentPlatform;const agreed=['razorpay','cashfree','payu','phonepe','paytm','jiopay','ccavenue'];return api?agreed.filter(id=>api.PAYMENT_PROVIDERS[id]).map(id=>[id,api.PAYMENT_PROVIDERS[id].name]):[];}
+ function providerNames(){const api=window.AureliaPaymentPlatform;return api?Object.entries(api.PAYMENT_PROVIDERS).map(([id,p])=>[id,p.name]):[];}
  function bridgeStatus(){
   try{
    const native=window.AureliaNative;
