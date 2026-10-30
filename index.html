@@ -809,7 +809,7 @@ function settle(){const t=S.t[S.tb-1],a=t.o.reduce((s,x)=>s+x[1],0);openS(`<h2 c
 function settleGo(){const t=S.t[S.tb-1],a=t.o.reduce((s,x)=>s+x[1],0),m=$('#sm .on').textContent;S.sales.push({t:t.n,a,m,at:new Date().toISOString()});S.today+=a;t.o=[];t.demo=0;aud('Dining bill settled','Table '+t.n+' · '+K(a)+' · '+m);closeS();render();toast(K(a)+' received by '+m)}
 function chg(i){const t=S.t[S.tb-1],b=bk(i);t.o.forEach(x=>b.ch.push(['Dining · '+x[0],x[1],'din']));t.o=[];t.demo=0;aud('Posted to room',b.g+' · Room '+b.room);closeS();render();toast('Posted to room '+b.room)}
 /* more: tiles, guests, expenses, inventory, reports, backup, settings */
-TL.length=0;TL.push(['folio','Folio','Money flow and guest ledgers','Folio'],['guests','Guests','Profiles, IDs, occupants, vehicles','Guests'],['hk','Housekeeping','Cleaning and release','Housekeeping'],['inv','Inventory','Stock, purchases, issues','POS'],['exp','Expenses','Record and void','Expenses'],['rep','Reports','Balance sheet and charts','Reports'],['aud','Audit','Every recorded action','Audit'],['backup','Backup','Folder, restore, data copy','Import/Export'],['set','Settings','Identity, autopilot, controls','']);
+TL.length=0;TL.push(['folio','Folio','Money flow and guest ledgers','Folio'],['guests','Guests','Profiles, IDs, occupants, vehicles','Guests'],['hk','Housekeeping','Cleaning and release','Housekeeping'],['inv','Inventory','Stock, purchases, issues','POS'],['exp','Expenses','Record and void','Expenses'],['rep','Reports','Balance sheet and charts','Reports'],['aud','Audit','Every recorded action','Audit'],['backup','Backup & Restore','Local, Drive, server and SAF backups','Import/Export'],['set','Settings','Identity, autopilot, controls','']);
 SUB.guests=()=>hd('Guests')+`<div class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn sm" onclick="dopen()">Add guest</button><button class="btn sm ghost" onclick="guestBookingExport()">Export guest / room PDF</button></div><div class="grid">${S.g.map((g,i)=>{const m=idMissing(g);return`<div class="card"><div class="item" style="padding:0;cursor:pointer" onclick="dopen(${i})"><div class="av">${esc(g.n[0]||'?')}</div><div class="f"><b>${esc(g.n)}</b><small>${esc(g.ph||'No phone')} · ${g.idt}</small></div><span class="tag ${m?'out':'ready'}">${m?'ID incomplete':'ID on file'}</span></div><div class="row" style="margin-top:10px"><span class="lab">${S.b.filter(b=>b.g===g.n).length} stays · ${(g.occ||[]).length} occupants · ${(g.veh||[]).length} vehicles</span><button class="btn sm ghost" onclick="ask('Remove guest','${esc(g.n).replace(/'/g,'’')} and the ID photos are deleted.','Remove','gdel(${i})')">Remove</button></div></div>`}).join('')||'<div class="empty">No guests yet.</div>'}</div>`;
 function gdel(i){const g=S.g[i];if(S.b.some(b=>b.g===g.n&&(b.st==='in'||b.st==='res'))){toast('This guest has an active stay or reservation');return}S.g.splice(i,1);aud('Guest removed',g.n);render()}
 const _inv=SUB.inv;SUB.inv=()=>_inv().replace(/onclick="invOp\((\d+),-1\)">Issue<\/button>/g,`onclick="invOp($1,-1)">Issue</button><button class="btn sm ghost" onclick="ask('Remove item','The item and its count are deleted.','Remove','invDel($1)')">Remove</button>`);
@@ -3438,8 +3438,9 @@ window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;
  SUB.set=function(){
   let out=originalSettings();
   const marker='<div class="card" style="margin-top:14px"><h2>Autopilot</h2>';
-  if(out.includes(marker))out=out.replace(marker,platformHtml()+marker);
-  else out+=platformHtml();
+  const backupCard='<div class="card" style="margin-top:14px"><h2>Backup & Restore</h2><p class="lab">Local-first backup with optional Google Drive, owner server/cloud and a separate SAF shared folder.</p><button class="btn sm" onclick="S.tab=\'more\';S.sub=\'backup\';render()">Open Backup & Restore</button></div>';
+  if(out.includes(marker))out=out.replace(marker,backupCard+platformHtml()+marker);
+  else out+=backupCard+platformHtml();
   return out;
  };
 })();
