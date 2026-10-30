@@ -28,7 +28,10 @@ final class PayBridgeClient {
   static final int PROTOCOL_MAX = 1;
   static final int MSG_HANDSHAKE = 100;
   static final int MSG_HANDSHAKE_RESULT = 101;
-  private static final long HANDSHAKE_TIMEOUT_MS = 8000L;
+  private static final long HANDSHAKE_TIMEOUT_MS = 10000L;
+  private static final int MAX_RECONNECT_ATTEMPTS = 5;
+  private static final long RECONNECT_BASE_DELAY_MS = 1000L;
+  private static final long RECONNECT_MAX_DELAY_MS = 16000L;
 
   interface Listener { void onStatusChanged(String statusJson); }
 
@@ -47,6 +50,8 @@ final class PayBridgeClient {
   private String signerSha256 = "";
   private String pendingNonce;
   private Runnable timeoutRunnable;
+  private Runnable reconnectRunnable;
+  private int reconnectAttempts;
 
   PayBridgeClient(Context context, Listener listener) {
     this.context = context.getApplicationContext();
@@ -103,6 +108,8 @@ final class PayBridgeClient {
         pendingNonce = null;
         connecting = false;
         authenticated = true;
+        reconnectAttempts = 0;
+        cancelReconnect();
         state = "connected";
         detail = "Authenticated native service connection";
         notifyStatus();
@@ -119,45 +126,15 @@ final class PayBridgeClient {
         return;
       }
       service = new Messenger(binder);
-      try {
-        pendingNonce = java.util.UUID.randomUUID().toString();
-        Message msg = Message.obtain(null, MSG_HANDSHAKE);
-        Bundle data = new Bundle();
-        data.putInt("protocolMin", PROTOCOL_MIN);
-        data.putInt("protocolMax", PROTOCOL_MAX);
-        data.putString("packageName", context.getPackageName());
-        data.putString("nonce", pendingNonce);
-        msg.setData(data);
-        msg.replyTo = reply;
-        service.send(msg);
-      } catch (Exception e) {
-        fail("handshake_failed", "Could not complete Pay Bridge handshake");
-      }
+      sendHandshake();
     }
 
     @Override public void onServiceDisconnected(ComponentName name) {
-      service = null;
-      clearHandshakeTimeout();
-      pendingNonce = null;
-      authenticated = false;
-      connecting = true;
-      state = "reconnecting";
-      detail = "Pay Bridge service disconnected; waiting for Android to reconnect";
-      // Android retains this binding and normally calls onServiceConnected again.
-      // Keep the handshake timeout active so a stalled reconnection fails closed.
-      startHandshakeTimeout();
-      notifyStatus();
+      handleUnexpectedDisconnect("Pay Bridge service process disconnected");
     }
 
     @Override public void onBindingDied(ComponentName name) {
-      clearHandshakeTimeout();
-      unbindQuietly();
-      authenticated = false;
-      connecting = false;
-      pendingNonce = null;
-      state = "disconnected";
-      detail = "Pay Bridge binding died; reconnect required";
-      notifyStatus();
+      handleUnexpectedDisconnect("Pay Bridge binding died");
     }
 
     @Override public void onNullBinding(ComponentName name) {
@@ -167,7 +144,14 @@ final class PayBridgeClient {
 
   synchronized void connect() {
     if (connecting || authenticated) { notifyStatus(); return; }
+    cancelReconnect();
+    reconnectAttempts = 0;
+    beginConnection();
+  }
 
+  /** Re-check package identity and signer on every initial or automatic bind attempt. */
+  private synchronized void beginConnection() {
+    if (connecting || authenticated) return;
     try {
       PackageInfo info = packageInfo(PACKAGE);
       if (info == null) {
@@ -190,27 +174,66 @@ final class PayBridgeClient {
       connecting = true;
       authenticated = false;
       pendingNonce = null;
-      state = "connecting";
+      state = reconnectAttempts == 0 ? "connecting" : "reconnecting";
       detail = "Binding to Pay Bridge native service";
       startHandshakeTimeout();
 
-      if (bound) {
-        // A transient onServiceDisconnected keeps the Android binding alive.
-        // Wait for Android's reconnection callback rather than creating a second binding.
-        if (service != null && service.getBinder().isBinderAlive()) {
-          sendHandshake();
-        }
-      } else {
-        Intent intent = new Intent();
-        intent.setComponent(new ComponentName(PACKAGE, SERVICE));
-        bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE);
-        if (!bound) fail("service_unavailable", "Pay Bridge native service is unavailable");
+      Intent intent = new Intent();
+      intent.setComponent(new ComponentName(PACKAGE, SERVICE));
+      bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE);
+      if (!bound) {
+        clearHandshakeTimeout();
+        connecting = false;
+        scheduleReconnect("Pay Bridge native service is temporarily unavailable");
       }
       notifyStatus();
     } catch (SecurityException e) {
       fail("permission_denied", "Signature permission denied");
     } catch (Exception e) {
       fail("connection_failed", "Could not connect to Pay Bridge");
+    }
+  }
+
+  private void handleUnexpectedDisconnect(String reason) {
+    clearHandshakeTimeout();
+    authenticated = false;
+    connecting = false;
+    pendingNonce = null;
+    unbindQuietly();
+    state = "reconnecting";
+    detail = reason;
+    notifyStatus();
+    scheduleReconnect(reason);
+  }
+
+  private synchronized void scheduleReconnect(String reason) {
+    if (authenticated || reconnectRunnable != null) return;
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      state = "disconnected";
+      detail = reason + "; automatic retry limit reached";
+      notifyStatus();
+      return;
+    }
+    long delay = Math.min(RECONNECT_BASE_DELAY_MS << reconnectAttempts,
+        RECONNECT_MAX_DELAY_MS);
+    reconnectAttempts++;
+    state = "reconnecting";
+    detail = reason + "; retry " + reconnectAttempts + " of " +
+        MAX_RECONNECT_ATTEMPTS + " in " + delay + " ms";
+    reconnectRunnable = () -> {
+      synchronized (PayBridgeClient.this) {
+        reconnectRunnable = null;
+        if (!authenticated && !connecting) beginConnection();
+      }
+    };
+    main.postDelayed(reconnectRunnable, delay);
+    notifyStatus();
+  }
+
+  private void cancelReconnect() {
+    if (reconnectRunnable != null) {
+      main.removeCallbacks(reconnectRunnable);
+      reconnectRunnable = null;
     }
   }
 
@@ -234,6 +257,8 @@ final class PayBridgeClient {
 
   synchronized void disconnect() {
     clearHandshakeTimeout();
+    cancelReconnect();
+    reconnectAttempts = 0;
     authenticated = false;
     connecting = false;
     pendingNonce = null;
@@ -247,7 +272,7 @@ final class PayBridgeClient {
     clearHandshakeTimeout();
     timeoutRunnable = () -> {
       synchronized (PayBridgeClient.this) {
-        if (connecting) fail("timeout", "Pay Bridge service bind or handshake timed out");
+        if (connecting) handleUnexpectedDisconnect("Pay Bridge service bind or handshake timed out");
       }
     };
     main.postDelayed(timeoutRunnable, HANDSHAKE_TIMEOUT_MS);
@@ -291,6 +316,7 @@ final class PayBridgeClient {
 
   private void fail(String code, String message) {
     clearHandshakeTimeout();
+    cancelReconnect();
     authenticated = false;
     connecting = false;
     pendingNonce = null;
