@@ -1,6 +1,6 @@
 # Aurelia Pay Bridge IPC contract
 
-Status: PMS-side Messenger client is implemented. The separate Pay Bridge application must implement this exact contract before the apps can connect.
+Status: PMS-side Messenger client implements connection discovery and protocol v1 handshake only. The separate Pay Bridge application has not been created and must implement this contract before the apps can connect.
 
 ## Android identity and access
 - Pay Bridge package: `com.aurelia.paybridge`
@@ -10,6 +10,7 @@ Status: PMS-side Messenger client is implemented. The separate Pay Bridge applic
 - PMS declares the matching `uses-permission` and narrow Android package-visibility query.
 - Both APKs must be signed with the same trusted signing identity. PMS checks Android package signature equality before binding.
 - PMS fails closed on missing package, signer mismatch, missing permission, missing service, invalid handshake, timeout, or disconnect.
+- A transient Android service-process disconnect retains the binding; PMS may wait for Android's reconnection callback. A dead binding must be unbound and explicitly rebound.
 
 ## Messenger protocol v1
 - Transport: Android `Messenger` over an explicit bound-service Intent.
@@ -23,8 +24,9 @@ Status: PMS-side Messenger client is implemented. The separate Pay Bridge applic
   - `protocolVersion` (int, must be 1)
   - `packageName` (string, must be `com.aurelia.paybridge`)
   - `nonce` (string, exact echo of PMS nonce)
-  - `capabilitiesJson` (JSON array string)
-- PMS accepts the connection only after the response passes all checks within 8 seconds.
+  - `capabilitiesJson` (JSON array string containing unique, non-empty strings; `handshake` is mandatory)
+- PMS accepts the connection only after the response passes all checks within **8 seconds**, measured from the start of binding. The timeout is cancelled after success or failure.
+- PMS validates the callback component identity, protocol version, package identity, nonce, and capability-array structure.
 - PMS reports the SHA-256 fingerprint of the installed APK signer only after successful handshake.
 - A green indicator means bound service plus successful protocol handshake and signer equality. Package installation alone is not connected.
 
