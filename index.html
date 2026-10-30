@@ -3476,7 +3476,36 @@ document.addEventListener('click',function(event){
 .payment-platform-card details[open] summary:after{content:'⌃'}
 .payment-platform-card .locked{opacity:.72}
 </style>
-<script type="module" src="./src/payments/provider-platform.mjs"></script>
+<script type="module">
+window.AureliaPaymentPlatformLoadState = "loading";
+import("./src/payments/provider-platform.mjs")
+  .then((api) => {
+    if (!window.AureliaPaymentPlatform && api) {
+      window.AureliaPaymentPlatform = Object.freeze({
+        PAYMENT_PROVIDERS: api.PAYMENT_PROVIDERS,
+        PMS_PROVIDER_CATALOGUE: api.PMS_PROVIDER_CATALOGUE,
+        PROVIDER_INTEGRATION_GUIDES: api.PROVIDER_INTEGRATION_GUIDES,
+        validateProviderConfig: api.validateProviderConfig,
+        getSingleConfiguredProvider: api.getSingleConfiguredProvider,
+        normalizeProviderEvent: api.normalizeProviderEvent,
+        isPayBridgeAuthenticated: api.isPayBridgeAuthenticated
+      });
+    }
+    if (!Array.isArray(window.AureliaPaymentPlatform?.PMS_PROVIDER_CATALOGUE)) {
+      throw new Error("Provider catalogue export is missing");
+    }
+    window.AureliaPaymentPlatformLoadState = "ready";
+    window.dispatchEvent(new Event("aurelia-payment-platform-ready"));
+    if (typeof window.render === "function") window.render();
+  })
+  .catch((error) => {
+    window.AureliaPaymentPlatformLoadState = "error";
+    window.AureliaPaymentPlatformLoadError = String(error?.message || error);
+    window.dispatchEvent(new Event("aurelia-payment-platform-error"));
+    if (typeof window.render === "function") window.render();
+    console.error("Aurelia provider catalogue failed to load:", error);
+  });
+</script>
 <script>
 (function(){
  function providerNames(){const api=window.AureliaPaymentPlatform;return api&&Array.isArray(api.PMS_PROVIDER_CATALOGUE)?api.PMS_PROVIDER_CATALOGUE.filter(id=>api.PAYMENT_PROVIDERS[id]).map(id=>[id,api.PAYMENT_PROVIDERS[id].name]):[];}
@@ -3493,7 +3522,14 @@ document.addEventListener('click',function(event){
  }
  function platformHtml(){
   const platform=window.AureliaPaymentPlatform;
-  if(!platform)return '<div class="card payment-platform-card"><h2>Payment Gateway</h2><p class="lab">Loading provider catalogue…</p></div>';
+  if(!platform){
+   const failed=window.AureliaPaymentPlatformLoadState==="error";
+   const detail=esc(window.AureliaPaymentPlatformLoadError||"The provider module has not finished loading.");
+   return '<div class="card payment-platform-card"><h2>Payment Gateway</h2><p class="lab">'+(failed?'Provider catalogue could not load. ':'Loading provider catalogue… ')+detail+'</p>'+(failed?'<p class="lab">Preview the complete project folder so ./src/payments/provider-platform.mjs is available beside index.html. In the APK, rebuild after syncing the www assets.</p><button class="btn sm ghost" onclick="location.reload()">Retry</button>':'')+'</div>';
+  }
+  if(!Array.isArray(platform.PMS_PROVIDER_CATALOGUE)||!platform.PMS_PROVIDER_CATALOGUE.length){
+   return '<div class="card payment-platform-card"><h2>Payment Gateway</h2><p class="lab">Provider catalogue loaded, but no providers were exported. Check PMS_PROVIDER_CATALOGUE in src/payments/provider-platform.mjs.</p></div>';
+  }
   const status=bridgeStatus(),connected=bridgeConnected(),caps=Array.isArray(status.capabilities)?status.capabilities:[],canManage=connected&&caps.includes('provider.management'),active=platform.getSingleConfiguredProvider(S.set.paymentProviders||{});
   const bridge=connected?'<div class="tag ready">Authenticated · protocol v'+esc(status.protocolVersion)+'</div><p class="lab">Signer fingerprint: '+esc(status.certificateSha256||'verified')+'<br>Capabilities: '+esc(caps.join(', ')||'handshake only')+'</p><button class="btn sm ghost" onclick="disconnectAureliaPayBridge()">Disconnect Pay Bridge</button>':'<div class="tag out">Not authenticated</div><p class="lab">'+esc(status.detail||'Separate Pay Bridge APK is not connected')+'</p><button class="btn sm" onclick="requestAureliaPayBridge()">Connect / Retry Pay Bridge</button>';
   const names=providerNames();
