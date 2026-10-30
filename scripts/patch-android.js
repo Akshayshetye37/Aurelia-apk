@@ -430,7 +430,7 @@ public class MainActivity extends BridgeActivity {
 
   private class AureliaBridge {
     @JavascriptInterface public String getPayBridgeStatus() {
-      return payBridgeClient == null ? "{\\"authenticated\\":false,\\"state\\":\\"initializing\\"}" : payBridgeClient.statusJson();
+      return payBridgeClient == null ? "{\"authenticated\":false,\"state\":\"initializing\"}" : payBridgeClient.statusJson();
     }
     @JavascriptInterface public void postMessage(String raw) {
       String operationType = "", operationRequestId = "";
