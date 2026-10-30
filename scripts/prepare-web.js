@@ -23,3 +23,6 @@ for(const name of ['reconciliation-panel.js']){
  fs.copyFileSync(source,path.join(featuresDest,name));
 }
 console.log('Prepared web app, settlement modules, and UPI reconciliation bridge for Capacitor');
+const platformSrc=path.join(root,'src','payments','provider-platform.mjs');
+if(!fs.existsSync(platformSrc))throw new Error('Payment platform module not found: '+platformSrc);
+fs.copyFileSync(platformSrc,path.join(settlementDest,'provider-platform.mjs'));
