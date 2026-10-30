@@ -820,7 +820,7 @@ const donut=p=>{const T=p.reduce((a,x)=>a+x[1],0),L=T||1;let c=0;return`<svg vie
 const br=(l,v,m,c)=>`<div class="row lab" style="margin-top:8px"><span>${l}</span><span>${K(v)}</span></div><div class="bar"><i style="width:${Math.max(0,v)/(m||1)*100}%;${c?`background:${c}`:''}"></i></div>`,ln=(l,v,b)=>`<div class="ln" style="${b?'font-weight:500;border-bottom:1px solid var(--gold)':''}"><span>${l}</span><span>${K(v)}</span></div>`;
 SUB.rep=()=>{const bs=S.b.filter(b=>b.st!=='res'),ch=bs.flatMap(b=>b.ch),room=bs.reduce((a,b)=>a+nts(b)*(rm(b.room)||{r:0}).r,0),sl=S.sales.reduce((a,x)=>a+x.a,0),din=ch.filter(x=>catOf(x)==='din').reduce((a,x)=>a+x[1],0)+sl,ext=ch.filter(x=>catOf(x)!=='din').reduce((a,x)=>a+x[1],0),dc=bs.reduce((a,b)=>a+(b.dc||0),0),rev=room+din+ext-dc,ex=S.exp.filter(e=>!e.v),exT=ex.reduce((a,e)=>a+e.a,0),M2={};bs.forEach(b=>(b.pays||[]).forEach(p=>M2[p.m]=(M2[p.m]||0)+p.a));S.sales.forEach(x=>M2[x.m]=(M2[x.m]||0)+x.a);const col=Object.values(M2).reduce((a,x)=>a+x,0),rec=S.b.filter(b=>b.st==='in').reduce((a,b)=>a+Math.max(0,dueB(b)),0),stk=S.inv.reduce((a,x)=>a+x.q*x.u,0),cash=col-exT,as=cash+rec+stk,pf=rev-exT,cats={};ex.forEach(e=>cats[e.c]=(cats[e.c]||0)+e.a);const v=[...S.hist,S.today],mx=Math.max(1,...v),ma=Math.max(1,Math.abs(cash),rec,stk);
 return hd('Reports')+`<div class="grid g4" style="margin-top:0">${kpi('Revenue',rev,S.set.cur,'','Rooms, dining, extras')}${kpi('Expenses',exT,S.set.cur,'','Active entries')}${kpi('Profit',Math.max(0,pf),S.set.cur,'',pf<0?'Currently a loss':'Revenue less expenses')}${kpi('Still owed',rec,S.set.cur,'','In-house balances')}</div><div class="grid g2"><div class="card" style="text-align:center"><h2>Where revenue comes from</h2>${donut([[ 'Rooms',room,'#d9b76e'],['Dining',din,'#3cb98a'],['Extras',ext,'#8aa8ff']])}<div class="lab" style="margin-top:6px">Gold rooms · green dining · blue extras</div></div><div class="card"><h2>Income statement</h2>${ln('Room revenue',room)}${ln('Dining revenue',din)}${ln('Extras',ext)}${ln('Less discounts',-dc)}${ln('Total revenue',rev,1)}${ln('Less expenses',-exT)}<div class="row" style="margin-top:10px"><span class="lab">Net profit</span><span class="tot ${pf<0?'out':''}">${K(pf)}</span></div></div></div><div class="grid g2"><div class="card"><h2>Balance sheet</h2><div class="lab">What the hotel owns</div>${br('Cash and mobile money',cash,ma)}${br('Owed by guests',rec,ma,'linear-gradient(90deg,#8d4a42,#d0675a)')}${br('Stock on hand',stk,ma,'linear-gradient(90deg,#1f6b4f,#3cb98a)')}${ln('Total assets',as,1)}<div class="lab" style="margin-top:12px">What the hotel owes</div>${ln('Supplier and guest deposits',0)}${ln('Owner’s equity',as,1)}<div class="lab">Assets equal liabilities plus equity.</div></div><div class="card"><h2>Money received by method</h2>${Object.entries(M2).map(([k,x])=>br(k,x,Math.max(...Object.values(M2)))).join('')||'<div class="empty">No payments yet.</div>'}<h2 style="margin-top:18px">Expenses by category</h2>${Object.entries(cats).map(([k,x])=>br(k,x,Math.max(...Object.values(cats)),'linear-gradient(90deg,#8d4a42,#e3a944)')).join('')||'<div class="empty">No expenses yet.</div>'}</div></div><div class="card" style="margin-top:14px"><h2>Takings, last seven days</h2><div style="display:flex;gap:8px;align-items:flex-end;height:130px">${v.map((x,i)=>`<div style="flex:1;text-align:center"><div style="height:${x/mx*100}px;border-radius:8px 8px 3px 3px;background:linear-gradient(180deg,#f1d995,#8d6a2b);transform-origin:bottom;animation:grow2 1.2s ${i*.08}s both cubic-bezier(.2,.8,.2,1)"></div><small class="lab">${['M','T','W','T','F','S','Now'][i]}</small></div>`).join('')}</div></div><p class="lab" style="margin-top:12px">Figures come from recorded stays, payments, dining sales, expenses and stock. Check them against your own books before filing taxes.</p>`};
-SUB.backup=()=>{const b=S.bk;return hd('Backup & Restore')+`<details class="card"><summary><h2 style="display:inline">Google Drive · Optional</h2></summary><div class="lab">Select a Google Drive folder through Android SAF. Sign in through Google's document provider if prompted. This is a secondary destination; private local backup remains primary. ID photos are included only in the integrity-checked PMS backup file.</div><div class="row" style="margin:14px 0"><span class="tag ${b.folder?'ready':'out'}">${b.folder?'Folder ready':'No folder chosen'}${b.label?' · '+esc(b.label):''}</span><button class="btn sm" onclick="pickDir()">${b.folder?'Change folder':'Choose Drive folder'}</button></div><div class="row"><span class="lab">Last backup: ${b.last?tmf(new Date(b.last)):'never'}</span><button class="btn sm ghost" onclick="runBackup()">Back up now</button></div><div class="lab" style="margin-top:10px">A backup runs when you open the app and whenever something changes. If nothing changed, no new file is made.</div></details><details class="card" open style="margin-top:14px"><summary><h2 style="display:inline">Local Backup · Primary</h2></summary><p class="lab">PMS backups are stored in private app storage without broad storage permissions. Automatic snapshots run on app launch and after PMS data changes. Seven verified local recovery points are retained.</p><div class="row"><span class="tag ${S.bk.localReady?'ready':'out'}">${S.bk.localReady?'Private local storage ready':'Checking private local storage'}</span><span class="lab">Automatic backup: ${S.au.backup===false?'Off':'On'}</span><button class="btn sm ghost" onclick="toggleLocalAutoBackup()">Toggle</button><button class="btn sm" onclick="runBackup()">Back up now</button></div></details>
+SUB.backup=()=>{const b=S.bk;return hd('Backup & Restore')+`<div class="card" style="margin-top:12px"><h2>Encrypted Backup Vault</h2><p class="lab">All new PMS backup copies are encrypted with AES-256-GCM before they are written to local storage, Google Drive, the shared folder or server/cloud. Set one strong recovery password and keep it somewhere separate from this phone. The same password is required to restore on a replacement device. It is never stored in plaintext.</p><label class="fld"><span>Recovery password (minimum 14 characters)</span><input id="backup-recovery-password" type="password" autocomplete="new-password" minlength="14"></label><label class="fld"><span>Confirm recovery password</span><input id="backup-recovery-confirm" type="password" autocomplete="new-password" minlength="14"></label><button class="btn sm" onclick="setupBackupRecoveryPassword()">Set recovery password</button><p id="backup-vault-status" class="lab">Recovery key status is checked when you create or restore a backup. The recovery password cannot be reset without re-encrypting existing backups.</p></div><details class="card"><summary><h2 style="display:inline">Google Drive · Optional</h2></summary><div class="lab">Select a Google Drive folder through Android SAF. Sign in through Google's document provider if prompted. This is a secondary destination; private local backup remains primary. ID photos are included only in the integrity-checked PMS backup file.</div><div class="row" style="margin:14px 0"><span class="tag ${b.folder?'ready':'out'}">${b.folder?'Folder ready':'No folder chosen'}${b.label?' · '+esc(b.label):''}</span><button class="btn sm" onclick="pickDir()">${b.folder?'Change folder':'Choose Drive folder'}</button></div><div class="row"><span class="lab">Last backup: ${b.last?tmf(new Date(b.last)):'never'}</span><button class="btn sm ghost" onclick="runBackup()">Back up now</button></div><div class="lab" style="margin-top:10px">A backup runs when you open the app and whenever something changes. If nothing changed, no new file is made.</div></details><details class="card" open style="margin-top:14px"><summary><h2 style="display:inline">Local Backup · Primary</h2></summary><p class="lab">PMS backups are stored in private app storage without broad storage permissions. Automatic snapshots run on app launch and after PMS data changes. Seven verified local recovery points are retained.</p><div class="row"><span class="tag ${S.bk.localReady?'ready':'out'}">${S.bk.localReady?'Private local storage ready':'Checking private local storage'}</span><span class="lab">Automatic backup: ${S.au.backup===false?'Off':'On'}</span><button class="btn sm ghost" onclick="toggleLocalAutoBackup()">Toggle</button><button class="btn sm" onclick="runBackup()">Back up now</button></div></details>
 <details class="card" style="margin-top:12px"><summary><h2 style="display:inline">Server / Cloud · Optional</h2></summary><p class="lab">Configure any owner-controlled HTTPS endpoint. The bearer token is encrypted using Android Keystore and is not saved in JavaScript storage.</p><label class="fld"><span>HTTPS endpoint</span><input id="backup-server-url" type="url" value="${esc(S.bk.serverUrl||'')}" placeholder="https://your-server.example/aurelia/backups"></label><label class="fld"><span>Bearer token (enter to save or rotate)</span><input id="backup-server-token" type="password" autocomplete="new-password"></label><div class="row" style="flex-wrap:wrap"><button class="btn sm" onclick="saveBackupServer()">Save securely</button><button class="btn sm ghost" onclick="testBackupServer()">Test connection</button><button class="btn sm ghost" onclick="restoreFromBackupServer()">Restore latest</button><button class="btn sm ghost" onclick="clearBackupServer()">Disconnect</button></div><p class="lab">Status: ${S.bk.serverConfigured?'Configured':'Not configured'}. Remote copies are attempted after each local snapshot while PMS is running.</p></details>
 <details class="card" style="margin-top:12px"><summary><h2 style="display:inline">Shared Folder / SAF Policy</h2></summary><p class="lab">This is a separate owner-selected folder for explicit PMS backup export/import and permitted file exchange. It is not the Google Drive backup destination and never exposes either app's live database.</p><div class="row"><span class="tag ${S.bk.sharedFolder?'ready':'out'}">${S.bk.sharedFolder?'Shared folder selected':'Not selected'}</span><button class="btn sm ghost" onclick="pickDir('shared')">Choose shared folder</button><button class="btn sm ghost" onclick="clearBackupFolder('shared')">Disconnect</button></div></details><details class="card" style="margin-top:14px"><summary><h2 style="display:inline">Recent backups</h2></summary><div class="list">${b.hist.map(h=>`<div class="item"><div class="f"><b style="font-size:13px;word-break:break-all">${esc(h.n)}</b><small>${tmf(new Date(h.at))}</small></div></div>`).join('')||'<div class="empty">No backups yet.</div>'}</div></details><details class="card" style="margin-top:14px"><summary><h2 style="display:inline">Restore and copy</h2></summary><label class="fld"><span>Restore from a backup file</span><input type="file" accept=".json,application/json" onchange="restoreF(this)"></label><div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px"><button class="btn sm ghost" onclick="cp('json')">Copy backup</button><button class="btn sm ghost" onclick="cp('guests')">Copy guests</button><button class="btn sm ghost" onclick="cp('bookings')">Copy bookings</button></div></details>`};
 const sw=(l,v,c,d)=>`<div class="row" style="padding:10px 0;border-bottom:1px dotted var(--ln);${d?'opacity:.4':''}"><span>${l}</span><button class="sw ${v?'on':''}" aria-label="${l}" onclick="${c}"></button></div>`,keep=f=>{const y=scrollY;f();render();scrollTo({top:y,behavior:'instant'})},ta=k=>keep(()=>S.au[k]=!S.au[k]);
@@ -861,6 +861,99 @@ async function sha256Hex(text){
 }
 const cloneSnapshot=()=>JSON.parse(JSON.stringify(Object.fromEntries(DK.map(k=>[k,S[k]]))));
 const cloneLiveSnapshot=()=>{const out={};DK.forEach(k=>{try{out[k]=typeof structuredClone==='function'?structuredClone(S[k]):JSON.parse(JSON.stringify(S[k]))}catch(e){out[k]=JSON.parse(JSON.stringify(S[k]))}});return out};
+
+/* Encrypted backup vault. The non-extractable data key is persisted in IndexedDB;
+   a recovery-password-wrapped copy makes encrypted exports portable to a new device. */
+const BACKUP_VAULT_DB='aurelia-pms-backup-vault-v1';
+const BACKUP_VAULT_ID='primary';
+const BACKUP_KDF_ITERATIONS=600000;
+function backupB64(bytes){let s='';new Uint8Array(bytes).forEach(b=>s+=String.fromCharCode(b));return btoa(s)}
+function backupUnB64(value){return Uint8Array.from(atob(value),c=>c.charCodeAt(0))}
+function backupVaultDb(){
+ return new Promise((resolve,reject)=>{
+  const req=indexedDB.open(BACKUP_VAULT_DB,1);
+  req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('vault'))req.result.createObjectStore('vault',{keyPath:'id'})};
+  req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('Could not open encrypted backup key storage.'));
+ });
+}
+async function readBackupVault(){
+ const db=await backupVaultDb();
+ try{return await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readonly'),req=tx.objectStore('vault').get(BACKUP_VAULT_ID);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}
+ finally{db.close()}
+}
+async function writeBackupVault(record){
+ const db=await backupVaultDb();
+ try{await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readwrite');tx.objectStore('vault').put(record);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('Could not save backup recovery key.'))})}
+ finally{db.close()}
+}
+async function backupPasswordKey(password,salt,iterations){
+ const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveKey']);
+ return crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt,iterations},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+async function setupBackupRecoveryPassword(){
+ try{
+  if(!crypto?.subtle)throw new Error('This Android WebView does not support secure backup encryption.');
+  if(await readBackupVault())throw new Error('A recovery password is already configured. Keep it safe; changing it requires a separate backup-key rotation procedure.');
+  const password=$('#backup-recovery-password')?.value||'',confirmPassword=$('#backup-recovery-confirm')?.value||'';
+  if(password.length<14)throw new Error('Use a recovery password with at least 14 characters.');
+  if(password!==confirmPassword)throw new Error('The two recovery passwords do not match.');
+  const salt=crypto.getRandomValues(new Uint8Array(16)),wrapIv=crypto.getRandomValues(new Uint8Array(12));
+  const kek=await backupPasswordKey(password,salt,BACKUP_KDF_ITERATIONS);
+  const rawKey=crypto.getRandomValues(new Uint8Array(32));
+  const wrapped=await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv,additionalData:new TextEncoder().encode('com.aurelia.pms|backup-key-wrap|v1')},kek,rawKey);
+  const dataKey=await crypto.subtle.importKey('raw',rawKey,{name:'AES-GCM'},false,['encrypt','decrypt']);
+  rawKey.fill(0);
+  await writeBackupVault({id:BACKUP_VAULT_ID,key:dataKey,salt:backupB64(salt),wrapIv:backupB64(wrapIv),wrappedKey:backupB64(wrapped),iterations:BACKUP_KDF_ITERATIONS,format:1});
+  $('#backup-recovery-password').value='';$('#backup-recovery-confirm').value='';
+  const status=$('#backup-vault-status');if(status)status.textContent='Encrypted backup vault is ready on this device. Keep your recovery password somewhere safe.';
+  toast('Encrypted backup vault configured. Create your first backup now.');
+  autoBackup();
+ }catch(e){toast(e.message||'Could not configure encrypted backups')}
+}
+async function decryptBackupEnvelope(envelope,filename){
+ if(envelope.format!=='AURELIA-PMS-ENCRYPTED-BACKUP'||envelope.v!==1||envelope.application!=='com.aurelia.pms'||envelope.cipher!=='AES-256-GCM'||envelope.kdf!=='PBKDF2-HMAC-SHA256'||envelope.iterations!==BACKUP_KDF_ITERATIONS||typeof envelope.name!=='string'||(filename&&envelope.name!==filename))throw new Error('Encrypted backup header is invalid or unsupported.');
+ const salt=backupUnB64(envelope.salt),iv=backupUnB64(envelope.iv),wrapIv=backupUnB64(envelope.wrapIv),wrappedKey=backupUnB64(envelope.wrappedKey),ciphertext=backupUnB64(envelope.ciphertext);
+ if(salt.length!==16||iv.length!==12||wrapIv.length!==12||wrappedKey.length!==48||ciphertext.length<16||ciphertext.length>25*1024*1024)throw new Error('Encrypted backup has invalid cryptographic fields or size.');
+ let vault=await readBackupVault(),key=null;
+ if(vault&&vault.salt===envelope.salt&&vault.format===1)key=vault.key;
+ if(!key){
+  const password=prompt('Enter the Aurelia backup recovery password. This password is required to decrypt this backup:');
+  if(password===null)throw new Error('Backup restore cancelled; no data was changed.');
+  if(password.length<1)throw new Error('A recovery password is required.');
+  try{
+   const kek=await backupPasswordKey(password,salt,envelope.iterations);
+   const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:wrapIv,additionalData:new TextEncoder().encode('com.aurelia.pms|backup-key-wrap|v1')},kek,wrappedKey);
+   key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
+   new Uint8Array(raw).fill(0);
+   await writeBackupVault({id:BACKUP_VAULT_ID,key,salt:envelope.salt,wrapIv:envelope.wrapIv,wrappedKey:envelope.wrappedKey,iterations:envelope.iterations,format:1});
+  }catch(_){throw new Error('Recovery password is incorrect or the backup key envelope is damaged.')}
+ }
+ try{
+  const aad=new TextEncoder().encode('com.aurelia.pms|backup-v1|'+envelope.name);
+  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv,additionalData:aad},key,ciphertext);
+  return new TextDecoder().decode(plain);
+ }catch(_){
+  if(vault&&vault.salt===envelope.salt)throw new Error('This backup does not match the recovery key stored on this device. Check the recovery password and backup file.');
+  throw new Error('Backup authentication failed. The file may be damaged or altered.');
+ }
+}
+async function decryptBackupPayload(payload,filename){
+ let raw;
+ try{raw=JSON.parse(payload)}catch(_){throw new Error('Backup file is not valid JSON.')}
+ if(raw&&raw.format==='AURELIA-PMS-ENCRYPTED-BACKUP')return await decryptBackupEnvelope(raw,filename||raw.name);
+ if(raw&&raw.v===4&&raw.data){console.warn('Restoring a legacy unencrypted PMS backup. New backups are encrypted.');return payload}
+ throw new Error('This file is not a supported Aurelia PMS backup.');
+}
+async function encryptBackupPayload(payload,name){
+ const vault=await readBackupVault();
+ if(!vault||!vault.key)throw new Error('Set the encrypted backup recovery password in Backup & Restore before creating backups.');
+ const iv=crypto.getRandomValues(new Uint8Array(12));
+ const aad=new TextEncoder().encode('com.aurelia.pms|backup-v1|'+name);
+ const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad},vault.key,new TextEncoder().encode(payload));
+ return JSON.stringify({format:'AURELIA-PMS-ENCRYPTED-BACKUP',v:1,application:'com.aurelia.pms',name,cipher:'AES-256-GCM',kdf:'PBKDF2-HMAC-SHA256',iterations:vault.iterations,salt:vault.salt,wrapIv:vault.wrapIv,wrappedKey:vault.wrappedKey,iv:backupB64(iv),ciphertext:backupB64(ciphertext)});
+}
+async function hasBackupVault(){try{return !!(await readBackupVault())}catch(_){return false}}
+
 async function createBackupSnapshot(){
  const dataHash=curHash(),data=cloneSnapshot();
  const originals=await photoArchive();
@@ -880,7 +973,7 @@ async function pruneBrowserBackups(directoryHandle,protectedHandle,maximum=3){
   try{
    const file=await handle.getFile(),raw=JSON.parse(await file.text());
    const data=raw&&raw.data;
-   let valid=!!(raw&&raw.v===4&&data&&Array.isArray(data.rooms)&&Array.isArray(data.b)&&data.set&&typeof data.set==='object');
+   let valid=!!(raw&&((raw.format==='AURELIA-PMS-ENCRYPTED-BACKUP'&&raw.v===1&&raw.application==='com.aurelia.pms'&&raw.cipher==='AES-256-GCM'&&raw.kdf==='PBKDF2-HMAC-SHA256'&&raw.iterations===BACKUP_KDF_ITERATIONS&&typeof raw.wrappedKey==='string'&&typeof raw.ciphertext==='string')||(raw.v===4&&data&&Array.isArray(data.rooms)&&Array.isArray(data.b)&&data.set&&typeof data.set==='object')));
    if(valid&&raw.integrity){
     valid=raw.integrity.algorithm==='SHA-256'&&/^[a-f0-9]{64}$/i.test(raw.integrity.digest||'');
     if(valid){const copy={...raw};delete copy.integrity;valid=await sha256Hex(JSON.stringify(copy))===raw.integrity.digest}
@@ -902,18 +995,19 @@ async function runBackup(auto){
  try{
   const snap=await createBackupSnapshot();
   if(S.bk.verified&&S.bk.hash===snap.dataHash){if(!auto)toast('Everything is already backed up');return}
-  const requestId='bk'+Date.now();BKB={h:snap.dataHash,nm:snap.name,payload:snap.payload,requestId};
-  if(nat({type:'backupDeviceNow',requestId,name:snap.name,payload:snap.payload}))return;
+  const encryptedPayload=await encryptBackupPayload(snap.payload,snap.name);
+  const requestId='bk'+Date.now();BKB={h:snap.dataHash,nm:snap.name,payload:encryptedPayload,requestId};
+  if(nat({type:'backupDeviceNow',requestId,name:snap.name,payload:encryptedPayload}))return;
   const saveToDir=window.BKDIR;
   if(saveToDir){
    const stagingName='.'+snap.name+'.staging-'+requestId;
    try{
     const stage=await saveToDir.getFileHandle(stagingName,{create:true}),w=await stage.createWritable();
-    await w.write(snap.payload);await w.close();
-    if(await (await stage.getFile()).text()!==snap.payload)throw new Error('Staged backup read-back verification failed');
+    await w.write(encryptedPayload);await w.close();
+    if(await (await stage.getFile()).text()!==encryptedPayload)throw new Error('Staged encrypted backup read-back verification failed');
     const final=await saveToDir.getFileHandle(snap.name,{create:true}),fw=await final.createWritable();
-    await fw.write(snap.payload);await fw.close();
-    if(await (await final.getFile()).text()!==snap.payload)throw new Error('Published backup read-back verification failed');
+    await fw.write(encryptedPayload);await fw.close();
+    if(await (await final.getFile()).text()!==encryptedPayload)throw new Error('Published encrypted backup read-back verification failed');
     try{await saveToDir.removeEntry(stagingName)}catch(_){}
     let retentionWarning='';
     try{await pruneBrowserBackups(saveToDir,final,3)}catch(cleanupError){console.error('Backup saved but retention cleanup failed',cleanupError);retentionWarning='WARN:Backup saved and verified, but retention cleanup was incomplete. Check the folder; older backup files may remain.'}
@@ -921,7 +1015,7 @@ async function runBackup(auto){
    }catch(e){try{await saveToDir.removeEntry(stagingName)}catch(_){}throw e}
   }
   BKB=null;
-  const blob=new Blob([snap.payload],{type:'application/json;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  const blob=new Blob([encryptedPayload],{type:'application/json;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download=snap.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
   toast('Backup download started. It is not marked verified until saved to a supported folder.');
   if(S.sub==='backup'&&!$('#sh').classList.contains('show'))render();
@@ -937,7 +1031,7 @@ function testBackupServer(){if(!nat({type:'testBackupServer',requestId:'bst'+Dat
 function clearBackupServer(){if(!confirm('Remove the saved server destination and encrypted token? Local backups remain.'))return;nat({type:'clearBackupServerConfig',requestId:'bsd'+Date.now()});S.bk.serverConfigured=false;S.bk.serverUrl='';S.bk.serverRetry=false;persist();render()}
 window.aureliaNativeBackupServerResult=(id,ok,message)=>{toast(message||(ok?'Server backup settings updated':'Server backup operation failed'));if(ok&&id.startsWith('bsc')){S.bk.serverConfigured=true;S.bk.serverUrl=$('#backup-server-url')?.value||'';S.bk.verified=false;persist();autoBackup();render()}};
 window.aureliaNativeBackupServerStatusResult=(id,configured,url)=>{S.bk.serverConfigured=!!configured;S.bk.serverUrl=url||'';persist()};
-function autoBackup(){if(LOCAL_STATE_STATUS!=='invalid'&&S.au.backup!==false&&!BKB&&(curHash()!==S.bk.hash||S.bk.serverRetry===true||S.bk.driveRetry===true||S.bk.sharedRetry===true))runBackup(true)}
+async function autoBackup(){if(LOCAL_STATE_STATUS==='invalid'||S.au.backup===false||BKB)return;if(!(await hasBackupVault()))return;if(curHash()!==S.bk.hash||S.bk.serverRetry===true||S.bk.driveRetry===true||S.bk.sharedRetry===true)runBackup(true)}
 async function pickDir(purpose='drive'){
  const requestId='bf'+Date.now();
  pendingBackupFolderRequestId=requestId;pendingBackupFolderPurpose=purpose;
@@ -996,7 +1090,7 @@ window.aureliaNativeRecoveryBackupResult=async(id,ok,payload,fileName)=>{
   return;
  }
  try{
-  const raw=JSON.parse(payload);
+  const raw=JSON.parse(await decryptBackupPayload(payload,fileName));
   if(!raw||raw.v!==4||!raw.data||!Array.isArray(raw.data.rooms)||!Array.isArray(raw.data.b)||!raw.data.set)throw new Error('Backup snapshot structure is invalid.');
   if(raw.integrity){
    if(raw.integrity.algorithm!=='SHA-256'||typeof raw.integrity.digest!=='string')throw new Error('Backup has an unsupported integrity checksum.');
@@ -1025,7 +1119,8 @@ window.aureliaNativeRecoveryBackupResult=async(id,ok,payload,fileName)=>{
 function restoreF(el){
  const f=el.files&&el.files[0];if(!f)return;
  f.text().then(async t=>{
-  const raw=JSON.parse(t);
+  const decrypted=await decryptBackupPayload(t,f.name);
+  const raw=JSON.parse(decrypted);
   if(raw&&raw.integrity){const meta=raw.integrity,copy={...raw};delete copy.integrity;if(meta.algorithm!=='SHA-256'||typeof meta.digest!=='string'||await sha256Hex(JSON.stringify(copy))!==meta.digest)throw new Error('Backup checksum does not match its contents.')}
   if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('The selected JSON file must contain an object.');
   const candidates=[raw,raw.data,raw.payload,raw.backup,raw.export,raw.records].filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
