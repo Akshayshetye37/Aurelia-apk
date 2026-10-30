@@ -3389,7 +3389,7 @@ document.addEventListener('click',function(event){
 <script type="module" src="./src/payments/provider-platform.mjs"></script>
 <script>
 (function(){
- function providerNames(){const api=window.AureliaPaymentPlatform;return api?Object.entries(api.PAYMENT_PROVIDERS).map(([id,p])=>[id,p.name]):[];}
+ function providerNames(){const api=window.AureliaPaymentPlatform;const agreed=['razorpay','cashfree','payu','phonepe','paytm','jiopay','ccavenue'];return api?agreed.filter(id=>api.PAYMENT_PROVIDERS[id]).map(id=>[id,api.PAYMENT_PROVIDERS[id].name]):[];}
  function bridgeStatus(){
   try{
    const native=window.AureliaNative;
@@ -3416,7 +3416,7 @@ document.addEventListener('click',function(event){
   }).join('');
   const catalogue=names.map(item=>esc(item[1])).join(' · ');
   const providerBody=!connected?'<p class="lab">Authenticate Pay Bridge before viewing or configuring merchant provider settings.</p>':(canManage?providers:'<p class="lab">The PMS handshake is authenticated, but this Pay Bridge has not advertised provider.management. Configuration and activation remain locked. Available catalogue: '+catalogue+'</p>');
-  return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateway</h2><p class="lab">Provider management and Pay Bridge diagnostics are separate expandable sections.</p><details open><summary>Pay Bridge Connection</summary>'+bridge+'<p class="lab">Connection is green only after installed package identity, shared signer, signature permission and protocol nonce handshake are verified. Current PMS client supports handshake only.</p></details><details><summary>Provider Management</summary>'+providerBody+(active?'<p class="lab">Saved provider preference: '+esc(platform.PAYMENT_PROVIDERS[active].name)+'</p>':'')+'</details><p class="lab">Provider adapters, payment execution, backend webhook verification and transaction IPC remain future Pay Bridge/backend implementation. No unverified event may settle a folio.</p></div>';
+  return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateway</h2><p class="lab">Provider management and Pay Bridge diagnostics are separate expandable sections.</p><details open><summary>Pay Bridge Connection</summary>'+bridge+'<p class="lab">Connection is green only after installed package identity, shared signer, signature permission and protocol nonce handshake are verified. Current PMS client supports handshake only.</p></details><details><summary>Provider Management</summary>'+providerBody+(connected&&active?'<p class="lab">Saved provider preference: '+esc(platform.PAYMENT_PROVIDERS[active].name)+'</p>':'')+'</details><p class="lab">Provider adapters, payment execution, backend webhook verification and transaction IPC remain future Pay Bridge/backend implementation. No unverified event may settle a folio.</p></div>';
  }
 window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;if(!native||typeof native.postMessage!=='function')throw new Error('Native Pay Bridge client is unavailable. Update the PMS APK.');native.postMessage(JSON.stringify({type:'payBridgeConnect'}));toast('Checking Pay Bridge installation, signing identity and native service…');setTimeout(()=>{try{render()}catch(_){ }},350)}catch(e){toast(e.message||'Could not start Pay Bridge connection')}};
  window.disconnectAureliaPayBridge=function(){try{window.AureliaNative.postMessage(JSON.stringify({type:'payBridgeDisconnect'}));toast('Pay Bridge disconnected')}catch(_){toast('Native Pay Bridge client is unavailable')}};
