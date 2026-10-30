@@ -48,6 +48,7 @@ fs.writeFileSync(manifestPath, manifest);
 
 const { execFileSync } = require('child_process');
 const iconSvg = path.join(__dirname, '..', 'assets', 'aurelia-icon.svg');
+const foregroundSvg = path.join(__dirname, '..', 'assets', 'aurelia-icon-foreground.svg');
 const resDir = path.join(appDir, 'res');
 const providerBlock = `if (!manifest.includes('androidx.core.content.FileProvider')) {
   manifest = manifest.replace('</application>', '    <provider android:name="androidx.core.content.FileProvider" android:authorities="\${applicationId}.fileprovider" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/aurelia_file_paths" /></provider></application>');
@@ -62,12 +63,22 @@ if (fs.existsSync(iconSvg)) {
   for (const [density, size] of Object.entries(densities)) {
     const dir = path.join(resDir, 'mipmap-' + density);
     fs.mkdirSync(dir, { recursive: true });
-    for (const name of ['ic_launcher', 'ic_launcher_round', 'ic_launcher_foreground']) {
-      const target = path.join(dir, name + '.png');
-      execFileSync(process.execPath, ['-e', 'const sharp=require(\"sharp\"); sharp(process.argv[1]).resize(+process.argv[3],+process.argv[3]).png().toFile(process.argv[2]).then(()=>{}).catch(e=>{console.error(e);process.exit(1)})', iconSvg, target, String(size)]);
+    for (const name of ['ic_launcher', 'ic_launcher_round']) {
+      execFileSync(process.execPath, ['-e', 'const sharp=require("sharp"); sharp(process.argv[1]).resize(+process.argv[3],+process.argv[3]).png().toFile(process.argv[2]).then(()=>{}).catch(e=>{console.error(e);process.exit(1)})', iconSvg, path.join(dir, name + '.png'), String(size)]);
     }
+    const foregroundSource = fs.existsSync(foregroundSvg) ? foregroundSvg : iconSvg;
+    execFileSync(process.execPath, ['-e', 'const sharp=require("sharp"); sharp(process.argv[1]).resize(+process.argv[3],+process.argv[3],{fit:"contain"}).png().toFile(process.argv[2]).then(()=>{}).catch(e=>{console.error(e);process.exit(1)})', foregroundSource, path.join(dir, 'ic_launcher_foreground.png'), String(size)]);
   }
-  console.log('Generated Aurelia PMS launcher icons for all Android densities.');
+  const adaptiveDir = path.join(resDir, 'mipmap-anydpi-v26');
+  fs.mkdirSync(adaptiveDir, { recursive: true });
+  const adaptive = '<?xml version="1.0" encoding="utf-8"?><adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/aurelia_icon_background"/><foreground android:drawable="@mipmap/ic_launcher_foreground"/></adaptive-icon>';
+  fs.writeFileSync(path.join(adaptiveDir, 'ic_launcher.xml'), adaptive);
+  fs.writeFileSync(path.join(adaptiveDir, 'ic_launcher_round.xml'), adaptive);
+  const valuesDir = path.join(resDir, 'values');
+  fs.mkdirSync(valuesDir, { recursive: true });
+  const colorsPath = path.join(valuesDir, 'aurelia_icon_colors.xml');
+  fs.writeFileSync(colorsPath, '<?xml version="1.0" encoding="utf-8"?><resources><color name="aurelia_icon_background">#082419</color></resources>');
+  console.log('Generated adaptive-safe Aurelia PMS launcher icons for all Android densities.');
 }
 
 const javaDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms');
