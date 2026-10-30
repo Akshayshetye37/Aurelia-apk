@@ -238,6 +238,24 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
  .payment-platform-card .provider-row .tag{font-size:11px;padding:4px 8px}
 }
 </style>
+
+<style id="aurelia-settings-native-polish">
+.settings-accordion{margin:12px 0;border:1px solid var(--ln);border-radius:19px;background:linear-gradient(155deg,rgba(23,54,40,.96),rgba(10,29,21,.98));overflow:hidden;box-shadow:0 10px 28px rgba(0,0,0,.12)}
+.settings-accordion>summary{display:flex;align-items:center;gap:12px;min-height:62px;padding:15px 17px;cursor:pointer;list-style:none;font:500 19px var(--serif);color:var(--tx);user-select:none}
+.settings-accordion>summary::-webkit-details-marker{display:none}
+.settings-accordion>summary:after{content:"";width:9px;height:9px;margin-left:auto;border-right:1.5px solid var(--gold);border-bottom:1.5px solid var(--gold);transform:rotate(45deg) translateY(-2px);transition:transform .2s ease;flex:none}
+.settings-accordion[open]>summary:after{transform:rotate(225deg) translate(-2px,-1px)}
+.settings-accordion>summary:focus-visible{outline:2px solid var(--gold);outline-offset:-4px;border-radius:16px}
+.settings-accordion__hint{display:block;color:var(--mu);font:300 11.5px/1.4 var(--sans);margin-top:2px}
+.settings-accordion__body{padding:0 17px 17px;border-top:1px solid rgba(220,194,133,.12)}
+.settings-accordion__body>.card{margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;transform:none!important;overflow:visible}
+.settings-accordion__body h2{font-size:22px;margin:12px 0 8px}
+.settings-accordion__body .fld{margin:11px 0}
+.settings-accordion__body .row{flex-wrap:wrap}
+.settings-accordion__body .btn{max-width:100%}
+.settings-privacy-note{padding:12px 14px;border:1px solid var(--ln);border-radius:14px;background:rgba(255,255,255,.025);color:var(--mu);font-size:12px;line-height:1.55}
+@media(min-width:760px){.settings-accordion>summary{min-height:66px;padding:17px 20px}.settings-accordion__body{padding:0 20px 20px}}
+</style>
 </head><body>
 
 <script id="guest-contact-actions-early">
@@ -1277,7 +1295,86 @@ function exportGuestBundleJson(){const id=Number($('#export-booking')?.value),b=
 function safeFile(x){return String(x||'file').replace(/[^a-z0-9_-]+/gi,'-').slice(0,60)}
 function downloadBlob(data,name,type){const blob=new Blob([data],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000)}
 function exportGuestBooking(){const id=Number($('#export-booking')?.value),b=bk(id);if(!b){toast('Choose a booking first');return}const g=gOf(b.g),r=rm(b.room)||{},holder=document.createElement('div');holder.className='invoice';holder.style.cssText='background:#fbf6e8;color:#2a2110;padding:26px;font-family:Georgia,serif';const img=(label,src)=>src?`<div style="display:inline-block;margin:8px 10px 8px 0;text-align:center"><div style="font-size:12px;color:#7a6a45">${esc(label)}</div><img src="${src}" style="max-width:260px;max-height:220px;object-fit:contain;border:1px solid #cdb27a;padding:4px;background:#fff"/></div>`:`<div style="display:inline-block;margin:8px 10px 8px 0;color:#7a6a45">${esc(label)}: no image on file</div>`;holder.innerHTML=`<h2 style="letter-spacing:.06em;color:#4a3410">${esc(S.set.name)} · Guest & Room Record</h2><p style="color:#7a6a45">Generated ${new Date().toLocaleString()} · Booking #${b.id}</p><h3>Stay details</h3><p><b>Guest:</b> ${esc(b.g)}<br/><b>Room:</b> ${esc(b.room)} (${esc(r.t||'')})<br/><b>Dates:</b> ${fd(b.in)} to ${fd(b.out)}<br/><b>Scheduled check-in:</b> ${esc(b.scheduledCheckIn?new Date(b.scheduledCheckIn).toLocaleString():((b.checkInTime||'14:00')+' (default)'))}<br/><b>Scheduled check-out:</b> ${esc(b.scheduledCheckOut?new Date(b.scheduledCheckOut).toLocaleString():((b.checkOutTime||'11:00')+' (default)'))}<br/><b>Actual check-in:</b> ${esc(b.actualCheckInAt?dateDDMMYYYY(new Date(b.actualCheckInAt))+' '+new Date(b.actualCheckInAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'Not checked in')}<br/><b>Actual check-out:</b> ${esc(b.actualCheckOutAt?dateDDMMYYYY(new Date(b.actualCheckOutAt))+' '+new Date(b.actualCheckOutAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'Not checked out')}<br/><b>Status:</b> ${esc(b.st)}<br/><b>Phone:</b> ${esc(g?.ph||'')}<br/><b>Email:</b> ${esc(g?.em||'')}<br/><b>ID type:</b> ${esc(g?.idt||'')}<br/><b>ID number:</b> ${esc(g?.idn||'')}</p><h3>Primary guest ID image</h3>${img('Primary guest ID',g?.img)}<h3>Occupants</h3>${(g?.occ||[]).map((o,i)=>`<div style="border-top:1px solid #cdb27a;padding:10px 0"><b>${esc(o.n||'Occupant '+(i+1))}</b><br/>Relation: ${esc(o.rel||'')} · ID type: ${esc(o.idt||'')} · ID number: ${esc(o.idn||'')}<br/>${img('Occupant '+(i+1)+' ID',o.img)}</div>`).join('')||'<p>No additional occupants recorded.</p>'}<h3>Charges & payments</h3><table class="it"><tr><th>Description</th><th>Amount</th></tr>${lines(b).map(x=>`<tr><td>${esc(x[0])}</td><td>${K(x[1])}</td></tr>`).join('')}${b.dc?`<tr><td>Discount</td><td>−${K(b.dc)}</td></tr>`:''}${(b.pays||[]).map(p=>`<tr><td>Payment · ${esc(p.m)} · ${esc(p.r||'')} · ${esc(p.at||'')}</td><td>−${K(p.a)}</td></tr>`).join('')}<tr><td><b>Total / balance due</b></td><td><b>${K(tt(b))} / ${K(dueB(b))}</b></td></tr></table><p style="color:#7a6a45;font-size:12px">Confidential: identity documents and contact details. Do not disclose without a lawful and authorised purpose.</p>`;openS(`<h2 class="foil">Guest & room export ready</h2><div class="lab">Use the browser print dialog and choose “Save as PDF”. ID images appear in the document if saved on this device.</div><div id="guest-pdf-preview"></div><div class="row noprint" style="margin-top:12px"><button class="btn" onclick="printGuestPreview()">Print / Save as PDF</button><button class="btn ghost" onclick="exportGuestBundleJson()">JSON + photos</button></div>`);$('#guest-pdf-preview').appendChild(holder);window._guestPdfHtml=holder.outerHTML}
-function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast('Preview missing');return}const html=node.innerHTML;if(window.AureliaNative&&nat({type:'printInvoice',html})){closeS();toast('Android print dialog opened. Choose Save as PDF.');return}const w=window.open('','_blank');if(!w){toast('Printing is blocked. Allow pop-ups or use the JSON export.');return}w.document.write('<!doctype html><html><head><title>Guest & Room Record</title><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:14px Arial;margin:22px;color:#222}h2,h3{color:#4a3410}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #cdb27a;padding:8px;text-align:left}img{max-width:250px;max-height:220px;object-fit:contain}</style></head><body>'+html+'</body></html>');w.document.close();w.focus();setTimeout(()=>w.print(),400)}
+function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast('Preview missing');return}const html=node.innerHTML;if(window.AureliaNative&&nat({type:'printInvoice',html})){closeS();toast('Android print dialog opened. Choose Save as PDF.');return}const w=window.open('','_blank');if(!w){toast('Printing is blocked. Allow pop-ups or use the JSON export.');return}w.document.write('<!doctype html><html><head><title>Guest & Room Record</title><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:14px Arial;margin:22px;color:#222}h2,h3{color:#4a3410}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #cdb27a;padding:8px;text-align:left}img{max-width:250px;max-height:220px;object-fit:contain}</style></head><body>'+html+'
+<script id="aurelia-settings-and-native-navigation">
+(function(){
+  const descriptions = {
+    "Hotel identity":"Property details, invoice identity and payment QR",
+    "Autopilot":"Optional hotel workflow automation",
+    "Feature controls":"Show or hide application modules",
+    "Guest terms":"Policies and guest-facing terms",
+    "Data care":"Backup, diagnostics and data recovery",
+    "Payment Provider":"Provider configuration and Pay Bridge connection",
+    "OCR controls":"Guest document text-recognition preferences",
+    "Android & privacy":"Native navigation, device access and permission policy"
+  };
+  const baseSettings = SUB.set;
+  SUB.set = function(){
+    const source = baseSettings();
+    const template = document.createElement('template');
+    template.innerHTML = source;
+    const privacy = document.createElement('section');
+    privacy.className = 'card';
+    privacy.innerHTML =
+      '<h2>Android &amp; privacy</h2>' +
+      '<p class="lab">Aurelia uses Android system interfaces for navigation, file selection, photo selection, sharing and printing.</p>' +
+      '<div class="settings-privacy-note"><b>Permission policy</b><br>' +
+      'No SMS, call-log, contacts, location, microphone, camera, accessibility, notification-listener, overlay or broad-storage permission is requested by the PMS. Backup and image selection use Android’s Storage Access Framework and system Photo Picker, which grant access only to files you select. Internet access is a normal Android permission and is used for network features.</div>' +
+      '<div class="settings-privacy-note" style="margin-top:10px"><b>Native navigation</b><br>' +
+      'Android Back closes the active sheet first, returns from an in-app section, and exits only from the home screen. External phone, web and sharing actions are handed to Android apps through system intents.</div>' +
+      '<div class="settings-privacy-note" style="margin-top:10px"><b>Pay Bridge compatibility</b><br>' +
+      'The PMS contains only the client-side connection foundation. The future Pay Bridge APK must use the documented package name, Messenger protocol and matching signing identity. No payment operation is enabled until both applications implement the versioned contract.</div>';
+    template.content.appendChild(privacy);
+
+    const cards = Array.from(template.content.querySelectorAll('.card'))
+      .filter(card => !card.closest('.card') && card.id !== 'razorpay-settings');
+    cards.forEach((card, index) => {
+      const heading = card.querySelector(':scope > h2');
+      const title = heading ? heading.textContent.trim() : 'Settings';
+      const details = document.createElement('details');
+      details.className = 'settings-accordion';
+      details.open = index === 0;
+      const summary = document.createElement('summary');
+      const label = document.createElement('span');
+      label.textContent = title;
+      const hint = document.createElement('small');
+      hint.className = 'settings-accordion__hint';
+      hint.textContent = descriptions[title] || 'Configuration and preferences';
+      label.appendChild(hint);
+      summary.appendChild(label);
+      const body = document.createElement('div');
+      body.className = 'settings-accordion__body';
+      Array.from(card.childNodes).forEach(node => {
+        if (node === heading) return;
+        body.appendChild(node);
+      });
+      details.appendChild(summary);
+      details.appendChild(body);
+      card.replaceWith(details);
+    });
+    return template.innerHTML;
+  };
+
+  window.aureliaHandleAndroidBack = function(){
+    const sheet = document.getElementById('sh');
+    if (sheet && sheet.classList.contains('show')) {
+      if (typeof closeS === 'function') closeS();
+      return true;
+    }
+    if (typeof S !== 'undefined' && S.sub) {
+      S.sub = null;
+      if (typeof render === 'function') render();
+      return true;
+    }
+    if (typeof S !== 'undefined' && S.tab && S.tab !== 'home') {
+      if (typeof go === 'function') go('home');
+      return true;
+    }
+    return false;
+  };
+})();
+</script>
+</body></html>');w.document.close();w.focus();setTimeout(()=>w.print(),400)}
 
 
 
