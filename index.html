@@ -1396,7 +1396,6 @@ function exportGuestBooking(){const id=Number($('#export-booking')?.value),b=bk(
 function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast('Preview missing');return}const html=node.innerHTML;if(window.AureliaNative&&nat({type:'printInvoice',html})){closeS();toast('Android print dialog opened. Choose Save as PDF.');return}const w=window.open('','_blank');if(!w){toast('Printing is blocked. Allow pop-ups or use the JSON export.');return}w.document.write('<!doctype html><html><head><title>Guest & Room Record</title><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:14px Arial;margin:22px;color:#222}h2,h3{color:#4a3410}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #cdb27a;padding:8px;text-align:left}img{max-width:250px;max-height:220px;object-fit:contain}@media print{button,.noprint{display:none!important}}</style></head><body>'+html+'</body></html>');w.document.close();w.focus();setTimeout(()=>w.print(),400)}
 
 (function(){
-(function(){
   const descriptions = {
     "Hotel identity":"Property details, invoice identity and payment QR",
     "Autopilot":"Optional hotel workflow automation",
