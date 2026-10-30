@@ -17,7 +17,7 @@ if (!manifest.includes('<queries>')) {
   manifest = manifest.replace('</queries>', '        <package android:name="com.aurelia.paybridge" />\n    </queries>');
 }
 if (!manifest.includes('com.aurelia.paybridge.permission.BIND_PAY_BRIDGE')) {
-  manifest = manifest.replace(/<application\\b/, '    <uses-permission android:name="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE" />\n    <application');
+  manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE" />\n    <application');
 }
 if (!manifest.includes('android.permission.INTERNET')) {
   manifest = manifest.replace('<manifest', '<manifest\n    xmlns:tools="http://schemas.android.com/tools"');
