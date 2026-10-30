@@ -1,102 +1,72 @@
-# Aurelia payment-provider integration research
+# Aurelia India payment-provider catalogue and integration policy
 
-Research snapshot: 30 October 2026  
-Scope: Razorpay, Paytm Payment Gateway and PhonePe Payment Gateway. This is an implementation specification distilled from provider documentation, not a claim that live merchant integrations are already connected.
+Research snapshot: 30 October 2026. Provider availability, product names and API versions can change. Always follow the merchant's current dashboard-issued integration kit and the provider's current official documentation.
 
-## Shared Aurelia architecture
+## Product decision: one provider per merchant
 
-1. PMS creates a folio collection intent with an immutable Aurelia booking/folio reference and amount in INR paise.
-2. Pay Bridge is the authenticated Android IPC client between PMS and provider-facing app workflows. It is not the payment authority and must not hold merchant secrets.
-3. The Aurelia trusted backend creates provider orders/transactions, stores credentials, receives callbacks/webhooks, verifies signatures/checksums, queries provider status, and writes an idempotent provider-event ledger.
-4. Backend returns a signed/authorized settlement decision to PMS. PMS checks Pay Bridge identity, booking/folio, amount, currency, provider transaction ID and idempotency key before it invokes the single settlement mutation boundary.
-5. Pending, failed, refunded, disputed, ambiguous, duplicate or mismatched events never auto-settle. Webhook retries and polling must be idempotent.
-6. Auto-settlement remains disabled until the provider integration, backend, Pay Bridge and PMS have passed sandbox and live end-to-end tests.
+Aurelia PMS supports a broad catalogue, but a merchant selects and configures **one** payment provider account at a time. A hotel does not need accounts with every provider. The selected provider is stored as the only configured entry in `S.set.paymentProviders`; selecting another provider replaces the previous selection. This avoids pretending that unrelated merchant accounts or credentials can be combined into one gateway.
 
-## Razorpay — first implementation target
+The catalogue includes payment aggregators/platforms and direct bank gateways. They are different product categories and do not share a universal API. The provider adapter must be selected and implemented against that provider's specific contract.
 
-Official docs:
-- [Standard Checkout integration steps](https://razorpay.com/docs/payments/payment-gateway/web-integration/standard/integration-steps/)
-- [Webhooks](https://razorpay.com/docs/webhooks/)
-- [Orders API](https://razorpay.com/docs/api/orders/)
+## Provider catalogue researched from official sources
 
-Integration facts:
-- Create an Order server-side for every payment. Amount is expressed in the smallest currency unit (INR paise).
-- Pass the server-created order_id into Checkout; do not trust a client-supplied order ID as the source of truth.
-- Verify the Checkout response signature server-side using the server-stored key secret and the order ID originally stored by Aurelia.
-- Verify webhook signatures server-side using the raw request body and webhook secret.
-- Confirm captured payment status (via verified webhook and/or provider status API) before considering a payment eligible for settlement. Authorized is not the same as captured.
-- Treat webhook deliveries as at-least-once: persist event IDs and payment IDs with uniqueness constraints and safely handle retries/out-of-order events.
+| Provider | Category | Official documentation |
+|---|---|---|
+| Razorpay | Payment aggregator | [Docs](https://razorpay.com/docs/) · [Checkout](https://razorpay.com/docs/payments/payment-gateway/web-integration/standard/integration-steps/) · [Webhooks](https://razorpay.com/docs/webhooks/) |
+| Cashfree Payments | Payment aggregator | [Docs](https://www.cashfree.com/docs/) · [Gateway overview](https://www.cashfree.com/docs/payments/overview) · [Webhook verification](https://www.cashfree.com/devstudio/preview/pg/tools/webhookVerification) |
+| PayU | Payment aggregator | [Docs](https://docs.payu.in/) · [Hosted checkout](https://docs.payu.in/docs/prebuilt-checkout-page-integration) · [Verify payment](https://docs.payu.in/docs/v2/docs/v2-non-seamless-api-integration-steps) |
+| PhonePe PG | Payment aggregator | [Developer portal](https://developer.phonepe.com/) · [Standard Checkout V2](https://developer.phonepe.com/phonepe-payment-gateway/pg-v2-standard-checkout-integration) |
+| Paytm PG | Payment aggregator | [Merchant docs](https://business.paytm.com/docs/) · [Initiate transaction](https://business.paytm.com/docs/api/initiate-transaction-api/) · [Callbacks/webhooks](https://business.paytm.com/docs/callback-and-webhook/) |
+| CCAvenue | Payment aggregator | [FAQ/integration](https://www.ccavenue.com/faq) · [In-app payments](https://www.ccavenue.com/inapp-payments) |
+| BillDesk | Payment aggregator | [Developer docs](https://docs.billdesk.io/) · [Integration FAQs](https://docs.billdesk.io/docs/integration-faqs) |
+| Easebuzz | Payment aggregator | [Developer docs](https://docs.easebuzz.in/) · [Official site](https://easebuzz.in/) |
+| NTT DATA Payment Services (Atom) | Payment aggregator | [Developer docs](https://atomtech.in/docs) |
+| Zaakpay | Payment gateway | [Developer integration guide](https://developer.zaakpay.com/docs/integrating-zaakpay-payment-gateway) |
+| Instamojo | Payment platform | [Payments API](https://docs.instamojo.com/v1.1/reference/payments-api) · [Webhook guidance](https://support.instamojo.com/hc/en-us/articles/208485755-Webhook-URL) |
+| HDFC Bank SmartGateway | Direct bank gateway | [Developer docs](https://smartgateway.hdfc.bank.in/docs/) |
+| SBIePay | Direct bank gateway | [Official portal](https://www.sbiepay.sbi/) |
+| Axis Bank Payment Gateway | Direct bank gateway | [Merchant services](https://www.axisbank.com/business-banking/cash-management-services/payment-gateway) |
+| ICICI Bank Eazypay / PG | Direct bank product | [Eazypay](https://eazypay.icicibank.com/) |
+| Pine Labs | Payment platform/acquiring | [Official site](https://www.pinelabs.com/) · [Developer portal](https://developer.pinelabs.com/) |
 
-Aurelia adapter contract:
-- createOrder(folioIntent) — backend only.
-- verifyCheckoutResponse(orderId, paymentId, signature) — backend only.
-- verifyWebhook(rawBody, signatureHeader) — backend only.
-- fetchPaymentStatus(paymentId) — backend only.
-- normalizeVerifiedPayment(...) — produce a provider-neutral event only after verification.
+The list is a practical India-focused catalogue, not a legal or exhaustive list of every RBI-authorised payment aggregator, bank acquirer, UPI app, POS provider or payment facilitator. Some brands above offer multiple products; merchant eligibility and enabled payment modes vary by agreement, KYC and underwriting. Google Pay, BHIM and other consumer UPI apps are payment apps/PSPs, not interchangeable merchant payment-gateway integrations, so they are not presented as merchant gateway accounts here.
 
-## Paytm Payment Gateway
+Razorpay's own Optimizer documentation distinguishes bank gateways from aggregators and lists a wider ecosystem including BillDesk, Cashfree, CCAvenue, Easebuzz, Paytm, PayU, Pine Labs, Atom/Ingenico and others. See [provider categories](https://tfs.np.razorpay.in/docs/payments/optimizer/add-payment-providers) and [supported providers](https://tfs.np.razorpay.in/docs/payments/optimizer/supported-gateways-aggregators).
 
-Official docs:
-- [Initiate Transaction API](https://www.paytmpayments.com/docs/api/initiate-transaction-api)
-- [Payment Status](https://www.paytmpayments.com/docs/payment-status)
-- [Callback and Webhook](https://www.paytmpayments.com/docs/callback-and-webhook)
+## Provider-neutral architecture
 
-Integration facts:
-- Initiate the transaction from the merchant backend; Paytm returns a transaction token used by the checkout flow.
-- Generate and validate the required checksum/signature on the backend. Merchant keys/salts never enter PMS or Pay Bridge.
-- Callback and webhook responses can be intermediate or final. Verify CHECKSUMHASH and then confirm final state through the Transaction Status API.
-- Accept only a final successful status (TXN_SUCCESS) for the expected MID, merchant order ID, amount and currency.
-- Handle webhook delivery retries and duplicate notifications with idempotent event processing.
+1. Merchant selects one provider and completes that provider's merchant onboarding/KYC.
+2. PMS sends a folio payment intent (immutable booking reference, amount in INR paise, currency and idempotency key) to the trusted Aurelia backend.
+3. Backend creates the provider-specific order/transaction and stores all credentials. It returns only a short-lived checkout token/redirect/session data to PMS or Pay Bridge.
+4. Customer completes payment in the provider's hosted checkout or supported SDK.
+5. Backend authenticates provider callbacks/webhooks using the exact current signature/hash/checksum contract. It also queries provider status to recover delayed or missing webhooks.
+6. Backend validates merchant account, order reference, amount, currency and final captured/paid state. Events are idempotently stored and duplicates/out-of-order notifications are safe.
+7. Only a backend-authorized, verified event may be considered for a folio settlement decision. Pending, failed, cancelled, refunded, disputed, mismatched, duplicate or ambiguous events never auto-settle.
 
-Aurelia adapter contract:
-- initiateTransaction(folioIntent) — backend only.
-- verifyCallbackOrWebhook(payload) — backend only.
-- fetchTransactionStatus(orderId) — backend only.
-- normalizeVerifiedPayment(...) — only after final status and order/amount checks.
+## Important provider-specific differences
 
-## PhonePe Payment Gateway
+- Razorpay: create server-side Orders; verify Checkout signature against the stored order; verify webhook HMAC over the raw body; distinguish authorized from captured.
+- Cashfree: create an order server-side; use payment-session checkout; verify webhook signature; query payments for the order because client callback/redirect alone is not final proof.
+- PayU: validate response hashes and S2S webhooks; use Verify Payment API for reconciliation. PayU's current v3 API and legacy hosted flows have different contracts; do not mix examples.
+- PhonePe: use current Standard Checkout V2 contracts, not legacy V1 snippets; authenticate webhook/callback and independently query order status.
+- Paytm: initiate transaction server-side, validate checksum, and use Transaction Status API because callback status may be intermediate.
+- Instamojo: webhook is form-encoded and includes MAC; validate MAC and query payment details by payment/payment-request IDs.
+- BillDesk, CCAvenue, Easebuzz, Atom, Zaakpay and bank gateways: follow the specific merchant-enabled product's signing, response and status-query documentation. Do not assume they share Razorpay/PayU payload formats.
 
-Official docs:
-- [PhonePe PG Developer Portal](https://developer.phonepe.com)
-- [Standard Checkout V2](https://developer.phonepe.com/phonepe-payment-gateway/pg-v2-standard-checkout-integration)
-- [PhonePe-maintained PG documentation index](https://github.com/PhonePe/phonepe-pg-docs-mcp)
+## Security and implementation boundaries
 
-Integration facts:
-- Use the current Standard Checkout V2 contract and the merchant's enabled environment/credentials; do not copy legacy V1 examples into a V2 adapter.
-- Create the merchant order and initiate checkout from the backend; return only the required checkout/redirect data to the client.
-- Verify server-to-server webhook/callback authenticity using the signature mechanism specified by the merchant's current PhonePe API version.
-- Independently query the order status through the current status API. A browser redirect or client success screen is not proof of payment.
-- Verify merchant order reference, amount, currency and terminal success state. Deduplicate events and poll status when callbacks are delayed or missing.
-
-Aurelia adapter contract:
-- createStandardCheckoutOrder(folioIntent) — backend only.
-- verifyWebhook(rawBody, headers) — backend only, version-specific.
-- fetchOrderStatus(merchantOrderId) — backend only.
-- normalizeVerifiedPayment(...) — only after provider status confirmation.
-
-## Pay Bridge and PMS boundaries
-
-- Pay Bridge: app identity, authenticated IPC, provider-workflow handoff and connection lifecycle.
-- PMS: folio context, guest/booking selection, payment display and final display of backend-authorized settlement result.
-- Trusted backend: merchant credentials, order creation, signature/checksum validation, provider status polling, webhook ingestion, idempotency, audit ledger and settlement authorization.
-- Never embed key secrets, salts, webhook secrets, private keys or API access tokens in APK assets, local storage, source code or logs.
-- A provider being configured in PMS is not equivalent to a verified provider connection.
-- A connected Pay Bridge is not equivalent to a provider payment being successful.
-
-## Rollout gates
-
-1. Provider-specific sandbox tests: success, failure, pending, timeout, duplicate webhook, out-of-order webhook, refund and amount mismatch.
-2. Backend security tests: signature/checksum tampering, replay, wrong MID/client, wrong order ID, wrong amount and credential leakage.
-3. Pay Bridge tests: package/signature verification, handshake, reconnect, disconnect, stale session and malformed IPC payloads.
-4. PMS tests: correct folio mapping, partial payment, overpayment rejection, cross-booking duplicate UTR/payment ID, persistence rollback and audit trail.
-5. Live low-value pilot with automatic settlement still disabled; compare provider ledger, backend ledger and PMS folio.
-6. Enable automatic settlement only after explicit release approval and all gates pass.
+- No secret, salt, private key, webhook secret, API access token or merchant password may be stored in APK, browser storage, app backup, logs or Git.
+- The PMS settings screen stores only a public merchant identifier and an HTTPS backend URL. It is not a provider connection.
+- Pay Bridge remains a separate future APK and is not a substitute for the trusted backend.
+- A browser redirect, Android intent result, screenshot, UPI notification or unsigned callback is not proof of payment.
+- Keep automatic folio settlement disabled until provider-specific sandbox and live end-to-end tests pass.
 
 ## Current implementation status
 
-- PMS provider settings screen: exists; it stores only public merchant identifiers and an HTTPS backend URL.
-- Provider-specific research and setup guidance: embedded in the provider workspace in PMS.
-- Provider API adapters/backend endpoints: not implemented by this change.
+- Provider catalogue and official documentation references: added to the PMS payment workspace.
+- Single-provider-per-merchant selection: implemented in the PMS settings UI; selecting a new provider replaces the previous selected provider.
+- Provider-specific setup/verification guidance: included for every catalogue entry.
+- Actual provider API adapters, backend endpoints, webhook receivers and provider status polling: not implemented by this catalogue change.
 - Separate Aurelia Pay Bridge APK: not yet built.
-- Live merchant credentials/webhooks: not connected.
+- Live merchant credentials and provider accounts: not connected.
 - Automatic folio settlement: disabled.
