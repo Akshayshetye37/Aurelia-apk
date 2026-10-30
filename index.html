@@ -938,9 +938,9 @@ function clearBackupServer(){if(!confirm('Remove the saved server destination an
 window.aureliaNativeBackupServerResult=(id,ok,message)=>{toast(message||(ok?'Server backup settings updated':'Server backup operation failed'));if(ok&&id.startsWith('bsc')){S.bk.serverConfigured=true;S.bk.serverUrl=$('#backup-server-url')?.value||'';S.bk.verified=false;persist();autoBackup();render()}};
 window.aureliaNativeBackupServerStatusResult=(id,configured,url)=>{S.bk.serverConfigured=!!configured;S.bk.serverUrl=url||'';persist()};
 function autoBackup(){if(LOCAL_STATE_STATUS!=='invalid'&&S.au.backup!==false&&!BKB&&(curHash()!==S.bk.hash||S.bk.serverRetry===true))runBackup(true)}
-async function pickDir(){
+async function pickDir(purpose='drive'){
  const requestId='bf'+Date.now();
- pendingBackupFolderRequestId=requestId;
+ pendingBackupFolderRequestId=requestId;pendingBackupFolderPurpose=purpose;
  if(nat({type:'chooseDeviceBackupFolder',requestId,purpose}))return;
  pendingBackupFolderRequestId=null;
  if(typeof window.showDirectoryPicker==='function'){
@@ -963,7 +963,7 @@ let pendingBackupFolderRequestId=null,pendingBackupFolderPurpose='drive';
 window.aureliaNativeBackupFolderResult=(id,ok,msg,purpose='drive')=>{
  if(!pendingBackupFolderRequestId||String(id)!==String(pendingBackupFolderRequestId))return;
  pendingBackupFolderRequestId=null;
- S.bk.folder=!!ok;
+ if(purpose==='shared')S.bk.sharedFolder=!!ok;else S.bk.folder=!!ok;
  if(ok)S.bk.verified=false;
  S.bk.label=msg||'';
  if(!ok){
@@ -981,17 +981,11 @@ function requestNextAutomaticRecovery(){
 }
 window.aureliaNativeDeviceBackupStatusResult=(id,localReady,driveSel,sharedSel,backupExists)=>{
  if(pendingBackupFolderRequestId&&String(id)!==String(pendingBackupFolderRequestId))return;
- S.bk.folder=!!sel;
- if(sel&&LOCAL_STATE_STATUS==='valid'&&!(backupExists&&S.bk.verified&&S.bk.hash===curHash()))S.bk.verified=false;
- if(RECOVERY_CHECK_PENDING&&localReady){
-  AUTO_RECOVERY_EXCLUDED=[];
-  if(requestNextAutomaticRecovery())return;
-  RECOVERY_CHECK_PENDING=false;persist();toast('Automatic recovery is unavailable. Use Restore from backup file.');
-  return;
- }
+ S.bk.localReady=!!localReady;S.bk.folder=!!driveSel;S.bk.sharedFolder=!!sharedSel;
+ if(LOCAL_STATE_STATUS==='valid'&&backupExists){S.bk.verified=true;S.bk.hash=curHash()}else if(LOCAL_STATE_STATUS==='valid')S.bk.verified=false;
+ if(RECOVERY_CHECK_PENDING&&localReady){AUTO_RECOVERY_EXCLUDED=[];if(requestNextAutomaticRecovery())return;RECOVERY_CHECK_PENDING=false;persist();toast('Automatic recovery is unavailable. Use Restore from backup file.');return;}
  if(RECOVERY_CHECK_PENDING&&!localReady)RECOVERY_CHECK_PENDING=false;
- persist();
- if(localReady&&LOCAL_STATE_STATUS==='valid')autoBackup();
+ persist();if(localReady&&LOCAL_STATE_STATUS==='valid')autoBackup();if(S.sub==='backup')render();
 };
 window.aureliaNativeRecoveryBackupResult=async(id,ok,payload,fileName)=>{
  if(!AUTO_RECOVERY_REQUEST_ID||String(id)!==String(AUTO_RECOVERY_REQUEST_ID))return;
