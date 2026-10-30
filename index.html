@@ -3594,7 +3594,8 @@ if (typeof window.render === "function") window.render();
  }
  function bridgeConnected(){
   const result=bridgeStatus();
-  return result.authenticated===true&&result.packageName==='com.aurelia.paybridge'&&/^[a-f0-9]{64}$/i.test(result.certificateSha256||'')&&result.protocolVersion===1;
+  const platform=window.AureliaPaymentPlatform;
+  return !!(platform&&typeof platform.isPayBridgeAuthenticated==='function'&&platform.isPayBridgeAuthenticated(result));
  }
  function platformHtml(){
   const platform=window.AureliaPaymentPlatform;
