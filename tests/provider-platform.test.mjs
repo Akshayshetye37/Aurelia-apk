@@ -11,7 +11,7 @@ test("provider registry exposes modular provider definitions", () => {
 
 test("provider config requires HTTPS backend and public merchant identifier", () => {
   assert.throws(() => validateProviderConfig("razorpay", { keyId: "rzp_test_1", backendUrl: "http://example.test" }), /HTTPS/);
-  assert.throws(() => validateProviderConfig("razorpay", { backendUrl: "https://api.example.test" }), /keyId/);
+  assert.throws(() => validateProviderConfig("razorpay", { backendUrl: "https://api.example.test" }), /Key ID/);
   assert.deepEqual(validateProviderConfig("razorpay", { keyId: "rzp_test_1", backendUrl: "https://api.example.test" }), {
     provider: "razorpay", keyId: "rzp_test_1", backendUrl: "https://api.example.test"
   });
@@ -47,8 +47,8 @@ test("Razorpay, Paytm and PhonePe have provider-specific official integration wo
     assert.ok(guide.docs.every(link => link.url.startsWith("https://")), id + " docs must use HTTPS");
   }
   assert.match(PROVIDER_INTEGRATION_GUIDES.razorpay.successState, /captured/i);
-  assert.match(PROVIDER_INTEGRATION_GUIDES.paytm.successState, /TXN_SUCCESS/);
-  assert.match(PROVIDER_INTEGRATION_GUIDES.phonepe.successState, /provider-confirmed/i);
+  assert.match(PROVIDER_INTEGRATION_GUIDES.paytm.successState, /checksum|status server-side/i);
+  assert.match(PROVIDER_INTEGRATION_GUIDES.phonepe.successState, /independently fetch order status/i);
 });
 
 test("Paytm final success state is normalized but remains unverified until backend confirms it", () => {
