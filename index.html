@@ -3478,7 +3478,6 @@ document.addEventListener('click',function(event){
 </style>
 <script type="module" id="aurelia-provider-platform-inline">
 window.AureliaPaymentPlatformLoadState = "loading";
-try {
 /**
  * Aurelia India payment-provider catalogue and integration policy.
  * This is a provider directory/configuration layer, not live payment adapters.
@@ -3580,18 +3579,8 @@ if (typeof window !== "undefined") {
   window.dispatchEvent(new Event("aurelia-payment-platform-ready"));
 }
 
-  if (!Array.isArray(window.AureliaPaymentPlatform?.PMS_PROVIDER_CATALOGUE)) {
-    throw new Error("Provider catalogue export is missing");
-  }
-  window.AureliaPaymentPlatformLoadState = "ready";
-  window.dispatchEvent(new Event("aurelia-payment-platform-ready"));
-  if (typeof window.render === "function") window.render();
-} catch (error) {
-  window.AureliaPaymentPlatformLoadState = "error";
-  window.AureliaPaymentPlatformLoadError = String(error?.message || error);
-  window.dispatchEvent(new Event("aurelia-payment-platform-error"));
-  console.error("Aurelia provider catalogue failed to initialize:", error);
-}
+window.AureliaPaymentPlatformLoadState = "ready";
+if (typeof window.render === "function") window.render();
 </script>
 <script>
 (function(){
