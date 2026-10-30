@@ -3277,33 +3277,7 @@ SUB.rep=function(){
  return base+'<div class="card ca-report" style="margin-top:16px"><h2>Professional management accounts</h2><p class="lab">Period-based schedules for review by your accountant. Enter a period or leave dates blank for the available records.</p><div class="ca-period"><label class="fld"><span>From date</span><input id="ca-start" type="date" value="'+monthStart+'"></label><label class="fld"><span>To date</span><input id="ca-end" type="date" value="'+today+'"></label></div><div class="ca-actions"><button class="btn" onclick="exportCAReport(\'pl\')">Export Profit &amp; Loss</button><button class="btn ghost" onclick="exportCAReport(\'bs\')">Export Balance Sheet Schedule</button></div><div class="lab" style="margin-top:12px">Includes revenue categories, discounts, operating expenses, net operating profit/loss, recorded collections, guest receivables, stock valuation and pending refunds. A statutory balance sheet needs verified cash/bank balances, creditors, taxes, deposits, fixed assets, depreciation and opening capital.</div></div>';
 };
 
-/* Request camera permission only when the user explicitly opens a camera capture field.
-   File picking and Save As use Android's system document picker and do not require broad storage permissions. */
-(function installAureliaPermissionFlow(){
- let permissionSeq=0, pendingCameraInput=null, allowNextCameraClick=false;
- window.aureliaCameraPermissionResult=function(requestId,granted){
-   if(String(requestId)!==String(window._aureliaCameraPendingId||''))return;
-   const input=pendingCameraInput;pendingCameraInput=null;
-   if(!granted){if(typeof toast==='function')toast('Camera permission denied. Enable Camera in Android App settings to take guest photos.');return}
-   if(input&&input.isConnected){allowNextCameraClick=true;input.click()}
- };
- document.addEventListener('click',function(event){
-   const input=event.target&&event.target.closest?event.target.closest('input[type="file"][capture]'):null;
-   if(!input)return;
-   if(allowNextCameraClick){allowNextCameraClick=false;return}
-   if(!window.AureliaNative)return; // Browser/PWA uses the browser's normal permission flow.
-   event.preventDefault();event.stopImmediatePropagation();
-   pendingCameraInput=input;
-   const requestId='camera-'+Date.now()+'-'+(++permissionSeq);
-   window._aureliaCameraPendingId=requestId;
-   if(!nat({type:'requestCameraPermission',requestId})){
-     pendingCameraInput=null;
-     if(typeof toast==='function')toast('Could not request camera permission. Choose an image file instead.');
-   }
- },true);
-})();
-
-</script>
+/* Camera capture uses the Android system file chooser. The selected camera app handles its own permission; Aurelia requests no CAMERA permission. */\n</script>
 <script id="aurelia-android-actions-and-export-search">
 /* Reliable Android external intents and searchable guest/room export. */
 (function(){
