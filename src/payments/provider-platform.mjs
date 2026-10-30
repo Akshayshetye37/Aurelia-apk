@@ -54,3 +54,7 @@ export function isPayBridgeAuthenticated(connection) {
     typeof connection.certificateSha256 === "string" &&
     /^[a-f0-9]{64}$/i.test(connection.certificateSha256);
 }
+
+if (typeof window !== "undefined") {
+  window.AureliaPaymentPlatform = Object.freeze({ PAYMENT_PROVIDERS, validateProviderConfig, normalizeProviderEvent, isPayBridgeAuthenticated });
+}
