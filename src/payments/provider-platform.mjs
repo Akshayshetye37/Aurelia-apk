@@ -104,7 +104,7 @@ if (typeof window !== "undefined") {
   window.AureliaPaymentPlatform = Object.freeze({
     PAYMENT_PROVIDERS, PMS_PROVIDER_CATALOGUE, PROVIDER_INTEGRATION_GUIDES,
     validateProviderConfig, getSingleConfiguredProvider,
-    normalizeProviderEvent, isPayBridgeAuthenticated
+    normalizeProviderEvent, isPayBridgeAuthenticated, hasPayBridgeCapability
   });
   window.dispatchEvent(new Event("aurelia-payment-platform-ready"));
 }
