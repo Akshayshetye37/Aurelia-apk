@@ -99,6 +99,7 @@ jobs:
           echo "Merged manifest contains none of the blocked sensitive permissions or notification-listener/accessibility service declarations."
 
       - name: Upload debug APK artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: aurelia-pms-debug-apk
