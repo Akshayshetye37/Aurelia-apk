@@ -131,6 +131,7 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 import android.webkit.JavascriptInterface;
 import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
+import androidx.activity.OnBackPressedCallback;
 import java.io.OutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -154,6 +155,26 @@ public class MainActivity extends BridgeActivity {
 
   @Override public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+      @Override public void handleOnBackPressed() {
+        if (bridge == null || bridge.getWebView() == null) {
+          setEnabled(false);
+          getOnBackPressedDispatcher().onBackPressed();
+          setEnabled(true);
+          return;
+        }
+        bridge.getWebView().evaluateJavascript(
+          "(function(){return !!(window.aureliaHandleAndroidBack && window.aureliaHandleAndroidBack())})()",
+          value -> {
+            if (!"true".equals(value)) {
+              setEnabled(false);
+              getOnBackPressedDispatcher().onBackPressed();
+              setEnabled(true);
+            }
+          }
+        );
+      }
+    });
     prefs = getSharedPreferences("aurelia_storage", MODE_PRIVATE);
     getWindow().setStatusBarColor(Color.rgb(5, 17, 13));
     getWindow().setNavigationBarColor(Color.rgb(5, 17, 13));
@@ -163,13 +184,6 @@ public class MainActivity extends BridgeActivity {
     payBridgeClient = new PayBridgeClient(this, status -> js("window.aureliaPayBridgeStatusChanged && window.aureliaPayBridgeStatusChanged(" + q(status) + ")"));
     bridge.getWebView().addJavascriptInterface(new AureliaBridge(), "AureliaNative");
     payBridgeClient.connect();
-  }
-
-  @Override public void onBackPressed() {
-    if (bridge == null || bridge.getWebView() == null) { super.onBackPressed(); return; }
-    bridge.getWebView().evaluateJavascript("(function(){return !!(window.aureliaHandleAndroidBack && window.aureliaHandleAndroidBack())})()", value -> {
-      if (!"true".equals(value)) MainActivity.super.onBackPressed();
-    });
   }
 
   @Override public void onResume() {
