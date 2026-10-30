@@ -1260,7 +1260,7 @@ function setRestaurantImage(el){shrink(el.files[0],u=>{S.restaurant.qr=u;persist
 // OCR pipeline: Google ML Kit on-device text recognition through the Android bridge.
 function resizeForOcr(file){return new Promise(resolve=>{const im=new Image(),url=URL.createObjectURL(file);im.onload=()=>{const scale=Math.min(1,1800/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.naturalWidth*scale));c.height=Math.max(1,Math.round(im.naturalHeight*scale));c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(url);c.toBlob(b=>resolve(b||file),'image/jpeg',.82)};im.onerror=()=>{URL.revokeObjectURL(url);resolve(file)};im.src=url})}
 function fileBase64(f){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]||'');r.onerror=reject;r.readAsDataURL(f)})}
-function loadScript(src){return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(new Error('Could not load OCR engine. Connect to the internet and retry.'));document.head.appendChild(s)})}
+function loadScript(src){return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(new Error('Could not load the image-export helper. Check your connection and retry.'));document.head.appendChild(s)})}
 const oldDsheet=dsheet;
 dsheet=function(){oldDsheet()};
 // Explicit guest-linking action prevents orphan profiles and requires room/stay choice to be intentional.
@@ -1286,7 +1286,7 @@ SUB.rest=()=>hd('Restaurant business')+`<div class="grid g2"><div class="card"><
 DK.push('restaurant','tableGuests','tableRooms');
 
 /* start */
-loadAll();if(S.set&&['Aurelia PMS','Aurelia PMS','Aurelia PMS'].includes(String(S.set.name||''))===false&&/hari\s*om/i.test(String(S.set.name||''))){S.set.name='Aurelia PMS';S.set.addr=String(S.set.addr||'').replace(/hari\s*om(?:\s+retreat)?/ig,'Aurelia PMS');persist()}RECOVERY_CHECK_PENDING=!!window.AureliaNative&&LOCAL_STATE_STATUS!=='valid';if(!window.AureliaNative)S.bk.folder=false;S.restaurant=Object.assign({name:'The Dining Room',phone:'',addr:'',tax:'',upi:'',cur:S.set.cur||'K',gst:0,qr:'',logo:''},S.restaurant||{});if(!S.restaurant.cur)S.restaurant.cur=S.set.cur||'K';S.tableGuests=S.tableGuests||{};S.tableRooms=S.tableRooms||{};cleanTableOrders();useMenu(S.menu);syncT();
+loadAll();if(S.set&&/hari\s*om/i.test(String(S.set.name||''))){S.set.name='Aurelia PMS';S.set.addr=String(S.set.addr||'').replace(/hari\s*om(?:\s+retreat)?/ig,'Aurelia PMS');persist()}RECOVERY_CHECK_PENDING=!!window.AureliaNative&&LOCAL_STATE_STATUS!=='valid';if(!window.AureliaNative)S.bk.folder=false;S.restaurant=Object.assign({name:'The Dining Room',phone:'',addr:'',tax:'',upi:'',cur:S.set.cur||'K',gst:0,qr:'',logo:''},S.restaurant||{});if(!S.restaurant.cur)S.restaurant.cur=S.set.cur||'K';S.tableGuests=S.tableGuests||{};S.tableRooms=S.tableRooms||{};cleanTableOrders();useMenu(S.menu);syncT();
 const _r3=render;render=function(){try{if(!S||typeof S!=='object')throw new Error('Saved app state is unavailable');['rooms','b','g','t','exp','inv','aud','cancelled','financialLedger'].forEach(k=>{if(!Array.isArray(S[k]))S[k]=[]});if(!S.set||typeof S.set!=='object')S.set={name:'Aurelia',tag:'Peace, comfort and mindful hospitality.',cur:'K'};if(!S.au||typeof S.au!=='object')S.au={};if(!S.bk||typeof S.bk!=='object')S.bk={folder:false,label:'',last:null,hash:'',hist:[]};if(!Array.isArray(types))throw new Error('Room type data is unavailable');syncT();_r3();brand();persist()}catch(err){console.error('Aurelia startup/render wrapper failed',err);const v=$('#v');if(v)v.innerHTML='<div class="card" style="margin:24px;padding:20px"><h2>Recovery needed</h2><p class="lab">A saved setting or room record prevented the screen from loading. Your existing records have not been intentionally deleted. Use Backup/Restore before clearing app data.</p><button class="btn" onclick="location.reload()">Reload app</button><button class="btn ghost" onclick="S.tab=\'more\';S.sub=\'backup\';location.reload()">Open backup after reload</button></div>'}};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)auto()});setInterval(auto,60000);
 nat({type:'deviceBackupStatus',requestId:'bs'+Date.now(),hash:curHash()});
@@ -1446,9 +1446,8 @@ window.aureliaNativeOcrResult=(requestId,payload)=>{
  if(d.status==='ERROR'){if(window.__aureliaOcrTargets)delete window.__aureliaOcrTargets[requestId];toast('OCR could not read this image. Enter details manually.');return;}
  const target=window.__aureliaOcrTargets&&window.__aureliaOcrTargets[requestId];
  if(target){delete window.__aureliaOcrTargets[requestId];try{const parsed=parseIdOcrText(d.text||'',d.lines);applyUploadedOcr(target,{name:d.name||d.fullName||parsed.name,id:d.docNumber||d.idNumber||d.id||parsed.id,text:d.text||'',lines:d.lines||[],type:d.docType&&d.docType!=='OTHER'?d.docType:parsed.type});}catch(e){toast('Could not read OCR result. Enter details manually.');}return;}
- const pending=window._pendingOcr&&window._pendingOcr[requestId];
- if(pending){delete window._pendingOcr[requestId];const parsed=parseIdOcrText(d.text||'',d.lines);const name=d.name||d.fullName||parsed.name||'',id=d.docNumber||d.idNumber||d.id||parsed.id||'';pending.innerHTML='<div class="ln"><span>Engine</span><b>Google ML Kit (on-device)</b></div><div class="ln"><span>Document type</span><b>'+esc(d.docType||parsed.type||'Verify manually')+'</b></div><div class="ln"><span>Proposed name</span><b>'+esc(name||'Not detected')+'</b></div><div class="ln"><span>Proposed ID number</span><b>'+esc(id||'Not detected')+'</b></div><div style="white-space:pre-wrap">'+esc(d.text||'')+'</div>';return;}
- // Ignore results from legacy OCR panels; only current request targets are accepted.
+ // One supported OCR path: the native Google ML Kit result mapped to the active ID upload request.
+
 };
 /* Android WebView-safe PNG export using html2canvas, then native Save As dialog. */
 async function downloadBillPng(elementId,fileName){
@@ -2480,7 +2479,7 @@ async function shareInvoiceImage(i){
   await Promise.all([...clone.querySelectorAll('img')].map(img=>img.complete?Promise.resolve():new Promise(resolve=>{img.onload=resolve;img.onerror=resolve})));
   const canvas=await window.html2canvas(clone,{scale:3,backgroundColor:'#fffdf8',useCORS:true,allowTaint:false,logging:false,windowWidth:720,scrollX:0,scrollY:0});
   const blob=await new Promise((resolve,reject)=>canvas.toBlob(x=>x?resolve(x):reject(new Error('PNG encoding failed')),'image/png'));
-  const name='Hari-Om-Invoice-'+(b.iv||b.id)+'.png',file=new File([blob],name,{type:'image/png'});
+  const name='Aurelia-PMS-Invoice-'+(b.iv||b.id)+'.png',file=new File([blob],name,{type:'image/png'});
   if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Hotel invoice',text:'Invoice for '+b.g+' · Balance due '+K(dueB(b))});toast('Choose WhatsApp or another app to share the invoice');return}
   const data=await fileBase64(blob);
   if(window.AureliaNative&&nat({type:'shareInvoicePng',name,mime:'image/png',data})){toast('Choose WhatsApp or another app in the Android share sheet');return}
@@ -2550,7 +2549,7 @@ exportInvoicePng=async function(i,phone){
   if(!window.html2canvas)await loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
   const canvas=await window.html2canvas(el,{scale:3,backgroundColor:'#fffaf0',useCORS:true,logging:false,windowWidth:Math.max(680,el.scrollWidth)});
   const blob=await new Promise((resolve,reject)=>canvas.toBlob(x=>x?resolve(x):reject(new Error('PNG encoding failed')),'image/png'));
-  const name='Hari-Om-Invoice-'+(b.iv||b.id)+'.png';
+  const name='Aurelia-PMS-Invoice-'+(b.iv||b.id)+'.png';
   const file=new File([blob],name,{type:'image/png'});
   if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Hotel invoice',text:'Invoice for '+b.g+' · Balance due '+K(dueB(b))});toast('Choose WhatsApp or another app to share the PNG');return}
   const data=await fileBase64(blob);
