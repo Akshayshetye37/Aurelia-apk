@@ -103,6 +103,10 @@ import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
+import android.provider.MediaStore;
+import android.provider.OpenableColumns;
+import android.os.Build;
+import android.graphics.Color;
 import android.database.Cursor;
 import android.util.Base64;
 import android.graphics.Bitmap;
@@ -124,8 +128,11 @@ import java.util.concurrent.Executors;
 public class MainActivity extends BridgeActivity {
   private static final int PICK_BACKUP_FOLDER = 7101;
   private static final int CREATE_BACKUP_FILE = 7102;
+  private static final int PICK_IMAGE_FILE = 7103;
   private String folderRequestId = "";
   private String pendingFileRequestId = "";
+  private String pendingImageRequestId = "";
+  private TextRecognizer ocrRecognizer;
   private byte[] pendingBytes = new byte[0];
   private boolean pendingIsBackup = false;
   private SharedPreferences prefs;
@@ -135,6 +142,9 @@ public class MainActivity extends BridgeActivity {
   @Override public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     prefs = getSharedPreferences("aurelia_storage", MODE_PRIVATE);
+    getWindow().setStatusBarColor(Color.rgb(5, 17, 13));
+    getWindow().setNavigationBarColor(Color.rgb(5, 17, 13));
+    getWindow().getDecorView().setSystemUiVisibility(0);
     payBridgeClient = new PayBridgeClient(this, status -> js("window.aureliaPayBridgeStatusChanged && window.aureliaPayBridgeStatusChanged(" + q(status) + ")"));
     bridge.getWebView().addJavascriptInterface(new AureliaBridge(), "AureliaNative");
     payBridgeClient.connect();
@@ -148,7 +158,37 @@ public class MainActivity extends BridgeActivity {
   @Override public void onDestroy() {
     if (payBridgeClient != null) payBridgeClient.disconnect();
     backupExecutor.shutdown();
+    if (ocrRecognizer != null) { ocrRecognizer.close(); ocrRecognizer = null; }
     super.onDestroy();
+  }
+
+  private TextRecognizer getOcrRecognizer() {
+    if (ocrRecognizer == null) ocrRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+    return ocrRecognizer;
+  }
+
+  private void launchImagePicker(String requestId) {
+    pendingImageRequestId = requestId;
+    Intent intent = Build.VERSION.SDK_INT >= 33 ? new Intent(MediaStore.ACTION_PICK_IMAGES) : new Intent(Intent.ACTION_OPEN_DOCUMENT);
+    intent.setType("image/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
+    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+    try { startActivityForResult(intent, PICK_IMAGE_FILE); }
+    catch (Exception e) { pendingImageRequestId = ""; imageResult(requestId, false, "The Android photo picker could not be opened."); }
+  }
+  private void imageResult(String id, boolean ok, String payload) {
+    js("window.aureliaNativeImagePicked && window.aureliaNativeImagePicked(" + q(id) + "," + q(payload) + "," + ok + ")");
+  }
+  private JSONObject readPickedImage(Uri uri) throws Exception {
+    String mime = getContentResolver().getType(uri), name = "selected-image";
+    try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+      if (cursor != null && cursor.moveToFirst()) { int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME); if (index >= 0 && cursor.getString(index) != null) name = cursor.getString(index); }
+    }
+    try (InputStream input = getContentResolver().openInputStream(uri); java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+      if (input == null) throw new IllegalStateException("Could not read the selected image.");
+      byte[] buffer = new byte[16384]; int count; long total = 0;
+      while ((count = input.read(buffer)) != -1) { total += count; if (total > 20L * 1024L * 1024L) throw new IllegalArgumentException("Choose an image smaller than 20 MB."); output.write(buffer, 0, count); }
+      JSONObject result = new JSONObject(); result.put("name", name); result.put("mime", mime == null ? "image/jpeg" : mime); result.put("data", Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)); return result;
+    }
   }
 
   private void js(String script) {
@@ -527,27 +567,27 @@ public class MainActivity extends BridgeActivity {
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             startActivityForResult(intent, PICK_BACKUP_FOLDER);
           });
+        } else if ("pickImage".equals(type)) {
+          runOnUiThread(() -> launchImagePicker(requestId));
         } else if ("recognizeId".equals(type)) {
           String imageData = obj.optString("data", "");
           byte[] imageBytes = Base64.decode(imageData, Base64.DEFAULT);
           Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
           if (bitmap == null) throw new IllegalArgumentException("Could not decode ID image");
           InputImage image = InputImage.fromBitmap(bitmap, 0);
-          TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+          TextRecognizer recognizer = getOcrRecognizer();
           recognizer.process(image)
             .addOnSuccessListener(result -> {
               JSONObject payload = new JSONObject();
               try { payload.put("status", "OK"); payload.put("text", result.getText()); payload.put("imageWidth", bitmap.getWidth()); payload.put("imageHeight", bitmap.getHeight()); org.json.JSONArray lineItems = new org.json.JSONArray(); for (com.google.mlkit.vision.text.Text.TextBlock block : result.getTextBlocks()) { for (com.google.mlkit.vision.text.Text.Line line : block.getLines()) { android.graphics.Rect box = line.getBoundingBox(); JSONObject item = new JSONObject(); item.put("text", line.getText()); if (box != null) { item.put("left", box.left); item.put("top", box.top); item.put("right", box.right); item.put("bottom", box.bottom); } item.put("confidence", line.getConfidence()); item.put("rotation", line.getAngle()); lineItems.put(item); } } payload.put("lines", lineItems); } catch (Exception ignored) { }
               js("window.aureliaNativeOcrResult && window.aureliaNativeOcrResult(" + q(requestId) + "," + q(payload.toString()) + ")");
               bitmap.recycle();
-              recognizer.close();
             })
             .addOnFailureListener(error -> {
               JSONObject payload = new JSONObject();
               try { payload.put("status", "ERROR"); payload.put("message", error == null ? "Text recognition failed" : String.valueOf(error.getMessage())); } catch (Exception ignored) { }
               js("window.aureliaNativeOcrResult && window.aureliaNativeOcrResult(" + q(requestId) + "," + q(payload.toString()) + ")");
               bitmap.recycle();
-              recognizer.close();
             });
         } else if ("deviceBackupStatus".equals(type)) {
           boolean selected = false, backupExists = false;
@@ -622,6 +662,12 @@ public class MainActivity extends BridgeActivity {
           folderResult(folderRequestId, true, label == null ? "Selected folder" : label);
         } catch (Exception e) { folderResult(folderRequestId, false, "Could not retain access to selected folder"); }
       } else folderResult(folderRequestId, false, "No folder selected");
+    } else if (requestCode == PICK_IMAGE_FILE) {
+      final String completedId = pendingImageRequestId; pendingImageRequestId = "";
+      if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+        try { imageResult(completedId, true, readPickedImage(data.getData()).toString()); }
+        catch (Exception e) { imageResult(completedId, false, e.getMessage() == null ? "Could not read the selected image." : e.getMessage()); }
+      } else imageResult(completedId, false, "Image selection cancelled.");
     } else if (requestCode == CREATE_BACKUP_FILE) {
       final String completedId = pendingFileRequestId;
       final boolean isBackup = pendingIsBackup;
@@ -649,4 +695,4 @@ public class MainActivity extends BridgeActivity {
 }
 `;
 fs.writeFileSync(javaPath, java);
-console.log('Installed SAF folder picker, persistent folder access, backup writing, individual-file save picker, and minimal manifest permissions.');
+console.log('Installed SAF backup, Android Photo Picker, reusable Google ML Kit OCR, system-bar styling, and minimal manifest permissions.');
