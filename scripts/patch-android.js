@@ -20,17 +20,28 @@ if (!manifest.includes('com.aurelia.paybridge.permission.BIND_PAY_BRIDGE')) {
   manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE" />\n    <application');
 }
 if (!manifest.includes('android.permission.INTERNET')) {
-  manifest = manifest.replace('<manifest', '<manifest\n    xmlns:tools="http://schemas.android.com/tools"');
-  manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="android.permission.INTERNET" />\n    <application');
+  manifest = manifest.replace(/<application\\b/, '    <uses-permission android:name="android.permission.INTERNET" />\\n    <application');
 }
-if (!manifest.includes('android.permission.READ_EXTERNAL_STORAGE')) {
-  manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <application');
+// Use app-private storage and Android's Storage Access Framework. The WebView file picker
+// delegates camera capture to the selected camera app, so Aurelia itself needs no CAMERA
+// or broad/legacy storage permission. Remove these even if a transitive manifest adds them.
+if (!manifest.includes('xmlns:tools=')) {
+  manifest = manifest.replace('<manifest', '<manifest xmlns:tools="http://schemas.android.com/tools"');
 }
-if (!manifest.includes('android.permission.CAMERA')) {
-  manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="android.permission.CAMERA" />\n    <application');
-}
-if (!manifest.includes('android.permission.WRITE_EXTERNAL_STORAGE')) {
-  manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />\n    <application');
+const permissionsToRemove = [
+  'android.permission.CAMERA',
+  'android.permission.READ_EXTERNAL_STORAGE',
+  'android.permission.WRITE_EXTERNAL_STORAGE',
+  'android.permission.READ_MEDIA_IMAGES',
+  'android.permission.READ_MEDIA_VIDEO',
+  'android.permission.READ_MEDIA_AUDIO',
+  'android.permission.MANAGE_EXTERNAL_STORAGE',
+  'android.permission.READ_SMS',
+  'android.permission.RECEIVE_SMS'
+];
+for (const permission of permissionsToRemove) {
+  const marker = '<uses-permission android:name="' + permission + '" tools:node="remove" />';
+  if (!manifest.includes(marker)) manifest = manifest.replace('</manifest>', '    ' + marker + '\\n</manifest>');
 }
 fs.writeFileSync(manifestPath, manifest);
 
@@ -515,15 +526,6 @@ public class MainActivity extends BridgeActivity {
             if (stagedFiles != null) for (java.io.File stagedFile : stagedFiles) try { stagedFile.delete(); } catch (Exception ignored) { }
             try { stageDir.delete(); } catch (Exception ignored) { }
           }
-        } else if ("requestCameraPermission".equals(type)) {
-          runOnUiThread(() -> {
-            cameraPermissionRequestId = requestId;
-            if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-              js("window.aureliaCameraPermissionResult && window.aureliaCameraPermissionResult(" + q(requestId) + ",true)");
-            } else {
-              ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_PERMISSION);
-            }
-          });
         } else if ("chooseDeviceBackupFolder".equals(type)) {
           runOnUiThread(() -> {
             folderRequestId = requestId;
@@ -610,14 +612,6 @@ public class MainActivity extends BridgeActivity {
         else if ("recoverLatestBackup".equals(operationType)) recoveryResult(operationRequestId, false, message, "");
         else if ("deviceBackupStatus".equals(operationType)) js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(operationRequestId) + ",false)");
       }
-    }
-  }
-
-  @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-    super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-    if (requestCode == REQUEST_CAMERA_PERMISSION) {
-      boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
-      js("window.aureliaCameraPermissionResult && window.aureliaCameraPermissionResult(" + q(cameraPermissionRequestId) + "," + granted + ")");
     }
   }
 
