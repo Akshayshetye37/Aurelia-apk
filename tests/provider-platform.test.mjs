@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PAYMENT_PROVIDERS, PROVIDER_INTEGRATION_GUIDES, validateProviderConfig, getSingleConfiguredProvider, normalizeProviderEvent, isPayBridgeAuthenticated } from "../src/payments/provider-platform.mjs";
+import { PAYMENT_PROVIDERS, PMS_PROVIDER_CATALOGUE, PROVIDER_INTEGRATION_GUIDES, validateProviderConfig, getSingleConfiguredProvider, normalizeProviderEvent, isPayBridgeAuthenticated } from "../src/payments/provider-platform.mjs";
 
 test("provider registry exposes modular provider definitions", () => {
   assert.ok(PAYMENT_PROVIDERS.razorpay);
@@ -10,6 +10,7 @@ test("provider registry exposes modular provider definitions", () => {
   assert.ok(PAYMENT_PROVIDERS.paytm);
   assert.ok(PAYMENT_PROVIDERS.jiopay);
   assert.ok(PAYMENT_PROVIDERS.ccavenue);
+  assert.deepEqual(PMS_PROVIDER_CATALOGUE, ["razorpay", "cashfree", "payu", "phonepe", "paytm", "jiopay", "ccavenue"]);
 });
 
 test("provider config requires HTTPS backend and public merchant identifier", () => {
