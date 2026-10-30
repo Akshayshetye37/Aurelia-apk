@@ -963,8 +963,7 @@ let pendingBackupFolderRequestId=null,pendingBackupFolderPurpose='drive';
 window.aureliaNativeBackupFolderResult=(id,ok,msg,purpose='drive')=>{
  if(!pendingBackupFolderRequestId||String(id)!==String(pendingBackupFolderRequestId))return;
  pendingBackupFolderRequestId=null;
- if(purpose==='shared')S.bk.sharedFolder=!!ok;else S.bk.folder=!!ok;
- if(ok)S.bk.verified=false;
+ if(ok){if(purpose==='shared')S.bk.sharedFolder=true;else S.bk.folder=true;S.bk.verified=false;}
  S.bk.label=msg||'';
  if(!ok){
   persist();render();
