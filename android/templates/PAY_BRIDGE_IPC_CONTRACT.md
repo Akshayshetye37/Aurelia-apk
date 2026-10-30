@@ -1,32 +1,42 @@
-# Aurelia Pay Bridge IPC contract (PMS side)
+# Aurelia Pay Bridge IPC contract
 
-Status: contract groundwork only. This file does not claim that a live connection exists.
+Status: PMS-side Messenger client is implemented. The separate Pay Bridge application must implement this exact contract before the apps can connect.
 
-## Identity and Android access
+## Android identity and access
 - Pay Bridge package: `com.aurelia.paybridge`
-- Explicit service component: `com.aurelia.paybridge/.ipc.PayBridgeService`
-- Required service permission: `com.aurelia.paybridge.permission.BIND_PAY_BRIDGE`
-- The permission must be declared by Pay Bridge with Android `protectionLevel="signature"`.
-- PMS declares the matching `uses-permission` and a narrow Android package-visibility query.
-- Both APKs must be signed by the same trusted signing identity for the signature permission to be granted.
-- PMS must fail closed if the package, permission, service, signer, or handshake is unavailable.
+- Explicit service class: `com.aurelia.paybridge.ipc.PayBridgeService`
+- Service must be exported and protected by `com.aurelia.paybridge.permission.BIND_PAY_BRIDGE`.
+- Pay Bridge must declare that permission with `android:protectionLevel="signature"`.
+- PMS declares the matching `uses-permission` and narrow Android package-visibility query.
+- Both APKs must be signed with the same trusted signing identity. PMS checks Android package signature equality before binding.
+- PMS fails closed on missing package, signer mismatch, missing permission, missing service, invalid handshake, timeout, or disconnect.
 
-## Protocol requirements
-- Transport: Android bound service using Messenger (or a versioned AIDL contract).
-- Protocol version: integer, negotiated on every connection.
-- Handshake must return the service protocol version, package identity, and capabilities.
-- Connection UI may show green only after successful service binding and authenticated handshake.
-- Package installation alone, an Intent launch, or a JavaScript event is not authentication.
-- No certificate fingerprint is pinned until the production signing identity is selected and verified.
+## Messenger protocol v1
+- Transport: Android `Messenger` over an explicit bound-service Intent.
+- PMS sends `what=100` with a `Bundle` containing:
+  - `protocolMin` (int, 1)
+  - `protocolMax` (int, 1)
+  - `packageName` (string, `com.aurelia.pms`)
+  - `nonce` (string, unique per connection)
+  - `replyTo` (Messenger)
+- Pay Bridge replies to `replyTo` with `what=101` and a Bundle containing:
+  - `protocolVersion` (int, must be 1)
+  - `packageName` (string, must be `com.aurelia.paybridge`)
+  - `nonce` (string, exact echo of PMS nonce)
+  - `capabilitiesJson` (JSON array string)
+- PMS accepts the connection only after the response passes all checks within 8 seconds.
+- PMS reports the SHA-256 fingerprint of the installed APK signer only after successful handshake.
+- A green indicator means bound service plus successful protocol handshake and signer equality. Package installation alone is not connected.
 
-## Payment boundary
-- Payment requests carry unique request IDs, booking/folio IDs, amount in paise, currency, provider and merchant reference.
-- Responses must echo the request ID and include provider transaction identity and evidence metadata.
-- PMS validates response shape, request matching, amount and currency before exposing evidence to staff.
-- A payment response never settles a folio automatically. Staff confirmation remains mandatory.
+## Scope and payment safety
+- This PMS client currently implements connection and protocol negotiation only.
+- Payment initiation, transaction events, refunds, and evidence transfer remain disabled until their versioned messages are specified and implemented on both apps.
 - Provider secrets and webhook secrets remain on the owner's trusted HTTPS backend, never in either APK.
+- A payment response must never settle a folio automatically. Staff confirmation remains mandatory.
+- Existing manual PMS payment methods remain available when Pay Bridge is absent.
 
-## Failure behavior
-Missing app, missing signature permission, wrong signer, service unavailable, protocol mismatch,
-timeout, malformed message, or revoked authorization must leave gateway settings locked and
-manual PMS payment methods operational.
+## Future extension rules
+- New protocol versions must negotiate explicitly; never silently reinterpret v1 messages.
+- Payment messages must include unique request IDs, booking/folio IDs, integer amount in paise, currency, provider and merchant reference.
+- Responses must echo request IDs and carry provider transaction identity and evidence metadata.
+- PMS must validate request matching, amount, currency, duplicate events and evidence before presenting a result to staff.
