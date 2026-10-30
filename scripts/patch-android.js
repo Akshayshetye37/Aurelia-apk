@@ -457,7 +457,7 @@ public class MainActivity extends BridgeActivity {
   }
   private void saveBackupServerConfig(String endpoint,String token) throws Exception {
     android.net.Uri parsed=android.net.Uri.parse(endpoint == null ? "" : endpoint.trim());
-    if (!"https".equalsIgnoreCase(parsed.getScheme()) || parsed.getHost()==null || parsed.getUserInfo()!=null)
+    if (!"https".equalsIgnoreCase(parsed.getScheme()) || parsed.getHost()==null || parsed.getUserInfo()!=null || parsed.getQuery()!=null || parsed.getFragment()!=null)
       throw new IllegalArgumentException("Use an HTTPS server URL without embedded username or password.");
     if (token==null || token.trim().length()<12 || token.length()>4096)
       throw new IllegalArgumentException("Enter a server bearer token of at least 12 characters.");
