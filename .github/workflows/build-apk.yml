@@ -9,6 +9,7 @@ on:
       - 'package.json'
       - 'capacitor.config.json'
       - 'scripts/**'
+      - 'android/templates/**'
       - 'src/**'
       - 'tests/**'
       - '.github/workflows/build-apk.yml'
