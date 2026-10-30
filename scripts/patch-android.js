@@ -372,6 +372,130 @@ public class MainActivity extends BridgeActivity {
     return result;
   }
 
+
+  // Local-first PMS backups live in private app storage. No storage permission or
+  // SAF grant is required for the primary copy. SAF destinations are secondary exports.
+  private java.io.File privateBackupDir() {
+    java.io.File dir = new java.io.File(getFilesDir(), "backups/pms");
+    if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("Could not create private PMS backup directory.");
+    return dir;
+  }
+  private void writePrivateBackup(String name, String payload) throws Exception {
+    if (name == null || !name.matches("^aurelia-backup-[A-Za-z0-9._-]+\\.json$")) throw new IllegalArgumentException("Invalid PMS backup filename.");
+    byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
+    java.io.File dir = privateBackupDir();
+    java.io.File stage = new java.io.File(dir, "." + name + ".staging");
+    java.io.File target = new java.io.File(dir, name);
+    try (java.io.FileOutputStream out = new java.io.FileOutputStream(stage)) {
+      out.write(bytes); out.flush(); out.getFD().sync();
+    }
+    if (!sha256(bytes).equals(sha256(readFileBytes(stage)))) {
+      stage.delete(); throw new IllegalStateException("Private local backup failed SHA-256 verification.");
+    }
+    if (target.exists() && !target.delete()) { stage.delete(); throw new IllegalStateException("Could not replace previous local backup."); }
+    if (!stage.renameTo(target)) { stage.delete(); throw new IllegalStateException("Could not publish the verified local backup."); }
+    java.io.File[] files = dir.listFiles((d, n) -> n.matches("^aurelia-backup-[A-Za-z0-9._-]+\\.json$"));
+    if (files != null) {
+      java.util.Arrays.sort(files, (a,b) -> Long.compare(b.lastModified(), a.lastModified()));
+      for (int i=7;i<files.length;i++) if (!files[i].delete()) android.util.Log.w("AureliaBackup","Could not prune old local backup "+files[i].getName());
+    }
+  }
+  private byte[] readFileBytes(java.io.File file) throws Exception {
+    try (java.io.FileInputStream in = new java.io.FileInputStream(file);
+         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+      byte[] buffer = new byte[16384]; int count;
+      while ((count=in.read(buffer))!=-1) out.write(buffer,0,count);
+      return out.toByteArray();
+    }
+  }
+  private boolean hasPrivateBackup(String hash) {
+    if (hash == null || hash.isEmpty()) return false;
+    java.io.File[] files = privateBackupDir().listFiles((d,n) -> n.startsWith("aurelia-backup-") && n.endsWith("-"+hash+".json"));
+    return files != null && files.length > 0;
+  }
+  private JSONObject readLatestPrivateBackup(String excludedJson) throws Exception {
+    java.util.HashSet<String> excluded = new java.util.HashSet<>();
+    try { org.json.JSONArray a = new org.json.JSONArray(excludedJson == null ? "[]" : excludedJson); for(int i=0;i<a.length();i++) excluded.add(a.optString(i)); } catch(Exception ignored) {}
+    java.io.File[] files = privateBackupDir().listFiles((d,n) -> n.matches("^aurelia-backup-[A-Za-z0-9._-]+\\.json$") && !excluded.contains(n));
+    if (files == null || files.length == 0) throw new IllegalStateException("No private local PMS backup exists yet.");
+    java.util.Arrays.sort(files,(a,b)->Long.compare(b.lastModified(),a.lastModified()));
+    for (java.io.File file : files) {
+      byte[] bytes=readFileBytes(file);
+      if (!isStructurallyValidBackup(bytes)) continue;
+      JSONObject result=new JSONObject();
+      result.put("name",file.getName());
+      result.put("payload",new String(bytes,StandardCharsets.UTF_8));
+      return result;
+    }
+    throw new IllegalStateException("No structurally valid private local PMS backup was found.");
+  }
+  private javax.crypto.SecretKey backupServerKey() throws Exception {
+    java.security.KeyStore store=java.security.KeyStore.getInstance("AndroidKeyStore"); store.load(null);
+    String alias="aurelia.pms.backup.server.v1";
+    java.security.Key existing=store.getKey(alias,null);
+    if(existing instanceof javax.crypto.SecretKey) return (javax.crypto.SecretKey)existing;
+    javax.crypto.KeyGenerator generator=javax.crypto.KeyGenerator.getInstance(android.security.keystore.KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore");
+    generator.init(new android.security.keystore.KeyGenParameterSpec.Builder(alias,
+      android.security.keystore.KeyProperties.PURPOSE_ENCRYPT | android.security.keystore.KeyProperties.PURPOSE_DECRYPT)
+      .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+      .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE).setRandomizedEncryptionRequired(true).build());
+    return generator.generateKey();
+  }
+  private String encryptBackupSecret(String secret) throws Exception {
+    javax.crypto.Cipher cipher=javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+    cipher.init(javax.crypto.Cipher.ENCRYPT_MODE,backupServerKey());
+    byte[] iv=cipher.getIV(), encrypted=cipher.doFinal(secret.getBytes(StandardCharsets.UTF_8));
+    byte[] joined=new byte[iv.length+encrypted.length]; System.arraycopy(iv,0,joined,0,iv.length); System.arraycopy(encrypted,0,joined,iv.length,encrypted.length);
+    return Base64.encodeToString(joined,Base64.NO_WRAP);
+  }
+  private String decryptBackupSecret(String encoded) throws Exception {
+    byte[] joined=Base64.decode(encoded,Base64.NO_WRAP); if(joined.length<29) throw new IllegalStateException("Saved server credential is invalid.");
+    byte[] iv=java.util.Arrays.copyOfRange(joined,0,12), encrypted=java.util.Arrays.copyOfRange(joined,12,joined.length);
+    javax.crypto.Cipher cipher=javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+    cipher.init(javax.crypto.Cipher.DECRYPT_MODE,backupServerKey(),new javax.crypto.spec.GCMParameterSpec(128,iv));
+    return new String(cipher.doFinal(encrypted),StandardCharsets.UTF_8);
+  }
+  private void saveBackupServerConfig(String endpoint,String token) throws Exception {
+    android.net.Uri parsed=android.net.Uri.parse(endpoint == null ? "" : endpoint.trim());
+    if (!"https".equalsIgnoreCase(parsed.getScheme()) || parsed.getHost()==null || parsed.getUserInfo()!=null)
+      throw new IllegalArgumentException("Use an HTTPS server URL without embedded username or password.");
+    if (token==null || token.trim().length()<12 || token.length()>4096)
+      throw new IllegalArgumentException("Enter a server bearer token of at least 12 characters.");
+    prefs.edit().putString("backup_server_url",parsed.toString()).putString("backup_server_token_enc",encryptBackupSecret(token.trim())).apply();
+  }
+  private boolean backupServerConfigured() {
+    return !prefs.getString("backup_server_url","").isEmpty() && !prefs.getString("backup_server_token_enc","").isEmpty();
+  }
+  private int serverRequest(String method,String name,String payload) throws Exception {
+    String endpoint=prefs.getString("backup_server_url","");
+    String encrypted=prefs.getString("backup_server_token_enc","");
+    if(endpoint.isEmpty() || encrypted.isEmpty()) throw new IllegalStateException("Owner-configured server backup is not configured.");
+    java.net.URL url=new java.net.URL(endpoint);
+    if(!"https".equalsIgnoreCase(url.getProtocol())) throw new SecurityException("Server backup requires HTTPS.");
+    javax.net.ssl.HttpsURLConnection connection=(javax.net.ssl.HttpsURLConnection)url.openConnection();
+    connection.setRequestMethod(method); connection.setConnectTimeout(12000); connection.setReadTimeout(30000);
+    connection.setInstanceFollowRedirects(false);
+    connection.setRequestProperty("Authorization","Bearer "+decryptBackupSecret(encrypted));
+    connection.setRequestProperty("X-Aurelia-Application","com.aurelia.pms");
+    connection.setRequestProperty("X-Aurelia-Backup-Schema","4");
+    if("POST".equals(method)) {
+      byte[] body=payload.getBytes(StandardCharsets.UTF_8);
+      connection.setDoOutput(true); connection.setRequestProperty("Content-Type","application/json; charset=utf-8");
+      connection.setRequestProperty("X-Aurelia-Backup-Name",name);
+      connection.setRequestProperty("X-Aurelia-Backup-SHA256",sha256(body));
+      connection.setFixedLengthStreamingMode(body.length);
+      try(OutputStream out=connection.getOutputStream()){out.write(body);out.flush();}
+    }
+    int code=connection.getResponseCode(); connection.disconnect();
+    if(code<200 || code>=300) throw new IllegalStateException("Backup server returned HTTP "+code+(code>=300&&code<400?"; redirects are rejected":""));
+    return code;
+  }
+  private String uploadBackupToServer(String name,String payload) {
+    if(!backupServerConfigured()) return null;
+    try { serverRequest("POST",name,payload); return null; }
+    catch(Exception e) { return "Server/cloud copy failed: "+(e.getMessage()==null?"request failed":e.getMessage()); }
+  }
+
   private static String sha256(byte[] bytes) throws Exception {
     byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
     StringBuilder out = new StringBuilder();
@@ -709,34 +833,58 @@ public class MainActivity extends BridgeActivity {
               bitmap.recycle();
             });
         } else if ("deviceBackupStatus".equals(type)) {
-          boolean selected = false, backupExists = false;
+          boolean localReady = false, folderSelected = false, matchingBackupExists = false;
           try {
-            selected = !prefs.getString("backup_tree_uri", "").isEmpty();
-            if (selected) backupExists = hasBackupForHash(obj.optString("hash", ""));
-          } catch (Exception folderError) { selected = false; backupExists = false; }
-          final boolean folderSelected = selected, matchingBackupExists = backupExists;
-          js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(requestId) + "," + folderSelected + "," + matchingBackupExists + ")");
+            privateBackupDir(); localReady = true;
+            folderSelected = !prefs.getString("backup_tree_uri", "").isEmpty();
+            matchingBackupExists = hasPrivateBackup(obj.optString("hash", ""));
+          } catch (Exception backupStatusError) { localReady = false; }
+          final boolean localAvailable = localReady, selectedFolder = folderSelected, localMatch = matchingBackupExists;
+          js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(requestId) + "," + localAvailable + "," + selectedFolder + "," + localMatch + ")");
         } else if ("recoverLatestBackup".equals(type)) {
           final String excluded = obj.optJSONArray("exclude") == null ? "[]" : obj.optJSONArray("exclude").toString();
           backupExecutor.execute(() -> {
             try {
-              JSONObject result = readLatestBackupFromSelectedFolder(excluded);
+              JSONObject result;
+              try { result = readLatestPrivateBackup(excluded); }
+              catch (Exception localError) { result = readLatestBackupFromSelectedFolder(excluded); }
               recoveryResult(requestId, true, result.optString("payload", ""), result.optString("name", ""));
             } catch (Exception e) { recoveryResult(requestId, false, e.getMessage() == null ? "Could not read a backup from the selected folder." : e.getMessage(), ""); }
           });
         } else if ("backupDeviceNow".equals(type)) {
           final String name = obj.optString("name", "aurelia-backup.json");
           final String payload = obj.optString("payload", "");
-          final String folderUri = prefs.getString("backup_tree_uri", "");
-          if (folderUri.isEmpty()) {
-            runOnUiThread(() -> saveDocument(requestId, name, "application/json", payload.getBytes(StandardCharsets.UTF_8), true));
-          } else {
-            backupExecutor.execute(() -> {
-              String error = writeToSelectedFolder(name, payload, requestId);
-              boolean saved = error == null || error.startsWith("WARN:");
-              backupResult(requestId, saved, error == null ? "" : error);
-            });
-          }
+          backupExecutor.execute(() -> {
+            try {
+              writePrivateBackup(name,payload);
+              java.util.ArrayList<String> warnings=new java.util.ArrayList<>();
+              String folderUri=prefs.getString("backup_tree_uri","");
+              if(!folderUri.isEmpty()) {
+                String folderError=writeToSelectedFolder(name,payload,requestId);
+                if(folderError!=null) warnings.add("Selected folder copy failed: "+folderError);
+              }
+              String serverError=uploadBackupToServer(name,payload);
+              if(serverError!=null) warnings.add(serverError);
+              backupResult(requestId,true,warnings.isEmpty()?"":"WARN:Private local backup verified. "+android.text.TextUtils.join(" ",warnings));
+            } catch(Exception e) {
+              backupResult(requestId,false,e.getMessage()==null?"Private local backup failed.":e.getMessage());
+            }
+          });
+        } else if ("saveBackupServerConfig".equals(type)) {
+          String endpoint=obj.optString("endpoint",""), token=obj.optString("token","");
+          saveBackupServerConfig(endpoint,token);
+          js("window.aureliaNativeBackupServerResult && window.aureliaNativeBackupServerResult("+q(requestId)+",true,"+q("Server credentials encrypted with Android Keystore.")+")");
+        } else if ("clearBackupServerConfig".equals(type)) {
+          prefs.edit().remove("backup_server_url").remove("backup_server_token_enc").apply();
+          js("window.aureliaNativeBackupServerResult && window.aureliaNativeBackupServerResult("+q(requestId)+",true,"+q("Server backup disconnected.")+")");
+        } else if ("testBackupServer".equals(type)) {
+          backupExecutor.execute(() -> {
+            try { serverRequest("HEAD","",""); js("window.aureliaNativeBackupServerResult && window.aureliaNativeBackupServerResult("+q(requestId)+",true,"+q("HTTPS endpoint authenticated successfully.")+")"); }
+            catch(Exception e) { js("window.aureliaNativeBackupServerResult && window.aureliaNativeBackupServerResult("+q(requestId)+",false,"+q(e.getMessage()==null?"Server connection test failed.":e.getMessage())+")"); }
+          });
+        } else if ("getBackupServerStatus".equals(type)) {
+          boolean configured=backupServerConfigured();
+          js("window.aureliaNativeBackupServerStatusResult && window.aureliaNativeBackupServerStatusResult("+q(requestId)+","+configured+","+q(prefs.getString("backup_server_url",""))+")");
         } else if ("openUrl".equals(type)) {
           String url = obj.optString("url", "");
           runOnUiThread(() -> { try { Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url)); startActivity(intent); } catch (Exception e) { js("window.aureliaNativeActionResult && window.aureliaNativeActionResult(" + q(requestId) + ",false," + q("Could not open link") + ")"); } });
@@ -763,7 +911,8 @@ public class MainActivity extends BridgeActivity {
         if ("photoStore".equals(operationType) || "photoLoad".equals(operationType) || "photoArchive".equals(operationType) || "photoRestore".equals(operationType)) photoResult(operationRequestId, false, message);
         else if ("backupDeviceNow".equals(operationType)) backupResult(operationRequestId, false, message);
         else if ("recoverLatestBackup".equals(operationType)) recoveryResult(operationRequestId, false, message, "");
-        else if ("deviceBackupStatus".equals(operationType)) js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(operationRequestId) + ",false)");
+        else if ("deviceBackupStatus".equals(operationType)) js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(operationRequestId) + ",false,false,false)");
+        else if ("saveBackupServerConfig".equals(operationType) || "clearBackupServerConfig".equals(operationType) || "testBackupServer".equals(operationType)) js("window.aureliaNativeBackupServerResult && window.aureliaNativeBackupServerResult(" + q(operationRequestId) + ",false," + q(message) + ")");
       }
     }
   }
