@@ -18,7 +18,7 @@ test("Google Drive and shared SAF folders have independent persisted grants", ()
   assert.match(androidPatch, /shared_tree_uri/);
   assert.match(androidPatch, /readLatestBackupFromFolder\(prefs\.getString\("shared_tree_uri"/);
   assert.match(html, /pickDir\('shared'\)/);
-  assert.match(html, /Choose Drive folder/);
+  assert.match(html, /Google Drive \/ Shared Folder/);
 });
 
 test("owner server credentials use Android Keystore and HTTPS only", () => {
