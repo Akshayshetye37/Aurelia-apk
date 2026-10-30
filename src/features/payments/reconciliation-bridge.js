@@ -4,7 +4,7 @@
     if (typeof value !== "string") throw new Error(label + ": native bridge unavailable");
     let result;
     try { result = JSON.parse(value); } catch (_) { throw new Error(label + ": invalid native response"); }
-    if (result && result.error) throw new Error(result.message || label + ": native operation failed");
+    if (result && result.error === true) throw new Error(result.message || label + ": native operation failed");
     return result;
   }
   function nativeBridge() {
