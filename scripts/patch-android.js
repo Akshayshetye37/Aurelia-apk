@@ -107,6 +107,7 @@ import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.os.Build;
 import android.graphics.Color;
+import android.view.WindowManager;
 import android.database.Cursor;
 import android.util.Base64;
 import android.graphics.Bitmap;
@@ -145,9 +146,18 @@ public class MainActivity extends BridgeActivity {
     getWindow().setStatusBarColor(Color.rgb(5, 17, 13));
     getWindow().setNavigationBarColor(Color.rgb(5, 17, 13));
     getWindow().getDecorView().setSystemUiVisibility(0);
+    getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    if (Build.VERSION.SDK_INT >= 29) getWindow().setNavigationBarContrastEnforced(false);
     payBridgeClient = new PayBridgeClient(this, status -> js("window.aureliaPayBridgeStatusChanged && window.aureliaPayBridgeStatusChanged(" + q(status) + ")"));
     bridge.getWebView().addJavascriptInterface(new AureliaBridge(), "AureliaNative");
     payBridgeClient.connect();
+  }
+
+  @Override public void onBackPressed() {
+    if (bridge == null || bridge.getWebView() == null) { super.onBackPressed(); return; }
+    bridge.getWebView().evaluateJavascript("(function(){return !!(window.aureliaHandleAndroidBack && window.aureliaHandleAndroidBack())})()", value -> {
+      if (!"true".equals(value)) MainActivity.super.onBackPressed();
+    });
   }
 
   @Override public void onResume() {
