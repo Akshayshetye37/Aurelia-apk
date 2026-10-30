@@ -124,6 +124,7 @@ public class MainActivity extends BridgeActivity {
   private byte[] pendingBytes = new byte[0];
   private boolean pendingIsBackup = false;
   private SharedPreferences prefs;
+  private PayBridgeClient payBridgeClient;
   private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor();
 
   @Override public void onCreate(Bundle savedInstanceState) {
