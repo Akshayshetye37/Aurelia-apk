@@ -553,6 +553,19 @@ public class MainActivity extends BridgeActivity {
   private boolean isStructurallyValidBackup(byte[] bytes) {
     try {
       JSONObject backup = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
+      if ("AURELIA-PMS-ENCRYPTED-BACKUP".equals(backup.optString("format", ""))) {
+        return backup.optInt("v", -1) == 1
+            && "com.aurelia.pms".equals(backup.optString("application", ""))
+            && "AES-256-GCM".equals(backup.optString("cipher", ""))
+            && "PBKDF2-HMAC-SHA256".equals(backup.optString("kdf", ""))
+            && backup.optInt("iterations", -1) == 600000
+            && backup.optString("name", "").matches("^aurelia-backup-[A-Za-z0-9._-]+\\.json$")
+            && backup.optString("salt", "").matches("^[A-Za-z0-9+/]{22}==$")
+            && backup.optString("iv", "").matches("^[A-Za-z0-9+/]{16}$")
+            && backup.optString("wrapIv", "").matches("^[A-Za-z0-9+/]{16}$")
+            && backup.optString("wrappedKey", "").matches("^[A-Za-z0-9+/]{64}$")
+            && backup.optString("ciphertext", "").matches("^[A-Za-z0-9+/=]+$");
+      }
       JSONObject data = backup.optJSONObject("data");
       if (backup.optInt("v", -1) != 4 || data == null
           || data.optJSONArray("rooms") == null || data.optJSONArray("b") == null
