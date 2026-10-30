@@ -227,6 +227,7 @@ public class MainActivity extends BridgeActivity {
   private static final int CREATE_BACKUP_FILE = 7102;
   private static final int PICK_IMAGE_FILE = 7103;
   private String folderRequestId = "";
+  private String folderPurpose = "drive";
   private String pendingFileRequestId = "";
   private String pendingImageRequestId = "";
   private TextRecognizer ocrRecognizer;
@@ -317,7 +318,7 @@ public class MainActivity extends BridgeActivity {
   }
   private static String q(String value) { return JSONObject.quote(value == null ? "" : value); }
   private void folderResult(String id, boolean ok, String message) {
-    js("window.aureliaNativeBackupFolderResult && window.aureliaNativeBackupFolderResult(" + q(id) + "," + ok + "," + q(message) + ")");
+    js("window.aureliaNativeBackupFolderResult && window.aureliaNativeBackupFolderResult(" + q(id) + "," + ok + "," + q(message) + "," + q(folderPurpose) + ")");
   }
   private void backupResult(String id, boolean ok, String error) {
     js("window.aureliaNativeDeviceBackupResult && window.aureliaNativeDeviceBackupResult(" + q(id) + "," + ok + "," + q(error) + ")");
@@ -341,8 +342,7 @@ public class MainActivity extends BridgeActivity {
     }
     return false;
   }
-  private JSONObject readLatestBackupFromSelectedFolder(String excludedJson) throws Exception {
-    String saved = prefs.getString("backup_tree_uri", "");
+  private JSONObject readLatestBackupFromFolder(String saved, String excludedJson) throws Exception {
     if (saved.isEmpty()) throw new IllegalStateException("No backup folder is selected.");
     java.util.HashSet<String> excluded = new java.util.HashSet<>();
     try { org.json.JSONArray values = new org.json.JSONArray(excludedJson == null ? "[]" : excludedJson); for (int i = 0; i < values.length(); i++) excluded.add(values.optString(i)); } catch (Exception ignored) { }
@@ -629,9 +629,10 @@ public class MainActivity extends BridgeActivity {
         "Backup was saved, but one or more obsolete backup files could not be removed.", deletionFailure);
   }
 
-  private String writeToSelectedFolder(String name, String payload, String requestId) {
-    String saved = prefs.getString("backup_tree_uri", null);
-    if (saved == null || saved.isEmpty()) return "No backup folder permission is saved.";
+  private String writeToSelectedFolder(String name, String payload, String requestId) { return writeToTreeFolder(prefs.getString("backup_tree_uri",""),name,payload,requestId); }
+  private String writeToSharedFolder(String name, String payload, String requestId) { return writeToTreeFolder(prefs.getString("shared_tree_uri",""),name,payload,requestId); }
+  private String writeToTreeFolder(String saved, String name, String payload, String requestId) {
+    if (saved == null || saved.isEmpty()) return "No folder permission is saved.";
     Uri tree = Uri.parse(saved);
     Uri root = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree));
     byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
@@ -825,6 +826,7 @@ public class MainActivity extends BridgeActivity {
         } else if ("chooseDeviceBackupFolder".equals(type)) {
           runOnUiThread(() -> {
             folderRequestId = requestId;
+            folderPurpose = "shared".equals(obj.optString("purpose","drive")) ? "shared" : "drive";
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             startActivityForResult(intent, PICK_BACKUP_FOLDER);
@@ -852,21 +854,25 @@ public class MainActivity extends BridgeActivity {
               bitmap.recycle();
             });
         } else if ("deviceBackupStatus".equals(type)) {
-          boolean localReady = false, folderSelected = false, matchingBackupExists = false;
+          boolean localReady = false, driveSelected = false, sharedSelected = false, matchingBackupExists = false;
           try {
             privateBackupDir(); localReady = true;
-            folderSelected = !prefs.getString("backup_tree_uri", "").isEmpty();
+            driveSelected = !prefs.getString("backup_tree_uri", "").isEmpty();
+            sharedSelected = !prefs.getString("shared_tree_uri", "").isEmpty();
             matchingBackupExists = hasPrivateBackup(obj.optString("hash", ""));
           } catch (Exception backupStatusError) { localReady = false; }
-          final boolean localAvailable = localReady, selectedFolder = folderSelected, localMatch = matchingBackupExists;
-          js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(requestId) + "," + localAvailable + "," + selectedFolder + "," + localMatch + ")");
+          final boolean localAvailable = localReady, driveFolder = driveSelected, sharedFolder = sharedSelected, localMatch = matchingBackupExists;
+          js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(requestId) + "," + localAvailable + "," + driveFolder + "," + sharedFolder + "," + localMatch + ")");
         } else if ("recoverLatestBackup".equals(type)) {
           final String excluded = obj.optJSONArray("exclude") == null ? "[]" : obj.optJSONArray("exclude").toString();
           backupExecutor.execute(() -> {
             try {
               JSONObject result;
               try { result = readLatestPrivateBackup(excluded); }
-              catch (Exception localError) { result = readLatestBackupFromSelectedFolder(excluded); }
+              catch (Exception localError) {
+                try { result = readLatestBackupFromFolder(prefs.getString("backup_tree_uri",""),excluded); }
+                catch (Exception driveError) { result = readLatestBackupFromFolder(prefs.getString("shared_tree_uri",""),excluded); }
+              }
               recoveryResult(requestId, true, result.optString("payload", ""), result.optString("name", ""));
             } catch (Exception e) { recoveryResult(requestId, false, e.getMessage() == null ? "Could not read a backup from the selected folder." : e.getMessage(), ""); }
           });
@@ -877,10 +883,15 @@ public class MainActivity extends BridgeActivity {
             try {
               writePrivateBackup(name,payload);
               java.util.ArrayList<String> warnings=new java.util.ArrayList<>();
-              String folderUri=prefs.getString("backup_tree_uri","");
-              if(!folderUri.isEmpty()) {
+              String driveUri=prefs.getString("backup_tree_uri","");
+              if(!driveUri.isEmpty()) {
                 String folderError=writeToSelectedFolder(name,payload,requestId);
-                if(folderError!=null) warnings.add("Selected folder copy failed: "+folderError);
+                if(folderError!=null) warnings.add("Google Drive / selected SAF copy failed: "+folderError);
+              }
+              String sharedUri=prefs.getString("shared_tree_uri","");
+              if(!sharedUri.isEmpty()) {
+                String sharedError=writeToSharedFolder(name,payload,requestId);
+                if(sharedError!=null) warnings.add("Shared-folder export copy failed: "+sharedError);
               }
               String serverError=uploadBackupToServer(name,payload);
               if(serverError!=null) warnings.add(serverError);
@@ -890,12 +901,13 @@ public class MainActivity extends BridgeActivity {
             }
           });
         } else if ("clearBackupFolder".equals(type)) {
-          String savedFolder=prefs.getString("backup_tree_uri","");
-          if(!savedFolder.isEmpty()) {
-            try { getContentResolver().releasePersistableUriPermission(Uri.parse(savedFolder),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION); } catch(Exception ignored) {}
-          }
-          prefs.edit().remove("backup_tree_uri").apply();
-          folderResult(requestId,true,"Optional folder disconnected; private local backups remain enabled.");
+          String purpose="shared".equals(obj.optString("purpose","drive"))?"shared":"drive";
+          String preferenceKey="shared".equals(purpose)?"shared_tree_uri":"backup_tree_uri";
+          String savedFolder=prefs.getString(preferenceKey,"");
+          if(!savedFolder.isEmpty()) { try { getContentResolver().releasePersistableUriPermission(Uri.parse(savedFolder),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION); } catch(Exception ignored) {} }
+          prefs.edit().remove(preferenceKey).apply();
+          folderPurpose=purpose;
+          folderResult(requestId,true,"Optional "+purpose+" folder disconnected; private local backups remain enabled.");
         } else if ("saveBackupServerConfig".equals(type)) {
           String endpoint=obj.optString("endpoint",""), token=obj.optString("token","");
           saveBackupServerConfig(endpoint,token);
@@ -957,7 +969,8 @@ public class MainActivity extends BridgeActivity {
         try {
           getContentResolver().takePersistableUriPermission(uri, data.getFlags() &
             (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION));
-          prefs.edit().putString("backup_tree_uri", uri.toString()).apply();
+          String preferenceKey="shared".equals(folderPurpose)?"shared_tree_uri":"backup_tree_uri";
+          prefs.edit().putString(preferenceKey, uri.toString()).apply();
           String label = uri.getLastPathSegment();
           folderResult(folderRequestId, true, label == null ? "Selected folder" : label);
         } catch (Exception e) { folderResult(folderRequestId, false, "Could not retain access to selected folder"); }
