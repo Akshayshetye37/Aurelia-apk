@@ -490,6 +490,25 @@ public class MainActivity extends BridgeActivity {
     if(code<200 || code>=300) throw new IllegalStateException("Backup server returned HTTP "+code+(code>=300&&code<400?"; redirects are rejected":""));
     return code;
   }
+  private String downloadLatestBackupFromServer() throws Exception {
+    String endpoint=prefs.getString("backup_server_url",""),encrypted=prefs.getString("backup_server_token_enc","");
+    if(endpoint.isEmpty()||encrypted.isEmpty())throw new IllegalStateException("Owner-configured server backup is not configured.");
+    java.net.URL url=new java.net.URL(endpoint);
+    if(!"https".equalsIgnoreCase(url.getProtocol()))throw new SecurityException("Server restore requires HTTPS.");
+    javax.net.ssl.HttpsURLConnection connection=(javax.net.ssl.HttpsURLConnection)url.openConnection();
+    connection.setRequestMethod("GET");connection.setConnectTimeout(12000);connection.setReadTimeout(30000);connection.setInstanceFollowRedirects(false);
+    connection.setRequestProperty("Authorization","Bearer "+decryptBackupSecret(encrypted));
+    connection.setRequestProperty("X-Aurelia-Application","com.aurelia.pms");
+    int code=connection.getResponseCode();
+    if(code<200||code>=300){connection.disconnect();throw new IllegalStateException("Backup server returned HTTP "+code);}
+    try(InputStream in=connection.getInputStream();java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
+      byte[] buffer=new byte[16384];int count;long total=0;
+      while((count=in.read(buffer))!=-1){total+=count;if(total>25L*1024L*1024L)throw new IllegalStateException("Server backup exceeds the 25 MB restore limit.");out.write(buffer,0,count);}
+      byte[] bytes=out.toByteArray();
+      if(!isStructurallyValidBackup(bytes))throw new IllegalStateException("Server returned an invalid PMS backup file.");
+      return new String(bytes,StandardCharsets.UTF_8);
+    } finally { connection.disconnect(); }
+  }
   private String uploadBackupToServer(String name,String payload) {
     if(!backupServerConfigured()) return null;
     try { serverRequest("POST",name,payload); return null; }
@@ -884,6 +903,11 @@ public class MainActivity extends BridgeActivity {
         } else if ("clearBackupServerConfig".equals(type)) {
           prefs.edit().remove("backup_server_url").remove("backup_server_token_enc").apply();
           js("window.aureliaNativeBackupServerResult && window.aureliaNativeBackupServerResult("+q(requestId)+",true,"+q("Server backup disconnected.")+")");
+        } else if ("restoreLatestServerBackup".equals(type)) {
+          backupExecutor.execute(() -> {
+            try { String payload=downloadLatestBackupFromServer(); js("window.aureliaNativeServerRestoreResult && window.aureliaNativeServerRestoreResult("+q(requestId)+",true,"+q(payload)+")"); }
+            catch(Exception e) { js("window.aureliaNativeServerRestoreResult && window.aureliaNativeServerRestoreResult("+q(requestId)+",false,"+q(e.getMessage()==null?"Server restore failed.":e.getMessage())+")"); }
+          });
         } else if ("testBackupServer".equals(type)) {
           backupExecutor.execute(() -> {
             try { serverRequest("HEAD","",""); js("window.aureliaNativeBackupServerResult && window.aureliaNativeBackupServerResult("+q(requestId)+",true,"+q("HTTPS endpoint authenticated successfully.")+")"); }
@@ -919,6 +943,7 @@ public class MainActivity extends BridgeActivity {
         else if ("backupDeviceNow".equals(operationType)) backupResult(operationRequestId, false, message);
         else if ("recoverLatestBackup".equals(operationType)) recoveryResult(operationRequestId, false, message, "");
         else if ("deviceBackupStatus".equals(operationType)) js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(operationRequestId) + ",false,false,false)");
+        else if ("restoreLatestServerBackup".equals(operationType)) js("window.aureliaNativeServerRestoreResult && window.aureliaNativeServerRestoreResult(" + q(operationRequestId) + ",false," + q(message) + ")");
         else if ("saveBackupServerConfig".equals(operationType) || "clearBackupServerConfig".equals(operationType) || "testBackupServer".equals(operationType)) js("window.aureliaNativeBackupServerResult && window.aureliaNativeBackupServerResult(" + q(operationRequestId) + ",false," + q(message) + ")");
       }
     }
