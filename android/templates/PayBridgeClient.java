@@ -53,6 +53,7 @@ final class PayBridgeClient {
   private Runnable reconnectRunnable;
   private int reconnectAttempts;
   private boolean connectionRequested;
+  private boolean manualDisconnect;
 
   PayBridgeClient(Context context, Listener listener) {
     this.context = context.getApplicationContext();
@@ -144,10 +145,25 @@ final class PayBridgeClient {
   };
 
   synchronized void connect() {
-    if (connecting || authenticated) { notifyStatus(); return; }
+    // Lifecycle calls are idempotent; only an explicit user retry resets the retry budget.
+    if (connecting || authenticated || connectionRequested || manualDisconnect) {
+      notifyStatus();
+      return;
+    }
+    connectionRequested = true;
+    beginConnection();
+  }
+
+  synchronized void retryNow() {
     cancelReconnect();
     reconnectAttempts = 0;
+    manualDisconnect = false;
     connectionRequested = true;
+    if (connecting || authenticated) {
+      notifyStatus();
+      return;
+    }
+    unbindQuietly();
     beginConnection();
   }
 
@@ -267,6 +283,7 @@ final class PayBridgeClient {
     cancelReconnect();
     reconnectAttempts = 0;
     connectionRequested = false;
+    manualDisconnect = true;
     authenticated = false;
     connecting = false;
     pendingNonce = null;
@@ -326,6 +343,7 @@ final class PayBridgeClient {
     clearHandshakeTimeout();
     cancelReconnect();
     connectionRequested = false;
+    manualDisconnect = true;
     authenticated = false;
     connecting = false;
     pendingNonce = null;
