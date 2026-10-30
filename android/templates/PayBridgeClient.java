@@ -52,6 +52,7 @@ final class PayBridgeClient {
   private Runnable timeoutRunnable;
   private Runnable reconnectRunnable;
   private int reconnectAttempts;
+  private boolean connectionRequested;
 
   PayBridgeClient(Context context, Listener listener) {
     this.context = context.getApplicationContext();
@@ -146,6 +147,7 @@ final class PayBridgeClient {
     if (connecting || authenticated) { notifyStatus(); return; }
     cancelReconnect();
     reconnectAttempts = 0;
+    connectionRequested = true;
     beginConnection();
   }
 
@@ -203,7 +205,12 @@ final class PayBridgeClient {
     state = "reconnecting";
     detail = reason;
     notifyStatus();
-    scheduleReconnect(reason);
+    if (connectionRequested) scheduleReconnect(reason);
+    else {
+      state = "disconnected";
+      detail = "Disconnected by user";
+      notifyStatus();
+    }
   }
 
   private synchronized void scheduleReconnect(String reason) {
@@ -259,6 +266,7 @@ final class PayBridgeClient {
     clearHandshakeTimeout();
     cancelReconnect();
     reconnectAttempts = 0;
+    connectionRequested = false;
     authenticated = false;
     connecting = false;
     pendingNonce = null;
@@ -317,6 +325,7 @@ final class PayBridgeClient {
   private void fail(String code, String message) {
     clearHandshakeTimeout();
     cancelReconnect();
+    connectionRequested = false;
     authenticated = false;
     connecting = false;
     pendingNonce = null;
