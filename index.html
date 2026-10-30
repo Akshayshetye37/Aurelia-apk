@@ -904,6 +904,7 @@ async function setupBackupRecoveryPassword(){
   const dataKey=await crypto.subtle.importKey('raw',rawKey,{name:'AES-GCM'},false,['encrypt','decrypt']);
   rawKey.fill(0);
   await writeBackupVault({id:BACKUP_VAULT_ID,key:dataKey,salt:backupB64(salt),wrapIv:backupB64(wrapIv),wrappedKey:backupB64(wrapped),iterations:BACKUP_KDF_ITERATIONS,format:1});
+  S.bk.verified=false;S.bk.hash='';
   $('#backup-recovery-password').value='';$('#backup-recovery-confirm').value='';
   const status=$('#backup-vault-status');if(status)status.textContent='Encrypted backup vault is ready on this device. Keep your recovery password somewhere safe.';
   toast('Encrypted backup vault configured. Create your first backup now.');
