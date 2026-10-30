@@ -92,8 +92,9 @@ export function isPayBridgeAuthenticated(connection) {
 
 if (typeof window !== "undefined") {
   window.AureliaPaymentPlatform = Object.freeze({
-    PAYMENT_PROVIDERS, PROVIDER_INTEGRATION_GUIDES,
+    PAYMENT_PROVIDERS, PMS_PROVIDER_CATALOGUE, PROVIDER_INTEGRATION_GUIDES,
     validateProviderConfig, getSingleConfiguredProvider,
     normalizeProviderEvent, isPayBridgeAuthenticated
   });
+  window.dispatchEvent(new Event("aurelia-payment-platform-ready"));
 }
