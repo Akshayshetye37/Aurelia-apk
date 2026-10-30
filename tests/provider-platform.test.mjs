@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PAYMENT_PROVIDERS, PROVIDER_INTEGRATION_GUIDES, validateProviderConfig, normalizeProviderEvent, isPayBridgeAuthenticated } from "../src/payments/provider-platform.mjs";
+import { PAYMENT_PROVIDERS, PROVIDER_INTEGRATION_GUIDES, validateProviderConfig, getSingleConfiguredProvider, normalizeProviderEvent, isPayBridgeAuthenticated } from "../src/payments/provider-platform.mjs";
 
 test("provider registry exposes modular provider definitions", () => {
   assert.ok(PAYMENT_PROVIDERS.razorpay);
@@ -58,4 +58,21 @@ test("Paytm final success state is normalized but remains unverified until backe
   });
   assert.equal(event.status, "paid");
   assert.equal(event.verified, false);
+});
+
+test("India provider catalogue covers aggregators and direct bank gateways", () => {
+  for (const id of ["razorpay", "cashfree", "payu", "phonepe", "paytm", "ccavenue", "billdesk", "easebuzz", "atom", "zaakpay", "instamojo", "hdfc_smartgateway", "sbi_epay", "axis_pg", "icici_pg", "pine_labs"]) {
+    assert.ok(PAYMENT_PROVIDERS[id], id + " catalogue entry missing");
+    assert.ok(PAYMENT_PROVIDERS[id].docs.every(link => link.url.startsWith("https://")), id + " docs must use HTTPS");
+    assert.ok(PAYMENT_PROVIDERS[id].identityField, id + " merchant identifier field missing");
+  }
+});
+
+test("single-provider selection replaces previous provider and reads legacy settings safely", () => {
+  assert.equal(getSingleConfiguredProvider({}), null);
+  assert.equal(getSingleConfiguredProvider({ razorpay: { configured: true } }), "razorpay");
+  assert.equal(getSingleConfiguredProvider({
+    razorpay: { configured: true }, paytm: { configured: true }
+  }), "razorpay");
+  assert.deepEqual(Object.keys({ payu: { configured: true } }), ["payu"]);
 });
