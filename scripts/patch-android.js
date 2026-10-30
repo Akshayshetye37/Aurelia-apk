@@ -32,6 +32,13 @@ if (!manifest.includes('xmlns:tools=')) {
 // Android's Photo Picker, Storage Access Framework and explicit system intents instead.
 // The narrow Pay Bridge package query and signature permission are not broad app inventory access.
 const permissionsToRemove = [
+  'android.permission.PACKAGE_USAGE_STATS',
+  'android.permission.WRITE_SECURE_SETTINGS',
+  'android.permission.READ_BASIC_PHONE_STATE',
+  'android.permission.READ_CELL_BROADCASTS',
+  'android.permission.BIND_NOTIFICATION_LISTENER_SERVICE',
+  'android.permission.BIND_ACCESSIBILITY_SERVICE',
+  'android.permission.BIND_VPN_SERVICE',
   'android.permission.ACCESS_MEDIA_LOCATION',
   'android.permission.READ_CALENDAR',
   'android.permission.WRITE_CALENDAR',
