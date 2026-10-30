@@ -74,6 +74,18 @@ const permissionsToRemove = [
   'android.permission.NFC',
   'android.permission.QUERY_ALL_PACKAGES',
   'android.permission.SYSTEM_ALERT_WINDOW',
+  'android.permission.WRITE_SETTINGS',
+  'android.permission.ACCESS_NOTIFICATION_POLICY',
+  'android.permission.SCHEDULE_EXACT_ALARM',
+  'android.permission.USE_EXACT_ALARM',
+  'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+  'android.permission.USE_BIOMETRIC',
+  'android.permission.USE_FINGERPRINT',
+  'android.permission.FOREGROUND_SERVICE_CAMERA',
+  'android.permission.FOREGROUND_SERVICE_MICROPHONE',
+  'android.permission.FOREGROUND_SERVICE_LOCATION',
+  'android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION',
+  'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
   'android.permission.REQUEST_INSTALL_PACKAGES',
   'android.permission.REQUEST_DELETE_PACKAGES'
 ];
