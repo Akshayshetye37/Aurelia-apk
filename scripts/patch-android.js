@@ -67,7 +67,8 @@ if (fs.existsSync(iconSvg)) {
       execFileSync(process.execPath, ['-e', 'const sharp=require("sharp"); sharp(process.argv[1]).resize(+process.argv[3],+process.argv[3]).png().toFile(process.argv[2]).then(()=>{}).catch(e=>{console.error(e);process.exit(1)})', iconSvg, path.join(dir, name + '.png'), String(size)]);
     }
     const foregroundSource = fs.existsSync(foregroundSvg) ? foregroundSvg : iconSvg;
-    execFileSync(process.execPath, ['-e', 'const sharp=require("sharp"); sharp(process.argv[1]).resize(+process.argv[3],+process.argv[3],{fit:"contain"}).png().toFile(process.argv[2]).then(()=>{}).catch(e=>{console.error(e);process.exit(1)})', foregroundSource, path.join(dir, 'ic_launcher_foreground.png'), String(size)]);
+    const foregroundSize = Math.round(size * 2.25);
+    execFileSync(process.execPath, ['-e', 'const sharp=require("sharp"); sharp(process.argv[1]).resize(+process.argv[3],+process.argv[3],{fit:"contain"}).png().toFile(process.argv[2]).then(()=>{}).catch(e=>{console.error(e);process.exit(1)})', foregroundSource, path.join(dir, 'ic_launcher_foreground.png'), String(foregroundSize)]);
   }
   const adaptiveDir = path.join(resDir, 'mipmap-anydpi-v26');
   fs.mkdirSync(adaptiveDir, { recursive: true });
