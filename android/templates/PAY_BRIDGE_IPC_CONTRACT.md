@@ -44,3 +44,20 @@ Status: PMS-side Messenger client implements connection discovery and protocol v
 - Payment messages must include unique request IDs, booking/folio IDs, integer amount in paise, currency, provider and merchant reference.
 - Responses must echo request IDs and carry provider transaction identity and evidence metadata.
 - PMS must validate request matching, amount, currency, duplicate events and evidence before presenting a result to staff.
+
+
+## Reserved future message identifiers
+
+The PMS build also includes `PayBridgeProtocol.java` as a constants-only contract dependency. The current connection client continues to send and accept only handshake messages 100 and 101.
+
+Reserved operation identifiers (not implemented or advertised yet):
+- 200/201: create payment / result
+- 202/203: retrieve payment status / result
+- 300/301: request refund / result
+- 302/303: retrieve refund status / result
+- 400/401: reconciliation request / result
+- 500/501: payment event / acknowledgement
+
+The future Bridge service manifest declaration is provided in `PAY_BRIDGE_MANIFEST_TEMPLATE.xml`. It is a template only and must be added to the separate Pay Bridge app, never to the PMS manifest. The service must also check caller permission and signer identity in its implementation; manifest protection alone does not replace per-request validation.
+
+Every payment operation must carry a unique request ID, transaction ID where applicable, booking and folio references, integer amount in paise, ISO currency, provider ID and merchant reference. Refunds must reference the original provider transaction. Capabilities may be advertised only after the corresponding operation is fully implemented and tested on both apps.
