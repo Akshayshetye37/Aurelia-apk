@@ -1,6 +1,6 @@
 # Aurelia Pay Bridge IPC contract
 
-Status: PMS-side Messenger client implements connection discovery and protocol v1 handshake only. The separate Pay Bridge application has not been created and must implement this contract before the apps can connect.
+Status: PMS-side Messenger client and the separate Aurelia Pay Bridge Android service both implement protocol-v1 handshake source code. Source-level contract alignment has been inspected, but a successful installed two-APK handshake has not yet been demonstrated. Protocol v1 remains handshake-only.
 
 ## Android identity and access
 - Pay Bridge package: `com.aurelia.paybridge`
