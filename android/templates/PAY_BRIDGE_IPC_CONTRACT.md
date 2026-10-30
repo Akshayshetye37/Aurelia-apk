@@ -9,8 +9,9 @@ Status: PMS-side Messenger client implements connection discovery and protocol v
 - Pay Bridge must declare that permission with `android:protectionLevel="signature"`.
 - PMS declares the matching `uses-permission` and narrow Android package-visibility query.
 - Both APKs must be signed with the same trusted signing identity. PMS checks Android package signature equality before binding.
-- PMS fails closed on missing package, signer mismatch, missing permission, missing service, invalid handshake, timeout, or disconnect.
-- A transient Android service-process disconnect retains the binding; PMS may wait for Android's reconnection callback. A dead binding must be unbound and explicitly rebound.
+- PMS fails closed on missing package, signer mismatch, missing permission, invalid service identity, invalid handshake, or malformed response.
+- Unexpected service-process disconnection, binding death, or bind/handshake timeout clears authenticated state immediately, unbinds the stale connection, and starts a controlled reconnect sequence. Each retry rechecks package signing identity and performs a fresh protocol handshake.
+- Automatic reconnection uses at most five retries with delays of 1, 2, 4, 8, and 16 seconds. The retry loop stops after the limit; a user can initiate a new manual connection attempt. A manual disconnect cancels pending retries and prevents reconnection.
 
 ## Messenger protocol v1
 - Transport: Android `Messenger` over an explicit bound-service Intent.
@@ -25,10 +26,11 @@ Status: PMS-side Messenger client implements connection discovery and protocol v
   - `packageName` (string, must be `com.aurelia.paybridge`)
   - `nonce` (string, exact echo of PMS nonce)
   - `capabilitiesJson` (JSON array string containing unique, non-empty strings; `handshake` is mandatory)
-- PMS accepts the connection only after the response passes all checks within **8 seconds**, measured from the start of binding. The timeout is cancelled after success or failure.
-- PMS validates the callback component identity, protocol version, package identity, nonce, and capability-array structure.
+- PMS accepts the connection only after the response passes all checks within **10 seconds**, measured from the start of binding. The timeout callback is explicitly removed after handshake success, terminal failure, or user disconnect. A bind/handshake timeout clears the current attempt and enters the bounded reconnect sequence.
+- PMS validates the callback ComponentName package and service class, binder liveness, protocol version, package identity, nonce, and capability-array structure.
+- capabilitiesJson must be a complete JSON array of unique, non-empty strings and must include the mandatory handshake capability. A response that omits it is rejected.
 - PMS reports the SHA-256 fingerprint of the installed APK signer only after successful handshake.
-- A green indicator means bound service plus successful protocol handshake and signer equality. Package installation alone is not connected.
+- A green indicator means bound service plus successful protocol handshake and signer equality. Package installation alone is not connected. The indicator is cleared immediately on unexpected disconnection and restored only after a new handshake succeeds.
 
 ## Scope and payment safety
 - This PMS client currently implements connection and protocol negotiation only.
