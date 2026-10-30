@@ -73,9 +73,12 @@ final class PayBridgeClient {
 
         JSONArray parsedCapabilities;
         try {
-          Object rawCapabilities = new org.json.JSONTokener(
-              data.getString("capabilitiesJson", "")).nextValue();
-          if (!(rawCapabilities instanceof JSONArray)) throw new IllegalArgumentException("Expected JSON array");
+          org.json.JSONTokener tokener = new org.json.JSONTokener(
+              data.getString("capabilitiesJson", ""));
+          Object rawCapabilities = tokener.nextValue();
+          if (!(rawCapabilities instanceof JSONArray) || tokener.nextClean() != 0) {
+            throw new IllegalArgumentException("Expected a complete JSON array");
+          }
           parsedCapabilities = (JSONArray) rawCapabilities;
           boolean hasHandshake = false;
           java.util.HashSet<String> seen = new java.util.HashSet<>();
@@ -137,11 +140,12 @@ final class PayBridgeClient {
       clearHandshakeTimeout();
       pendingNonce = null;
       authenticated = false;
-      connecting = false;
-      state = "disconnected";
-      detail = "Pay Bridge service disconnected; retry connection";
-      // Android retains this binding after a transient service disconnect.
-      // connect() can wait for Android to deliver the next onServiceConnected callback.
+      connecting = true;
+      state = "reconnecting";
+      detail = "Pay Bridge service disconnected; waiting for Android to reconnect";
+      // Android retains this binding and normally calls onServiceConnected again.
+      // Keep the handshake timeout active so a stalled reconnection fails closed.
+      startHandshakeTimeout();
       notifyStatus();
     }
 
