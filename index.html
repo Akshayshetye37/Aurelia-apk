@@ -992,7 +992,8 @@ window.aureliaNativeRecoveryBackupResult=async(id,ok,payload,fileName)=>{
  AUTO_RECOVERY_REQUEST_ID=null;
  if(!ok){
   RECOVERY_CHECK_PENDING=false;persist();
-  toast('Automatic recovery could not find a readable backup. Use Restore from backup file.');
+  toast('No readable local backup was found. A new private backup will be created from the current PMS state.');
+  autoBackup();
   return;
  }
  try{
