@@ -135,12 +135,12 @@ public class MainActivity extends BridgeActivity {
     payBridgeClient.connect();
   }
 
-  @Override protected void onResume() {
+  @Override public void onResume() {
     super.onResume();
     if (payBridgeClient != null) payBridgeClient.connect();
   }
 
-  @Override protected void onDestroy() {
+  @Override public void onDestroy() {
     if (payBridgeClient != null) payBridgeClient.disconnect();
     backupExecutor.shutdown();
     super.onDestroy();
