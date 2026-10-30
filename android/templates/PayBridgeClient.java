@@ -146,8 +146,16 @@ final class PayBridgeClient {
 
   synchronized void connect() {
     // Lifecycle calls are idempotent; only an explicit user retry resets the retry budget.
-    if (connecting || authenticated || connectionRequested || manualDisconnect) {
+    if (connecting || authenticated || manualDisconnect) {
       notifyStatus();
+      return;
+    }
+    // If PMS started before Pay Bridge was installed, re-check package visibility on
+    // the next foreground/resume instead of remaining stuck in NOT_INSTALLED forever.
+    // This does not reset reconnect attempts or override a deliberate user disconnect.
+    if (connectionRequested) {
+      if ("not_installed".equals(state)) beginConnection();
+      else notifyStatus();
       return;
     }
     connectionRequested = true;
