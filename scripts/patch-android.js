@@ -440,7 +440,7 @@ public class MainActivity extends BridgeActivity {
         final String requestId = obj.optString("requestId", "");
         operationType = type; operationRequestId = requestId;
         if ("payBridgeConnect".equals(type)) {
-          if (payBridgeClient != null) payBridgeClient.connect();
+          if (payBridgeClient != null) payBridgeClient.retryNow();
         } else if ("payBridgeDisconnect".equals(type)) {
           if (payBridgeClient != null) payBridgeClient.disconnect();
         } else if ("photoStore".equals(type)) {
