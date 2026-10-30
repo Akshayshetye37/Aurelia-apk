@@ -1361,6 +1361,11 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
       if (typeof closeS === 'function') closeS();
       return true;
     }
+    const expanded = Array.from(document.querySelectorAll('#v details[open]'));
+    if (expanded.length) {
+      expanded[expanded.length - 1].open = false;
+      return true;
+    }
     if (typeof S !== 'undefined' && S.sub) {
       S.sub = null;
       if (typeof render === 'function') render();
