@@ -7,6 +7,9 @@ test("provider registry exposes modular provider definitions", () => {
   assert.ok(PAYMENT_PROVIDERS.cashfree);
   assert.ok(PAYMENT_PROVIDERS.payu);
   assert.ok(PAYMENT_PROVIDERS.phonepe);
+  assert.ok(PAYMENT_PROVIDERS.paytm);
+  assert.ok(PAYMENT_PROVIDERS.jiopay);
+  assert.ok(PAYMENT_PROVIDERS.ccavenue);
 });
 
 test("provider config requires HTTPS backend and public merchant identifier", () => {
@@ -61,7 +64,7 @@ test("Paytm final success state is normalized but remains unverified until backe
 });
 
 test("India provider catalogue covers aggregators and direct bank gateways", () => {
-  for (const id of ["razorpay", "cashfree", "payu", "phonepe", "paytm", "ccavenue", "billdesk", "easebuzz", "atom", "zaakpay", "instamojo", "hdfc_smartgateway", "sbi_epay", "axis_pg", "icici_pg", "pine_labs"]) {
+  for (const id of ["razorpay", "cashfree", "payu", "phonepe", "paytm", "jiopay", "ccavenue", "billdesk", "easebuzz", "atom", "zaakpay", "instamojo", "hdfc_smartgateway", "sbi_epay", "axis_pg", "icici_pg", "pine_labs"]) {
     assert.ok(PAYMENT_PROVIDERS[id], id + " catalogue entry missing");
     assert.ok(PAYMENT_PROVIDERS[id].docs.every(link => link.url.startsWith("https://")), id + " docs must use HTTPS");
     assert.ok(PAYMENT_PROVIDERS[id].identityField, id + " merchant identifier field missing");
