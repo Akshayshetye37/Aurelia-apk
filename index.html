@@ -1327,7 +1327,7 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
     template.content.appendChild(privacy);
 
     const cards = Array.from(template.content.querySelectorAll('.card'))
-      .filter(card => !card.closest('.card') && card.id !== 'razorpay-settings');
+      .filter(card => !(card.parentElement && card.parentElement.closest && card.parentElement.closest('.card')) && card.id !== 'razorpay-settings');
     cards.forEach((card, index) => {
       const heading = card.querySelector(':scope > h2');
       const title = heading ? heading.textContent.trim() : 'Settings';
