@@ -1278,13 +1278,16 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
 (function(){
  const providerNames=[['razorpay','Razorpay'],['cashfree','Cashfree'],['payu','PayU'],['phonepe','PhonePe'],['paytm','Paytm'],['jiopay','JioPay'],['ccavenue','CCAvenue']];
  const fieldMap={razorpay:[['keyId','Key ID']],cashfree:[['appId','App ID']],payu:[['merchantKey','Merchant Key']],phonepe:[['clientId','Client ID']],paytm:[['merchantId','Merchant ID']],jiopay:[['merchantId','Merchant ID']],ccavenue:[['merchantId','Merchant ID']]};
- function bridgeConnected(){
+ function bridgeStatus(){
   try{
    const native=window.AureliaNative;
-   if(!native||typeof native.getPayBridgeStatus!=='function')return false;
-   const result=JSON.parse(native.getPayBridgeStatus());
-   return result&&result.authenticated===true&&result.packageName==='com.aurelia.paybridge'&&/^[a-f0-9]{64}$/i.test(result.certificateSha256||'');
-  }catch(_){return false}
+   if(!native||typeof native.getPayBridgeStatus!=='function')return {authenticated:false,state:'native_unavailable',detail:'Native connection support is unavailable in this build'};
+   return JSON.parse(native.getPayBridgeStatus())||{authenticated:false,state:'unknown'};
+  }catch(_){return {authenticated:false,state:'unknown'}}
+ }
+ function bridgeConnected(){
+  const result=bridgeStatus();
+  return result.authenticated===true&&result.packageName==='com.aurelia.paybridge'&&/^[a-f0-9]{64}$/i.test(result.certificateSha256||'')&&result.protocolVersion===1;
  }
  function platformHtml(){
   const connected=bridgeConnected(), providers=providerNames.map(([id,name])=>{
@@ -1295,10 +1298,12 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
     '<div class="lab">Secret keys and webhook secrets must be configured in your trusted backend. They must never be stored in this APK.</div>'+
     '<button class="btn sm" onclick="saveAureliaProvider(\''+id+'\')">Save provider settings</button></details>';
   }).join('');
-  if(!connected)return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateways</h2><div class="lab">Connect Aurelia Pay Bridge to unlock Razorpay and other payment providers. Existing manual payment methods continue working.</div><div class="provider-row locked"><span><b>Aurelia Pay Bridge</b><small class="lab" style="display:block">Not connected · gateway integrations locked</small></span><span class="tag out">Locked</span></div><button class="btn sm" style="margin-top:14px" onclick="requestAureliaPayBridge()">Connect Pay Bridge</button><div class="lab" style="margin-top:12px">Available after authenticated connection: Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue.</div></div>';
-  return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateways</h2><div class="tag ready" style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="display:inline-block;width:7px;height:7px;min-width:7px;border-radius:50%;background:#35d07f;box-shadow:0 0 7px rgba(53,208,127,.55)"></span><span>Connected</span></div>'+providers+'</div>';
+  if(!connected){const status=bridgeStatus();const label=status.state==='connecting'?'Connecting…':status.state==='not_installed'?'Not installed':status.state==='untrusted_signer'?'Untrusted signing identity':status.state==='disconnected'?'Disconnected':'Not connected';return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateways</h2><div class="lab">Aurelia PMS is ready and waiting for the separate Pay Bridge application. Existing manual payment methods continue working.</div><div class="provider-row locked"><span><b>Aurelia Pay Bridge</b><small class="lab" style="display:block">'+esc(status.detail||label)+' · gateway integrations locked</small></span><span class="tag out">'+label+'</span></div><button class="btn sm" style="margin-top:14px" onclick="requestAureliaPayBridge()">Connect / Retry Pay Bridge</button><div class="lab" style="margin-top:12px">Available after authenticated protocol v1 handshake: Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue.</div></div>';}
+  return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateways</h2><div class="tag ready" style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="display:inline-block;width:7px;height:7px;min-width:7px;border-radius:50%;background:#35d07f;box-shadow:0 0 7px rgba(53,208,127,.55)"></span><span>Connected · protocol v'+esc(bridgeStatus().protocolVersion)+'</span></div><button class="btn sm ghost" style="margin:10px 0" onclick="disconnectAureliaPayBridge()">Disconnect</button>'+providers+'</div>';
  }
- window.requestAureliaPayBridge=function(){window.dispatchEvent(new CustomEvent('aurelia:paybridge-connect-request'));toast('Pay Bridge connection service is not installed in this PMS build yet. Gateway settings remain locked.')};
+ window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;if(!native||typeof native.postMessage!=='function')throw new Error('Native Pay Bridge client is unavailable. Update the PMS APK.');native.postMessage(JSON.stringify({type:'payBridgeConnect'}));toast('Checking Pay Bridge installation, signing identity and native service…');setTimeout(()=>{try{render()}catch(_){ }},350)}catch(e){toast(e.message||'Could not start Pay Bridge connection')}};
+ window.disconnectAureliaPayBridge=function(){try{window.AureliaNative.postMessage(JSON.stringify({type:'payBridgeDisconnect'}));toast('Pay Bridge disconnected')}catch(_){toast('Native Pay Bridge client is unavailable')}};
+ window.aureliaPayBridgeStatusChanged=function(){try{if(document.querySelector('.payment-platform-card'))render()}catch(_){ }};
  window.saveAureliaProvider=function(id){
   if(!bridgeConnected()){toast('Connect Aurelia Pay Bridge first');return}
   const inputs=[...document.querySelectorAll('[data-provider="'+id+'"]')],config={};
