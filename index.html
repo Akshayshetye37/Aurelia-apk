@@ -1278,7 +1278,14 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
 (function(){
  const providerNames=[['razorpay','Razorpay'],['cashfree','Cashfree'],['payu','PayU'],['phonepe','PhonePe'],['paytm','Paytm'],['jiopay','JioPay'],['ccavenue','CCAvenue']];
  const fieldMap={razorpay:[['keyId','Key ID']],cashfree:[['appId','App ID']],payu:[['merchantKey','Merchant Key']],phonepe:[['clientId','Client ID']],paytm:[['merchantId','Merchant ID']],jiopay:[['merchantId','Merchant ID']],ccavenue:[['merchantId','Merchant ID']]};
- function bridgeConnected(){return window.__AURELIA_PAY_BRIDGE_AUTHENTICATED===true;}
+ function bridgeConnected(){
+  try{
+   const native=window.AureliaNative;
+   if(!native||typeof native.getPayBridgeStatus!=='function')return false;
+   const result=JSON.parse(native.getPayBridgeStatus());
+   return result&&result.authenticated===true&&result.packageName==='com.aurelia.paybridge'&&/^[a-f0-9]{64}$/i.test(result.certificateSha256||'');
+  }catch(_){return false}
+ }
  function platformHtml(){
   const connected=bridgeConnected(), providers=providerNames.map(([id,name])=>{
    const saved=(S.set.paymentProviders||{})[id]||{};
@@ -1305,13 +1312,7 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
    persist();aud('Payment gateway settings',id+' provider configuration saved');render();toast('Provider settings saved. Backend verification is still required.');
   }catch(e){toast(e.message||'Provider configuration is invalid')}
  };
- window.aureliaPayBridgeConnectionResult=function(result){
-  const platform=window.AureliaPaymentPlatform;
-  if(!platform||!platform.isPayBridgeAuthenticated(result)){window.__AURELIA_PAY_BRIDGE_AUTHENTICATED=false;toast('Pay Bridge authentication failed. Gateway settings remain locked.');render();return}
-  window.__AURELIA_PAY_BRIDGE_AUTHENTICATED=true;
-  if(!S.set.paymentDefaultInitialized){S.set.paymentDefaultMethod=false;S.set.paymentDefaultInitialized=true}
-  persist();render();toast('Aurelia Pay Bridge connected');
- };
+
  const originalSettings=SUB.set;
  SUB.set=function(){
   let out=originalSettings();
