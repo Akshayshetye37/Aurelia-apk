@@ -86,8 +86,18 @@ export function normalizeProviderEvent(providerId, event = {}) {
 export function isPayBridgeAuthenticated(connection) {
   return !!connection && connection.authenticated === true &&
     connection.packageName === "com.aurelia.paybridge" &&
+    connection.protocolVersion === 1 &&
     typeof connection.certificateSha256 === "string" &&
-    /^[a-f0-9]{64}$/i.test(connection.certificateSha256);
+    /^[a-f0-9]{64}$/i.test(connection.certificateSha256) &&
+    Array.isArray(connection.capabilities) &&
+    connection.capabilities.includes("handshake");
+}
+
+export function hasPayBridgeCapability(connection, capability) {
+  return isPayBridgeAuthenticated(connection) &&
+    typeof capability === "string" &&
+    capability.length > 0 &&
+    connection.capabilities.includes(capability);
 }
 
 if (typeof window !== "undefined") {
