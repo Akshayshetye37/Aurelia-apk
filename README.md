@@ -69,3 +69,21 @@ Passing tests and building a debug APK do not certify the PMS as production-read
 - Android Back closes overlays, returns through app sections and exits from Home. External actions are delegated to Android system intents.
 - The PMS manifest removes dangerous and special permissions, including SMS, call logs, contacts, location, camera, microphone, notification posting, Bluetooth, broad storage, package inventory and overlay permissions. SAF and Photo Picker provide user-selected file access.
 - See [docs/ANDROID-INTEGRATION.md](docs/ANDROID-INTEGRATION.md) for the Android IPC and signing contract.
+
+
+## Local-first backup architecture
+
+PMS backup uses three independent optional destinations around a private local primary:
+
+- **Private local device storage:** verified snapshots in app-private storage; seven managed recovery points; no storage permission.
+- **Google Drive:** optional owner-selected folder through Android SAF. Google account sign-in is handled by the Drive document provider when available.
+- **Owner server/cloud:** optional provider-neutral HTTPS endpoint. The bearer token is encrypted using Android Keystore. See [BACKUP-SERVER-CONTRACT.md](docs/BACKUP-SERVER-CONTRACT.md).
+- **Shared folder:** a separate SAF grant from the Drive backup destination, for owner-authorized backup copies and permitted file exchange. It is not a shared database.
+
+Automatic snapshots run on app launch, data changes and foreground maintenance. Android may defer work while the app is stopped or force-stopped; the PMS catches up on the next launch. Private app backups are removed by Android when the app is uninstalled or its app data is cleared, so owners should configure an off-device destination for device-loss protection.
+
+PMS and the future Pay Bridge remain independent data owners. The PMS backup format contains hotel operations only. The future Pay Bridge must implement its own independent backup schema and restore path. No live database file is shared.
+
+## Payment Gateway boundary
+
+The PMS catalogue exposes the agreed Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue providers. Provider configuration is locked until an authenticated Pay Bridge advertises the provider.management capability. This PMS branch's native Pay Bridge client currently implements the signer-checked protocol handshake only; it does not execute payments or provide provider adapters. API secrets and webhook secrets stay on the owner's trusted backend, and automatic folio settlement remains disabled.
