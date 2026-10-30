@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PAYMENT_PROVIDERS, validateProviderConfig, normalizeProviderEvent, isPayBridgeAuthenticated } from "../src/payments/provider-platform.mjs";
+import { PAYMENT_PROVIDERS, PROVIDER_INTEGRATION_GUIDES, validateProviderConfig, normalizeProviderEvent, isPayBridgeAuthenticated } from "../src/payments/provider-platform.mjs";
 
 test("provider registry exposes modular provider definitions", () => {
   assert.ok(PAYMENT_PROVIDERS.razorpay);
@@ -35,4 +35,27 @@ test("Pay Bridge connection requires package identity and certificate fingerprin
   assert.equal(isPayBridgeAuthenticated({ authenticated: true, packageName: "com.aurelia.paybridge", certificateSha256: "a".repeat(64) }), true);
   assert.equal(isPayBridgeAuthenticated({ authenticated: true, packageName: "com.other.app", certificateSha256: "a".repeat(64) }), false);
   assert.equal(isPayBridgeAuthenticated({ authenticated: true, packageName: "com.aurelia.paybridge" }), false);
+});
+
+test("Razorpay, Paytm and PhonePe have provider-specific official integration workspaces", () => {
+  for (const id of ["razorpay", "paytm", "phonepe"]) {
+    const provider = PAYMENT_PROVIDERS[id];
+    const guide = PROVIDER_INTEGRATION_GUIDES[id];
+    assert.ok(provider, id + " provider registry entry missing");
+    assert.ok(guide && guide.flow.length >= 3, id + " integration guide missing");
+    assert.ok(guide.docs.length >= 2, id + " official documentation links missing");
+    assert.ok(guide.docs.every(link => link.url.startsWith("https://")), id + " docs must use HTTPS");
+  }
+  assert.match(PROVIDER_INTEGRATION_GUIDES.razorpay.successState, /captured/i);
+  assert.match(PROVIDER_INTEGRATION_GUIDES.paytm.successState, /TXN_SUCCESS/);
+  assert.match(PROVIDER_INTEGRATION_GUIDES.phonepe.successState, /provider-confirmed/i);
+});
+
+test("Paytm final success state is normalized but remains unverified until backend confirms it", () => {
+  const event = normalizeProviderEvent("paytm", {
+    providerTransactionId: "paytm-txn-1", merchantReference: "AUR-FOLIO-1",
+    amount: 1250, currency: "INR", status: "TXN_SUCCESS"
+  });
+  assert.equal(event.status, "paid");
+  assert.equal(event.verified, false);
 });
