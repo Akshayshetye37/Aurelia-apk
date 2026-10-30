@@ -82,6 +82,21 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
 
+      - name: Verify merged Android manifest has no high-risk permissions
+        working-directory: android
+        shell: bash
+        run: |
+          manifest="$(find app/build/intermediates/merged_manifest -type f -name AndroidManifest.xml | head -n 1)"
+          if [ -z "$manifest" ]; then
+            echo "Merged Android manifest was not found; refusing to publish an unverified APK."
+            exit 1
+          fi
+          if grep -E 'android.permission.(READ_SMS|RECEIVE_SMS|CAMERA|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|READ_MEDIA_IMAGES|READ_MEDIA_VIDEO|READ_MEDIA_AUDIO|MANAGE_EXTERNAL_STORAGE)|BIND_NOTIFICATION_LISTENER_SERVICE|BIND_ACCESSIBILITY_SERVICE' "$manifest"; then
+            echo "A high-risk or unnecessary permission/service declaration remains in the merged manifest."
+            exit 1
+          fi
+          echo "Merged manifest contains none of the blocked SMS, notification-listener, accessibility, camera, or broad-storage declarations."
+
       - name: Publish debug APK as a private-repository prerelease asset
         if: github.event_name != 'pull_request'
         env:
