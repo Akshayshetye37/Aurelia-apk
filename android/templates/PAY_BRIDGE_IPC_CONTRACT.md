@@ -61,3 +61,12 @@ Reserved operation identifiers (not implemented or advertised yet):
 The future Bridge service manifest declaration is provided in `PAY_BRIDGE_MANIFEST_TEMPLATE.xml`. It is a template only and must be added to the separate Pay Bridge app, never to the PMS manifest. The service must also check caller permission and signer identity in its implementation; manifest protection alone does not replace per-request validation.
 
 Every payment operation must carry a unique request ID, transaction ID where applicable, booking and folio references, integer amount in paise, ISO currency, provider ID and merchant reference. Refunds must reference the original provider transaction. Capabilities may be advertised only after the corresponding operation is fully implemented and tested on both apps.
+
+
+## Provider-management capability gate
+
+The PMS provider-management UI remains locked unless the authenticated handshake advertises the exact capability string provider.management. A successful package/signature/nonce handshake alone does not authorize provider configuration.
+
+The future Pay Bridge may advertise provider.management only after it implements provider catalogue discovery, provider activation/configuration status, strict caller validation, and versioned request/response messages for those operations. Provider-specific adapters and payment execution are separate capabilities and must not be implied by provider.management.
+
+The PMS may store only non-secret provider preferences and public merchant identifiers. Provider credentials, API secrets, private keys, salts and webhook secrets remain on the owner's trusted HTTPS backend. A provider must never become active in the PMS solely because a local preference was saved; Pay Bridge is authoritative for actual activation and availability.
