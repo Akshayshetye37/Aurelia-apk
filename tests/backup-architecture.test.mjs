@@ -37,3 +37,16 @@ test("provider controls are capability-gated and folio auto-settlement stays dis
   const gate = fs.readFileSync(new URL("../src/payments/settlement-gate.mjs", import.meta.url), "utf8");
   assert.match(gate, /AUTO_FOLIO_SETTLEMENT_ENABLED = false/);
 });
+
+
+test("all new backup destinations receive a portable AES-256-GCM envelope", () => {
+  assert.match(html, /AURELIA-PMS-ENCRYPTED-BACKUP/);
+  assert.match(html, /AES-256-GCM/);
+  assert.match(html, /PBKDF2-HMAC-SHA256/);
+  assert.match(html, /BACKUP_KDF_ITERATIONS=600000/);
+  assert.match(html, /encryptBackupPayload\(snap\.payload,snap\.name\)/);
+  assert.match(html, /decryptBackupPayload\(payload,fileName\)/);
+  assert.match(html, /setupBackupRecoveryPassword/);
+  assert.match(androidPatch, /AURELIA-PMS-ENCRYPTED-BACKUP/);
+  assert.match(backupContract, /encrypted PMS backup envelope/);
+});
