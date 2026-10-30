@@ -25,6 +25,8 @@ export const PAYMENT_PROVIDERS = Object.freeze({
   pine_labs: { name: "Pine Labs", category: "Payment platform / acquiring", identityField: "merchantId", identityLabel: "Merchant ID", methods: ["upi", "cards", "netbanking", "pos"], integration: "merchant_product_api", docs: docs([["Pine Labs", "https://www.pinelabs.com/"], ["Pine Labs developer portal", "https://developer.pinelabs.com/"]]), verification: "Select the exact Pine Labs product (online gateway, QR or POS); verify status through that product's server-side API." }
 });
 
+export const PMS_PROVIDER_CATALOGUE = Object.freeze(["razorpay", "cashfree", "payu", "phonepe", "paytm", "jiopay", "ccavenue"]);
+
 export const PROVIDER_INTEGRATION_GUIDES = Object.freeze(Object.fromEntries(
   Object.entries(PAYMENT_PROVIDERS).map(([id, provider]) => [id, Object.freeze({
     phase: id === "razorpay" ? "First reference implementation" : "Provider-specific adapter required",
