@@ -8,7 +8,7 @@ test("Android image picker prefers Photo Picker without CATEGORY_OPENABLE", () =
   const start = patcher.indexOf("private void launchImagePicker(String requestId)");
   const end = patcher.indexOf("private void imageResult", start);
   assert.ok(start >= 0 && end > start, "native image picker implementation must exist");
-  const method = patcher.slice(start, end);
+  const method = patcher.slice(start, end).replace(/^\\s*\\/\\/.*$/gm, "");
   assert.match(method, /MediaStore\.ACTION_PICK_IMAGES/);
   assert.doesNotMatch(method.slice(0, method.indexOf("// Reliable system document-picker fallback")), /CATEGORY_OPENABLE/);
 });
