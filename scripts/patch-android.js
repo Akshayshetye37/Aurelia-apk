@@ -7,6 +7,18 @@ const manifestPath = path.join(appDir, 'AndroidManifest.xml');
 if (!fs.existsSync(manifestPath)) throw new Error('AndroidManifest.xml not found; run npx cap add android first.');
 
 let manifest = fs.readFileSync(manifestPath, 'utf8');
+
+// Pay Bridge package visibility and signature-protected IPC permission.
+// This is intentionally only discovery/permission groundwork: the PMS does not
+// report a connection until a future native client completes a real handshake.
+if (!manifest.includes('<queries>')) {
+  manifest = manifest.replace(/<manifest[^>]*>/, match => match + '\n    <queries>\n        <package android:name="com.aurelia.paybridge" />\n    </queries>');
+} else if (!manifest.includes('com.aurelia.paybridge')) {
+  manifest = manifest.replace('</queries>', '        <package android:name="com.aurelia.paybridge" />\n    </queries>');
+}
+if (!manifest.includes('com.aurelia.paybridge.permission.BIND_PAY_BRIDGE')) {
+  manifest = manifest.replace(/<application\\b/, '    <uses-permission android:name="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE" />\n    <application');
+}
 if (!manifest.includes('android.permission.INTERNET')) {
   manifest = manifest.replace('<manifest', '<manifest\n    xmlns:tools="http://schemas.android.com/tools"');
   manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="android.permission.INTERNET" />\n    <application');
