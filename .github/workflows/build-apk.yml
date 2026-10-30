@@ -54,7 +54,18 @@ jobs:
         run: npm run build
 
       - name: Generate Android project
-        run: npx cap add android
+        run: |
+          # The repository stores native source templates under android/templates.
+          # Move them out temporarily because Capacitor requires the android/ path to be absent.
+          if [ -d android/templates ]; then
+            mv android/templates "$RUNNER_TEMP/aurelia-android-templates"
+          fi
+          rmdir android 2>/dev/null || true
+          npx cap add android
+          if [ -d "$RUNNER_TEMP/aurelia-android-templates" ]; then
+            mkdir -p android/templates
+            mv "$RUNNER_TEMP/aurelia-android-templates"/* android/templates/
+          fi
 
       - name: Install native backup and file bridge
         run: node scripts/patch-android.js
