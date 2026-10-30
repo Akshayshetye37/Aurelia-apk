@@ -11,7 +11,7 @@ Status: PMS-side Messenger client implements connection discovery and protocol v
 - Both APKs must be signed with the same trusted signing identity. PMS checks Android package signature equality before binding.
 - PMS fails closed on missing package, signer mismatch, missing permission, invalid service identity, invalid handshake, or malformed response.
 - Unexpected service-process disconnection, binding death, or bind/handshake timeout clears authenticated state immediately, unbinds the stale connection, and starts a controlled reconnect sequence. Each retry rechecks package signing identity and performs a fresh protocol handshake.
-- Automatic reconnection uses at most five retries with delays of 1, 2, 4, 8, and 16 seconds. The retry loop stops after the limit; a user can initiate a new manual connection attempt. A manual disconnect cancels pending retries and prevents reconnection.
+- Automatic reconnection uses at most five retries with delays of 1, 2, 4, 8, and 16 seconds. The retry loop stops after the limit; the PMS explicit Connect action starts a new attempt and resets the retry budget. Lifecycle resume calls do not reset or bypass the retry policy. A manual disconnect cancels pending retries and prevents reconnection until the user explicitly connects again.
 
 ## Messenger protocol v1
 - Transport: Android `Messenger` over an explicit bound-service Intent.
