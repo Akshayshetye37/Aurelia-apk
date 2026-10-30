@@ -144,6 +144,9 @@ if (fs.existsSync(appGradleGroovy)) {
 const payBridgeTemplate = path.join(androidDir, 'templates', 'PayBridgeClient.java');
 if (!fs.existsSync(payBridgeTemplate)) throw new Error('PayBridgeClient.java template is missing.');
 fs.copyFileSync(payBridgeTemplate, path.join(javaDir, 'PayBridgeClient.java'));
+const payBridgeProtocolTemplate = path.join(androidDir, 'templates', 'PayBridgeProtocol.java');
+if (!fs.existsSync(payBridgeProtocolTemplate)) throw new Error('PayBridgeProtocol.java template is missing.');
+fs.copyFileSync(payBridgeProtocolTemplate, path.join(javaDir, 'PayBridgeProtocol.java'));
 
 const javaPath = path.join(javaDir, 'MainActivity.java');
 const java = String.raw`
