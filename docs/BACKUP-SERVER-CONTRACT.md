@@ -32,7 +32,7 @@ Headers:
 - X-Aurelia-Backup-Name: aurelia-backup-<date>-<hash>.json
 - X-Aurelia-Backup-SHA256: lowercase SHA-256 of exact request body bytes
 
-Body: the complete PMS backup JSON document (not multipart).
+Body: the complete `AURELIA-PMS-ENCRYPTED-BACKUP` JSON envelope (not multipart). The envelope contains AES-256-GCM ciphertext and password-wrapped data-key metadata; the plaintext PMS snapshot is never sent to the server.
 
 Return 2xx only after the server has durably stored the complete body and verified the supplied SHA-256. A 2xx response is the server's acknowledgement. The server should store immutable/content-addressed versions and enforce its own retention policy; it must not overwrite a different backup with the same name. 4xx/5xx responses are surfaced as remote-copy warnings; the private local copy remains the primary verified copy.
 
@@ -44,7 +44,7 @@ Headers:
 - Authorization: Bearer ...
 - X-Aurelia-Application: com.aurelia.pms
 
-Return the latest complete PMS backup as the raw application/json body. Return 404 when no PMS backup exists. Do not return a Pay Bridge backup or another tenant's backup. The PMS client limits a server restore response to 25 MiB and validates the PMS schema and integrity before showing the normal restore confirmation.
+Return the latest complete encrypted PMS backup envelope as the raw application/json body. Return 404 when no PMS backup exists. Do not return a Pay Bridge backup or another tenant's backup. The PMS client limits a server restore response to 25 MiB, validates the envelope structure, then authenticates/decrypts it using the owner's recovery password before showing the normal restore confirmation.
 
 ## Server-side requirements
 
