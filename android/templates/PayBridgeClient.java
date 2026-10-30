@@ -78,6 +78,7 @@ final class PayBridgeClient {
   private String pendingNonce;
   private final ServiceConnection connection = new ServiceConnection() {
     @Override public void onServiceConnected(ComponentName name, IBinder binder) {
+      if (!connecting) { unbindQuietly(); return; }
       service = new Messenger(binder);
       try {
         pendingNonce = java.util.UUID.randomUUID().toString();
@@ -90,9 +91,6 @@ final class PayBridgeClient {
         msg.setData(data);
         msg.replyTo = reply;
         service.send(msg);
-        main.postDelayed(() -> {
-          if (connecting) fail("timeout", "Pay Bridge handshake timed out");
-        }, 8000);
       } catch (Exception e) { fail("handshake_failed", "Could not complete Pay Bridge handshake"); }
     }
     @Override public void onServiceDisconnected(ComponentName name) {
@@ -125,7 +123,12 @@ final class PayBridgeClient {
       state = "connecting"; detail = "Binding to Pay Bridge native service"; connecting = true;
       bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE);
       if (!bound) fail("service_unavailable", "Pay Bridge native service is unavailable");
-      else notifyStatus();
+      else {
+        main.postDelayed(() -> {
+          if (connecting) fail("timeout", "Pay Bridge service bind or handshake timed out");
+        }, 10000);
+        notifyStatus();
+      }
     } catch (SecurityException e) { fail("permission_denied", "Signature permission denied"); }
       catch (Exception e) { fail("connection_failed", "Could not connect to Pay Bridge"); }
   }
