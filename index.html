@@ -1276,13 +1276,12 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
 <script type="module" src="./src/payments/provider-platform.mjs"></script>
 <script>
 (function(){
- const platform=window.AureliaPaymentPlatform;
- function providerNames(){return platform?Object.entries(platform.PAYMENT_PROVIDERS).map(([id,p])=>[id,p.name]):[];}
+ function providerNames(){const api=window.AureliaPaymentPlatform;return api?Object.entries(api.PAYMENT_PROVIDERS).map(([id,p])=>[id,p.name]):[];}
  function bridgeStatus(){
   try{
    const native=window.AureliaNative;
    if(!native||typeof native.getPayBridgeStatus!=='function')return {authenticated:false,state:'native_unavailable',detail:'Native connection support is unavailable in this build'};
-   return JSON.parse(native.getPayBridgeStatus())||{authenticated:false,state:'unknown};
+   return JSON.parse(native.getPayBridgeStatus())||{authenticated:false,state:'unknown'};
   }catch(_){return {authenticated:false,state:'unknown'}}
  }
  function bridgeConnected(){
@@ -1290,7 +1289,9 @@ function printGuestPreview(){const node=$('#guest-pdf-preview');if(!node){toast(
   return result.authenticated===true&&result.packageName==='com.aurelia.paybridge'&&/^[a-f0-9]{64}$/i.test(result.certificateSha256||'')&&result.protocolVersion===1;
  }
  function platformHtml(){
-  const connected=bridgeConnected(), active=platform&&platform.getSingleConfiguredProvider?platform.getSingleConfiguredProvider(S.set.paymentProviders||{}):null;
+  const platform=window.AureliaPaymentPlatform;
+  if(!platform)return '<div class="card payment-platform-card"><h2>Payment Provider</h2><p class="lab">Loading provider catalogue…</p></div>';
+  const connected=bridgeConnected(), active=platform.getSingleConfiguredProvider(S.set.paymentProviders||{});
   const providers=providerNames().map(([id,name])=>{
    const saved=(S.set.paymentProviders||{})[id]||{};
    const definition=platform.PAYMENT_PROVIDERS[id];
