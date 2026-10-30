@@ -870,6 +870,13 @@ public class MainActivity extends BridgeActivity {
               backupResult(requestId,false,e.getMessage()==null?"Private local backup failed.":e.getMessage());
             }
           });
+        } else if ("clearBackupFolder".equals(type)) {
+          String savedFolder=prefs.getString("backup_tree_uri","");
+          if(!savedFolder.isEmpty()) {
+            try { getContentResolver().releasePersistableUriPermission(Uri.parse(savedFolder),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION); } catch(Exception ignored) {}
+          }
+          prefs.edit().remove("backup_tree_uri").apply();
+          folderResult(requestId,true,"Optional folder disconnected; private local backups remain enabled.");
         } else if ("saveBackupServerConfig".equals(type)) {
           String endpoint=obj.optString("endpoint",""), token=obj.optString("token","");
           saveBackupServerConfig(endpoint,token);
