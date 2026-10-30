@@ -35,9 +35,19 @@ test("normalizes provider events without treating unverified callbacks as verifi
   assert.equal(event.currency, "INR");
 });
 
-test("Pay Bridge connection requires package identity and certificate fingerprint", () => {
-  assert.equal(isPayBridgeAuthenticated({ authenticated: true, packageName: "com.aurelia.paybridge", certificateSha256: "a".repeat(64) }), true);
-  assert.equal(isPayBridgeAuthenticated({ authenticated: true, packageName: "com.other.app", certificateSha256: "a".repeat(64) }), false);
+test("Pay Bridge connection requires package identity, protocol, certificate fingerprint and handshake capability", () => {
+  const valid = {
+    authenticated: true,
+    packageName: "com.aurelia.paybridge",
+    protocolVersion: 1,
+    certificateSha256: "a".repeat(64),
+    capabilities: ["handshake"]
+  };
+  assert.equal(isPayBridgeAuthenticated(valid), true);
+  assert.equal(isPayBridgeAuthenticated({ ...valid, packageName: "com.other.app" }), false);
+  assert.equal(isPayBridgeAuthenticated({ ...valid, protocolVersion: 2 }), false);
+  assert.equal(isPayBridgeAuthenticated({ ...valid, certificateSha256: "invalid" }), false);
+  assert.equal(isPayBridgeAuthenticated({ ...valid, capabilities: [] }), false);
   assert.equal(isPayBridgeAuthenticated({ authenticated: true, packageName: "com.aurelia.paybridge" }), false);
 });
 
