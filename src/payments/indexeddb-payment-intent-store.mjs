@@ -60,16 +60,17 @@ function completed(tx) {
 }
 
 export class IndexedDbPaymentIntentStore {
-  constructor({ indexedDBImpl = globalThis.indexedDB } = {}) {
+  constructor({ indexedDBImpl = globalThis.indexedDB, databaseName = DB_NAME } = {}) {
     if (!indexedDBImpl) throw new TypeError("IndexedDB is unavailable; durable payment recovery cannot be enabled");
     this.indexedDB = indexedDBImpl;
+    this.databaseName = databaseName;
     this.databasePromise = null;
   }
 
   async database() {
     if (!this.databasePromise) {
       this.databasePromise = new Promise((resolve, reject) => {
-        const open = this.indexedDB.open(DB_NAME, DB_VERSION);
+        const open = this.indexedDB.open(this.databaseName, DB_VERSION);
         open.onupgradeneeded = () => {
           const db = open.result;
           if (!db.objectStoreNames.contains(STORE_NAME)) {
