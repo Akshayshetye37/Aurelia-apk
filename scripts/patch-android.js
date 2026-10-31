@@ -197,8 +197,7 @@ const firebaseBootstrapTemplate = path.join(androidDir, 'templates', 'RecoveryFi
 if (!fs.existsSync(firebaseBootstrapTemplate)) throw new Error('RecoveryFirebaseAuthFactory.kt template is missing.');
 fs.copyFileSync(firebaseBootstrapTemplate, path.join(identityDir, 'RecoveryFirebaseAuthFactory.kt'));
 
-const appGradleGroovy = path.join(appModuleDir, 'build.gradle');
-const appGradleKts = path.join(appModuleDir, 'build.gradle.kts');
+
 const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
 
 function addFirebaseDependencies(contents, kotlinDsl) {
