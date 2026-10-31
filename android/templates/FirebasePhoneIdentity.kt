@@ -190,7 +190,10 @@ class FirebasePhoneIdentity(
         requestGeneration: Long
     ) {
         recoveryAuth.signInWithCredential(credential).addOnCompleteListener { task ->
-            val actualPhone = task.result?.user?.phoneNumber
+            // Task.result throws when the Firebase task failed. Read it only on success,
+            // otherwise the cleanup below would be skipped and the recovery flow could
+            // remain permanently marked in-flight.
+            val actualPhone = if (task.isSuccessful) task.result?.user?.phoneNumber else null
             val success = task.isSuccessful && actualPhone == expectedPhone
 
             // Always clear the recovery-only Firebase session. Do not leave a signed-in
