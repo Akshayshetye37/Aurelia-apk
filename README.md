@@ -4,14 +4,32 @@ Aurelia PMS is a browser-based property-management interface supplied as a singl
 
 ## Project location and working source
 
-- **GitHub repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
-- **Current implementation branch:** `fix/firebase-phone-identity-engine`
-- **Project root:** the repository root (`/` in the GitHub file browser).
-- **Current project status and architecture:** this README is the status ledger for this branch. It distinguishes implemented foundations from planned or unverified work; a documented target is not proof of implementation.
+**The Aurelia PMS source project is hosted in this GitHub repository:**
 
-All source changes for this workstream are maintained in this repository branch. The main implementation locations are listed in **Repository structure** below. In particular, native Android templates are maintained in `android/templates/`; `scripts/patch-android.js` applies them and other native changes to the generated Capacitor Android project during the build. Do not treat generated build output as the authoritative source when the maintained template or patch script is the source of truth.
+- **Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
+- **Working branch:** `fix/firebase-phone-identity-engine`
+- **Current branch HEAD checked for this update:** `6f1f78dacaca56dab117c679bf99726141f519ef`
+- **Project root:** repository root (`/` in the GitHub file browser).
+- **Main application UI:** `index.html`
+- **Android native templates:** `android/templates/`
+- **Build/patch scripts:** `scripts/`
+- **Tests:** `tests/`
+- **Documentation:** `docs/`
+- **Payment backend reference scaffold:** `payment-backend/` (inside this same PMS repository; it is not a separately deployed service or a separate repository).
 
-Changes made through the connected GitHub integration are committed to this branch. Local edits made outside GitHub are not automatically synchronized unless committed and pushed.
+The separate Pay Bridge project is hosted at [Akshayshetye37/aurelia-pay-bridge](https://github.com/Akshayshetye37/aurelia-pay-bridge). It is a different repository and a separate Android application; it is not nested inside the PMS project.
+
+**Local computer path:** this README identifies the GitHub source location, not a path on the owner's phone or computer. A local path exists only after the repository is cloned; its exact location depends on where the owner saves the clone.
+
+The branch is the maintained source of truth for this workstream. Generated Capacitor/Gradle output is build output; native templates and patch scripts are the maintained source. Changes made through GitHub are committed to this branch. Local edits are not synchronized unless committed and pushed.
+
+## Current infrastructure reality
+
+- Aurelia PMS is intended to remain **local-first**. Ordinary hotel operations and local backup do not require an Aurelia-owned cloud or application server.
+- **Aurelia currently has no deployed cloud environment and no running Aurelia payment server.** No Cloud Run deployment, production Firestore, Secret Manager vault, or production tenant provisioning is claimed.
+- `payment-backend/` is only a partial reference implementation/scaffold in this repository. Its presence does not mean a backend is hosted, configured, reachable, or production-ready.
+- Google Drive and a user-selected Shared Folder are optional file-backup destinations via Android Storage Access Framework (SAF). They are not the PMS live database, do not provide automatic multi-device database synchronization, and are independent of a payment backend.
+- Online gateway payment execution, trusted webhook verification, refunds and authoritative reconciliation require a separately deployed trusted backend. Those capabilities remain unavailable until that service and its controls are implemented and tested.
 
 ## Repository contents
 
@@ -88,7 +106,7 @@ PMS backup uses three independent optional destinations around a private local p
 
 - **Private local device storage:** verified snapshots in app-private storage; seven managed recovery points; no storage permission.
 - **Google Drive:** optional owner-selected folder through Android SAF. Google account sign-in is handled by the Drive document provider when available.
-- **Owner server/cloud:** optional provider-neutral HTTPS endpoint. The bearer token is encrypted using Android Keystore. See [BACKUP-SERVER-CONTRACT.md](docs/BACKUP-SERVER-CONTRACT.md).
+- **Owner server/cloud:** future optional destination only. No such Aurelia server is currently deployed or configured; the contract in [BACKUP-SERVER-CONTRACT.md](docs/BACKUP-SERVER-CONTRACT.md) is a design/interface reference, not an active service.
 - **Shared folder:** a separate SAF grant from the Drive backup destination, for owner-authorized backup copies and permitted file exchange. It is not a shared database.
 
 Every new backup is encrypted before it is written to any destination using an AES-256-GCM envelope. A random 256-bit data key is wrapped using PBKDF2-HMAC-SHA-256 (600,000 iterations) from an owner recovery password; the app caches a non-extractable key in IndexedDB so routine automatic backups do not prompt. The recovery password is never stored. Keep it independently: losing it makes encrypted backups unrecoverable. Existing plaintext v4 backups remain readable only for migration; all new backups are encrypted.
