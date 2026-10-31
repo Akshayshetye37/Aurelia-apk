@@ -183,8 +183,8 @@ if (fs.existsSync(appGradleGroovy)) {
 }
 
 
-// Firebase Phone Auth native integration. The Google Services plugin is applied only
-// when a real Console-generated config is supplied to the build workspace.
+// Firebase Phone Auth native integration. Google Services is applied only when
+// deployment supplies the actual Console-generated app config.
 const firebaseTemplate = path.join(androidDir, 'templates', 'FirebasePhoneIdentity.kt');
 if (!fs.existsSync(firebaseTemplate)) throw new Error('FirebasePhoneIdentity.kt template is missing.');
 const identityDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms', 'identity');
@@ -198,16 +198,15 @@ fs.copyFileSync(firebaseBootstrapTemplate, path.join(identityDir, 'RecoveryFireb
 const rootGradleGroovy = path.join(androidDir, 'build.gradle');
 const rootGradleKts = path.join(androidDir, 'build.gradle.kts');
 const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
-if (rootGradleGroovy && fs.existsSync(rootGradleGroovy)) {
+
+if (fs.existsSync(rootGradleGroovy) && fs.existsSync(appGradleGroovy)) {
   let rootGradle = fs.readFileSync(rootGradleGroovy, 'utf8');
   if (!rootGradle.includes('org.jetbrains.kotlin:kotlin-gradle-plugin')) {
+    if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Root Gradle file has no buildscript block for Kotlin plugin classpath.');
     rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + "\n        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21'");
   }
-  if (!rootGradle.includes('org.jetbrains.kotlin:kotlin-gradle-plugin')) {
-    rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + '\n        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21")');
-  }
   if (!rootGradle.includes('com.google.gms:google-services:')) {
-    if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Cannot safely add Google Services classpath: root build.gradle has no buildscript block.');
+    if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Root Gradle file has no buildscript block for Google Services classpath.');
     rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + "\n        classpath 'com.google.gms:google-services:4.4.2'");
   }
   fs.writeFileSync(rootGradleGroovy, rootGradle);
@@ -215,14 +214,18 @@ if (rootGradleGroovy && fs.existsSync(rootGradleGroovy)) {
   let appGradle = fs.readFileSync(appGradleGroovy, 'utf8');
   if (!appGradle.includes('kotlin-android') && !appGradle.includes('org.jetbrains.kotlin.android')) {
     if (/plugins\s*\{/.test(appGradle)) {
-      appGradle = appGradle.replace(/plugins\s*\{/, match => match + "\\n    id 'org.jetbrains.kotlin.android'");
+      appGradle = appGradle.replace(/plugins\s*\{/, match => match + "\n    id 'org.jetbrains.kotlin.android'");
     } else {
-      appGradle = appGradle.replace(/apply plugin: ['"]com\.android\.application['"]/, match => match + "\\napply plugin: 'kotlin-android'");
+      appGradle = appGradle.replace(/apply plugin: ['"]com\.android\.application['"]/, match => match + "\napply plugin: 'kotlin-android'");
     }
     if (!appGradle.includes('kotlin-android') && !appGradle.includes('org.jetbrains.kotlin.android')) throw new Error('Unable to apply Kotlin Android plugin to app module.');
   }
   if (hasGoogleServicesConfig && !appGradle.includes('com.google.gms.google-services')) {
-    appGradle += "\n// Firebase config is supplied by deployment; never commit production config.\napply plugin: 'com.google.gms.google-services'\n";
+    if (/plugins\s*\{/.test(appGradle)) {
+      appGradle = appGradle.replace(/plugins\s*\{/, match => match + "\n    id 'com.google.gms.google-services'");
+    } else {
+      appGradle += "\napply plugin: 'com.google.gms.google-services'\n";
+    }
   }
   if (!appGradle.includes('com.google.firebase:firebase-bom:')) {
     appGradle = appGradle.replace(/dependencies\s*\{/, match => match + "\n    implementation platform('com.google.firebase:firebase-bom:33.5.0')\n    implementation 'com.google.firebase:firebase-auth'");
@@ -230,11 +233,16 @@ if (rootGradleGroovy && fs.existsSync(rootGradleGroovy)) {
   fs.writeFileSync(appGradleGroovy, appGradle);
 } else if (fs.existsSync(rootGradleKts) && fs.existsSync(appGradleKts)) {
   let rootGradle = fs.readFileSync(rootGradleKts, 'utf8');
+  if (!rootGradle.includes('org.jetbrains.kotlin:kotlin-gradle-plugin')) {
+    if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Root Gradle Kotlin DSL file has no buildscript block for Kotlin plugin classpath.');
+    rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + '\n        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21")');
+  }
   if (!rootGradle.includes('com.google.gms:google-services:')) {
-    if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Cannot safely add Google Services classpath to Kotlin DSL root build.');
+    if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Root Gradle Kotlin DSL file has no buildscript block for Google Services classpath.');
     rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + '\n        classpath("com.google.gms:google-services:4.4.2")');
   }
   fs.writeFileSync(rootGradleKts, rootGradle);
+
   let appGradle = fs.readFileSync(appGradleKts, 'utf8');
   if (!appGradle.includes('org.jetbrains.kotlin.android')) {
     appGradle = appGradle.replace(/plugins\s*\{/, match => match + '\n    id("org.jetbrains.kotlin.android")');
