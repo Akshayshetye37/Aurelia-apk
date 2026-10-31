@@ -265,6 +265,8 @@ Not implemented / not production-ready:
 
 ## Payment implementation update — 2026-10-31
 
+The current branch is being rebuilt through the repository's test-and-APK workflow after the payment journal and documentation updates. The resulting artifact, if the workflow completes, is a debug APK only.
+
 The PMS repository now contains a unit-tested installation-local IndexedDB payment-intent journal adapter and a safer ambiguous-outcome rule: once a payment request has been dispatched, a lost response is recorded as UNKNOWN and must be reconciled before another checkout can be attempted. The journal adapter is not yet wired into the PMS runtime or payment UI. If integrated, it will preserve only PMS booking/folio correlation across WebView restarts; it is not a transactional provider database, cross-device ledger or payment authority.
 
 The production implementation ledger is [docs/PMS-PAYMENT-ORCHESTRATION.md](docs/PMS-PAYMENT-ORCHESTRATION.md). The separate Pay Bridge source repository has been identified as [Akshayshetye37/aurelia-pay-bridge](https://github.com/Akshayshetye37/aurelia-pay-bridge); it also remains handshake-only. A trusted backend repository/deployment target has not been identified. Therefore backend sessions, webhook verification, provider adapters, executable two-way payment IPC, atomic folio posting, refunds and end-to-end payment history are not claimed as implemented. The existing native IPC remains handshake-only. Live gateway payment and automatic folio settlement must remain disabled.
