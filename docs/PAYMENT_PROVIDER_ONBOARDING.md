@@ -35,11 +35,15 @@ Status: research and integration contract. This document does not mean the provi
 - Public JioPay material did not expose a verifiable universal PG API credential schema during this review. Do not invent fields or claim JioPay support is ready.
 
 
-## PMS credential form request contract
+## Provider onboarding boundary
 
-The provider form sends `PUT /api/admin/payment-providers/{providerId}/credentials` to the owner-supplied HTTPS backend. JSON body: `{ provider, environment, credentials }`, where environment is `test` or `live` and credentials contains only that provider's fields. The backend must authenticate an owner/admin (MFA-backed session or short-lived scoped token), enforce a provider-specific schema, reject unknown fields, encrypt secrets at rest, redact request bodies from logs/traces, and return only a non-secret status projection. Do not treat HTTP success as activation. Activation requires independent provider validation, a verified webhook and an explicit owner action. The PMS clears password-type inputs after a successful response and never writes credential values to local settings, IndexedDB, backups or audit logs.
+**Credential entry in the PMS APK is disabled.** The earlier prototype accepted an arbitrary HTTPS URL, a bearer token and provider secrets inside the APK. HTTPS alone does not establish that a destination is an owner-controlled endpoint, so that design could send merchant secrets to an attacker-controlled host. The current PMS screen is documentation/status-only and must not collect provider credentials.
 
-This is a client-side request contract only. No matching backend endpoint or credential vault is deployed in this repository; until one exists, submission must fail closed and providers remain inactive.
+The production owner console must be a separately hosted, owner-authenticated web application on a pinned, owner-controlled origin. It must use MFA-backed sessions, CSRF protection where cookie sessions are used, strict origin/CORS policy, provider-specific schemas, managed envelope encryption, secret redaction, audit events without secret values, key rotation, and non-secret status projections. PMS may display only provider ID, environment, validation state, activation state and last-check timestamp. It must never receive or store merchant secrets.
+
+The endpoint shape below is a proposed backend contract, not a deployed service: `PUT /api/admin/payment-providers/{providerId}/credentials` with `{ provider, environment, credentials }`. The backend must authenticate an owner/admin, enforce an exact provider schema, reject unknown fields, encrypt secrets at rest, redact request bodies from logs/traces, and return only a non-secret status projection. HTTP success is not activation. Activation requires provider-specific validation, a verified webhook, an independently fetched payment status and an explicit owner action.
+
+No matching backend endpoint, encrypted credential vault, owner console or deployment is present in this repository. Providers therefore remain inactive.
 
 ## Required owner setup journey
 
@@ -57,7 +61,7 @@ This is a client-side request contract only. No matching backend endpoint or cre
 ## Current implementation gap (do not misrepresent)
 
 The repository currently contains:
-- Provider-specific credential input forms in the PMS UI. Secret fields are sent only to a configured HTTPS endpoint and are not persisted in PMS storage.
+- Provider documentation and status-only onboarding placeholders in the PMS UI. Credential collection is deliberately disabled until the trusted owner console exists.
 - A PMS-side Messenger client and protocol-v1 handshake contract.
 - A provider catalogue and official documentation links.
 - A local PMS preference validation helper.
