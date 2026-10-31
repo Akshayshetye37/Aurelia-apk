@@ -22,14 +22,14 @@ test('Firebase Auth dependency is added without obsolete KTX artifact', () => {
 });
 
 test('Generated root Gradle plugin management is not rewritten', () => {
-  assert.doesNotMatch(patchScript, /rootGradle\\.replace|kotlin-gradle-plugin|google-services:4\\.4\\.2/);
+  assert.doesNotMatch(patchScript, /rootGradle\.replace|kotlin-gradle-plugin|google-services:4\.4\.2/);
   assert.match(patchScript, /addFirebaseDependencies/);
   assert.match(patchScript, /App Gradle file has no dependencies block/);
 });
 
 test('Groovy and Kotlin DSL app dependencies are supported', () => {
   assert.match(patchScript, /implementation platform/);
-  assert.match(patchScript, /implementation\\(platform/);
+  assert.match(patchScript, /implementation\(platform/);
   assert.match(patchScript, /implementation.*auth/);
 });
 
