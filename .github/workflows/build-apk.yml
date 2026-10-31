@@ -29,6 +29,7 @@ on:
       - 'assets/**'
       - 'scripts/**'
       - 'src/**'
+      - 'payment-backend/**'
       - 'tests/**'
       - '.github/workflows/build-apk.yml'
 
