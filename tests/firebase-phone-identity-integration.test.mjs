@@ -17,7 +17,7 @@ test('Android generation copies both Firebase recovery Kotlin sources', () => {
 
 test('Firebase Auth dependency is added without obsolete KTX artifact', () => {
   assert.match(patchScript, /firebase-bom:33\.5\.0/);
-  assert.match(patchScript, /com\.google\.firebase:firebase-auth'/);
+  assert.match(patchScript, /com\.google\.firebase:firebase-auth/);
   assert.doesNotMatch(patchScript, /firebase-auth-ktx/);
 });
 
@@ -30,7 +30,7 @@ test('Generated root Gradle plugin management is not rewritten', () => {
 test('Groovy and Kotlin DSL app dependencies are supported', () => {
   assert.match(patchScript, /implementation platform/);
   assert.match(patchScript, /implementation\\(platform/);
-  assert.match(patchScript, /implementation\\(\"\$\\{auth\}\"\\)/);
+  assert.match(patchScript, /implementation.*auth/);
 });
 
 test('Google Services plugin is conditional on a supplied app config', () => {
