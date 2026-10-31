@@ -86,3 +86,15 @@ test("a disconnected CREATED intent can be retried after Pay Bridge reconnects",
   assert.equal(retried.state, "PROCESSING");
   assert.equal(retried.backendSessionId, "sess-1");
 });
+
+
+test("an ambiguous backend session response is retained as UNKNOWN, never retried as a new checkout", async () => {
+  const f = fixture({ backendOverrides: {
+    async createSession() { throw Object.assign(new Error("network lost after request"), { code: "NETWORK_ERROR" }); }
+  } });
+  await assert.rejects(f.orchestrator.createPayment(input));
+  const saved = await f.store.get("req-1");
+  assert.equal(saved.state, "UNKNOWN");
+  assert.equal(saved.settlementAuthorized, false);
+  assert.equal(saved.lastErrorCode, "NETWORK_ERROR");
+});
