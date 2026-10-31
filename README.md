@@ -169,7 +169,7 @@ The following are present in the current project code or documented integration 
 - Local-first backup design covering app-private storage, optional Google Drive SAF destination and separately granted shared-folder access.
 - Encrypted backup format for backup snapshots; existing migration and restore behavior must be validated against the current implementation before operational use.
 - Firebase Phone Auth native source templates for the recovery identity boundary, including OTP lifecycle handling and a dedicated recovery FirebaseAuth instance.
-- Build-time Android patch logic to copy the Firebase identity templates and conditionally configure Firebase dependencies when a deployment-provided `google-services.json` is supplied.
+- Build-time Android patch logic to copy the Firebase identity templates and add Firebase Auth to the generated app module. Google Services is applied only when a deployment-provided `google-services.json` is supplied; the generated root Gradle plugin management is not rewritten.
 - Node guard tests for the Firebase integration contract.
 
 ### Firebase deployment status
