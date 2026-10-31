@@ -86,7 +86,8 @@ class FirebasePhoneIdentity(
         val token = resendToken
         if (authOperationInFlight || phone == null || token == null ||
             (state !is PhoneIdentityState.CodeSent &&
-             state !is PhoneIdentityState.AutoRetrievalTimedOut)) {
+             state !is PhoneIdentityState.AutoRetrievalTimedOut &&
+             state !is PhoneIdentityState.Failed)) {
             emit(PhoneIdentityState.Failed(FailureReason.INVALID_STATE))
             return
         }
@@ -104,7 +105,8 @@ class FirebasePhoneIdentity(
         val phone = trustedPhoneE164
         if (authOperationInFlight || phone == null || id == null ||
             (state !is PhoneIdentityState.CodeSent &&
-             state !is PhoneIdentityState.AutoRetrievalTimedOut)) {
+             state !is PhoneIdentityState.AutoRetrievalTimedOut &&
+             state !is PhoneIdentityState.Failed)) {
             emit(PhoneIdentityState.Failed(FailureReason.INVALID_STATE))
             return
         }
@@ -149,7 +151,7 @@ class FirebasePhoneIdentity(
             }
 
             override fun onVerificationFailed(exception: FirebaseException) {
-                if (requestGeneration != generation) return
+                if (requestGeneration != generation || authOperationInFlight) return
                 clearChallenge()
                 emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
             }
