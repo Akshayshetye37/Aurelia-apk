@@ -209,8 +209,8 @@ function addFirebaseDependencies(contents, kotlinDsl) {
   }
   if (contents.includes(auth)) return contents;
   const dependencyLines = kotlinDsl
-    ? `\n    implementation(platform("${bom}"))\\n    implementation("${auth}")`
-    : `\n    implementation platform("${bom}")\\n    implementation "${auth}"`;
+    ? `\n    implementation(platform("${bom}"))\n    implementation("${auth}")`
+    : `\n    implementation platform("${bom}")\n    implementation "${auth}"`;
   return contents.replace(/dependencies\s*\{/, match => match + dependencyLines);
 }
 
