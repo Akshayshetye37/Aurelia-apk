@@ -86,16 +86,20 @@ export class PayBridgePaymentOrchestrator {
     };
     if (record.currency !== "INR") throw new PaymentOrchestratorError("CURRENCY_UNSUPPORTED", "Only INR is enabled in this PMS integration");
     const existing = await this.store.get(requestId);
+    let current;
     if (existing) {
       if (existing.bookingId !== record.bookingId || existing.folioId !== record.folioId ||
           existing.amountPaise !== record.amountPaise || existing.providerId !== record.providerId) {
         throw new PaymentOrchestratorError("IDEMPOTENCY_CONFLICT", "Request ID was already used with different payment details");
       }
-      return clone(existing);
+      if (existing.state !== "CREATED") return clone(existing);
+      current = existing;
+    } else {
+      await this.store.put(record);
+      current = record;
     }
-    await this.store.put(record);
     if (!this.bridge.isAuthenticated()) throw new PaymentOrchestratorError("BRIDGE_DISCONNECTED", "Gateway checkout is unavailable; payment request remains safely recorded");
-    let current = transitionPayment(record, "REQUESTED", {}, this.now);
+    current = transitionPayment(current, "REQUESTED", {}, this.now);
     await this.store.put(current);
     try {
       const session = await this.backend.createSession({
