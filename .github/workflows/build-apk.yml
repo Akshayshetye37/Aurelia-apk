@@ -15,6 +15,7 @@ on:
       - 'scripts/**'
       - 'android/templates/**'
       - 'src/**'
+      - 'payment-backend/**'
       - 'tests/**'
       - '.github/workflows/build-apk.yml'
   pull_request:
@@ -90,8 +91,10 @@ jobs:
       - name: Run payment and evidence regression tests
         run: npm test
 
-      - name: Run payment backend security contract tests
-        run: npm --prefix payment-backend test
+      - name: Check payment backend syntax and security contracts
+        run: |
+          node --check payment-backend/src/server.mjs
+          npm --prefix payment-backend test
 
       - name: Prepare web app
         run: npm run build
