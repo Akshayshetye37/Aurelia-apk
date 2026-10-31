@@ -182,6 +182,83 @@ if (fs.existsSync(appGradleGroovy)) {
   }
 }
 
+
+// Firebase Phone Auth native integration. The Google Services plugin is applied only
+// when a real Console-generated config is supplied to the build workspace.
+const firebaseTemplate = path.join(androidDir, 'templates', 'FirebasePhoneIdentity.kt');
+if (!fs.existsSync(firebaseTemplate)) throw new Error('FirebasePhoneIdentity.kt template is missing.');
+const identityDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms', 'identity');
+fs.mkdirSync(identityDir, { recursive: true });
+fs.copyFileSync(firebaseTemplate, path.join(identityDir, 'FirebasePhoneIdentity.kt'));
+
+const firebaseBootstrapTemplate = path.join(androidDir, 'templates', 'RecoveryFirebaseAuthFactory.kt');
+if (!fs.existsSync(firebaseBootstrapTemplate)) throw new Error('RecoveryFirebaseAuthFactory.kt template is missing.');
+fs.copyFileSync(firebaseBootstrapTemplate, path.join(identityDir, 'RecoveryFirebaseAuthFactory.kt'));
+
+const rootGradleGroovy = path.join(androidDir, 'build.gradle');
+const rootGradleKts = path.join(androidDir, 'build.gradle.kts');
+const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
+if (rootGradleGroovy && fs.existsSync(rootGradleGroovy)) {
+  let rootGradle = fs.readFileSync(rootGradleGroovy, 'utf8');
+  if (!rootGradle.includes('com.google.gms:google-services:')) {
+    if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Cannot safely add Google Services classpath: root build.gradle has no buildscript block.');
+    rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + "\n        classpath 'com.google.gms:google-services:4.4.2'");
+  }
+  fs.writeFileSync(rootGradleGroovy, rootGradle);
+
+  let appGradle = fs.readFileSync(appGradleGroovy, 'utf8');
+  if (!appGradle.includes('kotlin-android') && !appGradle.includes('org.jetbrains.kotlin.android')) {
+    appGradle = appGradle.replace(/apply plugin: ['"]com\.android\.application['"]/, match => match + "\napply plugin: 'kotlin-android'");
+    if (!appGradle.includes('kotlin-android')) throw new Error('Unable to apply Kotlin Android plugin to app module.');
+  }
+  if (hasGoogleServicesConfig && !appGradle.includes('com.google.gms.google-services')) {
+    appGradle += "\n// Firebase config is supplied by deployment; never commit production config.\napply plugin: 'com.google.gms.google-services'\n";
+  }
+  if (!appGradle.includes('com.google.firebase:firebase-bom:')) {
+    appGradle = appGradle.replace(/dependencies\s*\{/, match => match + "\n    implementation platform('com.google.firebase:firebase-bom:33.5.0')\n    implementation 'com.google.firebase:firebase-auth'");
+  }
+  fs.writeFileSync(appGradleGroovy, appGradle);
+} else if (fs.existsSync(rootGradleKts) && fs.existsSync(appGradleKts)) {
+  let rootGradle = fs.readFileSync(rootGradleKts, 'utf8');
+  if (!rootGradle.includes('com.google.gms:google-services:')) {
+    if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Cannot safely add Google Services classpath to Kotlin DSL root build.');
+    rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + '\n        classpath("com.google.gms:google-services:4.4.2")');
+  }
+  fs.writeFileSync(rootGradleKts, rootGradle);
+  let appGradle = fs.readFileSync(appGradleKts, 'utf8');
+  if (!appGradle.includes('org.jetbrains.kotlin.android')) {
+    appGradle = appGradle.replace(/plugins\s*\{/, match => match + '\n    id("org.jetbrains.kotlin.android")');
+  }
+  if (hasGoogleServicesConfig && !appGradle.includes('com.google.gms.google-services')) {
+    appGradle = appGradle.replace(/plugins\s*\{/, match => match + '\n    id("com.google.gms.google-services")');
+  }
+  if (!appGradle.includes('com.google.firebase:firebase-bom:')) {
+    appGradle = appGradle.replace(/dependencies\s*\{/, match => match + '\n    implementation(platform("com.google.firebase:firebase-bom:33.5.0"))\n    implementation("com.google.firebase:firebase-auth")');
+  }
+  fs.writeFileSync(appGradleKts, appGradle);
+} else {
+  throw new Error('Generated Android Gradle files were not found; Firebase integration cannot be wired.');
+}
+
+if (hasGoogleServicesConfig) {
+  const config = JSON.parse(fs.readFileSync(path.join(appModuleDir, 'google-services.json'), 'utf8'));
+  const clients = Array.isArray(config.client) ? config.client : [];
+  const matchingClient = clients.some(client =>
+    client.client_info &&
+    client.client_info.android_client_info &&
+    client.client_info.android_client_info.package_name === 'com.aurelia.pms' &&
+    typeof client.client_info.mobilesdk_app_id === 'string' &&
+    /^1:[0-9]+:android:[0-9a-f]+$/i.test(client.client_info.mobilesdk_app_id) &&
+    Array.isArray(client.api_key) &&
+    client.api_key.some(key => typeof key.current_key === 'string' && /^AIza[0-9A-Za-z_-]{30,}$/.test(key.current_key))
+  );
+  if (!matchingClient || !config.project_info || !config.project_info.project_id) {
+    throw new Error('google-services.json failed structural validation for package com.aurelia.pms; refusing Firebase build.');
+  }
+} else {
+  console.log('Firebase config not supplied: Firebase SDK is compile-integrated, but Phone Auth is not configured and must remain unavailable at runtime.');
+}
+
 const payBridgeTemplate = path.join(androidDir, 'templates', 'PayBridgeClient.java');
 if (!fs.existsSync(payBridgeTemplate)) throw new Error('PayBridgeClient.java template is missing.');
 fs.copyFileSync(payBridgeTemplate, path.join(javaDir, 'PayBridgeClient.java'));
