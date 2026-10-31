@@ -200,6 +200,12 @@ const rootGradleKts = path.join(androidDir, 'build.gradle.kts');
 const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
 if (rootGradleGroovy && fs.existsSync(rootGradleGroovy)) {
   let rootGradle = fs.readFileSync(rootGradleGroovy, 'utf8');
+  if (!rootGradle.includes('org.jetbrains.kotlin:kotlin-gradle-plugin')) {
+    rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + "\n        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21'");
+  }
+  if (!rootGradle.includes('org.jetbrains.kotlin:kotlin-gradle-plugin')) {
+    rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + '\n        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21")');
+  }
   if (!rootGradle.includes('com.google.gms:google-services:')) {
     if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Cannot safely add Google Services classpath: root build.gradle has no buildscript block.');
     rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + "\n        classpath 'com.google.gms:google-services:4.4.2'");
