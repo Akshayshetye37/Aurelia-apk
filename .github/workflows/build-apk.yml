@@ -90,6 +90,9 @@ jobs:
       - name: Run payment and evidence regression tests
         run: npm test
 
+      - name: Run payment backend security contract tests
+        run: npm --prefix payment-backend test
+
       - name: Prepare web app
         run: npm run build
 
