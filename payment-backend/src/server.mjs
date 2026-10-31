@@ -119,7 +119,7 @@ app.get('/v1/admin/providers', requireTenantAdmin, async (req, res) => {
   res.json({ providers });
 });
 
-app.put('/v1/admin/providers/razorpay/credentials', requireOwner, express.json({ limit: '8kb', strict: true }), async (req, res) => {
+app.put('/v1/admin/providers/razorpay/credentials', requireTenantAdmin, express.json({ limit: '8kb', strict: true }), async (req, res) => {
   const environment = envOf(req);
   const { keyId, keySecret, webhookSecret } = req.body || {};
   const keys = Object.keys(req.body || {});
@@ -144,7 +144,7 @@ app.put('/v1/admin/providers/razorpay/credentials', requireOwner, express.json({
   }
 });
 
-app.post('/v1/admin/providers/razorpay/validate', requireOwner, express.json({ limit: '2kb' }), async (req, res) => {
+app.post('/v1/admin/providers/razorpay/validate', requireTenantAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const environment = envOf(req);
   if (!environment) return fail(res, 400, 'invalid_environment');
   try {
@@ -160,7 +160,7 @@ app.post('/v1/admin/providers/razorpay/validate', requireOwner, express.json({ l
   }
 });
 
-app.post('/v1/admin/providers/razorpay/test-orders', requireOwner, express.json({ limit: '2kb' }), async (req, res) => {
+app.post('/v1/admin/providers/razorpay/test-orders', requireTenantAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const environment = envOf(req);
   const amount = req.body?.amountPaise;
   const idem = idempotencyOf(req);
@@ -191,7 +191,7 @@ app.post('/v1/admin/providers/razorpay/test-orders', requireOwner, express.json(
       currency: order.currency, keyId: state.data().keyId, status: 'created' };
     await db.runTransaction(async tx => {
       tx.set(idemRef, { state: 'created', response, providerOrderId: order.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      tx.create(db.doc('paymentOrders/' + order.id), {
+      tx.create(db.doc('paymentOrders/' + req.tenant.id + '_' + order.id), {
         tenantId: req.tenant.id, provider: 'razorpay', environment: 'test',
         amount, currency: 'INR', state: 'created', createdAt: FieldValue.serverTimestamp()
       });
@@ -221,7 +221,7 @@ app.post('/v1/webhooks/razorpay/:tenantId/:environment', express.raw({ type: 'ap
     if (!entity || !['payment.captured', 'order.paid', 'payment.authorized'].includes(event.event)) {
       return res.status(200).json({ received: true, ignored: true });
     }
-    const orderRef = entity.order_id ? db.doc('paymentOrders/' + entity.order_id) : null;
+    const orderRef = entity.order_id ? db.doc('paymentOrders/' + tenantId + '_' + entity.order_id) : null;
     if (!orderRef) return fail(res, 400, 'order_reference_missing');
     const orderSnap = await orderRef.get();
     if (!orderSnap.exists || orderSnap.data().tenantId !== tenantId ||
@@ -253,7 +253,7 @@ app.post('/v1/webhooks/razorpay/:tenantId/:environment', express.raw({ type: 'ap
   }
 });
 
-app.post('/v1/admin/providers/razorpay/activate', requireOwner, express.json({ limit: '2kb' }), async (req, res) => {
+app.post('/v1/admin/providers/razorpay/activate', requireTenantAdmin, express.json({ limit: '2kb' }), async (req, res) => {
   const environment = envOf(req);
   if (!environment || req.body?.confirm !== true) return fail(res, 400, 'explicit_activation_confirmation_required');
   const ref = tenantDoc(req.tenant.id, environment);
