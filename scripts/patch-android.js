@@ -183,8 +183,10 @@ if (fs.existsSync(appGradleGroovy)) {
 }
 
 
-// Firebase Phone Auth native integration. Google Services is applied only when
-// deployment supplies the actual Console-generated app config.
+// Firebase Phone Auth native integration. Firebase's native BoM and plugin
+// versions are owned by the generated Capacitor project's plugin DSL/catalog.
+// Inject Firebase Auth into the app module without rewriting root Gradle plugin
+// management. The Google Services plugin is applied only for a supplied config.
 const firebaseTemplate = path.join(androidDir, 'templates', 'FirebasePhoneIdentity.kt');
 if (!fs.existsSync(firebaseTemplate)) throw new Error('FirebasePhoneIdentity.kt template is missing.');
 const identityDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms', 'identity');
@@ -195,71 +197,55 @@ const firebaseBootstrapTemplate = path.join(androidDir, 'templates', 'RecoveryFi
 if (!fs.existsSync(firebaseBootstrapTemplate)) throw new Error('RecoveryFirebaseAuthFactory.kt template is missing.');
 fs.copyFileSync(firebaseBootstrapTemplate, path.join(identityDir, 'RecoveryFirebaseAuthFactory.kt'));
 
-const rootGradleGroovy = path.join(androidDir, 'build.gradle');
-const rootGradleKts = path.join(androidDir, 'build.gradle.kts');
+const appGradleGroovy = path.join(appModuleDir, 'build.gradle');
+const appGradleKts = path.join(appModuleDir, 'build.gradle.kts');
 const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
 
-if (fs.existsSync(rootGradleGroovy) && fs.existsSync(appGradleGroovy)) {
-  let rootGradle = fs.readFileSync(rootGradleGroovy, 'utf8');
-  if (!rootGradle.includes('org.jetbrains.kotlin:kotlin-gradle-plugin')) {
-    if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Root Gradle file has no buildscript block for Kotlin plugin classpath.');
-    rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + "\n        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21'");
+function addFirebaseDependencies(contents, kotlinDsl) {
+  const bom = 'com.google.firebase:firebase-bom:33.5.0';
+  const auth = 'com.google.firebase:firebase-auth';
+  if (!/dependencies\\s*\\{/.test(contents)) {
+    throw new Error('App Gradle file has no dependencies block; refusing an incomplete Firebase integration.');
   }
-  if (!rootGradle.includes('com.google.gms:google-services:')) {
-    if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Root Gradle file has no buildscript block for Google Services classpath.');
-    rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + "\n        classpath 'com.google.gms:google-services:4.4.2'");
-  }
-  fs.writeFileSync(rootGradleGroovy, rootGradle);
+  if (contents.includes(auth)) return contents;
+  const dependencyLines = kotlinDsl
+    ? `\\n    implementation(platform("${bom}"))\\n    implementation("${auth}")`
+    : `\\n    implementation platform("${bom}")\\n    implementation "${auth}"`;
+  return contents.replace(/dependencies\\s*\\{/, match => match + dependencyLines);
+}
 
+function applyGoogleServices(contents, kotlinDsl) {
+  if (!hasGoogleServicesConfig || contents.includes('com.google.gms.google-services')) return contents;
+  if (!/plugins\\s*\\{/.test(contents)) {
+    throw new Error('App Gradle file has no plugins block for Google Services; refusing to append an unmanaged plugin.');
+  }
+  const statement = kotlinDsl
+    ? '\\n    id("com.google.gms.google-services")'
+    : "\\n    id 'com.google.gms.google-services'";
+  return contents.replace(/plugins\\s*\\{/, match => match + statement);
+}
+
+if (fs.existsSync(appGradleGroovy)) {
   let appGradle = fs.readFileSync(appGradleGroovy, 'utf8');
-  if (!appGradle.includes('kotlin-android') && !appGradle.includes('org.jetbrains.kotlin.android')) {
-    if (/plugins\s*\{/.test(appGradle)) {
-      appGradle = appGradle.replace(/plugins\s*\{/, match => match + "\n    id 'org.jetbrains.kotlin.android'");
-    } else {
-      appGradle = appGradle.replace(/apply plugin: ['"]com\.android\.application['"]/, match => match + "\napply plugin: 'kotlin-android'");
-    }
-    if (!appGradle.includes('kotlin-android') && !appGradle.includes('org.jetbrains.kotlin.android')) throw new Error('Unable to apply Kotlin Android plugin to app module.');
-  }
-  if (hasGoogleServicesConfig && !appGradle.includes('com.google.gms.google-services')) {
-    if (/plugins\s*\{/.test(appGradle)) {
-      appGradle = appGradle.replace(/plugins\s*\{/, match => match + "\n    id 'com.google.gms.google-services'");
-    } else {
-      appGradle += "\napply plugin: 'com.google.gms.google-services'\n";
-    }
-  }
-  if (!appGradle.includes('com.google.firebase:firebase-bom:')) {
-    appGradle = appGradle.replace(/dependencies\s*\{/, match => match + "\n    implementation platform('com.google.firebase:firebase-bom:33.5.0')\n    implementation 'com.google.firebase:firebase-auth'");
-  }
+  appGradle = addFirebaseDependencies(appGradle, false);
+  appGradle = applyGoogleServices(appGradle, false);
   fs.writeFileSync(appGradleGroovy, appGradle);
-} else if (fs.existsSync(rootGradleKts) && fs.existsSync(appGradleKts)) {
-  let rootGradle = fs.readFileSync(rootGradleKts, 'utf8');
-  if (!rootGradle.includes('org.jetbrains.kotlin:kotlin-gradle-plugin')) {
-    if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Root Gradle Kotlin DSL file has no buildscript block for Kotlin plugin classpath.');
-    rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + '\n        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21")');
-  }
-  if (!rootGradle.includes('com.google.gms:google-services:')) {
-    if (!/buildscript\s*\{/.test(rootGradle)) throw new Error('Root Gradle Kotlin DSL file has no buildscript block for Google Services classpath.');
-    rootGradle = rootGradle.replace(/dependencies\s*\{/, match => match + '\n        classpath("com.google.gms:google-services:4.4.2")');
-  }
-  fs.writeFileSync(rootGradleKts, rootGradle);
-
+} else if (fs.existsSync(appGradleKts)) {
   let appGradle = fs.readFileSync(appGradleKts, 'utf8');
-  if (!appGradle.includes('org.jetbrains.kotlin.android')) {
-    appGradle = appGradle.replace(/plugins\s*\{/, match => match + '\n    id("org.jetbrains.kotlin.android")');
-  }
-  if (hasGoogleServicesConfig && !appGradle.includes('com.google.gms.google-services')) {
-    appGradle = appGradle.replace(/plugins\s*\{/, match => match + '\n    id("com.google.gms.google-services")');
-  }
-  if (!appGradle.includes('com.google.firebase:firebase-bom:')) {
-    appGradle = appGradle.replace(/dependencies\s*\{/, match => match + '\n    implementation(platform("com.google.firebase:firebase-bom:33.5.0"))\n    implementation("com.google.firebase:firebase-auth")');
-  }
+  appGradle = addFirebaseDependencies(appGradle, true);
+  appGradle = applyGoogleServices(appGradle, true);
   fs.writeFileSync(appGradleKts, appGradle);
 } else {
-  throw new Error('Generated Android Gradle files were not found; Firebase integration cannot be wired.');
+  throw new Error('Generated Android app Gradle file was not found; Firebase integration cannot be wired.');
 }
 
 if (hasGoogleServicesConfig) {
-  const config = JSON.parse(fs.readFileSync(path.join(appModuleDir, 'google-services.json'), 'utf8'));
+  let config;
+  try {
+    config = JSON.parse(fs.readFileSync(path.join(appModuleDir, 'google-services.json'), 'utf8'));
+  } catch (error) {
+    throw new Error('google-services.json is invalid JSON; refusing Firebase build.', { cause: error });
+  }
   const clients = Array.isArray(config.client) ? config.client : [];
   const matchingClient = clients.some(client =>
     client.client_info &&
@@ -270,7 +256,7 @@ if (hasGoogleServicesConfig) {
     Array.isArray(client.api_key) &&
     client.api_key.some(key => typeof key.current_key === 'string' && /^AIza[0-9A-Za-z_-]{30,}$/.test(key.current_key))
   );
-  if (!matchingClient || !config.project_info || !config.project_info.project_id) {
+  if (!matchingClient || !config.project_info || typeof config.project_info.project_id !== 'string' || !config.project_info.project_id) {
     throw new Error('google-services.json failed structural validation for package com.aurelia.pms; refusing Firebase build.');
   }
 } else {
