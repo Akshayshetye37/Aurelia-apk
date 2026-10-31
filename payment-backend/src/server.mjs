@@ -165,21 +165,18 @@ app.post('/v1/admin/providers/razorpay/test-orders', requireOwner, express.json(
   try {
     const state = await ownerDoc(req.owner.uid, 'test').get();
     if (!state.exists || state.data().credentialsValidated !== true) return fail(res, 409, 'test_credentials_not_validated');
-    const reservation = await db.runTransaction(async tx => {
+    const reservationResult = await db.runTransaction(async tx => {
       const prior = await tx.get(idemRef);
-      if (prior.exists) return prior.data();
+      if (prior.exists) return { record: prior.data(), newlyReserved: false };
       const record = { ownerUid: req.owner.uid, amount, currency: 'INR', state: 'dispatching',
         createdAt: FieldValue.serverTimestamp() };
       tx.create(idemRef, record);
-      return record;
+      return { record, newlyReserved: true };
     });
+    const reservation = reservationResult.record;
     if (reservation.ownerUid !== req.owner.uid || reservation.amount !== amount) return fail(res, 409, 'idempotency_key_payload_conflict');
     if (reservation.response) return res.status(200).json(reservation.response);
-    if (reservation.state !== 'dispatching') return fail(res, 409, 'order_creation_unknown_reconcile_before_retry');
-    if (reservation.createdAt?.toDate && Date.now() - reservation.createdAt.toDate().getTime() > 120000) {
-      await idemRef.set({ state: 'unknown' }, { merge: true });
-      return fail(res, 409, 'order_creation_unknown_reconcile_before_retry');
-    }
+    if (!reservationResult.newlyReserved) return fail(res, 409, 'order_creation_unknown_reconcile_before_retry');
     const order = await razorpay(req.owner.uid, 'test', 'POST', '/orders', {
       amount, currency: 'INR', receipt: 'aur_' + idemId.slice(0, 24)
     });
