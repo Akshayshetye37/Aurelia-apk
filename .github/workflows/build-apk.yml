@@ -169,11 +169,10 @@ jobs:
           test -s "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/aurelia-pms-certificate.txt"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | head -n 1
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | sed -n '1p'
           sha256sum "$apk" > "$apk.sha256"
 
-      # Publish directly to a GitHub draft release before optional Actions artifacts.
-      # This avoids the repository Actions-artifact quota blocking delivery of the APK.
+      # Publish directly to a GitHub draft release to avoid Actions-artifact quota failures.
       - name: Publish signed PMS APK as a draft prerelease
         if: github.event_name != 'pull_request'
         env:
