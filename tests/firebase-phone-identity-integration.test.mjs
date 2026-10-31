@@ -64,3 +64,21 @@ test('documentation makes Firebase phone proof insufficient for key recovery', (
   assert.match(contract, /does not prove ownership of the Master Key/);
   assert.match(contract, /32-byte Recovery Secret/);
 });
+
+test('terminal Firebase provider failures invalidate all callbacks for that challenge', () => {
+  const failure = identity.slice(identity.indexOf('override fun onVerificationFailed'), identity.indexOf('override fun onCodeSent'));
+  assert.match(failure, /generation\+\+/);
+  assert.match(failure, /invalidateChallenge\(\)/);
+  assert.doesNotMatch(failure, /clearChallenge\(\)/);
+});
+
+test('synchronous Firebase SDK failures cannot strand the OTP state machine', () => {
+  assert.match(identity, /PhoneAuthProvider\.verifyPhoneNumber\(builder\.build\(\)\)[\s\S]*catch \(_:\s*Exception\)/);
+  assert.match(identity, /authOperationInFlight = false[\s\S]*FailureReason\.PROVIDER_FAILURE/);
+});
+
+test('failed Firebase tasks do not read Task.result and recovery auth is signed out', () => {
+  assert.match(identity, /if \(task\.isSuccessful\) task\.result\?\.user\?\.phoneNumber else null/);
+  assert.match(identity, /val signedOut = try \{[\s\S]*recoveryAuth\.signOut\(\)/);
+  assert.match(identity, /!signedOut -> emit\(PhoneIdentityState\.Failed/);
+});

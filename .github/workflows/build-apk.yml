@@ -171,34 +171,36 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | head -n 1
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: aurelia-pms-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload signed release APK
+      - name: Prepare release verification metadata
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: aurelia-pms-release-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
-          retention-days: 30
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="app/build/outputs/apk/release/app-release.apk"
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/aurelia-pms-certificate.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | head -n 1
+          sha256sum "$apk" > "$apk.sha256"
 
+      # Publish directly to a GitHub draft release before optional Actions artifacts.
+      # This avoids the repository Actions-artifact quota blocking delivery of the APK.
       - name: Publish signed PMS APK as a draft prerelease
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+        working-directory: android
         shell: bash
         run: |
           set -euo pipefail
           tag="aurelia-pms-release-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" android/app/build/outputs/apk/release/app-release.apk \
+          gh release create "$tag" \
+            app/build/outputs/apk/release/app-release.apk \
+            app/build/outputs/apk/release/app-release.apk.sha256 \
+            "$RUNNER_TEMP/aurelia-pms-certificate.txt" \
             --target "$GITHUB_SHA" \
             --draft \
             --prerelease \
-            --title "Aurelia PMS release APK (run ${GITHUB_RUN_NUMBER})" \
-            --notes "Signed PMS APK from commit ${GITHUB_SHA}. Confirm its certificate SHA-256 fingerprint matches Aurelia Pay Bridge before production installation. Payment processing and automatic folio settlement remain disabled."
+            --title "Aurelia PMS signed release APK (run ${GITHUB_RUN_NUMBER})" \
+            --notes "Signed PMS APK from commit ${GITHUB_SHA}. Verify the attached APK SHA-256 and signing-certificate report. Confirm the certificate SHA-256 fingerprint matches Aurelia Pay Bridge before installing both apps together. Forgot PIN recovery remains unavailable until the recovery coordinator, recovery-envelope implementation, Firebase deployment configuration and crash-recovery tests are completed. Payment processing and automatic folio settlement remain disabled."

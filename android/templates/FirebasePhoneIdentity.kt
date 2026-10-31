@@ -119,7 +119,13 @@ class FirebasePhoneIdentity(
         val requestGeneration = generation
         authOperationInFlight = true
         emit(PhoneIdentityState.Verifying)
-        authenticate(PhoneAuthProvider.getCredential(id, code), phone, requestGeneration)
+        try {
+            authenticate(PhoneAuthProvider.getCredential(id, code), phone, requestGeneration)
+        } catch (_: Exception) {
+            authOperationInFlight = false
+            clearChallenge()
+            emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
+        }
     }
 
     /**
@@ -153,7 +159,10 @@ class FirebasePhoneIdentity(
 
             override fun onVerificationFailed(exception: FirebaseException) {
                 if (requestGeneration != generation || authOperationInFlight) return
-                clearChallenge()
+                // A terminal provider error invalidates every callback from this challenge.
+                // Keep the trusted phone so the owner can explicitly request a fresh OTP.
+                generation++
+                invalidateChallenge()
                 emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
             }
 
@@ -181,7 +190,16 @@ class FirebasePhoneIdentity(
             .setActivity(activity)
             .setCallbacks(callbacks)
         if (forceToken != null) builder.setForceResendingToken(forceToken)
-        PhoneAuthProvider.verifyPhoneNumber(builder.build())
+        try {
+            PhoneAuthProvider.verifyPhoneNumber(builder.build())
+        } catch (_: Exception) {
+            if (requestGeneration == generation && !authOperationInFlight) {
+                // Synchronous SDK/configuration failures must not strand the UI in Requesting.
+                generation++
+                invalidateChallenge()
+                emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
+            }
+        }
     }
 
     private fun authenticate(
@@ -189,29 +207,41 @@ class FirebasePhoneIdentity(
         expectedPhone: String,
         requestGeneration: Long
     ) {
-        recoveryAuth.signInWithCredential(credential).addOnCompleteListener { task ->
-            // Task.result throws when the Firebase task failed. Read it only on success,
-            // otherwise the cleanup below would be skipped and the recovery flow could
-            // remain permanently marked in-flight.
-            val actualPhone = if (task.isSuccessful) task.result?.user?.phoneNumber else null
-            val success = task.isSuccessful && actualPhone == expectedPhone
+        try {
+            recoveryAuth.signInWithCredential(credential).addOnCompleteListener { task ->
+                // Task.result throws when Firebase authentication failed. Read it only on success.
+                val actualPhone = if (task.isSuccessful) task.result?.user?.phoneNumber else null
+                val success = task.isSuccessful && actualPhone == expectedPhone
 
-            // Always clear the recovery-only Firebase session. Do not leave a signed-in
-            // temporary user or let this auth instance become an app-wide session.
-            recoveryAuth.signOut()
-            authOperationInFlight = false
+                // Always attempt to clear the isolated recovery session before reporting a result.
+                // A sign-out failure is itself a failed verification, never a success.
+                val signedOut = try {
+                    recoveryAuth.signOut()
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+                authOperationInFlight = false
 
-            if (requestGeneration != generation) {
+                if (requestGeneration != generation) {
+                    invalidateChallenge()
+                    return@addOnCompleteListener
+                }
+
                 clearChallenge()
-                return@addOnCompleteListener
+                when {
+                    !signedOut -> emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
+                    success -> emit(PhoneIdentityState.IdentityVerified(expectedPhone))
+                    task.isSuccessful -> emit(PhoneIdentityState.Failed(FailureReason.PHONE_MISMATCH))
+                    else -> emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
+                }
             }
-
-            clearChallenge()
-            if (success) {
-                emit(PhoneIdentityState.IdentityVerified(expectedPhone))
-            } else if (task.isSuccessful) {
-                emit(PhoneIdentityState.Failed(FailureReason.PHONE_MISMATCH))
-            } else {
+        } catch (_: Exception) {
+            // signInWithCredential can fail synchronously (for example, SDK/config errors).
+            runCatching { recoveryAuth.signOut() }
+            authOperationInFlight = false
+            if (requestGeneration == generation) {
+                clearChallenge()
                 emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
             }
         }
