@@ -2,7 +2,7 @@
 
 ## Status and placement
 
-The repository currently generates the native Android project during Capacitor setup; it does not contain a checked-in `android/app` Gradle module. The Kotlin source in `android/templates/FirebasePhoneIdentity.kt` is therefore a native integration template, not a compiled APK feature. Do not report it as integrated until the generated Android module, Gradle dependencies, and CI build are updated and verified.
+The repository generates the native Android project during Capacitor setup. `scripts/patch-android.js` now copies both Kotlin sources into the generated app module, adds Firebase Auth through the Firebase BoM, and applies the Google Services plugin only when `android/app/google-services.json` is supplied. This is source-level build integration; it is not proof of a successful Android build or a working Firebase project.
 
 ## Security boundary
 
@@ -20,6 +20,14 @@ Firebase sign-in is asynchronous and cannot be cancelled once submitted. This en
 ## Required Gradle work before compilation
 
 The generated Android app module must apply the Google Services plugin and include Firebase Auth using the Firebase BoM. The actual Console-generated `google-services.json` must be installed in `android/app/` at build time and must match `com.aurelia.pms`. Never commit production configuration values or service-account credentials into source control. The present repository has no native Gradle module or genuine config file, so those integration steps are not yet performed.
+
+## Repository integration performed
+
+- The Android patch script copies `FirebasePhoneIdentity.kt` and `RecoveryFirebaseAuthFactory.kt` into the generated native source tree.
+- Firebase Auth is added as `firebase-auth` (not the retired standalone KTX artifact) through the Firebase BoM.
+- Google Services plugin application is conditional on the app-module config file being present.
+- A dedicated named FirebaseApp/Auth instance is created from the default app options. It is signed out on factory creation and after each completed OTP sign-in to avoid retaining a recovery session.
+- Node guard tests assert these integration contracts. They do not execute Kotlin or Firebase SDK code.
 
 ## Required verification
 
