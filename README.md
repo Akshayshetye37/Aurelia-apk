@@ -2,6 +2,17 @@
 
 Aurelia PMS is a browser-based property-management interface supplied as a single HTML file and packaged as an Android debug app through Capacitor in GitHub Actions.
 
+## Project location and working source
+
+- **GitHub repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
+- **Current implementation branch:** `fix/firebase-phone-identity-engine`
+- **Project root:** the repository root (`/` in the GitHub file browser).
+- **Current project status and architecture:** this README is the status ledger for this branch. It distinguishes implemented foundations from planned or unverified work; a documented target is not proof of implementation.
+
+All source changes for this workstream are maintained in this repository branch. The main implementation locations are listed in **Repository structure** below. In particular, native Android templates are maintained in `android/templates/`; `scripts/patch-android.js` applies them and other native changes to the generated Capacitor Android project during the build. Do not treat generated build output as the authoritative source when the maintained template or patch script is the source of truth.
+
+Changes made through the connected GitHub integration are committed to this branch. Local edits made outside GitHub are not automatically synchronized unless committed and pushed.
+
 ## Repository contents
 
 - `index.html` — the PMS interface and inline CSS/JavaScript.
