@@ -31,6 +31,10 @@ The branch is the maintained source of truth for this workstream. Generated Capa
 - Google Drive and a user-selected Shared Folder are optional file-backup destinations via Android Storage Access Framework (SAF). They are not the PMS live database, do not provide automatic multi-device database synchronization, and are independent of a payment backend.
 - Online gateway payment execution, trusted webhook verification, refunds and authoritative reconciliation require a separately deployed trusted backend. Those capabilities remain unavailable until that service and its controls are implemented and tested.
 
+## CI validation note
+
+The workflow includes a verification job and release-signing gates. A green Node test suite alone is not a release certification: the Android build, merged-manifest audit, signing configuration and device-level checks must also pass. Pull-request builds intentionally do not access release-signing secrets. Check the latest [Actions runs](https://github.com/Akshayshetye37/Aurelia-apk/actions) for the commit being evaluated.
+
 ## Repository contents
 
 - `index.html` — the PMS interface and inline CSS/JavaScript.
