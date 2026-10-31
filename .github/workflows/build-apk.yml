@@ -135,6 +135,43 @@ jobs:
           fi
           echo "Merged manifest contains none of the blocked sensitive permissions or notification-listener/accessibility service declarations."
 
+      - name: Require shared Aurelia release signing secrets
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_B64: ${{ secrets.AURELIA_RELEASE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          test -n "$KEYSTORE_B64" || { echo "Missing AURELIA_RELEASE_KEYSTORE_BASE64"; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "Missing AURELIA_RELEASE_KEYSTORE_PASSWORD"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "Missing AURELIA_RELEASE_KEY_ALIAS"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "Missing AURELIA_RELEASE_KEY_PASSWORD"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/aurelia-signing"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/aurelia-signing/release.jks"
+          test -s "$RUNNER_TEMP/aurelia-signing/release.jks"
+
+      - name: Build PMS release APK with shared signing identity
+        if: github.event_name != 'pull_request'
+        working-directory: android
+        env:
+          AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-signing/release.jks
+          AURELIA_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
+          AURELIA_RELEASE_KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
+          AURELIA_RELEASE_KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Verify PMS release APK signature
+        if: github.event_name != 'pull_request'
+        working-directory: android
+        shell: bash
+        run: |
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | head -n 1
       - name: Upload debug APK artifact
         continue-on-error: true
         uses: actions/upload-artifact@v4
@@ -144,14 +181,15 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish debug APK as a private-repository prerelease asset
-        if: github.event_name != 'pull_request'
+      - name: Publish matching-signature PMS release APK as a draft release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="aurelia-debug-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" android/app/build/outputs/apk/debug/app-debug.apk \
+          tag="aurelia-pms-release-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" android/app/build/outputs/apk/release/app-release.apk \
             --target "$GITHUB_SHA" \
+            --draft \
             --prerelease \
-            --title "Aurelia PMS debug APK (run ${GITHUB_RUN_NUMBER})" \
-            --notes "Debug APK built from commit ${GITHUB_SHA}. This is not a production-signed release. Automatic folio settlement remains disabled."
+            --title "Aurelia PMS release APK (run ${GITHUB_RUN_NUMBER})" \
+            --notes "Release-signed PMS APK built from commit ${GITHUB_SHA}. Uses the configured Aurelia release signing secrets, which must match the Pay Bridge release signing identity. Verify both APK certificate SHA-256 fingerprints before installation. Payment processing and automatic folio settlement remain disabled."
