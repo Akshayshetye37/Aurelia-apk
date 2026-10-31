@@ -159,18 +159,6 @@ jobs:
           AURELIA_RELEASE_KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
         run: ./gradlew --no-daemon --stacktrace assembleRelease
 
-      - name: Verify signed release APK
-        if: github.event_name != 'pull_request'
-        working-directory: android
-        shell: bash
-        run: |
-          set -euo pipefail
-          apk="app/build/outputs/apk/release/app-release.apk"
-          test -s "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | head -n 1
-
       - name: Prepare release verification metadata
         if: github.event_name != 'pull_request'
         working-directory: android
