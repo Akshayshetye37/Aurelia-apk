@@ -34,6 +34,17 @@ Status: research and integration contract. This document does not mean the provi
 - CCAvenue's merchant integration kit is account/product-specific. The official CCAvenue FAQ and onboarding material must be used to confirm the exact fields supplied to the merchant.
 - Public JioPay material did not expose a verifiable universal PG API credential schema during this review. Do not invent fields or claim JioPay support is ready.
 
+
+## Provider onboarding boundary
+
+**Credential entry in the PMS APK is disabled.** The earlier prototype accepted an arbitrary HTTPS URL, a bearer token and provider secrets inside the APK. HTTPS alone does not establish that a destination is an owner-controlled endpoint, so that design could send merchant secrets to an attacker-controlled host. The current PMS screen is documentation/status-only and must not collect provider credentials.
+
+The production owner console must be a separately hosted, owner-authenticated web application on a pinned, owner-controlled origin. It must use MFA-backed sessions, CSRF protection where cookie sessions are used, strict origin/CORS policy, provider-specific schemas, managed envelope encryption, secret redaction, audit events without secret values, key rotation, and non-secret status projections. PMS may display only provider ID, environment, validation state, activation state and last-check timestamp. It must never receive or store merchant secrets.
+
+The endpoint shape below is a proposed backend contract, not a deployed service: `PUT /api/admin/payment-providers/{providerId}/credentials` with `{ provider, environment, credentials }`. The backend must authenticate an owner/admin, enforce an exact provider schema, reject unknown fields, encrypt secrets at rest, redact request bodies from logs/traces, and return only a non-secret status projection. HTTP success is not activation. Activation requires provider-specific validation, a verified webhook, an independently fetched payment status and an explicit owner action.
+
+No matching backend endpoint, encrypted credential vault, owner console or deployment is present in this repository. Providers therefore remain inactive.
+
 ## Required owner setup journey
 
 1. Owner signs in to the Aurelia owner-controlled backend console over HTTPS with MFA.
@@ -47,20 +58,33 @@ Status: research and integration contract. This document does not mean the provi
 9. PMS receives a non-secret provider status/configuration projection from the backend. Pay Bridge receives only short-lived checkout/session data, never merchant secrets.
 10. Refund, void, settlement and reconciliation functions remain disabled until their individual provider adapter operations are implemented and tested.
 
-## Current implementation gap (do not misrepresent)
+## Current implementation status (do not misrepresent)
 
-The repository currently contains:
-- A PMS-side Messenger client and protocol-v1 handshake contract.
-- A provider catalogue and official documentation links.
-- A local PMS preference validation helper.
+The repository now contains an isolated Razorpay backend reference service under `payment-backend/`:
+- Firebase ID token verification with revocation checking, deployment-controlled owner UID allowlist, verified email, MFA second-factor claim and 10-minute recent-authentication gate.
+- Provider API and webhook secrets written to Google Secret Manager; non-secret onboarding metadata stored in Firestore.
+- Razorpay credential validation against the Orders API.
+- Server-side INR test order creation with a Firestore idempotency reservation. Reused or ambiguous requests fail closed rather than dispatching a second order.
+- Raw-body HMAC-SHA256 webhook verification, event-ID deduplication, order binding and independent provider payment fetch.
+- Separate explicit activation gate. Live activation requires sandbox acceptance and a verified live webhook event.
+- Backend security-contract tests included in the Android repository CI workflow.
 
-The repository does **not** yet contain:
-- The separate `com.aurelia.paybridge` Android application/service APK.
-- A production owner backend, merchant credential vault, provider APIs, webhook endpoints or deployment configuration.
-- Live provider adapters for the seven catalogue entries.
-- A provider-management IPC implementation advertising `provider.management`.
+This is a **reference implementation scaffold, not a deployed production payment backend**. The following remain unimplemented or unverified:
+- No owner-controlled Google Cloud project, Cloud Run service, Firestore database, Secret Manager IAM policy, Firebase Identity Platform MFA configuration or DNS/TLS endpoint has been provisioned.
+- No browser owner console or MFA enrollment/sign-in UI exists. The service intentionally rejects non-MFA owner tokens.
+- The initial deployment allowlist supports configured owner UIDs only; hotel/tenant membership and multi-tenant authorization require a reviewed model before multiple properties are onboarded.
+- The Razorpay sandbox flow has not been run against a real merchant test account; provider payload variations, webhook dashboard configuration and test acceptance remain unverified.
+- Razorpay checkout handoff, callback signature verification route, reconciliation worker, refunds and PMS/Pay Bridge integration are not implemented.
+- The PMS does not yet consume the backend's non-secret provider status projection.
+- Cashfree, PayU, PhonePe, Paytm, CCAvenue and JioPay adapters are not implemented.
 
-Therefore, the present Connect action cannot authenticate a missing Pay Bridge APK, and the provider form cannot truthfully activate a gateway. The CodeShack browser preview cannot exercise Android Messenger IPC at all. The PMS debug APK build passing is not proof of a working payment integration.
+Do not deploy with broad project Editor permissions. Use a dedicated Cloud Run service identity and least-privilege IAM. Google Secret Manager encrypts secrets at rest and in transit; use secret-level IAM, version pinning, audit logs and rotation as described in the official [Secret Manager best practices](https://docs.cloud.google.com/secret-manager/docs/best-practices). Cloud Run should use a dedicated service identity rather than a downloaded service-account key ([Cloud Run service identity](https://docs.cloud.google.com/run/docs/securing/service-identity)).
+
+The admin API expects Firebase Authentication with Identity Platform MFA. Firebase documents MFA enrollment and sign-in requirements in its [official MFA guide](https://firebase.google.com/docs/auth/web/multi-factor), and the backend follows the [Firebase ID token verification contract](https://firebase.google.com/docs/auth/admin/verify-id-tokens).
+
+Razorpay integration follows its official requirements: create each order on the server, verify checkout signatures server-side using the server-held secret, and independently fetch payment status; see [Razorpay integration steps](https://razorpay.com/docs/payments/payment-gateway/quick-integration/integration-steps/). Webhooks must be verified against the original raw request body, deduplicated by event ID, and supplemented with API fetch for critical status decisions; see [Razorpay webhook validation](https://github.com/razorpay/markdown-docs/blob/master/webhooks/validate-test.md) and [webhook guidance](https://github.com/razorpay/markdown-docs/blob/master/webhooks.md).
+
+**No live payment processing or production activation is authorized by these commits.** A successful build or passing unit tests do not prove a deployed backend, merchant account connection, webhook delivery, or real payment settlement.
 
 ## Implementation order
 
@@ -70,3 +94,10 @@ Therefore, the present Connect action cannot authenticate a missing Pay Bridge A
 4. Connect PMS to backend provider status and Pay Bridge only after both sides implement the negotiated capabilities.
 5. Add Cashfree, PayU, PhonePe V2, Paytm, CCAvenue one at a time using each provider's current contract; add JioPay only after receiving its merchant-specific docs.
 6. Keep auto-folio-settlement disabled. Present verified payment evidence to staff for explicit confirmation.
+
+
+## Implementation status — 2026-10-31
+
+The backend directory now contains a Razorpay-only reference scaffold with server-resolved tenant membership. Firebase UID is mapped to a platform-provisioned `paymentMemberships/{uid}` record; the APK cannot select or assert its own tenant ID. Provider status, secrets, order idempotency and webhook inbox records are tenant-scoped. The active membership model currently supports one hotel tenant per Firebase UID and owner/admin provider administration only.
+
+This does **not** complete provider onboarding or enable payments. The service is not deployed; Firebase/Firestore/Secret Manager/Cloud Run resources and IAM are not provisioned; no real merchant sandbox has been exercised; the order endpoint is a sandbox test utility, not checkout; reconciliation, refunds, PMS folio posting and Pay Bridge checkout are not integrated. Cashfree, PayU, PhonePe, Paytm, CCAvenue and JioPay adapters remain unimplemented and must stay disabled. Production use is prohibited until the gates in `payment-backend/README.md` are completed and independently reviewed.

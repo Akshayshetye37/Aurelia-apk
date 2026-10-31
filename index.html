@@ -3622,7 +3622,7 @@ if (typeof window.render === "function") window.render();
   const providers=names.map(([id,name])=>{
    const definition=platform.PAYMENT_PROVIDERS[id],guide=platform.PROVIDER_INTEGRATION_GUIDES[id];
    const docs=guide.docs.map(link=>'<li><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">'+esc(link.label)+'</a></li>').join('');
-   const fields='<p class="lab">Credential onboarding is not deployed yet. Do not enter API secrets, salts, private keys or webhook passwords in this PMS app. Configure them only in the future owner-controlled HTTPS backend.</p><p class="lab">Required public identifier: '+esc(definition.identityLabel)+'. Provider-specific secret fields and environment requirements are documented in <code>docs/PAYMENT_PROVIDER_ONBOARDING.md</code>.</p>';
+   const fields='<div class="provider-config locked" data-provider="'+esc(id)+'"><p class="lab">Credential onboarding is disabled in this PMS build. This screen does not collect API keys, salts, private keys, webhook secrets or owner tokens.</p><div class="tag out">Backend not connected · Credentials disabled</div><p class="lab">Configure providers only in a separately hosted, authenticated owner console after the encrypted backend vault is deployed. PMS will receive non-secret provider status only.</p><div class="lab" id="provider-status-'+esc(id)+'" role="status">Not configured · Awaiting owner backend deployment</div></div>';
    const guideHtml='<p class="lab">'+esc(definition.category)+' · '+esc(definition.integration)+'<br>Methods: '+esc(definition.methods.join(', '))+'<br>'+esc(definition.verification)+'</p><ul>'+docs+'</ul>';
    return '<details><summary>'+esc(name)+' · Documentation</summary>'+guideHtml+fields+'</details>';
   }).join('');
@@ -3633,9 +3633,7 @@ if (typeof window.render === "function") window.render();
 window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;if(!native||typeof native.postMessage!=='function')throw new Error('Native Pay Bridge client is unavailable. Update the PMS APK.');native.postMessage(JSON.stringify({type:'payBridgeConnect'}));toast('Checking Pay Bridge installation, signing identity and native service…');setTimeout(()=>{try{render()}catch(_){ }},350)}catch(e){toast(e.message||'Could not start Pay Bridge connection')}};
  window.disconnectAureliaPayBridge=function(){try{window.AureliaNative.postMessage(JSON.stringify({type:'payBridgeDisconnect'}));toast('Pay Bridge disconnected')}catch(_){toast('Native Pay Bridge client is unavailable')}};
  window.aureliaPayBridgeStatusChanged=function(){try{if(document.querySelector('.payment-platform-card'))render()}catch(_){ }};
- window.saveAureliaProvider=function(){
-  toast('Gateway credentials cannot be configured in the PMS APK. The owner HTTPS backend credential vault and provider adapters are not deployed yet.');
- };
+ window.saveAureliaProvider=function(){toast('Provider onboarding is disabled until the owner-controlled backend console is deployed.');return false;};
 
  const originalSettings=SUB.set;
  SUB.set=function(){

@@ -3,66 +3,52 @@ name: Build and verify Aurelia PMS APK
 on:
   workflow_dispatch:
   push:
+    branches:
+      - fix/firebase-phone-identity-engine
     paths:
       - 'index.html'
       - 'README.md'
+      - 'docs/**'
       - 'package.json'
+      - 'package-lock.json'
       - 'capacitor.config.json'
       - 'assets/**'
       - 'scripts/**'
       - 'android/templates/**'
       - 'src/**'
+      - 'payment-backend/**'
       - 'tests/**'
       - '.github/workflows/build-apk.yml'
   pull_request:
     paths:
+      - 'README.md'
+      - 'docs/**'
+      - 'android/templates/**'
       - 'index.html'
       - 'package.json'
+      - 'package-lock.json'
       - 'capacitor.config.json'
       - 'assets/**'
       - 'scripts/**'
       - 'src/**'
+      - 'payment-backend/**'
       - 'tests/**'
       - '.github/workflows/build-apk.yml'
 
+# Serialize builds on this branch so concurrent runs do not compete for runners
+# or publish ambiguous release artifacts.
+concurrency:
+  group: aurelia-pms-android-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
-  actions: write
 
 jobs:
-  cleanup-old-actions-artifacts:
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Delete Actions artifacts created on or before 2026-10-29 (UTC)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          cutoff='2026-10-30T00:00:00Z'
-          page=1
-          deleted=0
-          while :; do
-            response=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GH_REPOSITORY/actions/artifacts?per_page=100&page=$page")
-            count=$(jq '.artifacts | length' <<< "$response")
-            [ "$count" -gt 0 ] || break
-            while read -r artifact_id created_at artifact_name; do
-              [ -n "$artifact_id" ] || continue
-              if [[ "$created_at" < "$cutoff" ]]; then
-                echo "Deleting artifact $artifact_id ($artifact_name), created $created_at"
-                curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GH_REPOSITORY/actions/artifacts/$artifact_id" >/dev/null
-                deleted=$((deleted + 1))
-              fi
-            done < <(jq -r '.artifacts[] | [.id, .created_at, .name] | @tsv' <<< "$response")
-            page=$((page + 1))
-          done
-          echo "Deleted $deleted Actions artifact(s) created before $cutoff."
-
   verify-and-build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
+    name: Verify and build Aurelia PMS
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,71 +67,125 @@ jobs:
       - name: Install Node dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Run payment and evidence regression tests
+      - name: Run PMS regression tests
         run: npm test
+
+      - name: Check payment backend syntax and security contracts
+        run: |
+          node --check payment-backend/src/server.mjs
+          npm --prefix payment-backend test
 
       - name: Prepare web app
         run: npm run build
 
-      - name: Generate Android project
+      - name: Generate Android project from Capacitor and native templates
+        shell: bash
         run: |
-          # The repository stores native source templates under android/templates.
-          # Move them out temporarily because Capacitor requires the android/ path to be absent.
-          if [ -d android/templates ]; then
-            mv android/templates "$RUNNER_TEMP/aurelia-android-templates"
+          set -euo pipefail
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          if [[ -d android/templates ]]; then
+            mv android/templates "$template_dir"
           fi
-          rmdir android 2>/dev/null || true
+          if [[ -d android ]]; then
+            rmdir android
+          fi
           npx cap add android
-          if [ -d "$RUNNER_TEMP/aurelia-android-templates" ]; then
+          if [[ -d "$template_dir" ]]; then
             mkdir -p android/templates
-            mv "$RUNNER_TEMP/aurelia-android-templates"/* android/templates/
+            cp -a "$template_dir/." android/templates/
           fi
+          test -f android/gradlew
+          test -f android/app/build.gradle
 
-      - name: Install native backup and file bridge
+      - name: Apply Aurelia native Android configuration
         run: node scripts/patch-android.js
 
-      - name: Sync Capacitor
+      - name: Sync Capacitor Android project
         run: npx cap sync android
 
       - name: Build debug APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug
+          ./gradlew --no-daemon --stacktrace assembleDebug
 
-      - name: Verify merged Android manifest has no high-risk permissions
+      - name: Verify merged Android manifest permissions
         working-directory: android
         shell: bash
         run: |
-          manifest="$(find app/build/intermediates/merged_manifest -type f -name AndroidManifest.xml | head -n 1)"
-          if [ -z "$manifest" ]; then
-            echo "Merged Android manifest was not found; refusing to publish an unverified APK."
+          set -euo pipefail
+          manifest="$(find app/build/intermediates/merged_manifest -type f -name AndroidManifest.xml -print -quit)"
+          if [[ -z "$manifest" ]]; then
+            echo "::error::Merged Android manifest was not found."
             exit 1
           fi
           blocked_permissions='PACKAGE_USAGE_STATS|WRITE_SECURE_SETTINGS|READ_BASIC_PHONE_STATE|READ_CELL_BROADCASTS|BIND_VPN_SERVICE|BIND_NOTIFICATION_LISTENER_SERVICE|BIND_ACCESSIBILITY_SERVICE|ACCESS_MEDIA_LOCATION|READ_CALENDAR|WRITE_CALENDAR|READ_VOICEMAIL|WRITE_VOICEMAIL|ACCEPT_HANDOVER|UWB_RANGING|READ_HEALTH_DATA_IN_BACKGROUND|READ_HEALTH_DATA|WRITE_HEALTH_DATA|FOREGROUND_SERVICE|FOREGROUND_SERVICE_DATA_SYNC|FOREGROUND_SERVICE_CONNECTED_DEVICE|FOREGROUND_SERVICE_HEALTH|FOREGROUND_SERVICE_REMOTE_MESSAGING|FOREGROUND_SERVICE_SYSTEM_EXEMPTED|FOREGROUND_SERVICE_PHONE_CALL|USE_FULL_SCREEN_INTENT|REQUEST_COMPANION_RUN_IN_BACKGROUND|REQUEST_COMPANION_USE_DATA_IN_BACKGROUND|REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND|READ_SMS|RECEIVE_SMS|SEND_SMS|CAMERA|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|READ_MEDIA_IMAGES|READ_MEDIA_VIDEO|READ_MEDIA_AUDIO|READ_MEDIA_VISUAL_USER_SELECTED|MANAGE_EXTERNAL_STORAGE|READ_CALL_LOG|WRITE_CALL_LOG|READ_PHONE_STATE|CALL_PHONE|READ_CONTACTS|WRITE_CONTACTS|GET_ACCOUNTS|ACCESS_FINE_LOCATION|ACCESS_COARSE_LOCATION|ACCESS_BACKGROUND_LOCATION|RECORD_AUDIO|BODY_SENSORS|ACTIVITY_RECOGNITION|POST_NOTIFICATIONS|BLUETOOTH_SCAN|BLUETOOTH_CONNECT|BLUETOOTH_ADVERTISE|NEARBY_WIFI_DEVICES|QUERY_ALL_PACKAGES|SYSTEM_ALERT_WINDOW|WRITE_SETTINGS|ACCESS_NOTIFICATION_POLICY|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|REQUEST_IGNORE_BATTERY_OPTIMIZATIONS|USE_BIOMETRIC|USE_FINGERPRINT|FOREGROUND_SERVICE_CAMERA|FOREGROUND_SERVICE_MICROPHONE|FOREGROUND_SERVICE_LOCATION|FOREGROUND_SERVICE_MEDIA_PROJECTION|FOREGROUND_SERVICE_SPECIAL_USE|REQUEST_INSTALL_PACKAGES'
           if grep -E "android.permission.($blocked_permissions)|com.google.android.gms.permission.AD_ID|BIND_NOTIFICATION_LISTENER_SERVICE|BIND_ACCESSIBILITY_SERVICE" "$manifest"; then
-            echo "A high-risk or unnecessary permission/service declaration remains in the merged manifest."
+            echo "::error::A blocked sensitive permission/service declaration remains."
             exit 1
           fi
-          echo "Merged manifest contains none of the blocked sensitive permissions or notification-listener/accessibility service declarations."
+          echo "Merged manifest passed the sensitive-permission check."
 
-      - name: Upload debug APK artifact
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: aurelia-pms-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
+      - name: Validate release signing configuration
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_B64: ${{ secrets.AURELIA_RELEASE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$KEYSTORE_B64" ]] || { echo "::error::Missing AURELIA_RELEASE_KEYSTORE_BASE64"; exit 1; }
+          [[ -n "$KEYSTORE_PASSWORD" ]] || { echo "::error::Missing AURELIA_RELEASE_KEYSTORE_PASSWORD"; exit 1; }
+          [[ -n "$KEY_ALIAS" ]] || { echo "::error::Missing AURELIA_RELEASE_KEY_ALIAS"; exit 1; }
+          [[ -n "$KEY_PASSWORD" ]] || { echo "::error::Missing AURELIA_RELEASE_KEY_PASSWORD"; exit 1; }
+          signing_dir="$RUNNER_TEMP/aurelia-signing"
+          mkdir -p "$signing_dir"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$signing_dir/release.jks"
+          test -s "$signing_dir/release.jks"
+          keytool -list -keystore "$signing_dir/release.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          echo "Release keystore and alias validated."
 
-      - name: Publish debug APK as a private-repository prerelease asset
+      - name: Build signed PMS release APK
+        if: github.event_name != 'pull_request'
+        working-directory: android
+        env:
+          AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-signing/release.jks
+          AURELIA_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
+          AURELIA_RELEASE_KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
+          AURELIA_RELEASE_KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon --stacktrace assembleRelease
+
+      - name: Prepare release verification metadata
+        if: github.event_name != 'pull_request'
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="app/build/outputs/apk/release/app-release.apk"
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/aurelia-pms-certificate.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | sed -n '1p'
+          sha256sum "$apk" > "$apk.sha256"
+
+      # Publish directly to a GitHub draft release to avoid Actions-artifact quota failures.
+      - name: Publish signed PMS APK as a draft prerelease
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+        working-directory: android
+        shell: bash
         run: |
-          tag="aurelia-debug-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" android/app/build/outputs/apk/debug/app-debug.apk \
+          set -euo pipefail
+          tag="aurelia-pms-release-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" \
+            app/build/outputs/apk/release/app-release.apk \
+            app/build/outputs/apk/release/app-release.apk.sha256 \
+            "$RUNNER_TEMP/aurelia-pms-certificate.txt" \
             --target "$GITHUB_SHA" \
+            --draft \
             --prerelease \
-            --title "Aurelia PMS debug APK (run ${GITHUB_RUN_NUMBER})" \
-            --notes "Debug APK built from commit ${GITHUB_SHA}. This is not a production-signed release. Automatic folio settlement remains disabled."
+            --title "Aurelia PMS signed release APK (run ${GITHUB_RUN_NUMBER})" \
+            --notes "Signed PMS APK from commit ${GITHUB_SHA}. Verify the attached APK SHA-256 and signing-certificate report. Confirm the certificate SHA-256 fingerprint matches Aurelia Pay Bridge before installing both apps together. Forgot PIN recovery remains unavailable until the recovery coordinator, recovery-envelope implementation, Firebase deployment configuration and crash-recovery tests are completed. Payment processing and automatic folio settlement remain disabled."

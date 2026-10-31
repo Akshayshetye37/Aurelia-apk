@@ -127,6 +127,7 @@ fs.writeFileSync(manifestPath, manifest);
 
 
 const { execFileSync } = require('child_process');
+const iconPng = path.join(__dirname, '..', 'assets', 'aurelia-icon.png');
 const iconSvg = path.join(__dirname, '..', 'assets', 'aurelia-icon.svg');
 const foregroundSvg = path.join(__dirname, '..', 'assets', 'aurelia-icon-foreground.svg');
 const resDir = path.join(appDir, 'res');
@@ -138,7 +139,25 @@ fs.writeFileSync(path.join(resDir, 'xml', 'aurelia_file_paths.xml'), '<?xml vers
 `;
 eval(providerBlock);
 
-if (fs.existsSync(iconSvg)) {
+if (fs.existsSync(iconPng)) {
+  // A single 512px PNG is stored in mipmap-nodpi: Android scales it without
+  // density-specific resampling. This also avoids requiring Sharp on Termux.
+  const dir = path.join(resDir, 'mipmap-nodpi');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const name of ['ic_launcher', 'ic_launcher_round', 'ic_launcher_foreground']) {
+    fs.copyFileSync(iconPng, path.join(dir, name + '.png'));
+  }
+  const adaptiveDir = path.join(resDir, 'mipmap-anydpi-v26');
+  fs.mkdirSync(adaptiveDir, { recursive: true });
+  const adaptive = '<?xml version="1.0" encoding="utf-8"?><adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/aurelia_icon_background"/><foreground android:drawable="@mipmap/ic_launcher_foreground"/></adaptive-icon>';
+  fs.writeFileSync(path.join(adaptiveDir, 'ic_launcher.xml'), adaptive);
+  fs.writeFileSync(path.join(adaptiveDir, 'ic_launcher_round.xml'), adaptive);
+  const valuesDir = path.join(resDir, 'values');
+  fs.mkdirSync(valuesDir, { recursive: true });
+  fs.writeFileSync(path.join(valuesDir, 'aurelia_icon_colors.xml'), '<?xml version="1.0" encoding="utf-8"?><resources><color name="aurelia_icon_background">#082419</color></resources>');
+  console.log('Installed Aurelia PMS launcher artwork from assets/aurelia-icon.png.');
+} else if (fs.existsSync(iconSvg)) {
+  // Backward-compatible fallback for older checkouts that do not yet have the PNG.
   const densities = { 'mdpi':48, 'hdpi':72, 'xhdpi':96, 'xxhdpi':144, 'xxxhdpi':192 };
   for (const [density, size] of Object.entries(densities)) {
     const dir = path.join(resDir, 'mipmap-' + density);
@@ -157,9 +176,8 @@ if (fs.existsSync(iconSvg)) {
   fs.writeFileSync(path.join(adaptiveDir, 'ic_launcher_round.xml'), adaptive);
   const valuesDir = path.join(resDir, 'values');
   fs.mkdirSync(valuesDir, { recursive: true });
-  const colorsPath = path.join(valuesDir, 'aurelia_icon_colors.xml');
-  fs.writeFileSync(colorsPath, '<?xml version="1.0" encoding="utf-8"?><resources><color name="aurelia_icon_background">#082419</color></resources>');
-  console.log('Generated adaptive-safe Aurelia PMS launcher icons for all Android densities.');
+  fs.writeFileSync(path.join(valuesDir, 'aurelia_icon_colors.xml'), '<?xml version="1.0" encoding="utf-8"?><resources><color name="aurelia_icon_background">#082419</color></resources>');
+  console.log('Generated fallback Aurelia PMS launcher icons for all Android densities.');
 }
 
 const javaDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms');
@@ -180,6 +198,131 @@ if (fs.existsSync(appGradleGroovy)) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + '\n    implementation("com.google.mlkit:text-recognition:16.0.1")');
     fs.writeFileSync(appGradleKts, gradle);
   }
+}
+
+
+// Firebase Phone Auth native integration. Firebase's native BoM and plugin
+// versions are owned by the generated Capacitor project's plugin DSL/catalog.
+// Inject Firebase Auth into the app module without rewriting root Gradle plugin
+// management. The Google Services plugin is applied only for a supplied config.
+const firebaseTemplate = path.join(androidDir, 'templates', 'FirebasePhoneIdentity.kt');
+if (!fs.existsSync(firebaseTemplate)) throw new Error('FirebasePhoneIdentity.kt template is missing.');
+const identityDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms', 'identity');
+fs.mkdirSync(identityDir, { recursive: true });
+fs.copyFileSync(firebaseTemplate, path.join(identityDir, 'FirebasePhoneIdentity.kt'));
+
+const firebaseBootstrapTemplate = path.join(androidDir, 'templates', 'RecoveryFirebaseAuthFactory.kt');
+if (!fs.existsSync(firebaseBootstrapTemplate)) throw new Error('RecoveryFirebaseAuthFactory.kt template is missing.');
+fs.copyFileSync(firebaseBootstrapTemplate, path.join(identityDir, 'RecoveryFirebaseAuthFactory.kt'));
+
+
+const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
+
+function addFirebaseDependencies(contents, kotlinDsl) {
+  const bom = 'com.google.firebase:firebase-bom:33.5.0';
+  const auth = 'com.google.firebase:firebase-auth';
+  if (!/dependencies\s*\{/.test(contents)) {
+    throw new Error('App Gradle file has no dependencies block; refusing an incomplete Firebase integration.');
+  }
+  if (contents.includes(auth)) return contents;
+  const dependencyLines = kotlinDsl
+    ? `\n    implementation(platform("${bom}"))\n    implementation("${auth}")`
+    : `\n    implementation platform("${bom}")\n    implementation "${auth}"`;
+  return contents.replace(/dependencies\s*\{/, match => match + dependencyLines);
+}
+
+function applyGoogleServices(contents, kotlinDsl) {
+  if (!hasGoogleServicesConfig || contents.includes('com.google.gms.google-services')) return contents;
+  if (!/plugins\s*\{/.test(contents)) {
+    throw new Error('App Gradle file has no plugins block for Google Services; refusing to append an unmanaged plugin.');
+  }
+  const statement = kotlinDsl
+    ? '\n    id("com.google.gms.google-services")'
+    : "\n    id 'com.google.gms.google-services'";
+  return contents.replace(/plugins\s*\{/, match => match + statement);
+}
+
+if (fs.existsSync(appGradleGroovy)) {
+  let appGradle = fs.readFileSync(appGradleGroovy, 'utf8');
+  appGradle = addFirebaseDependencies(appGradle, false);
+  appGradle = applyGoogleServices(appGradle, false);
+  fs.writeFileSync(appGradleGroovy, appGradle);
+} else if (fs.existsSync(appGradleKts)) {
+  let appGradle = fs.readFileSync(appGradleKts, 'utf8');
+  appGradle = addFirebaseDependencies(appGradle, true);
+  appGradle = applyGoogleServices(appGradle, true);
+  fs.writeFileSync(appGradleKts, appGradle);
+} else {
+  throw new Error('Generated Android app Gradle file was not found; Firebase integration cannot be wired.');
+}
+
+if (hasGoogleServicesConfig) {
+  let config;
+  try {
+    config = JSON.parse(fs.readFileSync(path.join(appModuleDir, 'google-services.json'), 'utf8'));
+  } catch (error) {
+    throw new Error('google-services.json is invalid JSON; refusing Firebase build.', { cause: error });
+  }
+  const clients = Array.isArray(config.client) ? config.client : [];
+  const matchingClient = clients.some(client =>
+    client.client_info &&
+    client.client_info.android_client_info &&
+    client.client_info.android_client_info.package_name === 'com.aurelia.pms' &&
+    typeof client.client_info.mobilesdk_app_id === 'string' &&
+    /^1:[0-9]+:android:[0-9a-f]+$/i.test(client.client_info.mobilesdk_app_id) &&
+    Array.isArray(client.api_key) &&
+    client.api_key.some(key => typeof key.current_key === 'string' && /^AIza[0-9A-Za-z_-]{30,}$/.test(key.current_key))
+  );
+  if (!matchingClient || !config.project_info || typeof config.project_info.project_id !== 'string' || !config.project_info.project_id) {
+    throw new Error('google-services.json failed structural validation for package com.aurelia.pms; refusing Firebase build.');
+  }
+} else {
+  console.log('Firebase config not supplied: Firebase SDK is compile-integrated, but Phone Auth is not configured and must remain unavailable at runtime.');
+}
+
+// Release signing must use the same controlled keystore as Aurelia Pay Bridge.
+// Debug builds remain development-only and cannot authenticate to a release-signed bridge.
+if (fs.existsSync(appGradleGroovy)) {
+  let gradle = fs.readFileSync(appGradleGroovy, 'utf8');
+  if (!gradle.includes('AURELIA_RELEASE_KEYSTORE_PATH')) {
+    const envBlock = [
+      'def releaseStorePath = System.getenv("AURELIA_RELEASE_KEYSTORE_PATH")',
+      'def releaseStorePassword = System.getenv("AURELIA_RELEASE_KEYSTORE_PASSWORD")',
+      'def releaseKeyAlias = System.getenv("AURELIA_RELEASE_KEY_ALIAS")',
+      'def releaseKeyPassword = System.getenv("AURELIA_RELEASE_KEY_PASSWORD")',
+      'def releaseSigningReady = [releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword].every { it != null && !it.trim().isEmpty() }'
+    ].join('\n');
+    const signingBlock = [
+      '    signingConfigs {',
+      '        if (releaseSigningReady) {',
+      '            aureliaRelease {',
+      '                storeFile file(releaseStorePath)',
+      '                storePassword releaseStorePassword',
+      '                keyAlias releaseKeyAlias',
+      '                keyPassword releaseKeyPassword',
+      '            }',
+      '        }',
+      '    }',
+      '    buildTypes {',
+      '        release {',
+      '            if (releaseSigningReady) { signingConfig signingConfigs.aureliaRelease }',
+      '        }',
+      '    }'
+    ].join('\n');
+    if (!/android\s*\{/.test(gradle)) throw new Error('Generated Gradle file has no android block; cannot configure release signing.');
+    gradle = gradle.replace(/android\s*\{/, match => match + '\n' + envBlock);
+    const start = gradle.indexOf('android {');
+    let depth = 0, end = -1;
+    for (let i = gradle.indexOf('{', start); i < gradle.length; i++) {
+      if (gradle[i] === '{') depth++;
+      else if (gradle[i] === '}' && --depth === 0) { end = i; break; }
+    }
+    if (end < 0) throw new Error('Could not locate generated android block boundary.');
+    gradle = gradle.slice(0, end) + signingBlock + '\n' + gradle.slice(end);
+    fs.writeFileSync(appGradleGroovy, gradle);
+  }
+} else {
+  throw new Error('Expected generated Groovy app/build.gradle; release signing configuration was not applied.');
 }
 
 const payBridgeTemplate = path.join(androidDir, 'templates', 'PayBridgeClient.java');
