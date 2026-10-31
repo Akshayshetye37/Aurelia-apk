@@ -241,3 +241,23 @@ These are implementation and verification tasks, not completed features:
 - Never commit signing passwords, private keystores, service-account credentials or provider secrets.
 - Keep production credentials out of source control. Supply Firebase client configuration through a controlled build input and verify the exact package / SHA fingerprint registrations in Firebase Console.
 - Record test evidence and exact commit SHA for each milestone. Do not mark a component "verified" until its relevant tests have actually run and passed.
+
+## PMS Pay Bridge payment orchestration status
+
+A fail-closed PMS-side orchestration foundation now exists in `src/payments/pay-bridge-orchestrator.mjs`, with contract tests in `tests/pay-bridge-orchestrator.test.mjs` and the implementation boundary documented in `docs/PMS-PAYMENT-ORCHESTRATION.md`.
+
+Implemented in this branch:
+- Explicit payment state transitions and durable-store interface requirement.
+- Persist-before-dispatch payment intents, request-ID idempotency conflict checks and safe retry of unsubmitted intents.
+- Bridge event correlation to request, booking, folio, amount and currency.
+- Bridge-reported success never authorizes settlement; independent backend verification is required.
+- HTTPS-only backend client contract, reconciliation, cancellation and backend-authorized refund interfaces.
+- Tests for disconnected behavior, retries, mismatched events, idempotency and verification failure.
+
+Not implemented / not production-ready:
+- A concrete transactional durable payment store and server-side accounting ledger.
+- Native payment IPC operations in both APKs. The existing Pay Bridge IPC remains handshake-only.
+- A deployed trusted backend, provider adapters, webhook verification, provider status polling and refund execution.
+- A durable outbox, fully integrated payment UI, atomic folio posting and real-device/provider sandbox end-to-end tests.
+
+**Gateway checkout and automatic folio settlement remain unavailable/disabled until those dependencies are implemented and verified.** PMS hotel operations and manual payment recording must remain independent of Pay Bridge availability. A disconnected gateway request may be safely retained as CREATED for explicit retry; it is not represented as a payment or folio credit.
