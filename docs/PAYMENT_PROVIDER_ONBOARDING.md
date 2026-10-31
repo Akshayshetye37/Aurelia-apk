@@ -94,3 +94,10 @@ Razorpay integration follows its official requirements: create each order on the
 4. Connect PMS to backend provider status and Pay Bridge only after both sides implement the negotiated capabilities.
 5. Add Cashfree, PayU, PhonePe V2, Paytm, CCAvenue one at a time using each provider's current contract; add JioPay only after receiving its merchant-specific docs.
 6. Keep auto-folio-settlement disabled. Present verified payment evidence to staff for explicit confirmation.
+
+
+## Implementation status — 2026-10-31
+
+The backend directory now contains a Razorpay-only reference scaffold with server-resolved tenant membership. Firebase UID is mapped to a platform-provisioned `paymentMemberships/{uid}` record; the APK cannot select or assert its own tenant ID. Provider status, secrets, order idempotency and webhook inbox records are tenant-scoped. The active membership model currently supports one hotel tenant per Firebase UID and owner/admin provider administration only.
+
+This does **not** complete provider onboarding or enable payments. The service is not deployed; Firebase/Firestore/Secret Manager/Cloud Run resources and IAM are not provisioned; no real merchant sandbox has been exercised; the order endpoint is a sandbox test utility, not checkout; reconciliation, refunds, PMS folio posting and Pay Bridge checkout are not integrated. Cashfree, PayU, PhonePe, Paytm, CCAvenue and JioPay adapters remain unimplemented and must stay disabled. Production use is prohibited until the gates in `payment-backend/README.md` are completed and independently reviewed.
