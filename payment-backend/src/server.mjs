@@ -192,7 +192,7 @@ app.post('/v1/admin/providers/razorpay/test-orders', requireOwner, express.json(
     await db.runTransaction(async tx => {
       tx.set(idemRef, { state: 'created', response, providerOrderId: order.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       tx.create(db.doc('paymentOrders/' + order.id), {
-        ownerUid: req.actor.uid, provider: 'razorpay', environment: 'test',
+        tenantId: req.tenant.id, provider: 'razorpay', environment: 'test',
         amount, currency: 'INR', state: 'created', createdAt: FieldValue.serverTimestamp()
       });
     });
