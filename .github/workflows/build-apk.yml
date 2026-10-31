@@ -63,7 +63,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
 
       - name: Install Node dependencies
         run: npm install --no-audit --no-fund
