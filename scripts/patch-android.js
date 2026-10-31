@@ -214,10 +214,10 @@ if (rootGradleGroovy && fs.existsSync(rootGradleGroovy)) {
 
   let appGradle = fs.readFileSync(appGradleGroovy, 'utf8');
   if (!appGradle.includes('kotlin-android') && !appGradle.includes('org.jetbrains.kotlin.android')) {
-    if (/plugins\\s*\\{/.test(appGradle)) {
-      appGradle = appGradle.replace(/plugins\\s*\\{/, match => match + "\\n    id 'org.jetbrains.kotlin.android'");
+    if (/plugins\s*\{/.test(appGradle)) {
+      appGradle = appGradle.replace(/plugins\s*\{/, match => match + "\\n    id 'org.jetbrains.kotlin.android'");
     } else {
-      appGradle = appGradle.replace(/apply plugin: ['"]com\\.android\\.application['"]/, match => match + "\\napply plugin: 'kotlin-android'");
+      appGradle = appGradle.replace(/apply plugin: ['"]com\.android\.application['"]/, match => match + "\\napply plugin: 'kotlin-android'");
     }
     if (!appGradle.includes('kotlin-android') && !appGradle.includes('org.jetbrains.kotlin.android')) throw new Error('Unable to apply Kotlin Android plugin to app module.');
   }
