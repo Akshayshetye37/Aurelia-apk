@@ -6,6 +6,9 @@ on:
     paths:
       - 'index.html'
       - 'README.md'
+      - 'docs/**'
+      - 'README.md'
+      - 'docs/**'
       - 'package.json'
       - 'capacitor.config.json'
       - 'assets/**'
