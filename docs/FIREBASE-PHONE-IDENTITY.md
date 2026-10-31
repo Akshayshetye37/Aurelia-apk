@@ -2,7 +2,7 @@
 
 ## Status and placement
 
-The repository generates the native Android project during Capacitor setup. `scripts/patch-android.js` now copies both Kotlin sources into the generated app module, adds Firebase Auth through the Firebase BoM, and applies the Google Services plugin only when `android/app/google-services.json` is supplied. This is source-level build integration; it is not proof of a successful Android build or a working Firebase project.
+The repository generates the native Android project during Capacitor setup. `scripts/patch-android.js` now copies both Kotlin sources into the generated app module, adds Firebase Auth through the Firebase BoM to the generated app module, leaves the generated root plugin DSL untouched, and applies the Google Services plugin only when `android/app/google-services.json` is supplied. This is source-level build integration; it is not proof of a successful Android build or a working Firebase project.
 
 ## Security boundary
 
