@@ -34,6 +34,13 @@ Status: research and integration contract. This document does not mean the provi
 - CCAvenue's merchant integration kit is account/product-specific. The official CCAvenue FAQ and onboarding material must be used to confirm the exact fields supplied to the merchant.
 - Public JioPay material did not expose a verifiable universal PG API credential schema during this review. Do not invent fields or claim JioPay support is ready.
 
+
+## PMS credential form request contract
+
+The provider form sends `PUT /api/admin/payment-providers/{providerId}/credentials` to the owner-supplied HTTPS backend. JSON body: `{ provider, environment, credentials }`, where environment is `test` or `live` and credentials contains only that provider's fields. The backend must authenticate an owner/admin (MFA-backed session or short-lived scoped token), enforce a provider-specific schema, reject unknown fields, encrypt secrets at rest, redact request bodies from logs/traces, and return only a non-secret status projection. Do not treat HTTP success as activation. Activation requires independent provider validation, a verified webhook and an explicit owner action. The PMS clears password-type inputs after a successful response and never writes credential values to local settings, IndexedDB, backups or audit logs.
+
+This is a client-side request contract only. No matching backend endpoint or credential vault is deployed in this repository; until one exists, submission must fail closed and providers remain inactive.
+
 ## Required owner setup journey
 
 1. Owner signs in to the Aurelia owner-controlled backend console over HTTPS with MFA.
@@ -50,6 +57,7 @@ Status: research and integration contract. This document does not mean the provi
 ## Current implementation gap (do not misrepresent)
 
 The repository currently contains:
+- Provider-specific credential input forms in the PMS UI. Secret fields are sent only to a configured HTTPS endpoint and are not persisted in PMS storage.
 - A PMS-side Messenger client and protocol-v1 handshake contract.
 - A provider catalogue and official documentation links.
 - A local PMS preference validation helper.
