@@ -148,14 +148,14 @@ app.post('/v1/admin/providers/razorpay/validate', requireOwner, express.json({ l
   const environment = envOf(req);
   if (!environment) return fail(res, 400, 'invalid_environment');
   try {
-    const cfg = JSON.parse(await loadSecret(secretId(req.actor.uid, environment, 'api')));
-    await razorpay(req.owner.uid, environment, 'GET', '/orders?count=1');
-    await ownerDoc(req.owner.uid, environment).set({
+    const cfg = JSON.parse(await loadSecret(secretId(req.tenant.id, environment, 'api')));
+    await razorpay(req.tenant.id, environment, 'GET', '/orders?count=1');
+    await tenantDoc(req.tenant.id, environment).set({
       credentialsValidated: true, validatedAt: FieldValue.serverTimestamp(), active: false
     }, { merge: true });
     res.json({ valid: true, provider: 'razorpay', environment, keyId: cfg.keyId });
   } catch (e) {
-    await ownerDoc(req.owner.uid, environment).set({ credentialsValidated: false, active: false }, { merge: true });
+    await tenantDoc(req.tenant.id, environment).set({ credentialsValidated: false, active: false }, { merge: true });
     fail(res, e.providerStatus === 401 ? 422 : 503, e.providerStatus === 401 ? 'provider_credentials_rejected' : 'provider_validation_unavailable');
   }
 });
@@ -170,7 +170,7 @@ app.post('/v1/admin/providers/razorpay/test-orders', requireOwner, express.json(
   const idemId = crypto.createHash('sha256').update(req.owner.uid + ':' + idem).digest('hex');
   const idemRef = db.doc('paymentIdempotency/' + idemId);
   try {
-    const state = await ownerDoc(req.owner.uid, 'test').get();
+    const state = await tenantDoc(req.tenant.id, 'test').get();
     if (!state.exists || state.data().credentialsValidated !== true) return fail(res, 409, 'test_credentials_not_validated');
     const reservationResult = await db.runTransaction(async tx => {
       const prior = await tx.get(idemRef);
