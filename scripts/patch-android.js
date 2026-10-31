@@ -292,7 +292,7 @@ if (fs.existsSync(appGradleGroovy)) {
       '    }'
     ].join('\n');
     if (!/android\s*\{/.test(gradle)) throw new Error('Generated Gradle file has no android block; cannot configure release signing.');
-    gradle = gradle.replace(/android\s*\{/, match => match + '\\n' + envBlock);
+    gradle = gradle.replace(/android\s*\{/, match => match + '\n' + envBlock);
     const start = gradle.indexOf('android {');
     let depth = 0, end = -1;
     for (let i = gradle.indexOf('{', start); i < gradle.length; i++) {
@@ -300,7 +300,7 @@ if (fs.existsSync(appGradleGroovy)) {
       else if (gradle[i] === '}' && --depth === 0) { end = i; break; }
     }
     if (end < 0) throw new Error('Could not locate generated android block boundary.');
-    gradle = gradle.slice(0, end) + signingBlock + '\\n' + gradle.slice(end);
+    gradle = gradle.slice(0, end) + signingBlock + '\n' + gradle.slice(end);
     fs.writeFileSync(appGradleGroovy, gradle);
   }
 } else {
