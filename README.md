@@ -89,3 +89,144 @@ PMS and the future Pay Bridge remain independent data owners. The PMS backup for
 ## Payment Gateway boundary
 
 The PMS catalogue exposes the agreed Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue providers. Provider configuration is locked until an authenticated Pay Bridge advertises the provider.management capability. This PMS branch's native Pay Bridge client currently implements the signer-checked protocol handshake only; it does not execute payments or provide provider adapters. API secrets and webhook secrets stay on the owner's trusted backend, and automatic folio settlement remains disabled.
+
+
+---
+
+# Architecture, implementation status and remaining work
+
+This section is the project status ledger. It distinguishes code present in this repository from planned architecture and work that has not yet been implemented or verified. A design description is not evidence that a component is complete.
+
+## 1. Target system structure
+
+Aurelia is designed as two independent Android applications with separate data ownership.
+
+```text
+AURELIA PMS APK
+  Web UI (index.html)
+    |
+    +-- PMS business logic and local operational data
+    +-- Local encrypted backup / restore
+    +-- Android native bridge (Capacitor)
+    +-- Pay Bridge client (authenticated IPC only)
+    |
+    +-- Local-first storage
+    |     +-- App-private device storage
+    |     +-- IndexedDB / WebView data (current PMS live state)
+    |     +-- Optional user-selected Google Drive folder (SAF)
+    |     +-- Optional shared-folder SAF grant
+    |
+    +-- PIN and recovery security (target)
+          +-- PIN envelope and Master Key
+          +-- Independent 32-byte Recovery Secret
+          +-- Firebase Phone Auth identity proof
+          +-- Authenticated recovery envelope
+          +-- Crash-safe generation / manifest transaction
+
+AURELIA PAY BRIDGE APK (separate application)
+  +-- Own UI, identity and local data
+  +-- Own provider adapters and payment execution
+  +-- Own credential boundary
+  +-- Own backup / restore format
+  +-- Authenticated PMS IPC contract
+  +-- No shared live database with PMS
+```
+
+### Trust and data ownership rules
+
+- PMS and Pay Bridge remain separate APKs and separate data owners. PMS does not contain the Pay Bridge application.
+- PMS-to-Pay-Bridge communication must authenticate the installed package, signing certificate and IPC caller. A package name or client callback alone is not authentication.
+- Firebase Phone Auth proves control of a phone number. It does not prove ownership of the PMS Master Key.
+- Forgot PIN must require both current Firebase phone verification and the independent high-entropy Recovery Secret. The Recovery Secret must authenticate/decrypt the recovery envelope before the existing Master Key can be recovered.
+- The Firebase ID token is an identity credential, not an encryption key or recovery secret. Merely Base64-decoding JWT claims is not signature verification.
+- Google Drive and shared folders are backup / file-exchange destinations, not live databases or transaction authorities.
+- No custom application server is part of the current local-first deployment decision. Any future server-backed payment or backup feature must be explicitly designed, secured and documented as a separate service; client APKs must never contain provider secrets.
+
+## 2. Repository structure
+
+Key paths currently used by the project:
+
+| Path | Responsibility |
+|---|---|
+| `index.html` | PMS web interface and inline application logic |
+| `src/payments/` | UPI parsing, matching, local evidence and settlement safety gate |
+| `android/templates/` | Native Android source templates copied into the generated Capacitor project |
+| `scripts/prepare-web.js` | Web asset preparation |
+| `scripts/patch-android.js` | Applies native Android bridge, permission and dependency patches after Capacitor generates Android |
+| `tests/` | Node regression and integration-contract tests |
+| `docs/` | Security, Android integration, payment matching and backup contracts |
+| `.github/workflows/build-apk.yml` | CI validation and debug APK build |
+
+The generated `android/` Gradle project is a build output in this repository's current workflow; native source templates are maintained under `android/templates/`. Do not assume a generated Android Studio project is committed unless the repository tree confirms it.
+
+## 3. Implemented in the current repository branch
+
+The following are present in the current project code or documented integration foundation. Their presence does not imply production certification.
+
+- Capacitor-based PMS shell and Android build workflow.
+- Local UPI SMS parsing/matching foundation, local evidence journal and explicit auto-settlement safety gate.
+- PMS-side Pay Bridge client contract and signer-checked native IPC handshake foundation.
+- Local-first backup design covering app-private storage, optional Google Drive SAF destination and separately granted shared-folder access.
+- Encrypted backup format for backup snapshots; existing migration and restore behavior must be validated against the current implementation before operational use.
+- Firebase Phone Auth native source templates for the recovery identity boundary, including OTP lifecycle handling and a dedicated recovery FirebaseAuth instance.
+- Build-time Android patch logic to copy the Firebase identity templates and conditionally configure Firebase dependencies when a deployment-provided `google-services.json` is supplied.
+- Node guard tests for the Firebase integration contract.
+
+### Firebase deployment status
+
+The repository does not include a verified production Firebase Console configuration. Without the real configuration supplied securely to the Android build workspace, the recovery Firebase factory intentionally fails closed at runtime. Structural checks on a JSON file cannot prove that its API key, project, package registration, SHA fingerprints, Play Integrity or reCAPTCHA configuration are valid. No live SMS/device authentication test is claimed.
+
+## 4. Not yet complete — required before Forgot PIN can be enabled
+
+These are implementation and verification tasks, not completed features:
+
+1. Implement the real `RecoveryCoordinator` against the actual Kotlin interfaces in this repository. Do not use fabricated receipts, placeholder JWTs or mock claims as authentication proof.
+2. Complete the cryptographic recovery-envelope format and strict parser: authenticated metadata, key ID, generation, nonce, ciphertext/tag lengths, versioning and bounded input sizes.
+3. Confirm the independent 32-byte Recovery Secret is used to derive the recovery wrapping key and authenticate/decrypt the envelope. Firebase UID or phone number must not substitute for this secret.
+4. Complete PIN envelope rotation using immutable generations and an atomic active-manifest commit. Define deterministic startup recovery for PREPARED, COMMITTED and incomplete/corrupt transaction states.
+5. Verify transaction return values and failure outcomes. The coordinator must not write around or bypass the transaction engine.
+6. After commit, unlock the new PIN envelope and prove it contains the same Master Key identity as the recovered key. Clear temporary fingerprints, derived keys, salts and mutable secret buffers in `finally` blocks.
+7. Add automated tests for wrong phone, stale Firebase callbacks, invalid secret, tampered recovery metadata, key ID/generation mismatch, invalid PIN, each transaction write failure, process interruption and restart recovery.
+8. Run native Gradle compilation and Android device tests with a real Firebase project configuration. Robolectric tests alone do not prove process-death durability or real Firebase behavior.
+9. Integrate the Forgot PIN UI with the verified OTP and recovery coordinator state machine. Keep recovery unavailable until the coordinator and transaction tests pass.
+
+**Status: Forgot PIN is not production-ready and must remain disabled until these gates pass.**
+
+## 5. Other outstanding work
+
+### PMS operations and accounting
+- Native notification/SMS ingestion, staff review UI, durable cross-device accounting storage and atomic folio posting are not complete.
+- Automatic UPI-to-folio settlement remains disabled.
+- IndexedDB is installation-local and is not a multi-device accounting ledger.
+
+### Pay Bridge and payment processing
+- The current PMS native client foundation does not execute payments.
+- The separate Pay Bridge APK, provider adapters, secure provider credential handling, payment-session execution, webhook verification, refunds, reconciliation and end-to-end gateway testing remain outstanding.
+- A production payment system requires a trusted server-side payment integration for provider secrets and webhook verification. This is separate from the local-first PMS storage architecture.
+- Do not enable live payments or automatic folio settlement based on the client handshake alone.
+
+### Backup and synchronization
+- Validate encrypted backup restore, corruption handling, version migration and multi-destination failure behavior.
+- WorkManager-based unattended snapshots are not complete. The live PMS state currently resides in WebView/IndexedDB; a worker cannot reliably snapshot that state after the WebView process has stopped. Reliable background snapshots require a native background-accessible source of truth or an explicit foreground snapshot handoff.
+- Define conflict handling and restore authority before adding synchronization. Drive copies must not become an implicit shared live database.
+- Pay Bridge requires its own backup schema and restore path.
+
+## 6. Milestone sequence
+
+| Milestone | Scope | Exit condition |
+|---|---|---|
+| Phase 1 — Recovery hardening | Firebase identity boundary, recovery envelope, RecoveryCoordinator, Master Key handling and crash-safe PIN transaction | Native build plus negative, positive and interrupted-transaction tests pass |
+| Phase 2 — Forgot PIN UI | OTP, resend, timeout, Recovery Secret and new PIN screens | UI state transitions are bound to tested engine APIs; no bypass paths |
+| Phase 3 — Backup reliability | Restore validation, versioning, integrity checks and destination failure handling | Restore tests pass across local and user-selected Drive destinations |
+| Phase 4 — Background backup | Native-accessible snapshot source and WorkManager scheduling | Verified unattended snapshot and recovery behavior under Android lifecycle constraints |
+| Phase 5 — Pay Bridge | Separate APK, authenticated IPC, provider execution and independent backup | Device-level IPC and payment-provider certification / end-to-end tests |
+| Phase 6 — PMS accounting integration | Evidence ingestion, staff review, durable ledger and atomic folio posting | Reconciliation and ledger invariants pass end-to-end tests |
+
+## 7. Build and release truth
+
+- A passing Node test suite is not proof that native Kotlin compiles.
+- A successful debug APK build is not proof of Firebase authentication, payment processing, backup restoration or production security.
+- A release APK requires the owner's controlled signing identity and a separately verified release process.
+- Never commit signing passwords, private keystores, service-account credentials or provider secrets.
+- Keep production credentials out of source control. Supply Firebase client configuration through a controlled build input and verify the exact package / SHA fingerprint registrations in Firebase Console.
+- Record test evidence and exact commit SHA for each milestone. Do not mark a component "verified" until its relevant tests have actually run and passed.
