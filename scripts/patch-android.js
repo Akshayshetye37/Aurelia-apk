@@ -262,6 +262,51 @@ if (hasGoogleServicesConfig) {
   console.log('Firebase config not supplied: Firebase SDK is compile-integrated, but Phone Auth is not configured and must remain unavailable at runtime.');
 }
 
+// Release signing must use the same controlled keystore as Aurelia Pay Bridge.
+// Debug builds remain development-only and cannot authenticate to a release-signed bridge.
+if (fs.existsSync(appGradleGroovy)) {
+  let gradle = fs.readFileSync(appGradleGroovy, 'utf8');
+  if (!gradle.includes('AURELIA_RELEASE_KEYSTORE_PATH')) {
+    const envBlock = [
+      'def releaseStorePath = System.getenv("AURELIA_RELEASE_KEYSTORE_PATH")',
+      'def releaseStorePassword = System.getenv("AURELIA_RELEASE_KEYSTORE_PASSWORD")',
+      'def releaseKeyAlias = System.getenv("AURELIA_RELEASE_KEY_ALIAS")',
+      'def releaseKeyPassword = System.getenv("AURELIA_RELEASE_KEY_PASSWORD")',
+      'def releaseSigningReady = [releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword].every { it != null && !it.trim().isEmpty() }'
+    ].join('\n');
+    const signingBlock = [
+      '    signingConfigs {',
+      '        if (releaseSigningReady) {',
+      '            aureliaRelease {',
+      '                storeFile file(releaseStorePath)',
+      '                storePassword releaseStorePassword',
+      '                keyAlias releaseKeyAlias',
+      '                keyPassword releaseKeyPassword',
+      '            }',
+      '        }',
+      '    }',
+      '    buildTypes {',
+      '        release {',
+      '            if (releaseSigningReady) { signingConfig signingConfigs.aureliaRelease }',
+      '        }',
+      '    }'
+    ].join('\n');
+    if (!/android\\s*\\{/.test(gradle)) throw new Error('Generated Gradle file has no android block; cannot configure release signing.');
+    gradle = gradle.replace(/android\\s*\\{/, match => match + '\\n' + envBlock);
+    const start = gradle.indexOf('android {');
+    let depth = 0, end = -1;
+    for (let i = gradle.indexOf('{', start); i < gradle.length; i++) {
+      if (gradle[i] === '{') depth++;
+      else if (gradle[i] === '}' && --depth === 0) { end = i; break; }
+    }
+    if (end < 0) throw new Error('Could not locate generated android block boundary.');
+    gradle = gradle.slice(0, end) + signingBlock + '\\n' + gradle.slice(end);
+    fs.writeFileSync(appGradleGroovy, gradle);
+  }
+} else {
+  throw new Error('Expected generated Groovy app/build.gradle; release signing configuration was not applied.');
+}
+
 const payBridgeTemplate = path.join(androidDir, 'templates', 'PayBridgeClient.java');
 if (!fs.existsSync(payBridgeTemplate)) throw new Error('PayBridgeClient.java template is missing.');
 fs.copyFileSync(payBridgeTemplate, path.join(javaDir, 'PayBridgeClient.java'));
