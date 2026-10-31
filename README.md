@@ -1,6 +1,6 @@
 # Aurelia PMS
 
-Aurelia PMS is a browser-based property-management interface supplied as a single HTML file and packaged as an Android debug app through Capacitor in GitHub Actions.
+Aurelia PMS is a browser-based property-management interface supplied as a single HTML file and packaged as an Android application through Capacitor in GitHub Actions; the release workflow builds and signs a release APK on push/manual dispatch.
 
 ## Project location and working source
 
@@ -41,7 +41,7 @@ The workflow includes a verification job and release-signing gates. A green Node
 - `src/payments/` — direct-UPI parsing, matching, local evidence storage, and the explicit settlement safety gate.
 - `tests/` — Node.js regression tests for parsers, matching, evidence storage, and settlement gating.
 - `scripts/` — web preparation and build-time Android bridge patches.
-- `.github/workflows/build-apk.yml` — runs tests and builds a debug APK artifact.
+- `.github/workflows/build-apk.yml` — runs regression tests, generates the Capacitor Android project, audits the merged manifest, validates the protected release keystore, signs the release APK, verifies its signature, and publishes it as a GitHub draft prerelease.
 
 ## Build and verify
 
@@ -58,7 +58,7 @@ cd android
 ./gradlew --no-daemon assembleDebug
 ```
 
-The GitHub Actions workflow runs the tests before preparing the app and building the debug APK. Because the repository's Actions artifact storage quota is exhausted, successful push/manual builds publish the APK as a prerelease asset in the private repository. This is a debug APK, not a release-signed production build.
+The GitHub Actions workflow runs the regression tests before preparing the app and building the signed release APK. Successful push/manual builds publish the APK, SHA-256 checksum, and signing-certificate report as assets in a draft prerelease in this private repository. A draft release is not automatically approved for distribution; verify the certificate fingerprint against Aurelia Pay Bridge before installing both applications together.
 
 ## Direct UPI reconciliation status
 
