@@ -45,99 +45,10 @@ jobs:
           page=1
           deleted=0
           while :; do
-            response="$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GH_REPOSITORY/actions/artifacts?per_page=100&page=$page")"
-            count="$(jq '.artifacts | length' <<< "$response")"
-            if [ "$count" -eq 0 ]; then break; fi
-            while IFS=
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Install Node dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Run payment and evidence regression tests
-        run: npm test
-
-      - name: Prepare web app
-        run: npm run build
-
-      - name: Generate Android project
-        run: |
-          # The repository stores native source templates under android/templates.
-          # Move them out temporarily because Capacitor requires the android/ path to be absent.
-          if [ -d android/templates ]; then
-            mv android/templates "$RUNNER_TEMP/aurelia-android-templates"
-          fi
-          rmdir android 2>/dev/null || true
-          npx cap add android
-          if [ -d "$RUNNER_TEMP/aurelia-android-templates" ]; then
-            mkdir -p android/templates
-            mv "$RUNNER_TEMP/aurelia-android-templates"/* android/templates/
-          fi
-
-      - name: Install native backup and file bridge
-        run: node scripts/patch-android.js
-
-      - name: Sync Capacitor
-        run: npx cap sync android
-
-      - name: Build debug APK
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug
-
-      - name: Verify merged Android manifest has no high-risk permissions
-        working-directory: android
-        shell: bash
-        run: |
-          manifest="$(find app/build/intermediates/merged_manifest -type f -name AndroidManifest.xml | head -n 1)"
-          if [ -z "$manifest" ]; then
-            echo "Merged Android manifest was not found; refusing to publish an unverified APK."
-            exit 1
-          fi
-          blocked_permissions='PACKAGE_USAGE_STATS|WRITE_SECURE_SETTINGS|READ_BASIC_PHONE_STATE|READ_CELL_BROADCASTS|BIND_VPN_SERVICE|BIND_NOTIFICATION_LISTENER_SERVICE|BIND_ACCESSIBILITY_SERVICE|ACCESS_MEDIA_LOCATION|READ_CALENDAR|WRITE_CALENDAR|READ_VOICEMAIL|WRITE_VOICEMAIL|ACCEPT_HANDOVER|UWB_RANGING|READ_HEALTH_DATA_IN_BACKGROUND|READ_HEALTH_DATA|WRITE_HEALTH_DATA|FOREGROUND_SERVICE|FOREGROUND_SERVICE_DATA_SYNC|FOREGROUND_SERVICE_CONNECTED_DEVICE|FOREGROUND_SERVICE_HEALTH|FOREGROUND_SERVICE_REMOTE_MESSAGING|FOREGROUND_SERVICE_SYSTEM_EXEMPTED|FOREGROUND_SERVICE_PHONE_CALL|USE_FULL_SCREEN_INTENT|REQUEST_COMPANION_RUN_IN_BACKGROUND|REQUEST_COMPANION_USE_DATA_IN_BACKGROUND|REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND|READ_SMS|RECEIVE_SMS|SEND_SMS|CAMERA|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|READ_MEDIA_IMAGES|READ_MEDIA_VIDEO|READ_MEDIA_AUDIO|READ_MEDIA_VISUAL_USER_SELECTED|MANAGE_EXTERNAL_STORAGE|READ_CALL_LOG|WRITE_CALL_LOG|READ_PHONE_STATE|CALL_PHONE|READ_CONTACTS|WRITE_CONTACTS|GET_ACCOUNTS|ACCESS_FINE_LOCATION|ACCESS_COARSE_LOCATION|ACCESS_BACKGROUND_LOCATION|RECORD_AUDIO|BODY_SENSORS|ACTIVITY_RECOGNITION|POST_NOTIFICATIONS|BLUETOOTH_SCAN|BLUETOOTH_CONNECT|BLUETOOTH_ADVERTISE|NEARBY_WIFI_DEVICES|QUERY_ALL_PACKAGES|SYSTEM_ALERT_WINDOW|WRITE_SETTINGS|ACCESS_NOTIFICATION_POLICY|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|REQUEST_IGNORE_BATTERY_OPTIMIZATIONS|USE_BIOMETRIC|USE_FINGERPRINT|FOREGROUND_SERVICE_CAMERA|FOREGROUND_SERVICE_MICROPHONE|FOREGROUND_SERVICE_LOCATION|FOREGROUND_SERVICE_MEDIA_PROJECTION|FOREGROUND_SERVICE_SPECIAL_USE|REQUEST_INSTALL_PACKAGES'
-          if grep -E "android.permission.($blocked_permissions)|com.google.android.gms.permission.AD_ID|BIND_NOTIFICATION_LISTENER_SERVICE|BIND_ACCESSIBILITY_SERVICE" "$manifest"; then
-            echo "A high-risk or unnecessary permission/service declaration remains in the merged manifest."
-            exit 1
-          fi
-          echo "Merged manifest contains none of the blocked sensitive permissions or notification-listener/accessibility service declarations."
-
-      - name: Upload debug APK artifact
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: aurelia-pms-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Publish debug APK as a private-repository prerelease asset
-        if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="aurelia-debug-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" android/app/build/outputs/apk/debug/app-debug.apk \
-            --target "$GITHUB_SHA" \
-            --prerelease \
-            --title "Aurelia PMS debug APK (run ${GITHUB_RUN_NUMBER})" \
-            --notes "Debug APK built from commit ${GITHUB_SHA}. This is not a production-signed release. Automatic folio settlement remains disabled."
-\\t' read -r artifact_id created_at artifact_name; do
+            response=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GH_REPOSITORY/actions/artifacts?per_page=100&page=$page")
+            count=$(jq '.artifacts | length' <<< "$response")
+            [ "$count" -gt 0 ] || break
+            while read -r artifact_id created_at artifact_name; do
               [ -n "$artifact_id" ] || continue
               if [[ "$created_at" < "$cutoff" ]]; then
                 echo "Deleting artifact $artifact_id ($artifact_name), created $created_at"
