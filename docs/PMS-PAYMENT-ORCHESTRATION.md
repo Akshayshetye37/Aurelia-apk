@@ -42,7 +42,7 @@ Google Drive, owner cloud backup and SAF shared folders remain optional backup/f
 
 ### Phase 0 — Establish counterpart repositories and contracts
 
-Before writing executable cross-app/backend code, identify the actual Pay Bridge source repository and trusted backend repository/deployment target. Confirm package IDs, signing certificate fingerprint, provider scope, tenant/property model and authentication issuer. Do not invent a service implementation, certificate fingerprint, endpoint hostname, credential or deployment.
+The separate Pay Bridge source repository has now been identified as Akshayshetye37/aurelia-pay-bridge (main). Its current service also implements handshake only and advertises only handshake. The trusted backend repository/deployment target has not been identified in the connected repositories. Before writing executable cross-app/backend code, confirm the backend target, package IDs, signing certificate fingerprint, provider scope, tenant/property model and authentication issuer. Do not invent a service implementation, certificate fingerprint, endpoint hostname, credential or deployment.
 
 ### Phase 1 — Backend authority and transactional data model (P0)
 
