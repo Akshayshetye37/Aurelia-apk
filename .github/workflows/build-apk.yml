@@ -7,8 +7,6 @@ on:
       - 'index.html'
       - 'README.md'
       - 'docs/**'
-      - 'README.md'
-      - 'docs/**'
       - 'package.json'
       - 'capacitor.config.json'
       - 'assets/**'
@@ -19,6 +17,9 @@ on:
       - '.github/workflows/build-apk.yml'
   pull_request:
     paths:
+      - 'README.md'
+      - 'docs/**'
+      - 'android/templates/**'
       - 'index.html'
       - 'package.json'
       - 'capacitor.config.json'
