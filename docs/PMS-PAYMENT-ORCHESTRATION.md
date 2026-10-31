@@ -17,7 +17,7 @@ Google Drive, owner cloud backup and SAF shared folders remain optional backup/f
 ## 2. Implemented in this branch
 
 - src/payments/pay-bridge-orchestrator.mjs: request binding, state machine, backend-session contract, bridge orchestration, backend verification gate and reconciliation/refund client contracts.
-- src/payments/indexeddb-payment-intent-store.mjs: IndexedDB-backed, installation-local PMS intent journal. It validates immutable booking/folio/amount/provider bindings, rejects illegal state regression, protects verification/settlement flags from downgrade, and exposes pending records after restart.
+- src/payments/indexeddb-payment-intent-store.mjs: IndexedDB-backed, installation-local PMS intent-journal adapter. It validates immutable booking/folio/amount/provider bindings, rejects illegal state regression, protects verification/settlement flags from downgrade, and exposes pending records after restart. The adapter is unit-tested but is not yet wired into the PMS runtime or a live payment UI.
 - Orchestrator now preserves any ambiguous failure after request dispatch as UNKNOWN. It does not infer that a backend or Bridge request failed merely because the client lost its response.
 - Unit tests cover backend verification gating, mismatched bindings, idempotency, disconnected Bridge, ambiguous backend-session response, durable local persistence, invalid state changes and settlement authorization invariants.
 - Existing Android IPC still performs the signer-checked nonce handshake only. Reserved payment message IDs are not executable payment operations.
