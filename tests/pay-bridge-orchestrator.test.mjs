@@ -77,3 +77,12 @@ test("only declared state transitions are accepted", () => {
 test("backend adapter rejects non-HTTPS endpoints", () => {
   assert.throws(() => createPaymentBackendClient({baseUrl:"http://localhost",getAccessToken:async()=>"token"}));
 });
+
+test("a disconnected CREATED intent can be retried after Pay Bridge reconnects", async () => {
+  const f = fixture({ connected:false });
+  await assert.rejects(f.orchestrator.createPayment(input), e => e.code === "BRIDGE_DISCONNECTED");
+  f.bridge.isAuthenticated = () => true;
+  const retried = await f.orchestrator.createPayment(input);
+  assert.equal(retried.state, "PROCESSING");
+  assert.equal(retried.backendSessionId, "sess-1");
+});
