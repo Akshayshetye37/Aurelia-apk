@@ -204,25 +204,25 @@ const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-se
 function addFirebaseDependencies(contents, kotlinDsl) {
   const bom = 'com.google.firebase:firebase-bom:33.5.0';
   const auth = 'com.google.firebase:firebase-auth';
-  if (!/dependencies\\s*\\{/.test(contents)) {
+  if (!/dependencies\s*\{/.test(contents)) {
     throw new Error('App Gradle file has no dependencies block; refusing an incomplete Firebase integration.');
   }
   if (contents.includes(auth)) return contents;
   const dependencyLines = kotlinDsl
-    ? `\\n    implementation(platform("${bom}"))\\n    implementation("${auth}")`
-    : `\\n    implementation platform("${bom}")\\n    implementation "${auth}"`;
-  return contents.replace(/dependencies\\s*\\{/, match => match + dependencyLines);
+    ? `\n    implementation(platform("${bom}"))\\n    implementation("${auth}")`
+    : `\n    implementation platform("${bom}")\\n    implementation "${auth}"`;
+  return contents.replace(/dependencies\s*\{/, match => match + dependencyLines);
 }
 
 function applyGoogleServices(contents, kotlinDsl) {
   if (!hasGoogleServicesConfig || contents.includes('com.google.gms.google-services')) return contents;
-  if (!/plugins\\s*\\{/.test(contents)) {
+  if (!/plugins\s*\{/.test(contents)) {
     throw new Error('App Gradle file has no plugins block for Google Services; refusing to append an unmanaged plugin.');
   }
   const statement = kotlinDsl
-    ? '\\n    id("com.google.gms.google-services")'
-    : "\\n    id 'com.google.gms.google-services'";
-  return contents.replace(/plugins\\s*\\{/, match => match + statement);
+    ? '\n    id("com.google.gms.google-services")'
+    : "\n    id 'com.google.gms.google-services'";
+  return contents.replace(/plugins\s*\{/, match => match + statement);
 }
 
 if (fs.existsSync(appGradleGroovy)) {
