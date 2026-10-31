@@ -18,7 +18,7 @@ test('provider secrets are written to Secret Manager and never returned in statu
   assert.match(source, /keySecret/);
   assert.match(source, /webhookSecret/);
   assert.match(source, /keyId: d\.keyId \|\| null/);
-  assert.doesNotMatch(source, /res\\.json\\(\\{[^}]*\\bkeySecret\\b/);
+  assert.equal(source.includes('res.json({ keySecret'), false);
 });
 
 test('Razorpay webhook uses raw bytes, constant-time HMAC comparison and provider fetch', () => {
