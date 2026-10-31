@@ -17,9 +17,9 @@ The repository generates the native Android project during Capacitor setup. `scr
 
 Firebase sign-in is asynchronous and cannot be cancelled once submitted. This engine serializes authentication attempts, invalidates stale callback generations, and signs out the dedicated recovery Auth instance when the task completes. The dedicated FirebaseApp must be configured with the same Firebase project and a distinct app name; it must not be used by other application features.
 
-## Required Gradle work before compilation
+## Deployment configuration
 
-The generated Android app module must apply the Google Services plugin and include Firebase Auth using the Firebase BoM. The actual Console-generated `google-services.json` must be installed in `android/app/` at build time and must match `com.aurelia.pms`. Never commit production configuration values or service-account credentials into source control. The present repository has no native Gradle module or genuine config file, so those integration steps are not yet performed.
+Provide the actual Firebase Console-generated `google-services.json` to the Android build workspace at `android/app/google-services.json`. It must contain a client for the exact package `com.aurelia.pms`. The patch script performs structural checks only; it cannot prove that the project ID/API key is live or that Phone provider is enabled. Keep the file out of Git and use a protected CI secret/file injection step for production builds. Do not provide service-account credentials to the APK.
 
 ## Repository integration performed
 
