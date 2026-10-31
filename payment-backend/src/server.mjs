@@ -167,7 +167,7 @@ app.post('/v1/admin/providers/razorpay/test-orders', requireOwner, express.json(
   if (environment !== 'test' || !Number.isSafeInteger(amount) || amount < 100 || amount > 10000000 || !idem) {
     return fail(res, 400, 'invalid_test_order_request');
   }
-  const idemId = crypto.createHash('sha256').update(req.owner.uid + ':' + idem).digest('hex');
+  const idemId = crypto.createHash('sha256').update(req.tenant.id + ':razorpay:test:' + idem).digest('hex');
   const idemRef = db.doc('paymentIdempotency/' + idemId);
   try {
     const state = await tenantDoc(req.tenant.id, 'test').get();
@@ -175,16 +175,16 @@ app.post('/v1/admin/providers/razorpay/test-orders', requireOwner, express.json(
     const reservationResult = await db.runTransaction(async tx => {
       const prior = await tx.get(idemRef);
       if (prior.exists) return { record: prior.data(), newlyReserved: false };
-      const record = { ownerUid: req.owner.uid, amount, currency: 'INR', state: 'dispatching',
+      const record = { tenantId: req.tenant.id, amount, currency: 'INR', state: 'dispatching',
         createdAt: FieldValue.serverTimestamp() };
       tx.create(idemRef, record);
       return { record, newlyReserved: true };
     });
     const reservation = reservationResult.record;
-    if (reservation.ownerUid !== req.owner.uid || reservation.amount !== amount) return fail(res, 409, 'idempotency_key_payload_conflict');
+    if (reservation.tenantId !== req.tenant.id || reservation.amount !== amount) return fail(res, 409, 'idempotency_key_payload_conflict');
     if (reservation.response) return res.status(200).json(reservation.response);
     if (!reservationResult.newlyReserved) return fail(res, 409, 'order_creation_unknown_reconcile_before_retry');
-    const order = await razorpay(req.owner.uid, 'test', 'POST', '/orders', {
+    const order = await razorpay(req.tenant.id, 'test', 'POST', '/orders', {
       amount, currency: 'INR', receipt: 'aur_' + idemId.slice(0, 24)
     });
     const response = { provider: 'razorpay', environment: 'test', orderId: order.id, amount: order.amount,
@@ -192,7 +192,7 @@ app.post('/v1/admin/providers/razorpay/test-orders', requireOwner, express.json(
     await db.runTransaction(async tx => {
       tx.set(idemRef, { state: 'created', response, providerOrderId: order.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       tx.create(db.doc('paymentOrders/' + order.id), {
-        ownerUid: req.owner.uid, provider: 'razorpay', environment: 'test',
+        ownerUid: req.actor.uid, provider: 'razorpay', environment: 'test',
         amount, currency: 'INR', state: 'created', createdAt: FieldValue.serverTimestamp()
       });
     });
@@ -256,7 +256,7 @@ app.post('/v1/webhooks/razorpay/:tenantId/:environment', express.raw({ type: 'ap
 app.post('/v1/admin/providers/razorpay/activate', requireOwner, express.json({ limit: '2kb' }), async (req, res) => {
   const environment = envOf(req);
   if (!environment || req.body?.confirm !== true) return fail(res, 400, 'explicit_activation_confirmation_required');
-  const ref = ownerDoc(req.owner.uid, environment);
+  const ref = tenantDoc(req.tenant.id, environment);
   const snap = await ref.get();
   const state = snap.exists ? snap.data() : {};
   if (state.credentialsValidated !== true ||
@@ -264,13 +264,13 @@ app.post('/v1/admin/providers/razorpay/activate', requireOwner, express.json({ l
     return fail(res, 409, 'provider_onboarding_checks_incomplete');
   }
   if (environment === 'live') {
-    const test = await ownerDoc(req.owner.uid, 'test').get();
+    const test = await tenantDoc(req.tenant.id, 'test').get();
     if (!test.exists || test.data().sandboxTestPassed !== true || test.data().webhookVerified !== true) {
       return fail(res, 409, 'sandbox_acceptance_required');
     }
     if (state.webhookVerified !== true) return fail(res, 409, 'live_webhook_verification_required');
   }
-  await ref.set({ active: true, activatedAt: FieldValue.serverTimestamp(), activatedBy: req.owner.uid }, { merge: true });
+  await ref.set({ active: true, activatedAt: FieldValue.serverTimestamp(), activatedBy: req.actor.uid }, { merge: true });
   res.json({ active: true, provider: 'razorpay', environment });
 });
 
