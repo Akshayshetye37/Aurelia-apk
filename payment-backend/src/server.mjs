@@ -160,26 +160,43 @@ app.post('/v1/admin/providers/razorpay/test-orders', requireOwner, express.json(
   if (environment !== 'test' || !Number.isSafeInteger(amount) || amount < 100 || amount > 10000000 || !idem) {
     return fail(res, 400, 'invalid_test_order_request');
   }
-  const idemRef = db.doc('paymentIdempotency/' + req.owner.uid + '_' + idem);
+  const idemId = crypto.createHash('sha256').update(req.owner.uid + ':' + idem).digest('hex');
+  const idemRef = db.doc('paymentIdempotency/' + idemId);
   try {
-    const prior = await idemRef.get();
-    if (prior.exists) return res.status(200).json(prior.data().response);
     const state = await ownerDoc(req.owner.uid, 'test').get();
     if (!state.exists || state.data().credentialsValidated !== true) return fail(res, 409, 'test_credentials_not_validated');
+    const reservation = await db.runTransaction(async tx => {
+      const prior = await tx.get(idemRef);
+      if (prior.exists) return prior.data();
+      const record = { ownerUid: req.owner.uid, amount, currency: 'INR', state: 'dispatching',
+        createdAt: FieldValue.serverTimestamp() };
+      tx.create(idemRef, record);
+      return record;
+    });
+    if (reservation.ownerUid !== req.owner.uid || reservation.amount !== amount) return fail(res, 409, 'idempotency_key_payload_conflict');
+    if (reservation.response) return res.status(200).json(reservation.response);
+    if (reservation.state !== 'dispatching') return fail(res, 409, 'order_creation_unknown_reconcile_before_retry');
+    if (reservation.createdAt?.toDate && Date.now() - reservation.createdAt.toDate().getTime() > 120000) {
+      await idemRef.set({ state: 'unknown' }, { merge: true });
+      return fail(res, 409, 'order_creation_unknown_reconcile_before_retry');
+    }
     const order = await razorpay(req.owner.uid, 'test', 'POST', '/orders', {
-      amount, currency: 'INR', receipt: 'aur_' + crypto.randomBytes(10).toString('hex')
+      amount, currency: 'INR', receipt: 'aur_' + idemId.slice(0, 24)
     });
     const response = { provider: 'razorpay', environment: 'test', orderId: order.id, amount: order.amount,
       currency: order.currency, keyId: state.data().keyId, status: 'created' };
-    await idemRef.create({ ownerUid: req.owner.uid, response, createdAt: FieldValue.serverTimestamp() });
-    await db.doc('paymentOrders/' + order.id).create({
-      ownerUid: req.owner.uid, provider: 'razorpay', environment: 'test',
-      amount, currency: 'INR', state: 'created', createdAt: FieldValue.serverTimestamp()
+    await db.runTransaction(async tx => {
+      tx.set(idemRef, { state: 'created', response, providerOrderId: order.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      tx.create(db.doc('paymentOrders/' + order.id), {
+        ownerUid: req.owner.uid, provider: 'razorpay', environment: 'test',
+        amount, currency: 'INR', state: 'created', createdAt: FieldValue.serverTimestamp()
+      });
     });
     res.status(201).json(response);
   } catch (e) {
-    if (e.code === 6) return fail(res, 409, 'idempotency_conflict');
-    fail(res, e.providerStatus === 401 ? 422 : 503, 'test_order_creation_failed');
+    // Do not issue a second provider order after an ambiguous network failure.
+    await idemRef.set({ state: 'unknown', updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+    fail(res, e.providerStatus === 401 ? 422 : 503, 'order_creation_unknown_reconcile_before_retry');
   }
 });
 
@@ -209,7 +226,8 @@ app.post('/v1/webhooks/razorpay/:ownerUid/:environment', express.raw({ type: 'ap
     const payment = await razorpay(ownerUid, environment, 'GET', '/payments/' + encodeURIComponent(entity.id));
     const verified = payment.status === 'captured' && payment.order_id === entity.order_id &&
       payment.amount === orderSnap.data().amount && payment.currency === orderSnap.data().currency;
-    const inbox = db.doc('razorpayWebhookInbox/' + eventId);
+    const inboxId = crypto.createHash('sha256').update(ownerUid + ':' + environment + ':' + eventId).digest('hex');
+    const inbox = db.doc('razorpayWebhookInbox/' + inboxId);
     await db.runTransaction(async tx => {
       const seen = await tx.get(inbox);
       if (seen.exists) return;
@@ -221,9 +239,9 @@ app.post('/v1/webhooks/razorpay/:ownerUid/:environment', express.raw({ type: 'ap
       if (verified) tx.set(orderRef, {
         state: 'captured_verified', paymentId: entity.id, verifiedAt: FieldValue.serverTimestamp()
       }, { merge: true });
-      if (verified && environment === 'test') tx.set(ownerDoc(ownerUid, 'test'), {
+      if (verified) tx.set(ownerDoc(ownerUid, environment), environment === 'test' ? {
         sandboxTestPassed: true, webhookVerified: true, lastVerifiedTestAt: FieldValue.serverTimestamp(), active: false
-      }, { merge: true });
+      } : { webhookVerified: true, lastVerifiedLiveAt: FieldValue.serverTimestamp(), active: false }, { merge: true });
     });
     res.status(200).json({ received: true, verified });
   } catch {
@@ -246,6 +264,7 @@ app.post('/v1/admin/providers/razorpay/activate', requireOwner, express.json({ l
     if (!test.exists || test.data().sandboxTestPassed !== true || test.data().webhookVerified !== true) {
       return fail(res, 409, 'sandbox_acceptance_required');
     }
+    if (state.webhookVerified !== true) return fail(res, 409, 'live_webhook_verification_required');
   }
   await ref.set({ active: true, activatedAt: FieldValue.serverTimestamp(), activatedBy: req.owner.uid }, { merge: true });
   res.json({ active: true, provider: 'razorpay', environment });
