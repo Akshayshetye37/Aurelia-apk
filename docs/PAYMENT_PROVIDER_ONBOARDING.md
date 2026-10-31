@@ -58,21 +58,33 @@ No matching backend endpoint, encrypted credential vault, owner console or deplo
 9. PMS receives a non-secret provider status/configuration projection from the backend. Pay Bridge receives only short-lived checkout/session data, never merchant secrets.
 10. Refund, void, settlement and reconciliation functions remain disabled until their individual provider adapter operations are implemented and tested.
 
-## Current implementation gap (do not misrepresent)
+## Current implementation status (do not misrepresent)
 
-The repository currently contains:
-- Provider documentation and status-only onboarding placeholders in the PMS UI. Credential collection is deliberately disabled until the trusted owner console exists.
-- A PMS-side Messenger client and protocol-v1 handshake contract.
-- A provider catalogue and official documentation links.
-- A local PMS preference validation helper.
+The repository now contains an isolated Razorpay backend reference service under `payment-backend/`:
+- Firebase ID token verification with revocation checking, deployment-controlled owner UID allowlist, verified email, MFA second-factor claim and 10-minute recent-authentication gate.
+- Provider API and webhook secrets written to Google Secret Manager; non-secret onboarding metadata stored in Firestore.
+- Razorpay credential validation against the Orders API.
+- Server-side INR test order creation with a Firestore idempotency reservation. Reused or ambiguous requests fail closed rather than dispatching a second order.
+- Raw-body HMAC-SHA256 webhook verification, event-ID deduplication, order binding and independent provider payment fetch.
+- Separate explicit activation gate. Live activation requires sandbox acceptance and a verified live webhook event.
+- Backend security-contract tests included in the Android repository CI workflow.
 
-The repository does **not** yet contain:
-- The separate `com.aurelia.paybridge` Android application/service APK.
-- A production owner backend, merchant credential vault, provider APIs, webhook endpoints or deployment configuration.
-- Live provider adapters for the seven catalogue entries.
-- A provider-management IPC implementation advertising `provider.management`.
+This is a **reference implementation scaffold, not a deployed production payment backend**. The following remain unimplemented or unverified:
+- No owner-controlled Google Cloud project, Cloud Run service, Firestore database, Secret Manager IAM policy, Firebase Identity Platform MFA configuration or DNS/TLS endpoint has been provisioned.
+- No browser owner console or MFA enrollment/sign-in UI exists. The service intentionally rejects non-MFA owner tokens.
+- The initial deployment allowlist supports configured owner UIDs only; hotel/tenant membership and multi-tenant authorization require a reviewed model before multiple properties are onboarded.
+- The Razorpay sandbox flow has not been run against a real merchant test account; provider payload variations, webhook dashboard configuration and test acceptance remain unverified.
+- Razorpay checkout handoff, callback signature verification route, reconciliation worker, refunds and PMS/Pay Bridge integration are not implemented.
+- The PMS does not yet consume the backend's non-secret provider status projection.
+- Cashfree, PayU, PhonePe, Paytm, CCAvenue and JioPay adapters are not implemented.
 
-Therefore, the present Connect action cannot authenticate a missing Pay Bridge APK, and the provider form cannot truthfully activate a gateway. The CodeShack browser preview cannot exercise Android Messenger IPC at all. The PMS debug APK build passing is not proof of a working payment integration.
+Do not deploy with broad project Editor permissions. Use a dedicated Cloud Run service identity and least-privilege IAM. Google Secret Manager encrypts secrets at rest and in transit; use secret-level IAM, version pinning, audit logs and rotation as described in the official [Secret Manager best practices](https://docs.cloud.google.com/secret-manager/docs/best-practices). Cloud Run should use a dedicated service identity rather than a downloaded service-account key ([Cloud Run service identity](https://docs.cloud.google.com/run/docs/securing/service-identity)).
+
+The admin API expects Firebase Authentication with Identity Platform MFA. Firebase documents MFA enrollment and sign-in requirements in its [official MFA guide](https://firebase.google.com/docs/auth/web/multi-factor), and the backend follows the [Firebase ID token verification contract](https://firebase.google.com/docs/auth/admin/verify-id-tokens).
+
+Razorpay integration follows its official requirements: create each order on the server, verify checkout signatures server-side using the server-held secret, and independently fetch payment status; see [Razorpay integration steps](https://razorpay.com/docs/payments/payment-gateway/quick-integration/integration-steps/). Webhooks must be verified against the original raw request body, deduplicated by event ID, and supplemented with API fetch for critical status decisions; see [Razorpay webhook validation](https://github.com/razorpay/markdown-docs/blob/master/webhooks/validate-test.md) and [webhook guidance](https://github.com/razorpay/markdown-docs/blob/master/webhooks.md).
+
+**No live payment processing or production activation is authorized by these commits.** A successful build or passing unit tests do not prove a deployed backend, merchant account connection, webhook delivery, or real payment settlement.
 
 ## Implementation order
 
