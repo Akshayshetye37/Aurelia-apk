@@ -53,7 +53,7 @@ test('all provider state and secrets are scoped to server-resolved tenant IDs', 
   assert.match(source, /update\(req\.tenant\.id \+ ':razorpay:test:' \+ idem\)/);
   assert.match(source, /orderSnap\.data\(\)\.tenantId !== tenantId/);
   assert.match(source, /:tenantId\/:environment/);
-  assert.match(source, /paymentOrders\\/' \+ req\\.tenant\\.id \+ '_' \+ order\\.id/);
+  assert.match(source, /paymentOrders\/' \+ req\.tenant\.id \+ '_' \+ order\.id/);
   assert.equal(source.includes('ownerDoc('), false);
   assert.equal(source.includes('ownerUids'), false);
 });
