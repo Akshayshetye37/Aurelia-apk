@@ -125,9 +125,15 @@ export class PayBridgePaymentOrchestrator {
       if (state === "UNKNOWN") await this.reconcileOne(requestId);
       return clone(await this.store.get(requestId));
     } catch (error) {
-      if (error?.code === "BRIDGE_DISCONNECTED" || error?.name === "TimeoutError" || error?.code === "TIMEOUT") {
-        const latest = await this.store.get(requestId);
-        if (latest && ALLOWED[latest.state].has("UNKNOWN")) await this.store.put(transitionPayment(latest, "UNKNOWN", {}, this.now));
+      // Once REQUESTED has been persisted, a thrown error cannot prove that
+      // the backend or Bridge did not act. Preserve the request as UNKNOWN;
+      // reconciliation must resolve it before any retry can create checkout.
+      const latest = await this.store.get(requestId);
+      if (latest && ["REQUESTED", "PROCESSING"].includes(latest.state) &&
+          ALLOWED[latest.state].has("UNKNOWN")) {
+        await this.store.put(transitionPayment(latest, "UNKNOWN", {
+          lastErrorCode: String(error?.code || error?.name || "REQUEST_OUTCOME_UNKNOWN").slice(0, 64)
+        }, this.now));
       }
       throw error;
     }
