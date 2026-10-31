@@ -68,6 +68,7 @@ class FirebasePhoneIdentity(
             return
         }
 
+        // Never replace the phone identity while a prior challenge is still active.
         invalidateChallenge()
         trustedPhoneE164 = trustedPhoneFromRecoveryRecord
         val requestGeneration = ++generation
