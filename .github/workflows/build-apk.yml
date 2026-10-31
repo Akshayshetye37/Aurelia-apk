@@ -3,6 +3,8 @@ name: Build and verify Aurelia PMS APK
 on:
   workflow_dispatch:
   push:
+    branches:
+      - fix/firebase-phone-identity-engine
     paths:
       - 'index.html'
       - 'README.md'
