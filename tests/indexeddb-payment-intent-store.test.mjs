@@ -12,8 +12,10 @@ const intent = (overrides = {}) => ({
   ...overrides
 });
 
+let databaseSequence = 0;
 function store() {
-  return new IndexedDbPaymentIntentStore({ indexedDBImpl: indexedDB });
+  databaseSequence += 1;
+  return new IndexedDbPaymentIntentStore({ indexedDBImpl: indexedDB, databaseName: "aurelia-pms-payment-intents-test-" + databaseSequence });
 }
 
 test("payment intent survives store instances and is listed for reconciliation", async () => {
