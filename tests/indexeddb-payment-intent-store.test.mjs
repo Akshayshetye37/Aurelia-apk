@@ -13,15 +13,15 @@ const intent = (overrides = {}) => ({
 });
 
 let databaseSequence = 0;
-function store() {
+function store(databaseName = null) {
   databaseSequence += 1;
-  return new IndexedDbPaymentIntentStore({ indexedDBImpl: indexedDB, databaseName: "aurelia-pms-payment-intents-test-" + databaseSequence });
+  return new IndexedDbPaymentIntentStore({ indexedDBImpl: indexedDB, databaseName: databaseName || "aurelia-pms-payment-intents-test-" + databaseSequence });
 }
 
 test("payment intent survives store instances and is listed for reconciliation", async () => {
-  const first = store();
+  const first = store("aurelia-pms-payment-intents-restart-test");
   await first.put(intent());
-  const second = store();
+  const second = store("aurelia-pms-payment-intents-restart-test");
   assert.equal((await second.get("req-local-1")).state, "CREATED");
   assert.equal((await second.listPending()).length, 1);
 });
