@@ -25,7 +25,7 @@ sealed interface PhoneIdentityState {
     data object CodeSent : PhoneIdentityState
     data object AutoRetrievalTimedOut : PhoneIdentityState
     data object Verifying : PhoneIdentityState
-    data object IdentityVerified : PhoneIdentityState
+    data class IdentityVerified(val verifiedPhoneE164: String) : PhoneIdentityState
     data class Failed(val reason: FailureReason) : PhoneIdentityState
 }
 
@@ -35,7 +35,6 @@ enum class FailureReason {
     INVALID_STATE,
     PHONE_MISMATCH,
     PROVIDER_FAILURE,
-    SESSION_CLEANUP_FAILURE
 }
 
 class FirebasePhoneIdentity(
@@ -159,14 +158,14 @@ class FirebasePhoneIdentity(
                 id: String,
                 token: PhoneAuthProvider.ForceResendingToken
             ) {
-                if (requestGeneration != generation) return
+                if (requestGeneration != generation || authOperationInFlight) return
                 verificationId = id
                 resendToken = token
                 emit(PhoneIdentityState.CodeSent)
             }
 
             override fun onCodeAutoRetrievalTimeOut(id: String) {
-                if (requestGeneration != generation) return
+                if (requestGeneration != generation || authOperationInFlight) return
                 // Preserve verificationId: manual entry must still work after timeout.
                 if (verificationId == null) verificationId = id
                 emit(PhoneIdentityState.AutoRetrievalTimedOut)
@@ -188,7 +187,7 @@ class FirebasePhoneIdentity(
         requestGeneration: Long
     ) {
         recoveryAuth.signInWithCredential(credential).addOnCompleteListener { task ->
-            val actualPhone = recoveryAuth.currentUser?.phoneNumber
+            val actualPhone = task.result?.user?.phoneNumber
             val success = task.isSuccessful && actualPhone == expectedPhone
 
             // Always clear the recovery-only Firebase session. Do not leave a signed-in
@@ -203,7 +202,7 @@ class FirebasePhoneIdentity(
 
             clearChallenge()
             if (success) {
-                emit(PhoneIdentityState.IdentityVerified)
+                emit(PhoneIdentityState.IdentityVerified(expectedPhone))
             } else if (task.isSuccessful) {
                 emit(PhoneIdentityState.Failed(FailureReason.PHONE_MISMATCH))
             } else {
