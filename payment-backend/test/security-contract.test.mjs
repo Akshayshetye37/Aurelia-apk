@@ -49,7 +49,7 @@ test('activation requires sandbox acceptance and explicit confirmation', () => {
 test('all provider state and secrets are scoped to server-resolved tenant IDs', () => {
   assert.match(source, /paymentTenants\/' \+ tenantId/);
   assert.match(source, /paymentMemberships\/' \+ uid/);
-  assert.match(source, /const secretId = \\(tenantId, env, purpose\\) =>/);
+  assert.equal(source.includes('const secretId = (tenantId, env, purpose) =>'), true);
   assert.match(source, /update\(req\.tenant\.id \+ ':razorpay:test:' \+ idem\)/);
   assert.match(source, /orderSnap\.data\(\)\.tenantId !== tenantId/);
   assert.match(source, /:tenantId\/:environment/);
