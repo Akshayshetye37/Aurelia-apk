@@ -261,3 +261,10 @@ Not implemented / not production-ready:
 - A durable outbox, fully integrated payment UI, atomic folio posting and real-device/provider sandbox end-to-end tests.
 
 **Gateway checkout and automatic folio settlement remain unavailable/disabled until those dependencies are implemented and verified.** PMS hotel operations and manual payment recording must remain independent of Pay Bridge availability. A disconnected gateway request may be safely retained as CREATED for explicit retry; it is not represented as a payment or folio credit.
+
+
+## Payment implementation update — 2026-10-31
+
+The PMS now includes an installation-local IndexedDB payment-intent journal and a safer ambiguous-outcome rule: once a payment request has been dispatched, a lost response is recorded as UNKNOWN and must be reconciled before another checkout can be attempted. The journal preserves PMS booking/folio correlation across WebView restarts; it is not a transactional provider database, cross-device ledger or payment authority.
+
+The production implementation ledger is [docs/PMS-PAYMENT-ORCHESTRATION.md](docs/PMS-PAYMENT-ORCHESTRATION.md). The trusted backend and separate Pay Bridge source repositories have not been identified in this PMS repository. Therefore backend sessions, webhook verification, provider adapters, executable two-way payment IPC, atomic folio posting, refunds and end-to-end payment history are not claimed as implemented. The existing native IPC remains handshake-only. Live gateway payment and automatic folio settlement must remain disabled.
