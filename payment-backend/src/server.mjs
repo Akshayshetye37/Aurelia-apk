@@ -6,10 +6,9 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 const projectId = process.env.GOOGLE_CLOUD_PROJECT;
-const ownerUids = new Set((process.env.AURELIA_OWNER_UIDS || '').split(',').map(v => v.trim()).filter(Boolean));
 const origins = new Set((process.env.AURELIA_OWNER_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean));
-if (!projectId || ownerUids.size === 0 || origins.size === 0 || [...origins].some(v => !v.startsWith('https://'))) {
-  throw new Error('Set GOOGLE_CLOUD_PROJECT, AURELIA_OWNER_UIDS and exact HTTPS AURELIA_OWNER_ORIGINS before startup.');
+if (!projectId || origins.size === 0 || [...origins].some(v => !/^https:\/\/[^/]+$/.test(v))) {
+  throw new Error('Set GOOGLE_CLOUD_PROJECT and exact HTTPS AURELIA_OWNER_ORIGINS before startup.');
 }
 if (!getApps().length) initializeApp({ credential: applicationDefault(), projectId });
 const auth = getAuth();
@@ -34,10 +33,12 @@ app.use((req, res, next) => {
   next();
 });
 
-const secretId = (uid, env, purpose) =>
-  'aurl-' + crypto.createHash('sha256').update(uid + ':' + env + ':' + purpose).digest('hex').slice(0, 32);
+const tenantIdPattern = /^[A-Za-z0-9_-]{6,64}$/;
+const secretId = (tenantId, env, purpose) =>
+  'aurl-' + crypto.createHash('sha256').update(tenantId + ':razorpay:' + env + ':' + purpose).digest('hex').slice(0, 32);
 const secretName = id => 'projects/' + projectId + '/secrets/' + id;
-const ownerDoc = (uid, env) => db.doc('paymentOwners/' + uid + '/providers/razorpay_' + env);
+const tenantDoc = (tenantId, env) => db.doc('paymentTenants/' + tenantId + '/providers/razorpay_' + env);
+const membershipDoc = uid => db.doc('paymentMemberships/' + uid);
 const fail = (res, status, error) => res.status(status).json({ error });
 
 async function storeSecret(id, value) {
@@ -54,15 +55,21 @@ async function loadSecret(id) {
   const [version] = await sm.accessSecretVersion({ name: secretName(id) + '/versions/latest' });
   return Buffer.from(version.payload.data).toString('utf8');
 }
-async function requireOwner(req, res, next) {
+async function requireTenantAdmin(req, res, next) {
   try {
     const header = req.get('authorization') || '';
     if (!header.startsWith('Bearer ')) return fail(res, 401, 'authentication_required');
     const token = await auth.verifyIdToken(header.slice(7), true);
-    if (!ownerUids.has(token.uid) || token.email_verified !== true) return fail(res, 403, 'owner_not_authorized');
+    if (token.email_verified !== true) return fail(res, 403, 'verified_email_required');
     if (!(token.firebase || {}).sign_in_second_factor) return fail(res, 403, 'mfa_required');
     if (!Number.isFinite(token.auth_time) || Date.now() / 1000 - token.auth_time > 600) return fail(res, 401, 'recent_mfa_sign_in_required');
-    req.owner = token;
+    const membership = await membershipDoc(token.uid).get();
+    const m = membership.exists ? membership.data() : {};
+    if (m.status !== 'active' || !tenantIdPattern.test(m.tenantId || '') || !['owner', 'admin'].includes(m.role)) {
+      return fail(res, 403, 'active_tenant_admin_membership_required');
+    }
+    req.actor = token;
+    req.tenant = { id: m.tenantId, role: m.role };
     next();
   } catch {
     return fail(res, 401, 'invalid_or_revoked_token');
@@ -76,8 +83,8 @@ const idempotencyOf = req => {
   const value = req.get('idempotency-key') || req.body?.idempotencyKey || '';
   return /^[A-Za-z0-9._:-]{12,100}$/.test(value) ? value : null;
 };
-async function razorpay(uid, env, method, path, body) {
-  const cfg = JSON.parse(await loadSecret(secretId(uid, env, 'api')));
+async function razorpay(tenantId, env, method, path, body) {
+  const cfg = JSON.parse(await loadSecret(secretId(tenantId, env, 'api')));
   const response = await fetch('https://api.razorpay.com/v1' + path, {
     method,
     headers: {
@@ -98,9 +105,9 @@ function equalSignature(received, expected) {
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
-app.get('/v1/admin/providers', requireOwner, async (req, res) => {
+app.get('/v1/admin/providers', requireTenantAdmin, async (req, res) => {
   const providers = await Promise.all(['test', 'live'].map(async environment => {
-    const snap = await ownerDoc(req.owner.uid, environment).get();
+    const snap = await tenantDoc(req.tenant.id, environment).get();
     const d = snap.exists ? snap.data() : {};
     return {
       provider: 'razorpay', environment, configured: d.configured === true,
@@ -124,12 +131,12 @@ app.put('/v1/admin/providers/razorpay/credentials', requireOwner, express.json({
     return fail(res, 400, 'invalid_razorpay_credential_schema');
   }
   try {
-    await storeSecret(secretId(req.owner.uid, environment, 'api'), JSON.stringify({ keyId, keySecret }));
-    await storeSecret(secretId(req.owner.uid, environment, 'webhook'), webhookSecret);
-    await ownerDoc(req.owner.uid, environment).set({
+    await storeSecret(secretId(req.tenant.id, environment, 'api'), JSON.stringify({ keyId, keySecret }));
+    await storeSecret(secretId(req.tenant.id, environment, 'webhook'), webhookSecret);
+    await tenantDoc(req.tenant.id, environment).set({
       provider: 'razorpay', environment, keyId, configured: true, credentialsValidated: false,
       sandboxTestPassed: false, webhookVerified: false, active: false,
-      updatedAt: FieldValue.serverTimestamp(), updatedBy: req.owner.uid
+      updatedAt: FieldValue.serverTimestamp(), updatedBy: req.actor.uid
     }, { merge: true });
     res.status(202).json({ accepted: true, provider: 'razorpay', environment, status: 'credentials_stored_validation_pending' });
   } catch {
@@ -141,7 +148,7 @@ app.post('/v1/admin/providers/razorpay/validate', requireOwner, express.json({ l
   const environment = envOf(req);
   if (!environment) return fail(res, 400, 'invalid_environment');
   try {
-    const cfg = JSON.parse(await loadSecret(secretId(req.owner.uid, environment, 'api')));
+    const cfg = JSON.parse(await loadSecret(secretId(req.actor.uid, environment, 'api')));
     await razorpay(req.owner.uid, environment, 'GET', '/orders?count=1');
     await ownerDoc(req.owner.uid, environment).set({
       credentialsValidated: true, validatedAt: FieldValue.serverTimestamp(), active: false
@@ -197,16 +204,16 @@ app.post('/v1/admin/providers/razorpay/test-orders', requireOwner, express.json(
   }
 });
 
-app.post('/v1/webhooks/razorpay/:ownerUid/:environment', express.raw({ type: 'application/json', limit: '1mb' }), async (req, res) => {
-  const { ownerUid, environment } = req.params;
-  if (!ownerUids.has(ownerUid) || !['test', 'live'].includes(environment) || !Buffer.isBuffer(req.body)) {
+app.post('/v1/webhooks/razorpay/:tenantId/:environment', express.raw({ type: 'application/json', limit: '1mb' }), async (req, res) => {
+  const { tenantId, environment } = req.params;
+  if (!tenantIdPattern.test(tenantId || '') || !['test', 'live'].includes(environment) || !Buffer.isBuffer(req.body)) {
     return fail(res, 400, 'invalid_webhook_request');
   }
   const signature = req.get('x-razorpay-signature') || '';
   const eventId = req.get('x-razorpay-event-id') || '';
   if (!/^[A-Za-z0-9_-]{8,200}$/.test(eventId)) return fail(res, 400, 'invalid_event_id');
   try {
-    const webhookSecret = await loadSecret(secretId(ownerUid, environment, 'webhook'));
+    const webhookSecret = await loadSecret(secretId(tenantId, environment, 'webhook'));
     const expected = crypto.createHmac('sha256', webhookSecret).update(req.body).digest('hex');
     if (!equalSignature(signature, expected)) return fail(res, 400, 'invalid_webhook_signature');
     const event = JSON.parse(req.body.toString('utf8'));
@@ -217,26 +224,26 @@ app.post('/v1/webhooks/razorpay/:ownerUid/:environment', express.raw({ type: 'ap
     const orderRef = entity.order_id ? db.doc('paymentOrders/' + entity.order_id) : null;
     if (!orderRef) return fail(res, 400, 'order_reference_missing');
     const orderSnap = await orderRef.get();
-    if (!orderSnap.exists || orderSnap.data().ownerUid !== ownerUid ||
+    if (!orderSnap.exists || orderSnap.data().tenantId !== tenantId ||
         orderSnap.data().environment !== environment || orderSnap.data().amount !== entity.amount ||
         orderSnap.data().currency !== entity.currency) return fail(res, 409, 'payment_order_binding_mismatch');
-    const payment = await razorpay(ownerUid, environment, 'GET', '/payments/' + encodeURIComponent(entity.id));
+    const payment = await razorpay(tenantId, environment, 'GET', '/payments/' + encodeURIComponent(entity.id));
     const verified = payment.status === 'captured' && payment.order_id === entity.order_id &&
       payment.amount === orderSnap.data().amount && payment.currency === orderSnap.data().currency;
-    const inboxId = crypto.createHash('sha256').update(ownerUid + ':' + environment + ':' + eventId).digest('hex');
+    const inboxId = crypto.createHash('sha256').update(tenantId + ':' + environment + ':' + eventId).digest('hex');
     const inbox = db.doc('razorpayWebhookInbox/' + inboxId);
     await db.runTransaction(async tx => {
       const seen = await tx.get(inbox);
       if (seen.exists) return;
       tx.create(inbox, {
-        eventId, ownerUid, provider: 'razorpay', environment, event: event.event,
+        eventId, tenantId, provider: 'razorpay', environment, event: event.event,
         paymentId: entity.id, orderId: entity.order_id, signatureVerified: true,
         providerFetchVerified: verified, receivedAt: FieldValue.serverTimestamp()
       });
       if (verified) tx.set(orderRef, {
         state: 'captured_verified', paymentId: entity.id, verifiedAt: FieldValue.serverTimestamp()
       }, { merge: true });
-      if (verified) tx.set(ownerDoc(ownerUid, environment), environment === 'test' ? {
+      if (verified) tx.set(tenantDoc(tenantId, environment), environment === 'test' ? {
         sandboxTestPassed: true, webhookVerified: true, lastVerifiedTestAt: FieldValue.serverTimestamp(), active: false
       } : { webhookVerified: true, lastVerifiedLiveAt: FieldValue.serverTimestamp(), active: false }, { merge: true });
     });
