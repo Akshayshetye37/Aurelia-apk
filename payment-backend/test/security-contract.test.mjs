@@ -18,7 +18,7 @@ test('admin API verifies revoked Firebase tokens, server-resolved tenant members
 
 test('provider secrets are written to Secret Manager and never returned in status', () => {
   assert.match(source, /storeSecret\(secretId\(req\.tenant\.id, environment, 'api'\)/);
-  assert.match(source, /storeSecret\(secretId\(req\.owner\.uid, environment, 'webhook'\)/);
+  assert.match(source, /storeSecret\(secretId\(req\.tenant\.id, environment, 'webhook'\)/);
   assert.match(source, /keySecret/);
   assert.match(source, /webhookSecret/);
   assert.match(source, /keyId: d\.keyId \|\| null/);
@@ -53,6 +53,7 @@ test('all provider state and secrets are scoped to server-resolved tenant IDs', 
   assert.match(source, /update\(req\.tenant\.id \+ ':razorpay:test:' \+ idem\)/);
   assert.match(source, /orderSnap\.data\(\)\.tenantId !== tenantId/);
   assert.match(source, /:tenantId\/:environment/);
+  assert.match(source, /paymentOrders\/\' \+ req\.tenant\.id \+ '\\_' \+ order\.id/);
   assert.equal(source.includes('ownerDoc('), false);
   assert.equal(source.includes('ownerUids'), false);
 });
