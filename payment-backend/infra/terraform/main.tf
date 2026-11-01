@@ -62,6 +62,8 @@ resource "google_project_iam_member" "secret_runtime" {
 }
 
 resource "google_cloud_run_v2_service" "payment_backend" {
+  provider             = google-beta
+  launch_stage         = "BETA"
   project              = var.project_id
   name                 = var.service_name
   location             = var.region
