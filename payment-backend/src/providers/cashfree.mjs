@@ -104,8 +104,13 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
     const expected = crypto.createHmac('sha256', this.credentials.webhookSecret)
       .update(timestamp).update(rawBody).digest('base64');
     const a = Buffer.from(signature), b = Buffer.from(expected);
-    return { valid: a.length === b.length && crypto.timingSafeEqual(a, b),
-      event: JSON.parse(rawBody.toString('utf8')) };
+    const valid = a.length === b.length && crypto.timingSafeEqual(a, b);
+    if (!valid) return { valid: false };
+    try {
+      return { valid: true, event: JSON.parse(rawBody.toString('utf8')) };
+    } catch {
+      return { valid: false };
+    }
   }
 
   async createRefund(input) {
