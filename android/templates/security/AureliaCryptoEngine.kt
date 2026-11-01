@@ -41,8 +41,8 @@ class AureliaCryptoEngine(
     )
 
     fun validatePin(pin: CharArray) {
-        require(pin.size in 4..16 && pin.all { it in '0'..'9' }) {
-            "PIN must contain 4–16 digits."
+        require(pin.size in 6..12 && pin.all { it in '0'..'9' }) {
+            "PIN must contain 6–12 digits."
         }
     }
 
