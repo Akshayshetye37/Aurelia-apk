@@ -49,7 +49,7 @@ export function transitionPayment(record, nextState, patch = {}, now = () => new
   if (!Object.hasOwn(PAYMENT_STATES, nextState) || !ALLOWED[record.state].has(nextState)) {
     throw new PaymentOrchestratorError("INVALID_TRANSITION", record.state + " -> " + nextState + " is not allowed");
   }
-  return { ...record, ...patch, state: nextState, updatedAt: now(), history: [...(record.history || []), { state: nextState, at: now() }] };
+  return { ...record, ...patch, state: nextState, updatedAt: now(), history: [...(record.history || []).slice(-99), { state: nextState, at: now() }] };
 }
 
 /**
@@ -160,7 +160,7 @@ export class PayBridgePaymentOrchestrator {
     if (!this.bridge.isAuthenticated()) return clone(record);
     const marked = {
       ...record, bridgeDispatchStarted: true, updatedAt: this.now(),
-      history: [...(record.history || []), { state: "REQUESTED", event: "BRIDGE_DISPATCH_STARTED", at: this.now() }]
+      history: [...(record.history || []).slice(-99), { state: "REQUESTED", event: "BRIDGE_DISPATCH_STARTED", at: this.now() }]
     };
     await this.store.put(marked);
     const result = await this.bridge.createPayment({
@@ -266,8 +266,8 @@ export class PayBridgePaymentOrchestrator {
 
   async reconcileOne(requestId) {
     let record = await this.requireRecord(requestId);
-    // CREATED has not been dispatched; retry it after Bridge reconnects rather
-    // than querying the backend for a session that does not exist.
+    // CREATED has not been dispatched; leave it for an explicit retry after
+    // Bridge reconnects rather than querying the backend for a missing session.
     if (record.state === "CREATED" ||
         (record.state === "CANCELLED" && !record.backendSessionId)) return clone(record);
     if (record.state === "REQUESTED") {
