@@ -153,28 +153,53 @@ export class FirestorePaymentRepository {
       return { intentId: reservation.intentId, status: reservation.state, provider: payload.provider, environment: payload.environment, providerOrderId: reservation.providerOrderId, checkoutData: reservation.checkoutData, isDuplicate: true };
     }
 
-    // Provider network calls are deliberately outside Firestore transaction.
-    // Never hold a transaction open across an external network request.
+    // Fetching tenant secrets and constructing an adapter are local pre-dispatch
+    // operations. Only after both succeed do we mark that an external side effect
+    // may begin; every failure from that point onward must remain UNKNOWN.
+    let credentials;
+    let adapter;
     try {
-      const credentials = await this.secretManager.getProviderSecrets(
+      credentials = await this.secretManager.getProviderSecrets(
         tenantId, payload.provider, payload.environment
       );
-      const adapter = this.providerFactory(payload.provider, {
+      adapter = this.providerFactory(payload.provider, {
         credentials, environment: payload.environment
       });
-      const providerInput = payload.provider === 'razorpay'
-        ? {
-            amountMinor: payload.amountMinor, currency: payload.currency,
-            receipt: 'aur_' + intentId.replace(/-/g, '').slice(0, 24),
-            notes: { aurelia_intent_id: intentId, aurelia_folio_id: payload.folioId }
-          }
-        : {
-            orderId: 'aur_' + intentId.replace(/-/g, '').slice(0, 32),
-            amountMinor: payload.amountMinor, currency: payload.currency,
-            customer: payload.customer, returnUrl: payload.returnUrl,
-            idempotencyKey: 'aur_' + digest(intentId).slice(0, 32)
-          };
+    } catch {
+      await this.db.runTransaction(async tx => {
+        const [intentSnap, idemSnap, lockSnap] = await Promise.all([
+          tx.get(intentRef), tx.get(idemRef), tx.get(lockRef)
+        ]);
+        if (!intentSnap.exists || intentSnap.data().state !== 'DISPATCHING') return;
+        const next = transitionIntent('DISPATCHING', { type: 'dispatch_failed_before_send' });
+        tx.update(intentRef, { state: next, updatedAt: this.clock().toISOString(), version: 2 });
+        if (idemSnap.exists && idemSnap.data().intentId === intentId) {
+          tx.update(idemRef, { state: next, updatedAt: this.clock().toISOString() });
+        }
+        if (lockSnap.exists && lockSnap.data().intentId === intentId) {
+          tx.update(lockRef, { state: next, active: false, updatedAt: this.clock().toISOString() });
+        }
+      });
+      return { intentId, status: 'FAILED_TO_INITIATE', message: 'Payment could not be dispatched.' };
+    }
 
+    // Provider network calls are outside Firestore transactions. From the point
+    // the adapter method is invoked, transmission may have occurred: any error
+    // must retain UNKNOWN and the active folio lock until reconciliation.
+    const providerInput = payload.provider === 'razorpay'
+      ? {
+          amountMinor: payload.amountMinor, currency: payload.currency,
+          receipt: 'aur_' + intentId.replace(/-/g, '').slice(0, 24),
+          notes: { aurelia_intent_id: intentId, aurelia_folio_id: payload.folioId }
+        }
+      : {
+          orderId: 'aur_' + intentId.replace(/-/g, '').slice(0, 32),
+          amountMinor: payload.amountMinor, currency: payload.currency,
+          customer: payload.customer, returnUrl: payload.returnUrl,
+          idempotencyKey: 'aur_' + digest(intentId).slice(0, 32)
+        };
+
+    try {
       const remote = await adapter.createOrder(providerInput);
       if (!remote || typeof remote.orderId !== 'string' || !remote.orderId ||
           remote.amountMinor !== payload.amountMinor || remote.currency !== payload.currency) {
@@ -217,9 +242,6 @@ export class FirestorePaymentRepository {
       });
       return { intentId, status: 'CREATED', provider: payload.provider, environment: payload.environment, checkoutData };
     } catch {
-      // Even credential/network/response errors are conservatively UNKNOWN here:
-      // this boundary cannot prove whether the remote provider created an order.
-      // A reconciler must establish the outcome before any retry or lock release.
       await this.db.runTransaction(async tx => {
         const [intentSnap, idemSnap, lockSnap] = await Promise.all([
           tx.get(intentRef), tx.get(idemRef), tx.get(lockRef)
