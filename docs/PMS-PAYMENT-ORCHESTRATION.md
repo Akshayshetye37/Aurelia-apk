@@ -79,6 +79,8 @@ Run tests with both APKs installed and signed by the same controlled production 
 
 These are interface definitions only. They do not mean the server or routes exist. A mobile app must never receive provider API secrets or webhook signing secrets.
 
+For PMS session, verification and reconciliation responses, the server contract must echo and independently bind `requestId`, `sessionId`, `providerId`, `bookingId`, `folioId`, `amountPaise` and `currency`. Session creation must return all of those fields plus the opaque `sessionId`. Reconciliation responses must include `verified: true` before PMS changes a status. A `success` result must then pass the separate verify endpoint and return a non-empty provider transaction ID. Failure and cancellation results are final only when independently verified by the backend. Bridge responses alone never finalize them.
+
 ## 6. State and settlement rules
 
     CREATED -> REQUESTED -> PROCESSING -> SUCCESS (backend verification only)
