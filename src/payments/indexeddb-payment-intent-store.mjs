@@ -17,7 +17,7 @@ const STATES = new Set([
 ]);
 const ALLOWED = {
   CREATED: new Set(["CREATED", "REQUESTED", "CANCELLED"]),
-  REQUESTED: new Set(["REQUESTED", "PROCESSING", "UNKNOWN", "FAILED", "CANCELLED"]),
+  REQUESTED: new Set(["REQUESTED", "PROCESSING", "UNKNOWN", "FAILED", "CANCELLED", "RECONCILIATION"]),
   PROCESSING: new Set(["PROCESSING", "SUCCESS", "FAILED", "CANCELLED", "UNKNOWN"]),
   SUCCESS: new Set(["SUCCESS"]),
   FAILED: new Set(["FAILED", "RECONCILIATION"]),
@@ -54,6 +54,14 @@ function validate(record) {
   if (record.state === "SUCCESS" &&
       (record.backendVerified !== true || record.settlementAuthorized !== true)) {
     throw new TypeError("SUCCESS requires backend verification and settlement authorization");
+  }
+  if (record.backendSessionId != null &&
+      (typeof record.backendSessionId !== "string" || !record.backendSessionId || record.backendSessionId.length > 256)) {
+    throw new TypeError("Invalid backendSessionId");
+  }
+  if (record.bridgeTransactionId != null &&
+      (typeof record.bridgeTransactionId !== "string" || !record.bridgeTransactionId || record.bridgeTransactionId.length > 256)) {
+    throw new TypeError("Invalid bridgeTransactionId");
   }
   return record;
 }
@@ -127,6 +135,10 @@ export class IndexedDbPaymentIntentStore {
         }
         if (!ALLOWED[existing.state]?.has(record.state)) {
           throw new Error("Illegal payment intent state change: " + existing.state + " -> " + record.state);
+        }
+        if (existing.backendSessionId && record.backendSessionId &&
+            existing.backendSessionId !== record.backendSessionId) {
+          throw new Error("Backend session reference cannot be replaced");
         }
         if (existing.bridgeTransactionId && record.bridgeTransactionId &&
             existing.bridgeTransactionId !== record.bridgeTransactionId) {
