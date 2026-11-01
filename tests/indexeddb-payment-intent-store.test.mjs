@@ -83,3 +83,13 @@ test("failed and cancelled intents remain available for late-capture reconciliat
   await db.put(intent({ state: "SUCCESS", backendVerified: true, settlementAuthorized: true }));
   assert.equal((await db.listPending()).length, 0);
 });
+
+test("backend session may be recovered once but cannot be replaced", async () => {
+  const db = store();
+  await db.put(intent({ state:"REQUESTED" }));
+  await db.put(intent({ state:"RECONCILIATION", backendSessionId:"sess-1" }));
+  await assert.rejects(
+    db.put(intent({ state:"RECONCILIATION", backendSessionId:"sess-2" })),
+    /Backend session reference cannot be replaced/
+  );
+});
