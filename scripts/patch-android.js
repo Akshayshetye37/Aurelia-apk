@@ -140,7 +140,7 @@ fs.writeFileSync(path.join(resDir, 'xml', 'aurelia_file_paths.xml'), '<?xml vers
 `;
 eval(providerBlock);
 
-if (fs.existsSync(iconPng)) {
+if (fs.existsSync(iconPng) && !fs.existsSync(iconJpg)) {
   // A single 512px PNG is stored in mipmap-nodpi: Android scales it without
   // density-specific resampling. This also avoids requiring Sharp on Termux.
   const dir = path.join(resDir, 'mipmap-nodpi');
@@ -158,11 +158,21 @@ if (fs.existsSync(iconPng)) {
   fs.writeFileSync(path.join(valuesDir, 'aurelia_icon_colors.xml'), '<?xml version="1.0" encoding="utf-8"?><resources><color name="aurelia_icon_background">#082419</color></resources>');
   console.log('Installed Aurelia PMS launcher artwork from assets/aurelia-icon.png.');
 } else if (fs.existsSync(iconJpg)) {
-  // The supplied artwork is JPEG. Android mipmap resources support JPEG directly.
-  const dir = path.join(resDir, 'mipmap-nodpi');
-  fs.mkdirSync(dir, { recursive: true });
-  for (const name of ['ic_launcher', 'ic_launcher_round', 'ic_launcher_foreground']) {
-    fs.copyFileSync(iconJpg, path.join(dir, name + '.jpg'));
+  // Prefer the approved branded JPEG over the legacy placeholder PNG/SVG.
+  // Replace generated Capacitor launcher assets at every density to avoid stale icons.
+  const densities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi', 'nodpi'];
+  for (const density of densities) {
+    const dir = path.join(resDir, 'mipmap-' + density);
+    fs.mkdirSync(dir, { recursive: true });
+    for (const name of ['ic_launcher', 'ic_launcher_round', 'ic_launcher_foreground']) {
+      for (const ext of ['png', 'webp', 'jpg']) {
+        const old = path.join(dir, name + '.' + ext);
+        if (fs.existsSync(old)) fs.unlinkSync(old);
+      }
+    }
+    fs.copyFileSync(iconJpg, path.join(dir, 'ic_launcher.jpg'));
+    fs.copyFileSync(iconJpg, path.join(dir, 'ic_launcher_round.jpg'));
+    if (density === 'nodpi') fs.copyFileSync(iconJpg, path.join(dir, 'ic_launcher_foreground.jpg'));
   }
   const adaptiveDir = path.join(resDir, 'mipmap-anydpi-v26');
   fs.mkdirSync(adaptiveDir, { recursive: true });
@@ -172,7 +182,13 @@ if (fs.existsSync(iconPng)) {
   const valuesDir = path.join(resDir, 'values');
   fs.mkdirSync(valuesDir, { recursive: true });
   fs.writeFileSync(path.join(valuesDir, 'aurelia_icon_colors.xml'), '<?xml version="1.0" encoding="utf-8"?><resources><color name="aurelia_icon_background">#082419</color></resources>');
-  console.log('Installed supplied Aurelia PMS launcher artwork from assets/aurelia-icon.jpg.');
+  let launcherManifest = fs.readFileSync(manifestPath, 'utf8');
+  launcherManifest = launcherManifest.replace(/<application\\b([^>]*)>/, (match, attrs) => {
+    attrs = attrs.replace(/\\s+android:icon="[^"]*"/, '').replace(/\\s+android:roundIcon="[^"]*"/, '');
+    return '<application' + attrs + ' android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round">';
+  });
+  fs.writeFileSync(manifestPath, launcherManifest);
+  console.log('Installed branded Aurelia PMS icon across all launcher densities and adaptive resources.');
 } else if (fs.existsSync(iconSvg)) {
   // Backward-compatible fallback for older checkouts that do not yet have the PNG.
   const densities = { 'mdpi':48, 'hdpi':72, 'xhdpi':96, 'xxhdpi':144, 'xxxhdpi':192 };
