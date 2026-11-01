@@ -162,12 +162,25 @@ jobs:
         if: github.event_name != 'pull_request'
         working-directory: android
         shell: bash
+        env:
+          EXPECTED_CERT_SHA256: ${{ secrets.AURELIA_SHARED_CERT_SHA256 }}
         run: |
           set -euo pipefail
           apk="app/build/outputs/apk/release/app-release.apk"
           test -s "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/aurelia-pms-certificate.txt"
+          expected="${EXPECTED_CERT_SHA256//:/}"
+          expected="${expected,,}"
+          actual="$(awk -F': ' '/Signer #1 certificate SHA-256 digest:/ {print tolower($2); exit}' "$RUNNER_TEMP/aurelia-pms-certificate.txt")"
+          if [[ -z "$expected" ]]; then
+            echo "::error::Missing AURELIA_SHARED_CERT_SHA256. Configure the same certificate fingerprint in both PMS and Pay Bridge repository secrets."
+            exit 1
+          fi
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::PMS signing certificate does not match AURELIA_SHARED_CERT_SHA256."
+            exit 1
+          fi
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | sed -n '1p'
           sha256sum "$apk" > "$apk.sha256"
 
