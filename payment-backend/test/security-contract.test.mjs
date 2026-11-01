@@ -94,3 +94,18 @@ test('HTTP runtime rejects requests without trusted HTTPS transport and emits HS
   assert.match(source, /Strict-Transport-Security/);
   assert.equal(source.includes("req.headers['x-forwarded-proto'] === 'https'"), false);
 });
+
+
+test('verified webhook evidence is explicitly pending PMS accounting and cannot claim settlement', () => {
+  assert.match(source, /CAPTURED_VERIFIED_PENDING_ACCOUNTING/);
+  assert.match(source, /accountingStatus: 'PENDING'/);
+  assert.match(source, /authoritative_pms_ledger_mapping_not_implemented/);
+  assert.match(source, /accounting: outcome\.verified \? 'pending' : 'not_verified'/);
+});
+
+test('unverified webhook inbox records remain retryable while verified duplicates are idempotent', () => {
+  assert.match(source, /UNVERIFIED_RETRYABLE/);
+  assert.match(source, /prior\.providerFetchVerified === true/);
+  assert.match(source, /lastAttemptAt: FieldValue\.serverTimestamp\(\)/);
+  assert.match(source, /webhook_event_identity_conflict/);
+});
