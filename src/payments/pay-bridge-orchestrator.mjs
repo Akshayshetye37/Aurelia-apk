@@ -270,6 +270,13 @@ export class PayBridgePaymentOrchestrator {
     // than querying the backend for a session that does not exist.
     if (record.state === "CREATED" ||
         (record.state === "CANCELLED" && !record.backendSessionId)) return clone(record);
+    if (record.state === "REQUESTED") {
+      // Only a durable false marker proves native dispatch has not started.
+      // Missing/true markers are treated as ambiguous and never replayed.
+      if (record.bridgeDispatchStarted === false) return this.resumeUndispatched(record);
+      record = transitionPayment(record, "UNKNOWN", { lastErrorCode: "DISPATCH_OUTCOME_UNKNOWN" }, this.now);
+      await this.store.put(record);
+    }
     if (["UNKNOWN", "FAILED", "CANCELLED"].includes(record.state)) {
       record = transitionPayment(record, "RECONCILIATION", {}, this.now);
       await this.store.put(record);
