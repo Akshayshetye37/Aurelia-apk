@@ -7,7 +7,7 @@ const settlementSrc=path.join(root,'src','payments','settlement-service.mjs');
 if(!fs.existsSync(settlementSrc))throw new Error('Settlement service not found: '+settlementSrc);
 const settlementDest=path.join(dest,'src','payments');
 fs.mkdirSync(settlementDest,{recursive:true});
-for(const name of ['settlement-service.mjs','settlement-gate.mjs']){
+for(const name of ['settlement-service.mjs','settlement-gate.mjs','payment-engine.mjs','evidence-store.mjs','reconciliation-service.mjs']){
  const source=path.join(root,'src','payments',name);
  if(!fs.existsSync(source))throw new Error('Payment module not found: '+source);
  fs.copyFileSync(source,path.join(settlementDest,name));
@@ -31,4 +31,4 @@ for(const name of ['pay-bridge-orchestrator.mjs','indexeddb-payment-intent-store
  if(!fs.existsSync(source))throw new Error('Payment orchestration module not found: '+source);
  fs.copyFileSync(source,path.join(settlementDest,name));
 }
-console.log('Prepared local settlement, payment orchestration, intent journal and evidence modules for Capacitor');
+console.log('Prepared optional local settlement, payment orchestration, intent journal and evidence modules for Capacitor');
