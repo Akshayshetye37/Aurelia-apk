@@ -72,3 +72,6 @@ The PMS-side local settlement boundary was further hardened on this branch:
 - Reconciliation evidence now rejects invalid parse states, quarantines non-INR or unparsed evidence, derives normalized payer/UPI identity from raw fields rather than caller-supplied normalized values, and prevents a bank-statement credit from matching itself as a candidate.
 - Evidence payloads and identifiers are bounded; staff decisions are limited to review-only outcomes and must reference an existing evidence record. IndexedDB listing is cursor-based and bounded.
 - Historical room-rate snapshots are used in folio totals, preventing future room-rate edits from silently changing existing booking balances.
+
+- The settlement boundary now requires an explicit receipt-confirmation flag for manual payments, staff-reviewed UPI evidence and reservation advances; that confirmation is retained in both canonical payment and history rows. UPI evidence also requires a separate staff confirmation dialog, and synthetic “test payment” signals were removed from the production PMS UI.
+- Settlement rejects bookings outside the active reservation, in-house and departed states. Cancelled bookings cannot be settled through the local folio writer.
