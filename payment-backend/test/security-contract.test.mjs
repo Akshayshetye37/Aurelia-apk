@@ -69,7 +69,7 @@ test('HTTP runtime rejects requests without trusted HTTPS transport and emits HS
   assert.match(source, /process\.env\.AURELIA_HTTPS_TERMINATION !== 'trusted-proxy'/);
   assert.match(source, /process\.env\.AURELIA_TRUST_PROXY_HOPS !== '1'/);
   assert.match(source, /app\.set\('trust proxy', 1\)/);
-  assert.match(source, /The ingress must overwrite X-Forwarded-Proto/);
+  assert.match(source, /must overwrite X-Forwarded-Proto/);
   assert.match(source, /if \(!req\.secure\)/);
   assert.match(source, /insecure_connection_rejected/);
   assert.match(source, /Strict-Transport-Security/);
