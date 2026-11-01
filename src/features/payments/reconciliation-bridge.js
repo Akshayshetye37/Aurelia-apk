@@ -32,29 +32,42 @@
     if (typeof getState !== "function") return null;
     const state = getState();
     if (!state || !Array.isArray(state.b)) return null;
-    const ref = String(row.utr || "").trim();
+    const normalizeReference = value => String(value || "").replace(/\\s+/g, "").toUpperCase();
+    const ref = normalizeReference(row.utr);
     if (!ref) return null;
-    const amount = Number(row.amountPaise) / 100;
+    const amountPaise = Number(row.amountPaise);
     for (const booking of state.b) {
-      if (!Array.isArray(booking.pays)) continue;
-      const payment = booking.pays.find(item =>
-        String(item.r || "").trim() === ref &&
-        Math.abs(Number(item.a) - amount) < 0.005
-      );
+      if (!booking || typeof booking !== "object") continue;
+      const rows = [
+        ...(Array.isArray(booking.pays) ? booking.pays : []),
+        ...(Array.isArray(booking.payments) ? booking.payments : [])
+      ];
+      const payment = rows.find(item => {
+        if (!item || typeof item !== "object") return false;
+        const paymentReference = normalizeReference(item.r || item.reference);
+        const paymentPaise = Number.isSafeInteger(item.amountPaise)
+          ? item.amountPaise
+          : Math.round(Number(item.a ?? item.amount) * 100);
+        return paymentReference === ref && Number.isSafeInteger(paymentPaise) &&
+          paymentPaise === amountPaise;
+      });
       if (payment) return { bookingId: booking.id == null ? null : String(booking.id), room: booking.room == null ? null : String(booking.room) };
     }
     return null;
   }
   function fetchPendingEvidence() {
     const result = parse(nativeBridge().fetchUnprocessedSignals(), "Fetch evidence");
-    if (!Array.isArray(result)) throw new Error("Evidence queue response is not an array");
+    if (!Array.isArray(result) || result.length > 500) throw new Error("Evidence queue response must be an array of at most 500 records");
     const validated = result.map(row => {
       const id = Number(row && row.id), amountPaise = Number(row && row.amountPaise);
       const receivedAt = Number(row && row.receivedAt);
       if (!Number.isSafeInteger(id) || id <= 0 ||
           !Number.isSafeInteger(amountPaise) || amountPaise <= 0 ||
           !Number.isFinite(receivedAt) || receivedAt <= 0 ||
-          typeof row.notificationText !== "string" || !row.notificationText.trim()) {
+          typeof row.notificationText !== "string" || !row.notificationText.trim() ||
+          row.notificationText.length > 8192 ||
+          (row.utr != null && (typeof row.utr !== "string" || row.utr.length > 128)) ||
+          (row.sourcePackage != null && (typeof row.sourcePackage !== "string" || row.sourcePackage.length > 128))) {
         throw new Error("Invalid evidence record returned by native queue");
       }
       return { ...row, id, amountPaise, amountRupees: amountPaise / 100, receivedAt, verified: false };
@@ -74,7 +87,11 @@
   function updateEvidenceStatus(id, status, note) {
     if (!Number.isSafeInteger(Number(id)) || Number(id) <= 0) throw new Error("Invalid evidence ID");
     if (!["pending", "conflict", "reviewed", "rejected"].includes(status)) throw new Error("Invalid evidence status");
-    const result = parse(nativeBridge().markSignalProcessed(String(id), status, String(note || "")), "Update evidence");
+    const reviewNote = String(note || "").trim();
+    if (reviewNote.length > 300 || /[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/.test(reviewNote)) {
+      throw new Error("Review note must be at most 300 characters without control characters");
+    }
+    const result = parse(nativeBridge().markSignalProcessed(String(id), status, reviewNote), "Update evidence");
     if (!result || result.ok !== true) throw new Error(result && result.error || "Evidence status update was not acknowledged");
     return result;
   }
