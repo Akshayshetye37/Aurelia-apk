@@ -48,8 +48,9 @@ test("backend verification and settlement authorization cannot be downgraded", a
   const db = store();
   await db.put(intent());
   await db.put(intent({ state: "REQUESTED" }));
-  await db.put(intent({ state: "PROCESSING", backendVerified: true, settlementAuthorized: true }));
-  await assert.rejects(db.put(intent({ state: "PROCESSING", backendVerified: false, settlementAuthorized: false })), /cannot be downgraded/);
+  await db.put(intent({ state: "PROCESSING" }));
+  await db.put(intent({ state: "SUCCESS", backendVerified: true, settlementAuthorized: true }));
+  await assert.rejects(db.put(intent({ state: "SUCCESS", backendVerified: false, settlementAuthorized: false })), /cannot be downgraded/);
 });
 
 test("terminal payment intents are excluded from reconciliation queue", async () => {
@@ -63,4 +64,22 @@ test("terminal payment intents are excluded from reconciliation queue", async ()
 
 test("store fails closed when IndexedDB is unavailable", () => {
   assert.throws(() => new IndexedDbPaymentIntentStore({ indexedDBImpl: null }), /IndexedDB is unavailable/);
+});
+
+test("settlement authorization is rejected outside backend-verified SUCCESS", async () => {
+  const db = store();
+  await db.put(intent());
+  await assert.rejects(db.put(intent({ state: "REQUESTED", backendVerified: true, settlementAuthorized: true })), /backend-verified SUCCESS/);
+  await assert.rejects(db.put(intent({ state: "SUCCESS", backendVerified: false, settlementAuthorized: false })), /SUCCESS requires backend verification/);
+});
+
+test("failed and cancelled intents remain available for late-capture reconciliation", async () => {
+  const db = store();
+  await db.put(intent());
+  await db.put(intent({ state: "REQUESTED" }));
+  await db.put(intent({ state: "FAILED", backendVerified: true }));
+  assert.equal((await db.listPending()).length, 1);
+  await db.put(intent({ state: "RECONCILIATION", backendVerified: true }));
+  await db.put(intent({ state: "SUCCESS", backendVerified: true, settlementAuthorized: true }));
+  assert.equal((await db.listPending()).length, 0);
 });
