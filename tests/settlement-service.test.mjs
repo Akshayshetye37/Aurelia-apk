@@ -304,7 +304,7 @@ test("PMS persistence verification includes daily totals and audit rows", async 
 
 test("invoice and finance reports use each booking's snapshotted nightly rate", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  assert.match(html, /const roomCharge=b=>nts\(b\)\*\(b\.rate!=null/);
+  assert.match(html, /const roomCharge=b=>\{const rate=Number\(b\.rate\),snapshot=b\.rate!=null&&Number\.isFinite\(rate\)&&rate>=0/);
   assert.match(html, /function inv\(i\)[\s\S]*?roomCharge\(b\)/);
   assert.match(html, /room=bs\.reduce\(\(a,b\)=>a\+roomCharge\(b\),0\)/);
 });
