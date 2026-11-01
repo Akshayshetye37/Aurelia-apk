@@ -21,7 +21,7 @@ function validatePayload(payload) {
   if (payload.provider === 'cashfree' &&
       (!payload.customer || !ID.test(payload.customer.id || '') ||
        typeof payload.customer.phone !== 'string' ||
-       !/^\\+?[0-9]{8,15}$/.test(payload.customer.phone) ||
+       !/^\+?[0-9]{8,15}$/.test(payload.customer.phone) ||
        typeof payload.returnUrl !== 'string' || !payload.returnUrl.startsWith('https://'))) {
     throw new TypeError('cashfree_customer_and_https_return_url_required');
   }
