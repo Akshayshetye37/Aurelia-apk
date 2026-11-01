@@ -126,13 +126,13 @@ for (const permission of permissionsToRemove) {
 // Native PIN gate is the only exported launcher. MainActivity remains internal,
 // so ordinary launcher starts cannot instantiate the PMS WebView before PIN auth.
 if (!manifest.includes('com.aurelia.pms.security.LockGateActivity')) {
-  const mainActivityPattern = /<activity\\b(?=[^>]*android:name="(?:\\.MainActivity|com\\.aurelia\\.pms\\.MainActivity)")([^>]*)>([\\s\\S]*?)<\\/activity>/;
+  const mainActivityPattern = /<activity\b(?=[^>]*android:name="(?:\.MainActivity|com\.aurelia\.pms\.MainActivity)")([^>]*)>([\s\S]*?)<\/activity>/;
   const mainMatch = manifest.match(mainActivityPattern);
   if (!mainMatch) throw new Error('Capacitor MainActivity manifest declaration was not found; native PIN gate cannot be installed.');
   let mainAttrs = mainMatch[1].replace(/android:exported="[^"]*"/, '').trim();
   mainAttrs += ' android:exported="false"';
-  let mainBody = mainMatch[2].replace(/<intent-filter>[\\s\\S]*?<\\/intent-filter>/g, block =>
-    /android\\.intent\\.action\\.MAIN/.test(block) && /android\\.intent\\.category\\.LAUNCHER/.test(block) ? '' : block
+  let mainBody = mainMatch[2].replace(/<intent-filter>[\s\S]*?<\/intent-filter>/g, block =>
+    /android\.intent\.action\.MAIN/.test(block) && /android\.intent\.category\.LAUNCHER/.test(block) ? '' : block
   );
   const internalMain = '<activity' + mainAttrs + '>' + mainBody + '</activity>';
   const gateActivity = '<activity android:name="com.aurelia.pms.security.LockGateActivity" android:exported="true" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.NoActionBar"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>';
