@@ -87,3 +87,59 @@ test("bank statement credits are not reused as their own candidate evidence", as
   assert.equal(result.reconciliation.results[0].decision, "pending");
   await store.close();
 });
+
+test("unparsed candidate evidence is retained but excluded from matching", async () => {
+  const store = createEvidenceStore({ indexedDB, dbName:"unparsed-candidate" });
+  const service = createReconciliationService({ store });
+  await service.ingest(gpay("valid-candidate"));
+  await service.ingest({
+    eventId:"unparsed-candidate", evidenceId:"unparsed-candidate",
+    source:"gpay_notification", eventType:"payment_notification",
+    parseStatus:"unparsed", amountPaise:null, payerName:null, utr:null,
+    rawEvidence:"UNKNOWN PAYMENT NOTIFICATION"
+  });
+  const result = await service.ingest(bank("bank-after-unparsed"));
+  assert.equal(result.reconciliation.results[0].decision, "matched");
+  assert.equal(result.reconciliation.unparsedEvidence.length, 1);
+  await store.close();
+});
+
+test("unsupported currency evidence is retained for review and never matched", async () => {
+  const store = createEvidenceStore({ indexedDB, dbName:"unsupported-currency" });
+  const service = createReconciliationService({ store });
+  const result = await service.ingest({
+    eventId:"usd-1", evidenceId:"usd-1", source:"gpay_notification",
+    eventType:"payment_notification", currency:"USD", amount:"40",
+    payerName:"A Guest", timestamp:"2026-01-01T10:00:00Z",
+    rawEvidence:"REDACTED USD NOTICE"
+  });
+  assert.equal(result.reconciliation.unparsedEvidence[0].reason, "unsupported_currency");
+  assert.equal(result.reconciliation.results.length, 0);
+  await store.close();
+});
+
+test("caller-supplied normalized payer fields are ignored", async () => {
+  const store = createEvidenceStore({ indexedDB, dbName:"normalized-fields" });
+  const service = createReconciliationService({ store });
+  await service.ingest({
+    eventId:"forged-1", evidenceId:"forged-1", source:"gpay_notification",
+    eventType:"payment_notification", payerName:"Original Guest",
+    payerNameNormalized:"ATTACKER CHOSEN NAME", upiId:"guest@upi",
+    upiIdNormalized:"attacker@upi", amount:"40",
+    timestamp:"2026-01-01T10:00:00Z"
+  });
+  const stored = await store.getEvidence("forged-1");
+  assert.equal(stored.payerNameNormalized, "ORIGINAL GUEST");
+  assert.equal(stored.upiIdNormalized, "guest@upi");
+  await store.close();
+});
+
+test("unsupported parse status is rejected instead of treated as parsed", async () => {
+  const store = createEvidenceStore({ indexedDB, dbName:"invalid-parse-status" });
+  const service = createReconciliationService({ store });
+  await assert.rejects(service.ingest({
+    eventId:"bad-status", evidenceId:"bad-status", source:"gpay_notification",
+    parseStatus:"verified", amount:"40"
+  }), /parseStatus/);
+  await store.close();
+});
