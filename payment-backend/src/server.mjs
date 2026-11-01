@@ -353,7 +353,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     const sameOrder = status.orderId === providerOrderId;
     const sameCurrency = status.currency === orderSnap.data().currency;
     const sameAmount = status.amountMinor === orderSnap.data().amountMinor;
-    const verified = sameOrder && sameCurrency && sameAmount &&
+    const verified = sameOrder && sameCurrency && sameAmount && status.captured === true &&
       (provider === 'razorpay'
         ? status.paymentStatus === 'captured'
         : status.paymentStatus === 'SUCCESS');
