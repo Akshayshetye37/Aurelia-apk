@@ -92,7 +92,7 @@ class AppLockManager(context: Context) {
         val bytes = try { file.openRead().use { it.readBytes() } }
         catch (missing: java.io.FileNotFoundException) { return State(0, 0L, bootCount()) }
         val plain = decrypt(bytes)
-        try {
+        return try {
             val json = JSONObject(String(plain, Charsets.UTF_8))
             require(json.getString("magic") == MAGIC)
             val failures = json.getInt("failures")
