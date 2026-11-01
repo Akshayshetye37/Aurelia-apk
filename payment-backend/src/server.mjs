@@ -128,9 +128,17 @@ const paymentRepository = new FirestorePaymentRepository({
     }
   }
 });
+// Capability truth is deliberately stricter than adapter method availability.
+// A provider API adapter is not an end-to-end PMS payment implementation.
 const providerCatalogue = [
-  { id: 'razorpay', label: 'Razorpay', environments: ['test', 'live'], implemented: true },
-  { id: 'cashfree', label: 'Cashfree Payments', environments: ['test', 'live'], implemented: true }
+  { id: 'razorpay', label: 'Razorpay', environments: ['test', 'live'],
+    capabilities: { testCheckout: true, liveCollection: false, verifiedWebhook: true,
+      providerStatusLookup: true, folioSettlement: false, refunds: false, reconciliation: false },
+    productionReady: false },
+  { id: 'cashfree', label: 'Cashfree Payments', environments: ['test', 'live'],
+    capabilities: { testCheckout: true, liveCollection: false, verifiedWebhook: true,
+      providerStatusLookup: true, folioSettlement: false, refunds: false, reconciliation: false },
+    productionReady: false }
 ];
 function providerTenantDoc(tenantId, provider, environment) {
   return db.doc('paymentTenants/' + tenantId + '/providers/' + provider + '_' + environment);
@@ -160,6 +168,11 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
   if (!['razorpay', 'cashfree'].includes(body.provider) || !['test', 'live'].includes(body.environment)) {
     return fail(res, 409, 'provider_environment_not_enabled_for_checkout');
   }
+  // Hard release gate: provider checkout alone cannot be called live until
+  // atomic PMS folio posting, refund lifecycle and durable reconciliation exist.
+  if (body.environment === 'live') {
+    return fail(res, 409, 'live_payments_blocked_accounting_pipeline_incomplete');
+  }
   try {
     const state = await providerTenantDoc(req.tenant.id, body.provider, body.environment).get();
     if (!state.exists || state.data().active !== true || state.data().credentialsValidated !== true) {
@@ -180,6 +193,19 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
   }
 });
 
+app.get('/v1/payments/capabilities', requireTenantPaymentActor, (_req, res) => {
+  res.json({
+    liveCollection: false,
+    folioSettlement: false,
+    refunds: false,
+    reconciliation: false,
+    sdkCallbacksAuthoritative: false,
+    providers: providerCatalogue.map(({ id, label, capabilities, productionReady }) => ({
+      provider: id, label, capabilities, productionReady
+    }))
+  });
+});
+
 app.get('/v1/payments/intents/:intentId', requireTenantPaymentActor, async (req, res) => {
   try {
     return res.json(await paymentRepository.getPaymentIntent(req.actor.uid, req.params.intentId));
@@ -197,7 +223,8 @@ app.get('/v1/admin/providers', requireTenantAdmin, async (req, res) => {
       const snap = await providerTenantDoc(req.tenant.id, provider.id, environment).get();
       const d = snap.exists ? snap.data() : {};
       return {
-        provider: provider.id, label: provider.label, environment, implemented: provider.implemented,
+        provider: provider.id, label: provider.label, environment,
+        capabilities: provider.capabilities, productionReady: provider.productionReady,
         configured: d.configured === true, credentialsValidated: d.credentialsValidated === true,
         sandboxTestPassed: d.sandboxTestPassed === true, webhookVerified: d.webhookVerified === true,
         active: d.active === true, merchantId: d.merchantId || d.keyId || d.appId || null,
@@ -402,6 +429,10 @@ app.post('/v1/admin/providers/:provider/activate', requireTenantAdmin, express.j
   const { provider } = req.params, environment = envOf(req);
   if (!['razorpay', 'cashfree'].includes(provider) || !environment || req.body?.confirm !== true) {
     return fail(res, 400, 'explicit_activation_confirmation_required');
+  }
+  // Never activate live collection while the PMS accounting lifecycle is incomplete.
+  if (environment === 'live') {
+    return fail(res, 409, 'live_payments_blocked_accounting_pipeline_incomplete');
   }
   const ref = providerTenantDoc(req.tenant.id, provider, environment);
   const snap = await ref.get(), state = snap.exists ? snap.data() : {};
