@@ -117,6 +117,21 @@ function equalSignature(received, expected) {
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
+// Readiness is intentionally separate from liveness. It verifies that the
+// runtime identity can reach the two Google Cloud dependencies used by the
+// service without exposing project, tenant, secret or provider information.
+app.get('/readyz', async (_req, res) => {
+  const checks = { firestore: false, secretManager: false };
+  const results = await Promise.allSettled([
+    db.doc('aureliaSystem/health').get(),
+    sm.getSecret({ name: 'projects/' + projectId + '/secrets/aurelia-payment-backend-health' })
+  ]);
+  checks.firestore = results[0].status === 'fulfilled';
+  checks.secretManager = results[1].status === 'fulfilled';
+  const ready = checks.firestore && checks.secretManager;
+  return res.status(ready ? 200 : 503).json({ ok: ready, checks });
+});
+
 const paymentRepository = new FirestorePaymentRepository({
   db,
   secretManager: {
