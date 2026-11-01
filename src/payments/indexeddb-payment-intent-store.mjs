@@ -34,11 +34,17 @@ function clone(value) {
 }
 function validate(record) {
   if (!record || typeof record !== "object" || Array.isArray(record)) throw new TypeError("Payment intent must be an object");
-  if (typeof record.requestId !== "string" || !record.requestId || record.requestId.length > 128) throw new TypeError("Invalid requestId");
+  const safeText = value => typeof value === "string" && value.length > 0 &&
+    !/[\\u0000-\\u001f\\u007f]/.test(value);
+  if (!safeText(record.requestId) || record.requestId.length > 128) throw new TypeError("Invalid requestId");
   if (!STATES.has(record.state)) throw new TypeError("Invalid payment intent state");
   if (!Number.isSafeInteger(record.amountPaise) || record.amountPaise <= 0) throw new TypeError("Invalid amountPaise");
   for (const key of ["bookingId", "folioId", "currency", "providerId"]) {
-    if (typeof record[key] !== "string" || !record[key]) throw new TypeError("Invalid " + key);
+    if (!safeText(record[key])) throw new TypeError("Invalid " + key);
+  }
+  if (record.providerId.length > 64 || record.currency !== "INR") throw new TypeError("Invalid provider or currency");
+  if (record.history != null && (!Array.isArray(record.history) || record.history.length > 100)) {
+    throw new TypeError("Payment intent history must contain at most 100 entries");
   }
   if (record.currency !== "INR") throw new TypeError("Only INR intents are supported");
   if (record.bridgeDispatchStarted != null && typeof record.bridgeDispatchStarted !== "boolean") {
@@ -59,11 +65,11 @@ function validate(record) {
     throw new TypeError("SUCCESS requires backend verification and settlement authorization");
   }
   if (record.backendSessionId != null &&
-      (typeof record.backendSessionId !== "string" || !record.backendSessionId || record.backendSessionId.length > 256)) {
+      (!safeText(record.backendSessionId) || record.backendSessionId.length > 256)) {
     throw new TypeError("Invalid backendSessionId");
   }
   if (record.bridgeTransactionId != null &&
-      (typeof record.bridgeTransactionId !== "string" || !record.bridgeTransactionId || record.bridgeTransactionId.length > 256)) {
+      (!safeText(record.bridgeTransactionId) || record.bridgeTransactionId.length > 256)) {
     throw new TypeError("Invalid bridgeTransactionId");
   }
   return record;
