@@ -171,7 +171,7 @@ export class FirestorePaymentRepository {
           tx.get(intentRef), tx.get(idemRef), tx.get(lockRef)
         ]);
         if (!intentSnap.exists || intentSnap.data().state !== 'DISPATCHING') return;
-        const next = transitionIntent('DISPATCHING', { type: 'dispatch_failed_before_send' });
+        const next = transitionIntent('DISPATCHING', { type: 'dispatch_rejected', definitive: true, requestMayHaveReachedProvider: false });
         tx.update(intentRef, { state: next, updatedAt: this.clock().toISOString(), version: 2 });
         if (idemSnap.exists && idemSnap.data().intentId === intentId) {
           tx.update(idemRef, { state: next, updatedAt: this.clock().toISOString() });
