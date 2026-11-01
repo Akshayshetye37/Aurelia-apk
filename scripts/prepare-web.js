@@ -7,7 +7,7 @@ const settlementSrc=path.join(root,'src','payments','settlement-service.mjs');
 if(!fs.existsSync(settlementSrc))throw new Error('Settlement service not found: '+settlementSrc);
 const settlementDest=path.join(dest,'src','payments');
 fs.mkdirSync(settlementDest,{recursive:true});
-for(const name of ['settlement-service.mjs','settlement-gate.mjs','payment-engine.mjs','evidence-store.mjs','reconciliation-service.mjs']){
+for(const name of ['settlement-service.mjs','settlement-gate.mjs','payment-engine.mjs','evidence-store.mjs','reconciliation-service.mjs','backend-router.mjs']){
  const source=path.join(root,'src','payments',name);
  if(!fs.existsSync(source))throw new Error('Payment module not found: '+source);
  fs.copyFileSync(source,path.join(settlementDest,name));
@@ -22,7 +22,7 @@ for(const name of ['reconciliation-panel.js']){
  if(!fs.existsSync(source))throw new Error('Reconciliation UI not found: '+source);
  fs.copyFileSync(source,path.join(featuresDest,name));
 }
-console.log('Prepared web app, settlement modules, and UPI reconciliation bridge for Capacitor');
+console.log('Prepared web app, settlement modules, backend routing policy, and UPI reconciliation bridge for Capacitor');
 const platformSrc=path.join(root,'src','payments','provider-platform.mjs');
 if(!fs.existsSync(platformSrc))throw new Error('Payment platform module not found: '+platformSrc);
 fs.copyFileSync(platformSrc,path.join(settlementDest,'provider-platform.mjs'));
