@@ -265,6 +265,15 @@ app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express
     return fail(res, 400, 'invalid_provider_credential_schema');
   }
   try {
+    const stateRef = providerTenantDoc(req.tenant.id, provider, environment);
+    // Disable the previous credential set before rotating either secret. If a
+    // Secret Manager write fails midway, stale validation/activation cannot
+    // keep a partially rotated credential pair usable.
+    await stateRef.set({
+      configured: false, credentialsValidated: false, sandboxTestPassed: false,
+      webhookVerified: false, active: false,
+      updatedAt: FieldValue.serverTimestamp(), updatedBy: req.actor.uid
+    }, { merge: true });
     const apiCredentials = Object.fromEntries(
       [def.publicKey, ...def.secretKeys.filter(k => k !== 'webhookSecret')].map(k => [k, body[k]])
     );
@@ -274,7 +283,7 @@ app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express
       sandboxTestPassed: false, webhookVerified: false, active: false,
       updatedAt: FieldValue.serverTimestamp(), updatedBy: req.actor.uid };
     patch[def.publicKey] = body[def.publicKey];
-    await providerTenantDoc(req.tenant.id, provider, environment).set(patch, { merge: true });
+    await stateRef.set(patch, { merge: true });
     return res.status(202).json({ accepted: true, provider, environment, status: 'credentials_stored_validation_pending' });
   } catch {
     return fail(res, 503, 'credential_storage_unavailable');
@@ -291,6 +300,12 @@ app.delete('/v1/admin/providers/:provider/credentials', requireTenantAdmin, asyn
     const stateRef = providerTenantDoc(req.tenant.id, provider, environment);
     const state = await stateRef.get();
     if (!state.exists) return res.json({ removed: true, provider, environment, alreadyAbsent: true });
+    // Disable provider use before deleting either secret. A partial deletion
+    // must never leave a configured or active provider with missing material.
+    await stateRef.set({
+      configured: false, credentialsValidated: false, sandboxTestPassed: false,
+      webhookVerified: false, active: false, updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
     const ids = [
       providerSecretId(req.tenant.id, provider, environment, 'api'),
       providerSecretId(req.tenant.id, provider, environment, 'webhook')
