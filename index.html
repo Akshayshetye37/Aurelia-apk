@@ -1008,7 +1008,7 @@ async function backupPasswordKey(password,salt,iterations){
 async function setupBackupRecoveryPassword(){
  try{
   if(!crypto?.subtle)throw new Error('This Android WebView does not support secure backup encryption.');
-  if(await readBackupVault())throw new Error('A recovery password is already configured. Keep it safe; changing it requires a separate backup-key rotation procedure.');
+  if(await readBackupVault())throw new Error('A recovery password is already configured. Use Change recovery password below and verify the current password.');
   const password=$('#backup-recovery-password')?.value||'',confirmPassword=$('#backup-recovery-confirm')?.value||'';
   if(password.length<14)throw new Error('Use a recovery password with at least 14 characters.');
   if(password!==confirmPassword)throw new Error('The two recovery passwords do not match.');
