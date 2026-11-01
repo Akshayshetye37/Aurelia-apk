@@ -62,6 +62,7 @@ The PMS-side local settlement boundary was further hardened on this branch:
 - Existing paid totals without matching payment rows are preserved; no fabricated receipt date or payment method is introduced.
 - Manual folio submissions now carry a per-sheet request key when no bank reference is supplied.
 - Reservation advances are validated against stay charges before guest/booking mutation. Reservation creation snapshots and restores guest, booking, audit, daily total and ID state if persistence verification fails.
+- Folio totals, room rates, extra charges and discounts are rounded/validated to two decimal places. Each new reservation/imported booking snapshots its nightly room rate, and later room-rate edits preserve the old rate on existing bookings so historical folios do not change.
 - The IndexedDB intent journal now requires backend-verified `SUCCESS` before settlement authorization, keeps failed/cancelled provider intents available for late-capture reconciliation, and protects recovered session identifiers.
 - Bridge terminal observations cannot finalize payment. Backend verification/reconciliation must echo exact request, session, provider, booking, folio, amount and currency bindings.
 - The web build now packages the PMS payment orchestrator and IndexedDB intent journal, and a Node test/build GitHub Actions workflow was added.
