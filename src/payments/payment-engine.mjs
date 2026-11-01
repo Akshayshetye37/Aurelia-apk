@@ -39,6 +39,7 @@ export function parseAmountToPaise(value) {
     if (!Number.isFinite(value) || value <= 0) throw new TypeError("Amount must be positive and finite");
     const paise = Math.round(value * 100);
     if (Math.abs(value * 100 - paise) > 1e-7) throw new TypeError("Amount has more than two decimal places");
+    if (!Number.isSafeInteger(paise)) throw new TypeError("Amount exceeds the safe INR limit");
     return paise;
   }
   const cleaned = String(value ?? "").replace(/[,₹\s]/g, "").replace(/^(INR|RS\.?)/i, "");
