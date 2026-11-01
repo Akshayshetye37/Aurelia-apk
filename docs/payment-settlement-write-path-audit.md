@@ -68,3 +68,7 @@ The PMS-side local settlement boundary was further hardened on this branch:
 - The web build now packages the PMS payment orchestrator and IndexedDB intent journal, and a Node test/build GitHub Actions workflow was added.
 
 **Verification status:** Source changes and test cases were committed and re-fetched for inspection. The complete Node test suite, web build and Android APK/device verification have not been executed in this session. The new workflow is intended to run these Node tests and web bundle checks on pushes to this branch. Live gateway use remains disabled.
+
+- Reconciliation evidence now rejects invalid parse states, quarantines non-INR or unparsed evidence, derives normalized payer/UPI identity from raw fields rather than caller-supplied normalized values, and prevents a bank-statement credit from matching itself as a candidate.
+- Evidence payloads and identifiers are bounded; staff decisions are limited to review-only outcomes and must reference an existing evidence record. IndexedDB listing is cursor-based and bounded.
+- Historical room-rate snapshots are used in folio totals, preventing future room-rate edits from silently changing existing booking balances.
