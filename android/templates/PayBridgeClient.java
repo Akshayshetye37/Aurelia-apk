@@ -24,6 +24,7 @@ final class PayBridgeClient {
   static final String PACKAGE = "com.aurelia.paybridge";
   static final String SERVICE = "com.aurelia.paybridge.ipc.PayBridgeService";
   static final String PERMISSION = "com.aurelia.paybridge.permission.BIND_PAY_BRIDGE";
+  static final String APPROVED_RELEASE_CERT_SHA256 = "562c833fcb8808b226d6b0c33633c9771a47ec63cca5c42d8ef16c4c7b92bf86";
   static final int PROTOCOL_MIN = 1;
   static final int PROTOCOL_MAX = 1;
   static final int MSG_HANDSHAKE = 100;
@@ -190,8 +191,20 @@ final class PayBridgeClient {
       if (context.getPackageManager().checkSignatures(context.getPackageName(), PACKAGE)
           != PackageManager.SIGNATURE_MATCH) {
         unbindQuietly();
+        String pmsFingerprint = "";
+        String bridgeFingerprint = "";
+        try {
+          PackageInfo pmsInfo = packageInfo(context.getPackageName());
+          if (pmsInfo != null) pmsFingerprint = certificateFingerprint(pmsInfo);
+        } catch (Exception ignored) { }
+        try {
+          bridgeFingerprint = certificateFingerprint(info);
+        } catch (Exception ignored) { }
         state = "untrusted_signer";
-        detail = "Pay Bridge is not signed by the trusted PMS signing identity";
+        detail = "Installed signing certificates differ. PMS: " + shortFingerprint(pmsFingerprint)
+            + "; Pay Bridge: " + shortFingerprint(bridgeFingerprint)
+            + ". Expected shared release SHA-256: " + APPROVED_RELEASE_CERT_SHA256
+            + ". Uninstall both old builds and install the matching release APK pair.";
         notifyStatus();
         return;
       }
@@ -345,6 +358,11 @@ final class PayBridgeClient {
     StringBuilder out = new StringBuilder();
     for (byte b : digest) out.append(String.format(java.util.Locale.ROOT, "%02x", b & 0xff));
     return out.toString();
+  }
+
+  private String shortFingerprint(String fingerprint) {
+    if (fingerprint == null || fingerprint.isEmpty()) return "unavailable";
+    return fingerprint.substring(0, Math.min(12, fingerprint.length()));
   }
 
   private void fail(String code, String message) {
