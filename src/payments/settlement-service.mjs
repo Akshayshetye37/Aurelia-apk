@@ -32,6 +32,10 @@ function normalizedReference(value) {
   return String(value || "").trim();
 }
 
+function normalizedPaymentMethod(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function normalizedPaymentReference(value, method) {
   const reference = normalizedReference(value);
   return /upi|bank|neft|rtgs|imps|card|wallet/i.test(String(method || ""))
@@ -45,7 +49,7 @@ function samePayment(payment, { booking, amountPaise, method, reference }) {
     : moneyToPaise(payment.a ?? payment.amount, "Existing payment amount");
   return payment.bookingId === booking.id &&
     recordedPaise === amountPaise &&
-    String(payment.m || payment.method || "").trim() === method &&
+    normalizedPaymentMethod(payment.m ?? payment.method) === normalizedPaymentMethod(method) &&
     normalizedPaymentReference(payment.r ?? payment.reference, payment.m ?? payment.method) === reference;
 }
 
@@ -146,8 +150,9 @@ export function settlePayment({
         error.code = "PAYMENT_REFERENCE_ALREADY_APPLIED";
         throw error;
       }
-      if (moneyToPaise(existing.payment.a ?? existing.payment.amount, "Existing payment amount") !== amountPaise) {
-        const error = new Error("Payment reference was already recorded with a different amount");
+      if (moneyToPaise(existing.payment.a ?? existing.payment.amount, "Existing payment amount") !== amountPaise ||
+          normalizedPaymentMethod(existing.payment.m ?? existing.payment.method) !== normalizedPaymentMethod(paymentMethod)) {
+        const error = new Error("Payment reference was already recorded with different payment details");
         error.code = "PAYMENT_REFERENCE_CONFLICT";
         throw error;
       }
