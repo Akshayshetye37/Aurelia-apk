@@ -191,7 +191,7 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
         Object.keys(body.customer).some(key => !['id', 'phone', 'email'].includes(key)) ||
         (body.customer.email !== undefined &&
           (typeof body.customer.email !== 'string' || body.customer.email.length > 254 ||
-           !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.customer.email)))) {
+           !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.customer.email)))) {
       return fail(res, 400, 'invalid_cashfree_customer_schema');
     }
   }
