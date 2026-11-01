@@ -43,7 +43,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify-and-build:
@@ -184,22 +184,14 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | sed -n '1p'
           sha256sum "$apk" > "$apk.sha256"
 
-      # Publish directly to a GitHub draft release to avoid Actions-artifact quota failures.
-      - name: Publish signed PMS APK as a draft prerelease
+      - name: Upload signed PMS APK and verification metadata
         if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        working-directory: android
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="aurelia-pms-release-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" \
-            app/build/outputs/apk/release/app-release.apk \
-            app/build/outputs/apk/release/app-release.apk.sha256 \
-            "$RUNNER_TEMP/aurelia-pms-certificate.txt" \
-            --target "$GITHUB_SHA" \
-            --draft \
-            --prerelease \
-            --title "Aurelia PMS signed release APK (run ${GITHUB_RUN_NUMBER})" \
-            --notes "Signed PMS APK from commit ${GITHUB_SHA}. Verify the attached APK SHA-256 and signing-certificate report. Confirm the certificate SHA-256 fingerprint matches Aurelia Pay Bridge before installing both apps together. Forgot PIN recovery remains unavailable until the recovery coordinator, recovery-envelope implementation, Firebase deployment configuration and crash-recovery tests are completed. Payment processing and automatic folio settlement remain disabled."
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurelia-pms-release-${{ github.sha }}
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/app-release.apk.sha256
+            ${{ runner.temp }}/aurelia-pms-certificate.txt
+          if-no-files-found: error
+          retention-days: 14
