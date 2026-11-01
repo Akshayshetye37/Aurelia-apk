@@ -7,6 +7,7 @@ on:
       - 'package.json'
       - 'capacitor.config.json'
       - 'scripts/**'
+      - 'docs/PMS_IMPORT_MANIFEST.json'
       - '.github/workflows/build-apk.yml'
 jobs:
   build:
