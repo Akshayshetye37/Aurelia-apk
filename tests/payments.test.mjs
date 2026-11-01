@@ -122,3 +122,22 @@ test("bank credit cannot be passed as a payment candidate to itself", () => {
   });
   assert.equal(matchBankEvent(bankEvent, [bankEvent]).decision, "pending");
 });
+
+test("payment event matching rejects a candidate in a different currency", () => {
+  const candidate = createPaymentEvent({
+    eventId:"usd-candidate", source:"gpay_notification",
+    eventType:"payment_notification", currency:"USD",
+    payerName:"A Guest", amount:"40", timestamp:"2026-01-01T10:00:00Z"
+  });
+  const bankEvent = createPaymentEvent({
+    eventId:"inr-bank", source:"bank_sms", eventType:"credit",
+    currency:"INR", bank:"SBI", amount:"40",
+    timestamp:"2026-01-01T10:00:00Z"
+  });
+  assert.equal(matchBankEvent(bankEvent, [candidate]).decision, "pending");
+});
+
+test("payment event rejects invalid receivedAt and oversized evidence text", () => {
+  assert.throws(() => createPaymentEvent({ eventId:"bad-time", amount:"10", receivedAt:"not-a-date" }), /receivedAt/);
+  assert.throws(() => createPaymentEvent({ eventId:"large", amount:"10", rawEvidence:"x".repeat(8193) }), /8192/);
+});
