@@ -129,9 +129,9 @@ export function settlePayment({
   const priorPays = Array.isArray(booking.pays) ? booking.pays : [];
   const priorHistory = Array.isArray(booking.payments) ? booking.payments : [];
   const priorPaid = booking.p;
-  const priorPaidNumeric = Number(priorPaid);
   const priorToday = state.today;
-  const priorTodayPaise = moneyToPaise(Number(priorToday) || 0, "Daily payment total", { allowZero: true });
+  const priorTodayPaise = priorToday == null || priorToday === ""
+    ? 0 : moneyToPaise(priorToday, "Daily payment total", { allowZero: true });
   const priorAudit = Array.isArray(state.aud) ? state.aud.slice() : null;
   const timestamp = now();
 
@@ -161,9 +161,8 @@ export function settlePayment({
       if (!Number.isSafeInteger(total)) throw new RangeError("Existing payment total exceeds the safe INR limit");
       return total;
     }, 0);
-    const legacyPaidPaise = Number.isFinite(priorPaidNumeric) && priorPaidNumeric > 0
-      ? moneyToPaise(priorPaidNumeric, "Existing paid total", { allowZero: true })
-      : 0;
+    const legacyPaidPaise = priorPaid == null || priorPaid === ""
+      ? 0 : moneyToPaise(priorPaid, "Existing paid total", { allowZero: true });
     const nextPaidPaise = Math.max(recordedRowsPaise, legacyPaidPaise) + amountPaise;
     const nextTodayPaise = priorTodayPaise + amountPaise;
     if (!Number.isSafeInteger(nextPaidPaise) || !Number.isSafeInteger(nextTodayPaise)) {
