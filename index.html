@@ -3726,6 +3726,17 @@ if (typeof window.render === "function") window.render();
   }
   const status=bridgeStatus(),connected=bridgeConnected(),caps=Array.isArray(status.capabilities)?status.capabilities:[],canManage=connected&&caps.includes('provider.management');
   let bridge;
+  const pairingHelp={
+   untrusted_signer:'Signing certificate mismatch. Android permits this connection only when PMS and Pay Bridge use the same signing certificate. Uninstall both apps, then install the matching release-signed APK pair. Independently built debug APKs normally have different certificates.',
+   permission_denied:'Android rejected the signature-level bind permission. Confirm both APKs use the same release signing certificate and reinstall the matching pair.',
+   protocol_mismatch:'The installed applications speak incompatible IPC protocol versions. Update PMS and Pay Bridge from the same approved release pair.',
+   service_identity_mismatch:'The installed Pay Bridge service package or component does not match the PMS contract. Update the Pay Bridge APK.',
+   service_unavailable:'The Pay Bridge service could not be bound. Confirm the companion APK is installed and its exported service declares the required signature permission.',
+   handshake_failed:'The native handshake did not complete. Update both APKs and retry the connection.',
+   invalid_response:'Pay Bridge returned an invalid handshake response. Update both APKs from the same release pair.',
+   disconnected:'The native service is disconnected. Reopen Pay Bridge, then retry from PMS.'
+  };
+  const diagnosis=pairingHelp[status.state]||status.detail||'Connection could not be authenticated. Check the installed APK pair and retry.';
   if(status.state==="native_unavailable"){
    bridge='<div class="tag out">Browser preview only</div><p class="lab">Android Messenger is unavailable in CodeShack. Install and run the PMS APK to test the native connection.</p>';
   }else if(status.state==="not_installed"){
@@ -3733,7 +3744,7 @@ if (typeof window.render === "function") window.render();
   }else if(connected){
    bridge='<div class="tag ready">Authenticated · protocol v'+esc(status.protocolVersion)+'</div><p class="lab">Signer fingerprint: '+esc(status.certificateSha256||'verified')+'<br>Capabilities: '+esc(caps.join(', ')||'handshake only')+'</p><button class="btn sm ghost" onclick="disconnectAureliaPayBridge()">Disconnect Pay Bridge</button>';
   }else{
-   bridge='<div class="tag out">Not authenticated</div><p class="lab">'+esc(status.detail||'Pay Bridge is not connected')+'</p><button class="btn sm" onclick="requestAureliaPayBridge()">Connect / Retry Pay Bridge</button>';
+   bridge='<div class="tag out">Not authenticated · '+esc(status.state||'unknown')+'</div><p class="lab">'+esc(diagnosis)+'</p><button class="btn sm" onclick="requestAureliaPayBridge()">Connect / Retry Pay Bridge</button>';
   }
   const names=providerNames();
   const providers=names.map(([id,name])=>{
