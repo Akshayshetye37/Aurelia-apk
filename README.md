@@ -8,7 +8,7 @@ Aurelia PMS is a browser-based property-management interface supplied as a singl
 
 - **Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
 - **Working branch for the payment integration workstream:** `feature/multi-provider-payment-backend`
-- **Payment integration branch HEAD checked for this update:** `8c27e4fd35d26bf7292ee1efb5ba20fcdd8a7b27`
+- **Branch HEAD at the time of this README update:** `cb44c0035cf5e546ce6f3be4dee7c875e0b17007`
 - **Project root:** repository root (`/` in the GitHub file browser).
 - **Main application UI:** `index.html`
 - **Android native templates:** `android/templates/`
@@ -161,12 +161,12 @@ AURELIA PMS APK
     |     +-- Optional user-selected Google Drive folder (SAF)
     |     +-- Optional shared-folder SAF grant
     |
-    +-- PIN and recovery security (target)
-          +-- PIN envelope and Master Key
-          +-- Independent 32-byte Recovery Secret
-          +-- Firebase Phone Auth identity proof
-          +-- Authenticated recovery envelope
-          +-- Crash-safe generation / manifest transaction
+    +-- App lock and backup-key protection (planned / incomplete)
+          +-- Native PIN gate before PMS WebView access
+          +-- Versioned Argon2id-derived key-encryption envelope
+          +-- Android Keystore-backed biometric authorization
+          +-- Independent backup recovery protocol
+          +-- Crash-safe key-envelope rotation and recovery
 
 AURELIA PAY BRIDGE APK (separate application)
   +-- Own UI, identity and local data
@@ -181,9 +181,10 @@ AURELIA PAY BRIDGE APK (separate application)
 
 - PMS and Pay Bridge remain separate APKs and separate data owners. PMS does not contain the Pay Bridge application.
 - PMS-to-Pay-Bridge communication must authenticate the installed package, signing certificate and IPC caller. A package name or client callback alone is not authentication.
-- Firebase Phone Auth proves control of a phone number. It does not prove ownership of the PMS Master Key.
-- Forgot PIN must require both current Firebase phone verification and the independent high-entropy Recovery Secret. The Recovery Secret must authenticate/decrypt the recovery envelope before the existing Master Key can be recovered.
-- The Firebase ID token is an identity credential, not an encryption key or recovery secret. Merely Base64-decoding JWT claims is not signature verification.
+- App-lock PIN, backup encryption password, and account-recovery authorization are separate security factors with separate purposes. A local app PIN must never be treated as a backup recovery credential.
+- The documented recovery design uses a backend-mediated SMS OTP only to authorize recovery, followed by a KMS/HSM-controlled recovery-envelope operation. OTP verification alone must never release a data-encryption key.
+- The recovery backend, shared challenge store, SMS provider, business identity registry and KMS/HSM adapter are not deployed. Forgot-PIN recovery must remain unavailable and fail closed until that complete protocol is implemented and tested.
+- The canonical recovery decisions are in [docs/PIN-BACKUP-RECOVERY-STRATEGY.md](docs/PIN-BACKUP-RECOVERY-STRATEGY.md) and [docs/PIN-RECOVERY-API-CONTRACT.md](docs/PIN-RECOVERY-API-CONTRACT.md). Older Firebase Phone Auth / Recovery Secret descriptions are not the approved recovery protocol.
 - Google Drive and shared folders are backup / file-exchange destinations, not live databases or transaction authorities.
 - No custom application server is part of the current local-first deployment decision. Any future server-backed payment or backup feature must be explicitly designed, secured and documented as a separate service; client APKs must never contain provider secrets.
 
@@ -213,27 +214,33 @@ The following are present in the current project code or documented integration 
 - PMS-side Pay Bridge client contract and signer-checked native IPC handshake foundation.
 - Local-first backup design covering app-private storage, optional Google Drive SAF destination and separately granted shared-folder access.
 - Encrypted backup format for backup snapshots; existing migration and restore behavior must be validated against the current implementation before operational use.
-- Firebase Phone Auth native source templates for the recovery identity boundary, including OTP lifecycle handling and a dedicated recovery FirebaseAuth instance.
-- Build-time Android patch logic to copy the Firebase identity templates and add Firebase Auth to the generated app module. Google Services is applied only when a deployment-provided `google-services.json` is supplied; the generated root Gradle plugin management is not rewritten.
-- Node guard tests for the Firebase integration contract.
+- Android native templates and build-time patching infrastructure. Their presence alone does not prove that an app-lock gate, key hierarchy, biometric unlock or recovery flow is integrated.
 
-### Firebase deployment status
+### App lock and key protection status
 
-The repository does not include a verified production Firebase Console configuration. Without the real configuration supplied securely to the Android build workspace, the recovery Firebase factory intentionally fails closed at runtime. Structural checks on a JSON file cannot prove that its API key, project, package registration, SHA fingerprints, Play Integrity or reCAPTCHA configuration are valid. No live SMS/device authentication test is claimed.
+The app-lock design is not yet an implemented security boundary. No production-ready native PIN enrollment/unlock flow, lifecycle-enforced gateway, Argon2id key-envelope implementation, biometric key-unwrapping flow, or verified Master Key handoff is claimed by this README. A launcher screen by itself would not protect the PMS: every Activity, deep-link and intent entry path must enforce the same gate before the WebView is initialized.
+
+The intended local design is an optional 4–16 digit PIN, Argon2id-derived key-encryption key, AES-256-GCM key wrapping with authenticated/versioned metadata, persistent throttling, and Android Keystore-backed biometric authorization where supported. A biometric success callback must not unlock the app unless the corresponding Keystore cryptographic operation succeeds and the persisted protected payload is authenticated. PIN protection must not be confused with backup recovery.
+
+**Current status: app lock and biometric unlock are planned/incomplete. Do not describe them as active protection or rely on them to protect production guest data.**
+
+### Recovery deployment status
+
+The repository contains recovery design documents and API contracts, but no deployed recovery service, production SMS delivery, shared OTP challenge store, business identity registry or KMS/HSM recovery adapter is claimed. The recovery protocol is not complete end to end. Do not enable Forgot PIN, display a successful-recovery state, or imply that SMS OTP alone can recover encrypted data. Recovery must fail closed until the full server-side protocol and client-side envelope rewrap have passed security review and end-to-end tests.
 
 ## 4. Not yet complete — required before Forgot PIN can be enabled
 
 These are implementation and verification tasks, not completed features:
 
-1. Implement the real `RecoveryCoordinator` against the actual Kotlin interfaces in this repository. Do not use fabricated receipts, placeholder JWTs or mock claims as authentication proof.
-2. Complete the cryptographic recovery-envelope format and strict parser: authenticated metadata, key ID, generation, nonce, ciphertext/tag lengths, versioning and bounded input sizes.
-3. Confirm the independent 32-byte Recovery Secret is used to derive the recovery wrapping key and authenticate/decrypt the envelope. Firebase UID or phone number must not substitute for this secret.
-4. Complete PIN envelope rotation using immutable generations and an atomic active-manifest commit. Define deterministic startup recovery for PREPARED, COMMITTED and incomplete/corrupt transaction states.
-5. Verify transaction return values and failure outcomes. The coordinator must not write around or bypass the transaction engine.
-6. After commit, unlock the new PIN envelope and prove it contains the same Master Key identity as the recovered key. Clear temporary fingerprints, derived keys, salts and mutable secret buffers in `finally` blocks.
-7. Add automated tests for wrong phone, stale Firebase callbacks, invalid secret, tampered recovery metadata, key ID/generation mismatch, invalid PIN, each transaction write failure, process interruption and restart recovery.
-8. Run native Gradle compilation and Android device tests with a real Firebase project configuration. Robolectric tests alone do not prove process-death durability or real Firebase behavior.
-9. Integrate the Forgot PIN UI with the verified OTP and recovery coordinator state machine. Keep recovery unavailable until the coordinator and transaction tests pass.
+1. Implement the local native app-lock boundary in the generated Capacitor Android app. Enforce it on every entry path before PMS WebView initialization; do not rely on the launcher Activity alone.
+2. Implement PIN enrollment, verification, change and removal with a documented threat model, Argon2id parameter policy, persistent rate limiting and fail-closed corruption handling.
+3. Implement a versioned AES-256-GCM key envelope with strict parsing, authenticated application/key identity metadata, bounded KDF parameters and crash-safe atomic rotation.
+4. Integrate the protected key with the actual PMS data-encryption layer. Do not create a demonstration key flow that discards the recovered key or claims protection while operational data remains unencrypted.
+5. Implement biometric authorization with Android Keystore and BiometricPrompt CryptoObject. Verify key invalidation, enrollment changes, cancellation and PIN fallback.
+6. Implement lifecycle semantics for immediate, timeout and never-automatically-lock policies. Use monotonic time for elapsed-time decisions, handle process death/reboot explicitly and do not treat Activity onPause as proof that the app entered the background.
+7. Implement the separate backend recovery protocol in [docs/PIN-BACKUP-RECOVERY-STRATEGY.md](docs/PIN-BACKUP-RECOVERY-STRATEGY.md): OTP challenge controls, single-use authorization, tenant binding, audit, KMS/HSM envelope rewrap and operational fail-closed behavior. The API contract still requires cryptographic protocol review before implementation.
+8. Add cryptographic, parser, throttling, tamper, concurrency, process-death, reboot, PIN-rotation and recovery negative-path tests. Add real Android device tests for lifecycle and biometric behavior.
+9. Integrate UI states only after the native security APIs and tests exist. Keep app lock and Forgot PIN unavailable until their respective gates pass.
 
 **Status: Forgot PIN is not production-ready and must remain disabled until these gates pass.**
 
@@ -273,7 +280,7 @@ These are implementation and verification tasks, not completed features:
 - A successful debug APK build is not proof of Firebase authentication, payment processing, backup restoration or production security.
 - A release APK requires the owner's controlled signing identity and a separately verified release process.
 - Never commit signing passwords, private keystores, service-account credentials or provider secrets.
-- Keep production credentials out of source control. Supply Firebase client configuration through a controlled build input and verify the exact package / SHA fingerprint registrations in Firebase Console.
+- Keep production credentials out of source control. Supply any future service configuration through controlled build inputs and verify provider, tenant and signing configuration before release.
 - Record test evidence and exact commit SHA for each milestone. Do not mark a component "verified" until its relevant tests have actually run and passed.
 
 ## PMS Pay Bridge payment orchestration status
