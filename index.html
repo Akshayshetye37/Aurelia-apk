@@ -389,7 +389,7 @@ window.AureliaAdsBridge = {
 </script>
 
 
-<div class="app"><div class="top"><div class="crest" id="crest"></div><div class="pill"><i></i>Front desk online</div></div><main id="v"></main></div>
+<div class="app"><div class="top"><div class="crest" id="crest"></div><div class="pill" id="connection-status"><i></i>Local PMS · Internet optional</div></div><main id="v"></main></div>
 <nav class="dock" id="dock" style="--i:0"></nav>
 <div class="sheet" id="sh"><div class="scrim" onclick="closeS()"></div><div class="pan" id="pan"></div></div><div id="toast"></div>
 <script>
@@ -1437,7 +1437,8 @@ async function restoreGo(){
  }
 }
 const useMenu=m=>{Object.keys(MENU).forEach(k=>delete MENU[k]);Object.assign(MENU,m);S.menu=MENU};
-function persist(){if(RECOVERY_CHECK_PENDING)return;try{const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);(window.__aureliaStorage||localStorage).setItem(SK,JSON.stringify(o))}catch(e){if(!S.qw){S.qw=1;toast('Device storage is full. Back up, then remove old items.')}}}
+let LOCAL_STORAGE_WARNING_SHOWN=false;
+function persist(){if(RECOVERY_CHECK_PENDING)return;try{const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);(window.__aureliaStorage||localStorage).setItem(SK,JSON.stringify(o));if(window.__aureliaStorage&&window.__aureliaStorage.memoryOnly&&!LOCAL_STORAGE_WARNING_SHOWN){LOCAL_STORAGE_WARNING_SHOWN=true;toast('WARNING: Device persistence is unavailable. Data is session-only; export a backup before closing the app.')}}catch(e){if(!S.qw){S.qw=1;toast('Device storage is unavailable or full. Changes may not be saved. Export a backup before closing the app.')}}}
 let LOCAL_STATE_STATUS='missing',RECOVERY_CHECK_PENDING=false,AUTO_RECOVERY_REQUEST_ID=null,AUTO_RECOVERY_EXCLUDED=[];
 function loadAll(){
  let raw=null;try{raw=(window.__aureliaStorage||localStorage).getItem(SK)}catch(e){LOCAL_STATE_STATUS='invalid';return}
