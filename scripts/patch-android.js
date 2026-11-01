@@ -235,14 +235,33 @@ fs.mkdirSync(javaDir, { recursive: true });
 const appModuleDir = path.join(androidDir, 'app');
 const appGradleGroovy = path.join(appModuleDir, 'build.gradle');
 const appGradleKts = path.join(appModuleDir, 'build.gradle.kts');
+
+// The security boundary is implemented in Kotlin, while Capacitor's generated
+// MainActivity is Java. Explicitly enable Kotlin compilation in the app module;
+// without this plugin javac cannot resolve AureliaSecurityRuntime or LockGateActivity.
+function ensureKotlinAndroidPlugin(contents, kotlinDsl) {
+  const pluginId = 'org.jetbrains.kotlin.android';
+  if (contents.includes(pluginId)) return contents;
+  const statement = kotlinDsl
+    ? '    id("org.jetbrains.kotlin.android") version "2.0.21"'
+    : "    id 'org.jetbrains.kotlin.android' version '2.0.21'";
+  if (/plugins\\s*\\{/.test(contents)) {
+    return contents.replace(/plugins\\s*\\{/, match => match + '\\n' + statement);
+  }
+  // Capacitor 7's generated app module uses the plugins DSL. If a future
+  // template switches to legacy apply-plugin syntax, add a valid top-level
+  // plugins block before the remaining app configuration.
+  return 'plugins {\\n' + statement + '\\n}\\n\\n' + contents;
+}
+
 if (fs.existsSync(appGradleGroovy)) {
-  let gradle = fs.readFileSync(appGradleGroovy, 'utf8');
+  let gradle = ensureKotlinAndroidPlugin(fs.readFileSync(appGradleGroovy, 'utf8'), false);
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
     fs.writeFileSync(appGradleGroovy, gradle);
   }
 } else if (fs.existsSync(appGradleKts)) {
-  let gradle = fs.readFileSync(appGradleKts, 'utf8');
+  let gradle = ensureKotlinAndroidPlugin(fs.readFileSync(appGradleKts, 'utf8'), true);
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + '\n    implementation("com.google.mlkit:text-recognition:16.0.1")');
     fs.writeFileSync(appGradleKts, gradle);
