@@ -114,3 +114,11 @@ test("mismatched amounts never match", () => {
   const bank = createPaymentEvent({ eventId: "bob-3", source: "bank_sms", eventType: "credit", amount: "250", timestamp: "2026-04-05T07:52:40Z" });
   assert.equal(matchBankEvent(bank, [candidate]).decision, "pending");
 });
+
+test("bank credit cannot be passed as a payment candidate to itself", () => {
+  const bankEvent = createPaymentEvent({
+    eventId:"statement-credit", source:"statement_import", eventType:"credit",
+    bank:"SBI", amount:"40", currency:"INR", utr:"123456789012"
+  });
+  assert.equal(matchBankEvent(bankEvent, [bankEvent]).decision, "pending");
+});
