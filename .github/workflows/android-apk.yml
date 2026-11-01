@@ -61,6 +61,9 @@ jobs:
       - name: Install Node dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Verify imported PMS source integrity
+        run: npm run verify:pms-import
+
       - name: Prepare web app
         run: npm run build
 
