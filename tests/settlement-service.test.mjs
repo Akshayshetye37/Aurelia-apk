@@ -327,3 +327,11 @@ test("electronic payment references normalize case and internal whitespace", () 
   settlePayment({ ...deps, amount:10, method:"UPI", reference:"utr  abc 123" });
   assert.equal(booking.pays[0].r, "UTRABC123");
 });
+
+test("legacy electronic references match despite case and whitespace differences", () => {
+  const { booking, state, deps } = fixture();
+  booking.payments = [{ amount:10, method:"upi", reference:"utr abc 123" }];
+  const result = settlePayment({ ...deps, amount:10, method:"UPI", reference:"UTRABC123" });
+  assert.equal(result.duplicate, true);
+  assert.equal(booking.p, 0);
+});
