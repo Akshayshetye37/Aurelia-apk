@@ -42,7 +42,10 @@ test('PIN gate persists enrollment marker separately from the PIN envelope', () 
   const gate = read('android/templates/security/LockGateActivity.kt');
   assert.match(runtime, /AndroidKeyStore/);
   assert.match(runtime, /MARKER_ALIAS/);
-  assert.match(gate, /aurelia-pin-envelope\.v2/);
+  const store = read('android/templates/security/AureliaEnvelopeStore.kt');
+  assert.match(store, /AndroidKeyStore/);
+  assert.match(store, /AES\/GCM\/NoPadding/);
+  assert.match(gate, /AureliaEnvelopeStore/);
   assert.match(gate, /enrolled != envelopeExists/);
   assert.match(gate, /refusing setup or unlock/);
 });
