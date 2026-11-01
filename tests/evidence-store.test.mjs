@@ -87,3 +87,24 @@ test("automatic folio settlement is explicitly disabled", () => {
   assert.equal(AUTO_FOLIO_SETTLEMENT_ENABLED, false);
   assert.throws(assertAutoFolioSettlementEnabled, /settlement is disabled/i);
 });
+
+test("evidence input rejects oversized raw text and invalid currency", async () => {
+  const store = createEvidenceStore({ indexedDB, dbName:"bounded-evidence" });
+  await assert.rejects(store.addEvidence(base({ rawEvidence:"x".repeat(8193) })), /8192/);
+  await assert.rejects(store.addEvidence(base({ currency:"US" })), /currency/);
+  await store.close();
+});
+
+test("staff decisions require an existing evidence record and review-only outcome", async () => {
+  const store = createEvidenceStore({ indexedDB, dbName:"decision-integrity" });
+  await assert.rejects(store.recordDecision({
+    decisionId:"orphan", evidenceId:"missing", decision:"needs_review",
+    reason:"missing evidence", reviewerId:"staff-1"
+  }), /missing evidence/);
+  await store.addEvidence(base());
+  await assert.rejects(store.recordDecision({
+    decisionId:"paid", evidenceId:"evidence-1", decision:"paid",
+    reason:"not allowed", reviewerId:"staff-1"
+  }), /review-only/);
+  await store.close();
+});
