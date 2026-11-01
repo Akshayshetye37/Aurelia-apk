@@ -249,6 +249,52 @@ if (!fs.existsSync(firebaseBootstrapTemplate)) throw new Error('RecoveryFirebase
 fs.copyFileSync(firebaseBootstrapTemplate, path.join(identityDir, 'RecoveryFirebaseAuthFactory.kt'));
 
 
+
+/**
+ * Native App Manager security sources are maintained as templates and copied
+ * into the generated Capacitor project on every rebuild.
+ */
+const securityTemplateDir = path.join(androidDir, 'templates', 'security');
+const securitySourceDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms', 'security');
+fs.mkdirSync(securitySourceDir, { recursive: true });
+for (const file of [
+  'AureliaCryptoEngine.kt',
+  'AppLockManager.kt',
+  'BiometricVaultManager.kt',
+  'AureliaAppManager.kt'
+]) {
+  const source = path.join(securityTemplateDir, file);
+  if (!fs.existsSync(source)) throw new Error('Native security template is missing: ' + file);
+  fs.copyFileSync(source, path.join(securitySourceDir, file));
+}
+
+function addNativeSecurityDependencies(contents, kotlinDsl) {
+  if (!/dependencies\\s*\\{/.test(contents)) {
+    throw new Error('App Gradle file has no dependencies block; native security dependencies were not added.');
+  }
+  const dependencies = [
+    ['org.bouncycastle:bcprov-jdk18on:1.80', 'org.bouncycastle:bcprov-jdk18on'],
+    ['androidx.biometric:biometric:1.2.0-alpha05', 'androidx.biometric:biometric']
+  ];
+  for (const [coordinate, marker] of dependencies) {
+    if (contents.includes(marker)) continue;
+    const line = kotlinDsl
+      ? `\\n    implementation("${coordinate}")`
+      : `\\n    implementation "${coordinate}"`;
+    contents = contents.replace(/dependencies\\s*\\{/, match => match + line);
+  }
+  return contents;
+}
+if (fs.existsSync(appGradleGroovy)) {
+  const gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleGroovy, 'utf8'), false);
+  fs.writeFileSync(appGradleGroovy, gradle);
+} else if (fs.existsSync(appGradleKts)) {
+  const gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleKts, 'utf8'), true);
+  fs.writeFileSync(appGradleKts, gradle);
+} else {
+  throw new Error('Generated Android app Gradle file was not found; native security dependencies cannot be wired.');
+}
+
 const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
 
 function addFirebaseDependencies(contents, kotlinDsl) {
