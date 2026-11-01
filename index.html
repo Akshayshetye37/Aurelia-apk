@@ -991,15 +991,41 @@ function backupVaultDb(){
   req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('Could not open encrypted backup key storage.'));
  });
 }
+let backupVaultMemory=null;
+const BACKUP_VAULT_FALLBACK_KEY='aurelia-pms-backup-vault-v1:wrapped';
+function readBackupVaultFallback(){
+ try{
+  const raw=localStorage.getItem(BACKUP_VAULT_FALLBACK_KEY);
+  if(!raw)return null;
+  const saved=JSON.parse(raw);
+  if(!saved||saved.id!==BACKUP_VAULT_ID||saved.format!==1||typeof saved.wrappedKey!=='string')return null;
+  return {...saved,key:backupVaultMemory&&backupVaultMemory.salt===saved.salt?backupVaultMemory.key:null};
+ }catch(_){throw new Error('This preview blocks both IndexedDB and local storage. Open the PMS in Chrome or the native Android app to use encrypted backups.')}
+}
 async function readBackupVault(){
- const db=await backupVaultDb();
- try{return await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readonly'),req=tx.objectStore('vault').get(BACKUP_VAULT_ID);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}
- finally{db.close()}
+ try{
+  const db=await backupVaultDb();
+  try{return await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readonly'),req=tx.objectStore('vault').get(BACKUP_VAULT_ID);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}
+  finally{db.close()}
+ }catch(error){
+  const fallback=readBackupVaultFallback();
+  if(fallback)return fallback;
+  if(error&&/blocks both IndexedDB/.test(error.message))throw error;
+  return null;
+ }
 }
 async function writeBackupVault(record){
- const db=await backupVaultDb();
- try{await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readwrite');tx.objectStore('vault').put(record);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('Could not save backup recovery key.'))})}
- finally{db.close()}
+ try{
+  const db=await backupVaultDb();
+  try{await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readwrite');tx.objectStore('vault').put(record);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('Could not save backup recovery key.'))})}
+  finally{db.close()}
+ }catch(error){
+  try{
+   const {key,...wrappedOnly}=record;
+   localStorage.setItem(BACKUP_VAULT_FALLBACK_KEY,JSON.stringify(wrappedOnly));
+   backupVaultMemory={salt:record.salt,key:record.key};
+  }catch(_){throw new Error('Secure backup storage is blocked in this preview. Open the PMS in Chrome or the native Android app; no recovery key was saved.')}
+ }
 }
 async function backupPasswordKey(password,salt,iterations){
  const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveKey']);
@@ -1083,10 +1109,22 @@ async function decryptBackupPayload(payload,filename){
 }
 async function encryptBackupPayload(payload,name){
  const vault=await readBackupVault();
- if(!vault||!vault.key)throw new Error('Set the encrypted backup recovery password in Backup & Restore before creating backups.');
+ if(!vault)throw new Error('Set the encrypted backup recovery password in Backup & Restore before creating backups.');
+ let key=vault.key;
+ if(!key){
+  const password=prompt('Enter your Aurelia backup recovery password to unlock the encrypted backup vault:');
+  if(password===null)throw new Error('Backup creation cancelled.');
+  try{
+   const kek=await backupPasswordKey(password,backupUnB64(vault.salt),vault.iterations||BACKUP_KDF_ITERATIONS);
+   const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:backupUnB64(vault.wrapIv),additionalData:new TextEncoder().encode('com.aurelia.pms|backup-key-wrap|v1')},kek,backupUnB64(vault.wrappedKey));
+   key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
+   new Uint8Array(raw).fill(0);
+   backupVaultMemory={salt:vault.salt,key};
+  }catch(_){throw new Error('Recovery password is incorrect. No backup was created.')}
+ }
  const iv=crypto.getRandomValues(new Uint8Array(12));
  const aad=new TextEncoder().encode('com.aurelia.pms|backup-v1|'+name);
- const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad},vault.key,new TextEncoder().encode(payload));
+ const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad},key,new TextEncoder().encode(payload));
  return JSON.stringify({format:'AURELIA-PMS-ENCRYPTED-BACKUP',v:1,application:'com.aurelia.pms',name,cipher:'AES-256-GCM',kdf:'PBKDF2-HMAC-SHA256',iterations:vault.iterations,salt:vault.salt,wrapIv:vault.wrapIv,wrappedKey:vault.wrappedKey,iv:backupB64(iv),ciphertext:backupB64(ciphertext)});
 }
 async function hasBackupVault(){try{return !!(await readBackupVault())}catch(_){return false}}
