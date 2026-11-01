@@ -50,7 +50,7 @@ function normalizeInput(input) {
     receivedAt: receivedAt.toISOString(), rawEvidence
   });
   return {
-    ...event, ...input, eventId, evidenceId, source, parseStatus: "parsed",
+    ...input, ...event, eventId, evidenceId, source, parseStatus: "parsed",
     currency, amountPaise, receivedAt: receivedAt.toISOString(), rawEvidence
   };
 }
