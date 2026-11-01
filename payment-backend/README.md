@@ -19,7 +19,7 @@ Separately deployable Node.js service; not part of either APK. The backend curre
 - Both modules accept an injectable fetch implementation for deterministic contract tests. Amounts are integer minor units at the internal boundary. Provider API secrets remain server-side.
 - Automated unit/contract tests cover request auth/header shape, amount conversion, webhook signatures and invalid input rejection.
 
-These modules are not yet connected to the HTTP service. Their presence does not mean a merchant can accept payments. No sandbox merchant credentials or provider-side end-to-end tests have been run.
+An explicit adapter factory now instantiates only Razorpay and Cashfree modules; unimplemented providers fail closed. A provider-independent domain module defines INR minor-unit validation, strict tenant/provider/environment/order/amount/currency binding, conservative provider-state normalization and legal payment-state transitions. These are foundational modules only: they are not yet connected to the HTTP service. Their presence does not mean a merchant can accept payments. No sandbox merchant credentials or provider-side end-to-end tests have been run.
 
 ## Current HTTP endpoints
 
