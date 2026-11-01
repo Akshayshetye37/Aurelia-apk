@@ -391,6 +391,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     if (typeof eventId !== 'string' || !webhookEventIdPattern.test(eventId)) return fail(res, 400, 'invalid_event_id');
     const inboxId = crypto.createHash('sha256').update(tenantId + ':' + provider + ':' + environment + ':' + eventId).digest('hex');
     const inbox = db.doc('paymentWebhookInbox/' + inboxId);
+    const orderData = orderSnap.data();
     const intentRef = orderData.intentId
       ? db.doc('paymentIntents/' + orderData.intentId)
       : null;
