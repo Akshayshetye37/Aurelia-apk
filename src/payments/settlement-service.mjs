@@ -64,7 +64,7 @@ export function settlePayment({
   const amountPaise = moneyToPaise(amount, "Payment amount");
   const value = amountPaise / 100;
   const paymentMethod = String(method || "").trim();
-  if (!paymentMethod || paymentMethod.length > MAX_METHOD_LENGTH || /[\\u0000-\\u001f\\u007f]/.test(paymentMethod)) {
+  if (!paymentMethod || paymentMethod.length > MAX_METHOD_LENGTH || /[\u0000-\u001f\u007f]/.test(paymentMethod)) {
     throw new TypeError("Payment method is required and must be at most " + MAX_METHOD_LENGTH + " characters");
   }
 
@@ -153,6 +153,9 @@ export function settlePayment({
     // canonical payment rows. Preserve that recorded balance instead of
     // silently reducing it when the first new payment is entered.
     const recordedRowsPaise = priorPays.reduce((sum, row) => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) {
+        throw new TypeError("Existing payment row is invalid");
+      }
       const rowPaise = Number.isSafeInteger(row.amountPaise)
         ? row.amountPaise
         : moneyToPaise(row.a ?? row.amount, "Existing payment amount");
