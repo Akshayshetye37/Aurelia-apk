@@ -128,6 +128,7 @@ fs.writeFileSync(manifestPath, manifest);
 
 const { execFileSync } = require('child_process');
 const iconPng = path.join(__dirname, '..', 'assets', 'aurelia-icon.png');
+const iconJpg = path.join(__dirname, '..', 'assets', 'aurelia-icon.jpg');
 const iconSvg = path.join(__dirname, '..', 'assets', 'aurelia-icon.svg');
 const foregroundSvg = path.join(__dirname, '..', 'assets', 'aurelia-icon-foreground.svg');
 const resDir = path.join(appDir, 'res');
@@ -156,6 +157,22 @@ if (fs.existsSync(iconPng)) {
   fs.mkdirSync(valuesDir, { recursive: true });
   fs.writeFileSync(path.join(valuesDir, 'aurelia_icon_colors.xml'), '<?xml version="1.0" encoding="utf-8"?><resources><color name="aurelia_icon_background">#082419</color></resources>');
   console.log('Installed Aurelia PMS launcher artwork from assets/aurelia-icon.png.');
+} else if (fs.existsSync(iconJpg)) {
+  // The supplied artwork is JPEG. Android mipmap resources support JPEG directly.
+  const dir = path.join(resDir, 'mipmap-nodpi');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const name of ['ic_launcher', 'ic_launcher_round', 'ic_launcher_foreground']) {
+    fs.copyFileSync(iconJpg, path.join(dir, name + '.jpg'));
+  }
+  const adaptiveDir = path.join(resDir, 'mipmap-anydpi-v26');
+  fs.mkdirSync(adaptiveDir, { recursive: true });
+  const adaptive = '<?xml version="1.0" encoding="utf-8"?><adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/aurelia_icon_background"/><foreground android:drawable="@mipmap/ic_launcher_foreground"/></adaptive-icon>';
+  fs.writeFileSync(path.join(adaptiveDir, 'ic_launcher.xml'), adaptive);
+  fs.writeFileSync(path.join(adaptiveDir, 'ic_launcher_round.xml'), adaptive);
+  const valuesDir = path.join(resDir, 'values');
+  fs.mkdirSync(valuesDir, { recursive: true });
+  fs.writeFileSync(path.join(valuesDir, 'aurelia_icon_colors.xml'), '<?xml version="1.0" encoding="utf-8"?><resources><color name="aurelia_icon_background">#082419</color></resources>');
+  console.log('Installed supplied Aurelia PMS launcher artwork from assets/aurelia-icon.jpg.');
 } else if (fs.existsSync(iconSvg)) {
   // Backward-compatible fallback for older checkouts that do not yet have the PNG.
   const densities = { 'mdpi':48, 'hdpi':72, 'xhdpi':96, 'xxhdpi':144, 'xxxhdpi':192 };
