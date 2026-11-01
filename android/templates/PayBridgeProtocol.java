@@ -13,6 +13,7 @@ public final class PayBridgeProtocol {
   public static final String PMS_PACKAGE = "com.aurelia.pms";
   public static final String BRIDGE_PACKAGE = "com.aurelia.paybridge";
   public static final String BRIDGE_SERVICE = "com.aurelia.paybridge.ipc.PayBridgeService";
+  public static final String BIND_ACTION = "com.aurelia.paybridge.BIND";
   public static final String BIND_PERMISSION = "com.aurelia.paybridge.permission.BIND_PAY_BRIDGE";
 
   public static final int PROTOCOL_MIN = 1;
@@ -29,7 +30,7 @@ public final class PayBridgeProtocol {
   public static final int MSG_REQUEST_REFUND = 300;
   public static final int MSG_REQUEST_REFUND_RESULT = 301;
   public static final int MSG_GET_REFUND_STATUS = 302;
-  public static final int MSG_REFUND_STATUS_RESULT = 303;
+  public static final int MSG_GET_REFUND_STATUS_RESULT = 303;
   public static final int MSG_RECONCILE = 400;
   public static final int MSG_RECONCILE_RESULT = 401;
   public static final int MSG_PAYMENT_EVENT = 500;
