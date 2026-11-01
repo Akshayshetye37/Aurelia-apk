@@ -337,9 +337,13 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
       return fail(res, 409, 'payment_order_binding_mismatch');
     }
     const status = await adapter.getPaymentStatus({ orderId: providerOrderId, paymentId });
-    const verified = provider === 'razorpay'
-      ? status.paymentStatus === 'captured' && status.amountMinor === orderSnap.data().amountMinor
-      : status.paymentStatus === 'SUCCESS' && status.amountMinor === orderSnap.data().amountMinor;
+    const sameOrder = status.orderId === providerOrderId;
+    const sameCurrency = status.currency === orderSnap.data().currency;
+    const sameAmount = status.amountMinor === orderSnap.data().amountMinor;
+    const verified = sameOrder && sameCurrency && sameAmount &&
+      (provider === 'razorpay'
+        ? status.paymentStatus === 'captured'
+        : status.paymentStatus === 'SUCCESS');
     const eventId = provider === 'razorpay'
       ? req.get('x-razorpay-event-id')
       : req.get('x-webhook-id') || crypto.createHash('sha256').update(req.body).digest('hex');
