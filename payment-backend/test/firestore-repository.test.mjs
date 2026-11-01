@@ -165,3 +165,44 @@ test('Cashfree rejects malformed phone numbers before provider dispatch', async 
 test('unprovisioned folio cannot create provider order', async () => { const s = setup(); s.db.docs.delete('paymentFolios/' + paymentFolioDocumentId('hotel_123', 'folio_123')); await assert.rejects(s.repo.initializePaymentIntent('user_123', payload()), /authoritative_folio_not_provisioned/); assert.equal(s.dispatches, 0); });
 test('amount above authoritative folio balance is rejected before provider dispatch', async () => { const s = setup(); s.db.seed('paymentFolios/' + paymentFolioDocumentId('hotel_123', 'folio_123'), { tenantId: 'hotel_123', folioId: 'folio_123', bookingId: 'booking_123', status: 'open', currency: 'INR', balanceMinor: 1000, revision: 8 }); await assert.rejects(s.repo.initializePaymentIntent('user_123', payload({ amountMinor: 1001 })), /payment_exceeds_authoritative_folio_balance/); assert.equal(s.dispatches, 0); });
 test('closed or cross-tenant folio cannot be charged', async () => { const s = setup(); s.db.seed('paymentFolios/' + paymentFolioDocumentId('hotel_123', 'folio_123'), { tenantId: 'other_hotel', folioId: 'folio_123', bookingId: 'booking_123', status: 'closed', currency: 'INR', balanceMinor: 1000000, revision: 9 }); await assert.rejects(s.repo.initializePaymentIntent('user_123', payload()), /folio_not_open_or_authoritative_snapshot_invalid/); assert.equal(s.dispatches, 0); });
+
+
+test('provider secrets or adapter construction failure is definitively pre-dispatch and releases folio lock', async () => {
+  const s = setup();
+  const repo = new FirestorePaymentRepository({
+    db: s.db,
+    secretManager: { getProviderSecrets: async () => { throw new Error('secret_manager_unavailable'); } },
+    providerFactory: () => { throw new Error('must_not_construct'); }
+  });
+  const result = await repo.initializePaymentIntent('user_123', payload());
+  assert.equal(result.status, 'FAILED_TO_INITIATE');
+  assert.equal(s.dispatches, 0);
+  const lock = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentFolioLocks/'))?.[1];
+  assert.equal(lock?.active, false);
+});
+
+test('adapter construction failure is pre-dispatch and allows a new attempt after lock release', async () => {
+  const s = setup();
+  const repo = new FirestorePaymentRepository({
+    db: s.db,
+    secretManager: { getProviderSecrets: async () => ({ keyId: 'test', keySecret: 'secret', webhookSecret: 'hook' }) },
+    providerFactory: () => { throw new Error('adapter_configuration_invalid'); }
+  });
+  const first = await repo.initializePaymentIntent('user_123', payload());
+  assert.equal(first.status, 'FAILED_TO_INITIATE');
+  const lock = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentFolioLocks/'))?.[1];
+  assert.equal(lock?.active, false);
+});
+
+test('pre-dispatch failure does not permit reuse of the same idempotency key with changed request', async () => {
+  const s = setup();
+  const repo = new FirestorePaymentRepository({
+    db: s.db,
+    secretManager: { getProviderSecrets: async () => { throw new Error('secret_manager_unavailable'); } }
+  });
+  await repo.initializePaymentIntent('user_123', payload());
+  await assert.rejects(
+    repo.initializePaymentIntent('user_123', payload({ amountMinor: 450001 })),
+    /idempotency_key_payload_conflict/
+  );
+});
