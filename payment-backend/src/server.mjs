@@ -71,26 +71,36 @@ async function loadSecret(id) {
   const [version] = await sm.accessSecretVersion({ name: secretName(id) + '/versions/latest' });
   return Buffer.from(version.payload.data).toString('utf8');
 }
-async function requireTenantAdmin(req, res, next) {
+async function authenticateTenantMembership(req, res, next, allowedRoles, failureCode) {
   try {
     const header = req.get('authorization') || '';
     if (!header.startsWith('Bearer ')) return fail(res, 401, 'authentication_required');
     const token = await auth.verifyIdToken(header.slice(7), true);
     if (token.email_verified !== true) return fail(res, 403, 'verified_email_required');
     if (!(token.firebase || {}).sign_in_second_factor) return fail(res, 403, 'mfa_required');
-    if (!Number.isFinite(token.auth_time) || Date.now() / 1000 - token.auth_time > 600) return fail(res, 401, 'recent_mfa_sign_in_required');
+    const ageSeconds = Date.now() / 1000 - token.auth_time;
+    if (!Number.isFinite(token.auth_time) || ageSeconds < 0 || ageSeconds > 600) {
+      return fail(res, 401, 'recent_mfa_sign_in_required');
+    }
     const membership = await membershipDoc(token.uid).get();
     const m = membership.exists ? membership.data() : {};
-    if (m.status !== 'active' || !tenantIdPattern.test(m.tenantId || '') || !['owner', 'admin'].includes(m.role)) {
-      return fail(res, 403, 'active_tenant_admin_membership_required');
+    if (m.status !== 'active' || !tenantIdPattern.test(m.tenantId || '') || !allowedRoles.includes(m.role)) {
+      return fail(res, 403, failureCode);
     }
     req.actor = token;
     req.tenant = { id: m.tenantId, role: m.role };
-    next();
+    return next();
   } catch {
     return fail(res, 401, 'invalid_or_revoked_token');
   }
 }
+function requireTenantAdmin(req, res, next) {
+  return authenticateTenantMembership(req, res, next, ['owner', 'admin'], 'active_tenant_admin_membership_required');
+}
+function requireTenantPaymentActor(req, res, next) {
+  return authenticateTenantMembership(req, res, next, ['owner', 'admin', 'staff'], 'active_tenant_payment_membership_required');
+}
+
 const envOf = req => {
   const value = req.body?.environment || req.query?.environment;
   return value === 'test' || value === 'live' ? value : null;
@@ -137,7 +147,7 @@ async function providerAdapterForTenant(tenantId, provider, environment) {
   const { createProviderAdapter } = await import('./providers/factory.mjs');
   return { adapter: createProviderAdapter(provider, { credentials, environment }), state: state.data() };
 }
-app.post('/v1/payments/intents', requireTenantAdmin, express.json({ limit: '8kb', strict: true }), async (req, res) => {
+app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit: '8kb', strict: true }), async (req, res) => {
   const body = req.body || {};
   const allowed = ['folioId', 'amountMinor', 'currency', 'provider', 'environment', 'idempotencyKey', 'customer', 'returnUrl'];
   if (Object.keys(body).some(k => !allowed.includes(k)) ||
@@ -161,7 +171,7 @@ app.post('/v1/payments/intents', requireTenantAdmin, express.json({ limit: '8kb'
       }
     }
     const result = await paymentRepository.initializePaymentIntent(req.actor.uid, { ...body, idempotencyKey });
-    return res.status(result.isDuplicate ? 200 : result.status === 'CREATED' ? 201 : 202).json(result);
+    return res.status(result.isDuplicate ? 200 : result.status === 'CREATED' ? 201 : result.status === 'FAILED_TO_INITIATE' ? 503 : 202).json(result);
   } catch (error) {
     const status = Number.isInteger(error.statusCode) ? error.statusCode :
       error.message === 'active_tenant_membership_required' ? 403 : 400;
@@ -169,7 +179,7 @@ app.post('/v1/payments/intents', requireTenantAdmin, express.json({ limit: '8kb'
   }
 });
 
-app.get('/v1/payments/intents/:intentId', requireTenantAdmin, async (req, res) => {
+app.get('/v1/payments/intents/:intentId', requireTenantPaymentActor, async (req, res) => {
   try {
     return res.json(await paymentRepository.getPaymentIntent(req.actor.uid, req.params.intentId));
   } catch (error) {
