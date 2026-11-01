@@ -4,6 +4,10 @@ Status: **PMS-side foundation plus installation-local intent journal implemented
 
 This document is the implementation ledger for the payment workstream. It separates work that can be completed in the PMS repository from components that require the separate Pay Bridge application and a trusted backend deployment. A client contract or schema proposal is not an operational payment service.
 
+## 1. Local-first operation and optional remote services
+
+Aurelia PMS must not require a server, cloud account, Firebase project or network connection for core hotel operations. The default mode is Local only: bookings, guests, rooms, manual/cash folio accounting, invoices and local backup continue to use the existing PMS storage. Remote payment processing is an optional owner-enabled capability that may be configured later from Settings after a secure endpoint identity and authentication contract exist. No endpoint, cloud project, guest data upload or provider credential is provisioned automatically. Backup destinations remain separate from payment-service endpoints. If no payment backend is configured, gateway checkout is unavailable; it must not fall back to client-side provider calls or unverified callbacks. A configured backend outage must not block core PMS operations. This Settings workflow is not implemented yet, so documentation must not imply it is available.
+
 ## 1. Data ownership and trust boundaries
 
 - **Aurelia PMS owns:** bookings, guests, rooms, folios, hotel accounting, staff-facing payment history and the atomic folio posting boundary.
