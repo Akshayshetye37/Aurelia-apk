@@ -8,7 +8,7 @@ function fixture({ paid = 0, pays = [] } = {}) {
   const booking = { id: 17, room: "A1", p: paid, pays, payments: [] };
   const state = { b: [booking], today: 0, aud: [] };
   const deps = {
-    state, booking, balanceDue: 1000,
+    state, booking, balanceDue: 1000, verificationConfirmed: true,
     persist: () => {},
     audit: (a, d) => state.aud.unshift({ a, d }),
     assertAutoFolioSettlementEnabled
