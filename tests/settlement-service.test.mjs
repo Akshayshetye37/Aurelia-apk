@@ -4,8 +4,8 @@ import { readFile } from "node:fs/promises";
 import { settlePayment } from "../src/payments/settlement-service.mjs";
 import { AUTO_FOLIO_SETTLEMENT_ENABLED, assertAutoFolioSettlementEnabled } from "../src/payments/settlement-gate.mjs";
 
-function fixture() {
-  const booking = { id: 17, room: "A1", p: 0, pays: [], payments: [] };
+function fixture({ paid = 0, pays = [] } = {}) {
+  const booking = { id: 17, room: "A1", p: paid, pays, payments: [] };
   const state = { b: [booking], today: 0, aud: [] };
   const deps = {
     state, booking, balanceDue: 1000,
@@ -49,18 +49,39 @@ test("same idempotency key or UTR cannot post twice", () => {
   assert.equal(state.today, 300);
 });
 
-test("automatic source calls the gate and cannot mutate while disabled", () => {
+test("same idempotency key with changed amount or method is rejected", () => {
+  const { deps } = fixture();
+  const input = { ...deps, amount: 300, method: "UPI", reference: "UTR-456", source: "staff_review", idempotencyKey: "utr:UTR-456" };
+  settlePayment(input);
+  assert.throws(() => settlePayment({ ...input, amount: 301 }), error => error.code === "IDEMPOTENCY_KEY_CONFLICT");
+  assert.throws(() => settlePayment({ ...input, method: "Cash" }), error => error.code === "IDEMPOTENCY_KEY_CONFLICT");
+});
+
+test("idempotency key cannot be reused across different bookings", () => {
   const { booking, state, deps } = fixture();
-  assert.equal(AUTO_FOLIO_SETTLEMENT_ENABLED, false);
+  settlePayment({ ...deps, amount: 300, method: "UPI", source: "manual", idempotencyKey: "request-unique-123" });
+  const other = { id: 18, room: "A2", p: 0, pays: [], payments: [] };
+  state.b.push(other);
   assert.throws(() => settlePayment({
-    ...deps, amount: 100, method: "UPI", source: "auto",
-    idempotencyKey: "auto-1"
-  }), /automatic folio settlement is disabled/i);
-  assert.equal(booking.pays.length, 0);
+    ...deps, booking: other, amount: 300, method: "UPI", source: "manual",
+    idempotencyKey: "request-unique-123", balanceDue: 1000
+  }), error => error.code === "IDEMPOTENCY_KEY_CONFLICT");
+});
+
+test("legacy paid total is preserved when old payment rows are missing", () => {
+  const { booking, deps } = fixture({ paid: 125, pays: [] });
+  settlePayment({ ...deps, amount: 25, method: "Cash" });
+  assert.equal(booking.p, 150);
+  assert.equal(booking.pays.reduce((sum, row) => sum + row.a, 0), 25);
+});
+
+test("INR payments require paise precision and a valid balance", () => {
+  const { booking, state, deps } = fixture();
+  assert.throws(() => settlePayment({ ...deps, amount: 10.001, method: "Cash" }), /two decimal places/);
+  assert.throws(() => settlePayment({ ...deps, amount: 10, method: "Cash", balanceDue: undefined }), /Balance due/);
+  assert.throws(() => settlePayment({ ...deps, amount: 10, method: "Cash", balanceDue: Number.NaN }), /Balance due/);
   assert.equal(booking.p, 0);
-  assert.equal(booking.payments.length, 0);
   assert.equal(state.today, 0);
-  assert.equal(state.aud.length, 0);
 });
 
 test("overpayment is rejected without changing balances", () => {
@@ -78,6 +99,20 @@ test("persistence failure rolls in-memory payment state back", () => {
     ...deps, amount: 100, method: "Cash", source: "manual",
     persist: () => { calls++; if (calls === 1) throw new Error("storage failure"); }
   }), /storage failure/);
+  assert.equal(booking.pays.length, 0);
+  assert.equal(booking.p, 0);
+  assert.equal(booking.payments.length, 0);
+  assert.equal(state.today, 0);
+  assert.equal(state.aud.length, 0);
+});
+
+test("automatic source calls the gate and cannot mutate while disabled", () => {
+  const { booking, state, deps } = fixture();
+  assert.equal(AUTO_FOLIO_SETTLEMENT_ENABLED, false);
+  assert.throws(() => settlePayment({
+    ...deps, amount: 100, method: "UPI", source: "auto",
+    idempotencyKey: "auto-1"
+  }), /automatic folio settlement is disabled/i);
   assert.equal(booking.pays.length, 0);
   assert.equal(booking.p, 0);
   assert.equal(booking.payments.length, 0);
