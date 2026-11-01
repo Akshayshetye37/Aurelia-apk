@@ -5,7 +5,8 @@
   "description": "Aurelia PMS Android wrapper",
   "scripts": {
     "build": "node scripts/prepare-web.js",
-    "android:sync": "npx cap sync android"
+    "android:sync": "npx cap sync android",
+    "verify:pms-import": "node scripts/verify-pms-import.js"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
