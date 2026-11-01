@@ -3930,9 +3930,57 @@ window.printGuestPreview=function(){
 };
 </script>
 
-<script type="module">
-import { settlePayment as settlePaymentCore } from './src/payments/settlement-service.mjs';
-window.aureliaSettlePayment = settlePaymentCore;
+<script id="aurelia-preview-settlement-fallback">
+/* Standalone HTML preview fallback. Native/served builds replace this with settlement-service.mjs. */
+window.aureliaSettlePayment=function(input){
+ const state=input&&input.state,booking=input&&input.booking;
+ const fail=(message,code)=>{const e=new Error(message);e.code=code||'SETTLEMENT_REJECTED';throw e};
+ if(input.source==='auto')fail('Automatic gateway settlement is disabled.','AUTO_SETTLEMENT_DISABLED');
+ if(!['manual','staff_review','reservation_advance'].includes(input.source||'manual'))fail('Unsupported payment source');
+ if(input.verificationConfirmed!==true)fail('Confirm that the payment was independently received before recording it.','PAYMENT_CONFIRMATION_REQUIRED');
+ if(!state||!Array.isArray(state.b)||!booking||!state.b.includes(booking))fail('Booking not found in PMS state');
+ if(booking.st&&!['res','in','done'].includes(String(booking.st).toLowerCase()))fail('This booking cannot accept payments.');
+ const rawAmount=input.amount,amount=typeof rawAmount==='number'?rawAmount:(typeof rawAmount==='string'&&/^\d+(?:\.\d{1,2})?$/.test(rawAmount.trim())?Number(rawAmount):NaN);
+ if(!Number.isFinite(amount)||amount<=0||!Number.isSafeInteger(Math.round(amount*100))||Math.abs(amount*100-Math.round(amount*100))>1e-7)fail('Enter a valid payment amount with no more than two decimal places.');
+ const method=String(input.method||'').trim(),reference=String(input.reference||'').trim(),key=String(input.idempotencyKey||'').trim();
+ if(!method||method.length>40||/[\u0000-\u001f\u007f]/.test(method))fail('Select a valid payment method.');
+ if(reference.length>256||key.length>256)fail('Payment reference is too long.');
+ const all=[...state.b,...(Array.isArray(state.cancelled)?state.cancelled:[])];
+ for(const other of all){
+  for(const row of [...(Array.isArray(other.pays)?other.pays:[]),...(Array.isArray(other.payments)?other.payments:[])]){
+   if(!row||typeof row!=='object')continue;
+   const sameKey=key&&row.idempotencyKey===key;
+   const sameRef=reference&&String(row.r??row.reference??'').trim().toLowerCase()===reference.toLowerCase();
+   if(sameKey||sameRef){
+    if(other!==booking)fail('This payment reference is already applied to another booking. Review the original folio.','PAYMENT_REFERENCE_ALREADY_APPLIED');
+    const oldAmount=Number(row.amountPaise!=null?row.amountPaise/100:(row.a??row.amount));
+    if(oldAmount!==amount||String(row.m??row.method||'').toLowerCase()!==method.toLowerCase())fail('This payment reference was already used with different details.','PAYMENT_REFERENCE_CONFLICT');
+    return {ok:true,duplicate:true,payment:row};
+   }
+  }
+ }
+ const paise=Math.round(amount*100),due=Number(input.balanceDue);
+ if(!Number.isFinite(due)||due<0)fail('Could not verify the outstanding folio balance.');
+ if(paise>Math.round(due*100))fail('Payment exceeds the outstanding balance.');
+ const priorPays=Array.isArray(booking.pays)?booking.pays:[],priorHistory=Array.isArray(booking.payments)?booking.payments:[];
+ const priorPaid=booking.p,priorToday=state.today,priorAudit=Array.isArray(state.aud)?state.aud.slice():null;
+ const payment={a:paise/100,amountPaise:paise,m:method,r:reference,at:new Date().toISOString(),auto:false,source:input.source||'manual',bookingId:booking.id,verificationConfirmed:true,idempotencyKey:key||undefined};
+ try{
+  booking.pays=priorPays.slice();booking.pays.push(payment);
+  const recorded=priorPays.reduce((sum,row)=>sum+Math.round(Number(row.amountPaise!=null?row.amountPaise/100:(row.a??row.amount))*100),0);
+  const legacy=Math.round(Number(priorPaid||0)*100);
+  booking.p=(Math.max(recorded,legacy)+paise)/100;
+  booking.payments=priorHistory.slice();booking.payments.push({date:payment.at,amount:payment.a,amountPaise:paise,method,reference,source:payment.source,bookingId:booking.id,verificationConfirmed:true,idempotencyKey:key||undefined});
+  state.today=(Math.round(Number(priorToday||0)*100)+paise)/100;
+  if(typeof input.audit==='function')input.audit('Payment',payment.a+' by '+method+' · Room '+booking.room+(reference?' · ref '+reference:''));
+  if(typeof input.persist==='function')input.persist();
+  return {ok:true,duplicate:false,payment};
+ }catch(error){
+  booking.pays=priorPays;booking.p=priorPaid;booking.payments=priorHistory;state.today=priorToday;
+  if(priorAudit&&Array.isArray(state.aud))state.aud.splice(0,state.aud.length,...priorAudit);
+  throw error;
+ }
+};
 </script>
 <script type="module" id="aurelia-local-settlement-adapter">
 import { settlePayment as settleLocalPayment } from './src/payments/settlement-service.mjs';
