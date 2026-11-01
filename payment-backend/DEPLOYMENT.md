@@ -10,7 +10,7 @@ This service is **not deployed by this repository**. The workflow validates test
 - HTTPS ingress (Cloud Run is the reference target). The container must not be exposed directly around the HTTPS ingress.
 - Exact browser origins in AURELIA_OWNER_ORIGINS, comma-separated, with scheme and host only. Do not use wildcard origins.
 - GOOGLE_CLOUD_PROJECT set to the project that owns the Firestore database and secrets.
-- AURELIA_TRUST_PROXY_HOPS=1 only when exactly one trusted ingress proxy overwrites X-Forwarded-Proto. Otherwise leave it unset.
+- AURELIA_HTTPS_TERMINATION=trusted-proxy and AURELIA_TRUST_PROXY_HOPS=1 are mandatory. The service fails startup if either is missing. Set them only behind exactly one trusted HTTPS ingress proxy that overwrites X-Forwarded-Proto.
 - PORT supplied by the platform (defaults to 8080).
 
 ## Cloud Run deployment outline
@@ -18,7 +18,7 @@ This service is **not deployed by this repository**. The workflow validates test
 1. Create/select the Google Cloud project and enable Cloud Run, Artifact Registry, Firestore and Secret Manager APIs.
 2. Create a dedicated runtime service account. Grant only the required Firestore data access and Secret Manager secret access roles. Do not grant project Owner/Editor.
 3. Create the Firestore database in Native mode and deploy reviewed Security Rules. Mobile clients must not write payment membership, intent, order, idempotency, webhook inbox or folio-lock collections.
-4. Build and push the image from this directory. Configure Cloud Run with the runtime service account, GOOGLE_CLOUD_PROJECT, exact AURELIA_OWNER_ORIGINS, AURELIA_TRUST_PROXY_HOPS=1, and a platform-managed HTTPS URL.
+4. Build and push the image from this directory. Configure Cloud Run with the runtime service account, GOOGLE_CLOUD_PROJECT, exact AURELIA_OWNER_ORIGINS, AURELIA_HTTPS_TERMINATION=trusted-proxy, AURELIA_TRUST_PROXY_HOPS=1, and a platform-managed HTTPS load balancer URL. Configure Cloud Run ingress as internal-and-cloud-load-balancing, and disable the default run.app URL.
 5. Require HTTPS ingress, disable unauthenticated administrative access at the application layer (admin routes additionally require Firebase ID token, verified email, MFA and active tenant membership), and restrict direct container ingress.
 6. Configure Firebase Authentication MFA and create membership documents using a separate trusted provisioning process. A client must never self-assign tenant or owner role.
 7. Call GET /healthz over the final HTTPS URL. A successful response proves only that the process is responding; it does not prove Firestore permissions, Secret Manager access, merchant credentials, webhooks or payment flows.
@@ -31,7 +31,8 @@ This service is **not deployed by this repository**. The workflow validates test
 |---|---:|---|
 | GOOGLE_CLOUD_PROJECT | Yes | GCP project ID |
 | AURELIA_OWNER_ORIGINS | Yes | Exact allowed HTTPS origins, comma-separated |
-| AURELIA_TRUST_PROXY_HOPS | Conditional | Set to 1 only behind one trusted proxy |
+| AURELIA_HTTPS_TERMINATION | Yes | Must be trusted-proxy when behind the managed HTTPS load balancer |
+| AURELIA_TRUST_PROXY_HOPS | Yes | Must be 1 behind exactly one trusted ingress proxy |
 | PORT | No | HTTP port inside the container; defaults to 8080 |
 
 The service uses Application Default Credentials from its attached runtime identity. Never commit credentials or put them in container build arguments.
