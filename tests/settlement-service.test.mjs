@@ -301,3 +301,10 @@ test("PMS persistence verification includes daily totals and audit rows", async 
   assert.match(html, /Number\(saved\.today\|\|0\)!==Number\(S\.today\|\|0\)/);
   assert.match(html, /JSON\.stringify\(saved\.aud\|\|\[\]\)!==JSON\.stringify\(S\.aud\|\|\[\]\)/);
 });
+
+test("invoice and finance reports use each booking's snapshotted nightly rate", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /const roomCharge=b=>nts\(b\)\*\(b\.rate!=null/);
+  assert.match(html, /function inv\(i\)[\s\S]*?roomCharge\(b\)/);
+  assert.match(html, /room=bs\.reduce\(\(a,b\)=>a\+roomCharge\(b\),0\)/);
+});
