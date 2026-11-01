@@ -59,14 +59,22 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
     const data = await this.request('GET', path);
     const payment = Array.isArray(data.items)
       ? [...data.items].sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))
-          .find(p => p.status === 'captured') ||
+          .find(p => p.id === input.paymentId) ||
         [...data.items].sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))[0]
       : data;
-    if (!payment) return { provider: 'razorpay', orderId: input.orderId, paymentStatus: 'pending' };
-    return { provider: 'razorpay', orderId: payment.order_id || input.orderId,
-      paymentId: payment.id, paymentStatus: payment.status,
-      amountMinor: payment.amount, currency: payment.currency,
-      captured: payment.captured === true };
+    if (!payment) return {
+      provider: 'razorpay', orderId: input.orderId, paymentId: null,
+      paymentStatus: 'pending', captured: false
+    };
+    return {
+      provider: 'razorpay',
+      orderId: payment.order_id || input.orderId,
+      paymentId: payment.id,
+      paymentStatus: payment.status,
+      amountMinor: payment.amount,
+      currency: payment.currency,
+      captured: payment.captured === true
+    };
   }
 
   async verifyWebhook(rawBody, headers) {
