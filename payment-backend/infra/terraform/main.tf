@@ -49,6 +49,7 @@ resource "google_project_iam_custom_role" "payment_secret_runtime" {
   permissions = [
     "secretmanager.secrets.create",
     "secretmanager.secrets.get",
+    "secretmanager.secrets.delete",
     "secretmanager.versions.add",
     "secretmanager.versions.access"
   ]
