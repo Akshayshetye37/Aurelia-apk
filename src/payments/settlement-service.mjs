@@ -60,6 +60,12 @@ export function settlePayment({
   if (!ALLOWED_SOURCES.has(source)) throw new TypeError("Unsupported payment source");
   if (!state || !Array.isArray(state.b)) throw new TypeError("Application state is required");
   if (!booking || !state.b.includes(booking)) throw new TypeError("Booking not found in application state");
+  const bookingStatus = String(booking.st || "").toLowerCase();
+  if (bookingStatus && !["res", "in", "done"].includes(bookingStatus)) {
+    const error = new Error("Payments can only be recorded against arriving, in-house, or departed bookings");
+    error.code = "BOOKING_NOT_SETTLEABLE";
+    throw error;
+  }
 
   const amountPaise = moneyToPaise(amount, "Payment amount");
   const value = amountPaise / 100;
