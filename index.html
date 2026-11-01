@@ -3950,7 +3950,7 @@ window.aureliaSettlePayment=function(input){
   for(const row of [...(Array.isArray(other.pays)?other.pays:[]),...(Array.isArray(other.payments)?other.payments:[])]){
    if(!row||typeof row!=='object')continue;
    const sameKey=key&&row.idempotencyKey===key;
-   const sameRef=reference&&String(row.r??row.reference??'').trim().toLowerCase()===reference.toLowerCase();
+   const sameRef=(input.source||'manual')!=='reservation_advance'&&reference&&String(row.r??row.reference??'').trim().toLowerCase()===reference.toLowerCase();
    if(sameKey||sameRef){
     if(other!==booking)fail('This payment reference is already applied to another booking. Review the original folio.','PAYMENT_REFERENCE_ALREADY_APPLIED');
     const oldAmount=Number(row.amountPaise!=null?row.amountPaise/100:(row.a??row.amount));
