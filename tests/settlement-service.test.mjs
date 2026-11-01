@@ -335,3 +335,12 @@ test("legacy electronic references match despite case and whitespace differences
   assert.equal(result.duplicate, true);
   assert.equal(booking.p, 0);
 });
+
+test("same reference and amount with a different method is a conflict", () => {
+  const { booking, deps } = fixture();
+  booking.payments = [{ amount:10, method:"UPI", reference:"TXN-123" }];
+  assert.throws(
+    () => settlePayment({ ...deps, amount:10, method:"Cash", reference:"TXN-123" }),
+    e => e.code === "PAYMENT_REFERENCE_CONFLICT"
+  );
+});
