@@ -686,7 +686,7 @@ function settlePayment(input){
 }
 function addPay(b,a,m,r,auto){return settlePayment({booking:b,amount:a,method:m,reference:r||'',source:auto?'auto':'manual',idempotencyKey:r?('ref:'+r):undefined})}
 let mchips=id=>`<div class="chips" id="${id}">${PM.map((p,k)=>`<button class="chip ${k?'':'on'}" onclick="$$('#${id} .chip').forEach(c=>c.classList.remove('on'));this.classList.add('on')">${p}</button>`).join('')}</div>`;
-const payForm=(d,i)=>`<label class="fld"><span>Payment amount</span><input id="pa" type="number" value="${d}"></label>${mchips('pm')}<label class="fld"><span>Transaction reference</span><input id="pr"></label><label class="fld"><input id="pc" type="checkbox">I checked that the money has arrived</label><button class="btn" style="width:100%" onclick="pay(${i})">Record payment</button>`;
+const payForm=(d,i)=>{const booking=bk(i),requestId='manual:'+booking.id+':'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2));return `<input type="hidden" id="payment-request-id" value="${requestId}"><label class="fld"><span>Payment amount</span><input id="pa" type="number" value="${d}"></label>${mchips('pm')}<label class="fld"><span>Transaction reference</span><input id="pr"></label><label class="fld"><input id="pc" type="checkbox">I checked that the money has arrived</label><button class="btn" style="width:100%" onclick="pay(${i})">Record payment</button>`;};
 function folio(i){const b=bk(i),d=dueB(b);openS(`<h2 class="foil">${esc(b.g)}</h2><div class="lab">Folio · Room ${b.room}<br>
 Stay ${fd(b.in)} → ${fd(b.out)}
  · In ${esc(b.checkInTime||defCheckInTime())}${b.actualCheckInAt?' (actual '+dateDDMMYYYY(new Date(b.actualCheckInAt))+' '+new Date(b.actualCheckInAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+')':''}
@@ -3225,7 +3225,7 @@ pay=function(i){
  if(!(amount>0)||!Number.isFinite(amount)){toast('Enter a valid payment amount');return}
  if(!$('#pc')?.checked){toast('Confirm that payment was actually received');return}
  try{
-  const result=settlePayment({booking:b,amount,method,reference,source:'manual',idempotencyKey:reference?('ref:'+reference):undefined});
+  const result=settlePayment({booking:b,amount,method,reference,source:'manual',idempotencyKey:reference?('ref:'+reference):($('#payment-request-id')?.value||('manual:'+b.id+':'+Date.now()))});
   if(!result||!result.ok){toast(result&&result.message||'Payment was not recorded');return}
   render();inv(i);toast(result.duplicate?'This payment reference was already recorded':K(amount)+' payment recorded');
  }catch(e){toast(e&&e.message||'Payment was not recorded')}
