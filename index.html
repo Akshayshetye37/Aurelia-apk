@@ -684,7 +684,7 @@ function settlePayment(input){
   let raw,saved;
   try{raw=(window.__aureliaStorage||localStorage).getItem(SK);saved=raw?JSON.parse(raw):null}catch(e){throw new Error('Could not verify the saved payment record')}
   const savedBooking=saved&&Array.isArray(saved.b)?saved.b.find(x=>x.id===b.id):null;
-  if(!savedBooking||Number(savedBooking.p)!==Number(b.p)||JSON.stringify(savedBooking.pays||[])!==JSON.stringify(b.pays||[])||JSON.stringify(savedBooking.payments||[])!==JSON.stringify(b.payments||[]))throw new Error('Payment could not be verified in device storage');
+  if(!savedBooking||Number(savedBooking.p)!==Number(b.p)||JSON.stringify(savedBooking.pays||[])!==JSON.stringify(b.pays||[])||JSON.stringify(savedBooking.payments||[])!==JSON.stringify(b.payments||[])||Number(saved.today||0)!==Number(S.today||0)||JSON.stringify(saved.aud||[])!==JSON.stringify(S.aud||[]))throw new Error('Payment could not be verified in device storage');
  };
  return window.aureliaSettlePayment({...input,state:S,balanceDue:dueB(b),persist:persistSettlement,audit:(kind,detail)=>aud(kind,detail)});
 }
@@ -874,7 +874,9 @@ function dsave(){
   if(!savedGuest||(d.k==='res'&&(!savedBooking||
     Number(savedBooking.p||0)!==Number(booking.p||0)||
     JSON.stringify(savedBooking.pays||[])!==JSON.stringify(booking.pays||[])||
-    JSON.stringify(savedBooking.payments||[])!==JSON.stringify(booking.payments||[])))){
+    JSON.stringify(savedBooking.payments||[])!==JSON.stringify(booking.payments||[])||
+    Number(saved.today||0)!==Number(S.today||0)||
+    JSON.stringify(saved.aud||[])!==JSON.stringify(S.aud||[])))){
    throw new Error('Guest or reservation could not be verified in device storage');
   }
   closeS();
