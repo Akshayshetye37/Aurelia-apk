@@ -316,3 +316,66 @@ test("refund is disabled even for a captured payment until a durable refund life
   );
   assert.equal(called, false);
 });
+
+
+test("ambiguous Pay Bridge timeout is reconciled by backend before one confirmed folio posting", async () => {
+  const records = new Map();
+  const store = {
+    async put(record) { records.set(record.requestId, structuredClone(record)); },
+    async get(requestId) { return records.has(requestId) ? structuredClone(records.get(requestId)) : null; },
+    async listPending() { return [...records.values()]; }
+  };
+  const bridge = {
+    isAuthenticated: () => true,
+    async createPayment() { throw Object.assign(new Error("socket timeout after dispatch"), { code: "ETIMEDOUT" }); },
+    async getPaymentStatus() { return { status: "unknown" }; },
+    async cancelPayment() { return { status: "unknown" }; }
+  };
+  const binding = {
+    requestId: "req-orchestrated-001", sessionId: "sess-orchestrated-001",
+    providerId: "razorpay", bookingId: "booking-orchestrated-001",
+    folioId: "folio-orchestrated-001", amountPaise: 12500, currency: "INR"
+  };
+  const backend = {
+    async createSession(input) { return { ...input, sessionId: binding.sessionId }; },
+    async reconcile(input) { return { ...binding, ...input, verified: true, status: "success" }; },
+    async verifyPayment(input) {
+      return { ...binding, ...input, verified: true, status: "success", transactionId: "txn-orchestrated-001" };
+    },
+    async getPaymentStatus() { return { status: "success" }; }
+  };
+  const orchestrator = new PayBridgePaymentOrchestrator({ store, bridge, backend });
+  await assert.rejects(orchestrator.createPayment({
+    requestId: binding.requestId, bookingId: binding.bookingId,
+    folioId: binding.folioId, amountPaise: binding.amountPaise,
+    currency: binding.currency, providerId: binding.providerId
+  }), error => error.code === "ETIMEDOUT");
+
+  const unknown = await store.get(binding.requestId);
+  assert.equal(unknown.state, "UNKNOWN");
+  assert.equal(unknown.settlementAuthorized, false);
+
+  const verified = await orchestrator.reconcileOne(binding.requestId);
+  assert.equal(verified.state, "SUCCESS");
+  assert.equal(verified.backendVerified, true);
+  assert.equal(verified.settlementAuthorized, true);
+
+  const booking = { id: binding.bookingId, room: "A1", p: 0, pays: [], payments: [] };
+  const state = { b: [booking], today: 0, aud: [] };
+  const posting = {
+    state, booking, amount: binding.amountPaise / 100, method: "UPI",
+    reference: "txn-orchestrated-001", source: "staff_review",
+    idempotencyKey: binding.requestId, balanceDue: 500,
+    verificationConfirmed: verified.settlementAuthorized,
+    persist: () => {}, audit: (action, detail) => state.aud.push({ action, detail })
+  };
+  const first = settlePayment(posting);
+  const retry = settlePayment(posting);
+  assert.equal(first.duplicate, false);
+  assert.equal(retry.duplicate, true);
+  assert.equal(booking.p, 125);
+  assert.equal(booking.pays.length, 1);
+  assert.equal(booking.payments.length, 1);
+  assert.equal(state.today, 125);
+  assert.equal(state.aud.length, 1);
+});
