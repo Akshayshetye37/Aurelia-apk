@@ -1,0 +1,107 @@
+name: Build Aurelia PMS Android APK
+
+on:
+  push:
+    branches:
+      - feature/multi-provider-payment-backend
+    paths:
+      - 'index.html'
+      - 'README.md'
+      - 'docs/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.json'
+      - 'assets/**'
+      - 'scripts/**'
+      - 'android/templates/**'
+      - 'src/**'
+      - 'tests/**'
+      - '.github/workflows/build-pms-debug-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurelia-pms-debug-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout PMS
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run PMS regression suite
+        run: npm test
+
+      - name: Prepare web application
+        run: npm run build
+
+      - name: Generate Android project from Capacitor templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          if [[ -d android/templates ]]; then
+            mv android/templates "$template_dir"
+          fi
+          if [[ -d android ]]; then
+            rmdir android
+          fi
+          npx cap add android
+          if [[ -d "$template_dir" ]]; then
+            mkdir -p android/templates
+            cp -a "$template_dir/." android/templates/
+          fi
+          test -f android/gradlew
+          test -f android/app/build.gradle
+
+      - name: Apply PMS Android configuration
+        run: node scripts/patch-android.js
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Verify APK package identity and signature
+        working-directory: android
+        run: |
+          set -euo pipefail
+          apk="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | tee "$RUNNER_TEMP/aurelia-pms-badging.txt"
+          grep -F "package: name='com.aurelia.pms'" "$RUNNER_TEMP/aurelia-pms-badging.txt"
+          sha256sum "$apk" > "$apk.sha256"
+
+      - name: Upload installable debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurelia-pms-debug-apk-${{ github.sha }}
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
