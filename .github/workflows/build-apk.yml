@@ -163,7 +163,7 @@ jobs:
         working-directory: android
         shell: bash
         env:
-          EXPECTED_CERT_SHA256: ${{ secrets.AURELIA_SHARED_CERT_SHA256 }}
+          EXPECTED_CERT_SHA256: 562c833fcb8808b226d6b0c33633c9771a47ec63cca5c42d8ef16c4c7b92bf86
         run: |
           set -euo pipefail
           apk="app/build/outputs/apk/release/app-release.apk"
@@ -174,7 +174,7 @@ jobs:
           expected="${expected,,}"
           actual="$(awk -F': ' '/Signer #1 certificate SHA-256 digest:/ {print tolower($2); exit}' "$RUNNER_TEMP/aurelia-pms-certificate.txt")"
           if [[ -z "$expected" ]]; then
-            echo "::error::Missing AURELIA_SHARED_CERT_SHA256. Configure the same certificate fingerprint in both PMS and Pay Bridge repository secrets."
+            echo "::error::Missing AURELIA_SHARED_CERT_SHA256. The expected public certificate fingerprint is pinned in CI for both applications."
             exit 1
           fi
           if [[ "$actual" != "$expected" ]]; then
