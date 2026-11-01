@@ -266,6 +266,31 @@ app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express
   }
 });
 
+app.delete('/v1/admin/providers/:provider/credentials', requireTenantAdmin, async (req, res) => {
+  const { provider } = req.params;
+  const environment = req.query?.environment;
+  if (!['razorpay', 'cashfree'].includes(provider) || !['test', 'live'].includes(environment)) {
+    return fail(res, 400, 'invalid_provider_environment');
+  }
+  try {
+    const stateRef = providerTenantDoc(req.tenant.id, provider, environment);
+    const state = await stateRef.get();
+    if (!state.exists) return res.json({ removed: true, provider, environment, alreadyAbsent: true });
+    const ids = [
+      providerSecretId(req.tenant.id, provider, environment, 'api'),
+      providerSecretId(req.tenant.id, provider, environment, 'webhook')
+    ];
+    for (const id of ids) {
+      try { await sm.deleteSecret({ name: secretName(id) }); }
+      catch (error) { if (error.code !== 5) throw error; }
+    }
+    await stateRef.delete();
+    return res.json({ removed: true, provider, environment, active: false });
+  } catch {
+    return fail(res, 503, 'provider_credential_removal_unavailable');
+  }
+});
+
 app.post('/v1/admin/providers/:provider/validate', requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
   const { provider } = req.params, environment = envOf(req);
   if (!['razorpay', 'cashfree'].includes(provider) || !environment) return fail(res, 400, 'invalid_provider_environment');
