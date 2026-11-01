@@ -164,7 +164,7 @@ export function createEvidenceStore(options = {}) {
 
     async listEvidence({ source = null, limit = 500 } = {}) {
       const requested = Number(limit);
-      const maxItems = Number.isSafeInteger(requested) ? Math.min(1000, Math.max(0, requested)) : 500;
+      const maxItems = Number.isSafeInteger(requested) ? Math.min(10000, Math.max(0, requested)) : 500;
       if (maxItems === 0) return [];
       const sourceFilter = source == null ? null : String(source).trim().toLowerCase();
       const db = await getDb();
