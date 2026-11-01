@@ -60,7 +60,7 @@ export function createProviderWebhookRouter({
           }
           const eventId = provider === 'razorpay'
             ? req.get('x-razorpay-event-id')
-            : req.get('x-webhook-id') || verification.event?.data?.payment?.cf_payment_id;
+            : req.get('x-webhook-id') || crypto.createHash('sha256').update(req.body).digest('hex');
           if (!safeId(eventId)) return res.status(400).json({ error: 'invalid_event_id' });
           const eventKey = crypto.createHash('sha256')
             .update(provider + ':' + binding.tenantId + ':' + environment + ':' + eventId)
