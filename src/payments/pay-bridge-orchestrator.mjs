@@ -370,14 +370,15 @@ export class PayBridgePaymentOrchestrator {
   }
 
   /** Refund is backend-authorized; never sent directly to a provider from PMS. */
-  async createRefund({ requestId, amountPaise: refundAmount, idempotencyKey }) {
+  async createRefund({ requestId }) {
     const record = await this.requireRecord(requestId);
-    if (record.state !== "SUCCESS" || !record.backendVerified) throw new PaymentOrchestratorError("REFUND_NOT_ELIGIBLE", "Only backend-verified payments may be refunded");
-    if (!this.backend.createRefund) throw new PaymentOrchestratorError("REFUND_UNAVAILABLE", "Backend refund API is not configured");
-    return this.backend.createRefund({
-      requestId, transactionId: record.bridgeTransactionId,
-      amountPaise: amount(refundAmount), idempotencyKey: text(idempotencyKey, "idempotencyKey")
-    });
+    if (record.state !== "SUCCESS" || !record.backendVerified || !record.settlementAuthorized) {
+      throw new PaymentOrchestratorError("REFUND_NOT_ELIGIBLE", "Only backend-verified and settlement-authorized payments may be refunded");
+    }
+    // Refunds require their own durable idempotent journal, cumulative amount
+    // accounting, backend verification and PMS ledger reversal. None of those
+    // contracts is active in this local-first release, so never send a refund.
+    throw new PaymentOrchestratorError("REFUND_UNAVAILABLE", "Refunds are disabled until the durable refund lifecycle is implemented");
   }
 }
 
