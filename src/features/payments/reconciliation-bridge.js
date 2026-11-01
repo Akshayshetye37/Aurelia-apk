@@ -32,7 +32,7 @@
     if (typeof getState !== "function") return null;
     const state = getState();
     if (!state || !Array.isArray(state.b)) return null;
-    const normalizeReference = value => String(value || "").replace(/\\s+/g, "").toUpperCase();
+    const normalizeReference = value => String(value || "").replace(/\s+/g, "").toUpperCase();
     const ref = normalizeReference(row.utr);
     if (!ref) return null;
     const amountPaise = Number(row.amountPaise);
@@ -88,7 +88,7 @@
     if (!Number.isSafeInteger(Number(id)) || Number(id) <= 0) throw new Error("Invalid evidence ID");
     if (!["pending", "conflict", "reviewed", "rejected"].includes(status)) throw new Error("Invalid evidence status");
     const reviewNote = String(note || "").trim();
-    if (reviewNote.length > 300 || /[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/.test(reviewNote)) {
+    if (reviewNote.length > 300 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(reviewNote)) {
       throw new Error("Review note must be at most 300 characters without control characters");
     }
     const result = parse(nativeBridge().markSignalProcessed(String(id), status, reviewNote), "Update evidence");
