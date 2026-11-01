@@ -248,3 +248,26 @@ test("production PMS does not expose a fake UPI payment signal", async () => {
   assert.match(html, /Number\.isSafeInteger\(Math\.round\(amt\*100\)\)/);
   assert.match(html, /\^\[A-Za-z0-9\._:-\]\{1,128\}\$/);
 });
+
+test("settlement rejects bookings in non-settleable states", () => {
+  const { booking, state, deps } = fixture();
+  booking.st = "cancelled";
+  assert.throws(
+    () => settlePayment({ ...deps, amount:10, method:"Cash" }),
+    e => e.code === "BOOKING_NOT_SETTLEABLE"
+  );
+  assert.equal(booking.p, 0);
+  assert.equal(state.today, 0);
+});
+test("departed bookings remain settleable for outstanding folio balances", () => {
+  const { booking, deps } = fixture();
+  booking.st = "done";
+  const result = settlePayment({ ...deps, amount:10, method:"Cash" });
+  assert.equal(result.ok, true);
+  assert.equal(booking.p, 10);
+});
+test("UPI notification evidence requires independent confirmation before folio posting", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /A notification alone is not proof of payment/);
+  assert.match(html, /\['open','pending_review'\]\.includes\(s\.st\)/);
+});
