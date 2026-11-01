@@ -82,7 +82,7 @@ export function createPaymentEvent(input) {
     eventId, evidenceId, source, eventType, amountPaise, currency,
     timestamp: timestamp && !Number.isNaN(timestamp.getTime()) ? timestamp.toISOString() : null,
     timestampPrecision,
-    utr: utr ? utr.replace(/\s+/g, "") : null,
+    utr: utr ? utr.replace(/\s+/g, "").toUpperCase() : null,
     payerName,
     payerNameNormalized: normalizeName(payerName || ""),
     upiId,
