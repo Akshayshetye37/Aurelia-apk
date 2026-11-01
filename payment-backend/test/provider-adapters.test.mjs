@@ -89,3 +89,33 @@ test('Cashfree rejects correctly signed stale webhook timestamps', async () => {
   const adapter = new CashfreeAdapter({ credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' }, environment: 'test' });
   assert.deepEqual(await adapter.verifyWebhook(raw, { 'x-webhook-timestamp': timestamp, 'x-webhook-signature': signature }), { valid: false });
 });
+
+
+test('provider factory exposes only adapters with the complete checkout contract', async () => {
+  const { createProviderAdapter, implementedProviderAdapters, providerCapabilities } = await import('../src/providers/factory.mjs');
+  assert.deepEqual(implementedProviderAdapters().sort(), ['cashfree', 'razorpay']);
+  assert.equal(providerCapabilities('payu'), null);
+  const adapter = createProviderAdapter('cashfree', {
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' }, environment: 'test'
+  });
+  for (const operation of ['validateCredentials', 'createOrder', 'getPaymentStatus', 'verifyWebhook', 'createRefund']) {
+    assert.equal(typeof adapter[operation], 'function');
+  }
+  assert.throws(() => createProviderAdapter('ccavenue', {}), /provider_adapter_unavailable/);
+});
+
+test('provider-neutral checkout contract rejects amount or provider response binding drift', async () => {
+  const { assertCheckoutRequest, normalizeCheckoutSession } = await import('../src/providers/checkout-contract.mjs');
+  const request = { provider: 'razorpay', environment: 'test', amountMinor: 1200, currency: 'INR', idempotencyKey: 'idem-key-123456' };
+  assert.equal(assertCheckoutRequest(request), request);
+  assert.throws(() => assertCheckoutRequest({ ...request, amountMinor: 12.5 }), /invalid_checkout_request/);
+  assert.throws(() => normalizeCheckoutSession('razorpay', {
+    orderId: 'order_123', amountMinor: 1000, currency: 'INR', keyId: 'rzp_test_key'
+  }, request), /provider_checkout_response_binding_mismatch/);
+  assert.deepEqual(normalizeCheckoutSession('razorpay', {
+    orderId: 'order_123', amountMinor: 1200, currency: 'INR', keyId: 'rzp_test_key'
+  }, request), {
+    provider: 'razorpay', providerOrderId: 'order_123', amountMinor: 1200, currency: 'INR',
+    checkout: { keyId: 'rzp_test_key' }, providerStatus: 'created'
+  });
+});
