@@ -14,6 +14,7 @@ test('native security templates are copied by the Android generation source', ()
     'BiometricVaultManager.kt',
     'AureliaAppManager.kt',
     'AureliaSecurityRuntime.kt',
+    'AureliaEnvelopeStore.kt',
     'LockGateActivity.kt'
   ]) {
     assert.ok(fs.existsSync(path.join(root, 'android/templates/security', name)), name + ' template missing');
