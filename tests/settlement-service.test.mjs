@@ -241,3 +241,10 @@ test("UPI evidence duplicate lookup includes legacy payment history rows", async
   assert.match(html, /item\.reference/);
   assert.match(html, /paymentPaise === amountPaise/);
 });
+
+test("production PMS does not expose a fake UPI payment signal", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.doesNotMatch(html, /testSig|Send test/);
+  assert.match(html, /Number\.isSafeInteger\(Math\.round\(amt\*100\)\)/);
+  assert.match(html, /\^\[A-Za-z0-9\._:-\]\{1,128\}\$/);
+});
