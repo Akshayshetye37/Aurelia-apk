@@ -108,7 +108,11 @@ export class PayBridgePaymentOrchestrator {
         amountPaise: record.amountPaise, currency: record.currency, providerId: record.providerId,
         idempotencyKey: requestId
       });
-      if (!session || session.requestId !== requestId || !session.sessionId) {
+      if (!session || session.requestId !== requestId ||
+          session.bookingId !== record.bookingId || session.folioId !== record.folioId ||
+          session.amountPaise !== record.amountPaise || session.currency !== record.currency ||
+          session.providerId !== record.providerId || typeof session.sessionId !== "string" ||
+          !session.sessionId || session.sessionId.length > 256) {
         throw new PaymentOrchestratorError("INVALID_BACKEND_SESSION", "Backend returned an invalid payment session binding");
       }
       current = { ...current, backendSessionId: text(session.sessionId, "sessionId"), updatedAt: this.now() };
@@ -122,8 +126,14 @@ export class PayBridgePaymentOrchestrator {
       // Bridge is an execution surface, not payment authority. Only a
       // processing observation is safe to mirror; all terminal observations
       // require an independently bound backend reconciliation.
-      const state = result.status === "processing" ? "PROCESSING" : "UNKNOWN";
-      current = transitionPayment(current, state, { bridgeTransactionId: result.transactionId || null }, this.now);
+      const state = result.status === "processing" &&
+        typeof result.transactionId === "string" && result.transactionId.length > 0 &&
+        result.transactionId.length <= 256 ? "PROCESSING" : "UNKNOWN";
+      current = transitionPayment(current, state, {
+        bridgeTransactionId: typeof result.transactionId === "string" &&
+          result.transactionId.length > 0 && result.transactionId.length <= 256
+          ? result.transactionId : current.bridgeTransactionId
+      }, this.now);
       await this.store.put(current);
       if (state === "UNKNOWN") await this.reconcileOne(requestId);
       return clone(await this.store.get(requestId));
@@ -175,7 +185,8 @@ export class PayBridgePaymentOrchestrator {
       currency: record.currency, folioId: record.folioId, bookingId: record.bookingId
     });
     if (!result || result.verified !== true || result.status !== "success" ||
-        result.requestId !== record.requestId || result.amountPaise !== record.amountPaise ||
+        result.requestId !== record.requestId || result.sessionId !== record.backendSessionId ||
+        result.providerId !== record.providerId || result.amountPaise !== record.amountPaise ||
         result.currency !== record.currency || result.folioId !== record.folioId ||
         result.bookingId !== record.bookingId ||
         !result.transactionId || (record.bridgeTransactionId && result.transactionId !== record.bridgeTransactionId)) {
@@ -183,7 +194,7 @@ export class PayBridgePaymentOrchestrator {
     }
     if (record.state === "SUCCESS") return clone(record);
     if (!ALLOWED[record.state].has("SUCCESS")) {
-      if (record.state === "UNKNOWN") {
+      if (["UNKNOWN", "FAILED", "CANCELLED"].includes(record.state)) {
         const recon = transitionPayment(record, "RECONCILIATION", {}, this.now);
         await this.store.put(recon);
         return this.verifyPayment(requestId);
@@ -214,6 +225,8 @@ export class PayBridgePaymentOrchestrator {
     const bound = result?.verified === true &&
       result.requestId === record.requestId &&
       result.bookingId === record.bookingId &&
+      result.sessionId === record.backendSessionId &&
+      result.providerId === record.providerId &&
       result.folioId === record.folioId &&
       result.amountPaise === record.amountPaise &&
       result.currency === record.currency;
