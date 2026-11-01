@@ -128,32 +128,56 @@ const paymentRepository = new FirestorePaymentRepository({
   db,
   secretManager: {
     async getProviderSecrets(tenantId, provider, environment) {
-      if (provider !== 'razorpay') throw new Error('provider_not_enabled_for_checkout');
-      const api = JSON.parse(await loadSecret(secretId(tenantId, environment, 'api')));
-      const webhookSecret = await loadSecret(secretId(tenantId, environment, 'webhook'));
+      if (!['razorpay', 'cashfree'].includes(provider)) throw new Error('provider_not_enabled_for_checkout');
+      const id = (purpose) => providerSecretId(tenantId, provider, environment, purpose);
+      const api = JSON.parse(await loadSecret(id('api')));
+      const webhookSecret = await loadSecret(id('webhook'));
       return { ...api, webhookSecret };
     }
   }
 });
-
+const providerCatalogue = [
+  { id: 'razorpay', label: 'Razorpay', environments: ['test', 'live'], implemented: true },
+  { id: 'cashfree', label: 'Cashfree Payments', environments: ['test', 'live'], implemented: true }
+];
+function providerTenantDoc(tenantId, provider, environment) {
+  return db.doc('paymentTenants/' + tenantId + '/providers/' + provider + '_' + environment);
+}
+function providerSecretId(tenantId, provider, environment, purpose) {
+  return 'aurl-' + crypto.createHash('sha256')
+    .update(tenantId + ':' + provider + ':' + environment + ':' + purpose).digest('hex').slice(0, 32);
+}
+async function providerAdapterForTenant(tenantId, provider, environment) {
+  const state = await providerTenantDoc(tenantId, provider, environment).get();
+  if (!state.exists || state.data().credentialsValidated !== true) {
+    throw Object.assign(new Error('provider_credentials_not_validated'), { statusCode: 409 });
+  }
+  const credentials = await paymentRepository.secretManager.getProviderSecrets(tenantId, provider, environment);
+  const { createProviderAdapter } = await import('./providers/factory.mjs');
+  return { adapter: createProviderAdapter(provider, { credentials, environment }), state: state.data() };
+}
 app.post('/v1/payments/intents', requireTenantAdmin, express.json({ limit: '8kb', strict: true }), async (req, res) => {
   const body = req.body || {};
-  const allowed = ['folioId', 'amountMinor', 'currency', 'provider', 'environment', 'idempotencyKey'];
+  const allowed = ['folioId', 'amountMinor', 'currency', 'provider', 'environment', 'idempotencyKey', 'customer', 'returnUrl'];
   if (Object.keys(body).some(k => !allowed.includes(k)) ||
       !['folioId', 'amountMinor', 'currency', 'provider', 'environment'].every(k => Object.hasOwn(body, k))) {
     return fail(res, 400, 'invalid_payment_intent_schema');
   }
   const idempotencyKey = idempotencyOf(req) || body.idempotencyKey;
-  if (!idempotencyKey || !/^[A-Za-z0-9._:-]{12,100}$/.test(idempotencyKey)) {
-    return fail(res, 400, 'idempotency_key_required');
-  }
-  if (body.provider !== 'razorpay' || body.environment !== 'test') {
+  if (!idempotencyKey || !/^[A-Za-z0-9._:-]{12,100}$/.test(idempotencyKey)) return fail(res, 400, 'idempotency_key_required');
+  if (!['razorpay', 'cashfree'].includes(body.provider) || !['test', 'live'].includes(body.environment)) {
     return fail(res, 409, 'provider_environment_not_enabled_for_checkout');
   }
   try {
-    const providerState = await tenantDoc(req.tenant.id, 'test').get();
-    if (!providerState.exists || providerState.data().credentialsValidated !== true) {
-      return fail(res, 409, 'razorpay_test_credentials_not_validated');
+    const state = await providerTenantDoc(req.tenant.id, body.provider, body.environment).get();
+    if (!state.exists || state.data().active !== true || state.data().credentialsValidated !== true) {
+      return fail(res, 409, 'provider_not_active');
+    }
+    if (body.environment === 'live') {
+      const sandbox = await providerTenantDoc(req.tenant.id, body.provider, 'test').get();
+      if (!sandbox.exists || sandbox.data().sandboxTestPassed !== true || sandbox.data().webhookVerified !== true) {
+        return fail(res, 409, 'sandbox_acceptance_required');
+      }
     }
     const result = await paymentRepository.initializePaymentIntent(req.actor.uid, { ...body, idempotencyKey });
     return res.status(result.isDuplicate ? 200 : result.status === 'CREATED' ? 201 : 202).json(result);
@@ -176,103 +200,117 @@ app.get('/v1/payments/intents/:intentId', requireTenantAdmin, async (req, res) =
 
 
 app.get('/v1/admin/providers', requireTenantAdmin, async (req, res) => {
-  const providers = await Promise.all(['test', 'live'].map(async environment => {
-    const snap = await tenantDoc(req.tenant.id, environment).get();
-    const d = snap.exists ? snap.data() : {};
-    return {
-      provider: 'razorpay', environment, configured: d.configured === true,
-      credentialsValidated: d.credentialsValidated === true, sandboxTestPassed: d.sandboxTestPassed === true,
-      webhookVerified: d.webhookVerified === true, active: d.active === true,
-      keyId: d.keyId || null, updatedAt: d.updatedAt?.toDate?.().toISOString() || null
-    };
-  }));
+  const providers = await Promise.all(providerCatalogue.flatMap(provider =>
+    provider.environments.map(async environment => {
+      const snap = await providerTenantDoc(req.tenant.id, provider.id, environment).get();
+      const d = snap.exists ? snap.data() : {};
+      return {
+        provider: provider.id, label: provider.label, environment, implemented: provider.implemented,
+        configured: d.configured === true, credentialsValidated: d.credentialsValidated === true,
+        sandboxTestPassed: d.sandboxTestPassed === true, webhookVerified: d.webhookVerified === true,
+        active: d.active === true, merchantId: d.merchantId || d.keyId || d.appId || null,
+        updatedAt: d.updatedAt?.toDate?.().toISOString() || null
+      };
+    })
+  ));
   res.json({ providers });
 });
 
-app.put('/v1/admin/providers/razorpay/credentials', requireTenantAdmin, express.json({ limit: '8kb', strict: true }), async (req, res) => {
-  const environment = envOf(req);
-  const { keyId, keySecret, webhookSecret } = req.body || {};
-  const keys = Object.keys(req.body || {});
-  if (!environment || keys.some(k => !['environment', 'keyId', 'keySecret', 'webhookSecret'].includes(k)) ||
-      !/^rzp_(test|live)_[A-Za-z0-9]{8,}$/.test(keyId || '') || !keySecret || keySecret.length > 512 ||
-      !webhookSecret || webhookSecret.length > 512 ||
-      (environment === 'test' && !keyId.startsWith('rzp_test_')) ||
-      (environment === 'live' && !keyId.startsWith('rzp_live_'))) {
-    return fail(res, 400, 'invalid_razorpay_credential_schema');
+app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express.json({ limit: '8kb', strict: true }), async (req, res) => {
+  const { provider } = req.params, environment = envOf(req), body = req.body || {};
+  const definitions = {
+    razorpay: { publicKey: 'keyId', secretKeys: ['keySecret', 'webhookSecret'], valid: c => /^rzp_(test|live)_[A-Za-z0-9]{8,}$/.test(c.keyId || '') },
+    cashfree: { publicKey: 'appId', secretKeys: ['secretKey', 'webhookSecret'], valid: c => typeof c.appId === 'string' && /^[A-Za-z0-9_-]{6,128}$/.test(c.appId) }
+  };
+  const def = definitions[provider];
+  const allowed = new Set(['environment', def?.publicKey, ...(def?.secretKeys || [])].filter(Boolean));
+  if (!def || !environment || Object.keys(body).some(k => !allowed.has(k)) || !def.valid(body) ||
+      def.secretKeys.some(k => typeof body[k] !== 'string' || body[k].length < 8 || body[k].length > 512) ||
+      (provider === 'razorpay' && environment === 'test' && !body.keyId.startsWith('rzp_test_')) ||
+      (provider === 'razorpay' && environment === 'live' && !body.keyId.startsWith('rzp_live_'))) {
+    return fail(res, 400, 'invalid_provider_credential_schema');
   }
   try {
-    await storeSecret(secretId(req.tenant.id, environment, 'api'), JSON.stringify({ keyId, keySecret }));
-    await storeSecret(secretId(req.tenant.id, environment, 'webhook'), webhookSecret);
-    await tenantDoc(req.tenant.id, environment).set({
-      provider: 'razorpay', environment, keyId, configured: true, credentialsValidated: false,
+    const apiCredentials = Object.fromEntries(
+      [def.publicKey, ...def.secretKeys.filter(k => k !== 'webhookSecret')].map(k => [k, body[k]])
+    );
+    await storeSecret(providerSecretId(req.tenant.id, provider, environment, 'api'), JSON.stringify(apiCredentials));
+    await storeSecret(providerSecretId(req.tenant.id, provider, environment, 'webhook'), body.webhookSecret);
+    const patch = { provider, environment, configured: true, credentialsValidated: false,
       sandboxTestPassed: false, webhookVerified: false, active: false,
-      updatedAt: FieldValue.serverTimestamp(), updatedBy: req.actor.uid
-    }, { merge: true });
-    res.status(202).json({ accepted: true, provider: 'razorpay', environment, status: 'credentials_stored_validation_pending' });
+      updatedAt: FieldValue.serverTimestamp(), updatedBy: req.actor.uid };
+    patch[def.publicKey] = body[def.publicKey];
+    await providerTenantDoc(req.tenant.id, provider, environment).set(patch, { merge: true });
+    return res.status(202).json({ accepted: true, provider, environment, status: 'credentials_stored_validation_pending' });
   } catch {
-    fail(res, 503, 'credential_storage_unavailable');
+    return fail(res, 503, 'credential_storage_unavailable');
   }
 });
 
-app.post('/v1/admin/providers/razorpay/validate', requireTenantAdmin, express.json({ limit: '2kb' }), async (req, res) => {
-  const environment = envOf(req);
-  if (!environment) return fail(res, 400, 'invalid_environment');
+app.post('/v1/admin/providers/:provider/validate', requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
+  const { provider } = req.params, environment = envOf(req);
+  if (!['razorpay', 'cashfree'].includes(provider) || !environment) return fail(res, 400, 'invalid_provider_environment');
   try {
-    const cfg = JSON.parse(await loadSecret(secretId(req.tenant.id, environment, 'api')));
-    await razorpay(req.tenant.id, environment, 'GET', '/orders?count=1');
-    await tenantDoc(req.tenant.id, environment).set({
+    const { adapter } = await providerAdapterForTenant(req.tenant.id, provider, environment);
+    await adapter.validateCredentials();
+    await providerTenantDoc(req.tenant.id, provider, environment).set({
       credentialsValidated: true, validatedAt: FieldValue.serverTimestamp(), active: false
     }, { merge: true });
-    res.json({ valid: true, provider: 'razorpay', environment, keyId: cfg.keyId });
-  } catch (e) {
-    await tenantDoc(req.tenant.id, environment).set({ credentialsValidated: false, active: false }, { merge: true });
-    fail(res, e.providerStatus === 401 ? 422 : 503, e.providerStatus === 401 ? 'provider_credentials_rejected' : 'provider_validation_unavailable');
+    return res.json({ valid: true, provider, environment });
+  } catch (error) {
+    await providerTenantDoc(req.tenant.id, provider, environment)
+      .set({ credentialsValidated: false, active: false }, { merge: true }).catch(() => {});
+    return fail(res, error.statusCode || 503, error.statusCode ? error.message : 'provider_validation_unavailable');
   }
 });
 
-app.post('/v1/admin/providers/razorpay/test-orders', requireTenantAdmin, express.json({ limit: '2kb' }), async (req, res) => {
-  const environment = envOf(req);
-  const amount = req.body?.amountPaise;
-  const idem = idempotencyOf(req);
-  if (environment !== 'test' || !Number.isSafeInteger(amount) || amount < 100 || amount > 10000000 || !idem) {
+app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
+  const { provider } = req.params, environment = envOf(req), amountMinor = req.body?.amountMinor, idem = idempotencyOf(req);
+  if (!['razorpay', 'cashfree'].includes(provider) || environment !== 'test' ||
+      !Number.isSafeInteger(amountMinor) || amountMinor < 100 || amountMinor > 10000000 || !idem) {
     return fail(res, 400, 'invalid_test_order_request');
   }
-  const idemId = crypto.createHash('sha256').update(req.tenant.id + ':razorpay:test:' + idem).digest('hex');
+  const idemId = crypto.createHash('sha256').update(req.tenant.id + ':' + provider + ':test:' + idem).digest('hex');
   const idemRef = db.doc('paymentIdempotency/' + idemId);
   try {
-    const state = await tenantDoc(req.tenant.id, 'test').get();
-    if (!state.exists || state.data().credentialsValidated !== true) return fail(res, 409, 'test_credentials_not_validated');
+    const { adapter } = await providerAdapterForTenant(req.tenant.id, provider, 'test');
     const reservationResult = await db.runTransaction(async tx => {
       const prior = await tx.get(idemRef);
       if (prior.exists) return { record: prior.data(), newlyReserved: false };
-      const record = { tenantId: req.tenant.id, amount, currency: 'INR', state: 'dispatching',
-        createdAt: FieldValue.serverTimestamp() };
+      const record = { tenantId: req.tenant.id, provider, amountMinor, currency: 'INR',
+        state: 'dispatching', createdAt: FieldValue.serverTimestamp() };
       tx.create(idemRef, record);
       return { record, newlyReserved: true };
     });
     const reservation = reservationResult.record;
-    if (reservation.tenantId !== req.tenant.id || reservation.amount !== amount) return fail(res, 409, 'idempotency_key_payload_conflict');
+    if (reservation.tenantId !== req.tenant.id || reservation.provider !== provider || reservation.amountMinor !== amountMinor) {
+      return fail(res, 409, 'idempotency_key_payload_conflict');
+    }
     if (reservation.response) return res.status(200).json(reservation.response);
     if (!reservationResult.newlyReserved) return fail(res, 409, 'order_creation_unknown_reconcile_before_retry');
-    const order = await razorpay(req.tenant.id, 'test', 'POST', '/orders', {
-      amount, currency: 'INR', receipt: 'aur_' + idemId.slice(0, 24)
-    });
-    const response = { provider: 'razorpay', environment: 'test', orderId: order.id, amount: order.amount,
-      currency: order.currency, keyId: state.data().keyId, status: 'created' };
+    const input = provider === 'razorpay'
+      ? { amountMinor, currency: 'INR', receipt: 'aur_' + idemId.slice(0, 24) }
+      : { orderId: 'aur_' + idemId.slice(0, 32), amountMinor, currency: 'INR',
+          customer: { id: 'aurelia_test', phone: '9999999999' },
+          returnUrl: 'https://example.invalid/payment-return', idempotencyKey: 'aur_' + idemId.slice(0, 32) };
+    const order = await adapter.createOrder(input);
+    const response = { provider, environment: 'test', orderId: order.orderId, amountMinor: order.amountMinor,
+      currency: order.currency, checkoutData: provider === 'razorpay' ? { keyId: order.keyId } :
+        { paymentSessionId: order.paymentSessionId }, status: 'created' };
     await db.runTransaction(async tx => {
-      tx.set(idemRef, { state: 'created', response, providerOrderId: order.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      tx.create(db.doc('paymentOrders/' + req.tenant.id + '_' + order.id), {
-        tenantId: req.tenant.id, provider: 'razorpay', environment: 'test',
-        amount, currency: 'INR', state: 'created', createdAt: FieldValue.serverTimestamp()
+      tx.set(idemRef, { state: 'created', response, providerOrderId: order.orderId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      tx.create(db.doc('paymentOrders/' + req.tenant.id + '_' + provider + '_' + order.orderId), {
+        tenantId: req.tenant.id, provider, environment: 'test', amountMinor, currency: 'INR',
+        state: 'created', createdAt: FieldValue.serverTimestamp()
       });
     });
-    res.status(201).json(response);
-  } catch (e) {
-    // Do not issue a second provider order after an ambiguous network failure.
+    return res.status(201).json(response);
+  } catch {
     await idemRef.set({ state: 'unknown', updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
-    fail(res, e.providerStatus === 401 ? 422 : 503, 'order_creation_unknown_reconcile_before_retry');
+    return fail(res, 503, 'order_creation_unknown_reconcile_before_retry');
   }
 });
+
 
 app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'application/json', limit: '1mb' }), async (req, res) => {
   const { provider, tenantId, environment } = req.params;
