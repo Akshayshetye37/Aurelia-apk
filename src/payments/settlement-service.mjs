@@ -160,11 +160,12 @@ export function settlePayment({
   const payment = {
     a: value, amountPaise, m: paymentMethod, r: ref, at: timestamp,
     auto: source === "auto", source, bookingId: booking.id,
-    idempotencyKey: key || undefined
+    verificationConfirmed: true, idempotencyKey: key || undefined
   };
   const history = {
     date: timestamp, amount: value, amountPaise, method: paymentMethod,
-    reference: ref, source, bookingId: booking.id, idempotencyKey: key || undefined
+    reference: ref, source, bookingId: booking.id,
+    verificationConfirmed: true, idempotencyKey: key || undefined
   };
 
   try {
