@@ -168,6 +168,9 @@ export class IndexedDbPaymentIntentStore {
     await completed(tx);
     // Failed/cancelled records remain visible for late-capture reconciliation.
     // Only backend-verified SUCCESS is fully closed.
-    return rows.filter(row => row.state !== "SUCCESS").map(clone);
+    return rows.filter(row =>
+      row.state !== "SUCCESS" &&
+      (row.state !== "CANCELLED" || Boolean(row.backendSessionId))
+    ).map(clone);
   }
 }
