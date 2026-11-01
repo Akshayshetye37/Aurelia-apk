@@ -204,3 +204,18 @@ test("settlement rejects non-decimal amount encodings and unsafe methods", () =>
   assert.equal(booking.p, 0);
   assert.equal(state.today, 0);
 });
+
+test("legacy payment history references prevent duplicate posting when canonical rows are absent", () => {
+  const legacyHistory = { amount: 300, method: "UPI", reference: "UTR-HISTORY-ONLY" };
+  const { booking, state, deps } = fixture({ paid: 300, pays: [] });
+  booking.payments = [legacyHistory];
+  const result = settlePayment({
+    ...deps, amount: 300, method: "UPI", reference: "UTR-HISTORY-ONLY",
+    source: "staff_review", balanceDue: 700
+  });
+  assert.equal(result.duplicate, true);
+  assert.equal(booking.p, 300);
+  assert.equal(booking.pays.length, 0);
+  assert.equal(booking.payments.length, 1);
+  assert.equal(state.today, 0);
+});
