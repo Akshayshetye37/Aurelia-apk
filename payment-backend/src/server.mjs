@@ -53,10 +53,7 @@ app.use((req, res, next) => {
 });
 
 const tenantIdPattern = /^[A-Za-z0-9_-]{6,64}$/;
-const secretId = (tenantId, env, purpose) =>
-  'aurl-' + crypto.createHash('sha256').update(tenantId + ':razorpay:' + env + ':' + purpose).digest('hex').slice(0, 32);
 const secretName = id => 'projects/' + projectId + '/secrets/' + id;
-const tenantDoc = (tenantId, env) => db.doc('paymentTenants/' + tenantId + '/providers/razorpay_' + env);
 const membershipDoc = uid => db.doc('paymentMemberships/' + uid);
 const fail = (res, status, error) => res.status(status).json({ error });
 
