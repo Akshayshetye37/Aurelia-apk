@@ -99,21 +99,6 @@ const idempotencyOf = req => {
   const value = req.get('idempotency-key') || req.body?.idempotencyKey || '';
   return /^[A-Za-z0-9._:-]{12,100}$/.test(value) ? value : null;
 };
-async function razorpay(tenantId, env, method, path, body) {
-  const cfg = JSON.parse(await loadSecret(secretId(tenantId, env, 'api')));
-  const response = await fetch('https://api.razorpay.com/v1' + path, {
-    method,
-    headers: {
-      Authorization: 'Basic ' + Buffer.from(cfg.keyId + ':' + cfg.keySecret).toString('base64'),
-      'Content-Type': 'application/json'
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(15000)
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error('provider_request_failed'), { providerStatus: response.status });
-  return data;
-}
 function equalSignature(received, expected) {
   if (!/^[a-f0-9]{64}$/i.test(received || '') || !/^[a-f0-9]{64}$/i.test(expected || '')) return false;
   return crypto.timingSafeEqual(Buffer.from(received, 'hex'), Buffer.from(expected, 'hex'));
