@@ -10,9 +10,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import android.util.AtomicFile
 import com.aurelia.pms.MainActivity
-import java.io.File
 
 /**
  * Exported launcher boundary. This Activity contains no WebView and starts the
@@ -22,7 +20,7 @@ import java.io.File
  */
 class LockGateActivity : Activity() {
     private lateinit var manager: AureliaAppManager
-    private lateinit var envelopeFile: AtomicFile
+    private lateinit var envelopeStore: AureliaEnvelopeStore
     private var enrollmentMode = false
     private var pinField: EditText? = null
     private var confirmField: EditText? = null
@@ -34,10 +32,9 @@ class LockGateActivity : Activity() {
             android.view.WindowManager.LayoutParams.FLAG_SECURE
         )
         manager = AureliaSecurityRuntime.manager(this)
-        envelopeFile = AtomicFile(File(noBackupFilesDir, "aurelia-pin-envelope.v2"))
+        envelopeStore = AureliaEnvelopeStore(this)
         val enrolled = AureliaSecurityRuntime.isEnrolled()
-        val envelopeExists = envelopeFile.baseFile.exists() ||
-            File(envelopeFile.baseFile.path + ".bak").exists()
+        val envelopeExists = envelopeStore.exists()
         if (enrolled != envelopeExists) {
             throw SecurityException("PIN enrollment state is inconsistent; refusing setup or unlock.")
         }
@@ -130,31 +127,9 @@ class LockGateActivity : Activity() {
         }
     }
 
-    private fun writeEnvelope(value: String) {
-        val bytes = value.toByteArray(Charsets.UTF_8)
-        var stream: java.io.FileOutputStream? = null
-        try {
-            stream = envelopeFile.startWrite()
-            stream.write(bytes)
-            stream.fd.sync()
-            envelopeFile.finishWrite(stream)
-        } catch (failure: Exception) {
-            if (stream != null) envelopeFile.failWrite(stream)
-            throw failure
-        } finally {
-            bytes.fill(0)
-        }
-    }
+    private fun writeEnvelope(value: String) = envelopeStore.write(value)
 
-    private fun readEnvelope(): String {
-        val bytes = envelopeFile.openRead().use { it.readBytes() }
-        try {
-            require(bytes.size in 1..4096) { "Invalid PIN envelope file." }
-            return String(bytes, Charsets.UTF_8)
-        } finally {
-            bytes.fill(0)
-        }
-    }
+    private fun readEnvelope(): String = envelopeStore.read()
 
     private fun openPms() {
         startActivity(Intent(this, MainActivity::class.java))
