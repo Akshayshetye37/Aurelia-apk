@@ -51,6 +51,7 @@ export function settlePayment({
   source = "manual",
   idempotencyKey,
   balanceDue,
+  verificationConfirmed = false,
   persist = () => {},
   audit = () => {},
   now = () => new Date().toISOString()
@@ -58,6 +59,11 @@ export function settlePayment({
   // The automatic path must fail closed before validation or any mutation.
   if (source === "auto") assertAutoFolioSettlementEnabled();
   if (!ALLOWED_SOURCES.has(source)) throw new TypeError("Unsupported payment source");
+  if (verificationConfirmed !== true) {
+    const error = new Error("Confirm that the payment was independently received before recording it");
+    error.code = "PAYMENT_CONFIRMATION_REQUIRED";
+    throw error;
+  }
   if (!state || !Array.isArray(state.b)) throw new TypeError("Application state is required");
   if (!booking || !state.b.includes(booking)) throw new TypeError("Booking not found in application state");
   const bookingStatus = String(booking.st || "").toLowerCase();
