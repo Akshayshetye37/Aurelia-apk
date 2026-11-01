@@ -15,7 +15,7 @@ export const PROVIDERS = Object.freeze({
       { key: 'webhookSecret', label: 'Webhook Secret', type: 'password', secret: true, required: true }
     ],
     capabilities: ['orders', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'implemented
+    adapterStatus: 'implemented'
   },
   cashfree: {
     label: 'Cashfree Payments',
