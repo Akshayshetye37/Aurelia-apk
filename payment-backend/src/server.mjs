@@ -274,76 +274,76 @@ app.post('/v1/admin/providers/razorpay/test-orders', requireTenantAdmin, express
   }
 });
 
-app.post('/v1/webhooks/razorpay/:tenantId/:environment', express.raw({ type: 'application/json', limit: '1mb' }), async (req, res) => {
-  const { tenantId, environment } = req.params;
-  if (!tenantIdPattern.test(tenantId || '') || !['test', 'live'].includes(environment) || !Buffer.isBuffer(req.body)) {
+app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'application/json', limit: '1mb' }), async (req, res) => {
+  const { provider, tenantId, environment } = req.params;
+  if (!['razorpay', 'cashfree'].includes(provider) || !tenantIdPattern.test(tenantId || '') ||
+      !['test', 'live'].includes(environment) || !Buffer.isBuffer(req.body)) {
     return fail(res, 400, 'invalid_webhook_request');
   }
-  const signature = req.get('x-razorpay-signature') || '';
-  const eventId = req.get('x-razorpay-event-id') || '';
-  if (!/^[A-Za-z0-9_-]{8,200}$/.test(eventId)) return fail(res, 400, 'invalid_event_id');
   try {
-    const webhookSecret = await loadSecret(secretId(tenantId, environment, 'webhook'));
-    const expected = crypto.createHmac('sha256', webhookSecret).update(req.body).digest('hex');
-    if (!equalSignature(signature, expected)) return fail(res, 400, 'invalid_webhook_signature');
-    const event = JSON.parse(req.body.toString('utf8'));
-    const entity = event?.payload?.payment?.entity;
-    if (!entity || !['payment.captured', 'order.paid', 'payment.authorized'].includes(event.event)) {
-      return res.status(200).json({ received: true, ignored: true });
-    }
-    const orderRef = entity.order_id ? db.doc('paymentOrders/' + tenantId + '_' + entity.order_id) : null;
-    if (!orderRef) return fail(res, 400, 'order_reference_missing');
+    const { adapter } = await providerAdapterForTenant(tenantId, provider, environment);
+    const checked = await adapter.verifyWebhook(req.body, req.headers);
+    if (!checked.valid) return fail(res, 400, 'invalid_webhook_signature');
+    const event = checked.event;
+    const paymentEntity = provider === 'razorpay'
+      ? event?.payload?.payment?.entity
+      : event?.data?.payment;
+    const providerOrderId = provider === 'razorpay' ? paymentEntity?.order_id : event?.data?.order?.order_id;
+    const paymentId = provider === 'razorpay' ? paymentEntity?.id : paymentEntity?.cf_payment_id;
+    if (!providerOrderId || !paymentId) return res.status(200).json({ received: true, ignored: true });
+    const orderRef = db.doc('paymentOrders/' + tenantId + '_' + provider + '_' + providerOrderId);
     const orderSnap = await orderRef.get();
     if (!orderSnap.exists || orderSnap.data().tenantId !== tenantId ||
-        orderSnap.data().environment !== environment || orderSnap.data().amount !== entity.amount ||
-        orderSnap.data().currency !== entity.currency) return fail(res, 409, 'payment_order_binding_mismatch');
-    const payment = await razorpay(tenantId, environment, 'GET', '/payments/' + encodeURIComponent(entity.id));
-    const verified = payment.status === 'captured' && payment.order_id === entity.order_id &&
-      payment.amount === orderSnap.data().amount && payment.currency === orderSnap.data().currency;
-    const inboxId = crypto.createHash('sha256').update(tenantId + ':' + environment + ':' + eventId).digest('hex');
-    const inbox = db.doc('razorpayWebhookInbox/' + inboxId);
+        orderSnap.data().provider !== provider || orderSnap.data().environment !== environment) {
+      return fail(res, 409, 'payment_order_binding_mismatch');
+    }
+    const status = await adapter.getPaymentStatus({ orderId: providerOrderId, paymentId });
+    const verified = provider === 'razorpay'
+      ? status.paymentStatus === 'captured' && status.amountMinor === orderSnap.data().amountMinor
+      : status.paymentStatus === 'SUCCESS' && status.amountMinor === orderSnap.data().amountMinor;
+    const eventId = provider === 'razorpay'
+      ? req.get('x-razorpay-event-id')
+      : req.get('x-webhook-id') || crypto.createHash('sha256').update(req.body).digest('hex');
+    if (!eventId || !/^[A-Za-z0-9_-]{8,200}$/.test(eventId)) return fail(res, 400, 'invalid_event_id');
+    const inboxId = crypto.createHash('sha256').update(tenantId + ':' + provider + ':' + environment + ':' + eventId).digest('hex');
+    const inbox = db.doc('paymentWebhookInbox/' + inboxId);
     await db.runTransaction(async tx => {
       const seen = await tx.get(inbox);
       if (seen.exists) return;
-      tx.create(inbox, {
-        eventId, tenantId, provider: 'razorpay', environment, event: event.event,
-        paymentId: entity.id, orderId: entity.order_id, signatureVerified: true,
-        providerFetchVerified: verified, receivedAt: FieldValue.serverTimestamp()
-      });
-      if (verified) tx.set(orderRef, {
-        state: 'captured_verified', paymentId: entity.id, verifiedAt: FieldValue.serverTimestamp()
+      tx.create(inbox, { eventId, tenantId, provider, environment, paymentId, providerOrderId,
+        signatureVerified: true, providerFetchVerified: verified, receivedAt: FieldValue.serverTimestamp() });
+      if (verified) tx.set(orderRef, { state: 'captured_verified', paymentId, verifiedAt: FieldValue.serverTimestamp() }, { merge: true });
+      if (verified) tx.set(providerTenantDoc(tenantId, provider, environment), {
+        ...(environment === 'test' ? { sandboxTestPassed: true } : {}),
+        webhookVerified: true, active: false, lastVerifiedWebhookAt: FieldValue.serverTimestamp()
       }, { merge: true });
-      if (verified) tx.set(tenantDoc(tenantId, environment), environment === 'test' ? {
-        sandboxTestPassed: true, webhookVerified: true, lastVerifiedTestAt: FieldValue.serverTimestamp(), active: false
-      } : { webhookVerified: true, lastVerifiedLiveAt: FieldValue.serverTimestamp(), active: false }, { merge: true });
     });
-    res.status(200).json({ received: true, verified });
+    return res.status(200).json({ received: true, verified });
   } catch {
-    fail(res, 503, 'webhook_processing_unavailable');
+    return fail(res, 503, 'webhook_processing_unavailable');
   }
 });
-
-app.post('/v1/admin/providers/razorpay/activate', requireTenantAdmin, express.json({ limit: '2kb' }), async (req, res) => {
-  const environment = envOf(req);
-  if (!environment || req.body?.confirm !== true) return fail(res, 400, 'explicit_activation_confirmation_required');
-  const ref = tenantDoc(req.tenant.id, environment);
-  const snap = await ref.get();
-  const state = snap.exists ? snap.data() : {};
+app.post('/v1/admin/providers/:provider/activate', requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
+  const { provider } = req.params, environment = envOf(req);
+  if (!['razorpay', 'cashfree'].includes(provider) || !environment || req.body?.confirm !== true) {
+    return fail(res, 400, 'explicit_activation_confirmation_required');
+  }
+  const ref = providerTenantDoc(req.tenant.id, provider, environment);
+  const snap = await ref.get(), state = snap.exists ? snap.data() : {};
   if (state.credentialsValidated !== true ||
       (environment === 'test' && (state.sandboxTestPassed !== true || state.webhookVerified !== true))) {
     return fail(res, 409, 'provider_onboarding_checks_incomplete');
   }
   if (environment === 'live') {
-    const test = await tenantDoc(req.tenant.id, 'test').get();
-    if (!test.exists || test.data().sandboxTestPassed !== true || test.data().webhookVerified !== true) {
+    const sandbox = await providerTenantDoc(req.tenant.id, provider, 'test').get();
+    if (!sandbox.exists || sandbox.data().sandboxTestPassed !== true || sandbox.data().webhookVerified !== true) {
       return fail(res, 409, 'sandbox_acceptance_required');
     }
     if (state.webhookVerified !== true) return fail(res, 409, 'live_webhook_verification_required');
   }
   await ref.set({ active: true, activatedAt: FieldValue.serverTimestamp(), activatedBy: req.actor.uid }, { merge: true });
-  res.json({ active: true, provider: 'razorpay', environment });
+  return res.json({ active: true, provider, environment });
 });
-
 app.use((err, _req, res, _next) => {
   // Deliberately do not log request bodies, tokens, provider responses or secrets.
   const status = err?.type === 'entity.too.large' ? 413 : 400;
