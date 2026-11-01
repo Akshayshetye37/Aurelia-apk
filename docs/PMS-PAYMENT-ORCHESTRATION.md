@@ -106,3 +106,7 @@ PMS reservations, guests, rooms, check-in/out and manual/cash accounting remain 
 - PMS persists a `bridgeDispatchStarted` marker before native IPC. On restart, an intent with a confirmed false marker can safely resume; a true or legacy-missing marker is treated as ambiguous and reconciled without blind redispatch. Intent history is bounded.
 
 - Refund initiation is deliberately disabled in PMS until a durable refund journal, cumulative refund limit, provider verification and exactly-once folio reversal are implemented. A successful capture does not enable an unsafe client-side refund call.
+
+## PMS runtime status clarification
+
+The payment orchestration, IndexedDB intent journal, payment engine, evidence store and reconciliation coordinator are included in the prepared web bundle as optional modules. They are **not yet wired into the active PMS payment UI or native Bridge payment IPC**. The active PMS folio writer remains the local settlement service. The optional reconciliation evidence modules do not post payments. Remote checkout, automatic reconciliation settlement and refunds remain unavailable.
