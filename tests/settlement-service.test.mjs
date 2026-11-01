@@ -190,3 +190,9 @@ test("reservation advance is validated before the booking is committed", async (
   assert.match(handler, /Guest or reservation could not be verified in device storage/);
   assert.match(handler, /S\.b=priorBookings/);
 });
+
+test("manual folio submissions reuse one request key for the open payment sheet", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /id="payment-request-id" value="\$\{requestId\}"/);
+  assert.match(html, /idempotencyKey:reference\?\('ref:'\+reference\):\(\$\('#payment-request-id'\)/);
+});
