@@ -7,8 +7,8 @@ Aurelia PMS is a browser-based property-management interface supplied as a singl
 **The Aurelia PMS source project is hosted in this GitHub repository:**
 
 - **Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
-- **Working branch:** `fix/firebase-phone-identity-engine`
-- **Current branch HEAD checked for this update:** `6f1f78dacaca56dab117c679bf99726141f519ef`
+- **Working branch for the payment integration workstream:** `feature/multi-provider-payment-backend`
+- **Payment integration branch HEAD checked for this update:** `8c27e4fd35d26bf7292ee1efb5ba20fcdd8a7b27`
 - **Project root:** repository root (`/` in the GitHub file browser).
 - **Main application UI:** `index.html`
 - **Android native templates:** `android/templates/`
@@ -30,6 +30,14 @@ The branch is the maintained source of truth for this workstream. Generated Capa
 - `payment-backend/` is only a partial reference implementation/scaffold in this repository. Its presence does not mean a backend is hosted, configured, reachable, or production-ready.
 - Google Drive and a user-selected Shared Folder are optional file-backup destinations via Android Storage Access Framework (SAF). They are not the PMS live database, do not provide automatic multi-device database synchronization, and are independent of a payment backend.
 - Online gateway payment execution, trusted webhook verification, refunds and authoritative reconciliation require a separately deployed trusted backend. Those capabilities remain unavailable until that service and its controls are implemented and tested.
+
+## Pay Bridge installation and connection diagnostics
+
+Installing both APKs does not by itself establish a trusted connection. PMS and Pay Bridge use an exported Messenger service protected by Android's signature-level permission, and both apps independently verify the shared signing identity. Both APKs must be built with the exact same controlled release keystore. Independently generated debug APKs from separate GitHub runners normally have different debug certificates and will be rejected as `untrusted_signer` or `permission_denied`.
+
+Build the PMS release APK from this repository and the Pay Bridge release APK from [Akshayshetye37/aurelia-pay-bridge](https://github.com/Akshayshetye37/aurelia-pay-bridge), using the same four protected release-signing values in both repositories. Verify that the SHA-256 signing-certificate fingerprints printed by both workflows are identical before installing the pair. Uninstall older/debug copies first, then install both matching release APKs. Do not weaken the signature permission or remove signer checks to force a connection.
+
+The current native connection authenticates only the companion app's handshake. Pay Bridge still advertises only `handshake`; payment execution, refunds and provider management are not implemented in IPC.
 
 ## CI validation note
 
