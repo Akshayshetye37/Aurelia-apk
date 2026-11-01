@@ -166,3 +166,24 @@ test("a backend-verified failure can be reopened for late-capture verification",
   assert.equal(recovered.state, "SUCCESS");
   assert.equal(recovered.settlementAuthorized, true);
 });
+
+test("REQUESTED intent recovers a backend session after process death", async () => {
+  const f = fixture();
+  await f.store.put({
+    requestId:"req-1", bookingId:"booking-1", folioId:"folio-1",
+    amountPaise:12500, currency:"INR", providerId:"razorpay",
+    state:"REQUESTED", backendSessionId:null, bridgeTransactionId:null,
+    backendVerified:false, settlementAuthorized:false,
+    createdAt:"2026-11-01T00:00:00.000Z", updatedAt:"2026-11-01T00:00:00.000Z",
+    history:[{state:"CREATED"}]
+  });
+  f.backend.reconcile = async p => ({
+    verified:true, status:"success", requestId:p.requestId, sessionId:"sess-recovered",
+    providerId:p.providerId, bookingId:p.bookingId, folioId:p.folioId,
+    amountPaise:p.amountPaise, currency:p.currency
+  });
+  const result = await f.orchestrator.reconcileOne("req-1");
+  assert.equal(result.state, "SUCCESS");
+  assert.equal(result.backendSessionId, "sess-recovered");
+  assert.equal(result.settlementAuthorized, true);
+});
