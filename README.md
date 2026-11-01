@@ -218,11 +218,11 @@ The following are present in the current project code or documented integration 
 
 ### App lock and key protection status
 
-The app-lock design is not yet an implemented security boundary. No production-ready native PIN enrollment/unlock flow, lifecycle-enforced gateway, Argon2id key-envelope implementation, biometric key-unwrapping flow, or verified Master Key handoff is claimed by this README. A launcher screen by itself would not protect the PMS: every Activity, deep-link and intent entry path must enforce the same gate before the WebView is initialized.
+The repository now contains native security primitives under `android/templates/security/`: Argon2id/AES-256-GCM DEK envelope handling, Android Keystore-backed encrypted retry state, a biometric CryptoObject vault primitive, and a process-scoped PIN/session coordinator. `scripts/patch-android.js` copies these templates into the generated Android app and injects their dependencies. These are foundational components, not a complete app-lock boundary: they are not yet wired to a native enrollment/unlock UI, a pre-WebView launch gateway, or the actual IndexedDB/PMS data-encryption layer. A launcher screen by itself would not protect the PMS: every Activity, deep-link and intent entry path must enforce the same gate before the WebView is initialized.
 
 The intended local design is an optional 4–16 digit PIN, Argon2id-derived key-encryption key, AES-256-GCM key wrapping with authenticated/versioned metadata, persistent throttling, and Android Keystore-backed biometric authorization where supported. A biometric success callback must not unlock the app unless the corresponding Keystore cryptographic operation succeeds and the persisted protected payload is authenticated. PIN protection must not be confused with backup recovery.
 
-**Current status: app lock and biometric unlock are planned/incomplete. Do not describe them as active protection or rely on them to protect production guest data.**
+**Current status: native cryptographic and lock-state primitives are implemented as maintained templates; end-to-end app-lock enforcement remains incomplete. Do not describe the PMS as protected or rely on these primitives to protect production guest data until launch gating, UI, data-key integration, Android instrumentation and device validation pass.**
 
 ### Recovery deployment status
 
@@ -236,10 +236,10 @@ These are implementation and verification tasks, not completed features:
 2. Implement PIN enrollment, verification, change and removal with a documented threat model, Argon2id parameter policy, persistent rate limiting and fail-closed corruption handling.
 3. Implement a versioned AES-256-GCM key envelope with strict parsing, authenticated application/key identity metadata, bounded KDF parameters and crash-safe atomic rotation.
 4. Integrate the protected key with the actual PMS data-encryption layer. Do not create a demonstration key flow that discards the recovered key or claims protection while operational data remains unencrypted.
-5. Implement biometric authorization with Android Keystore and BiometricPrompt CryptoObject. Verify key invalidation, enrollment changes, cancellation and PIN fallback.
+5. Integrate the Keystore biometric primitive with BiometricPrompt UI and the persisted DEK envelope. Verify key invalidation, enrollment changes, cancellation and PIN fallback on supported devices.
 6. Implement lifecycle semantics for immediate, timeout and never-automatically-lock policies. Use monotonic time for elapsed-time decisions, handle process death/reboot explicitly and do not treat Activity onPause as proof that the app entered the background.
 7. Implement the separate backend recovery protocol in [docs/PIN-BACKUP-RECOVERY-STRATEGY.md](docs/PIN-BACKUP-RECOVERY-STRATEGY.md): OTP challenge controls, single-use authorization, tenant binding, audit, KMS/HSM envelope rewrap and operational fail-closed behavior. The API contract still requires cryptographic protocol review before implementation.
-8. Add cryptographic, parser, throttling, tamper, concurrency, process-death, reboot, PIN-rotation and recovery negative-path tests. Add real Android device tests for lifecycle and biometric behavior.
+8. Add JVM/instrumentation cryptographic, parser, throttling, tamper, concurrency, process-death, reboot, PIN-rotation and recovery negative-path tests. Add real Android device tests for lifecycle and biometric behavior. The current Node tests validate template wiring and security boundaries only; they do not execute Android cryptography.
 9. Integrate UI states only after the native security APIs and tests exist. Keep app lock and Forgot PIN unavailable until their respective gates pass.
 
 **Status: Forgot PIN is not production-ready and must remain disabled until these gates pass.**
@@ -360,7 +360,7 @@ Aurelia is divided into the following workstreams. These are architectural bound
 | Division | Owns | Current boundary / status |
 |---|---|---|
 | **1. Aurelia PMS Core** | Hotel operations, rooms, bookings, guests, folios, staff workflows and the primary PMS UI | Main application is in `index.html`. Must remain usable locally without Pay Bridge or a cloud payment service. |
-| **2. Native App Manager & Security** | App lifecycle, app-lock policy, PIN enrollment/unlock, lockout, biometric authorization and protected-key lifecycle | **Planned/incomplete.** The HTML app-lock demo is a UI-only prototype, not Android security. Native gateway, Argon2id envelope, Keystore biometric flow, lifecycle enforcement and tests still need implementation. |
+| **2. Native App Manager & Security** | App lifecycle, app-lock policy, PIN enrollment/unlock, lockout, biometric authorization and protected-key lifecycle | **Partial native foundation.** Argon2id/AES-GCM envelope, encrypted retry-state, Keystore biometric and process-session primitives exist as templates. Pre-WebView launch gateway, UI, live PMS data-key integration and Android device tests remain outstanding. |
 | **3. Local Data & Backup** | PMS local persistence, backup creation, encryption, restore, migration and user-selected backup destinations | Local-first architecture. WebView/IndexedDB currently owns live PMS state. Backup restore and unattended background reliability require further validation; backup is not cross-device live synchronization. |
 | **4. Payments & Accounting** | Payment intents, UPI evidence, reconciliation, folio allocation, refunds and accounting controls | Foundations exist, but no production payment/accounting path is complete. Automatic folio settlement and live gateway collection remain disabled. A provider callback or bridge success event is not accounting proof. |
 | **5. Aurelia Pay Bridge (separate APK/repository)** | Provider execution, payment-side credential boundary, payment IPC server and its own data/backup ownership | Separate repository: [aurelia-pay-bridge](https://github.com/Akshayshetye37/aurelia-pay-bridge). The current connection foundation is handshake-only; do not assume payment execution is connected. |
@@ -397,7 +397,7 @@ The demo HTML is only a visual/interaction prototype. It does not implement Argo
 - **Native generation source:** `android/templates/` and `scripts/patch-android.js`
 - **Payment backend scaffold:** `payment-backend/` (not deployed)
 - **Pay Bridge project:** [github.com/Akshayshetye37/aurelia-pay-bridge](https://github.com/Akshayshetye37/aurelia-pay-bridge), maintained separately
-- **App Manager:** design and HTML demonstration only; native implementation is still outstanding.
+- **App Manager:** partial native security primitives added under `android/templates/security/`; launch gateway, UI, PMS data-key integration and Android device validation remain outstanding.
 - **Live payment and automatic folio settlement:** disabled pending trusted backend, executable IPC, verified provider events, durable reconciliation and atomic PMS ledger posting.
 
 For a new development session, start by checking out the PMS branch above, reading this README and the linked security/payment architecture documents, then inspect the current repository tree and CI status before editing. Do not create another repository or branch for these workstreams.
