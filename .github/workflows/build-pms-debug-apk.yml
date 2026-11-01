@@ -96,6 +96,16 @@ jobs:
           grep -F "package: name='com.aurelia.pms'" "$RUNNER_TEMP/aurelia-pms-badging.txt"
           sha256sum "$apk" > "$apk.sha256"
 
+      - name: Upload standalone PMS debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurelia-pms-debug-${{ github.sha }}
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Mark debug build as standalone only
         run: |
           echo "This debug APK is not compatible with the signature-protected Pay Bridge service." >> "$GITHUB_STEP_SUMMARY"
