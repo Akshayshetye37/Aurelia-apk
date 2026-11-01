@@ -27,7 +27,7 @@ This policy is a product/architecture requirement. The owner-facing payment-back
 
 - Firebase ID tokens are verified server-side, including revoked-token checking, verified email, MFA second-factor claim and recent authentication.
 - Tenant identity is resolved from the trusted Firestore membership document `paymentMemberships/{firebaseUid}`; a client-supplied tenant ID is never an authorization source.
-- Existing provider administration authorization requires an active membership with `owner` or `admin` role. The intent repository currently has a broader role allowlist (`owner`, `admin`, `staff`); this policy mismatch must be resolved before exposing an intent route.
+- Provider credential administration and activation require an active `owner` or `admin` membership. Customer payment-intent creation and lookup accept active `owner`, `admin` or `staff` memberships. All authenticated routes require a verified email, MFA claim, revoked-token checking and authentication within the last ten minutes.
 - Provider credentials and webhook secrets belong in Google Secret Manager. No merchant secret may be embedded in the PMS APK, Pay Bridge APK, browser code or client configuration.
 - Webhook tenant/order identifiers are lookup hints only. Resolve a pre-existing trusted provider-order binding, verify the raw-body signature, and independently fetch provider status before accepting a payment outcome.
 - HTTPS-only is enforced at startup and per request. Production must set `AURELIA_HTTPS_TERMINATION=trusted-proxy` and `AURELIA_TRUST_PROXY_HOPS=1`; Express trusts exactly one TLS-terminating ingress hop, validates `req.secure`, rejects cleartext with HTTP 403 (no redirect), and emits HSTS. The ingress must overwrite `X-Forwarded-Proto`, enforce modern TLS (TLS 1.2 minimum, TLS 1.3 preferred), and be the only network path to the container. Never expose the container directly or trust client-supplied forwarded headers.
@@ -43,7 +43,7 @@ This policy is a product/architecture requirement. The owner-facing payment-back
 - `src/providers/factory.mjs`: factory for the implemented Razorpay and Cashfree adapters; unsupported providers fail closed.
 - `src/providers/registry.mjs`: provider implementation/capability status. PayU, PhonePe, Paytm, CCAvenue and JioPay are not implemented.
 
-These adapter modules have deterministic unit/contract tests. They have not completed merchant sandbox end-to-end verification and are not yet wired into the full payment-intent service.
+Both adapters are registered in the HTTP service. Their merchant credential lifecycle, validation endpoint, test-order utility and webhook verification routes are provider-neutral. Adapter unit/contract tests exist, but merchant sandbox end-to-end verification, production onboarding and complete accounting settlement remain unverified.
 
 ### Payment domain and state machine
 
@@ -66,7 +66,7 @@ These adapter modules have deterministic unit/contract tests. They have not comp
 - A different active intent cannot acquire the same tenant/folio lock.
 - Provider order responses are checked against expected amount and currency before the provider-order binding is stored.
 - An ambiguous provider outcome is recorded as `UNKNOWN`; the folio lock is retained and a blind retry is not allowed.
-- The repository currently resolves membership itself and returns checkout data, but it is not yet exposed through an HTTP route.
+- The repository is exposed through `POST /v1/payments/intents` and `GET /v1/payments/intents/:intentId`. It resolves tenant membership from the verified Firebase UID and requires a pre-provisioned authoritative folio.
 
 **Important limitation:** the repository's current catch boundary still needs refinement. It conservatively treats failures across secret loading, adapter construction and provider dispatch as `UNKNOWN`. The next change must distinguish failures proven to occur before the provider request could be transmitted (eligible for `FAILED_TO_INITIATE` and lock release) from failures after transmission may have begun (must remain `UNKNOWN`). Generic error messages alone are not sufficient proof of pre-dispatch failure.
 
@@ -81,34 +81,37 @@ The fake-store concurrency test is useful unit coverage, **not proof of Firestor
 
 The Node process listens on an internal container port; this is not permission to expose a public HTTP endpoint. Public access must be through a managed HTTPS ingress/load balancer. Configure both required environment variables above. The ingress must terminate TLS, overwrite forwarded-protocol headers, and prevent direct Internet access to the container. The application rejects any request it cannot verify as secure. It does not redirect HTTP requests, especially payment POSTs. Local plain-HTTP development is intentionally unsupported; use a local HTTPS reverse proxy or a dedicated test harness.
 
-## 4. Existing HTTPS service
+## 4. Current HTTPS service routes
 
-The current `src/server.mjs` exposes:
+The current `src/server.mjs` exposes the following provider-neutral routes:
 
-- `GET /healthz`
-- `GET /v1/admin/providers`
-- `PUT /v1/admin/providers/razorpay/credentials`
-- `POST /v1/admin/providers/razorpay/validate`
-- `POST /v1/admin/providers/razorpay/test-orders`
-- `POST /v1/admin/providers/razorpay/activate`
-- `POST /v1/webhooks/razorpay/{tenantId}/{test|live}`
+- `GET /healthz` — process liveness only.
+- `POST /v1/payments/intents` and `GET /v1/payments/intents/:intentId` — authenticated customer intent API, restricted to an active tenant owner/admin/staff membership.
+- `GET /v1/admin/providers` — provider/environment status.
+- `PUT /v1/admin/providers/{razorpay|cashfree}/credentials` — write-only credential intake; secrets are stored in Secret Manager.
+- `POST /v1/admin/providers/{razorpay|cashfree}/validate` — provider credential validation.
+- `POST /v1/admin/providers/{razorpay|cashfree}/test-orders` — test-environment onboarding order utility with idempotency protection.
+- `POST /v1/admin/providers/{razorpay|cashfree}/activate` — explicit environment activation gate.
+- `POST /v1/webhooks/{razorpay|cashfree}/{tenantId}/{test|live}` — raw-body signature validation followed by a provider-side status fetch and trusted order binding check.
 
-The Razorpay test-order route is an onboarding/test utility, not the customer payment-intent API. The current server's tenant secret/document helpers are Razorpay-specific. The generic adapter factory, Cashfree adapter, intent state machine, webhook router and Firestore intent repository are not yet integrated into one end-to-end service.
+All admin/provider onboarding routes require an owner/admin membership. Payment-intent routes additionally allow active staff members. Only Razorpay and Cashfree are registered as implemented adapters; all other catalogue entries remain unsupported and fail closed.
 
-Do not add a second independent authentication or HTTPS implementation in a new router. The eventual payment router must reuse the existing server security middleware and authenticated actor/tenant context.
+**Integration boundary:** verified webhook events update the provider-order evidence record and provider onboarding state. They do not yet post a PMS folio ledger entry, release an unresolved folio lock, or establish exactly-once accounting. The reconciliation and ledger-settlement pipeline remains a release blocker.
+
+Do not add a second independent authentication or HTTPS implementation in another router. The payment routes reuse the shared Firebase authentication, tenant-membership and HTTPS middleware.
 
 ## 5. Not implemented or not verified
 
 | Component | Current status | Remaining work |
 |---|---|---|
-| Razorpay adapter | Implemented module; not end-to-end verified | Merchant sandbox checkout, webhook and refund tests |
-| Cashfree adapter | Implemented module; not service-wired | Tenant credential lifecycle, HTTP routes, webhook and sandbox tests |
+| Razorpay adapter | Implemented and wired to provider-neutral routes; not end-to-end verified | Merchant sandbox checkout, webhook and refund tests |
+| Cashfree adapter | Implemented and wired to provider-neutral routes; not end-to-end verified | Merchant sandbox checkout, webhook and refund tests |
 | PayU | Not implemented | Select supported API product/version; obtain merchant staging access |
 | PhonePe | Not implemented | Confirm merchant-enabled PG product/API version and staging access |
 | Paytm | Not implemented | Confirm merchant product, API contract and staging access |
 | CCAvenue | Not implemented | Obtain current merchant integration kit/specification; do not guess crypto or request fields |
 | JioPay | Not implemented | Confirm merchant UAT product, credentials and contract |
-| Customer payment-intent HTTP API | Not implemented | Authenticated route integrated with repository |
+| Customer payment-intent HTTP API | Implemented; end-to-end accounting not verified | Integrate and verify against actual PMS folio schema and ledger settlement |
 | Actual PMS folio validation | Blocked on schema inspection | Confirm real folio/ledger collection, ownership, open-state and balance calculation |
 | Pre-dispatch vs ambiguous failure boundary | Partially implemented; refinement required | Explicit dispatch marker and state-machine-backed failure classification |
 | Firestore Emulator tests | Not implemented/verified | Real emulator transaction, contention and cleanup tests |
@@ -144,7 +147,7 @@ Work in this order. Do not skip ahead to live payments.
 
 **Exit gate:** deterministic unit tests cover every transition and failure boundary; no generic exception can incorrectly release a possibly paid folio.
 
-### Phase 3 — Authenticated intent API and Firestore Emulator
+### Phase 3 — Verify authenticated intent API and Firestore Emulator
 
 1. Add the payment-intent router to the existing Express application, reusing existing authentication and HTTPS middleware.
 2. Add strict schema validation, integer minor-unit money, request limits, rate limits and safe error responses.
