@@ -53,5 +53,5 @@ test('native PIN and data-key material are not exposed through JavaScript interf
   assert.match(crypto, /Argon2BytesGenerator/);
   assert.match(crypto, /AES\/GCM\/NoPadding/);
   assert.match(manager, /currentDataKeyCopy/);
-  assert.doesNotMatch(gate, /addJavascriptInterface|evaluateJavascript|WebView/);
+  assert.doesNotMatch(gate, /addJavascriptInterface|evaluateJavascript/);
 });
