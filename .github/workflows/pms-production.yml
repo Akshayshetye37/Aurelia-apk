@@ -1,0 +1,125 @@
+name: Aurelia PMS Android Production Build
+
+on:
+  push:
+    branches: [copy-from-designer-apk-v2]
+    paths:
+      - 'pms/**'
+      - '.github/workflows/pms-production.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurelia-pms-production-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - name: Checkout PMS source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify PMS web asset is synchronized
+        run: cmp pms/index.html pms/android/app/src/main/assets/index.html
+
+      - name: Validate embedded JavaScript
+        working-directory: pms
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          class InlineScripts(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.active = False
+                  self.external = False
+                  self.parts = []
+                  self.current = []
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() == "script":
+                      self.active = True
+                      self.external = any(k.lower() == "src" for k, _ in attrs)
+                      self.current = []
+              def handle_data(self, data):
+                  if self.active and not self.external:
+                      self.current.append(data)
+              def handle_endtag(self, tag):
+                  if tag.lower() == "script" and self.active:
+                      if not self.external:
+                          self.parts.append("".join(self.current))
+                      self.active = False
+          parser = InlineScripts()
+          parser.feed(open("index.html", encoding="utf-8").read())
+          if not parser.parts:
+              raise SystemExit("No inline JavaScript found")
+          open("/tmp/aurelia-pms-inline.js", "w", encoding="utf-8").write("\\n".join(parser.parts))
+          PY
+          node --check /tmp/aurelia-pms-inline.js
+
+      - name: Build installable debug APK
+        working-directory: pms/android
+        run: gradle --no-daemon clean assembleDebug
+
+      - name: Verify debug APK
+        run: |
+          APK="pms/android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          "$ANDROID_HOME"/build-tools/$(ls "$ANDROID_HOME"/build-tools | sort -V | tail -1)/apksigner verify --verbose "$APK"
+
+      - name: Build release APK
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEYSTORE_PASSWORD != '' && env.ANDROID_KEY_ALIAS != '' && env.ANDROID_KEY_PASSWORD != '' }}
+        working-directory: pms/android
+        run: gradle --no-daemon assembleRelease
+
+      - name: Sign production APK
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEYSTORE_PASSWORD != '' && env.ANDROID_KEY_ALIAS != '' && env.ANDROID_KEY_PASSWORD != '' }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/aurelia-release.jks"
+          UNSIGNED="pms/android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          test -s "$UNSIGNED"
+          ZIPALIGN="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME"/build-tools | sort -V | tail -1)/zipalign"
+          APKSIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME"/build-tools | sort -V | tail -1)/apksigner"
+          mkdir -p dist
+          "$ZIPALIGN" -v -p 4 "$UNSIGNED" dist/aurelia-pms-production-aligned.apk
+          "$APKSIGNER" sign --ks "$RUNNER_TEMP/aurelia-release.jks" --ks-pass env:ANDROID_KEYSTORE_PASSWORD --ks-key-alias "$ANDROID_KEY_ALIAS" --key-pass env:ANDROID_KEY_PASSWORD --out dist/aurelia-pms-production.apk dist/aurelia-pms-production-aligned.apk
+          "$APKSIGNER" verify --verbose dist/aurelia-pms-production.apk
+          rm -f dist/aurelia-pms-production-aligned.apk "$RUNNER_TEMP/aurelia-release.jks"
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurelia-pms-debug-apk
+          path: pms/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload signed production APK
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEYSTORE_PASSWORD != '' && env.ANDROID_KEY_ALIAS != '' && env.ANDROID_KEY_PASSWORD != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurelia-pms-production-apk
+          path: dist/aurelia-pms-production.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Report signing requirement
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 == '' || env.ANDROID_KEYSTORE_PASSWORD == '' || env.ANDROID_KEY_ALIAS == '' || env.ANDROID_KEY_PASSWORD == '' }}
+        run: echo "::warning::Debug APK built. Signed production APK was not produced because Android release-signing secrets are not configured."
