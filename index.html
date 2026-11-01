@@ -3752,9 +3752,7 @@ if (typeof window.render === "function") window.render();
    const docs=guide.docs.map(link=>'<li><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">'+esc(link.label)+'</a></li>').join('');
    const backendCfg=S.set.backendConnection||{};
    const backendLabel=backendCfg.reachable?'Backend reachable · health check passed':'Backend not verified';
-   const backendCfg=S.set.backendConnection||{};
-   const backendLabel=backendCfg.reachable?'Backend reachable · health check passed':'Backend not verified';
-   const fields='<div class="provider-config" data-provider="'+esc(id)+'"><div class="tag '+(backendCfg.reachable?'ready':'out')+'">'+esc(backendLabel)+'</div><label class="fld"><span>Backend HTTPS origin (health check only)</span><input id="aurelia-backend-url" data-aurelia-backend-url type="url" inputmode="url" autocomplete="url" placeholder="https://payments.example.com" value="'+esc(backendCfg.endpoint||'')+'"></label><div class="row" style="flex-wrap:wrap"><button class="btn sm" onclick="saveAureliaBackendEndpoint()">Save endpoint</button><button class="btn sm ghost" onclick="testAureliaBackendConnection()">Test backend</button></div><p class="lab">Provider credentials remain server-side. Provider onboarding is disabled until the owner-controlled backend console is deployed. PMS receives non-secret provider status only. A successful health check does not authenticate an owner or enable payment collection.</p><div class="lab" id="provider-status-'+esc(id)+'" role="status">Provider credentials and activation are not configured from this PMS interface.</div></div>';
+   const fields='<div class="provider-config" data-provider="'+esc(id)+'"><div class="tag '+(backendCfg.reachable?'ready':'out')+'">'+esc(backendLabel)+'</div><label class="fld"><span>Backend HTTPS origin (health check only)</span><input data-aurelia-backend-url type="url" inputmode="url" autocomplete="url" placeholder="https://payments.example.com" value="'+esc(backendCfg.endpoint||'')+'"></label><div class="row" style="flex-wrap:wrap"><button class="btn sm" onclick="saveAureliaBackendEndpoint()">Save endpoint</button><button class="btn sm ghost" onclick="testAureliaBackendConnection()">Test backend</button></div><p class="lab">Provider credentials remain server-side. Provider onboarding is disabled until the owner-controlled backend console is deployed. PMS receives non-secret provider status only. A successful health check does not authenticate an owner or enable payment collection.</p><div class="lab" id="provider-status-'+esc(id)+'" role="status">Provider credentials and activation are not configured from this PMS interface.</div></div>';
    const guideHtml='<p class="lab">'+esc(definition.category)+' · '+esc(definition.integration)+'<br>Methods: '+esc(definition.methods.join(', '))+'<br>'+esc(definition.verification)+'</p><ul>'+docs+'</ul>';
    return '<details><summary>'+esc(name)+' · Documentation</summary>'+guideHtml+fields+'</details>';
   }).join('');
@@ -3772,7 +3770,7 @@ window.saveAureliaBackendEndpoint=function(){
  persist();render();toast('Backend endpoint saved. Run Test backend to verify it.');return true;
 };
 window.testAureliaBackendConnection=async function(){
- const input=document.getElementById('aurelia-backend-url');
+ const input=document.querySelector('[data-aurelia-backend-url]');
  const raw=(input?.value||S.set.backendConnection?.endpoint||'').trim();
  let url;
  try{url=new URL(raw)}catch(_){toast('Enter and save a valid HTTPS backend origin first');return}
