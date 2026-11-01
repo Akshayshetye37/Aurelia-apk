@@ -204,7 +204,7 @@ final class PayBridgeClient {
       detail = "Binding to Pay Bridge native service";
       startHandshakeTimeout();
 
-      Intent intent = new Intent();
+      Intent intent = new Intent(PayBridgeProtocol.BIND_ACTION);
       intent.setComponent(new ComponentName(PACKAGE, SERVICE));
       bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE);
       if (!bound) {
