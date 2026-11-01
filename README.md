@@ -324,9 +324,19 @@ A separate `payment-backend/` service now contains a **partial Razorpay referenc
 The backend tests are security-contract regression checks, not cloud/provider integration tests. No production readiness claim is made. Ordinary PMS operations remain local-first; this optional payment service does not make the general PMS dependent on cloud availability.
 
 
+
+
+### Local folio settlement boundary
+
+The PMS now records staff-confirmed manual receipts in the local booking folio with an idempotency key, timestamp, method, optional reference and audit event. This is a local PMS accounting record; it is not gateway settlement, bank reconciliation, provider capture verification or a double-entry general ledger. Gateway callbacks and Pay Bridge events cannot post folio credits. Live gateway collection, automatic folio settlement, refunds and reconciliation remain disabled until the trusted backend, verified provider events and accounting journal are deployed and tested.
+
+### Backup recovery-password rotation
+
+The Backup & Restore screen supports changing the recovery password by decrypting the existing wrapped data key with the current password and wrapping the same key with the new password. This does not rotate the backup data-encryption key. Previously exported backup files retain the password wrapper they were created with and still require their original password; retain it until those files have been replaced or retired. A forgotten recovery password cannot be bypassed to decrypt existing backups.
+
 ## Provider credential onboarding (owner-only)
 
-The Provider Directory UI now distinguishes documentation from working integrations. It offers credential entry only for the two providers that have server adapters wired today: Razorpay and Cashfree Payments. PayU, PhonePe, Paytm, JioPay and CCAvenue remain documentation/catalogue entries; entering credentials for them is intentionally disabled because no compatible adapter is implemented.
+The Provider Directory UI distinguishes documentation, local merchant metadata and actual gateway onboarding. It exposes environment and non-secret merchant identifier fields for each catalogue provider; these values are local reference metadata only and do not connect or activate a gateway. Merchant API secrets, salts and webhook secrets are deliberately not collected in the PMS APK. A separately hosted, MFA-authenticated owner console and backend secret vault are not yet deployed, so secret onboarding remains unavailable. Only the Razorpay backend reference adapter exists; it is not deployed or end-to-end verified. Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue must remain inactive until their server adapters and verification flows are implemented.
 
 ### Required merchant values
 
