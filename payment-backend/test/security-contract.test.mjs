@@ -16,21 +16,22 @@ test('admin API verifies revoked Firebase tokens, server-resolved tenant members
   assert.match(source, /recent_mfa_sign_in_required/);
 });
 
-test('provider secrets are written to Secret Manager and never returned in status', () => {
-  assert.match(source, /storeSecret\(secretId\(req\.tenant\.id, environment, 'api'\)/);
-  assert.match(source, /storeSecret\(secretId\(req\.tenant\.id, environment, 'webhook'\)/);
+test('provider-neutral credentials are namespaced by tenant, provider, environment and purpose', () => {
+  assert.match(source, /providerSecretId\(tenantId, provider, environment, purpose\)/);
+  assert.match(source, /storeSecret\(providerSecretId\(req\.tenant\.id, provider, environment, 'api'\)/);
+  assert.match(source, /storeSecret\(providerSecretId\(req\.tenant\.id, provider, environment, 'webhook'\)/);
+  assert.match(source, /\['razorpay', 'cashfree'\]/);
   assert.match(source, /keySecret/);
   assert.match(source, /webhookSecret/);
-  assert.match(source, /keyId: d\.keyId \|\| null/);
   assert.equal(source.includes('res.json({ keySecret'), false);
 });
 
-test('Razorpay webhook uses raw bytes, constant-time HMAC comparison and provider fetch', () => {
+test('provider-neutral webhook route verifies raw body with provider adapter before accepting payment', () => {
   assert.match(source, /express\.raw\(\{ type: 'application\/json'/);
-  assert.match(source, /createHmac\('sha256', webhookSecret\)\.update\(req\.body\)/);
+  assert.match(source, /adapter\.verifyWebhook\(req\.body, req\.headers\)/);
+  assert.match(source, /adapter\.getPaymentStatus\(\{ orderId: providerOrderId, paymentId \}\)/);
+  assert.match(source, /providerFetchVerified: verified/);
   assert.match(source, /timingSafeEqual/);
-  assert.match(source, /GET', '\/payments\/'/);
-  assert.match(source, /payment\.status === 'captured'/);
 });
 
 test('ambiguous order creation is not retried with the same idempotency key', () => {
@@ -49,11 +50,9 @@ test('activation requires sandbox acceptance and explicit confirmation', () => {
 test('all provider state and secrets are scoped to server-resolved tenant IDs', () => {
   assert.match(source, /paymentTenants\/' \+ tenantId/);
   assert.match(source, /paymentMemberships\/' \+ uid/);
-  assert.equal(source.includes('const secretId = (tenantId, env, purpose) =>'), true);
-  assert.match(source, /update\(req\.tenant\.id \+ ':razorpay:test:' \+ idem\)/);
-  assert.match(source, /orderSnap\.data\(\)\.tenantId !== tenantId/);
-  assert.match(source, /:tenantId\/:environment/);
-  assert.match(source, /paymentOrders\/' \+ req\.tenant\.id \+ '_' \+ order\.id/);
+  assert.match(source, /providerSecretId\(tenantId, provider, environment, purpose\)/);
+  assert.match(source, /providerTenantDoc\(tenantId, provider, environment\)/);
+  assert.match(source, /:provider:environment/);
   assert.equal(source.includes('ownerDoc('), false);
   assert.equal(source.includes('ownerUids'), false);
 });
