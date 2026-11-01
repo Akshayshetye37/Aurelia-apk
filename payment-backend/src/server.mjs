@@ -323,10 +323,17 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     const providerOrderId = provider === 'razorpay' ? paymentEntity?.order_id : event?.data?.order?.order_id;
     const paymentId = provider === 'razorpay' ? paymentEntity?.id : paymentEntity?.cf_payment_id;
     if (!providerOrderId || !paymentId) return res.status(200).json({ received: true, ignored: true });
-    const orderRef = db.doc('paymentOrders/' + tenantId + '_' + provider + '_' + providerOrderId);
-    const orderSnap = await orderRef.get();
-    if (!orderSnap.exists || orderSnap.data().tenantId !== tenantId ||
-        orderSnap.data().provider !== provider || orderSnap.data().environment !== environment) {
+    const providerOrderHash = crypto.createHash('sha256')
+      .update(tenantId + ':' + provider + ':' + environment + ':' + providerOrderId).digest('hex');
+    const intentOrderRef = db.doc('paymentProviderOrders/' + providerOrderHash);
+    const onboardingOrderRef = db.doc('paymentOrders/' + tenantId + '_' + provider + '_' + providerOrderId);
+    const intentOrderSnap = await intentOrderRef.get();
+    const onboardingOrderSnap = intentOrderSnap.exists ? null : await onboardingOrderRef.get();
+    const orderRef = intentOrderSnap.exists ? intentOrderRef : onboardingOrderRef;
+    const orderSnap = intentOrderSnap.exists ? intentOrderSnap : onboardingOrderSnap;
+    if (!orderSnap?.exists || orderSnap.data().tenantId !== tenantId ||
+        orderSnap.data().provider !== provider || orderSnap.data().environment !== environment ||
+        orderSnap.data().providerOrderId && orderSnap.data().providerOrderId !== providerOrderId) {
       return fail(res, 409, 'payment_order_binding_mismatch');
     }
     const status = await adapter.getPaymentStatus({ orderId: providerOrderId, paymentId });
