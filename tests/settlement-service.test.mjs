@@ -227,3 +227,10 @@ test("folio totals and charge/discount/rate entry use two-decimal currency preci
   assert.match(html, /function dcApply\(i\)[\s\S]*?two decimal places/);
   assert.match(html, /function roomSave\(i\)[\s\S]*?two decimal places/);
 });
+
+test("historical folios preserve the nightly rate when room rates change", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /rate:roomRate/);
+  assert.match(html, /b\\.rate!=null&&Number\\.isFinite\\(Number\\(b\\.rate\\)\\)/);
+  assert.match(html, /if\\(b\\.rate==null\\|\\|!Number\\.isFinite\\(Number\\(b\\.rate\\)\\)\\|\\|Number\\(b\\.rate\\)<=0\\)b\\.rate=o\\.r/);
+});
