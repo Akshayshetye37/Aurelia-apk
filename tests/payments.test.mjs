@@ -141,3 +141,8 @@ test("payment event rejects invalid receivedAt and oversized evidence text", () 
   assert.throws(() => createPaymentEvent({ eventId:"bad-time", amount:"10", receivedAt:"not-a-date" }), /receivedAt/);
   assert.throws(() => createPaymentEvent({ eventId:"large", amount:"10", rawEvidence:"x".repeat(8193) }), /8192/);
 });
+
+test("payment event rejects malformed event timestamps and precision labels", () => {
+  assert.throws(() => createPaymentEvent({ eventId:"bad-event-time", amount:"10", timestamp:"not-a-date" }), /event timestamp/);
+  assert.throws(() => createPaymentEvent({ eventId:"bad-precision", amount:"10", timestampPrecision:"verified" }), /timestampPrecision/);
+});
