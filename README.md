@@ -70,7 +70,7 @@ cd android
 ./gradlew --no-daemon assembleDebug
 ```
 
-The GitHub Actions workflow runs the regression tests before preparing the app and building the signed release APK. Successful push/manual builds publish the APK, SHA-256 checksum, and signing-certificate report as assets in a draft prerelease in this private repository. A draft release is not automatically approved for distribution; verify the certificate fingerprint against Aurelia Pay Bridge before installing both applications together.
+The GitHub Actions workflow runs the regression tests before preparing the app and building the signed release APK. Successful push/manual builds upload the APK, SHA-256 checksum, and signing-certificate report as a 14-day GitHub Actions artifact. Download it from the successful `Build and verify Aurelia PMS APK` run. A draft release is not automatically approved for distribution; verify the certificate fingerprint against Aurelia Pay Bridge before installing both applications together.
 
 ## Direct UPI reconciliation status
 
