@@ -63,3 +63,13 @@ test('client-supplied tenant identifiers are not used to authorize admin request
   assert.equal(source.includes('req.body.tenantId'), false);
   assert.equal(source.includes('req.query.tenantId'), false);
 });
+
+
+test('HTTP runtime rejects requests without trusted HTTPS transport and emits HSTS', () => {
+  assert.match(source, /app\.set\('trust proxy', trustProxyHops\)/);
+  assert.match(source, /process\.env\.AURELIA_TRUST_PROXY_HOPS === '1' \? 1 : false/);
+  assert.match(source, /if \(!req\.secure\)/);
+  assert.match(source, /insecure_connection_rejected/);
+  assert.match(source, /Strict-Transport-Security/);
+  assert.equal(source.includes("req.headers['x-forwarded-proto'] === 'https'"), false);
+});
