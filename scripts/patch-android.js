@@ -279,6 +279,7 @@ for (const file of [
   'BiometricVaultManager.kt',
   'AureliaAppManager.kt',
   'AureliaSecurityRuntime.kt',
+  'AureliaEnvelopeStore.kt',
   'LockGateActivity.kt'
 ]) {
   const source = path.join(securityTemplateDir, file);
