@@ -90,6 +90,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
       orderStatus: order.order_status,
       paymentId: successful?.cf_payment_id || null,
       paymentStatus: successful?.payment_status || order.order_status,
+      captured: successful?.payment_status === 'SUCCESS',
       amountMinor: Math.round(Number(order.order_amount) * 100),
       currency: order.order_currency
     };
