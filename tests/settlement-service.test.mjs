@@ -271,3 +271,20 @@ test("UPI notification evidence requires independent confirmation before folio p
   assert.match(html, /A notification alone is not proof of payment/);
   assert.match(html, /\['open','pending_review'\]\.includes\(s\.st\)/);
 });
+
+test("settlement requires explicit payment receipt confirmation", () => {
+  const { deps, booking, state } = fixture();
+  const { verificationConfirmed, ...unconfirmed } = deps;
+  assert.throws(
+    () => settlePayment({ ...unconfirmed, amount:10, method:"Cash" }),
+    e => e.code === "PAYMENT_CONFIRMATION_REQUIRED"
+  );
+  assert.equal(booking.p, 0);
+  assert.equal(state.today, 0);
+});
+test("reservation advances require the same explicit receipt confirmation", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /advance-confirm/);
+  assert.match(html, /Confirm that the reservation advance was received/);
+  assert.match(html, /verificationConfirmed:\$\('#advance-confirm'\)\?\.checked===true/);
+});
