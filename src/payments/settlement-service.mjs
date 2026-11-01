@@ -80,7 +80,10 @@ export function settlePayment({
     throw new TypeError("Payment method is required and must be at most " + MAX_METHOD_LENGTH + " characters");
   }
 
-  const ref = normalizedReference(reference);
+  const rawReference = normalizedReference(reference);
+  const ref = /upi|bank|neft|rtgs|imps|card|wallet/i.test(paymentMethod)
+    ? rawReference.replace(/\s+/g, "").toUpperCase()
+    : rawReference;
   if (ref.length > MAX_REFERENCE_LENGTH || /[\u0000-\u001f\u007f]/.test(ref)) {
     throw new TypeError("Payment reference is invalid or too long");
   }
