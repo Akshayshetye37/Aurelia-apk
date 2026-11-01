@@ -201,10 +201,10 @@ final class PayBridgeClient {
           bridgeFingerprint = certificateFingerprint(info);
         } catch (Exception ignored) { }
         state = "untrusted_signer";
-        detail = "Installed signing certificates differ. PMS: " + shortFingerprint(pmsFingerprint)
-            + "; Pay Bridge: " + shortFingerprint(bridgeFingerprint)
-            + ". Expected shared release SHA-256: " + APPROVED_RELEASE_CERT_SHA256
-            + ". Uninstall both old builds and install the matching release APK pair.";
+        detail = "Installed APK signing certificates do not match. PMS SHA-256: " + (pmsFingerprint.isEmpty() ? "unavailable" : pmsFingerprint)
+            + "; Pay Bridge SHA-256: " + (bridgeFingerprint.isEmpty() ? "unavailable" : bridgeFingerprint)
+            + "; approved release SHA-256: " + APPROVED_RELEASE_CERT_SHA256
+            + ". The installed APK certificates, not the keystore filename or build claim, determine trust. Check the exact installed APKs, selected key alias, and any Play App Signing re-signing.";
         notifyStatus();
         return;
       }
