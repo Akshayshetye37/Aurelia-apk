@@ -775,10 +775,90 @@ function dsheet(){
   <button class="btn" style="width:100%;margin-top:14px" onclick="dsave()">${res?'Confirm reservation':'Save guest'}</button>`;
   openS(html);
 }
-function dsave(){rdD();const d=S.dr,g=d.g,nm=g.n.trim();if(!nm){toast('Enter the guest’s name');return}if(!g.idn.trim()||!g.img){toast('The primary guest needs an ID number and photo');return}const bad=d.oc.findIndex(o=>!o.n||!o.idn||!o.img);if(bad>=0){toast('Occupant '+(bad+1)+' needs a name, ID number and photo');return}
-if(d.k==='res'){const a=offOf(d.in),z=offOf(d.out);if(!(z>a)){toast('Departure must be after arrival');return}if(a<0){toast('Arrival cannot be in the past');return}if(!d.room||!free(d.room,a,z)){toast('Choose a suite that is free on those dates');return}}
-const gi=d.k==='guest'?d.gi:S.g.findIndex(x=>x.n.toLowerCase()===nm.toLowerCase()),old=gi!=null&&gi>=0?S.g[gi]:null,rec={...g,n:nm,occ:d.oc,veh:d.vh};if(old&&old.n!==nm)S.b.forEach(b=>{if(b.g===old.n)b.g=nm});if(old)S.g[gi]=rec;else S.g.push(rec);
-if(d.k==='res'){const amount=Number(d.bookingAmount||0);if(!Number.isFinite(amount)||amount<0){toast('Enter a valid booking amount');return}const booking={id:++id,g:nm,room:d.room,in:offOf(d.in),out:offOf(d.out),st:'res',ch:[],pays:[],checkInTime:d.checkInTime||defCheckInTime(),checkOutTime:d.checkOutTime||defCheckOutTime(),scheduledCheckIn:d.in+'T'+(d.checkInTime||defCheckInTime()),scheduledCheckOut:d.out+'T'+(d.checkOutTime||defCheckOutTime())};S.b.push(booking);if(amount>0)settlePayment({booking,amount,method:'Cash',reference:'Booking advance',source:'reservation_advance',idempotencyKey:'booking-advance:'+booking.id});aud('Reservation',nm+' · Room '+d.room+' · '+fd(offOf(d.in))+(amount>0?' · Advance '+K(amount):''));persist();closeS();S.tab='stays';S.f='res';render();toast('Reservation confirmed for '+fd(offOf(d.in)))}else{aud('Guest saved',nm);closeS();render();toast('Guest saved')}}
+function dsave(){
+ rdD();
+ const d=S.dr,g=d.g,nm=String(g.n||'').trim();
+ if(!nm){toast('Enter the guest’s name');return}
+ if(!String(g.idn||'').trim()||!g.img){toast('The primary guest needs an ID number and photo');return}
+ const bad=(d.oc||[]).findIndex(o=>!o.n||!o.idn||!o.img);
+ if(bad>=0){toast('Occupant '+(bad+1)+' needs a name, ID number and photo');return}
+
+ let arrival=null,departure=null,advance=0,roomRate=0;
+ if(d.k==='res'){
+  arrival=offOf(d.in);departure=offOf(d.out);
+  if(!(departure>arrival)){toast('Departure must be after arrival');return}
+  if(arrival<0){toast('Arrival cannot be in the past');return}
+  if(!d.room||!free(d.room,arrival,departure)){toast('Choose a suite that is free on those dates');return}
+  advance=Number(d.bookingAmount||0);
+  const room=rm(d.room);
+  roomRate=Number(room&&room.r);
+  if(!Number.isFinite(advance)||advance<0||!Number.isSafeInteger(Math.round(advance*100))||Math.abs(advance*100-Math.round(advance*100))>1e-7){
+   toast('Enter a valid advance with no more than two decimal places');return;
+  }
+  const maxAdvancePaise=Math.round((departure-arrival)*roomRate*100);
+  if(!Number.isFinite(roomRate)||roomRate<0||!Number.isSafeInteger(maxAdvancePaise)||Math.round(advance*100)>maxAdvancePaise){
+   toast('Advance cannot exceed the room charges for this stay');return;
+  }
+ }
+
+ // Snapshot every state surface touched below. Reservation creation and its
+ // advance are one local operation: a failed payment persistence must not
+ // leave a guest/booking partially created in memory or device storage.
+ const priorGuests=S.g.slice();
+ const priorBookings=S.b.slice();
+ const priorBookingNames=priorBookings.map(b=>[b,b.g]);
+ const priorAudit=Array.isArray(S.aud)?S.aud.slice():[];
+ const priorToday=S.today,priorId=id;
+ let booking=null;
+ try{
+  const gi=d.k==='guest'?d.gi:S.g.findIndex(x=>x.n.toLowerCase()===nm.toLowerCase());
+  const old=gi!=null&&gi>=0?S.g[gi]:null;
+  const rec={...g,n:nm,occ:d.oc,veh:d.vh};
+  if(old&&old.n!==nm)S.b.forEach(b=>{if(b.g===old.n)b.g=nm});
+  if(old)S.g[gi]=rec;else S.g.push(rec);
+
+  if(d.k==='res'){
+   const checkIn=d.checkInTime||defCheckInTime();
+   const checkOut=d.checkOutTime||defCheckOutTime();
+   booking={id:++id,g:nm,room:d.room,in:arrival,out:departure,st:'res',ch:[],pays:[],
+    checkInTime:checkIn,checkOutTime:checkOut,
+    scheduledCheckIn:d.in+'T'+checkIn,scheduledCheckOut:d.out+'T'+checkOut};
+   S.b.push(booking);
+   if(advance>0)settlePayment({booking,amount:advance,method:'Cash',reference:'Booking advance',
+    source:'reservation_advance',idempotencyKey:'booking-advance:'+booking.id});
+   aud('Reservation',nm+' · Room '+d.room+' · '+fd(arrival)+(advance>0?' · Advance '+K(advance):''));
+  }else{
+   aud('Guest saved',nm);
+  }
+
+  persist();
+  let saved;
+  try{
+   const raw=(window.__aureliaStorage||localStorage).getItem(SK);
+   saved=raw?JSON.parse(raw):null;
+  }catch(_){throw new Error('Could not verify the saved guest and reservation records')}
+  const savedGuest=saved&&Array.isArray(saved.g)?saved.g.find(x=>x.n===nm):null;
+  const savedBooking=d.k==='res'&&saved&&Array.isArray(saved.b)?saved.b.find(x=>x.id===booking.id):null;
+  if(!savedGuest||(d.k==='res'&&(!savedBooking||
+    Number(savedBooking.p||0)!==Number(booking.p||0)||
+    JSON.stringify(savedBooking.pays||[])!==JSON.stringify(booking.pays||[])||
+    JSON.stringify(savedBooking.payments||[])!==JSON.stringify(booking.payments||[])))){
+   throw new Error('Guest or reservation could not be verified in device storage');
+  }
+  closeS();
+  if(d.k==='res'){S.tab='stays';S.f='res';render();toast('Reservation confirmed for '+nm)}
+  else{render();toast('Guest saved')}
+ }catch(error){
+  S.g=priorGuests;
+  S.b=priorBookings;
+  priorBookingNames.forEach(([b,name])=>{b.g=name});
+  if(Array.isArray(S.aud))S.aud.splice(0,S.aud.length,...priorAudit);
+  S.today=priorToday;
+  id=priorId;
+  persist();
+  toast(error&&error.message||'Could not save guest or reservation; no payment was recorded');
+ }
+}
 function cin(i){const b=bk(i);if(!b)return;const g=gOf(b.g),m=idMissing(g);
 if(m){openS(`<h2 class="foil">ID details needed</h2><p class="lab">${esc(b.g)}: ${m}. Every guest needs an ID photo and number before check-in.</p>${g?`<button class="btn" style="width:100%" onclick="dopen(${S.g.indexOf(g)})">Add ID details</button>`:''}`);return}
 const r=rm(b.room);if(r&&r.s!=='ready'){toast('Room '+b.room+' is not ready yet');return}
