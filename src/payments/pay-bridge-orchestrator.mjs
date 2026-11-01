@@ -235,7 +235,7 @@ export class PayBridgePaymentOrchestrator {
     }
     const result = await this.backend.verifyPayment({
       requestId: record.requestId, sessionId: record.backendSessionId,
-      transactionId: record.bridgeTransactionId, amountPaise: record.amountPaise,
+      providerId: record.providerId, transactionId: record.bridgeTransactionId, amountPaise: record.amountPaise,
       currency: record.currency, folioId: record.folioId, bookingId: record.bookingId
     });
     const validSession = typeof result?.sessionId === "string" &&
@@ -288,7 +288,7 @@ export class PayBridgePaymentOrchestrator {
     }
     const result = await this.backend.reconcile({
       requestId: record.requestId, sessionId: record.backendSessionId,
-      transactionId: record.bridgeTransactionId, amountPaise: record.amountPaise,
+      providerId: record.providerId, transactionId: record.bridgeTransactionId, amountPaise: record.amountPaise,
       currency: record.currency, folioId: record.folioId, bookingId: record.bookingId
     });
     // A reconciliation response is authoritative only when the backend
