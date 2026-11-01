@@ -88,10 +88,18 @@ export function settlePayment({
   if (key) {
     const existing = indexedPayments.find(row => row.payment.idempotencyKey === key);
     if (existing) {
-      if (existing.booking !== booking ||
-          !samePayment({ ...existing.payment, bookingId: existing.booking.id }, {
-            booking, amountPaise, method: paymentMethod, reference: ref
-          })) {
+      if (existing.booking !== booking) {
+        const error = new Error(!suppliedKey && ref
+          ? "Payment reference is already applied to another booking; review the original folio before proceeding"
+          : "Idempotency key was already used for a different payment");
+        error.code = !suppliedKey && ref
+          ? "PAYMENT_REFERENCE_ALREADY_APPLIED"
+          : "IDEMPOTENCY_KEY_CONFLICT";
+        throw error;
+      }
+      if (!samePayment({ ...existing.payment, bookingId: existing.booking.id }, {
+        booking, amountPaise, method: paymentMethod, reference: ref
+      })) {
         const error = new Error("Idempotency key was already used for a different payment");
         error.code = "IDEMPOTENCY_KEY_CONFLICT";
         throw error;
