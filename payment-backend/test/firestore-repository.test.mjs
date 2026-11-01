@@ -128,3 +128,35 @@ test('invalid floating-point money is rejected before Firestore reservation', as
   await assert.rejects(s.repo.initializePaymentIntent('user_123', payload({ amountMinor: 4500.5 })), /invalid_payment_intent_request/);
   assert.equal(s.dispatches, 0);
 });
+
+test('Cashfree accepts valid international and domestic phone formats', async () => {
+  for (const phone of ['9999999999', '+919999999999']) {
+    const s = setup({
+      createOrder: async input => ({
+        orderId: 'cf_order_123', amountMinor: input.amountMinor,
+        currency: input.currency, paymentSessionId: 'cf_session_123',
+        checkoutUrl: 'https://checkout.example/session'
+      })
+    });
+    const result = await s.repo.initializePaymentIntent('user_123', payload({
+      provider: 'cashfree',
+      customer: { id: 'guest_123', phone },
+      returnUrl: 'https://pms.example/payment-return'
+    }));
+    assert.equal(result.status, 'CREATED');
+    assert.equal(s.dispatches, 1);
+  }
+});
+
+test('Cashfree rejects malformed phone numbers before provider dispatch', async () => {
+  const s = setup();
+  await assert.rejects(
+    s.repo.initializePaymentIntent('user_123', payload({
+      provider: 'cashfree',
+      customer: { id: 'guest_123', phone: '+12abc' },
+      returnUrl: 'https://pms.example/payment-return'
+    })),
+    /cashfree_customer_and_https_return_url_required/
+  );
+  assert.equal(s.dispatches, 0);
+});
