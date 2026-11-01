@@ -140,3 +140,27 @@ test("manual UI and staff apply call the settlement boundary", async () => {
   assert.match(html, /source:'manual'/);
   assert.match(html, /source:'staff_review'/);
 });
+
+test("idempotent retry succeeds after the folio balance reaches zero", () => {
+  const { booking, state, deps } = fixture();
+  const input = { ...deps, amount: 1000, method: "Cash", source: "manual", idempotencyKey: "full-payment-req-123" };
+  assert.equal(settlePayment(input).duplicate, false);
+  const retry = settlePayment({ ...input, balanceDue: 0 });
+  assert.equal(retry.duplicate, true);
+  assert.equal(booking.p, 1000);
+  assert.equal(booking.pays.length, 1);
+  assert.equal(state.today, 1000);
+});
+
+test("legacy payment rows with idempotency keys remain safely deduplicated", () => {
+  const legacyPayment = { a: 300, m: "UPI", r: "UTR-OLD", idempotencyKey: "legacy-request-123" };
+  const { booking, state, deps } = fixture({ paid: 300, pays: [legacyPayment] });
+  const result = settlePayment({
+    ...deps, amount: 300, method: "UPI", reference: "UTR-OLD",
+    idempotencyKey: "legacy-request-123", balanceDue: 700
+  });
+  assert.equal(result.duplicate, true);
+  assert.equal(booking.p, 300);
+  assert.equal(booking.pays.length, 1);
+  assert.equal(state.today, 0);
+});
