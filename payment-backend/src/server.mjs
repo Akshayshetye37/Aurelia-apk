@@ -378,6 +378,14 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
       if (verified) tx.set(orderRef, {
         state: 'captured_verified', paymentId, verifiedAt: FieldValue.serverTimestamp()
       }, { merge: true });
+      if (verified && currentOrder.data().intentId) {
+        const intentRef = db.doc('paymentIntents/' + currentOrder.data().intentId);
+        tx.set(intentRef, {
+          providerPaymentId: paymentId,
+          providerVerifiedStatus: 'CAPTURED',
+          providerVerifiedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
       if (verified) tx.set(providerTenantDoc(tenantId, provider, environment), {
         ...(environment === 'test' ? { sandboxTestPassed: true } : {}),
         webhookVerified: true, active: false, lastVerifiedWebhookAt: FieldValue.serverTimestamp()
