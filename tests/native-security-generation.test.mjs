@@ -22,6 +22,13 @@ test('native security templates are copied by the Android generation source', ()
   }
 });
 
+test('Kotlin Android plugin is enabled for native security sources', () => {
+  const patcher = read('scripts/patch-android.js');
+  assert.match(patcher, /org\\.jetbrains\\.kotlin\\.android/);
+  assert.match(patcher, /ensureKotlinAndroidPlugin/);
+  assert.match(patcher, /2\\.0\\.21/);
+});
+
 test('native security dependencies are injected idempotently', () => {
   const patcher = read('scripts/patch-android.js');
   assert.match(patcher, /org\.bouncycastle:bcprov-jdk18on:1\.80/);
