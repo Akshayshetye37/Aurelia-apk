@@ -19,10 +19,10 @@ function fixture({ connected = true, backendOverrides = {} } = {}) {
     async cancelPayment(p) { return { requestId: p.requestId, status: "cancelled" }; }
   };
   const backend = {
-    async createSession(p) { return { requestId: p.requestId, sessionId: "sess-1" }; },
-    async verifyPayment(p) { return { verified: true, status: "success", requestId: p.requestId, bookingId: p.bookingId, amountPaise: p.amountPaise, currency: p.currency, folioId: p.folioId, transactionId: "txn-1" }; },
+    async createSession(p) { return { requestId: p.requestId, sessionId: "sess-1", bookingId: p.bookingId, folioId: p.folioId, amountPaise: p.amountPaise, currency: p.currency, providerId: p.providerId }; },
+    async verifyPayment(p) { return { verified: true, status: "success", requestId: p.requestId, sessionId: p.sessionId, providerId: p.providerId, bookingId: p.bookingId, amountPaise: p.amountPaise, currency: p.currency, folioId: p.folioId, transactionId: "txn-1" }; },
     async getPaymentStatus() { return { status: "processing" }; },
-    async reconcile(p) { return { verified: true, status: "processing", requestId: p.requestId, bookingId: p.bookingId, amountPaise: p.amountPaise, currency: p.currency, folioId: p.folioId }; },
+    async reconcile(p) { return { verified: true, status: "processing", requestId: p.requestId, sessionId: p.sessionId, providerId: p.providerId, bookingId: p.bookingId, amountPaise: p.amountPaise, currency: p.currency, folioId: p.folioId }; },
     ...backendOverrides
   };
   return { store, bridge, backend, records, orchestrator: new PayBridgePaymentOrchestrator({ store, bridge, backend }) };
@@ -101,7 +101,7 @@ test("an ambiguous backend session response is retained as UNKNOWN, never retrie
 
 test("bridge failure event is only a hint and requires backend reconciliation", async () => {
   const f = fixture({ backendOverrides: {
-    async reconcile(p) { return { verified:true, status:"failed", requestId:p.requestId, bookingId:p.bookingId, amountPaise:p.amountPaise, currency:p.currency, folioId:p.folioId }; }
+    async reconcile(p) { return { verified:true, status:"failed", requestId:p.requestId, sessionId:p.sessionId, providerId:p.providerId, bookingId:p.bookingId, amountPaise:p.amountPaise, currency:p.currency, folioId:p.folioId }; }
   }});
   await f.orchestrator.createPayment(input);
   const result = await f.orchestrator.receiveBridgeEvent({
@@ -121,7 +121,7 @@ test("unbound backend reconciliation cannot mark a payment failed", async () => 
 
 test("backend verification must bind the exact booking", async () => {
   const f = fixture({ backendOverrides: {
-    async verifyPayment(p) { return { verified:true, status:"success", requestId:p.requestId, bookingId:"another-booking", amountPaise:p.amountPaise, currency:p.currency, folioId:p.folioId, transactionId:"txn-1" }; }
+    async verifyPayment(p) { return { verified:true, status:"success", requestId:p.requestId, sessionId:p.sessionId, providerId:p.providerId, bookingId:"another-booking", amountPaise:p.amountPaise, currency:p.currency, folioId:p.folioId, transactionId:"txn-1" }; }
   }});
   await f.orchestrator.createPayment(input);
   await assert.rejects(f.orchestrator.verifyPayment("req-1"), e => e.code === "BACKEND_NOT_VERIFIED");
@@ -129,10 +129,27 @@ test("backend verification must bind the exact booking", async () => {
 
 test("bridge cancellation is not final until backend confirms it", async () => {
   const f = fixture({ backendOverrides: {
-    async reconcile(p) { return { verified:true, status:"cancelled", requestId:p.requestId, bookingId:p.bookingId, amountPaise:p.amountPaise, currency:p.currency, folioId:p.folioId }; }
+    async reconcile(p) { return { verified:true, status:"cancelled", requestId:p.requestId, sessionId:p.sessionId, providerId:p.providerId, bookingId:p.bookingId, amountPaise:p.amountPaise, currency:p.currency, folioId:p.folioId }; }
   }});
   await f.orchestrator.createPayment(input);
   const result = await f.orchestrator.cancelPayment("req-1");
   assert.equal(result.state, "CANCELLED");
   assert.equal(result.backendVerified, true);
+});
+
+test("backend session must bind the exact folio amount and provider", async () => {
+  const f = fixture({ backendOverrides: {
+    async createSession(p) { return { requestId:p.requestId, sessionId:"sess-1", bookingId:p.bookingId, folioId:"other-folio", amountPaise:p.amountPaise, currency:p.currency, providerId:p.providerId }; }
+  }});
+  await assert.rejects(f.orchestrator.createPayment(input), e => e.code === "INVALID_BACKEND_SESSION");
+  assert.equal((await f.store.get("req-1")).state, "UNKNOWN");
+});
+
+test("backend reconciliation cannot change status without matching session and provider", async () => {
+  const f = fixture({ backendOverrides: {
+    async reconcile(p) { return { verified:true, status:"failed", requestId:p.requestId, sessionId:"wrong-session", providerId:p.providerId, bookingId:p.bookingId, amountPaise:p.amountPaise, currency:p.currency, folioId:p.folioId }; }
+  }});
+  await f.orchestrator.createPayment(input);
+  const result = await f.orchestrator.reconcileOne("req-1");
+  assert.equal(result.state, "PROCESSING");
 });
