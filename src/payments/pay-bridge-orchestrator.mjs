@@ -99,6 +99,11 @@ export class PayBridgePaymentOrchestrator {
           existing.amountPaise !== record.amountPaise || existing.providerId !== record.providerId) {
         throw new PaymentOrchestratorError("IDEMPOTENCY_CONFLICT", "Request ID was already used with different payment details");
       }
+      if (existing.state === "REQUESTED") {
+        return existing.bridgeDispatchStarted === false
+          ? this.resumeUndispatched(existing)
+          : this.reconcileOne(requestId);
+      }
       if (existing.state !== "CREATED") return clone(existing);
       current = existing;
     } else {
