@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - fix/firebase-phone-identity-engine
+      - feature/multi-provider-payment-backend
     paths:
       - 'index.html'
       - 'README.md'
