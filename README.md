@@ -37,6 +37,10 @@ Installing both APKs does not by itself establish a trusted connection. PMS and 
 
 Build the PMS release APK from this repository and the Pay Bridge release APK from [Akshayshetye37/aurelia-pay-bridge](https://github.com/Akshayshetye37/aurelia-pay-bridge), using the same four protected release-signing values in both repositories. Verify that the SHA-256 signing-certificate fingerprints printed by both workflows are identical before installing the pair. Uninstall older/debug copies first, then install both matching release APKs. Do not weaken the signature permission or remove signer checks to force a connection.
 
+Both repositories now require an additional Actions secret, `AURELIA_SHARED_CERT_SHA256`, containing the SHA-256 certificate digest (hex, with or without colons) for that exact release keystore. Configure this same value in both repositories, and configure the same `AURELIA_RELEASE_KEYSTORE_BASE64`, `AURELIA_RELEASE_KEYSTORE_PASSWORD`, `AURELIA_RELEASE_KEY_ALIAS` and `AURELIA_RELEASE_KEY_PASSWORD` values in both repositories. The release workflows fail closed if the produced APK signer does not match the expected digest. Never put the keystore or passwords in source files, workflow YAML, issues or commits. The standalone PMS debug workflow intentionally no longer publishes an installable APK because it cannot authenticate against a separately built Pay Bridge debug APK.
+
+The approved launcher artwork is `assets/aurelia-icon.jpg`. PMS installs it over all generated Capacitor mipmap densities in `scripts/patch-android.js`; Pay Bridge uses the same image and `scripts/install-launcher-icon.sh`.
+
 The current native connection authenticates only the companion app's handshake. Pay Bridge still advertises only `handshake`; payment execution, refunds and provider management are not implemented in IPC.
 
 ## CI validation note
