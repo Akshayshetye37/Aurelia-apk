@@ -97,6 +97,6 @@ PMS reservations, guests, rooms, check-in/out and manual/cash accounting remain 
 - Local manual folio settlement validates INR paise precision, requires a valid non-negative balance, rejects changed/reused idempotency keys, and prevents one key from being credited to multiple bookings.
 - Legacy paid totals are preserved when older booking records contain a paid total without matching payment rows; no fabricated historical receipt is inserted.
 - Bridge success/failure/cancellation messages are observations only. Terminal Bridge observations trigger backend reconciliation and cannot directly finalize a payment.
-- Backend verification and reconciliation responses must echo the exact request, booking, folio, amount and currency binding. Missing or mismatched fields fail closed.
+- Backend session, verification and reconciliation responses must echo the exact request, session, provider, booking, folio, amount and currency binding. Missing or mismatched fields fail closed.
 - Failed/cancelled records remain available for late-capture reconciliation. Only backend-verified SUCCESS is closed.
 - The local journal is installation-local, not a multi-device atomic ledger. Gateway execution remains unavailable until the backend and executable native IPC are implemented and configured.
