@@ -391,36 +391,69 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     if (typeof eventId !== 'string' || !webhookEventIdPattern.test(eventId)) return fail(res, 400, 'invalid_event_id');
     const inboxId = crypto.createHash('sha256').update(tenantId + ':' + provider + ':' + environment + ':' + eventId).digest('hex');
     const inbox = db.doc('paymentWebhookInbox/' + inboxId);
-    await db.runTransaction(async tx => {
-      const [seen, currentOrder] = await Promise.all([tx.get(inbox), tx.get(orderRef)]);
-      if (seen.exists) return;
+    const orderData = orderSnap.data();
+    const intentRef = orderData.intentId
+      ? db.doc('paymentIntents/' + orderData.intentId)
+      : null;
+    const outcome = await db.runTransaction(async tx => {
+      const refs = [tx.get(inbox), tx.get(orderRef)];
+      if (intentRef) refs.push(tx.get(intentRef));
+      const [seen, currentOrder, currentIntent] = await Promise.all(refs);
       if (!currentOrder.exists || currentOrder.data().tenantId !== tenantId ||
-          currentOrder.data().provider !== provider || currentOrder.data().environment !== environment) {
+          currentOrder.data().provider !== provider || currentOrder.data().environment !== environment ||
+          currentOrder.data().providerOrderId !== providerOrderId) {
         throw new Error('payment_order_binding_changed');
       }
-      tx.create(inbox, {
+      if (seen.exists) {
+        const prior = seen.data();
+        if (prior.tenantId !== tenantId || prior.provider !== provider ||
+            prior.environment !== environment || prior.providerOrderId !== providerOrderId ||
+            prior.paymentId !== paymentId) {
+          throw new Error('webhook_event_identity_conflict');
+        }
+        if (prior.providerFetchVerified === true) return { duplicate: true, verified: true };
+      }
+      if (intentRef && (!currentIntent?.exists ||
+          currentIntent.data().tenantId !== tenantId ||
+          currentIntent.data().providerOrderId !== providerOrderId ||
+          currentIntent.data().folioId !== currentOrder.data().folioId ||
+          currentIntent.data().amountMinor !== currentOrder.data().amountMinor ||
+          currentIntent.data().currency !== currentOrder.data().currency)) {
+        throw new Error('payment_intent_binding_mismatch');
+      }
+      const evidence = {
         eventId, tenantId, provider, environment, paymentId, providerOrderId,
         signatureVerified: true, providerFetchVerified: verified,
-        receivedAt: FieldValue.serverTimestamp()
-      });
-      if (verified) tx.set(orderRef, {
-        state: 'captured_verified', paymentId, verifiedAt: FieldValue.serverTimestamp()
-      }, { merge: true });
-      if (verified && currentOrder.data().intentId) {
-        const intentRef = db.doc('paymentIntents/' + currentOrder.data().intentId);
-        tx.set(intentRef, {
-          providerPaymentId: paymentId,
-          providerVerifiedStatus: 'CAPTURED',
-          providerVerifiedAt: FieldValue.serverTimestamp()
+        processingStatus: verified ? 'CAPTURED_VERIFIED_PENDING_ACCOUNTING' : 'UNVERIFIED_RETRYABLE',
+        receivedAt: seen.exists ? (seen.data().receivedAt || FieldValue.serverTimestamp()) : FieldValue.serverTimestamp(),
+        lastAttemptAt: FieldValue.serverTimestamp()
+      };
+      tx.set(inbox, evidence, { merge: true });
+      if (verified) {
+        tx.set(orderRef, {
+          state: 'captured_verified', paymentId, verifiedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+        if (intentRef) {
+          tx.set(intentRef, {
+            providerPaymentId: paymentId,
+            providerVerifiedStatus: 'CAPTURED',
+            providerVerifiedAt: FieldValue.serverTimestamp(),
+            accountingStatus: 'PENDING',
+            accountingBlockReason: 'authoritative_pms_ledger_mapping_not_implemented'
+          }, { merge: true });
+        }
+        tx.set(providerTenantDoc(tenantId, provider, environment), {
+          ...(environment === 'test' ? { sandboxTestPassed: true } : {}),
+          webhookVerified: true, active: false, lastVerifiedWebhookAt: FieldValue.serverTimestamp()
         }, { merge: true });
       }
-      if (verified) tx.set(providerTenantDoc(tenantId, provider, environment), {
-        ...(environment === 'test' ? { sandboxTestPassed: true } : {}),
-        webhookVerified: true, active: false, lastVerifiedWebhookAt: FieldValue.serverTimestamp()
-      }, { merge: true });
+      return { duplicate: false, verified };
     });
 
-    return res.status(200).json({ received: true, verified });
+    return res.status(200).json({
+      received: true, verified: outcome.verified, duplicate: outcome.duplicate === true,
+      accounting: outcome.verified ? 'pending' : 'not_verified'
+    });
   } catch {
     return fail(res, 503, 'webhook_processing_unavailable');
   }
