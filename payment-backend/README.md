@@ -85,7 +85,8 @@ The Node process listens on an internal container port; this is not permission t
 
 The current `src/server.mjs` exposes the following provider-neutral routes:
 
-- `GET /healthz` — process liveness only.
+- `GET /healthz` — process liveness only; it does not probe dependencies.
+- `GET /readyz` — verifies the runtime identity can read Firestore and access the provisioned Secret Manager health secret. It reports dependency readiness only, not owner authentication, merchant configuration, provider status, webhooks, folio settlement or payment readiness.
 - `POST /v1/payments/intents` and `GET /v1/payments/intents/:intentId` — authenticated payment-intent API. Checkout is test-environment only; live collection is hard-blocked in the server.
 - `GET /v1/payments/capabilities` — authenticated, explicit capability declaration. It reports live collection, folio settlement, refunds and reconciliation as unavailable until their complete workflows are implemented.
 - `GET /v1/admin/providers` — provider/environment status, including operation-level capability and production-readiness flags.
