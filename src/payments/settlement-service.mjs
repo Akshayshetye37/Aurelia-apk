@@ -14,7 +14,9 @@ const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
 const MONEY_TOLERANCE = 1e-7;
 
 function moneyToPaise(value, label, { allowZero = false } = {}) {
-  const amount = Number(value);
+  const validType = typeof value === "number" ||
+    (typeof value === "string" && /^\\d+(?:\\.\\d{1,2})?$/.test(value.trim()));
+  const amount = validType ? Number(value) : Number.NaN;
   if (!Number.isFinite(amount) || amount < 0 || (!allowZero && amount <= 0)) {
     throw new RangeError(label + (allowZero ? " must be zero or greater" : " must be greater than zero"));
   }
@@ -62,7 +64,7 @@ export function settlePayment({
   const amountPaise = moneyToPaise(amount, "Payment amount");
   const value = amountPaise / 100;
   const paymentMethod = String(method || "").trim();
-  if (!paymentMethod || paymentMethod.length > MAX_METHOD_LENGTH) {
+  if (!paymentMethod || paymentMethod.length > MAX_METHOD_LENGTH || /[\\u0000-\\u001f\\u007f]/.test(paymentMethod)) {
     throw new TypeError("Payment method is required and must be at most " + MAX_METHOD_LENGTH + " characters");
   }
 
@@ -77,7 +79,10 @@ export function settlePayment({
   const key = suppliedKey || (ref && source !== "reservation_advance" ? "ref:" + ref : "");
 
   const indexedPayments = state.b.flatMap(item =>
-    (Array.isArray(item.pays) ? item.pays : []).map(payment => ({ booking: item, payment }))
+    item && Array.isArray(item.pays)
+      ? item.pays.filter(payment => payment && typeof payment === "object" && !Array.isArray(payment))
+        .map(payment => ({ booking: item, payment }))
+      : []
   );
 
   if (key) {
@@ -126,6 +131,7 @@ export function settlePayment({
   const priorPaid = booking.p;
   const priorPaidNumeric = Number(priorPaid);
   const priorToday = state.today;
+  const priorTodayPaise = moneyToPaise(Number(priorToday) || 0, "Daily payment total", { allowZero: true });
   const priorAudit = Array.isArray(state.aud) ? state.aud.slice() : null;
   const timestamp = now();
 
@@ -149,17 +155,25 @@ export function settlePayment({
     const recordedRowsPaise = priorPays.reduce((sum, row) => {
       const rowPaise = Number.isSafeInteger(row.amountPaise)
         ? row.amountPaise
-        : moneyToPaise(Number(row.a) || 0, "Existing payment amount", { allowZero: true });
-      return sum + rowPaise;
+        : moneyToPaise(row.a ?? row.amount, "Existing payment amount");
+      if (rowPaise <= 0) throw new RangeError("Existing payment amount must be greater than zero");
+      const total = sum + rowPaise;
+      if (!Number.isSafeInteger(total)) throw new RangeError("Existing payment total exceeds the safe INR limit");
+      return total;
     }, 0);
     const legacyPaidPaise = Number.isFinite(priorPaidNumeric) && priorPaidNumeric > 0
       ? moneyToPaise(priorPaidNumeric, "Existing paid total", { allowZero: true })
       : 0;
-    booking.p = (Math.max(recordedRowsPaise, legacyPaidPaise) + amountPaise) / 100;
+    const nextPaidPaise = Math.max(recordedRowsPaise, legacyPaidPaise) + amountPaise;
+    const nextTodayPaise = priorTodayPaise + amountPaise;
+    if (!Number.isSafeInteger(nextPaidPaise) || !Number.isSafeInteger(nextTodayPaise)) {
+      throw new RangeError("Payment total exceeds the safe INR limit");
+    }
+    booking.p = nextPaidPaise / 100;
 
     booking.payments = priorHistory.slice();
     booking.payments.push(history);
-    state.today = (Number(state.today) || 0) + value;
+    state.today = nextTodayPaise / 100;
     audit(source === "auto" ? "Auto payment" : "Payment",
       value + " by " + paymentMethod + " · Room " + booking.room + (ref ? " · ref " + ref : ""));
     persist();
