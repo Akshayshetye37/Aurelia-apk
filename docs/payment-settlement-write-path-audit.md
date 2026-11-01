@@ -1,9 +1,14 @@
 # Payment / folio settlement write-path audit
 
-**Branch:** `feature/direct-upi-reconciliation`  
+**Source implementation history:** `feature/direct-upi-reconciliation`  
+**Inspected integration branch:** `feature/multi-provider-payment-backend`  
 **Phase A hotfix:** `0dcf0e319f0c6c0fa3bc16383482dcb479110b88`  
 **Phase B implementation commits:** `5433111`, `9a684ca`, `b0d9f28`, `233df47`, `bdaf590`, `d3a2948`, `418beb0`, `c8afa7f`, `fde1fd0`  
 **Status:** Runtime settlement writes are centralized in the new service. Full repository test/build execution and APK/device verification are still pending. Automatic settlement must remain disabled.
+
+## Deployment and connectivity policy
+
+The current PMS settlement implementation is local-first. A server, cloud account or Firebase deployment is not required for manual PMS operations or manual/cash payment recording. Remote payment processing is optional and must remain unavailable until an owner explicitly configures a trusted payment backend through a future Settings workflow. Do not reuse backup endpoint settings as payment API configuration. No automatic cloud provisioning or guest/payment data upload is permitted. The payment-backend Settings workflow is not implemented; this audit does not claim otherwise.
 
 ## Settlement invariants
 
