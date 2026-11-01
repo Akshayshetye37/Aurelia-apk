@@ -288,3 +288,10 @@ test("reservation advances require the same explicit receipt confirmation", asyn
   assert.match(html, /Confirm that the reservation advance was received/);
   assert.match(html, /verificationConfirmed:\$\('#advance-confirm'\)\?\.checked===true/);
 });
+
+test("reservation advance defers payment persistence to the enclosing atomic save", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /input\.deferPersistence===true/);
+  assert.match(html, /deferPersistence:true/);
+  assert.match(html, /savedBooking\.pays/);
+});
