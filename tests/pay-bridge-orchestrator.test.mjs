@@ -187,3 +187,24 @@ test("REQUESTED intent recovers a backend session after process death", async ()
   assert.equal(result.backendSessionId, "sess-recovered");
   assert.equal(result.settlementAuthorized, true);
 });
+
+test("malformed Bridge event status is rejected", async () => {
+  const f = fixture();
+  await f.orchestrator.createPayment(input);
+  await assert.rejects(f.orchestrator.receiveBridgeEvent({
+    requestId:"req-1", bookingId:"booking-1", folioId:"folio-1",
+    amountPaise:12500, currency:"INR", status:"paid"
+  }), e => e.code === "EVENT_BINDING_MISMATCH");
+});
+
+test("payment backend URL rejects embedded credentials and query strings", () => {
+  assert.throws(() => createPaymentBackendClient({baseUrl:"https://user:pass@example.test",getAccessToken:async()=>"token"}));
+  assert.throws(() => createPaymentBackendClient({baseUrl:"https://example.test?redirect=evil",getAccessToken:async()=>"token"}));
+});
+
+test("orchestrator rejects unsafe bridge timeouts", () => {
+  const f = fixture();
+  assert.throws(() => new PayBridgePaymentOrchestrator({
+    store:f.store, bridge:f.bridge, backend:f.backend, requestTimeoutMs:0
+  }), /requestTimeoutMs/);
+});
