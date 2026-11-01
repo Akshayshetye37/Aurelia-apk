@@ -543,7 +543,7 @@ Stay ${fd(b.in)} → ${fd(b.out)}
  · In ${esc(b.checkInTime||defCheckInTime())}${b.actualCheckInAt?' (actual '+dateDDMMYYYY(new Date(b.actualCheckInAt))+' '+new Date(b.actualCheckInAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+')':''}
  · Out ${esc(b.checkOutTime||defCheckOutTime())}${b.actualCheckOutAt?' (actual '+dateDDMMYYYY(new Date(b.actualCheckOutAt))+' '+new Date(b.actualCheckOutAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+')':''}
 </div><div style="margin:12px 0">${L.map(x=>`<div class="ln"><span>${esc(x[0])}</span><span>${K(x[1])}</span></div>`).join('')}<div class="ln"><span>Paid</span><span>${K(b.p||0)}</span></div></div><div class="row"><span class="lab">Balance due</span><span class="tot">${K(d)}</span></div>${d>0?`<label class="fld"><span>Payment amount</span><input id="pa" type="number" value="${d}"></label><div class="chips" id="pm">${['Cash','MTN MoMo','Airtel Money','Zamtel','Card','Bank transfer','UPI'].map((p,k)=>`<button class="chip ${k?'':'on'}" onclick="$$('#pm .chip').forEach(c=>c.classList.remove('on'));this.classList.add('on')">${p}</button>`).join('')}</div><label class="fld"><span>Transaction reference</span><input id="pr"></label><label class="fld"><input id="pc" type="checkbox">I checked that the money has arrived</label><button class="btn" style="width:100%" onclick="pay(${i})">Record payment</button>`:''}<div class="row" style="margin:14px 0 0"><input id="cl" placeholder="Extra charge" style="flex:1;padding:11px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--ln)"><input id="ca" type="number" placeholder="Amount" style="width:96px;padding:11px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--ln)"><button class="btn sm ghost" onclick="addC(${i})">Add</button></div><div class="row" style="margin-top:16px">${on('Invoices')?`<button class="btn ghost sm" onclick="inv(${i})">Invoice</button>`:''}${b.st==='in'?`<button class="btn sm" ${d>0?'style="opacity:.45"':''} onclick="outB(${i})">${d>0?'Settle to check out':'Check out'}</button>`:''}</div>`)}
-function pay(i){const b=bk(i);if(!b)return;const a=Number($('#pa')?.value),m=$('#pm .on')?.textContent||'Cash',r=$('#pr')?.value?.trim()||'';if(!(a>0)||!Number.isFinite(a)){toast('Enter an amount above zero');return}if(!$('#pc')?.checked){toast('Confirm that you received the money');return}try{settlePayment({booking:b,amount:a,method:m,reference:r,source:'manual',idempotencyKey:r?('ref:'+r):undefined});render();folio(i)}catch(e){toast(e.message||'Payment was not recorded')}}
+function pay(i){const b=bk(i);if(!b)return;const a=Number($('#pa')?.value),m=$('#pm .on')?.textContent||'Cash',r=$('#pr')?.value?.trim()||'';if(!(a>0)||!Number.isFinite(a)){toast('Enter an amount above zero');return}if(!$('#pc')?.checked){toast('Confirm that you received the money');return}try{settlePayment({booking:b,amount:a,method:m,reference:r,source:'manual',idempotencyKey:r?('ref:'+r):undefined,verificationConfirmed:true});render();folio(i)}catch(e){toast(e.message||'Payment was not recorded')}}
 function addC(i){const l=$('#cl').value.trim(),a=+$('#ca').value;if(!l||!(a>0)||!Number.isSafeInteger(Math.round(a*100))||Math.abs(a*100-Math.round(a*100))>1e-7){toast('Add a label and a valid amount with no more than two decimal places');return}bk(i).ch.push([l,Math.round(a*100)/100]);aud('Charge',l+' · '+K(a));folio(i)}
 function outB(i){const b=bk(i);if(!b)return;if(dueB(b)>0){toast('Settle '+K(dueB(b))+' before check-out');return}
 const pre=(b.checkOutTime||defCheckOutTime()||new Date().toTimeString().slice(0,5));
@@ -733,7 +733,7 @@ function addSig(o){
 }
 window.aureliaNativePaymentSignal=j=>{try{addSig(typeof j==='string'?JSON.parse(j):j)}catch(e){}};
 function sigM(id){const s=S.sig.find(x=>x.id===id);openS(`<h2 class="foil">Match ${K(s.amt)}</h2><div class="lab">${esc(s.app)} · ${esc(s.payer||'Unknown payer')}</div><div class="list">${S.b.filter(b=>b.st==='in'&&dueB(b)>=s.amt).map(b=>row(b)+`<button class="btn sm" onclick="sigA('${id}',${b.id})">Apply</button></div>`).join('')||'<div class="empty">No folio has a balance this large.</div>'}</div>`)}
-function sigA(id,i){const s=S.sig.find(x=>x.id===id),b=bk(i);if(!s||!b){toast('Signal or booking not found');return}if(!['open','pending_review'].includes(s.st)){toast('This evidence is not available for settlement review');return}if(!window.confirm('Have you independently verified this UPI transaction in the bank or payment app? A notification alone is not proof of payment.'))return;try{const result=settlePayment({booking:b,amount:s.amt,method:'UPI',reference:s.ref||'',source:'staff_review',idempotencyKey:s.ref?'utr:'+s.ref:'signal:'+s.id});if(!result||!result.ok){toast(result&&result.message||'Payment was not recorded');return}s.st='matched';s.b=b.id;persist();closeS();render();toast(result.duplicate?'This signal was already recorded':'Payment applied')}catch(e){toast(e&&e.message||'Payment was not recorded')}}
+function sigA(id,i){const s=S.sig.find(x=>x.id===id),b=bk(i);if(!s||!b){toast('Signal or booking not found');return}if(!['open','pending_review'].includes(s.st)){toast('This evidence is not available for settlement review');return}if(!window.confirm('Have you independently verified this UPI transaction in the bank or payment app? A notification alone is not proof of payment.'))return;try{const result=settlePayment({booking:b,amount:s.amt,method:'UPI',reference:s.ref||'',source:'staff_review',idempotencyKey:s.ref?'utr:'+s.ref:'signal:'+s.id,verificationConfirmed:true});if(!result||!result.ok){toast(result&&result.message||'Payment was not recorded');return}s.st='matched';s.b=b.id;persist();closeS();render();toast(result.duplicate?'This signal was already recorded':'Payment applied')}catch(e){toast(e&&e.message||'Payment was not recorded')}}
 /* money flow */
 const band=(x1,y1,x2,y2,w,c,dl)=>`<path d="M${x1} ${y1}C${(x1+x2)/2} ${y1} ${(x1+x2)/2} ${y2} ${x2} ${y2}" fill="none" stroke="${c}" stroke-opacity=".6" stroke-width="${Math.max(2,w)}" pathLength="1" stroke-dasharray="1" style="animation:dr 1.8s ${dl}s cubic-bezier(.3,.7,.2,1) both"/>`;
 function flow(A,Z){const G=A.reduce((s,x)=>s+x[0],0);if(!G)return'<div class="empty">Charges and payments will flow here.</div>';const H=112,sc=H/G;let y=16,ym=16,s='';A.forEach((x,i)=>{const h=x[0]*sc;if(x[0]>0)s+=band(12,y+h/2,166,ym+h/2,h,x[1],i*.15);y+=h+6;ym+=h});let m2=16,yy=16;Z.forEach((x,i)=>{const h=x[0]*sc;if(x[0]>0)s+=band(176,m2+h/2,324,yy+h/2,h,x[1],.5+i*.15);m2+=h;yy+=h+6});return`<svg viewBox="0 0 336 ${H+44}" style="width:100%">${s}<rect x="166" y="16" width="10" height="${H}" rx="4" fill="#d9b76e"/></svg><div class="row lab" style="flex-wrap:wrap;gap:6px 14px">${[...A,...Z].map(x=>`<span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${x[1]};margin-right:6px"></i>${x[2]} ${K(x[0])}</span>`).join('')}</div>`}
@@ -774,7 +774,8 @@ function dsheet(){
     <label class="fld"><span>Suite free on these dates</span>${fr.length
       ? `<select id="dR">${fr.map(r=>`<option value="${r.n}" ${r.n===d.room?'selected':''}>${r.n} · ${r.t} · ${K(r.r)}</option>`).join('')}</select>`
       : '<div class="lab">No suite is free for these dates.</div>'}</label>
-    ${f('dAmount','Booking amount / advance received (₹)',d.bookingAmount??'0','number')}`;
+    ${f('dAmount','Booking amount / advance received (₹)',d.bookingAmount??'0','number')}
+    <label class="fld"><span><input id="advance-confirm" type="checkbox"> I have independently confirmed that this advance was received.</span></label>`;
   }
   html += `${f('d1','Guest name',g.n)}${f('d2','Phone',g.ph,'tel')}${f('d3','Email',g.em,'email')}
   <label class="fld"><span>ID type</span>${ty(g.idt)}</label>
@@ -822,6 +823,7 @@ function dsave(){
    toast('Enter a valid advance with no more than two decimal places');return;
   }
   const maxAdvancePaise=Math.round((departure-arrival)*roomRate*100);
+  if(advance>0&&!$('#advance-confirm')?.checked){toast('Confirm that the reservation advance was received');return}
   if(!Number.isFinite(roomRate)||roomRate<0||!Number.isSafeInteger(maxAdvancePaise)||Math.round(advance*100)>maxAdvancePaise){
    toast('Advance cannot exceed the room charges for this stay');return;
   }
@@ -851,7 +853,7 @@ function dsave(){
     scheduledCheckIn:d.in+'T'+checkIn,scheduledCheckOut:d.out+'T'+checkOut};
    S.b.push(booking);
    if(advance>0)settlePayment({booking,amount:advance,method:'Cash',reference:'Booking advance',
-    source:'reservation_advance',idempotencyKey:'booking-advance:'+booking.id});
+    source:'reservation_advance',idempotencyKey:'booking-advance:'+booking.id,verificationConfirmed:$('#advance-confirm')?.checked===true});
    aud('Reservation',nm+' · Room '+d.room+' · '+fd(arrival)+(advance>0?' · Advance '+K(advance):''));
   }else{
    aud('Guest saved',nm);
