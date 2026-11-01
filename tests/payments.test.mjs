@@ -146,3 +146,7 @@ test("payment event rejects malformed event timestamps and precision labels", ()
   assert.throws(() => createPaymentEvent({ eventId:"bad-event-time", amount:"10", timestamp:"not-a-date" }), /event timestamp/);
   assert.throws(() => createPaymentEvent({ eventId:"bad-precision", amount:"10", timestampPrecision:"verified" }), /timestampPrecision/);
 });
+
+test("numeric amount conversion rejects unsafe paise integers", () => {
+  assert.throws(() => createPaymentEvent({ eventId:"unsafe-amount", amount: Number.MAX_SAFE_INTEGER }), /safe INR limit|safe integer/);
+});
