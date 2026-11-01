@@ -313,7 +313,13 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     return fail(res, 400, 'invalid_webhook_request');
   }
   try {
-    const { adapter } = await providerAdapterForTenant(tenantId, provider, environment);
+    const hookState = await providerTenantDoc(tenantId, provider, environment).get();
+    if (!hookState.exists || hookState.data().configured !== true) {
+      return fail(res, 404, 'webhook_provider_not_configured');
+    }
+    const credentials = await paymentRepository.secretManager.getProviderSecrets(tenantId, provider, environment);
+    const { createProviderAdapter } = await import('./providers/factory.mjs');
+    const adapter = createProviderAdapter(provider, { credentials, environment });
     const checked = await adapter.verifyWebhook(req.body, req.headers);
     if (!checked.valid) return fail(res, 400, 'invalid_webhook_signature');
     const event = checked.event;
