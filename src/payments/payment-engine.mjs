@@ -104,6 +104,7 @@ export function validateCandidate(candidate) {
   if (!candidate || !Number.isSafeInteger(candidate.amountPaise) || candidate.amountPaise <= 0) reasons.push("invalid_amount");
   if (!candidate || !candidate.source) reasons.push("missing_source");
   if (!candidate || !candidate.evidenceId) reasons.push("missing_evidence_id");
+  if (candidate?.eventType === "credit" && candidate.bank) reasons.push("bank_credit_not_candidate");
   if (candidate && !CANDIDATE_SOURCES.has(candidate.source) && !CANDIDATE_TYPES.has(candidate.eventType)) {
     reasons.push("unsupported_candidate_type");
   }
