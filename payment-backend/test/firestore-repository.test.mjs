@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FirestorePaymentRepository } from '../src/intents/firestore-repository.mjs';
+import { FirestorePaymentRepository, paymentFolioDocumentId } from '../src/intents/firestore-repository.mjs';
 
 class FakeFirestore {
   constructor() { this.docs = new Map(); this.tail = Promise.resolve(); }
@@ -60,6 +60,7 @@ const payload = (overrides = {}) => ({
 const setup = ({ createOrder } = {}) => {
   const db = membershipDb(new FakeFirestore());
   db.seed('paymentMemberships/user_123', { tenantId: 'hotel_123', role: 'owner', status: 'active' });
+  db.seed('paymentFolios/' + paymentFolioDocumentId('hotel_123', 'folio_123'), { tenantId: 'hotel_123', folioId: 'folio_123', bookingId: 'booking_123', status: 'open', currency: 'INR', balanceMinor: 1000000, revision: 7 });
   let dispatches = 0;
   const repo = new FirestorePaymentRepository({
     db,
@@ -160,3 +161,7 @@ test('Cashfree rejects malformed phone numbers before provider dispatch', async 
   );
   assert.equal(s.dispatches, 0);
 });
+
+test('unprovisioned folio cannot create provider order', async () => { const s = setup(); s.db.docs.delete('paymentFolios/' + paymentFolioDocumentId('hotel_123', 'folio_123')); await assert.rejects(s.repo.initializePaymentIntent('user_123', payload()), /authoritative_folio_not_provisioned/); assert.equal(s.dispatches, 0); });
+test('amount above authoritative folio balance is rejected before provider dispatch', async () => { const s = setup(); s.db.seed('paymentFolios/' + paymentFolioDocumentId('hotel_123', 'folio_123'), { tenantId: 'hotel_123', folioId: 'folio_123', bookingId: 'booking_123', status: 'open', currency: 'INR', balanceMinor: 1000, revision: 8 }); await assert.rejects(s.repo.initializePaymentIntent('user_123', payload({ amountMinor: 1001 })), /payment_exceeds_authoritative_folio_balance/); assert.equal(s.dispatches, 0); });
+test('closed or cross-tenant folio cannot be charged', async () => { const s = setup(); s.db.seed('paymentFolios/' + paymentFolioDocumentId('hotel_123', 'folio_123'), { tenantId: 'other_hotel', folioId: 'folio_123', bookingId: 'booking_123', status: 'closed', currency: 'INR', balanceMinor: 1000000, revision: 9 }); await assert.rejects(s.repo.initializePaymentIntent('user_123', payload()), /folio_not_open_or_authoritative_snapshot_invalid/); assert.equal(s.dispatches, 0); });

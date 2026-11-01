@@ -48,6 +48,27 @@ export class FirestorePaymentRepository {
     this.clock = clock;
   }
 
+  async getPaymentIntent(authUid, intentId) {
+    if (typeof authUid !== 'string' || !authUid || typeof intentId !== 'string' || !/^[0-9a-f-]{36}$/i.test(intentId)) {
+      throw new TypeError('invalid_payment_intent_lookup');
+    }
+    const membershipSnap = await this.db.collection('paymentMemberships').doc(authUid).get();
+    const membership = membershipSnap.exists ? membershipSnap.data() : null;
+    if (!membership || membership.status !== 'active' || !ID.test(membership.tenantId || '') ||
+        !['owner', 'admin', 'staff'].includes(membership.role)) throw new Error('active_tenant_membership_required');
+    const snap = await this.db.collection('paymentIntents').doc(intentId).get();
+    if (!snap.exists || snap.data().tenantId !== membership.tenantId) {
+      const error = new Error('payment_intent_not_found'); error.statusCode = 404; throw error;
+    }
+    const record = snap.data();
+    return {
+      intentId: record.intentId, status: record.state, provider: record.provider,
+      environment: record.environment, folioId: record.folioId, amountMinor: record.amountMinor,
+      currency: record.currency, providerOrderId: record.providerOrderId || null,
+      checkoutData: record.checkoutData || null, updatedAt: record.updatedAt
+    };
+  }
+
   async initializePaymentIntent(authUid, rawPayload) {
     if (typeof authUid !== 'string' || !authUid) throw new TypeError('authenticated_uid_required');
     const payload = validatePayload(rawPayload);

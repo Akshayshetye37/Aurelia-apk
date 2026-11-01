@@ -4,6 +4,7 @@ import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
 
 const projectId = process.env.GOOGLE_CLOUD_PROJECT;
 const origins = new Set((process.env.AURELIA_OWNER_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean));
@@ -122,6 +123,57 @@ function equalSignature(received, expected) {
 }
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
+
+const paymentRepository = new FirestorePaymentRepository({
+  db,
+  secretManager: {
+    async getProviderSecrets(tenantId, provider, environment) {
+      if (provider !== 'razorpay') throw new Error('provider_not_enabled_for_checkout');
+      const api = JSON.parse(await loadSecret(secretId(tenantId, environment, 'api')));
+      const webhookSecret = await loadSecret(secretId(tenantId, environment, 'webhook'));
+      return { ...api, webhookSecret };
+    }
+  }
+});
+
+app.post('/v1/payments/intents', requireTenantAdmin, express.json({ limit: '8kb', strict: true }), async (req, res) => {
+  const body = req.body || {};
+  const allowed = ['folioId', 'amountMinor', 'currency', 'provider', 'environment', 'idempotencyKey'];
+  if (Object.keys(body).some(k => !allowed.includes(k)) ||
+      !['folioId', 'amountMinor', 'currency', 'provider', 'environment'].every(k => Object.hasOwn(body, k))) {
+    return fail(res, 400, 'invalid_payment_intent_schema');
+  }
+  const idempotencyKey = idempotencyOf(req) || body.idempotencyKey;
+  if (!idempotencyKey || !/^[A-Za-z0-9._:-]{12,100}$/.test(idempotencyKey)) {
+    return fail(res, 400, 'idempotency_key_required');
+  }
+  if (body.provider !== 'razorpay' || body.environment !== 'test') {
+    return fail(res, 409, 'provider_environment_not_enabled_for_checkout');
+  }
+  try {
+    const providerState = await tenantDoc(req.tenant.id, 'test').get();
+    if (!providerState.exists || providerState.data().credentialsValidated !== true) {
+      return fail(res, 409, 'razorpay_test_credentials_not_validated');
+    }
+    const result = await paymentRepository.initializePaymentIntent(req.actor.uid, { ...body, idempotencyKey });
+    return res.status(result.isDuplicate ? 200 : result.status === 'CREATED' ? 201 : 202).json(result);
+  } catch (error) {
+    const status = Number.isInteger(error.statusCode) ? error.statusCode :
+      error.message === 'active_tenant_membership_required' ? 403 : 400;
+    return fail(res, status, String(error.message || 'payment_intent_creation_failed').slice(0, 100));
+  }
+});
+
+app.get('/v1/payments/intents/:intentId', requireTenantAdmin, async (req, res) => {
+  try {
+    return res.json(await paymentRepository.getPaymentIntent(req.actor.uid, req.params.intentId));
+  } catch (error) {
+    const status = Number.isInteger(error.statusCode) ? error.statusCode :
+      error.message === 'active_tenant_membership_required' ? 403 : 400;
+    return fail(res, status, String(error.message || 'payment_intent_lookup_failed').slice(0, 100));
+  }
+});
+
 
 app.get('/v1/admin/providers', requireTenantAdmin, async (req, res) => {
   const providers = await Promise.all(['test', 'live'].map(async environment => {
