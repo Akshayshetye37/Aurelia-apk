@@ -57,7 +57,11 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
       ? '/payments/' + encodeURIComponent(input.paymentId)
       : '/orders/' + encodeURIComponent(input.orderId) + '/payments';
     const data = await this.request('GET', path);
-    const payment = Array.isArray(data.items) ? data.items.find(p => ['captured', 'authorized', 'failed'].includes(p.status)) || data.items[0] : data;
+    const payment = Array.isArray(data.items)
+      ? [...data.items].sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))
+          .find(p => p.status === 'captured') ||
+        [...data.items].sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))[0]
+      : data;
     if (!payment) return { provider: 'razorpay', orderId: input.orderId, paymentStatus: 'pending' };
     return { provider: 'razorpay', orderId: payment.order_id || input.orderId,
       paymentId: payment.id, paymentStatus: payment.status,
@@ -81,8 +85,8 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
       throw new TypeError('invalid_razorpay_refund');
     }
     const refund = await this.request('POST', '/payments/' + encodeURIComponent(input.paymentId) + '/refund', {
-      amount: input.amountMinor, receipt: input.receipt,
-      ...(input.notes ? { notes: input.notes } : {})
+      amount: input.amountMinor,
+      notes: { ...(input.notes || {}), aurelia_refund_reference: input.receipt }
     });
     return { provider: 'razorpay', refundId: refund.id, status: refund.status,
       amountMinor: refund.amount, currency: refund.currency };
