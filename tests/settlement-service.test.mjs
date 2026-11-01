@@ -196,3 +196,11 @@ test("manual folio submissions reuse one request key for the open payment sheet"
   assert.match(html, /id="payment-request-id" value="\$\{requestId\}"/);
   assert.match(html, /idempotencyKey:reference\?\('ref:'\+reference\):\(\$\('#payment-request-id'\)/);
 });
+
+test("settlement rejects non-decimal amount encodings and unsafe methods", () => {
+  const { booking, state, deps } = fixture();
+  assert.throws(() => settlePayment({ ...deps, amount: "0x10", method: "Cash" }), /Payment amount/);
+  assert.throws(() => settlePayment({ ...deps, amount: 10, method: "Cash\\nUPI" }), /Payment method/);
+  assert.equal(booking.p, 0);
+  assert.equal(state.today, 0);
+});
