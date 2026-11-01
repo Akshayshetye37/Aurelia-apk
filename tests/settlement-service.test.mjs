@@ -177,3 +177,16 @@ test("a UTR already applied to another booking is a conflict, not a successful d
   assert.equal(other.p, 0);
   assert.equal(other.pays.length, 0);
 });
+
+test("reservation advance is validated before the booking is committed", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const start = html.indexOf("function dsave(){");
+  const end = html.indexOf("\\nfunction cin(i)", start);
+  assert.ok(start >= 0 && end > start);
+  const handler = html.slice(start, end);
+  assert.match(handler, /Advance cannot exceed the room charges/);
+  assert.match(handler, /no more than two decimal places/);
+  assert.match(handler, /priorBookings/);
+  assert.match(handler, /Guest or reservation could not be verified in device storage/);
+  assert.match(handler, /S\\.b=priorBookings/);
+});
