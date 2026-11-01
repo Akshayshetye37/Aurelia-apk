@@ -102,8 +102,12 @@ export function settlePayment({
       normalizedReference(row.payment.r ?? row.payment.reference) === ref
     );
     if (existing) {
-      if (existing.booking === booking &&
-          moneyToPaise(existing.payment.a ?? existing.payment.amount, "Existing payment amount") !== amountPaise) {
+      if (existing.booking !== booking) {
+        const error = new Error("Payment reference is already applied to another booking; review the original folio before proceeding");
+        error.code = "PAYMENT_REFERENCE_ALREADY_APPLIED";
+        throw error;
+      }
+      if (moneyToPaise(existing.payment.a ?? existing.payment.amount, "Existing payment amount") !== amountPaise) {
         const error = new Error("Payment reference was already recorded with a different amount");
         error.code = "PAYMENT_REFERENCE_CONFLICT";
         throw error;
