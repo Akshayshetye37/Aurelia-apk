@@ -3954,7 +3954,7 @@ window.aureliaSettlePayment=function(input){
    if(sameKey||sameRef){
     if(other!==booking)fail('This payment reference is already applied to another booking. Review the original folio.','PAYMENT_REFERENCE_ALREADY_APPLIED');
     const oldAmount=Number(row.amountPaise!=null?row.amountPaise/100:(row.a??row.amount));
-    if(oldAmount!==amount||String(row.m??row.method||'').toLowerCase()!==method.toLowerCase())fail('This payment reference was already used with different details.','PAYMENT_REFERENCE_CONFLICT');
+    if(oldAmount!==amount||String((row.m??row.method)||'').toLowerCase()!==method.toLowerCase())fail('This payment reference was already used with different details.','PAYMENT_REFERENCE_CONFLICT');
     return {ok:true,duplicate:true,payment:row};
    }
   }
