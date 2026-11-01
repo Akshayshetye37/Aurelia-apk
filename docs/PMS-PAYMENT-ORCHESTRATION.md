@@ -104,3 +104,5 @@ PMS reservations, guests, rooms, check-in/out and manual/cash accounting remain 
 - The local journal is installation-local, not a multi-device atomic ledger. Gateway execution remains unavailable until the backend and executable native IPC are implemented and configured.
 
 - PMS persists a `bridgeDispatchStarted` marker before native IPC. On restart, an intent with a confirmed false marker can safely resume; a true or legacy-missing marker is treated as ambiguous and reconciled without blind redispatch. Intent history is bounded.
+
+- Refund initiation is deliberately disabled in PMS until a durable refund journal, cumulative refund limit, provider verification and exactly-once folio reversal are implemented. A successful capture does not enable an unsafe client-side refund call.
