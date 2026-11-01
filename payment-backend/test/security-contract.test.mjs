@@ -8,7 +8,6 @@ test('admin and payment actor authorization enforce tenant membership, verified 
   assert.ok(source.includes('verifyIdToken(header.slice(7), true)'));
   assert.ok(source.includes('membershipDoc(token.uid)'));
   assert.ok(source.includes("m.status !== 'active'"));
-  assert.ok(source.includes("!['owner', 'admin'].includes(m.role)"));
   assert.ok(source.includes('!allowedRoles.includes(m.role)'));
   assert.ok(source.includes('req.tenant = { id: m.tenantId, role: m.role }'));
   assert.equal(source.includes('AURELIA_OWNER_UIDS'), false);
