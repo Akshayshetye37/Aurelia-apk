@@ -36,7 +36,11 @@
     const ref = normalizeReference(row.utr);
     if (!ref) return null;
     const amountPaise = Number(row.amountPaise);
-    for (const booking of state.b) {
+    const allBookings = [
+      ...state.b,
+      ...(Array.isArray(state.cancelled) ? state.cancelled : [])
+    ];
+    for (const booking of allBookings) {
       if (!booking || typeof booking !== "object") continue;
       const rows = [
         ...(Array.isArray(booking.pays) ? booking.pays : []),
