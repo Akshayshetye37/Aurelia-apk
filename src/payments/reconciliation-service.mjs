@@ -72,7 +72,7 @@ export function createReconciliationService({ store, matchOptions = {} } = {}) {
   }
 
   async function reconcile() {
-    const evidence = await store.listEvidence({ limit: 1000 });
+    const evidence = await store.listEvidence({ limit: 10000 });
     const candidates = evidence.filter(isCandidate);
     const bankEvents = evidence.filter(isBankCredit);
     const results = bankEvents.map(bankEvent => {
