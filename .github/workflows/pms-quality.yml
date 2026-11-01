@@ -1,0 +1,44 @@
+name: PMS quality checks
+
+on:
+  push:
+    branches:
+      - feature/multi-provider-payment-backend
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pms-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout PMS
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run complete PMS test suite
+        run: npm test
+      - name: Prepare production web bundle
+        run: npm run build
+      - name: Verify payment runtime modules are packaged
+        run: |
+          test -s www/index.html
+          test -s www/src/payments/settlement-service.mjs
+          test -s www/src/payments/settlement-gate.mjs
+          test -s www/src/payments/provider-platform.mjs
+          test -s www/src/features/payments/reconciliation-bridge.js
+          test -s www/src/features/payments/reconciliation-panel.js
