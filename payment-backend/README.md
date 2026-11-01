@@ -86,8 +86,9 @@ The Node process listens on an internal container port; this is not permission t
 The current `src/server.mjs` exposes the following provider-neutral routes:
 
 - `GET /healthz` — process liveness only.
-- `POST /v1/payments/intents` and `GET /v1/payments/intents/:intentId` — authenticated customer intent API, restricted to an active tenant owner/admin/staff membership.
-- `GET /v1/admin/providers` — provider/environment status.
+- `POST /v1/payments/intents` and `GET /v1/payments/intents/:intentId` — authenticated payment-intent API. Checkout is test-environment only; live collection is hard-blocked in the server.
+- `GET /v1/payments/capabilities` — authenticated, explicit capability declaration. It reports live collection, folio settlement, refunds and reconciliation as unavailable until their complete workflows are implemented.
+- `GET /v1/admin/providers` — provider/environment status, including operation-level capability and production-readiness flags.
 - `PUT /v1/admin/providers/{razorpay|cashfree}/credentials` — write-only credential intake; secrets are stored in Secret Manager.
 - `POST /v1/admin/providers/{razorpay|cashfree}/validate` — provider credential validation.
 - `POST /v1/admin/providers/{razorpay|cashfree}/test-orders` — test-environment onboarding order utility with idempotency protection.
@@ -96,7 +97,7 @@ The current `src/server.mjs` exposes the following provider-neutral routes:
 
 All admin/provider onboarding routes require an owner/admin membership. Payment-intent routes additionally allow active staff members. Only Razorpay and Cashfree are registered as implemented adapters; all other catalogue entries remain unsupported and fail closed.
 
-**Integration boundary:** verified webhook events update the provider-order evidence record and provider onboarding state. They do not yet post a PMS folio ledger entry, release an unresolved folio lock, or establish exactly-once accounting. The reconciliation and ledger-settlement pipeline remains a release blocker.
+**Integration boundary:** verified webhook events update provider-order evidence and payment-intent verification metadata. They do not post a PMS folio ledger entry, release an unresolved folio lock, or establish exactly-once accounting. Provider adapters expose refund API methods, but there is no trusted refund-intent lifecycle or refund accounting. No durable reconciliation worker exists. The service therefore hard-rejects every live payment-intent request and every live-provider activation attempt, even if legacy provider configuration documents say `active: true`. The capability endpoint reports these workflows as unavailable.
 
 Do not add a second independent authentication or HTTPS implementation in another router. The payment routes reuse the shared Firebase authentication, tenant-membership and HTTPS middleware.
 
