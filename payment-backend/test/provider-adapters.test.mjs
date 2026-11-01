@@ -49,6 +49,24 @@ test('Cashfree webhook signature uses timestamp concatenated with raw body', asy
   assert.equal((await adapter.verifyWebhook(raw, { 'x-webhook-timestamp': timestamp, 'x-webhook-signature': signature })).valid, true);
 });
 
+test('Cashfree verified payment status includes an explicit capture flag', async () => {
+  const mock = mockFetch(async (url) => {
+    if (url.endsWith('/payments')) {
+      return { status: 200, body: [{ cf_payment_id: 'cf_pay_123', payment_status: 'SUCCESS' }] };
+    }
+    return { status: 200, body: { order_id: 'order_123', order_status: 'PAID', order_amount: 125, order_currency: 'INR' } };
+  });
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  const status = await adapter.getPaymentStatus({ orderId: 'order_123' });
+  assert.equal(status.paymentStatus, 'SUCCESS');
+  assert.equal(status.amountMinor, 12500);
+  assert.equal(status.currency, 'INR');
+  assert.equal(status.captured, true);
+});
+
 test('provider adapters reject invalid amount units and malformed IDs before network calls', async () => {
   const mock = mockFetch(async () => ({ status: 200, body: {} }));
   const adapter = new CashfreeAdapter({ credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' }, environment: 'test', fetchImpl: mock.fetchImpl });
