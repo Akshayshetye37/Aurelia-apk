@@ -4,6 +4,7 @@ import {
   PAYMENT_STATES, PayBridgePaymentOrchestrator, PaymentOrchestratorError,
   createPaymentBackendClient, transitionPayment
 } from "../src/payments/pay-bridge-orchestrator.mjs";
+import { settlePayment } from "../src/payments/settlement-service.mjs";
 
 function fixture({ connected = true, backendOverrides = {} } = {}) {
   const records = new Map();
