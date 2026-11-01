@@ -116,7 +116,8 @@ export function settlePayment({
 
   const priorPays = Array.isArray(booking.pays) ? booking.pays : [];
   const priorHistory = Array.isArray(booking.payments) ? booking.payments : [];
-  const priorPaid = Number(booking.p);
+  const priorPaid = booking.p;
+  const priorPaidNumeric = Number(priorPaid);
   const priorToday = state.today;
   const priorAudit = Array.isArray(state.aud) ? state.aud.slice() : null;
   const timestamp = now();
@@ -144,10 +145,10 @@ export function settlePayment({
         : moneyToPaise(Number(row.a) || 0, "Existing payment amount", { allowZero: true });
       return sum + rowPaise;
     }, 0);
-    const legacyPaidPaise = Number.isFinite(priorPaid) && priorPaid > 0
-      ? moneyToPaise(priorPaid, "Existing paid total", { allowZero: true })
+    const legacyPaidPaise = Number.isFinite(priorPaidNumeric) && priorPaidNumeric > 0
+      ? moneyToPaise(priorPaidNumeric, "Existing paid total", { allowZero: true })
       : 0;
-    booking.p = Math.max(recordedRowsPaise, legacyPaidPaise) / 100 + value;
+    booking.p = (Math.max(recordedRowsPaise, legacyPaidPaise) + amountPaise) / 100;
 
     booking.payments = priorHistory.slice();
     booking.payments.push(history);
@@ -158,7 +159,7 @@ export function settlePayment({
     return { ok: true, duplicate: false, payment, history };
   } catch (error) {
     booking.pays = priorPays;
-    booking.p = Number.isFinite(priorPaid) ? priorPaid : priorPaid;
+    booking.p = priorPaid;
     booking.payments = priorHistory;
     state.today = priorToday;
     if (priorAudit && Array.isArray(state.aud)) state.aud.splice(0, state.aud.length, ...priorAudit);
