@@ -36,7 +36,11 @@ class LockGateActivity : Activity() {
         )
         manager = AureliaSecurityRuntime.manager(this)
         envelopeFile = AtomicFile(File(noBackupFilesDir, "aurelia-pin-envelope.v2"))
-        enrollmentMode = !envelopeFile.baseFile.exists()
+        val enrolled = AureliaSecurityRuntime.isEnrolled()
+        if (enrolled && !envelopeFile.baseFile.exists()) {
+            throw SecurityException("PIN envelope is missing; re-enrollment is prohibited.")
+        }
+        enrollmentMode = !enrolled
         render()
     }
 
@@ -103,9 +107,9 @@ class LockGateActivity : Activity() {
                 }
                 val enrollment = manager.enroll(first)
                 writeEnvelope(enrollment.envelopeJson)
+                AureliaSecurityRuntime.markEnrolled()
                 openPms()
             } else {
-                manager.lockoutCheckForGate()
                 val envelope = readEnvelope()
                 if (manager.unlock(first, envelope)) openPms()
                 else showError("Incorrect PIN.")
