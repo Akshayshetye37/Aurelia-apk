@@ -1,49 +1,62 @@
 name: Build Aurelia PMS APK
+
 on:
   workflow_dispatch:
   push:
     paths:
-      - 'index.html'
-      - 'package.json'
-      - 'capacitor.config.json'
-      - 'scripts/**'
+      - 'pms/**'
       - 'docs/PMS_IMPORT_MANIFEST.json'
+      - 'scripts/verify-pms-import.js'
       - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurelia-pms-native-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
+    name: Build imported Aurelia PMS Android application
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+
       - name: Verify imported PMS source integrity
-        run: npm run verify:pms-import
-      - name: Setup Java
+        run: node scripts/verify-pms-import.js
+
+      - name: Verify Android WebView asset matches PMS source
+        run: cmp pms/index.html pms/android/app/src/main/assets/index.html
+
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
-      - name: Prepare app and install Capacitor
+          java-version: '17'
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build native PMS debug APK
+        working-directory: pms/android
+        run: gradle --no-daemon --stacktrace clean assembleDebug
+
+      - name: Verify APK exists and signature is valid
+        shell: bash
         run: |
-          npm install
-          npm run build
-          npx cap add android
-          node scripts/patch-android.js
-          npx cap sync android
-      - name: Build debug APK
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug
-      - name: Upload APK
+          APK="pms/android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          BUILD_TOOLS="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" verify --verbose "$APK"
+
+      - name: Upload Aurelia PMS APK
         uses: actions/upload-artifact@v4
         with:
-          name: aurelia-pms-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: aurelia-pms-native-debug-apk
+          path: pms/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
