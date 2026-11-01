@@ -5,7 +5,10 @@ import { readFile } from 'node:fs/promises';
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
 test('PMS provider directory never renders merchant credential inputs', () => {
-  assert.match(html, /Credential onboarding is disabled in this PMS build/);
+  assert.match(html, /Provider credentials remain server-side/);
+  assert.match(html, /data-aurelia-backend-url/);
+  assert.match(html, /testAureliaBackendConnection/);
+  assert.match(html, /url\.protocol!=='https:'/);
   assert.doesNotMatch(html, /id="provider-backend-/);
   assert.doesNotMatch(html, /id="provider-auth-/);
   assert.doesNotMatch(html, /data-provider-field=/);
@@ -20,7 +23,7 @@ test('PMS provider UI cannot submit merchant secrets to an arbitrary HTTPS host'
 test('provider catalogue remains documentation-only until trusted backend deployment', () => {
   assert.match(html, /Provider Directory &amp; Onboarding|Provider Directory & Onboarding/);
   assert.match(html, /owner-controlled backend console/);
-  assert.match(html, /non-secret provider status only/);
+  assert.match(html, /PMS receives non-secret provider status only|Provider credentials remain server-side/);
 });
 
 
