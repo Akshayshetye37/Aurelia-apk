@@ -49,7 +49,7 @@
           '<pre>' + escapeHtml(row.notificationText) + '</pre>' +
           '<label>Review note <input type="text" data-role="note" maxlength="300"></label>' +
           '<p><strong>Unverified:</strong> Confirm the transaction independently before marking reviewed.</p>' +
-          '<button type="button" data-status="reviewed">Mark verified/reviewed</button> ' +
+          '<button type="button" data-status="reviewed">Mark reviewed</button> ' +
           '<button type="button" data-status="rejected">Reject evidence</button></article>'
         ).join("");
         status.textContent = (accessEnabled ? "Notification access enabled. " : "WARNING: Notification access is disabled. Open Settings to enable capture. ") +
