@@ -53,6 +53,7 @@ app.use((req, res, next) => {
 });
 
 const tenantIdPattern = /^[A-Za-z0-9_-]{6,64}$/;
+const webhookEventIdPattern = /^[A-Za-z0-9._:-]{1,200}$/;
 const secretName = id => 'projects/' + projectId + '/secrets/' + id;
 const membershipDoc = uid => db.doc('paymentMemberships/' + uid);
 const fail = (res, status, error) => res.status(status).json({ error });
@@ -353,7 +354,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     const eventId = provider === 'razorpay'
       ? req.get('x-razorpay-event-id')
       : req.get('x-webhook-id') || crypto.createHash('sha256').update(req.body).digest('hex');
-    if (!eventId || !/^[A-Za-z0-9_-]{8,200}$/.test(eventId)) return fail(res, 400, 'invalid_event_id');
+    if (typeof eventId !== 'string' || !webhookEventIdPattern.test(eventId)) return fail(res, 400, 'invalid_event_id');
     const inboxId = crypto.createHash('sha256').update(tenantId + ':' + provider + ':' + environment + ':' + eventId).digest('hex');
     const inbox = db.doc('paymentWebhookInbox/' + inboxId);
     await db.runTransaction(async tx => {
