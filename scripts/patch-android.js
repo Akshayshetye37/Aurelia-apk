@@ -269,7 +269,7 @@ for (const file of [
 }
 
 function addNativeSecurityDependencies(contents, kotlinDsl) {
-  if (!/dependencies\\s*\\{/.test(contents)) {
+  if (!/dependencies\s*\{/.test(contents)) {
     throw new Error('App Gradle file has no dependencies block; native security dependencies were not added.');
   }
   const dependencies = [
@@ -279,9 +279,9 @@ function addNativeSecurityDependencies(contents, kotlinDsl) {
   for (const [coordinate, marker] of dependencies) {
     if (contents.includes(marker)) continue;
     const line = kotlinDsl
-      ? `\\n    implementation("${coordinate}")`
-      : `\\n    implementation "${coordinate}"`;
-    contents = contents.replace(/dependencies\\s*\\{/, match => match + line);
+      ? `\n    implementation("${coordinate}")`
+      : `\n    implementation "${coordinate}"`;
+    contents = contents.replace(/dependencies\s*\{/, match => match + line);
   }
   return contents;
 }
