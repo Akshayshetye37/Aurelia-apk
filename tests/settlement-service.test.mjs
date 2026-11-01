@@ -232,7 +232,7 @@ test("historical folios preserve the nightly rate when room rates change", async
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /rate:roomRate/);
   assert.match(html, /b\\.rate!=null&&Number\\.isFinite\\(Number\\(b\\.rate\\)\\)/);
-  assert.match(html, /if\\(b\\.rate==null\\|\\|!Number\\.isFinite\\(Number\\(b\\.rate\\)\\)\\|\\|Number\\(b\\.rate\\)<=0\\)b\\.rate=o\\.r/);
+  assert.match(html, /if\\(b\\.rate==null\\|\\|!Number\\.isFinite\\(Number\\(b\\.rate\\)\\)\\)b\\.rate=o\\.r/);
 });
 
 test("UPI evidence duplicate lookup includes legacy payment history rows", async () => {
