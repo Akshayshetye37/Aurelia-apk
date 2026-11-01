@@ -3750,7 +3750,9 @@ if (typeof window.render === "function") window.render();
   const providers=names.map(([id,name])=>{
    const definition=platform.PAYMENT_PROVIDERS[id],guide=platform.PROVIDER_INTEGRATION_GUIDES[id];
    const docs=guide.docs.map(link=>'<li><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">'+esc(link.label)+'</a></li>').join('');
-   const fields='<div class="provider-config locked" data-provider="'+esc(id)+'"><p class="lab">Credential onboarding is disabled in this PMS build. This screen does not collect API keys, salts, private keys, webhook secrets or owner tokens.</p><div class="tag out">Backend not connected · Credentials disabled</div><p class="lab">Configure providers only in a separately hosted, authenticated owner console after the encrypted backend vault is deployed. PMS will receive non-secret provider status only.</p><div class="lab" id="provider-status-'+esc(id)+'" role="status">Not configured · Awaiting owner backend deployment</div></div>';
+   const backendCfg=S.set.backendConnection||{};
+   const backendLabel=backendCfg.reachable?'Backend reachable · health check passed':'Backend not verified';
+   const fields='<div class="provider-config locked" data-provider="'+esc(id)+'"><p class="lab">Provider credentials remain server-side. First configure the owner-deployed HTTPS payment backend below. A successful health check confirms service availability only; it does not authenticate an owner or enable payments.</p><div class="tag '+(backendCfg.reachable?'ready':'out')+'">'+esc(backendLabel)+'</div><div class="lab" id="aurelia-backend-status" role="status">'+(backendCfg.checkedAt?'Last checked: '+esc(new Date(backendCfg.checkedAt).toLocaleString()):'No successful backend health check recorded')+'</div><label class="fld"><span>Owner payment backend HTTPS origin</span><input id="aurelia-backend-url" type="url" inputmode="url" autocomplete="url" placeholder="https://payments.example.com" value="'+esc(backendCfg.endpoint||'')+'"></label><button class="btn sm" onclick="saveAureliaBackendEndpoint()">Save endpoint</button><button class="btn sm ghost" onclick="testAureliaBackendConnection()">Test backend</button><p class="lab">The endpoint must be deployed by the owner, use HTTPS, allow this app origin, and expose GET /healthz. Payment administration still requires authenticated owner/MFA access. Live gateway collection remains disabled until the complete payment flow is verified.</p><div class="lab" id="provider-status-'+esc(id)+'" role="status">Provider credentials are not configured.</div></div>';
    const guideHtml='<p class="lab">'+esc(definition.category)+' · '+esc(definition.integration)+'<br>Methods: '+esc(definition.methods.join(', '))+'<br>'+esc(definition.verification)+'</p><ul>'+docs+'</ul>';
    return '<details><summary>'+esc(name)+' · Documentation</summary>'+guideHtml+fields+'</details>';
   }).join('');
@@ -3758,6 +3760,39 @@ if (typeof window.render === "function") window.render();
   return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateway</h2><p class="lab">Provider catalogue is available. Gateway account setup and Pay Bridge app authentication are two different processes.</p><details open><summary>Pay Bridge Connection</summary>'+bridge+'<p class="lab">This handshake authenticates the installed companion APK only. It does not log in to a payment gateway merchant account. The current PMS client implements handshake only; provider-management IPC is not yet implemented.</p></details><details><summary>Provider Directory & Onboarding</summary>'+providerBody+'</details><p class="lab">Live payment execution is not enabled. The owner backend, encrypted credential vault, separate Pay Bridge APK and provider-specific adapters must be deployed before a provider can be activated. No unverified event may settle a folio.</p></div>';
  }
 
+window.saveAureliaBackendEndpoint=function(){
+ const input=document.getElementById('aurelia-backend-url');
+ const raw=(input?.value||'').trim();
+ let url;
+ try{url=new URL(raw)}catch(_){toast('Enter a valid HTTPS backend origin');return false}
+ if(url.protocol!=='https:'||url.username||url.password||url.pathname!=='/'||url.search||url.hash){toast('Use an HTTPS origin only, for example https://payments.example.com');return false}
+ S.set.backendConnection={...(S.set.backendConnection||{}),endpoint:url.origin,reachable:false,checkedAt:null};
+ persist();render();toast('Backend endpoint saved. Run Test backend to verify it.');return true;
+};
+window.testAureliaBackendConnection=async function(){
+ const input=document.getElementById('aurelia-backend-url');
+ const raw=(input?.value||S.set.backendConnection?.endpoint||'').trim();
+ let url;
+ try{url=new URL(raw)}catch(_){toast('Enter and save a valid HTTPS backend origin first');return}
+ if(url.protocol!=='https:'||url.username||url.password||url.pathname!=='/'||url.search||url.hash){toast('Backend must be an HTTPS origin without a path or credentials');return}
+ const status=document.getElementById('aurelia-backend-status');
+ if(status)status.textContent='Checking secure backend health…';
+ try{
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),10000);
+  let response;
+  try{response=await fetch(url.origin+'/healthz',{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',signal:controller.signal})}
+  finally{clearTimeout(timeout)}
+  if(!response.ok)throw new Error('Backend returned HTTP '+response.status);
+  const body=await response.json();
+  if(!body||body.ok!==true)throw new Error('Backend health response was not recognized');
+  S.set.backendConnection={...(S.set.backendConnection||{}),endpoint:url.origin,reachable:true,checkedAt:new Date().toISOString()};
+  persist();render();toast('Backend is reachable. Payment authorization is still separate and remains disabled.');
+ }catch(error){
+  S.set.backendConnection={...(S.set.backendConnection||{}),endpoint:url.origin,reachable:false,checkedAt:null};
+  persist();render();toast('Backend health check failed: '+(error?.name==='AbortError'?'request timed out':(error?.message||'connection unavailable')));
+ }
+};
 window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;if(!native||typeof native.postMessage!=='function')throw new Error('Native Pay Bridge client is unavailable. Update the PMS APK.');native.postMessage(JSON.stringify({type:'payBridgeConnect'}));toast('Checking Pay Bridge installation, signing identity and native service…');setTimeout(()=>{try{render()}catch(_){ }},350)}catch(e){toast(e.message||'Could not start Pay Bridge connection')}};
  window.disconnectAureliaPayBridge=function(){try{window.AureliaNative.postMessage(JSON.stringify({type:'payBridgeDisconnect'}));toast('Pay Bridge disconnected')}catch(_){toast('Native Pay Bridge client is unavailable')}};
  window.aureliaPayBridgeStatusChanged=function(){try{if(document.querySelector('.payment-platform-card'))render()}catch(_){ }};
