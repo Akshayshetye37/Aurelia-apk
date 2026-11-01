@@ -421,7 +421,7 @@ const types=[['Standard',850],['Deluxe',1200],['Executive Suite',1800],['Family 
 let id=0;const S={tab:'home',f:'all',tb:3,rooms:[],b:[],t:[],g:[],exp:[],inv:[],aud:[],cancelled:[],financialLedger:[],sig:[],sales:[],menu:{},today:23650,hist:[41200,38600,52400,47900,61300,56800],set:{name:'Aurelia PMS',tag:'Peace, comfort and mindful hospitality.',cur:'₹',upi:'',phone:'',addr:''},au:{},bk:{}};
 window.aureliaGetAppState = () => S;
 types.forEach((t,i)=>rn[i].forEach(n=>S.rooms.push({n,t:t[0],r:t[1],s:'ready'})));
-const B=(g,room,i,o,st,ch=[])=>S.b.push({id:++id,g,room,in:i,out:o,st,ch});
+const B=(g,room,i,o,st,ch=[])=>S.b.push({id:++id,g,room,in:i,out:o,st,ch,rate:S.rooms.find(r=>r.n===room)?.r||0});
 B('Mwila Chanda','102',-2,0,'in');B('Natasha Banda','201',-1,2,'in',[['Dinner · Seared Kafue bream',260]]);B('James Whitfield','301',-3,1,'in',[['Breakfast for two',180]]);B('Sofia Marchetti','302',-1,4,'in');B('Chileshe Mulenga','401',-2,1,'in');B('Peter Zulu','103',-1,2,'in');B('Grace Tembo','202',-2,3,'in');
 B('Amara Okafor','402',0,3,'res');B('Thandiwe Phiri','203',0,2,'res');B('Lubinda Mwiinga','104',1,3,'res');
 S.rooms.forEach(r=>{if(S.b.some(b=>b.room===r.n&&b.st==='in'))r.s='occ'});S.rooms[0].s='clean';S.rooms.find(r=>r.n==='204').s='out';
@@ -524,7 +524,7 @@ try{render()}catch(bootErr){
 }
 /* ===== Full module set ===== */
 IC.more='M5 12h.01M12 12h.01M19 12h.01';TABS.push(['more','More']);
-const bk=i=>S.b.find(x=>x.id===i),aud=(a,d)=>S.aud.unshift({a,d,at:new Date()}),tt=b=>Math.round((nts(b)*(rm(b.room)||{r:0}).r+b.ch.reduce((a,x)=>a+x[1],0)-(b.dc||0))*100)/100,dueB=b=>Math.round((tt(b)-(b.p||0))*100)/100,on=k=>S.fe[k]!==false,tmf=d=>d.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+const bk=i=>S.b.find(x=>x.id===i),aud=(a,d)=>S.aud.unshift({a,d,at:new Date()}),tt=b=>Math.round((nts(b)*(b.rate!=null&&Number.isFinite(Number(b.rate))?Number(b.rate):(rm(b.room)||{r:0}).r)+b.ch.reduce((a,x)=>a+x[1],0)-(b.dc||0))*100)/100,dueB=b=>Math.round((tt(b)-(b.p||0))*100)/100,on=k=>S.fe[k]!==false,tmf=d=>d.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
 const M=['Dashboard','Reservations','Bookings','Guests','Rooms','Folio','Invoices','Housekeeping','POS','Expenses','Reports','Audit','Import/Export','WhatsApp actions','Payment QR','Payment verification','Offline mode'],G={Payments:['GPay notification reader','Payer-name matching','Automatic reconciliation','Manual confirmation','Duplicate-payment detection','Payment retry and recovery','Payment announcement'],Restaurant:['Restaurant billing','Staying-guest billing','Walk-in billing','Add and remove food','Add to room folio','Bill PDF','WhatsApp sharing','Restaurant audit'],Inventory:['Purchase and add stock','Stock deduction on sale','Low-stock alerts','Inventory audit'],'Backup and recovery':['Automatic local backup','Recovery queue']};
 Object.assign(S,{sub:null,co:0,aud:[],fe:{},led:[],terms:'Check-in from 14:00 and check-out by 11:00. A valid ID is required for every adult guest. Quiet hours run from 22:00 to 06:00. Damage to property is billed to the room folio.',set:{name:'Aurelia PMS',phone:'',addr:'',tax:'',upi:'',cur:'₹'},exp:[{id:1,t:'Fresh produce',c:'Kitchen',a:1850,v:0,demo:1},{id:2,t:'Generator diesel',c:'Utilities',a:3200,v:0,demo:1}],inv:[{n:'Mosi lager',q:48,ro:24,u:45},{n:'Seared Kafue bream',q:9,ro:12,u:120},{n:'Cooking oil (5L)',q:6,ro:4,u:210},{n:'Bed linen sets',q:30,ro:20,u:0}]});
 [...M,...Object.keys(G),...Object.values(G).flat()].forEach(k=>S.fe[k]=true);
@@ -663,7 +663,7 @@ Object.assign(S.set,{checkInTime:'14:00',checkOutTime:'11:00',tag:'Peace, comfor
 S.rooms.forEach(x=>x.demo=1);S.b.forEach(x=>{x.demo=1;x.pays=[]});S.g.forEach((g,i)=>{g.demo=1;g.idn='NRC-'+(214000+i*7919);g.img=DEMO_IMG});S.inv.forEach(x=>x.demo=1);Object.values(MENU).forEach(a=>a.forEach(m=>m[3]=1));S.t[2].demo=1;
 S.b[1].pays=[{a:1000,m:'Cash',r:'',at:new Date().toISOString()}];
 const gOf=n=>S.g.find(g=>g.n===n),paid=b=>(b.pays||[]).reduce((a,x)=>a+x.a,0),catOf=x=>x[2]||(/dining|dinner|breakfast|lunch/i.test(x[0])?'din':'ext');
-const lines=b=>[[`Room ${b.room} · ${nts(b)} night${nts(b)>1?'s':''}`,nts(b)*(rm(b.room)||{r:0}).r],...b.ch];
+const lines=b=>[[`Room ${b.room} · ${nts(b)} night${nts(b)>1?'s':''}`,nts(b)*(b.rate!=null&&Number.isFinite(Number(b.rate))?Number(b.rate):(rm(b.room)||{r:0}).r)],...b.ch];
 const ask=(t,m,l,c)=>openS(`<h2 class="foil">${t}</h2><p class="lab">${m}</p><div class="row"><button class="btn ghost sm" onclick="closeS()">Keep it</button><button class="btn sm" onclick="closeS();${c}">${l}</button></div>`);
 const syncT=()=>{types.length=0;const m=new Map();S.rooms.forEach(r=>{if(!m.has(r.t))m.set(r.t,r.r)});m.forEach((r,t)=>types.push([t,r]))};
 const free=(n,a,z,ex)=>!S.b.some(b=>b.id!==ex&&b.room===n&&b.st!=='done'&&b.in<z&&b.out>a);
@@ -820,7 +820,7 @@ function dsave(){
   if(d.k==='res'){
    const checkIn=d.checkInTime||defCheckInTime();
    const checkOut=d.checkOutTime||defCheckOutTime();
-   booking={id:++id,g:nm,room:d.room,in:arrival,out:departure,st:'res',ch:[],pays:[],
+   booking={id:++id,g:nm,room:d.room,in:arrival,out:departure,st:'res',rate:roomRate,ch:[],pays:[],
     checkInTime:checkIn,checkOutTime:checkOut,
     scheduledCheckIn:d.in+'T'+checkIn,scheduledCheckOut:d.out+'T'+checkOut};
    S.b.push(booking);
@@ -877,7 +877,7 @@ V.stays=()=>{if(S.f==='cal')return cal();const F={all:'All',res:'Arriving',in:'I
 V.rooms=()=>`<div class="row"><h2 style="margin-top:6px;font-size:36px">Rooms</h2><button class="btn sm" onclick="roomNew()">Add room</button></div>${S.rooms.length?`<div class="rooms">${S.rooms.map((r,i)=>{const b=S.b.find(b=>b.room===r.n&&b.st==='in');return`<div class="card room" onclick="roomS(${i})"><div class="row"><span class="n">${esc(r.n)}</span><span class="tag ${r.s}">${{ready:'Ready',occ:'Occupied',clean:'Cleaning',out:'Out of service'}[r.s]}</span></div><div class="lab">${esc(r.t)}</div><div style="margin-top:6px;color:var(--gold)">${K(r.r)} a night</div><div class="lab" style="margin-top:8px;min-height:22px">${b?esc(b.g):'&nbsp;'}</div></div>`}).join('')}</div>`:'<div class="empty">No rooms yet. Add your first room.</div>'}`;
 const rform=(r,i)=>`<label class="fld"><span>Room number</span><input id="rn1" value="${esc(r.n)}"></label><label class="fld"><span>Room type</span><input id="rn2" list="rtl" value="${esc(r.t)}"><datalist id="rtl">${types.map(t=>`<option>${esc(t[0])}`).join('')}</datalist></label><label class="fld"><span>Rate per night</span><input id="rn3" type="number" value="${r.r}"></label>`;
 function roomNew(){openS(`<h2 class="foil">Add room</h2>${rform({n:'',t:'Standard',r:850})}<button class="btn" style="width:100%" onclick="roomSave(-1)">Add room</button>`)}
-function roomSave(i){const n=$('#rn1').value.trim(),t=$('#rn2').value.trim(),r=+$('#rn3').value;if(!n||!t||!(r>0)||!Number.isSafeInteger(Math.round(r*100))||Math.abs(r*100-Math.round(r*100))>1e-7){toast('Enter a number, a type and a rate with no more than two decimal places');return}if(S.rooms.some((x,k)=>k!==i&&x.n===n)){toast('Room '+n+' already exists');return}if(i<0){S.rooms.push({n,t,r,s:'ready'});aud('Room added',n)}else{const o=S.rooms[i];S.b.forEach(b=>{if(b.room===o.n)b.room=n});Object.assign(o,{n,t,r});aud('Room edited',n)}closeS();render()}
+function roomSave(i){const n=$('#rn1').value.trim(),t=$('#rn2').value.trim(),r=+$('#rn3').value;if(!n||!t||!(r>0)||!Number.isSafeInteger(Math.round(r*100))||Math.abs(r*100-Math.round(r*100))>1e-7){toast('Enter a number, a type and a rate with no more than two decimal places');return}if(S.rooms.some((x,k)=>k!==i&&x.n===n)){toast('Room '+n+' already exists');return}if(i<0){S.rooms.push({n,t,r,s:'ready'});aud('Room added',n)}else{const o=S.rooms[i];S.b.forEach(b=>{if(b.room===o.n){if(b.rate==null||!Number.isFinite(Number(b.rate))||Number(b.rate)<=0)b.rate=o.r;b.room=n}});Object.assign(o,{n,t,r});aud('Room edited',n)}closeS();render()}
 function roomS(i){const r=S.rooms[i];openS(`<h2 class="foil">Room ${esc(r.n)}</h2>${rform(r)}<button class="btn sm" onclick="roomSave(${i})">Save details</button>${r.s==='occ'?'<div class="lab" style="margin-top:12px">This room is occupied. Check the guest out to change its status.</div>':`<div style="display:grid;gap:8px;margin-top:14px">${[['ready','Ready for guests'],['clean','Needs cleaning'],['out','Out of service']].map(([k,l])=>`<button class="btn ${r.s===k?'':'ghost'}" onclick="rs('${r.n}','${k}');closeS()">${l}</button>`).join('')}</div>`}<button class="btn ghost sm" style="margin-top:14px" onclick="ask('Remove room ${esc(r.n)}','The room and its details are deleted.','Remove','rdel(${i})')">Remove room</button>`)}
 function rdel(i){const r=S.rooms[i];if(S.b.some(b=>b.room===r.n&&!r.demo)){toast('Room '+r.n+' has bookings. Mark it out of service instead.');return}S.b=S.b.filter(b=>b.room!==r.n);S.rooms.splice(i,1);aud('Room removed',r.n);render()}
 /* dining and menu */
@@ -1281,6 +1281,7 @@ async function restoreGo(){
    const duplicate=S.b.some(y=>String(y.g||'').trim().toLowerCase()===b.g.trim().toLowerCase()&&roomKey(y.room)===rk&&Number(y.in)===Number(b.in)&&Number(y.out)===Number(b.out));
    if(duplicate){sk++;return}
    if(S.b.some(y=>String(y.id)===String(b.id)))b.id=++id;else id=Math.max(id,+b.id||0);
+   if(b.rate==null){const room=S.rooms.find(r=>r.n===b.room);if(room)b.rate=room.r}
    S.b.push(b);ba++;
    const gname=String(b.g||'').trim(),gkey=gname.toLowerCase();
    if(gname&&!guestNames.has(gkey)){
@@ -1851,6 +1852,7 @@ function commitXlsxImport(rows){
   if(S.b.some(b=>String(b.g||'').toLowerCase()===x.g.toLowerCase()&&String(b.room)===x.room&&b.in===x.inn&&b.out===x.out)){skipped++;return}
   const b={id:++id,g:x.g,room:x.room,in:x.inn,out:x.out,st:x.st==='in'||(x.inn<=0&&x.out>0)?'in':'res',ch:[],p:0,pays:[],oc:[],veh:[],checkInTime:x.checkInTime||'14:00',checkOutTime:x.checkOutTime||'11:00',scheduledCheckIn:ymd(x.inn)+'T'+(x.checkInTime||'14:00'),scheduledCheckOut:ymd(x.out)+'T'+(x.checkOutTime||'11:00')};
   if(x.phone)b.ph=x.phone;if(x.email)b.email=x.email;if(x.idType)b.idt=x.idType;if(x.idNumber)b.idn=x.idNumber;
+  if(b.rate==null){const room=S.rooms.find(r=>r.n===b.room);if(room)b.rate=room.r}
   S.b.push(b);added++;
  });
  window._aureliaPendingXlsx=null;persist();render();closeS();toast('Excel import: '+added+' added, '+skipped+' skipped (room must exist).');
