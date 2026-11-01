@@ -20,8 +20,8 @@ const ALLOWED = {
   REQUESTED: new Set(["REQUESTED", "PROCESSING", "UNKNOWN", "FAILED", "CANCELLED"]),
   PROCESSING: new Set(["PROCESSING", "SUCCESS", "FAILED", "CANCELLED", "UNKNOWN"]),
   SUCCESS: new Set(["SUCCESS"]),
-  FAILED: new Set(["FAILED"]),
-  CANCELLED: new Set(["CANCELLED"]),
+  FAILED: new Set(["FAILED", "RECONCILIATION"]),
+  CANCELLED: new Set(["CANCELLED", "RECONCILIATION"]),
   UNKNOWN: new Set(["UNKNOWN", "RECONCILIATION", "PROCESSING", "FAILED", "CANCELLED"]),
   RECONCILIATION: new Set(["RECONCILIATION", "SUCCESS", "PROCESSING", "FAILED", "CANCELLED", "UNKNOWN"])
 };
@@ -41,8 +41,19 @@ function validate(record) {
     if (typeof record[key] !== "string" || !record[key]) throw new TypeError("Invalid " + key);
   }
   if (record.currency !== "INR") throw new TypeError("Only INR intents are supported");
-  if (record.settlementAuthorized === true && record.backendVerified !== true) {
-    throw new TypeError("Settlement cannot be authorized without backend verification");
+  if (record.backendVerified != null && typeof record.backendVerified !== "boolean") {
+    throw new TypeError("backendVerified must be boolean");
+  }
+  if (record.settlementAuthorized != null && typeof record.settlementAuthorized !== "boolean") {
+    throw new TypeError("settlementAuthorized must be boolean");
+  }
+  if (record.settlementAuthorized === true &&
+      (record.backendVerified !== true || record.state !== "SUCCESS")) {
+    throw new TypeError("Settlement authorization requires a backend-verified SUCCESS state");
+  }
+  if (record.state === "SUCCESS" &&
+      (record.backendVerified !== true || record.settlementAuthorized !== true)) {
+    throw new TypeError("SUCCESS requires backend verification and settlement authorization");
   }
   return record;
 }
@@ -97,7 +108,15 @@ export class IndexedDbPaymentIntentStore {
   async put(input) {
     const record = validate(clone(input));
     const db = await this.database();
-    const tx = db.transaction(STORE_NAME, "readwrite", { durability: "strict" });
+    // Older Android System WebView releases may reject the durability options
+    // dictionary. Retain IndexedDB transaction atomicity with the default mode.
+    let tx;
+    try {
+      tx = db.transaction(STORE_NAME, "readwrite", { durability: "strict" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      tx = db.transaction(STORE_NAME, "readwrite");
+    }
     const done = completed(tx);
     const store = tx.objectStore(STORE_NAME);
     try {
@@ -147,6 +166,8 @@ export class IndexedDbPaymentIntentStore {
     const tx = db.transaction(STORE_NAME, "readonly");
     const rows = await request(tx.objectStore(STORE_NAME).getAll());
     await completed(tx);
-    return rows.filter(row => !TERMINAL.has(row.state)).map(clone);
+    // Failed/cancelled records remain visible for late-capture reconciliation.
+    // Only backend-verified SUCCESS is fully closed.
+    return rows.filter(row => row.state !== "SUCCESS").map(clone);
   }
 }
