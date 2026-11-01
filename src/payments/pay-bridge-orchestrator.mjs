@@ -211,6 +211,10 @@ export class PayBridgePaymentOrchestrator {
 
   async reconcileOne(requestId) {
     let record = await this.requireRecord(requestId);
+    // CREATED has not been dispatched; retry it after Bridge reconnects rather
+    // than querying the backend for a session that does not exist.
+    if (record.state === "CREATED" ||
+        (record.state === "CANCELLED" && !record.backendSessionId)) return clone(record);
     if (["UNKNOWN", "FAILED", "CANCELLED"].includes(record.state)) {
       record = transitionPayment(record, "RECONCILIATION", {}, this.now);
       await this.store.put(record);
@@ -251,7 +255,8 @@ export class PayBridgePaymentOrchestrator {
     const records = await this.store.listPending();
     const results = [];
     for (const item of records) {
-      if (!item || !item.requestId || ["SUCCESS", "FAILED", "CANCELLED"].includes(item.state)) continue;
+      if (!item || !item.requestId || item.state === "SUCCESS" || item.state === "CREATED" ||
+          (item.state === "CANCELLED" && !item.backendSessionId)) continue;
       try { results.push(await this.reconcileOne(item.requestId)); }
       catch (error) { results.push({ requestId: item.requestId, state: item.state, error: error.code || "RECONCILIATION_FAILED" }); }
     }
