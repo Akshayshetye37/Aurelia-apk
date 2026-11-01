@@ -273,3 +273,16 @@ test("undispatched REQUESTED intent can be cancelled locally", async () => {
   const result = await f.orchestrator.cancelPayment("req-1");
   assert.equal(result.state, "CANCELLED");
 });
+
+test("native dispatch marker is durable before Bridge receives the request", async () => {
+  const f = fixture();
+  f.bridge.createPayment = async p => {
+    const saved = await f.store.get(p.requestId);
+    assert.equal(saved.state, "REQUESTED");
+    assert.equal(saved.bridgeDispatchStarted, true);
+    return { requestId:p.requestId, transactionId:"txn-durable", status:"processing" };
+  };
+  const result = await f.orchestrator.createPayment(input);
+  assert.equal(result.state, "PROCESSING");
+  assert.equal(result.bridgeDispatchStarted, true);
+});
