@@ -15,7 +15,7 @@ const MONEY_TOLERANCE = 1e-7;
 
 function moneyToPaise(value, label, { allowZero = false } = {}) {
   const validType = typeof value === "number" ||
-    (typeof value === "string" && /^\\d+(?:\\.\\d{1,2})?$/.test(value.trim()));
+    (typeof value === "string" && /^\d+(?:\.\d{1,2})?$/.test(value.trim()));
   const amount = validType ? Number(value) : Number.NaN;
   if (!Number.isFinite(amount) || amount < 0 || (!allowZero && amount <= 0)) {
     throw new RangeError(label + (allowZero ? " must be zero or greater" : " must be greater than zero"));
