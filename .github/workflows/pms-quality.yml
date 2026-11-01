@@ -38,6 +38,9 @@ jobs:
           test -s www/index.html
           test -s www/src/payments/settlement-service.mjs
           test -s www/src/payments/settlement-gate.mjs
+          test -s www/src/payments/payment-engine.mjs
+          test -s www/src/payments/evidence-store.mjs
+          test -s www/src/payments/reconciliation-service.mjs
           test -s www/src/payments/provider-platform.mjs
           test -s www/src/payments/pay-bridge-orchestrator.mjs
           test -s www/src/payments/indexeddb-payment-intent-store.mjs
