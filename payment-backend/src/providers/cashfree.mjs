@@ -101,6 +101,15 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
     if (typeof timestamp !== 'string' || !/^\d{10,16}$/.test(timestamp) ||
         typeof signature !== 'string' || !/^[A-Za-z0-9+/]+=*$/.test(signature) ||
         !Buffer.isBuffer(rawBody)) return { valid: false };
+    // Cashfree signs timestamp + exact raw bytes. Enforce a bounded timestamp
+    // window as well: a valid old signature must not be replayable indefinitely.
+    const timestampNumber = Number(timestamp);
+    const timestampMs = timestamp.length <= 10 ? timestampNumber * 1000 : timestampNumber;
+    const now = Date.now();
+    const maxSkewMs = 5 * 60 * 1000;
+    if (!Number.isSafeInteger(timestampNumber) || !Number.isFinite(timestampMs) ||
+        Math.abs(now - timestampMs) > maxSkewMs) return { valid: false };
+
     const expected = crypto.createHmac('sha256', this.credentials.webhookSecret)
       .update(timestamp).update(rawBody).digest('base64');
     const a = Buffer.from(signature), b = Buffer.from(expected);
