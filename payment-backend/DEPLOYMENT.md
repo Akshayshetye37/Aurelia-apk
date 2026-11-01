@@ -22,8 +22,8 @@ This service is **not deployed by this repository**. The workflow validates test
 5. Require HTTPS ingress, disable unauthenticated administrative access at the application layer (admin routes additionally require Firebase ID token, verified email, MFA and active tenant membership), and restrict direct container ingress.
 6. Configure Firebase Authentication MFA and create membership documents using a separate trusted provisioning process. A client must never self-assign tenant or owner role.
 7. Call GET /healthz over the final HTTPS URL. A successful response proves only that the process is responding; it does not prove Firestore permissions, Secret Manager access, merchant credentials, webhooks or payment flows.
-8. Before configuring the endpoint in PMS, implement and verify the missing payment-intent API, Cashfree service routes, reconciliation, folio ledger settlement, and authenticated backend identity. Do not treat the current generic health check as a trust/identity handshake.
-9. Use Razorpay test credentials and real sandbox checkout/webhook events. Keep live activation disabled until all acceptance gates in README.md pass.
+8. Before enabling remote payment in PMS, complete the owner-controlled endpoint trust handshake and verify the backend identity. The PMS endpoint configuration UI and authenticated handshake are not implemented; do not point the installed PMS at an arbitrary URL.
+9. Verify the customer intent route against the real PMS folio schema, run Firestore Emulator integration tests, implement reconciliation and exactly-once folio ledger posting, then test Razorpay and Cashfree with merchant sandbox credentials and real signed webhook events. Keep live activation disabled until every acceptance gate in README.md passes.
 
 ## Environment variables
 
@@ -47,4 +47,4 @@ The service uses Application Default Credentials from its attached runtime ident
 
 ## Current hard blockers
 
-The current server is a limited Razorpay onboarding/test-order service. It does not yet expose the customer payment-intent API, integrate the PMS folio schema, settle the folio ledger exactly once, run reconciliation, wire Cashfree routes, or connect Pay Bridge. Therefore deployment and a passing /healthz check do **not** make live payments safe or the PMS payment integration production-ready.
+The current server exposes provider-neutral Razorpay and Cashfree onboarding, credential validation, test-order, webhook and customer payment-intent routes. The service remains **not production-ready**: actual PMS folio/ledger integration, exactly-once accounting, reconciliation, authenticated PMS endpoint trust, complete Cashfree/Razorpay merchant sandbox acceptance, refund lifecycle, Firestore Emulator verification and Pay Bridge execution are outstanding. Deployment and a passing `/healthz` check do **not** make live payments safe.
