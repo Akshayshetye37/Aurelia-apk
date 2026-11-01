@@ -22,6 +22,17 @@ resource "google_service_account" "runtime" {
   depends_on   = [google_project_service.required]
 }
 
+resource "google_secret_manager_secret" "backend_health" {
+  project   = var.project_id
+  secret_id = "aurelia-payment-backend-health"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required]
+}
+
 resource "google_project_iam_member" "firestore_user" {
   project = var.project_id
   role    = "roles/datastore.user"
@@ -103,7 +114,8 @@ resource "google_cloud_run_v2_service" "payment_backend" {
   depends_on = [
     google_project_service.required,
     google_project_iam_member.firestore_user,
-    google_project_iam_member.secret_runtime
+    google_project_iam_member.secret_runtime,
+    google_secret_manager_secret.backend_health
   ]
 }
 
