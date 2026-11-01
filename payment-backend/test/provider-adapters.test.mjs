@@ -55,3 +55,28 @@ test('provider adapters reject invalid amount units and malformed IDs before net
   await assert.rejects(() => adapter.createOrder({ orderId: 'x', amountMinor: 12.5, currency: 'INR' }), /invalid_cashfree_order/);
   assert.equal(mock.calls.length, 0);
 });
+
+
+test('Cashfree invalid signatures never expose or parse an event payload', async () => {
+  const raw = Buffer.from('{"type":"PAYMENT_SUCCESS_WEBHOOK","sensitive":"untrusted"}');
+  const adapter = new CashfreeAdapter({ credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' }, environment: 'test' });
+  const result = await adapter.verifyWebhook(raw, { 'x-webhook-timestamp': '1730000000', 'x-webhook-signature': 'invalid' });
+  assert.deepEqual(result, { valid: false });
+});
+
+test('Cashfree authenticated malformed JSON is rejected without throwing', async () => {
+  const raw = Buffer.from('{not-json');
+  const timestamp = '1730000000';
+  const signature = crypto.createHmac('sha256', 'hook').update(timestamp).update(raw).digest('base64');
+  const adapter = new CashfreeAdapter({ credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' }, environment: 'test' });
+  assert.deepEqual(await adapter.verifyWebhook(raw, { 'x-webhook-timestamp': timestamp, 'x-webhook-signature': signature }), { valid: false });
+});
+
+test('Razorpay refund reference is stored as a note, not an unsupported refund field', async () => {
+  const mock = mockFetch(async () => ({ status: 200, body: { id: 'rfnd_123', status: 'processed', amount: 500, currency: 'INR' } }));
+  const adapter = new RazorpayAdapter({ credentials: { keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' }, environment: 'test', fetchImpl: mock.fetchImpl });
+  await adapter.createRefund({ paymentId: 'pay_123', amountMinor: 500, receipt: 'refund_123' });
+  const body = JSON.parse(mock.calls[0].options.body);
+  assert.equal(body.receipt, undefined);
+  assert.equal(body.notes.aurelia_refund_reference, 'refund_123');
+});
