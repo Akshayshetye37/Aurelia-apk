@@ -35,6 +35,9 @@ class BiometricVaultManager {
 
     @Synchronized
     fun createOrReplaceKey() {
+        require(Build.VERSION.SDK_INT >= 24) {
+            "Biometric vault requires Android 7.0 or later for enrollment invalidation guarantees."
+        }
         val store = KeyStore.getInstance(STORE).apply { load(null) }
         if (store.containsAlias(ALIAS)) store.deleteEntry(ALIAS)
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, STORE)
