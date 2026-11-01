@@ -8,7 +8,7 @@ const PROVIDERS = new Set(['razorpay', 'cashfree']);
 const ENVIRONMENTS = new Set(['test', 'live']);
 
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
-const safeEqual = (a, b) => a === b;
+export const paymentFolioDocumentId = (tenantId, folioId) => digest(tenantId + ':' + folioId);
 
 function validatePayload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
@@ -94,25 +94,34 @@ export class FirestorePaymentRepository {
     const intentRef = this.db.collection('paymentIntents').doc(intentId);
     const idemRef = this.db.collection('paymentIntentIdempotency').doc(keyHash);
     const lockRef = this.db.collection('paymentFolioLocks').doc(folioHash);
+    const folioRef = this.db.collection('paymentFolios').doc(paymentFolioDocumentId(tenantId, payload.folioId));
     const now = this.clock().toISOString();
 
     const reservation = await this.db.runTransaction(async tx => {
       // Firestore requires every transaction read to precede its first write.
-      const [idemSnap, lockSnap] = await Promise.all([tx.get(idemRef), tx.get(lockRef)]);
+      const [idemSnap, lockSnap, folioSnap] = await Promise.all([tx.get(idemRef), tx.get(lockRef), tx.get(folioRef)]);
 
       if (idemSnap.exists) {
         const idem = idemSnap.data();
         if (idem.tenantId !== tenantId || idem.fingerprint !== fingerprint) {
           return { kind: 'IDEMPOTENCY_CONFLICT' };
         }
-        return { kind: 'DUPLICATE', intentId: idem.intentId, state: idem.state };
+        const priorIntentSnap = await tx.get(this.db.collection('paymentIntents').doc(idem.intentId));
+        if (!priorIntentSnap.exists || priorIntentSnap.data().tenantId !== tenantId) return { kind: 'IDEMPOTENCY_RECORD_INCONSISTENT' };
+        const priorIntent = priorIntentSnap.data();
+        return { kind: 'DUPLICATE', intentId: idem.intentId, state: idem.state, checkoutData: priorIntent.checkoutData || null, providerOrderId: priorIntent.providerOrderId || null };
       }
+      if (!folioSnap.exists) return { kind: 'FOLIO_NOT_PROVISIONED' };
+      const authoritativeFolio = folioSnap.data();
+      if (authoritativeFolio.tenantId !== tenantId || authoritativeFolio.folioId !== payload.folioId || authoritativeFolio.status !== 'open' || authoritativeFolio.currency !== 'INR' || !Number.isSafeInteger(authoritativeFolio.balanceMinor) || authoritativeFolio.balanceMinor < 0) return { kind: 'FOLIO_NOT_PAYABLE' };
+      if (payload.amountMinor > authoritativeFolio.balanceMinor) return { kind: 'AMOUNT_EXCEEDS_FOLIO_BALANCE' };
       if (lockSnap.exists && lockSnap.data().active === true) {
         return { kind: 'FOLIO_LOCKED', intentId: lockSnap.data().intentId || null };
       }
 
       const record = {
         intentId, tenantId, folioId: payload.folioId,
+        bookingId: authoritativeFolio.bookingId || null, folioRevision: authoritativeFolio.revision ?? null,
         provider: payload.provider, environment: payload.environment,
         amountMinor: payload.amountMinor, currency: payload.currency,
         idempotencyKey: payload.idempotencyKey, fingerprint,
@@ -131,6 +140,9 @@ export class FirestorePaymentRepository {
       return { kind: 'RESERVED', record };
     });
 
+    if (reservation.kind === 'FOLIO_NOT_PROVISIONED') { const error = new Error('authoritative_folio_not_provisioned'); error.statusCode = 409; throw error; }
+    if (reservation.kind === 'FOLIO_NOT_PAYABLE') { const error = new Error('folio_not_open_or_authoritative_snapshot_invalid'); error.statusCode = 409; throw error; }
+    if (reservation.kind === 'AMOUNT_EXCEEDS_FOLIO_BALANCE') { const error = new Error('payment_exceeds_authoritative_folio_balance'); error.statusCode = 422; throw error; }
     if (reservation.kind === 'IDEMPOTENCY_CONFLICT') {
       const error = new Error('idempotency_key_payload_conflict'); error.statusCode = 409; throw error;
     }
@@ -138,7 +150,7 @@ export class FirestorePaymentRepository {
       const error = new Error('folio_payment_already_in_progress'); error.statusCode = 409; throw error;
     }
     if (reservation.kind === 'DUPLICATE') {
-      return { intentId: reservation.intentId, status: reservation.state, isDuplicate: true };
+      return { intentId: reservation.intentId, status: reservation.state, provider: payload.provider, environment: payload.environment, providerOrderId: reservation.providerOrderId, checkoutData: reservation.checkoutData, isDuplicate: true };
     }
 
     // Provider network calls are deliberately outside Firestore transaction.
