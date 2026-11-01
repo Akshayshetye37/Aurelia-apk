@@ -93,10 +93,13 @@ export function createEvidenceStore(options = {}) {
       const bankValue = safeText(input.bank, "bank", 64);
       const utrValue = safeText(input.utr, "UTR", 128);
       const accountScope = safeText(input.accountScope || input.accountSuffix, "accountScope", 64);
+      const accountSuffix = safeText(input.accountSuffix, "accountSuffix", 16);
       const payerName = safeText(input.payerName, "payerName", 128);
       const upiId = safeText(input.upiId, "upiId", 128);
       const sourcePackage = safeText(input.sourcePackage, "sourcePackage", 128);
       const eventType = safeText(input.eventType || "unknown", "eventType", 64, true).toLowerCase();
+      const timestampPrecision = String(input.timestampPrecision || "unknown");
+      if (!["exact", "date_only", "unknown"].includes(timestampPrecision)) throw new TypeError("Invalid timestampPrecision");
       const rawEvidence = input.rawEvidence == null ? null : String(input.rawEvidence);
       if (rawEvidence && rawEvidence.length > 8192) throw new TypeError("rawEvidence exceeds 8192 characters");
       const receivedAtDate = input.receivedAt ? new Date(input.receivedAt) : new Date();
@@ -105,10 +108,10 @@ export function createEvidenceStore(options = {}) {
       if (timestampDate && Number.isNaN(timestampDate.getTime())) throw new TypeError("Invalid evidence timestamp");
 
       const record = {
-        ...input, evidenceId, eventId, source, parseStatus, eventType,
+        ...input, evidenceId, eventId, source, parseStatus, eventType, timestampPrecision,
         amountPaise, currency, bank: bankValue ? bankValue.toUpperCase() : null,
         utr: utrValue ? normalizeUtr(utrValue) : null,
-        payerName, upiId, sourcePackage,
+        payerName, upiId, sourcePackage, accountSuffix,
         rawEvidence,
         receivedAt: receivedAtDate.toISOString(),
         timestamp: timestampDate ? timestampDate.toISOString() : null,
