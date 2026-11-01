@@ -7,7 +7,7 @@ const intent = (overrides = {}) => ({
   requestId: "req-local-1", bookingId: "booking-1", folioId: "folio-1",
   amountPaise: 12500, currency: "INR", providerId: "razorpay",
   state: "CREATED", backendVerified: false, settlementAuthorized: false,
-  bridgeTransactionId: null, createdAt: "2026-10-31T00:00:00.000Z",
+  bridgeTransactionId: null, bridgeDispatchStarted: false, createdAt: "2026-10-31T00:00:00.000Z",
   updatedAt: "2026-10-31T00:00:00.000Z", history: [{ state: "CREATED" }],
   ...overrides
 });
@@ -91,5 +91,14 @@ test("backend session may be recovered once but cannot be replaced", async () =>
   await assert.rejects(
     db.put(intent({ state:"RECONCILIATION", backendSessionId:"sess-2" })),
     /Backend session reference cannot be replaced/
+  );
+});
+
+test("bridge dispatch marker cannot be downgraded after it is persisted", async () => {
+  const db = store();
+  await db.put(intent({ state:"REQUESTED", bridgeDispatchStarted:true }));
+  await assert.rejects(
+    db.put(intent({ state:"REQUESTED", bridgeDispatchStarted:false })),
+    /Bridge dispatch marker cannot be downgraded/
   );
 });
