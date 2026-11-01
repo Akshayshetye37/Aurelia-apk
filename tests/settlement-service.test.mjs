@@ -321,3 +321,9 @@ test("UTR already recorded on a cancelled booking cannot be reused", () => {
   );
   assert.equal(booking.p, 0);
 });
+
+test("electronic payment references normalize case and internal whitespace", () => {
+  const { booking, deps } = fixture();
+  settlePayment({ ...deps, amount:10, method:"UPI", reference:"utr  abc 123" });
+  assert.equal(booking.pays[0].r, "UTRABC123");
+});
