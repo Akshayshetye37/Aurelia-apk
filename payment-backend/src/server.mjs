@@ -351,9 +351,10 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     }
     const status = await adapter.getPaymentStatus({ orderId: providerOrderId, paymentId });
     const sameOrder = status.orderId === providerOrderId;
+    const samePayment = status.paymentId === paymentId;
     const sameCurrency = status.currency === orderSnap.data().currency;
     const sameAmount = status.amountMinor === orderSnap.data().amountMinor;
-    const verified = sameOrder && sameCurrency && sameAmount && status.captured === true &&
+    const verified = sameOrder && samePayment && sameCurrency && sameAmount && status.captured === true &&
       (provider === 'razorpay'
         ? status.paymentStatus === 'captured'
         : status.paymentStatus === 'SUCCESS');
