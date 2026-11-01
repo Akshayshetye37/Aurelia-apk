@@ -21,7 +21,7 @@ This service is **not deployed by this repository**. The workflow validates test
 4. Build and push the image from this directory. Configure Cloud Run with the runtime service account, GOOGLE_CLOUD_PROJECT, exact AURELIA_OWNER_ORIGINS, AURELIA_HTTPS_TERMINATION=trusted-proxy, AURELIA_TRUST_PROXY_HOPS=1, and a platform-managed HTTPS load balancer URL. Configure Cloud Run ingress as internal-and-cloud-load-balancing, and disable the default run.app URL.
 5. Require HTTPS ingress, disable unauthenticated administrative access at the application layer (admin routes additionally require Firebase ID token, verified email, MFA and active tenant membership), and restrict direct container ingress.
 6. Configure Firebase Authentication MFA and create membership documents using a separate trusted provisioning process. A client must never self-assign tenant or owner role.
-7. Call GET /healthz over the final HTTPS URL. A successful response proves only that the process is responding; it does not prove Firestore permissions, Secret Manager access, merchant credentials, webhooks or payment flows.
+7. Call GET /healthz for process liveness and GET /readyz over the final HTTPS URL. `/readyz` must report both Firestore and Secret Manager checks as true; this verifies runtime dependency access only, not merchant credentials, owner authentication, webhooks or payment flows.
 8. Before enabling remote payment in PMS, complete the owner-controlled endpoint trust handshake and verify the backend identity. The PMS endpoint configuration UI and authenticated handshake are not implemented; do not point the installed PMS at an arbitrary URL.
 9. Verify the customer intent route against the real PMS folio schema, run Firestore Emulator integration tests, implement reconciliation and exactly-once folio ledger posting, then test Razorpay and Cashfree with merchant sandbox credentials and real signed webhook events. Keep live activation disabled until every acceptance gate in README.md passes.
 
@@ -40,7 +40,8 @@ The service uses Application Default Credentials from its attached runtime ident
 ## Health semantics and operational checks
 
 - GET /healthz: liveness only. It does not query Firestore or Secret Manager.
-- A green health check must never enable gateway collection or owner administration by itself.
+- GET /readyz: checks Firestore read access and access to the Terraform-provisioned `aurelia-payment-backend-health` Secret Manager resource. It returns 503 if either dependency is unavailable.
+- A successful liveness or readiness check must never enable gateway collection or owner administration by itself.
 - Monitor 5xx responses, provider API failures, webhook verification failures, unresolved UNKNOWN intents, Firestore contention and Secret Manager access errors.
 - Configure platform logs/metrics/alerts and tested backups before production use.
 - Rotate merchant API and webhook secrets through the owner-admin flow after that flow is security-reviewed. Never print credentials or request bodies in logs.
