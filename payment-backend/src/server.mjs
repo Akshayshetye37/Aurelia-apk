@@ -17,15 +17,15 @@ const db = getFirestore();
 const sm = new SecretManagerServiceClient();
 const app = express();
 app.disable('x-powered-by');
-// Trust exactly one ingress proxy only when the deployment explicitly declares it.
-// The ingress must overwrite X-Forwarded-Proto; the container must not be publicly reachable.
-const trustProxyHops = process.env.AURELIA_TRUST_PROXY_HOPS === '1' ? 1 : false;
-app.set('trust proxy', trustProxyHops);
+// Production contract: TLS terminates at a trusted HTTPS ingress. The ingress
+// must overwrite X-Forwarded-Proto and be the only network path to this container.
+if (process.env.AURELIA_HTTPS_TERMINATION !== 'trusted-proxy' ||
+    process.env.AURELIA_TRUST_PROXY_HOPS !== '1') {
+  throw new Error('HTTPS_ONLY: configure trusted HTTPS ingress and AURELIA_TRUST_PROXY_HOPS=1.');
+}
+app.set('trust proxy', 1);
 
-// HTTPS is an ingress invariant. TLS termination/cipher/TLS 1.3 policy belongs
-// at the load balancer or hosting edge; Express can only validate the trusted
-// transport metadata it receives. Never trust X-Forwarded-Proto from an
-// untrusted client connection.
+// Reject cleartext requests; never redirect payment POSTs or forward credentials.
 app.use((req, res, next) => {
   if (!req.secure) {
     return res.status(403).json({

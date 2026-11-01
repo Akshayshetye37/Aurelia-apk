@@ -30,7 +30,7 @@ This policy is a product/architecture requirement. The owner-facing payment-back
 - Existing provider administration authorization requires an active membership with `owner` or `admin` role. The intent repository currently has a broader role allowlist (`owner`, `admin`, `staff`); this policy mismatch must be resolved before exposing an intent route.
 - Provider credentials and webhook secrets belong in Google Secret Manager. No merchant secret may be embedded in the PMS APK, Pay Bridge APK, browser code or client configuration.
 - Webhook tenant/order identifiers are lookup hints only. Resolve a pre-existing trusted provider-order binding, verify the raw-body signature, and independently fetch provider status before accepting a payment outcome.
-- The service enforces HTTPS using Express `req.secure`. It trusts one ingress proxy only when explicitly configured. TLS protocol/cipher policy belongs at the hosting ingress; do not expose the container around that ingress.
+- HTTPS-only is enforced at startup and per request. Production must set `AURELIA_HTTPS_TERMINATION=trusted-proxy` and `AURELIA_TRUST_PROXY_HOPS=1`; Express trusts exactly one TLS-terminating ingress hop, validates `req.secure`, rejects cleartext with HTTP 403 (no redirect), and emits HSTS. The ingress must overwrite `X-Forwarded-Proto`, enforce modern TLS (TLS 1.2 minimum, TLS 1.3 preferred), and be the only network path to the container. Never expose the container directly or trust client-supplied forwarded headers.
 - Firestore membership and payment authority collections must not be writable by mobile clients. Enforce this with Firestore Security Rules and IAM.
 
 ## 2. Implemented foundations
@@ -77,7 +77,11 @@ These adapter modules have deterministic unit/contract tests. They have not comp
 
 The fake-store concurrency test is useful unit coverage, **not proof of Firestore Emulator or production Firestore transaction behavior**. A real emulator integration suite has not yet been completed or verified.
 
-## 3. Existing HTTP service
+## 3. HTTPS-only service transport
+
+The Node process listens on an internal container port; this is not permission to expose a public HTTP endpoint. Public access must be through a managed HTTPS ingress/load balancer. Configure both required environment variables above. The ingress must terminate TLS, overwrite forwarded-protocol headers, and prevent direct Internet access to the container. The application rejects any request it cannot verify as secure. It does not redirect HTTP requests, especially payment POSTs. Local plain-HTTP development is intentionally unsupported; use a local HTTPS reverse proxy or a dedicated test harness.
+
+## 4. Existing HTTPS service
 
 The current `src/server.mjs` exposes:
 
@@ -93,7 +97,7 @@ The Razorpay test-order route is an onboarding/test utility, not the customer pa
 
 Do not add a second independent authentication or HTTPS implementation in a new router. The eventual payment router must reuse the existing server security middleware and authenticated actor/tenant context.
 
-## 4. Not implemented or not verified
+## 5. Not implemented or not verified
 
 | Component | Current status | Remaining work |
 |---|---|---|
@@ -116,7 +120,7 @@ Do not add a second independent authentication or HTTPS implementation in a new 
 | Owner payment-backend Settings UI | Not implemented | Optional endpoint setup, trust verification, authentication and explicit enable/disable controls |
 | Cloud deployment and operations | Not implemented | Owner may configure later; GCP project, IAM, secrets, ingress, monitoring, backups and runbooks required |
 
-## 5. Execution plan and acceptance gates
+## 6. Execution plan and acceptance gates
 
 Work in this order. Do not skip ahead to live payments.
 
