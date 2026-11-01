@@ -57,11 +57,18 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
       ? '/payments/' + encodeURIComponent(input.paymentId)
       : '/orders/' + encodeURIComponent(input.orderId) + '/payments';
     const data = await this.request('GET', path);
-    const payment = Array.isArray(data.items)
+    const orderedPayments = Array.isArray(data.items)
       ? [...data.items].sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))
-          .find(p => p.id === input.paymentId) ||
-        [...data.items].sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))[0]
-      : data;
+      : null;
+    // A requested payment ID is an exact binding, never a preference. Falling
+    // back to another payment from the same order can falsely settle an intent.
+    const payment = orderedPayments
+      ? (input.paymentId
+          ? orderedPayments.find(p => p.id === input.paymentId)
+          : orderedPayments[0])
+      : (input.paymentId
+          ? (data.id === input.paymentId ? data : null)
+          : data);
     if (!payment) return {
       provider: 'razorpay', orderId: input.orderId, paymentId: null,
       paymentStatus: 'pending', captured: false
