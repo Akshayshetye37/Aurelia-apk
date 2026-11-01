@@ -133,3 +133,13 @@ test('readiness endpoint checks Firestore and Secret Manager separately from liv
   assert.match(source, /checks\.firestore && checks\.secretManager/);
   assert.match(source, /res\.status\(ready \? 200 : 503\)/);
 });
+
+
+test('credential rotation and deletion disable provider state before secret mutations', () => {
+  const rotation = source.indexOf('configured: false, credentialsValidated: false, sandboxTestPassed: false');
+  const firstSecretWrite = source.indexOf("storeSecret(providerSecretId(req.tenant.id, provider, environment, 'api')");
+  const deletion = source.indexOf('await stateRef.set({\n      configured: false, credentialsValidated: false, sandboxTestPassed: false');
+  const firstSecretDelete = source.indexOf('await sm.deleteSecret({ name: secretName(id) })');
+  assert.ok(rotation >= 0 && firstSecretWrite > rotation);
+  assert.ok(deletion >= 0 && firstSecretDelete > deletion);
+});
