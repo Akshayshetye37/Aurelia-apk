@@ -60,3 +60,12 @@ test('recovery code is not silently enabled by the local native security foundat
   assert.match(recovery, /KMS\/HSM/);
   assert.match(readme, /not production-ready|planned\/incomplete/i);
 });
+
+
+test('PIN policy is enforced by the cryptographic engine, not only by the launch form', () => {
+  const crypto = read('android/templates/security/AureliaCryptoEngine.kt');
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.match(crypto, /pin\.size in 6\.\.12 && pin\.all \{ it in '0'\.\.'9' \}/);
+  assert.match(gate, /first\.size !in 6\.\.12/);
+  assert.match(crypto, /PIN must contain 6–12 digits/);
+});
