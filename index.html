@@ -710,7 +710,7 @@ function addSig(o){
  const amountPaise=Number.isSafeInteger(o.amountPaise)?o.amountPaise:null;
  const amt=amountPaise!==null?amountPaise/100:Number(o.amt??o.amount);
  const atDate=o.at?new Date(o.at):new Date();
- const safe=v=>!/[ \u0000-\u001f\u007f]/.test(v);
+ const safe=v=>!/[\u0000-\u001f\u007f]/.test(v);
  if(!Number.isFinite(amt)||!(amt>0)||!Number.isSafeInteger(Math.round(amt*100))||
     Math.abs(amt*100-Math.round(amt*100))>1e-7||
     !app||app.length>64||!safe(app)||payer.length>128||!safe(payer)||
