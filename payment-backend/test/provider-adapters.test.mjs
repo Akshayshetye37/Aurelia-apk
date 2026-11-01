@@ -44,6 +44,25 @@ test('Razorpay status lookup selects the exact payment ID from an order', async 
   assert.equal(status.captured, false);
 });
 
+test('Razorpay status lookup never substitutes a different captured payment for a missing requested ID', async () => {
+  const mock = mockFetch(async () => ({
+    status: 200,
+    body: {
+      items: [
+        { id: 'pay_other', order_id: 'order_123', amount: 12500, currency: 'INR', status: 'captured', captured: true, created_at: 20 }
+      ]
+    }
+  }));
+  const adapter = new RazorpayAdapter({
+    credentials: { keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  const status = await adapter.getPaymentStatus({ orderId: 'order_123', paymentId: 'pay_missing' });
+  assert.equal(status.paymentId, null);
+  assert.equal(status.paymentStatus, 'pending');
+  assert.equal(status.captured, false);
+});
+
 test('Razorpay webhook verifies exact raw bytes with constant-time comparison', async () => {
   const raw = Buffer.from('{"event":"payment.captured"}');
   const sig = crypto.createHmac('sha256', 'hook').update(raw).digest('hex');
