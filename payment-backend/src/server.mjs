@@ -129,9 +129,8 @@ const paymentRepository = new FirestorePaymentRepository({
   secretManager: {
     async getProviderSecrets(tenantId, provider, environment) {
       if (!['razorpay', 'cashfree'].includes(provider)) throw new Error('provider_not_enabled_for_checkout');
-      const id = (purpose) => providerSecretId(tenantId, provider, environment, purpose);
-      const api = JSON.parse(await loadSecret(id('api')));
-      const webhookSecret = await loadSecret(id('webhook'));
+      const api = JSON.parse(await loadSecret(providerSecretId(tenantId, provider, environment, 'api')));
+      const webhookSecret = await loadSecret(providerSecretId(tenantId, provider, environment, 'webhook'));
       return { ...api, webhookSecret };
     }
   }
@@ -149,8 +148,8 @@ function providerSecretId(tenantId, provider, environment, purpose) {
 }
 async function providerAdapterForTenant(tenantId, provider, environment) {
   const state = await providerTenantDoc(tenantId, provider, environment).get();
-  if (!state.exists || state.data().credentialsValidated !== true) {
-    throw Object.assign(new Error('provider_credentials_not_validated'), { statusCode: 409 });
+  if (!state.exists || state.data().configured !== true) {
+    throw Object.assign(new Error('provider_credentials_not_configured'), { statusCode: 409 });
   }
   const credentials = await paymentRepository.secretManager.getProviderSecrets(tenantId, provider, environment);
   const { createProviderAdapter } = await import('./providers/factory.mjs');
