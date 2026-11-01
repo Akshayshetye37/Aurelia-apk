@@ -3752,13 +3752,9 @@ if (typeof window.render === "function") window.render();
    const docs=guide.docs.map(link=>'<li><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">'+esc(link.label)+'</a></li>').join('');
    const backendCfg=S.set.backendConnection||{};
    const backendLabel=backendCfg.reachable?'Backend reachable · health check passed':'Backend not verified';
-   const credentialFields={
-   razorpay:[['keyId','Key ID','text','rzp_test_…'],['keySecret','Key Secret','password','Razorpay API secret'],['webhookSecret','Webhook Secret','password','Razorpay webhook signing secret']],
-   cashfree:[['appId','App ID','text','Cashfree App ID'],['secretKey','Secret Key','password','Cashfree API secret'],['webhookSecret','Webhook Secret','password','Cashfree webhook signing secret']]
-  }[id]||null;
-  const supported=!!credentialFields;
-  const inputHtml=credentialFields?credentialFields.map(([key,label,type,placeholder])=>'<label class="fld"><span>'+esc(label)+(type==='password'?' · write-only':'')+'</span><input data-provider-field="'+esc(key)+'" type="'+type+'" autocomplete="'+(type==='password'?'new-password':'off')+'" placeholder="'+esc(placeholder)+'"></label>').join(''):'<p class="lab">Credential entry is not enabled: this provider has no implemented server adapter. Do not submit credentials here. The documentation links above are reference material only.</p>';
-  const fields='<div class="provider-config" data-provider="'+esc(id)+'"><div class="tag '+(backendCfg.reachable?'ready':'out')+'">'+esc(backendLabel)+'</div><label class="fld"><span>Backend HTTPS origin (shared)</span><input id="aurelia-backend-url" data-aurelia-backend-url type="url" inputmode="url" autocomplete="url" placeholder="https://payments.example.com" value="'+esc(backendCfg.endpoint||'')+'"></label><div class="row" style="flex-wrap:wrap"><button class="btn sm" onclick="saveAureliaBackendEndpoint()">Save endpoint</button><button class="btn sm ghost" onclick="testAureliaBackendConnection()">Test backend</button></div><label class="fld"><span>Credential environment</span><select data-provider-environment="'+esc(id)+'"><option value="test">Test / Sandbox</option><option value="live">Live / Production (currently blocked)</option></select></label>'+inputHtml+(supported?'<div class="row" style="flex-wrap:wrap"><button class="btn sm" onclick="saveAureliaProviderCredentials(\''+esc(id)+'\')">Save credentials securely</button><button class="btn sm ghost" onclick="validateAureliaProviderCredentials(\''+esc(id)+'\')">Validate credentials</button><button class="btn sm ghost" onclick="resetAureliaProvider(\''+esc(id)+'\')">Remove / Reset</button></div>':'')+'<p class="lab">Secrets are sent only to the authenticated HTTPS backend and stored in Google Secret Manager. They are never saved in PMS settings. Backend health does not authenticate an owner. Provider activation and live collections remain disabled until separate acceptance gates pass.</p><div class="lab" id="provider-status-'+esc(id)+'" role="status">Credential status has not been loaded.</div></div>';
+   const backendCfg=S.set.backendConnection||{};
+   const backendLabel=backendCfg.reachable?'Backend reachable · health check passed':'Backend not verified';
+   const fields='<div class="provider-config" data-provider="'+esc(id)+'"><div class="tag '+(backendCfg.reachable?'ready':'out')+'">'+esc(backendLabel)+'</div><label class="fld"><span>Backend HTTPS origin (health check only)</span><input id="aurelia-backend-url" data-aurelia-backend-url type="url" inputmode="url" autocomplete="url" placeholder="https://payments.example.com" value="'+esc(backendCfg.endpoint||'')+'"></label><div class="row" style="flex-wrap:wrap"><button class="btn sm" onclick="saveAureliaBackendEndpoint()">Save endpoint</button><button class="btn sm ghost" onclick="testAureliaBackendConnection()">Test backend</button></div><p class="lab">Provider credentials remain server-side. Provider onboarding is disabled until the owner-controlled backend console is deployed. PMS receives non-secret provider status only. A successful health check does not authenticate an owner or enable payment collection.</p><div class="lab" id="provider-status-'+esc(id)+'" role="status">Provider credentials and activation are not configured from this PMS interface.</div></div>';
    const guideHtml='<p class="lab">'+esc(definition.category)+' · '+esc(definition.integration)+'<br>Methods: '+esc(definition.methods.join(', '))+'<br>'+esc(definition.verification)+'</p><ul>'+docs+'</ul>';
    return '<details><summary>'+esc(name)+' · Documentation</summary>'+guideHtml+fields+'</details>';
   }).join('');
@@ -3814,28 +3810,7 @@ window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;
  if(!response.ok)throw new Error(data.error||('Backend returned HTTP '+response.status));
  return data;
 };
-window.saveAureliaProviderCredentials=async function(provider){
- const card=document.querySelector('[data-provider="'+provider+'"]'),status=document.getElementById('provider-status-'+provider);
- const env=card?.querySelector('[data-provider-environment]')?.value||'test';
- const fields=provider==='razorpay'?['keyId','keySecret','webhookSecret']:provider==='cashfree'?['appId','secretKey','webhookSecret']:[];
- const body={environment:env};
- for(const key of fields){const input=card?.querySelector('[data-provider-field="'+key+'"]');const value=(input?.value||'').trim();if(!value){toast('Enter '+key+' before saving');return}body[key]=value}
- if(status)status.textContent='Sending credentials securely…';
- try{const out=await window.aureliaPaymentAdminRequest('/v1/admin/providers/'+provider+'/credentials','PUT',body);card.querySelectorAll('input[type=password]').forEach(x=>x.value='');if(status)status.textContent='Credentials stored. Validation is still required.';toast('Credentials stored securely; validate them next.');}
- catch(e){if(status)status.textContent=e.message;toast(e.message||'Credential save failed')}
-};
-window.validateAureliaProviderCredentials=async function(provider){
- const card=document.querySelector('[data-provider="'+provider+'"]'),status=document.getElementById('provider-status-'+provider),env=card?.querySelector('[data-provider-environment]')?.value||'test';
- try{const out=await window.aureliaPaymentAdminRequest('/v1/admin/providers/'+provider+'/validate','POST',{environment:env});if(status)status.textContent=out.valid?'Provider credentials validated for '+env+' environment. Activation remains separate.':'Validation failed';toast(out.valid?'Provider credentials validated':'Provider validation failed')}
- catch(e){if(status)status.textContent=e.message;toast(e.message||'Validation failed')}
-};
-window.resetAureliaProvider=async function(provider){
- const card=document.querySelector('[data-provider="'+provider+'"]'),status=document.getElementById('provider-status-'+provider),env=card?.querySelector('[data-provider-environment]')?.value||'test';
- if(!confirm('Remove '+provider+' credentials for '+env+' environment? Existing PMS payment records will not be deleted.'))return;
- try{await window.aureliaPaymentAdminRequest('/v1/admin/providers/'+provider+'/credentials?environment='+encodeURIComponent(env),'DELETE');card.querySelectorAll('input').forEach(x=>{if(x.dataset.providerField)x.value=''});if(status)status.textContent='Credentials removed; provider inactive.';toast('Provider credentials removed. Existing payment records are unchanged.')}
- catch(e){if(status)status.textContent=e.message;toast(e.message||'Provider reset failed')}
-};
-
+// Merchant credential entry, mutation and validation are intentionally absent from the PMS.
  const originalSettings=SUB.set;
  SUB.set=function(){
   let out=originalSettings();
