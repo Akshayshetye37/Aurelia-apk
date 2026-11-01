@@ -180,6 +180,21 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
   }
   const idempotencyKey = idempotencyOf(req) || body.idempotencyKey;
   if (!idempotencyKey || !/^[A-Za-z0-9._:-]{12,100}$/.test(idempotencyKey)) return fail(res, 400, 'idempotency_key_required');
+  if (body.provider === 'cashfree') {
+    let returnUrl;
+    try { returnUrl = new URL(body.returnUrl); } catch { return fail(res, 400, 'invalid_cashfree_return_url'); }
+    if (returnUrl.protocol !== 'https:' || returnUrl.username || returnUrl.password ||
+        !origins.has(returnUrl.origin)) {
+      return fail(res, 400, 'cashfree_return_url_origin_not_allowed');
+    }
+    if (!body.customer || typeof body.customer !== 'object' || Array.isArray(body.customer) ||
+        Object.keys(body.customer).some(key => !['id', 'phone', 'email'].includes(key)) ||
+        (body.customer.email !== undefined &&
+          (typeof body.customer.email !== 'string' || body.customer.email.length > 254 ||
+           !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.customer.email)))) {
+      return fail(res, 400, 'invalid_cashfree_customer_schema');
+    }
+  }
   if (!['razorpay', 'cashfree'].includes(body.provider) || !['test', 'live'].includes(body.environment)) {
     return fail(res, 409, 'provider_environment_not_enabled_for_checkout');
   }
