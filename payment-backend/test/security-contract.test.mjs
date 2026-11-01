@@ -4,16 +4,19 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../src/server.mjs', import.meta.url), 'utf8');
 
-test('admin API verifies revoked Firebase tokens, server-resolved tenant membership, verified email and MFA', () => {
-  assert.match(source, /verifyIdToken\(header\.slice\(7\), true\)/);
-  assert.match(source, /membershipDoc\(token\.uid\)/);
-  assert.match(source, /m\.status !== 'active'/);
-  assert.match(source, /!\['owner', 'admin'\]\.includes\(m\.role\)/);
-  assert.match(source, /req\.tenant = \{ id: m\.tenantId, role: m\.role \}/);
+test('admin and payment actor authorization enforce tenant membership, verified email and MFA', () => {
+  assert.match(source, /verifyIdToken\\(header\\.slice\\(7\\), true\\)/);
+  assert.match(source, /membershipDoc\\(token\\.uid\\)/);
+  assert.match(source, /m\\.status !== 'active'/);
+  assert.match(source, /!\\['owner', 'admin'\\]\\.includes\\(m\\.role\\)/);
+  assert.match(source, /!allowedRoles\\.includes\\(m\\.role\\)/);
+  assert.match(source, /req\\.tenant = \\{ id: m\\.tenantId, role: m\\.role \\}/);
   assert.equal(source.includes('AURELIA_OWNER_UIDS'), false);
-  assert.match(source, /token\.email_verified !== true/);
+  assert.match(source, /token\\.email_verified !== true/);
   assert.match(source, /sign_in_second_factor/);
   assert.match(source, /recent_mfa_sign_in_required/);
+  assert.match(source, /requireTenantPaymentActor\\(req, res, next\\)/);
+  assert.match(source, /\\['owner', 'admin', 'staff'\\]/);
 });
 
 test('provider-neutral credentials are namespaced by tenant, provider, environment and purpose', () => {
@@ -47,12 +50,11 @@ test('activation requires sandbox acceptance and explicit confirmation', () => {
 });
 
 
-test('all provider state and secrets are scoped to server-resolved tenant IDs', () => {
-  assert.match(source, /paymentTenants\/' \+ tenantId/);
-  assert.match(source, /paymentMemberships\/' \+ uid/);
-  assert.match(source, /providerSecretId\(tenantId, provider, environment, purpose\)/);
-  assert.match(source, /providerTenantDoc\(tenantId, provider, environment\)/);
-  assert.match(source, /:provider:environment/);
+test('provider state and secrets use deterministic provider and environment namespaces', () => {
+  assert.match(source, /providerTenantDoc\\(tenantId, provider, environment\\)/);
+  assert.match(source, /providerSecretId\\(tenantId, provider, environment, purpose\\)/);
+  assert.match(source, /paymentMemberships\\/' \\+ uid/);
+  assert.match(source, /paymentProviderOrders\\/' \\+ providerOrderHash/);
   assert.equal(source.includes('ownerDoc('), false);
   assert.equal(source.includes('ownerUids'), false);
 });
