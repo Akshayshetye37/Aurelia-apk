@@ -349,3 +349,55 @@ The Provider Directory UI now distinguishes documentation from working integrati
 5. Live credentials may be stored separately, but live payment collection remains hard-blocked by the backend until accounting, settlement, refund and reconciliation gates are complete.
 
 A successful `/healthz` response proves liveness only. It does not prove owner authentication, Firestore access, Secret Manager access, provider credential validity, or payment readiness.
+
+
+---
+
+## Final project divisions and ownership map
+
+Aurelia is divided into the following workstreams. These are architectural boundaries, not a claim that every workstream is finished or production-enabled.
+
+| Division | Owns | Current boundary / status |
+|---|---|---|
+| **1. Aurelia PMS Core** | Hotel operations, rooms, bookings, guests, folios, staff workflows and the primary PMS UI | Main application is in `index.html`. Must remain usable locally without Pay Bridge or a cloud payment service. |
+| **2. Native App Manager & Security** | App lifecycle, app-lock policy, PIN enrollment/unlock, lockout, biometric authorization and protected-key lifecycle | **Planned/incomplete.** The HTML app-lock demo is a UI-only prototype, not Android security. Native gateway, Argon2id envelope, Keystore biometric flow, lifecycle enforcement and tests still need implementation. |
+| **3. Local Data & Backup** | PMS local persistence, backup creation, encryption, restore, migration and user-selected backup destinations | Local-first architecture. WebView/IndexedDB currently owns live PMS state. Backup restore and unattended background reliability require further validation; backup is not cross-device live synchronization. |
+| **4. Payments & Accounting** | Payment intents, UPI evidence, reconciliation, folio allocation, refunds and accounting controls | Foundations exist, but no production payment/accounting path is complete. Automatic folio settlement and live gateway collection remain disabled. A provider callback or bridge success event is not accounting proof. |
+| **5. Aurelia Pay Bridge (separate APK/repository)** | Provider execution, payment-side credential boundary, payment IPC server and its own data/backup ownership | Separate repository: [aurelia-pay-bridge](https://github.com/Akshayshetye37/aurelia-pay-bridge). The current connection foundation is handshake-only; do not assume payment execution is connected. |
+| **6. Trusted Payment Backend (separate deployment concern)** | Owner/tenant authorization, provider API calls, secret storage, webhook verification, provider status checks and server-side payment authority | `payment-backend/` in this PMS repository is a partial reference scaffold, not a deployed service. No production cloud environment is claimed. Provider credentials must never be stored in the APK or browser. |
+| **7. Build, Release & Quality** | Capacitor generation, native patching, tests, manifest audit, signing and release artifacts | Maintained through `scripts/`, `android/templates/`, `tests/` and `.github/workflows/`. Generated Android output is not the source of truth when templates/scripts generate it. |
+
+### Cross-division rules
+
+1. **PMS remains the operational owner.** Pay Bridge availability must not block bookings, room operations or manual payment recording.
+2. **Separate application and data ownership.** PMS and Pay Bridge are separate APKs. They must not share a live database or exchange master keys.
+3. **Native security stays native.** PIN verification, lockout state, cryptographic keys and biometric cryptographic operations must not be exposed to JavaScript, WebView storage, logs or IPC payloads.
+4. **One authoritative accounting path.** A verified provider event is payment evidence; it is not a folio credit until the trusted accounting path validates and posts it atomically.
+5. **Secrets stay server-side.** Provider API secrets, webhook secrets, service credentials and signing keys must not be embedded in source code, HTML, browser storage or APK assets.
+6. **Local-first core, optional cloud services.** Failure or absence of a payment backend must not disable ordinary PMS operations.
+7. **No false completion status.** A design, mock screen, interface contract or passing unit test is not proof of native integration, provider connectivity or production readiness.
+
+### App Manager implementation boundary
+
+The intended native App Manager is a dedicated security subsystem, not a JavaScript PIN screen. Its components are:
+
+- **AppLockManager:** cold-start authorization, foreground/background policy, process-session authorization, persistent throttling and reboot/clock-anomaly handling.
+- **EnvelopeManager / AureliaCryptoEngine:** Argon2id PIN-derived key-encryption key, versioned AES-256-GCM envelope, authenticated metadata and crash-safe atomic persistence/rotation.
+- **BiometricVaultManager:** Android Keystore-backed AES-GCM operation authorized through `BiometricPrompt`; biometric success is accepted only when the cryptographic operation completes and the protected payload authenticates.
+- **AureliaAppManager:** coordinates setup, lock, PIN unlock, biometric unlock, policy changes and recovery-safe state transitions.
+- **Native launch gateway:** enforces authorization before the PMS WebView is initialized and covers all Activity, task, intent and process-recreation entry paths.
+
+The demo HTML is only a visual/interaction prototype. It does not implement Argon2id, AES-GCM, Android Keystore, real biometric authentication, secure persistence or native launch enforcement. It is not part of the repository unless separately committed. The App Manager must not be marked complete until native integration, negative-path tests and supported-device lifecycle tests pass. Locking the UI alone does not encrypt existing IndexedDB/WebView data.
+
+### Current handoff status — 2026-11-02
+
+- **PMS project location:** [github.com/Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
+- **Working branch:** `feature/multi-provider-payment-backend`
+- **Primary UI:** `index.html`
+- **Native generation source:** `android/templates/` and `scripts/patch-android.js`
+- **Payment backend scaffold:** `payment-backend/` (not deployed)
+- **Pay Bridge project:** [github.com/Akshayshetye37/aurelia-pay-bridge](https://github.com/Akshayshetye37/aurelia-pay-bridge), maintained separately
+- **App Manager:** design and HTML demonstration only; native implementation is still outstanding.
+- **Live payment and automatic folio settlement:** disabled pending trusted backend, executable IPC, verified provider events, durable reconciliation and atomic PMS ledger posting.
+
+For a new development session, start by checking out the PMS branch above, reading this README and the linked security/payment architecture documents, then inspect the current repository tree and CI status before editing. Do not create another repository or branch for these workstreams.
