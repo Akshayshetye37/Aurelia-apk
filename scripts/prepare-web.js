@@ -26,3 +26,9 @@ console.log('Prepared web app, settlement modules, and UPI reconciliation bridge
 const platformSrc=path.join(root,'src','payments','provider-platform.mjs');
 if(!fs.existsSync(platformSrc))throw new Error('Payment platform module not found: '+platformSrc);
 fs.copyFileSync(platformSrc,path.join(settlementDest,'provider-platform.mjs'));
+for(const name of ['pay-bridge-orchestrator.mjs','indexeddb-payment-intent-store.mjs']){
+ const source=path.join(root,'src','payments',name);
+ if(!fs.existsSync(source))throw new Error('Payment orchestration module not found: '+source);
+ fs.copyFileSync(source,path.join(settlementDest,name));
+}
+console.log('Prepared local settlement, payment orchestration, intent journal and evidence modules for Capacitor');
