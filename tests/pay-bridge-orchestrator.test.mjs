@@ -208,3 +208,68 @@ test("orchestrator rejects unsafe bridge timeouts", () => {
     store:f.store, bridge:f.bridge, backend:f.backend, requestTimeoutMs:0
   }), /requestTimeoutMs/);
 });
+
+test("REQUESTED intent with no dispatch marker safely resumes checkout", async () => {
+  const f = fixture();
+  let calls = 0;
+  f.bridge.createPayment = async p => { calls++; return { requestId:p.requestId, transactionId:"txn-resume", status:"processing" }; };
+  await f.store.put({
+    requestId:"req-1", bookingId:"booking-1", folioId:"folio-1",
+    amountPaise:12500, currency:"INR", providerId:"razorpay",
+    state:"REQUESTED", backendSessionId:"sess-1", bridgeTransactionId:null,
+    bridgeDispatchStarted:false, backendVerified:false, settlementAuthorized:false,
+    createdAt:"2026-11-01T00:00:00.000Z", updatedAt:"2026-11-01T00:00:00.000Z",
+    history:[{state:"CREATED"}]
+  });
+  const result = await f.orchestrator.reconcileOne("req-1");
+  assert.equal(calls, 1);
+  assert.equal(result.state, "PROCESSING");
+  assert.equal(result.bridgeDispatchStarted, true);
+});
+
+test("REQUESTED intent with a dispatch marker is reconciled, never dispatched twice", async () => {
+  const f = fixture();
+  let calls = 0;
+  f.bridge.createPayment = async p => { calls++; return { requestId:p.requestId, transactionId:"txn-duplicate", status:"processing" }; };
+  await f.store.put({
+    requestId:"req-1", bookingId:"booking-1", folioId:"folio-1",
+    amountPaise:12500, currency:"INR", providerId:"razorpay",
+    state:"REQUESTED", backendSessionId:"sess-1", bridgeTransactionId:null,
+    bridgeDispatchStarted:true, backendVerified:false, settlementAuthorized:false,
+    createdAt:"2026-11-01T00:00:00.000Z", updatedAt:"2026-11-01T00:00:00.000Z",
+    history:[{state:"CREATED"}]
+  });
+  const result = await f.orchestrator.reconcileOne("req-1");
+  assert.equal(calls, 0);
+  assert.equal(result.state, "PROCESSING");
+});
+
+test("legacy REQUESTED intent without a dispatch marker is treated as ambiguous", async () => {
+  const f = fixture();
+  let calls = 0;
+  f.bridge.createPayment = async p => { calls++; return { requestId:p.requestId, transactionId:"txn-legacy", status:"processing" }; };
+  await f.store.put({
+    requestId:"req-1", bookingId:"booking-1", folioId:"folio-1",
+    amountPaise:12500, currency:"INR", providerId:"razorpay",
+    state:"REQUESTED", backendSessionId:"sess-1", bridgeTransactionId:null,
+    backendVerified:false, settlementAuthorized:false,
+    createdAt:"2026-11-01T00:00:00.000Z", updatedAt:"2026-11-01T00:00:00.000Z",
+    history:[{state:"CREATED"}]
+  });
+  await f.orchestrator.reconcileOne("req-1");
+  assert.equal(calls, 0);
+});
+
+test("undispatched REQUESTED intent can be cancelled locally", async () => {
+  const f = fixture();
+  await f.store.put({
+    requestId:"req-1", bookingId:"booking-1", folioId:"folio-1",
+    amountPaise:12500, currency:"INR", providerId:"razorpay",
+    state:"REQUESTED", backendSessionId:"sess-1", bridgeTransactionId:null,
+    bridgeDispatchStarted:false, backendVerified:false, settlementAuthorized:false,
+    createdAt:"2026-11-01T00:00:00.000Z", updatedAt:"2026-11-01T00:00:00.000Z",
+    history:[{state:"CREATED"}]
+  });
+  const result = await f.orchestrator.cancelPayment("req-1");
+  assert.equal(result.state, "CANCELLED");
+});
