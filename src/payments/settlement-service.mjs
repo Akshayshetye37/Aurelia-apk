@@ -32,6 +32,13 @@ function normalizedReference(value) {
   return String(value || "").trim();
 }
 
+function normalizedPaymentReference(value, method) {
+  const reference = normalizedReference(value);
+  return /upi|bank|neft|rtgs|imps|card|wallet/i.test(String(method || ""))
+    ? reference.replace(/\s+/g, "").toUpperCase()
+    : reference;
+}
+
 function samePayment(payment, { booking, amountPaise, method, reference }) {
   const recordedPaise = Number.isSafeInteger(payment.amountPaise)
     ? payment.amountPaise
@@ -39,7 +46,7 @@ function samePayment(payment, { booking, amountPaise, method, reference }) {
   return payment.bookingId === booking.id &&
     recordedPaise === amountPaise &&
     String(payment.m || payment.method || "").trim() === method &&
-    normalizedReference(payment.r ?? payment.reference) === reference;
+    normalizedPaymentReference(payment.r ?? payment.reference, payment.m ?? payment.method) === reference;
 }
 
 export function settlePayment({
@@ -81,9 +88,7 @@ export function settlePayment({
   }
 
   const rawReference = normalizedReference(reference);
-  const ref = /upi|bank|neft|rtgs|imps|card|wallet/i.test(paymentMethod)
-    ? rawReference.replace(/\s+/g, "").toUpperCase()
-    : rawReference;
+  const ref = normalizedPaymentReference(rawReference, paymentMethod);
   if (ref.length > MAX_REFERENCE_LENGTH || /[\u0000-\u001f\u007f]/.test(ref)) {
     throw new TypeError("Payment reference is invalid or too long");
   }
@@ -133,7 +138,7 @@ export function settlePayment({
   // deduplication so one bank credit cannot be applied to two guest folios.
   if (ref && source !== "reservation_advance") {
     const existing = indexedPayments.find(row =>
-      normalizedReference(row.payment.r ?? row.payment.reference) === ref
+      normalizedPaymentReference(row.payment.r ?? row.payment.reference, row.payment.m ?? row.payment.method) === ref
     );
     if (existing) {
       if (existing.booking !== booking) {
