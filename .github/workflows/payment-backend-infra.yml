@@ -1,0 +1,34 @@
+name: Payment backend infrastructure validation
+
+on:
+  push:
+    branches: [feature/multi-provider-payment-backend]
+    paths:
+      - "payment-backend/infra/terraform/**"
+      - ".github/workflows/payment-backend-infra.yml"
+  pull_request:
+    paths:
+      - "payment-backend/infra/terraform/**"
+      - ".github/workflows/payment-backend-infra.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: payment-backend/infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive
+      - name: Initialize without remote backend
+        run: terraform init -backend=false
+      - name: Validate infrastructure configuration
+        run: terraform validate
