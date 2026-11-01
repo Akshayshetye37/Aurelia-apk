@@ -61,6 +61,23 @@ test('Cashfree creates hosted checkout session and sends required API version he
   assert.equal(mock.calls[0].options.headers['x-api-version'], '2023-08-01');
 });
 
+test('Cashfree status lookup prefers the payment ID associated with the webhook', async () => {
+  const mock = mockFetch(async (url) => url.endsWith('/payments')
+    ? { status: 200, body: [
+        { cf_payment_id: 'cf_other', payment_status: 'SUCCESS' },
+        { cf_payment_id: 'cf_target', payment_status: 'PENDING' }
+      ] }
+    : { status: 200, body: { order_id: 'order_123', order_status: 'PAID', order_amount: 125, order_currency: 'INR' } });
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  const status = await adapter.getPaymentStatus({ orderId: 'order_123', paymentId: 'cf_target' });
+  assert.equal(status.paymentId, 'cf_target');
+  assert.equal(status.paymentStatus, 'PENDING');
+  assert.equal(status.captured, false);
+});
+
 test('Cashfree webhook signature uses timestamp concatenated with raw body', async () => {
   const raw = Buffer.from('{"type":"PAYMENT_SUCCESS_WEBHOOK"}');
   const timestamp = String(Math.floor(Date.now() / 1000));
