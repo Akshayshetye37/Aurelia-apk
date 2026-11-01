@@ -134,7 +134,7 @@ if (!manifest.includes('com.aurelia.pms.security.LockGateActivity')) {
   let mainBody = mainMatch[2].replace(/<intent-filter>[\s\S]*?<\/intent-filter>/g, block =>
     /android\.intent\.action\.MAIN/.test(block) && /android\.intent\.category\.LAUNCHER/.test(block) ? '' : block
   );
-  const internalMain = '<activity' + mainAttrs + '>' + mainBody + '</activity>';
+  const internalMain = '<activity ' + mainAttrs + '>' + mainBody + '</activity>';
   const gateActivity = '<activity android:name="com.aurelia.pms.security.LockGateActivity" android:exported="true" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.NoActionBar"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>';
   manifest = manifest.replace(mainMatch[0], internalMain + '\n        ' + gateActivity);
 }
