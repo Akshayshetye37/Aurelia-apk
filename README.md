@@ -8,7 +8,7 @@ Aurelia PMS is a browser-based property-management interface supplied as a singl
 
 - **Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
 - **Working branch for the payment integration workstream:** `feature/multi-provider-payment-backend`
-- **Branch HEAD at the time of this README update:** `cb44c0035cf5e546ce6f3be4dee7c875e0b17007`
+- **Parent commit before this README-only update:** `cb44c0035cf5e546ce6f3be4dee7c875e0b17007`
 - **Project root:** repository root (`/` in the GitHub file browser).
 - **Main application UI:** `index.html`
 - **Android native templates:** `android/templates/`
@@ -267,8 +267,8 @@ These are implementation and verification tasks, not completed features:
 
 | Milestone | Scope | Exit condition |
 |---|---|---|
-| Phase 1 — Recovery hardening | Firebase identity boundary, recovery envelope, RecoveryCoordinator, Master Key handling and crash-safe PIN transaction | Native build plus negative, positive and interrupted-transaction tests pass |
-| Phase 2 — Forgot PIN UI | OTP, resend, timeout, Recovery Secret and new PIN screens | UI state transitions are bound to tested engine APIs; no bypass paths |
+| Phase 1 — Local security | Native PIN gate, key-envelope format, Master Key integration and crash-safe PIN transaction | Native build plus negative, positive and interrupted-transaction tests pass |
+| Phase 2 — Forgot PIN UI | OTP, resend, timeout, backend-authorized recovery and new PIN screens | UI state transitions are bound to tested engine APIs; no bypass paths |
 | Phase 3 — Backup reliability | Restore validation, versioning, integrity checks and destination failure handling | Restore tests pass across local and user-selected Drive destinations |
 | Phase 4 — Background backup | Native-accessible snapshot source and WorkManager scheduling | Verified unattended snapshot and recovery behavior under Android lifecycle constraints |
 | Phase 5 — Pay Bridge | Separate APK, authenticated IPC, provider execution and independent backup | Device-level IPC and payment-provider certification / end-to-end tests |
@@ -277,7 +277,7 @@ These are implementation and verification tasks, not completed features:
 ## 7. Build and release truth
 
 - A passing Node test suite is not proof that native Kotlin compiles.
-- A successful debug APK build is not proof of Firebase authentication, payment processing, backup restoration or production security.
+- A successful debug APK build is not proof of app-lock enforcement, recovery, payment processing, backup restoration or production security.
 - A release APK requires the owner's controlled signing identity and a separately verified release process.
 - Never commit signing passwords, private keystores, service-account credentials or provider secrets.
 - Keep production credentials out of source control. Supply any future service configuration through controlled build inputs and verify provider, tenant and signing configuration before release.
