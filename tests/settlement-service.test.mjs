@@ -219,3 +219,11 @@ test("legacy payment history references prevent duplicate posting when canonical
   assert.equal(booking.payments.length, 1);
   assert.equal(state.today, 0);
 });
+
+test("folio totals and charge/discount/rate entry use two-decimal currency precision", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /tt=b=>Math\.round\(/);
+  assert.match(html, /function addC\(i\)[\s\S]*?two decimal places/);
+  assert.match(html, /function dcApply\(i\)[\s\S]*?two decimal places/);
+  assert.match(html, /function roomSave\(i\)[\s\S]*?two decimal places/);
+});
