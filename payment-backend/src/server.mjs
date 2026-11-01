@@ -44,7 +44,7 @@ app.use((req, res, next) => {
     res.set('Access-Control-Allow-Origin', origin);
     res.set('Vary', 'Origin');
     res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key');
-    res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   }
   if (req.method === 'OPTIONS') return res.status(204).end();
   res.set('Cache-Control', 'no-store');
