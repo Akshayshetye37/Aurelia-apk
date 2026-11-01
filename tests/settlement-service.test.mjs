@@ -308,3 +308,16 @@ test("invoice and finance reports use each booking's snapshotted nightly rate", 
   assert.match(html, /function inv\(i\)[\s\S]*?roomCharge\(b\)/);
   assert.match(html, /room=bs\.reduce\(\(a,b\)=>a\+roomCharge\(b\),0\)/);
 });
+
+test("UTR already recorded on a cancelled booking cannot be reused", () => {
+  const { booking, state, deps } = fixture();
+  state.cancelled = [{
+    id:99, pays:[{a:25,m:"UPI",r:"UTR-CANCELLED",amountPaise:2500}],
+    payments:[]
+  }];
+  assert.throws(
+    () => settlePayment({ ...deps, amount:25, method:"UPI", reference:"UTR-CANCELLED", idempotencyKey:"utr:UTR-CANCELLED" }),
+    e => e.code === "PAYMENT_REFERENCE_ALREADY_APPLIED"
+  );
+  assert.equal(booking.p, 0);
+});
