@@ -31,8 +31,11 @@ function normalizedReference(value) {
 }
 
 function samePayment(payment, { booking, amountPaise, method, reference }) {
+  const recordedPaise = Number.isSafeInteger(payment.amountPaise)
+    ? payment.amountPaise
+    : moneyToPaise(payment.a ?? payment.amount, "Existing payment amount");
   return payment.bookingId === booking.id &&
-    Number.isSafeInteger(payment.amountPaise) && payment.amountPaise === amountPaise &&
+    recordedPaise === amountPaise &&
     String(payment.m || payment.method || "").trim() === method &&
     normalizedReference(payment.r ?? payment.reference) === reference;
 }
@@ -73,11 +76,6 @@ export function settlePayment({
   }
   const key = suppliedKey || (ref && source !== "reservation_advance" ? "ref:" + ref : "");
 
-  // Validate the balance before mutation. A missing/invalid balance must not
-  // silently disable the overpayment guard.
-  const duePaise = moneyToPaise(balanceDue, "Balance due", { allowZero: true });
-  if (amountPaise > duePaise) throw new RangeError("Payment exceeds the balance due");
-
   const indexedPayments = state.b.flatMap(item =>
     (Array.isArray(item.pays) ? item.pays : []).map(payment => ({ booking: item, payment }))
   );
@@ -113,6 +111,11 @@ export function settlePayment({
       return { ok: true, duplicate: true, payment: existing.payment };
     }
   }
+
+  // Validate the balance only for a new posting. An idempotent retry must
+  // return the original result even though the original payment reduced due.
+  const duePaise = moneyToPaise(balanceDue, "Balance due", { allowZero: true });
+  if (amountPaise > duePaise) throw new RangeError("Payment exceeds the balance due");
 
   const priorPays = Array.isArray(booking.pays) ? booking.pays : [];
   const priorHistory = Array.isArray(booking.payments) ? booking.payments : [];
