@@ -245,27 +245,27 @@ function ensureKotlinAndroidPlugin(contents, kotlinDsl) {
   const statement = kotlinDsl
     ? '    id("org.jetbrains.kotlin.android") version "2.0.21"'
     : "    id 'org.jetbrains.kotlin.android' version '2.0.21'";
-  if (/plugins\\s*\\{/.test(contents)) {
-    return contents.replace(/plugins\\s*\\{/, match => match + '\\n' + statement);
+  if (/plugins\s*\{/.test(contents)) {
+    return contents.replace(/plugins\s*\{/, match => match + '\n' + statement);
   }
   // Capacitor 7's generated app module uses the plugins DSL. If a future
   // template switches to legacy apply-plugin syntax, add a valid top-level
   // plugins block before the remaining app configuration.
-  return 'plugins {\\n' + statement + '\\n}\\n\\n' + contents;
+  return 'plugins {\n' + statement + '\n}\n\n' + contents;
 }
 
 if (fs.existsSync(appGradleGroovy)) {
   let gradle = ensureKotlinAndroidPlugin(fs.readFileSync(appGradleGroovy, 'utf8'), false);
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
-    fs.writeFileSync(appGradleGroovy, gradle);
   }
+  fs.writeFileSync(appGradleGroovy, gradle);
 } else if (fs.existsSync(appGradleKts)) {
   let gradle = ensureKotlinAndroidPlugin(fs.readFileSync(appGradleKts, 'utf8'), true);
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + '\n    implementation("com.google.mlkit:text-recognition:16.0.1")');
-    fs.writeFileSync(appGradleKts, gradle);
   }
+  fs.writeFileSync(appGradleKts, gradle);
 }
 
 
