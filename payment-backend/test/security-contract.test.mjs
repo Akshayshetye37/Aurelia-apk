@@ -48,6 +48,25 @@ test('activation requires sandbox acceptance and explicit confirmation', () => {
   assert.match(source, /live_webhook_verification_required/);
 });
 
+test('live payment collection remains blocked until PMS accounting lifecycle is implemented', () => {
+  assert.match(source, /live_payments_blocked_accounting_pipeline_incomplete/);
+  assert.match(source, /if \(body\.environment === 'live'\)/);
+  assert.match(source, /if \(environment === 'live'\)/);
+  assert.match(source, /folioSettlement: false/);
+  assert.match(source, /refunds: false/);
+  assert.match(source, /reconciliation: false/);
+  assert.match(source, /sdkCallbacksAuthoritative: false/);
+  assert.match(source, /productionReady: false/);
+});
+
+test('capability endpoint does not advertise incomplete money movement as implemented', () => {
+  assert.match(source, /app\.get\('\/v1\/payments\/capabilities'/);
+  assert.match(source, /liveCollection: false/);
+  assert.match(source, /folioSettlement: false/);
+  assert.match(source, /refunds: false/);
+  assert.match(source, /reconciliation: false/);
+});
+
 
 test('provider state and secrets use deterministic provider and environment namespaces', () => {
   assert.ok(source.includes('providerTenantDoc(tenantId, provider, environment)'));
