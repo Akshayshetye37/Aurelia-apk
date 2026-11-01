@@ -358,16 +358,26 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     const inboxId = crypto.createHash('sha256').update(tenantId + ':' + provider + ':' + environment + ':' + eventId).digest('hex');
     const inbox = db.doc('paymentWebhookInbox/' + inboxId);
     await db.runTransaction(async tx => {
-      const seen = await tx.get(inbox);
+      const [seen, currentOrder] = await Promise.all([tx.get(inbox), tx.get(orderRef)]);
       if (seen.exists) return;
-      tx.create(inbox, { eventId, tenantId, provider, environment, paymentId, providerOrderId,
-        signatureVerified: true, providerFetchVerified: verified, receivedAt: FieldValue.serverTimestamp() });
-      if (verified) tx.set(orderRef, { state: 'captured_verified', paymentId, verifiedAt: FieldValue.serverTimestamp() }, { merge: true });
+      if (!currentOrder.exists || currentOrder.data().tenantId !== tenantId ||
+          currentOrder.data().provider !== provider || currentOrder.data().environment !== environment) {
+        throw new Error('payment_order_binding_changed');
+      }
+      tx.create(inbox, {
+        eventId, tenantId, provider, environment, paymentId, providerOrderId,
+        signatureVerified: true, providerFetchVerified: verified,
+        receivedAt: FieldValue.serverTimestamp()
+      });
+      if (verified) tx.set(orderRef, {
+        state: 'captured_verified', paymentId, verifiedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
       if (verified) tx.set(providerTenantDoc(tenantId, provider, environment), {
         ...(environment === 'test' ? { sandboxTestPassed: true } : {}),
         webhookVerified: true, active: false, lastVerifiedWebhookAt: FieldValue.serverTimestamp()
       }, { merge: true });
     });
+
     return res.status(200).json({ received: true, verified });
   } catch {
     return fail(res, 503, 'webhook_processing_unavailable');
