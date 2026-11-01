@@ -90,7 +90,11 @@ export function settlePayment({
   }
   const key = suppliedKey || (ref && source !== "reservation_advance" ? "ref:" + ref : "");
 
-  const indexedPayments = state.b.flatMap(item => {
+  const allBookings = [
+    ...state.b,
+    ...(Array.isArray(state.cancelled) ? state.cancelled : [])
+  ];
+  const indexedPayments = allBookings.flatMap(item => {
     if (!item) return [];
     const canonical = Array.isArray(item.pays) ? item.pays : [];
     const history = Array.isArray(item.payments) ? item.payments : [];
