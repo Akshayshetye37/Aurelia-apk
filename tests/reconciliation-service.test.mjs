@@ -73,3 +73,17 @@ test("multiple strong candidate matches remain in review", () => {
   assert.equal(result.decision, "review");
   assert.equal(result.reason, "multiple_strong_candidates");
 });
+
+test("bank statement credits are not reused as their own candidate evidence", async () => {
+  const store = createEvidenceStore({ indexedDB, dbName:"statement-self-match" });
+  const service = createReconciliationService({ store });
+  const result = await service.ingest({
+    eventId:"statement-credit", evidenceId:"statement-credit",
+    source:"statement_import", eventType:"credit", bank:"SBI",
+    amount:"40", currency:"INR", utr:"123456789012",
+    timestamp:"2026-01-01T10:00:00Z"
+  });
+  assert.equal(result.reconciliation.results.length, 1);
+  assert.equal(result.reconciliation.results[0].decision, "pending");
+  await store.close();
+});
