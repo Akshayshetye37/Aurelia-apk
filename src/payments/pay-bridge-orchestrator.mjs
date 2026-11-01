@@ -18,8 +18,9 @@ const ALLOWED = Object.freeze({
   REQUESTED: new Set(["PROCESSING", "UNKNOWN", "FAILED", "CANCELLED"]),
   PROCESSING: new Set(["SUCCESS", "FAILED", "CANCELLED", "UNKNOWN"]),
   SUCCESS: new Set(),
-  FAILED: new Set(),
-  CANCELLED: new Set(),
+  // Reopen only through a fresh backend reconciliation: provider capture can arrive late.
+  FAILED: new Set(["RECONCILIATION"]),
+  CANCELLED: new Set(["RECONCILIATION"]),
   UNKNOWN: new Set(["RECONCILIATION", "PROCESSING", "FAILED", "CANCELLED"]),
   RECONCILIATION: new Set(["SUCCESS", "PROCESSING", "FAILED", "CANCELLED", "UNKNOWN"])
 });
@@ -118,8 +119,10 @@ export class PayBridgePaymentOrchestrator {
         folioId: record.folioId
       }, { timeoutMs: this.requestTimeoutMs });
       if (!result || result.requestId !== requestId) throw new PaymentOrchestratorError("INVALID_BRIDGE_RESPONSE", "Pay Bridge response did not match the request");
-      const state = result.status === "processing" ? "PROCESSING" :
-        result.status === "failed" ? "FAILED" : result.status === "cancelled" ? "CANCELLED" : "UNKNOWN";
+      // Bridge is an execution surface, not payment authority. Only a
+      // processing observation is safe to mirror; all terminal observations
+      // require an independently bound backend reconciliation.
+      const state = result.status === "processing" ? "PROCESSING" : "UNKNOWN";
       current = transitionPayment(current, state, { bridgeTransactionId: result.transactionId || null }, this.now);
       await this.store.put(current);
       if (state === "UNKNOWN") await this.reconcileOne(requestId);
@@ -144,13 +147,18 @@ export class PayBridgePaymentOrchestrator {
     const record = await this.store.get(requestId);
     if (!record) throw new PaymentOrchestratorError("UNKNOWN_REQUEST", "No PMS payment matches this event");
     if (event.amountPaise !== record.amountPaise || event.currency !== record.currency ||
-        (event.folioId && event.folioId !== record.folioId) ||
-        (event.bookingId && event.bookingId !== record.bookingId)) {
+        event.folioId !== record.folioId || event.bookingId !== record.bookingId) {
       throw new PaymentOrchestratorError("EVENT_BINDING_MISMATCH", "Bridge event does not match the original payment");
     }
-    if (["SUCCESS", "FAILED", "CANCELLED"].includes(record.state)) return clone(record);
-    const next = event.status === "processing" ? "PROCESSING" :
-      event.status === "failed" ? "FAILED" : event.status === "cancelled" ? "CANCELLED" : "UNKNOWN";
+    if (record.state === "SUCCESS") return clone(record);
+    // Bridge events are hints only. A failure, cancellation or success event
+    // triggers backend reconciliation; it never directly finalizes a payment.
+    const next = event.status === "processing" ? "PROCESSING" : "UNKNOWN";
+    if (["FAILED", "CANCELLED"].includes(record.state)) {
+      const reopened = transitionPayment(record, "RECONCILIATION", {}, this.now);
+      await this.store.put(reopened);
+      return this.reconcileOne(requestId);
+    }
     if (!ALLOWED[record.state].has(next)) return clone(record);
     const updated = transitionPayment(record, next, { bridgeTransactionId: event.transactionId || record.bridgeTransactionId }, this.now);
     await this.store.put(updated);
@@ -169,6 +177,7 @@ export class PayBridgePaymentOrchestrator {
     if (!result || result.verified !== true || result.status !== "success" ||
         result.requestId !== record.requestId || result.amountPaise !== record.amountPaise ||
         result.currency !== record.currency || result.folioId !== record.folioId ||
+        result.bookingId !== record.bookingId ||
         !result.transactionId || (record.bridgeTransactionId && result.transactionId !== record.bridgeTransactionId)) {
       throw new PaymentOrchestratorError("BACKEND_NOT_VERIFIED", "Backend did not independently verify this exact payment");
     }
@@ -191,7 +200,7 @@ export class PayBridgePaymentOrchestrator {
 
   async reconcileOne(requestId) {
     let record = await this.requireRecord(requestId);
-    if (record.state === "UNKNOWN") {
+    if (["UNKNOWN", "FAILED", "CANCELLED"].includes(record.state)) {
       record = transitionPayment(record, "RECONCILIATION", {}, this.now);
       await this.store.put(record);
     }
@@ -200,13 +209,26 @@ export class PayBridgePaymentOrchestrator {
       transactionId: record.bridgeTransactionId, amountPaise: record.amountPaise,
       currency: record.currency, folioId: record.folioId, bookingId: record.bookingId
     });
-    if (result?.status === "success") return this.verifyPayment(requestId);
-    if (result?.status === "failed" && ALLOWED[record.state].has("FAILED")) {
+    // A reconciliation response is authoritative only when the backend
+    // verifies and echoes every immutable PMS binding.
+    const bound = result?.verified === true &&
+      result.requestId === record.requestId &&
+      result.bookingId === record.bookingId &&
+      result.folioId === record.folioId &&
+      result.amountPaise === record.amountPaise &&
+      result.currency === record.currency;
+    if (!bound) return clone(record);
+    if (result.status === "success") return this.verifyPayment(requestId);
+    if (result.status === "failed" && ALLOWED[record.state].has("FAILED")) {
       const failed = transitionPayment(record, "FAILED", { backendVerified: true }, this.now);
       await this.store.put(failed); return clone(failed);
     }
-    if (result?.status === "processing" && ALLOWED[record.state].has("PROCESSING")) {
-      const pending = transitionPayment(record, "PROCESSING", {}, this.now);
+    if (result.status === "cancelled" && ALLOWED[record.state].has("CANCELLED")) {
+      const cancelled = transitionPayment(record, "CANCELLED", { backendVerified: true }, this.now);
+      await this.store.put(cancelled); return clone(cancelled);
+    }
+    if (result.status === "processing" && ALLOWED[record.state].has("PROCESSING")) {
+      const pending = transitionPayment(record, "PROCESSING", { backendVerified: true }, this.now);
       await this.store.put(pending); return clone(pending);
     }
     return clone(record);
@@ -225,12 +247,28 @@ export class PayBridgePaymentOrchestrator {
 
   async cancelPayment(requestId) {
     const record = await this.requireRecord(requestId);
+    if (record.state === "SUCCESS") return clone(record);
+    if (record.state === "CREATED") {
+      const cancelled = transitionPayment(record, "CANCELLED", {}, this.now);
+      await this.store.put(cancelled);
+      return clone(cancelled);
+    }
     if (!this.bridge.isAuthenticated()) throw new PaymentOrchestratorError("BRIDGE_DISCONNECTED", "Pay Bridge is unavailable");
-    const result = await this.bridge.cancelPayment({ requestId, sessionId: record.backendSessionId });
-    if (result?.requestId !== requestId || result?.status !== "cancelled") throw new PaymentOrchestratorError("CANCEL_UNCONFIRMED", "Cancellation is not confirmed; reconciliation is required");
-    if (!ALLOWED[record.state].has("CANCELLED")) return clone(record);
-    const cancelled = transitionPayment(record, "CANCELLED", {}, this.now);
-    await this.store.put(cancelled); return clone(cancelled);
+    try {
+      const result = await this.bridge.cancelPayment({ requestId, sessionId: record.backendSessionId });
+      if (result?.requestId !== requestId || result?.status !== "cancelled") {
+        throw new PaymentOrchestratorError("CANCEL_UNCONFIRMED", "Bridge cancellation was not acknowledged");
+      }
+    } catch {
+      // A lost response does not prove that the provider stopped. Reconcile.
+    }
+    const latest = await this.requireRecord(requestId);
+    if (ALLOWED[latest.state].has("UNKNOWN")) {
+      await this.store.put(transitionPayment(latest, "UNKNOWN", {}, this.now));
+    }
+    const reconciled = await this.reconcileOne(requestId);
+    if (reconciled.state === "CANCELLED") return clone(reconciled);
+    throw new PaymentOrchestratorError("CANCEL_UNCONFIRMED", "Backend has not independently confirmed cancellation; payment remains " + reconciled.state);
   }
 
   async requireRecord(requestId) {
@@ -254,14 +292,18 @@ export class PayBridgePaymentOrchestrator {
 /** Minimal HTTPS-only JSON transport adapter; authentication is supplied by a token provider. */
 export function createPaymentBackendClient({ baseUrl, getAccessToken, fetchImpl = globalThis.fetch } = {}) {
   const base = text(baseUrl, "baseUrl");
-  if (!/^https:\/\//i.test(base) || !fetchImpl || typeof getAccessToken !== "function") {
-    throw new TypeError("HTTPS backend URL, fetch implementation and access-token provider are required");
+  let parsedBase;
+  try { parsedBase = new URL(base); } catch { throw new TypeError("Invalid payment backend URL"); }
+  if (parsedBase.protocol !== "https:" || parsedBase.username || parsedBase.password ||
+      parsedBase.search || parsedBase.hash || !fetchImpl || typeof getAccessToken !== "function") {
+    throw new TypeError("A clean HTTPS backend URL, fetch implementation and access-token provider are required");
   }
   const call = async (path, body) => {
     const token = text(await getAccessToken(), "access token", 4096);
-    const response = await fetchImpl(new URL(path, base), {
+    const response = await fetchImpl(new URL(path, parsedBase), {
       method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + token },
-      body: JSON.stringify(body), cache: "no-store", credentials: "omit"
+      body: JSON.stringify(body), cache: "no-store", credentials: "omit",
+      signal: AbortSignal.timeout(15000)
     });
     if (!response.ok) throw new PaymentOrchestratorError("BACKEND_HTTP_" + response.status, "Payment backend request failed");
     return response.json();
