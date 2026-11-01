@@ -675,6 +675,10 @@ function settlePayment(input){
  if(!b)throw new Error('Booking not found');
  if(typeof window.aureliaSettlePayment!=='function')throw new Error('Settlement service is not ready; no payment was recorded');
  const persistSettlement=()=>{
+  if(input.deferPersistence===true){
+   if(input.source!=='reservation_advance')throw new Error('Deferred payment persistence is reserved for atomic reservation creation');
+   return;
+  }
   if(RECOVERY_CHECK_PENDING)throw new Error('Payment storage is paused during recovery');
   persist();
   let raw,saved;
@@ -853,7 +857,7 @@ function dsave(){
     scheduledCheckIn:d.in+'T'+checkIn,scheduledCheckOut:d.out+'T'+checkOut};
    S.b.push(booking);
    if(advance>0)settlePayment({booking,amount:advance,method:'Cash',reference:'Booking advance',
-    source:'reservation_advance',idempotencyKey:'booking-advance:'+booking.id,verificationConfirmed:$('#advance-confirm')?.checked===true});
+    source:'reservation_advance',idempotencyKey:'booking-advance:'+booking.id,verificationConfirmed:$('#advance-confirm')?.checked===true,deferPersistence:true});
    aud('Reservation',nm+' · Room '+d.room+' · '+fd(arrival)+(advance>0?' · Advance '+K(advance):''));
   }else{
    aud('Guest saved',nm);
