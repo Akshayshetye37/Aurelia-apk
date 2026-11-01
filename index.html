@@ -3752,7 +3752,7 @@ if (typeof window.render === "function") window.render();
    const docs=guide.docs.map(link=>'<li><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">'+esc(link.label)+'</a></li>').join('');
    const backendCfg=S.set.backendConnection||{};
    const backendLabel=backendCfg.reachable?'Backend reachable · health check passed':'Backend not verified';
-   const fields='<div class="provider-config locked" data-provider="'+esc(id)+'"><p class="lab">Provider credentials remain server-side. First configure the owner-deployed HTTPS payment backend below. A successful health check confirms service availability only; it does not authenticate an owner or enable payments.</p><div class="tag '+(backendCfg.reachable?'ready':'out')+'">'+esc(backendLabel)+'</div><div class="lab" id="aurelia-backend-status" role="status">'+(backendCfg.checkedAt?'Last checked: '+esc(new Date(backendCfg.checkedAt).toLocaleString()):'No successful backend health check recorded')+'</div><label class="fld"><span>Owner payment backend HTTPS origin</span><input id="aurelia-backend-url" type="url" inputmode="url" autocomplete="url" placeholder="https://payments.example.com" value="'+esc(backendCfg.endpoint||'')+'"></label><button class="btn sm" onclick="saveAureliaBackendEndpoint()">Save endpoint</button><button class="btn sm ghost" onclick="testAureliaBackendConnection()">Test backend</button><p class="lab">The endpoint must be deployed by the owner, use HTTPS, allow this app origin, and expose GET /healthz. Payment administration still requires authenticated owner/MFA access. Live gateway collection remains disabled until the complete payment flow is verified.</p><div class="lab" id="provider-status-'+esc(id)+'" role="status">Provider credentials are not configured.</div></div>';
+   const fields='<div class="provider-config locked" data-provider="'+esc(id)+'"><p class="lab">Provider credentials remain server-side. First configure the owner-deployed HTTPS payment backend below. A successful health check confirms service availability only; it does not authenticate an owner or enable payments.</p><div class="tag '+(backendCfg.reachable?'ready':'out')+'">'+esc(backendLabel)+'</div><div class="lab" data-aurelia-backend-status role="status">'+(backendCfg.checkedAt?'Last checked: '+esc(new Date(backendCfg.checkedAt).toLocaleString()):'No successful backend health check recorded')+'</div><label class="fld"><span>Owner payment backend HTTPS origin</span><input data-aurelia-backend-url type="url" inputmode="url" autocomplete="url" placeholder="https://payments.example.com" value="'+esc(backendCfg.endpoint||'')+'"></label><button class="btn sm" onclick="saveAureliaBackendEndpoint()">Save endpoint</button><button class="btn sm ghost" onclick="testAureliaBackendConnection()">Test backend</button><p class="lab">The endpoint must be deployed by the owner, use HTTPS, allow this app origin, and expose GET /healthz. Payment administration still requires authenticated owner/MFA access. Live gateway collection remains disabled until the complete payment flow is verified.</p><div class="lab" id="provider-status-'+esc(id)+'" role="status">Provider credentials are not configured.</div></div>';
    const guideHtml='<p class="lab">'+esc(definition.category)+' · '+esc(definition.integration)+'<br>Methods: '+esc(definition.methods.join(', '))+'<br>'+esc(definition.verification)+'</p><ul>'+docs+'</ul>';
    return '<details><summary>'+esc(name)+' · Documentation</summary>'+guideHtml+fields+'</details>';
   }).join('');
@@ -3761,7 +3761,7 @@ if (typeof window.render === "function") window.render();
  }
 
 window.saveAureliaBackendEndpoint=function(){
- const input=document.getElementById('aurelia-backend-url');
+ const input=document.querySelector('[data-aurelia-backend-url]');
  const raw=(input?.value||'').trim();
  let url;
  try{url=new URL(raw)}catch(_){toast('Enter a valid HTTPS backend origin');return false}
@@ -3775,7 +3775,7 @@ window.testAureliaBackendConnection=async function(){
  let url;
  try{url=new URL(raw)}catch(_){toast('Enter and save a valid HTTPS backend origin first');return}
  if(url.protocol!=='https:'||url.username||url.password||url.pathname!=='/'||url.search||url.hash){toast('Backend must be an HTTPS origin without a path or credentials');return}
- const status=document.getElementById('aurelia-backend-status');
+ const status=document.querySelector('[data-aurelia-backend-status]');
  if(status)status.textContent='Checking secure backend health…';
  try{
   const controller=new AbortController();
