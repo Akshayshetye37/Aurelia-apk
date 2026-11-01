@@ -123,3 +123,13 @@ test('owner credential management CORS permits the actual PUT and DELETE methods
   assert.ok(source.includes("app.put('/v1/admin/providers/:provider/credentials'"));
   assert.ok(source.includes("app.delete('/v1/admin/providers/:provider/credentials'"));
 });
+
+
+test('readiness endpoint checks Firestore and Secret Manager separately from liveness', () => {
+  assert.match(source, /app\.get\('\/healthz'/);
+  assert.match(source, /app\.get\('\/readyz', async/);
+  assert.match(source, /db\.doc\('aureliaSystem\/health'\)\.get\(\)/);
+  assert.match(source, /aurelia-payment-backend-health/);
+  assert.match(source, /checks\.firestore && checks\.secretManager/);
+  assert.match(source, /res\.status\(ready \? 200 : 503\)/);
+});
