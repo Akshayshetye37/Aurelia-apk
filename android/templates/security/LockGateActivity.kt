@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -95,8 +94,11 @@ class LockGateActivity : Activity() {
     }
 
     private fun submit() {
-        val first = pinField?.text?.toString()?.toCharArray() ?: return
-        val second = confirmField?.text?.toString()?.toCharArray()
+        val firstField = pinField?.text ?: return
+        val first = CharArray(firstField.length)
+        firstField.getChars(0, firstField.length, first, 0)
+        val secondField = confirmField?.text
+        val second = secondField?.let { CharArray(it.length).also { chars -> it.getChars(0, it.length, chars, 0) } }
         try {
             if (first.size !in 6..12 || first.any { it !in '0'..'9' }) {
                 showError("PIN must be 6–12 digits.")
@@ -156,7 +158,9 @@ class LockGateActivity : Activity() {
 
     private fun openPms() {
         startActivity(Intent(this, MainActivity::class.java))
-        finish()
+        // Keep the native gate as the task root. If Android kills the process,
+        // task restoration returns through this gate rather than trusting a
+        // restored WebView activity as the app entry point.
     }
 
     private fun showError(message: String) {
