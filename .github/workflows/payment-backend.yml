@@ -1,0 +1,37 @@
+name: Payment backend checks
+
+on:
+  push:
+    branches:
+      - feature/multi-provider-payment-backend
+    paths:
+      - "payment-backend/**"
+      - ".github/workflows/payment-backend.yml"
+  pull_request:
+    paths:
+      - "payment-backend/**"
+      - ".github/workflows/payment-backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: payment-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: payment-backend/package.json
+      - name: Install backend dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run backend tests
+        run: npm test
+      - name: Build deployment container
+        run: docker build -t aurelia-payment-backend:ci .
