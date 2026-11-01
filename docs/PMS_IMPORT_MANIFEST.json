@@ -1,0 +1,65 @@
+{
+  "source_repository": "Akshayshetye37/Designer-apk",
+  "source_ref": "main",
+  "source_commit": "9811f6929c27b609cbfa869c7f099fda984ff3a9",
+  "target_prefix": "pms/",
+  "hash_algorithm": "git-blob-sha1",
+  "files": [
+    {
+      "path": "pms/.github/workflows/android-apk.yml",
+      "sha1": "a22efa9ef8d71ac468f3b785204425a827ee82f1"
+    },
+    {
+      "path": "pms/README.md",
+      "sha1": "7f8b56cc17a12a17cbf1db42db4a4a83933b8e5f"
+    },
+    {
+      "path": "pms/android/app/build.gradle",
+      "sha1": "bf5fcdde85385f8eb6951933c8d5e654edb3c7f0"
+    },
+    {
+      "path": "pms/android/app/src/main/AndroidManifest.xml",
+      "sha1": "da045e9c3cd13b53da386519b33049d71348281b"
+    },
+    {
+      "path": "pms/android/app/src/main/assets/index.html",
+      "sha1": "4b8b26daa9f13a20833ab1d696721bc410829610"
+    },
+    {
+      "path": "pms/android/app/src/main/java/com/aurelia/pms/MainActivity.java",
+      "sha1": "12102cfecb712d2039aabade56f151548d0bef52"
+    },
+    {
+      "path": "pms/android/app/src/main/res/drawable/ic_aurelia_launcher.xml",
+      "sha1": "4069d39f8acdaaadd7ffbce570c90db25498ab22"
+    },
+    {
+      "path": "pms/android/app/src/main/res/layout/activity_main.xml",
+      "sha1": "5fc7f1364e9d39243d1dca01950310895c2f0d3c"
+    },
+    {
+      "path": "pms/android/app/src/main/res/values/strings.xml",
+      "sha1": "ce7a4de7ad5b6d10029d79304a1d1146e1b5c440"
+    },
+    {
+      "path": "pms/android/build.gradle",
+      "sha1": "e5ce0d95c7f5f20385cd3f1bbfe77db777662d94"
+    },
+    {
+      "path": "pms/android/gradle.properties",
+      "sha1": "5b3cb48bf5dd3493435d2c50c1c2a90813fdf115"
+    },
+    {
+      "path": "pms/android/settings.gradle",
+      "sha1": "7164f1c9890441045a2a86cffb753793f31db052"
+    },
+    {
+      "path": "pms/dist/aurelia-pms-source.zip",
+      "sha1": "0abd3a3f266db94adb3836ae2e2f16499ae38cbc"
+    },
+    {
+      "path": "pms/index.html",
+      "sha1": "4b8b26daa9f13a20833ab1d696721bc410829610"
+    }
+  ]
+}
