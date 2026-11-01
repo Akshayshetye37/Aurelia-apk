@@ -22,3 +22,12 @@ test('provider catalogue remains documentation-only until trusted backend deploy
   assert.match(html, /owner-controlled backend console/);
   assert.match(html, /non-secret provider status only/);
 });
+
+
+test('Pay Bridge connection UI diagnoses signing and protocol pairing failures', () => {
+  assert.match(html, /untrusted_signer/);
+  assert.match(html, /same signing certificate/);
+  assert.match(html, /Independently built debug APKs/);
+  assert.match(html, /protocol_mismatch/);
+  assert.match(html, /permission_denied/);
+});
