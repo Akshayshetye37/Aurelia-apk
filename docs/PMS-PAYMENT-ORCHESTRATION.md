@@ -102,3 +102,5 @@ PMS reservations, guests, rooms, check-in/out and manual/cash accounting remain 
 - Backend session, verification and reconciliation responses must echo the exact request, session, provider, booking, folio, amount and currency binding. Missing or mismatched fields fail closed.
 - Failed/cancelled records remain available for late-capture reconciliation. Only backend-verified SUCCESS is closed.
 - The local journal is installation-local, not a multi-device atomic ledger. Gateway execution remains unavailable until the backend and executable native IPC are implemented and configured.
+
+- PMS persists a `bridgeDispatchStarted` marker before native IPC. On restart, an intent with a confirmed false marker can safely resume; a true or legacy-missing marker is treated as ambiguous and reconciled without blind redispatch. Intent history is bounded.
