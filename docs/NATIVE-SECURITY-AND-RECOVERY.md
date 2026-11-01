@@ -12,6 +12,7 @@ Maintained sources are under `android/templates/security/`. `scripts/patch-andro
 
 - PMS data encryption uses a random 256-bit data-encryption key (DEK).
 - The owner PIN is processed by Argon2id (v1.3, 64 MiB, 3 iterations, parallelism 1) to derive a key-encryption key (KEK).
+- The versioned PIN envelope file is separately encrypted at rest with an Android Keystore AES-GCM key. This blocks straightforward offline PIN guessing from a copied app-private envelope file on a different device; it does not defeat a privileged attacker controlling the original device or an instrumented running process.
 - The KEK wraps the DEK using AES-256-GCM with a fresh 96-bit nonce and 128-bit tag.
 - Envelope version, KDF, KDF parameters, cipher, salt and nonce are validated before decryption. Metadata is bound as authenticated additional data.
 - PIN rotation must unwrap and re-wrap the same DEK. It must not create a new DEK unless the complete encrypted PMS dataset is migrated atomically.
@@ -59,7 +60,7 @@ The supplied example OTP/KMS design is not safe to copy as written:
 - If no recovery secret or other previously provisioned key-wrapping path exists, forgotten-PIN recovery cannot recover the encrypted data. The safe fallback is destructive reset of local encrypted data only after explicit user confirmation, not silent key recreation.
 - No server endpoint accepts a new DEK, plaintext DEK, PIN, PIN-derived KEK or client-asserted replacement envelope as proof of recovery.
 
-The current native gate implements initial PIN enrollment and PIN unlock only. It does not implement forgotten-PIN reset, phone registration, Firebase OTP recovery, recovery-key provisioning, or backend-issued recovery authorization. Those remain disabled until this contract is implemented and tested.
+The current native gate implements initial PIN enrollment and PIN unlock only. Its envelope file is protected by a separate Android Keystore key and AtomicFile. It does not implement forgotten-PIN reset, phone registration, Firebase OTP recovery, recovery-key provisioning, or backend-issued recovery authorization. Those remain disabled until this contract is implemented and tested.
 
 ## Acceptance gates before production
 
