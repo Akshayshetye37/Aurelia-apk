@@ -250,7 +250,9 @@ app.post('/v1/admin/providers/:provider/validate', requireTenantAdmin, express.j
   const { provider } = req.params, environment = envOf(req);
   if (!['razorpay', 'cashfree'].includes(provider) || !environment) return fail(res, 400, 'invalid_provider_environment');
   try {
-    const { adapter } = await providerAdapterForTenant(req.tenant.id, provider, environment);
+    const credentials = await paymentRepository.secretManager.getProviderSecrets(req.tenant.id, provider, environment);
+    const { createProviderAdapter } = await import('./providers/factory.mjs');
+    const adapter = createProviderAdapter(provider, { credentials, environment });
     await adapter.validateCredentials();
     await providerTenantDoc(req.tenant.id, provider, environment).set({
       credentialsValidated: true, validatedAt: FieldValue.serverTimestamp(), active: false
@@ -272,7 +274,9 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
   const idemId = crypto.createHash('sha256').update(req.tenant.id + ':' + provider + ':test:' + idem).digest('hex');
   const idemRef = db.doc('paymentIdempotency/' + idemId);
   try {
-    const { adapter } = await providerAdapterForTenant(req.tenant.id, provider, 'test');
+    const credentials = await paymentRepository.secretManager.getProviderSecrets(req.tenant.id, provider, 'test');
+    const { createProviderAdapter } = await import('./providers/factory.mjs');
+    const adapter = createProviderAdapter(provider, { credentials, environment: 'test' });
     const reservationResult = await db.runTransaction(async tx => {
       const prior = await tx.get(idemRef);
       if (prior.exists) return { record: prior.data(), newlyReserved: false };
@@ -309,7 +313,6 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
     return fail(res, 503, 'order_creation_unknown_reconcile_before_retry');
   }
 });
-
 
 app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'application/json', limit: '1mb' }), async (req, res) => {
   const { provider, tenantId, environment } = req.params;
