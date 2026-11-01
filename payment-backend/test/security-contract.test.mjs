@@ -116,3 +116,10 @@ test('webhook intent binding reads the resolved provider-order document and supp
   assert.match(source, /const intentRef = orderData\.intentId\s*\? db\.doc\('paymentIntents\/' \+ orderData\.intentId\)\s*: null/);
   assert.match(source, /if \(intentRef && \(!currentIntent\?\.exists/);
 });
+
+
+test('owner credential management CORS permits the actual PUT and DELETE methods', () => {
+  assert.match(source, /Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'/);
+  assert.match(source, /app\\.put\\('\\/v1\\/admin\\/providers\\/:provider\\/credentials'/);
+  assert.match(source, /app\\.delete\\('\\/v1\\/admin\\/providers\\/:provider\\/credentials'/);
+});
