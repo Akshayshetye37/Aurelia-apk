@@ -1,28 +1,42 @@
-# Aurelia PMS
+# Aurelia APK / PMS workspace
 
-A browser-based hotel/property-management interface supplied as a single HTML file.
+This repository currently contains two distinct application codebases. They are intentionally kept separate while architecture and integration contracts are established.
 
-## Contents
+## Repository layout
 
-- `index.html` — the supplied Aurelia PMS interface and its inline CSS/JavaScript.
-- `.gitignore` — ignores common local, build, Android, and secret files.
-- `docs/SECURITY.md` — security and production-readiness notes.
+- Root `index.html`, `package.json`, `capacitor.config.json`, `scripts/`, and root `.github/workflows/`: existing root Capacitor application and its build pipeline.
+- `pms/`: source-preserving import of `Akshayshetye37/Designer-apk@main`, including its web UI, standalone Android project, native activity, build workflow source and source ZIP.
+- `docs/IMPLEMENTATION_ROADMAP.md`: architecture decisions, trust boundaries, phased delivery plan, exit criteria and immediate priorities.
+- Aurelia Pay Bridge remains a separate repository and Android application. Payment backend services are not included in this repository.
 
-## Run locally
+## Important separation
 
-Open `index.html` in a modern browser for an initial inspection. Some features depend on network-loaded libraries or services. Android-specific features require a compatible Android WebView wrapper that implements the `AureliaNative` JavaScript bridge; that native Android project is not included in this repository yet.
+The root application and imported `pms/` snapshot are not currently integrated. Their web entry points are different versions. The root Capacitor Android project and `pms/android` are separate Android projects and both currently use the `com.aurelia.pms` application ID. Do not build/install them as separate production apps until the application-ID and packaging strategy is resolved.
 
-## Important source limitation
+The imported files under `pms/` are retained unchanged from the source snapshot. Do not edit them as part of root application work unless a task explicitly authorizes changing the imported PMS.
 
-The uploaded HTML source ends immediately after a CSS `</style>` block and does not include a closing `</body>` or `</html>` tag. It appears incomplete. Complete and test the source before treating this repository as a release-ready web app or building an APK.
+## Build the root Capacitor application
 
-## Before real-world use
+```bash
+npm ci
+npm run build
+npx cap sync android
+```
 
-- Replace demo/default property details, sample records, room rates, and menu items.
-- Review the security notes in [docs/SECURITY.md](docs/SECURITY.md).
-- Test all workflows, browser storage, backup/restore, invoice calculations, payment flows, and Android bridge behavior.
-- Do not use real guest or payment data until security and privacy issues are addressed.
+The root Android project must already be generated/available for Android build commands. See the root GitHub Actions workflows for the current CI build sequence.
 
-## Project status
+## Imported PMS source
 
-Source upload and repository scaffolding only. Runtime, backend, Android, and end-to-end tests have not been completed.
+The imported PMS source is under `pms/`. Its README and native Android project describe the source snapshot. Its nested `pms/.github/workflows/android-apk.yml` is retained as source material; GitHub does not execute workflow files nested below the repository-root `.github/workflows/` directory. The workflow also assumes its project files are at repository root, so it must not be copied into the root workflow directory unchanged.
+
+## Payment architecture
+
+- PMS owns booking, guest, folio and property-accounting records.
+- Aurelia Pay Bridge owns native checkout and validated IPC.
+- A separate server-side Payment API owns provider credentials, payment/refund state, webhook verification, idempotency and reconciliation.
+- PMS folio credits are posted only from authenticated, verified, idempotent backend events.
+- Local payment matching, manual confirmation, UI state and provider SDK callbacks are not authoritative proof of payment.
+
+## Production status
+
+This branch is a source import and planning baseline, not a production payment integration. Do not process real guest data or live payments based solely on the presence of these files. Follow [the implementation roadmap](docs/IMPLEMENTATION_ROADMAP.md) and its release gates.
