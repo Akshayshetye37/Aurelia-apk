@@ -64,8 +64,11 @@ export function createPaymentEvent(input) {
   const currency = String(input.currency || "INR").trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) throw new TypeError("Invalid currency code");
   const timestamp = input.timestamp ? new Date(input.timestamp) : null;
+  if (timestamp && Number.isNaN(timestamp.getTime())) throw new TypeError("Invalid event timestamp");
   const receivedAt = input.receivedAt ? new Date(input.receivedAt) : new Date();
   if (Number.isNaN(receivedAt.getTime())) throw new TypeError("Invalid receivedAt timestamp");
+  const timestampPrecision = String(input.timestampPrecision || (timestamp ? "exact" : "unknown"));
+  if (!["exact", "date_only", "unknown"].includes(timestampPrecision)) throw new TypeError("Invalid timestampPrecision");
   const utr = boundedText(input.utr, "UTR", 128);
   const payerName = boundedText(input.payerName, "payerName", 128);
   const upiId = boundedText(input.upiId, "UPI ID", 128);
@@ -77,7 +80,7 @@ export function createPaymentEvent(input) {
   return {
     eventId, evidenceId, source, eventType, amountPaise, currency,
     timestamp: timestamp && !Number.isNaN(timestamp.getTime()) ? timestamp.toISOString() : null,
-    timestampPrecision: input.timestampPrecision || (timestamp ? "exact" : "unknown"),
+    timestampPrecision,
     utr: utr ? utr.replace(/\s+/g, "") : null,
     payerName,
     payerNameNormalized: normalizeName(payerName || ""),
