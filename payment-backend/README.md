@@ -215,3 +215,32 @@ Until every applicable acceptance gate above passes:
 - Do not release a folio lock on an ambiguous provider outcome.
 - Do not post a folio payment without a provider-verified captured state and exact binding.
 - Do not claim production readiness based on compilation, adapter unit tests or a successful test-order API call alone.
+
+
+## Provider credential onboarding (owner-only)
+
+The Provider Directory UI now distinguishes documentation from working integrations. It offers credential entry only for the two providers that have server adapters wired today: Razorpay and Cashfree Payments. PayU, PhonePe, Paytm, JioPay and CCAvenue remain documentation/catalogue entries; entering credentials for them is intentionally disabled because no compatible adapter is implemented.
+
+### Required merchant values
+
+| Provider | Environment | Required values | Official source |
+|---|---|---|---|
+| Razorpay | Test or Live | Key ID, Key Secret, Webhook Secret | [API keys](https://razorpay.com/docs/payments/dashboard/account-settings/api-keys/) and [webhook setup](https://razorpay.com/docs/webhooks/) |
+| Cashfree Payments | Sandbox or Production | App ID, Secret Key, Webhook Secret | [Cashfree Payments docs](https://www.cashfree.com/docs/) and [API authentication](https://www.cashfree.com/docs/api-reference/authentication) |
+| PayU India | Test or Live | Merchant Key and Salt (Salt Index only if the merchant product assigns one) | [PayU hosted checkout](https://docs.payu.in/docs/custom-checkout-merchant-hosted) |
+| PhonePe PG | UAT or Production | Client ID, Client Secret, Client Version, Merchant ID (confirm exact product/version with PhonePe onboarding) | [PhonePe PG docs](https://developer.phonepe.com/payment-gateway/) |
+| Paytm PG | Staging or Production | MID, Merchant Key, Website/Industry Type as issued for the merchant account | [Paytm developer docs](https://developer.paytm.com/docs/) |
+| JioPay | Merchant-specific | Do not assume generic field names; use the API credentials and contract issued for the enabled Jio payment product | [Jio developer portal](https://developer.jio.com/) |
+| CCAvenue | Test or Live | Merchant ID, Access Code, Working Key | [CCAvenue integration resources](https://www.ccavenue.com/) (use the current merchant MARS integration kit) |
+
+**Security rules:** never enter merchant secrets into the backend URL field, PMS local settings, browser storage, GitHub, or an APK. Credential forms submit only to the configured HTTPS backend using an owner/admin Firebase ID token. The backend stores secrets in Google Secret Manager. Secret inputs are write-only and are cleared after submission. Reset removes the selected provider/environment's Secret Manager secrets and Firestore configuration; it does not delete historical PMS payment records.
+
+### Required setup before credential submission
+
+1. Deploy the existing `payment-backend/` service to a trusted HTTPS host and configure Firestore, Secret Manager, service identity and ingress.
+2. Provision the owner/admin's verified Firebase account, MFA and `paymentMemberships/{uid}` tenant membership.
+3. Complete the PMS Firebase owner-auth integration so the UI can supply a fresh ID token through `window.AureliaPaymentAuth.getIdToken()`. Until that integration is available, the UI deliberately refuses to transmit credentials.
+4. Save and health-check the backend origin, then enter sandbox/test credentials first and validate them.
+5. Live credentials may be stored separately, but live payment collection remains hard-blocked by the backend until accounting, settlement, refund and reconciliation gates are complete.
+
+A successful `/healthz` response proves liveness only. It does not prove owner authentication, Firestore access, Secret Manager access, provider credential validity, or payment readiness.
