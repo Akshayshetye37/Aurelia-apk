@@ -66,7 +66,7 @@ class LockGateActivity : Activity() {
         root.addView(hint)
         pinField = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
-            hint = if (enrollmentMode) "New PIN" else "PIN"
+            this.hint = if (enrollmentMode) "New PIN" else "PIN"
             setTextColor(android.graphics.Color.WHITE)
             setHintTextColor(android.graphics.Color.GRAY)
             filters = arrayOf(android.text.InputFilter.LengthFilter(12))
@@ -75,7 +75,7 @@ class LockGateActivity : Activity() {
         if (enrollmentMode) {
             confirmField = EditText(this).apply {
                 inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
-                hint = "Confirm PIN"
+                this.hint = "Confirm PIN"
                 setTextColor(android.graphics.Color.WHITE)
                 setHintTextColor(android.graphics.Color.GRAY)
                 filters = arrayOf(android.text.InputFilter.LengthFilter(12))
