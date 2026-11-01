@@ -303,3 +303,16 @@ test("repeated create call resumes only a REQUESTED intent proven not dispatched
   assert.equal(calls, 1);
   assert.equal(result.state, "PROCESSING");
 });
+
+test("refund is disabled even for a captured payment until a durable refund lifecycle exists", async () => {
+  const f = fixture();
+  await f.orchestrator.createPayment(input);
+  await f.orchestrator.verifyPayment("req-1");
+  let called = false;
+  f.backend.createRefund = async () => { called = true; return { status:"success" }; };
+  await assert.rejects(
+    f.orchestrator.createRefund({ requestId:"req-1", amountPaise:100, idempotencyKey:"refund-1" }),
+    e => e.code === "REFUND_UNAVAILABLE"
+  );
+  assert.equal(called, false);
+});
