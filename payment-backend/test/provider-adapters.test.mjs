@@ -43,7 +43,7 @@ test('Cashfree creates hosted checkout session and sends required API version he
 
 test('Cashfree webhook signature uses timestamp concatenated with raw body', async () => {
   const raw = Buffer.from('{"type":"PAYMENT_SUCCESS_WEBHOOK"}');
-  const timestamp = '1730000000';
+  const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = crypto.createHmac('sha256', 'hook').update(timestamp).update(raw).digest('base64');
   const adapter = new CashfreeAdapter({ credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' }, environment: 'test' });
   assert.equal((await adapter.verifyWebhook(raw, { 'x-webhook-timestamp': timestamp, 'x-webhook-signature': signature })).valid, true);
@@ -60,13 +60,13 @@ test('provider adapters reject invalid amount units and malformed IDs before net
 test('Cashfree invalid signatures never expose or parse an event payload', async () => {
   const raw = Buffer.from('{"type":"PAYMENT_SUCCESS_WEBHOOK","sensitive":"untrusted"}');
   const adapter = new CashfreeAdapter({ credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' }, environment: 'test' });
-  const result = await adapter.verifyWebhook(raw, { 'x-webhook-timestamp': '1730000000', 'x-webhook-signature': 'invalid' });
+  const result = await adapter.verifyWebhook(raw, { 'x-webhook-timestamp': String(Math.floor(Date.now() / 1000)), 'x-webhook-signature': 'invalid' });
   assert.deepEqual(result, { valid: false });
 });
 
 test('Cashfree authenticated malformed JSON is rejected without throwing', async () => {
   const raw = Buffer.from('{not-json');
-  const timestamp = '1730000000';
+  const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = crypto.createHmac('sha256', 'hook').update(timestamp).update(raw).digest('base64');
   const adapter = new CashfreeAdapter({ credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' }, environment: 'test' });
   assert.deepEqual(await adapter.verifyWebhook(raw, { 'x-webhook-timestamp': timestamp, 'x-webhook-signature': signature }), { valid: false });
@@ -79,4 +79,13 @@ test('Razorpay refund reference is stored as a note, not an unsupported refund f
   const body = JSON.parse(mock.calls[0].options.body);
   assert.equal(body.receipt, undefined);
   assert.equal(body.notes.aurelia_refund_reference, 'refund_123');
+});
+
+
+test('Cashfree rejects correctly signed stale webhook timestamps', async () => {
+  const raw = Buffer.from('{"type":"PAYMENT_SUCCESS_WEBHOOK"}');
+  const timestamp = String(Math.floor(Date.now() / 1000) - 601);
+  const signature = crypto.createHmac('sha256', 'hook').update(timestamp).update(raw).digest('base64');
+  const adapter = new CashfreeAdapter({ credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' }, environment: 'test' });
+  assert.deepEqual(await adapter.verifyWebhook(raw, { 'x-webhook-timestamp': timestamp, 'x-webhook-signature': signature }), { valid: false });
 });
