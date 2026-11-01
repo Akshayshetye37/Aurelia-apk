@@ -8,6 +8,18 @@
 
 export const DEFAULT_MATCH_WINDOW_MS = 5 * 60 * 1000;
 
+const CANDIDATE_SOURCES = new Set(["gpay_notification", "guest_utr", "statement_import"]);
+const CANDIDATE_TYPES = new Set(["payment_notification", "payment_candidate", "guest_utr"]);
+
+function boundedText(value, label, max, required = false) {
+  const result = String(value ?? "").trim();
+  if ((required && !result) || result.length > max || /[\u0000-\u001f\u007f]/.test(result)) {
+    throw new TypeError("Invalid " + label);
+  }
+  return result || null;
+}
+
+
 export function normalizeName(value = "") {
   return String(value)
     .normalize("NFKD")
@@ -45,26 +57,37 @@ export function createPaymentEvent(input) {
     throw new TypeError("amountPaise must be a positive integer");
   }
 
+  const eventId = boundedText(input.eventId || cryptoSafeId(), "eventId", 128, true);
+  const evidenceId = boundedText(input.evidenceId || eventId, "evidenceId", 128, true);
+  const source = boundedText(input.source || "unknown", "source", 64, true).toLowerCase();
+  const eventType = boundedText(input.eventType || "unknown", "eventType", 64, true).toLowerCase();
+  const currency = String(input.currency || "INR").trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) throw new TypeError("Invalid currency code");
   const timestamp = input.timestamp ? new Date(input.timestamp) : null;
+  const receivedAt = input.receivedAt ? new Date(input.receivedAt) : new Date();
+  if (Number.isNaN(receivedAt.getTime())) throw new TypeError("Invalid receivedAt timestamp");
+  const utr = boundedText(input.utr, "UTR", 128);
+  const payerName = boundedText(input.payerName, "payerName", 128);
+  const upiId = boundedText(input.upiId, "UPI ID", 128);
+  const bank = boundedText(input.bank, "bank", 64);
+  const accountScope = boundedText(input.accountScope, "accountScope", 64);
+  const accountSuffix = boundedText(input.accountSuffix, "accountSuffix", 16);
+  const rawEvidence = input.rawEvidence == null ? null : String(input.rawEvidence);
+  if (rawEvidence && rawEvidence.length > 8192) throw new TypeError("rawEvidence exceeds 8192 characters");
   return {
-    eventId: String(input.eventId || cryptoSafeId()),
-    source: String(input.source || "unknown"),
-    eventType: String(input.eventType || "unknown").toLowerCase(),
-    amountPaise,
-    currency: String(input.currency || "INR").toUpperCase(),
+    eventId, evidenceId, source, eventType, amountPaise, currency,
     timestamp: timestamp && !Number.isNaN(timestamp.getTime()) ? timestamp.toISOString() : null,
     timestampPrecision: input.timestampPrecision || (timestamp ? "exact" : "unknown"),
-    utr: input.utr ? String(input.utr).replace(/\s+/g, "") : null,
-    payerName: input.payerName ? String(input.payerName).trim() : null,
-    payerNameNormalized: normalizeName(input.payerName || ""),
-    upiId: input.upiId ? String(input.upiId).trim() : null,
-    upiIdNormalized: normalizeUpiId(input.upiId || ""),
-    bank: input.bank ? String(input.bank).trim().toUpperCase() : null,
-    accountScope: input.accountScope ? String(input.accountScope).trim() : null,
-    accountSuffix: input.accountSuffix ? String(input.accountSuffix).trim() : null,
-    evidenceId: String(input.evidenceId || input.eventId || cryptoSafeId()),
-    rawEvidence: input.rawEvidence ? String(input.rawEvidence) : null,
-    receivedAt: input.receivedAt ? new Date(input.receivedAt).toISOString() : new Date().toISOString(),
+    utr: utr ? utr.replace(/\s+/g, "") : null,
+    payerName,
+    payerNameNormalized: normalizeName(payerName || ""),
+    upiId,
+    upiIdNormalized: normalizeUpiId(upiId || ""),
+    bank: bank ? bank.toUpperCase() : null,
+    accountScope,
+    accountSuffix,
+    rawEvidence,
+    receivedAt: receivedAt.toISOString(),
     verificationStatus: "pending",
   };
 }
@@ -72,6 +95,19 @@ export function createPaymentEvent(input) {
 function cryptoSafeId() {
   // Avoid a runtime dependency on Web Crypto so this module can be unit-tested in Node.
   return `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function validateCandidate(candidate) {
+  const reasons = [];
+  if (!candidate || candidate.parseStatus === "unparsed") reasons.push("unparsed_candidate");
+  if (!candidate || candidate.currency !== "INR") reasons.push("unsupported_currency");
+  if (!candidate || !Number.isSafeInteger(candidate.amountPaise) || candidate.amountPaise <= 0) reasons.push("invalid_amount");
+  if (!candidate || !candidate.source) reasons.push("missing_source");
+  if (!candidate || !candidate.evidenceId) reasons.push("missing_evidence_id");
+  if (candidate && !CANDIDATE_SOURCES.has(candidate.source) && !CANDIDATE_TYPES.has(candidate.eventType)) {
+    reasons.push("unsupported_candidate_type");
+  }
+  return { valid: reasons.length === 0, reasons };
 }
 
 export function validateBankCredit(event) {
@@ -94,6 +130,9 @@ export function scoreEvidence(candidate, bankEvent, options = {}) {
   const windowMs = options.windowMs ?? DEFAULT_MATCH_WINDOW_MS;
   const reasons = [];
   if (!candidate || !bankEvent) return { score: 0, reasons: ["missing_event"], eligibleForAutoMatch: false };
+  if (candidate.currency !== bankEvent.currency) {
+    return { score: 0, reasons: ["currency_mismatch"], eligibleForAutoMatch: false };
+  }
   if (candidate.amountPaise !== bankEvent.amountPaise) {
     return { score: 0, reasons: ["amount_mismatch"], eligibleForAutoMatch: false };
   }
@@ -207,7 +246,8 @@ export function matchBankEvent(bankEvent, candidates, options = {}) {
   if (!validation.valid) return { decision: "reject", reason: validation.reasons.join(","), matches: [] };
 
   const scored = (candidates || [])
-    .filter(candidate => candidate && candidate.amountPaise === bankEvent.amountPaise)
+    .filter(candidate => validateCandidate(candidate).valid &&
+      candidate.currency === bankEvent.currency && candidate.amountPaise === bankEvent.amountPaise)
     .map(candidate => ({ candidate, ...scoreEvidence(candidate, bankEvent, options) }))
     .sort((a, b) => b.score - a.score);
 
