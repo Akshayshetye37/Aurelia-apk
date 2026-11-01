@@ -234,3 +234,10 @@ test("historical folios preserve the nightly rate when room rates change", async
   assert.match(html, /b\\.rate!=null&&Number\\.isFinite\\(Number\\(b\\.rate\\)\\)/);
   assert.match(html, /if\\(b\\.rate==null\\|\\|!Number\\.isFinite\\(Number\\(b\\.rate\\)\\)\\|\\|Number\\(b\\.rate\\)<=0\\)b\\.rate=o\\.r/);
 });
+
+test("UPI evidence duplicate lookup includes legacy payment history rows", async () => {
+  const html = await readFile(new URL("../src/features/payments/reconciliation-bridge.js", import.meta.url), "utf8");
+  assert.match(html, /booking\.payments/);
+  assert.match(html, /item\.reference/);
+  assert.match(html, /paymentPaise === amountPaise/);
+});
