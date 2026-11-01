@@ -78,12 +78,14 @@ export function settlePayment({
   }
   const key = suppliedKey || (ref && source !== "reservation_advance" ? "ref:" + ref : "");
 
-  const indexedPayments = state.b.flatMap(item =>
-    item && Array.isArray(item.pays)
-      ? item.pays.filter(payment => payment && typeof payment === "object" && !Array.isArray(payment))
-        .map(payment => ({ booking: item, payment }))
-      : []
-  );
+  const indexedPayments = state.b.flatMap(item => {
+    if (!item) return [];
+    const canonical = Array.isArray(item.pays) ? item.pays : [];
+    const history = Array.isArray(item.payments) ? item.payments : [];
+    return [...canonical, ...history]
+      .filter(payment => payment && typeof payment === "object" && !Array.isArray(payment))
+      .map(payment => ({ booking: item, payment }));
+  });
 
   if (key) {
     const existing = indexedPayments.find(row => row.payment.idempotencyKey === key);
