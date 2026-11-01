@@ -15,7 +15,7 @@ export const PAYMENT_STATES = Object.freeze({
 const TERMINAL = new Set(["FAILED", "CANCELLED"]);
 const ALLOWED = Object.freeze({
   CREATED: new Set(["REQUESTED", "CANCELLED"]),
-  REQUESTED: new Set(["PROCESSING", "UNKNOWN", "FAILED", "CANCELLED"]),
+  REQUESTED: new Set(["PROCESSING", "UNKNOWN", "FAILED", "CANCELLED", "RECONCILIATION"]),
   PROCESSING: new Set(["SUCCESS", "FAILED", "CANCELLED", "UNKNOWN"]),
   SUCCESS: new Set(),
   // Reopen only through a fresh backend reconciliation: provider capture can arrive late.
@@ -178,14 +178,21 @@ export class PayBridgePaymentOrchestrator {
   }
 
   async verifyPayment(requestId) {
-    const record = await this.requireRecord(requestId);
+    let record = await this.requireRecord(requestId);
+    if (["REQUESTED", "UNKNOWN", "FAILED", "CANCELLED"].includes(record.state)) {
+      record = transitionPayment(record, "RECONCILIATION", {}, this.now);
+      await this.store.put(record);
+    }
     const result = await this.backend.verifyPayment({
       requestId: record.requestId, sessionId: record.backendSessionId,
       transactionId: record.bridgeTransactionId, amountPaise: record.amountPaise,
       currency: record.currency, folioId: record.folioId, bookingId: record.bookingId
     });
-    if (!result || result.verified !== true || result.status !== "success" ||
-        result.requestId !== record.requestId || result.sessionId !== record.backendSessionId ||
+    const validSession = typeof result?.sessionId === "string" &&
+      result.sessionId.length > 0 && result.sessionId.length <= 256 &&
+      (!record.backendSessionId || result.sessionId === record.backendSessionId);
+    if (!result || result.verified !== true || result.status !== "success" || !validSession ||
+        result.requestId !== record.requestId ||
         result.providerId !== record.providerId || result.amountPaise !== record.amountPaise ||
         result.currency !== record.currency || result.folioId !== record.folioId ||
         result.bookingId !== record.bookingId ||
@@ -194,7 +201,7 @@ export class PayBridgePaymentOrchestrator {
     }
     if (record.state === "SUCCESS") return clone(record);
     if (!ALLOWED[record.state].has("SUCCESS")) {
-      if (["UNKNOWN", "FAILED", "CANCELLED"].includes(record.state)) {
+      if (["REQUESTED", "UNKNOWN", "FAILED", "CANCELLED"].includes(record.state)) {
         const recon = transitionPayment(record, "RECONCILIATION", {}, this.now);
         await this.store.put(recon);
         return this.verifyPayment(requestId);
@@ -202,6 +209,7 @@ export class PayBridgePaymentOrchestrator {
       throw new PaymentOrchestratorError("INVALID_TRANSITION", "Payment cannot be verified from state " + record.state);
     }
     const verified = transitionPayment(record, "SUCCESS", {
+      backendSessionId: record.backendSessionId || result.sessionId,
       bridgeTransactionId: result.transactionId, backendVerified: true,
       settlementAuthorized: true, backendVerifiedAt: this.now()
     }, this.now);
@@ -226,15 +234,21 @@ export class PayBridgePaymentOrchestrator {
     });
     // A reconciliation response is authoritative only when the backend
     // verifies and echoes every immutable PMS binding.
-    const bound = result?.verified === true &&
+    const validSession = typeof result?.sessionId === "string" &&
+      result.sessionId.length > 0 && result.sessionId.length <= 256 &&
+      (!record.backendSessionId || result.sessionId === record.backendSessionId);
+    const bound = result?.verified === true && validSession &&
       result.requestId === record.requestId &&
       result.bookingId === record.bookingId &&
-      result.sessionId === record.backendSessionId &&
       result.providerId === record.providerId &&
       result.folioId === record.folioId &&
       result.amountPaise === record.amountPaise &&
       result.currency === record.currency;
     if (!bound) return clone(record);
+    if (!record.backendSessionId) {
+      record = { ...record, backendSessionId: result.sessionId, updatedAt: this.now() };
+      await this.store.put(record);
+    }
     if (result.status === "success") return this.verifyPayment(requestId);
     if (result.status === "failed" && ALLOWED[record.state].has("FAILED")) {
       const failed = transitionPayment(record, "FAILED", { backendVerified: true }, this.now);
