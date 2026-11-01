@@ -41,7 +41,7 @@ test("state cannot skip directly from CREATED to SUCCESS", async () => {
 
 test("settlement authorization requires backend verification", async () => {
   const db = store();
-  await assert.rejects(db.put(intent({ settlementAuthorized: true })), /without backend verification/);
+  await assert.rejects(db.put(intent({ settlementAuthorized: true })), /backend-verified SUCCESS/);
 });
 
 test("backend verification and settlement authorization cannot be downgraded", async () => {
@@ -50,7 +50,7 @@ test("backend verification and settlement authorization cannot be downgraded", a
   await db.put(intent({ state: "REQUESTED" }));
   await db.put(intent({ state: "PROCESSING" }));
   await db.put(intent({ state: "SUCCESS", backendVerified: true, settlementAuthorized: true }));
-  await assert.rejects(db.put(intent({ state: "SUCCESS", backendVerified: false, settlementAuthorized: false })), /cannot be downgraded/);
+  await assert.rejects(db.put(intent({ state: "SUCCESS", backendVerified: false, settlementAuthorized: false })), /SUCCESS requires backend verification/);
 });
 
 test("terminal payment intents are excluded from reconciliation queue", async () => {
