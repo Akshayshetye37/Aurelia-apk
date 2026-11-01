@@ -56,6 +56,7 @@ function normalizeInput(input) {
 }
 function isCandidate(event) {
   return event.parseStatus !== "unparsed" && event.currency === "INR" &&
+    !isBankCredit(event) &&
     (candidateSources.has(String(event.source || "").toLowerCase()) ||
       candidateTypes.has(String(event.eventType || "").toLowerCase()));
 }
