@@ -286,3 +286,20 @@ test("native dispatch marker is durable before Bridge receives the request", asy
   assert.equal(result.state, "PROCESSING");
   assert.equal(result.bridgeDispatchStarted, true);
 });
+
+test("repeated create call resumes only a REQUESTED intent proven not dispatched", async () => {
+  const f = fixture();
+  let calls = 0;
+  f.bridge.createPayment = async p => { calls++; return { requestId:p.requestId, transactionId:"txn-retry", status:"processing" }; };
+  await f.store.put({
+    requestId:"req-1", bookingId:"booking-1", folioId:"folio-1",
+    amountPaise:12500, currency:"INR", providerId:"razorpay",
+    state:"REQUESTED", backendSessionId:"sess-1", bridgeTransactionId:null,
+    bridgeDispatchStarted:false, backendVerified:false, settlementAuthorized:false,
+    createdAt:"2026-11-01T00:00:00.000Z", updatedAt:"2026-11-01T00:00:00.000Z",
+    history:[{state:"CREATED"}]
+  });
+  const result = await f.orchestrator.createPayment(input);
+  assert.equal(calls, 1);
+  assert.equal(result.state, "PROCESSING");
+});
