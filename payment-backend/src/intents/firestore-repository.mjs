@@ -183,9 +183,9 @@ export class FirestorePaymentRepository {
       return { intentId, status: 'FAILED_TO_INITIATE', message: 'Payment could not be dispatched.' };
     }
 
-    // Provider network calls are outside Firestore transactions. From the point
-    // the adapter method is invoked, transmission may have occurred: any error
-    // must retain UNKNOWN and the active folio lock until reconciliation.
+    // The provider call is the irreversible side-effect boundary. The adapter
+    // is fully constructed above; every failure after invocation may follow a
+    // transmitted request and therefore must retain UNKNOWN plus the folio lock.
     const providerInput = payload.provider === 'razorpay'
       ? {
           amountMinor: payload.amountMinor, currency: payload.currency,
@@ -205,17 +205,13 @@ export class FirestorePaymentRepository {
           remote.amountMinor !== payload.amountMinor || remote.currency !== payload.currency) {
         throw new Error('provider_order_binding_mismatch');
       }
-
       const checkoutData = payload.provider === 'razorpay'
         ? { keyId: remote.keyId }
         : { paymentSessionId: remote.paymentSessionId, checkoutUrl: remote.checkoutUrl || null };
-      if (payload.provider === 'razorpay' && typeof checkoutData.keyId !== 'string') {
+      if ((payload.provider === 'razorpay' && typeof checkoutData.keyId !== 'string') ||
+          (payload.provider === 'cashfree' && typeof checkoutData.paymentSessionId !== 'string')) {
         throw new Error('provider_checkout_payload_invalid');
       }
-      if (payload.provider === 'cashfree' && typeof checkoutData.paymentSessionId !== 'string') {
-        throw new Error('provider_checkout_payload_invalid');
-      }
-
       await this.db.runTransaction(async tx => {
         const [currentIntent, currentIdem, currentLock] = await Promise.all([
           tx.get(intentRef), tx.get(idemRef), tx.get(lockRef)
