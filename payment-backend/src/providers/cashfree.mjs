@@ -83,14 +83,17 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
       this.request('GET', '/orders/' + encodeURIComponent(input.orderId)),
       this.request('GET', '/orders/' + encodeURIComponent(input.orderId) + '/payments')
     ]);
-    const successful = Array.isArray(payments) ? payments.find(p => p.payment_status === 'SUCCESS') : null;
+    const matching = Array.isArray(payments)
+      ? payments.find(p => p.cf_payment_id === input.paymentId) ||
+        payments.find(p => p.payment_status === 'SUCCESS')
+      : null;
     return {
       provider: 'cashfree',
       orderId: order.order_id,
       orderStatus: order.order_status,
-      paymentId: successful?.cf_payment_id || null,
-      paymentStatus: successful?.payment_status || order.order_status,
-      captured: successful?.payment_status === 'SUCCESS',
+      paymentId: matching?.cf_payment_id || null,
+      paymentStatus: matching?.payment_status || order.order_status,
+      captured: matching?.payment_status === 'SUCCESS',
       amountMinor: Math.round(Number(order.order_amount) * 100),
       currency: order.order_currency
     };
