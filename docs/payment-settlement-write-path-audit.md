@@ -50,3 +50,20 @@ The settlement service validates booking membership, amount, method, balance lim
 - UI label is **“Suggest matches”**, not “Auto settle.”
 - Phase A blocks silent notification-to-folio posting.
 - Phase B centralizes runtime payment writes, but cross-store atomicity, reconciliation quality, evidence fixtures, APK/device verification, and production approval remain outstanding.
+
+## Follow-up hardening — 2026-11-01
+
+The PMS-side local settlement boundary was further hardened on this branch:
+
+- INR amounts, balance due, legacy paid totals and daily totals are validated as safe paise values. Invalid numeric encodings, more-than-two-decimal values, control characters and unsafe aggregate totals are rejected.
+- An idempotent replay is resolved before checking the now-reduced balance, so a retry after a full payment returns the original posting instead of a false overpayment error.
+- Idempotency-key reuse with changed details and reuse across bookings is rejected. A UTR already present on another folio is a conflict, not a successful duplicate acknowledgement.
+- Duplicate-reference lookup includes both canonical `booking.pays` and legacy `booking.payments` rows.
+- Existing paid totals without matching payment rows are preserved; no fabricated receipt date or payment method is introduced.
+- Manual folio submissions now carry a per-sheet request key when no bank reference is supplied.
+- Reservation advances are validated against stay charges before guest/booking mutation. Reservation creation snapshots and restores guest, booking, audit, daily total and ID state if persistence verification fails.
+- The IndexedDB intent journal now requires backend-verified `SUCCESS` before settlement authorization, keeps failed/cancelled provider intents available for late-capture reconciliation, and protects recovered session identifiers.
+- Bridge terminal observations cannot finalize payment. Backend verification/reconciliation must echo exact request, session, provider, booking, folio, amount and currency bindings.
+- The web build now packages the PMS payment orchestrator and IndexedDB intent journal, and a Node test/build GitHub Actions workflow was added.
+
+**Verification status:** Source changes and test cases were committed and re-fetched for inspection. The complete Node test suite, web build and Android APK/device verification have not been executed in this session. The new workflow is intended to run these Node tests and web bundle checks on pushes to this branch. Live gateway use remains disabled.
