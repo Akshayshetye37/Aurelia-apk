@@ -164,3 +164,16 @@ test("legacy payment rows with idempotency keys remain safely deduplicated", () 
   assert.equal(booking.pays.length, 1);
   assert.equal(state.today, 0);
 });
+
+test("a UTR already applied to another booking is a conflict, not a successful duplicate", () => {
+  const { booking, state, deps } = fixture();
+  settlePayment({ ...deps, amount: 300, method: "UPI", reference: "UTR-SHARED", source: "staff_review" });
+  const other = { id: 18, room: "A2", p: 0, pays: [], payments: [] };
+  state.b.push(other);
+  assert.throws(() => settlePayment({
+    ...deps, booking: other, amount: 300, method: "UPI", reference: "UTR-SHARED",
+    source: "staff_review", balanceDue: 1000
+  }), error => error.code === "PAYMENT_REFERENCE_ALREADY_APPLIED");
+  assert.equal(other.p, 0);
+  assert.equal(other.pays.length, 0);
+});
