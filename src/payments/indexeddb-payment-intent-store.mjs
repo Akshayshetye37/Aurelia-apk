@@ -35,7 +35,7 @@ function clone(value) {
 function validate(record) {
   if (!record || typeof record !== "object" || Array.isArray(record)) throw new TypeError("Payment intent must be an object");
   const safeText = value => typeof value === "string" && value.length > 0 &&
-    !/[\\u0000-\\u001f\\u007f]/.test(value);
+    !/[\u0000-\u001f\u007f]/.test(value);
   if (!safeText(record.requestId) || record.requestId.length > 128) throw new TypeError("Invalid requestId");
   if (!STATES.has(record.state)) throw new TypeError("Invalid payment intent state");
   if (!Number.isSafeInteger(record.amountPaise) || record.amountPaise <= 0) throw new TypeError("Invalid amountPaise");
