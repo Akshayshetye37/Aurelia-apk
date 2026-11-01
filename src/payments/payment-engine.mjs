@@ -136,7 +136,7 @@ export function scoreEvidence(candidate, bankEvent, options = {}) {
   if (candidate.amountPaise !== bankEvent.amountPaise) {
     return { score: 0, reasons: ["amount_mismatch"], eligibleForAutoMatch: false };
   }
-  if (candidate.utr && bankEvent.utr && String(candidate.utr).replace(/\\s+/g, "").toUpperCase() !== String(bankEvent.utr).replace(/\\s+/g, "").toUpperCase()) {
+  if (candidate.utr && bankEvent.utr && String(candidate.utr).replace(/\s+/g, "").toUpperCase() !== String(bankEvent.utr).replace(/\s+/g, "").toUpperCase()) {
     return { score: 0, reasons: ["utr_conflict"], eligibleForAutoMatch: false };
   }
   if (candidate.upiId && bankEvent.upiId && normalizeUpiId(candidate.upiId) !== normalizeUpiId(bankEvent.upiId)) {
