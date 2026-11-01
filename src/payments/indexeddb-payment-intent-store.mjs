@@ -41,6 +41,9 @@ function validate(record) {
     if (typeof record[key] !== "string" || !record[key]) throw new TypeError("Invalid " + key);
   }
   if (record.currency !== "INR") throw new TypeError("Only INR intents are supported");
+  if (record.bridgeDispatchStarted != null && typeof record.bridgeDispatchStarted !== "boolean") {
+    throw new TypeError("bridgeDispatchStarted must be boolean");
+  }
   if (record.backendVerified != null && typeof record.backendVerified !== "boolean") {
     throw new TypeError("backendVerified must be boolean");
   }
@@ -143,6 +146,9 @@ export class IndexedDbPaymentIntentStore {
         if (existing.bridgeTransactionId && record.bridgeTransactionId &&
             existing.bridgeTransactionId !== record.bridgeTransactionId) {
           throw new Error("Bridge transaction reference cannot be replaced");
+        }
+        if (existing.bridgeDispatchStarted === true && record.bridgeDispatchStarted !== true) {
+          throw new Error("Bridge dispatch marker cannot be downgraded");
         }
         if (existing.backendVerified && !record.backendVerified) {
           throw new Error("Backend verification cannot be downgraded");
