@@ -20,9 +20,9 @@ function fixture({ connected = true, backendOverrides = {} } = {}) {
   };
   const backend = {
     async createSession(p) { return { requestId: p.requestId, sessionId: "sess-1" }; },
-    async verifyPayment(p) { return { verified: true, status: "success", requestId: p.requestId, amountPaise: p.amountPaise, currency: p.currency, folioId: p.folioId, transactionId: "txn-1" }; },
+    async verifyPayment(p) { return { verified: true, status: "success", requestId: p.requestId, bookingId: p.bookingId, amountPaise: p.amountPaise, currency: p.currency, folioId: p.folioId, transactionId: "txn-1" }; },
     async getPaymentStatus() { return { status: "processing" }; },
-    async reconcile() { return { status: "processing" }; },
+    async reconcile(p) { return { verified: true, status: "processing", requestId: p.requestId, bookingId: p.bookingId, amountPaise: p.amountPaise, currency: p.currency, folioId: p.folioId }; },
     ...backendOverrides
   };
   return { store, bridge, backend, records, orchestrator: new PayBridgePaymentOrchestrator({ store, bridge, backend }) };
@@ -41,7 +41,7 @@ test("bridge processing is not settlement authorization; backend verification is
   assert.equal(r.state, "PROCESSING");
   assert.equal(r.settlementAuthorized, false);
   const event = await f.orchestrator.receiveBridgeEvent({
-    requestId:"req-1", amountPaise:12500, currency:"INR", folioId:"folio-1", status:"success", transactionId:"txn-1"
+    requestId:"req-1", bookingId:"booking-1", amountPaise:12500, currency:"INR", folioId:"folio-1", status:"success", transactionId:"txn-1"
   });
   assert.equal(event.state, "PROCESSING");
   const verified = await f.orchestrator.verifyPayment("req-1");
@@ -66,7 +66,7 @@ test("request id reuse with different amount is rejected", async () => {
 test("events cannot be attached to a different folio or amount", async () => {
   const f = fixture();
   await f.orchestrator.createPayment(input);
-  await assert.rejects(f.orchestrator.receiveBridgeEvent({requestId:"req-1",amountPaise:1,currency:"INR",folioId:"folio-1",status:"success"}), e => e.code === "EVENT_BINDING_MISMATCH");
+  await assert.rejects(f.orchestrator.receiveBridgeEvent({requestId:"req-1",bookingId:"booking-1",amountPaise:1,currency:"INR",folioId:"folio-1",status:"success"}), e => e.code === "EVENT_BINDING_MISMATCH");
 });
 
 test("only declared state transitions are accepted", () => {
@@ -97,4 +97,42 @@ test("an ambiguous backend session response is retained as UNKNOWN, never retrie
   assert.equal(saved.state, "UNKNOWN");
   assert.equal(saved.settlementAuthorized, false);
   assert.equal(saved.lastErrorCode, "NETWORK_ERROR");
+});
+
+test("bridge failure event is only a hint and requires backend reconciliation", async () => {
+  const f = fixture({ backendOverrides: {
+    async reconcile(p) { return { verified:true, status:"failed", requestId:p.requestId, bookingId:p.bookingId, amountPaise:p.amountPaise, currency:p.currency, folioId:p.folioId }; }
+  }});
+  await f.orchestrator.createPayment(input);
+  const result = await f.orchestrator.receiveBridgeEvent({
+    requestId:"req-1", bookingId:"booking-1", folioId:"folio-1",
+    amountPaise:12500, currency:"INR", status:"failed", transactionId:"txn-1"
+  });
+  assert.equal(result.state, "FAILED");
+  assert.equal(result.backendVerified, true);
+});
+
+test("unbound backend reconciliation cannot mark a payment failed", async () => {
+  const f = fixture({ backendOverrides: { async reconcile() { return { status:"failed", verified:true, requestId:"wrong-request" }; } } });
+  await f.orchestrator.createPayment(input);
+  const result = await f.orchestrator.reconcileOne("req-1");
+  assert.equal(result.state, "PROCESSING");
+});
+
+test("backend verification must bind the exact booking", async () => {
+  const f = fixture({ backendOverrides: {
+    async verifyPayment(p) { return { verified:true, status:"success", requestId:p.requestId, bookingId:"another-booking", amountPaise:p.amountPaise, currency:p.currency, folioId:p.folioId, transactionId:"txn-1" }; }
+  }});
+  await f.orchestrator.createPayment(input);
+  await assert.rejects(f.orchestrator.verifyPayment("req-1"), e => e.code === "BACKEND_NOT_VERIFIED");
+});
+
+test("bridge cancellation is not final until backend confirms it", async () => {
+  const f = fixture({ backendOverrides: {
+    async reconcile(p) { return { verified:true, status:"cancelled", requestId:p.requestId, bookingId:p.bookingId, amountPaise:p.amountPaise, currency:p.currency, folioId:p.folioId }; }
+  }});
+  await f.orchestrator.createPayment(input);
+  const result = await f.orchestrator.cancelPayment("req-1");
+  assert.equal(result.state, "CANCELLED");
+  assert.equal(result.backendVerified, true);
 });
