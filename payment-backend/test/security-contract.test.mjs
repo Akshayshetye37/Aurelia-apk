@@ -109,3 +109,10 @@ test('unverified webhook inbox records remain retryable while verified duplicate
   assert.match(source, /lastAttemptAt: FieldValue\.serverTimestamp\(\)/);
   assert.match(source, /webhook_event_identity_conflict/);
 });
+
+
+test('webhook intent binding reads the resolved provider-order document and supports onboarding orders without an intent', () => {
+  assert.match(source, /const orderData = orderSnap\.data\(\);\s*const intentRef = orderData\.intentId/);
+  assert.match(source, /const intentRef = orderData\.intentId\s*\? db\.doc\('paymentIntents\/' \+ orderData\.intentId\)\s*: null/);
+  assert.match(source, /if \(intentRef && \(!currentIntent\?\.exists/);
+});
