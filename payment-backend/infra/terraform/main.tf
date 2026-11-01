@@ -51,12 +51,12 @@ resource "google_project_iam_member" "secret_runtime" {
 }
 
 resource "google_cloud_run_v2_service" "payment_backend" {
-  project             = var.project_id
-  name                = var.service_name
-  location            = var.region
-  ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  project              = var.project_id
+  name                 = var.service_name
+  location             = var.region
+  ingress              = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   default_uri_disabled = true
-  deletion_protection = true
+  deletion_protection  = true
 
   template {
     service_account = google_service_account.runtime.email
