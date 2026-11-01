@@ -286,9 +286,15 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
     if (!reservationResult.newlyReserved) return fail(res, 409, 'order_creation_unknown_reconcile_before_retry');
     const input = provider === 'razorpay'
       ? { amountMinor, currency: 'INR', receipt: 'aur_' + idemId.slice(0, 24) }
-      : { orderId: 'aur_' + idemId.slice(0, 32), amountMinor, currency: 'INR',
-          customer: { id: 'aurelia_test', phone: '9999999999' },
-          returnUrl: 'https://example.invalid/payment-return', idempotencyKey: 'aur_' + idemId.slice(0, 32) };
+      : {
+          orderId: 'aur_' + idemId.slice(0, 32), amountMinor, currency: 'INR',
+          customer: {
+            id: 'aurelia_owner_test',
+            phone: '9999999999'
+          },
+          returnUrl: [...origins][0] + '/payment-return',
+          idempotencyKey: 'aur_' + idemId.slice(0, 32)
+        };
     const order = await adapter.createOrder(input);
     const response = { provider, environment: 'test', orderId: order.orderId, amountMinor: order.amountMinor,
       currency: order.currency, checkoutData: provider === 'razorpay' ? { keyId: order.keyId } :
