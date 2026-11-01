@@ -3,10 +3,25 @@
 **Repository:** `Akshayshetye37/Aurelia-apk`  
 **Branch:** `feature/multi-provider-payment-backend`  
 **Path:** `payment-backend/`  
-**Deployment status:** Not deployed.  
+**Deployment status:** Not deployed; hosting is optional and may be configured by the owner later.  
 **Payment acceptance status:** Not production-ready; live payments must remain disabled.
 
 This is a separately deployable Node.js service for Aurelia PMS payments. It is not part of the PMS APK or the Aurelia Pay Bridge APK. The backend contains provider adapters, security foundations, a payment-intent state machine, and an atomic Firestore reservation repository. These components are not yet connected into a complete customer checkout-to-folio-settlement flow.
+
+## Deployment policy: local-first and optional
+
+Aurelia PMS must remain fully usable without a server, cloud account, Firebase project, or payment backend. Do not make backend deployment, sign-in to a cloud service, or remote connectivity a prerequisite for installing or using core PMS functions.
+
+- Default installation mode is **Local only**. Bookings, guests, rooms, manual payments, folio history, invoices and local backup continue to work using the existing PMS local data model.
+- A future owner-controlled Settings option may enable a remote payment service after the owner supplies and verifies its endpoint and completes the required authentication/onboarding. Until then, remote payment functions remain unavailable, not broken or mandatory.
+- Do not silently create a cloud project, deploy infrastructure, upload PMS/guest data, or transmit payment evidence.
+- Do not treat an arbitrary URL as a trusted payment backend. Endpoint configuration must be validated over HTTPS and authenticated against a documented service identity before use.
+- Remote payment configuration must be separate from optional backup destinations. A backup URL is not a payment API, and a payment API is not a backup destination.
+- Never store provider API secrets, webhook secrets, service-account keys, or backend credentials in PMS settings, localStorage, either APK, or client-side configuration. Merchant credentials belong in a trusted server-side secret store.
+- If a configured backend is unavailable, core PMS operations remain available. Gateway checkout is unavailable and any already-dispatched payment with an ambiguous outcome remains UNKNOWN until it can be reconciled. Never fall back to an unverified client-side payment path.
+- Enabling remote payment processing is an explicit owner action and must not turn on live payments automatically. Sandbox verification, authorization, monitoring and a separate live-activation gate remain mandatory.
+
+This policy is a product/architecture requirement. The owner-facing payment-backend configuration screen and remote endpoint verification workflow are **not implemented**. Do not claim that owners can configure or use a payment backend from Settings until that UI and its security contract exist.
 
 ## 1. Architecture and trust boundaries
 
@@ -98,8 +113,8 @@ Do not add a second independent authentication or HTTPS implementation in a new 
 | Refund lifecycle | Adapter methods exist; lifecycle not wired | Refund intent/state machine, status reconciliation and ledger treatment |
 | Pay Bridge payment execution | Not implemented | Extend existing IPC contract after backend intent/session flow is stable |
 | Installed-device IPC test | Not verified | Test signed PMS/Bridge APKs on device |
-| Owner payment console | Not implemented | Secure owner workflow for provider configuration/onboarding |
-| Cloud deployment and operations | Not implemented | GCP project, IAM, secrets, ingress, monitoring, backups and runbooks |
+| Owner payment-backend Settings UI | Not implemented | Optional endpoint setup, trust verification, authentication and explicit enable/disable controls |
+| Cloud deployment and operations | Not implemented | Owner may configure later; GCP project, IAM, secrets, ingress, monitoring, backups and runbooks required |
 
 ## 5. Execution plan and acceptance gates
 
