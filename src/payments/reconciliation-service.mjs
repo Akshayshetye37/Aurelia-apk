@@ -91,7 +91,7 @@ export function createReconciliationService({ store, matchOptions = {} } = {}) {
     });
 
     const unparsed = evidence.filter(event => event.parseStatus === "unparsed").map(event => ({
-      evidenceId: event.evidenceId, decision: "review", reason: "unparsed_evidence"
+      evidenceId: event.evidenceId, decision: "review", reason: event.reviewReason || "unparsed_evidence"
     }));
     return { results, unparsedEvidence: unparsed, evidenceCount: evidence.length, settlementEnabled: false };
   }
