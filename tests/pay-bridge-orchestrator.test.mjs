@@ -153,3 +153,16 @@ test("backend reconciliation cannot change status without matching session and p
   const result = await f.orchestrator.reconcileOne("req-1");
   assert.equal(result.state, "PROCESSING");
 });
+
+test("a backend-verified failure can be reopened for late-capture verification", async () => {
+  const f = fixture({ backendOverrides: {
+    async reconcile(p) { return { verified:true, status:"failed", requestId:p.requestId, sessionId:p.sessionId, providerId:p.providerId, bookingId:p.bookingId, amountPaise:p.amountPaise, currency:p.currency, folioId:p.folioId }; }
+  }});
+  await f.orchestrator.createPayment(input);
+  const failed = await f.orchestrator.reconcileOne("req-1");
+  assert.equal(failed.state, "FAILED");
+  f.backend.reconcile = async p => ({ verified:true, status:"success", requestId:p.requestId, sessionId:p.sessionId, providerId:p.providerId, bookingId:p.bookingId, amountPaise:p.amountPaise, currency:p.currency, folioId:p.folioId });
+  const recovered = await f.orchestrator.reconcileOne("req-1");
+  assert.equal(recovered.state, "SUCCESS");
+  assert.equal(recovered.settlementAuthorized, true);
+});
