@@ -1,4 +1,4 @@
-import { assertAutoFolioSettlementEnabled } from "./settlement-gate.mjs";
+import { AUTO_FOLIO_SETTLEMENT_ENABLED, assertAutoFolioSettlementEnabled } from "./settlement-gate.mjs";
 
 /**
  * Single local mutation boundary for hotel folio payments.
@@ -63,12 +63,17 @@ export function settlePayment({
   idempotencyKey,
   balanceDue,
   verificationConfirmed = false,
+  autoSettlementEnabled = AUTO_FOLIO_SETTLEMENT_ENABLED,
+  gatewayActive = false,
   persist = () => {},
   audit = () => {},
   now = () => new Date().toISOString()
 } = {}) {
   // The automatic path must fail closed before validation or any mutation.
-  if (source === "auto") assertAutoFolioSettlementEnabled();
+  if (source === "auto") assertAutoFolioSettlementEnabled({
+    enabled: autoSettlementEnabled,
+    gatewayActive
+  });
   if (!ALLOWED_SOURCES.has(source)) throw new TypeError("Unsupported payment source");
   if (verificationConfirmed !== true) {
     const error = new Error("Confirm that the payment was independently received before recording it");

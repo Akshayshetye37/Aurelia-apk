@@ -120,6 +120,25 @@ test("automatic source calls the gate and cannot mutate while disabled", () => {
   assert.equal(state.aud.length, 0);
 });
 
+test("automatic settlement requires explicit enablement and an active gateway", () => {
+  assert.throws(() => assertAutoFolioSettlementEnabled({ enabled: true, gatewayActive: false }),
+    error => error.code === "PAYMENT_GATEWAY_INACTIVE");
+  assert.throws(() => assertAutoFolioSettlementEnabled({ enabled: false, gatewayActive: true }),
+    error => error.code === "AUTO_SETTLEMENT_DISABLED");
+  assert.equal(assertAutoFolioSettlementEnabled({ enabled: true, gatewayActive: true }), true);
+});
+
+test("automatic settlement is blocked unless both runtime conditions are true", () => {
+  const { booking, state, deps } = fixture();
+  const base = { ...deps, amount: 100, method: "Razorpay", source: "auto", idempotencyKey: "gateway-auto-1" };
+  assert.throws(() => settlePayment({ ...base, autoSettlementEnabled: true, gatewayActive: false }),
+    error => error.code === "PAYMENT_GATEWAY_INACTIVE");
+  assert.throws(() => settlePayment({ ...base, autoSettlementEnabled: false, gatewayActive: true }),
+    error => error.code === "AUTO_SETTLEMENT_DISABLED");
+  assert.equal(booking.pays.length, 0);
+  assert.equal(state.today, 0);
+});
+
 test("addSig is evidence-only and keeps suggested matches in review", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const start = html.indexOf("function addSig(o)");
