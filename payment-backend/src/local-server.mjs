@@ -116,7 +116,7 @@ function originGuard(req, res, next) {
     res.set('Access-Control-Allow-Origin', origin);
     res.set('Vary', 'Origin');
     res.set('Access-Control-Allow-Credentials', 'true');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, X-CSRF-Token');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, X-CSRF-Token, X-Aurelia-Session');
     res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   }
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -199,7 +199,7 @@ app.post('/v1/auth/login', loginRateLimit, async (req, res) => {
     .run(tokenDigest(token), row.id, expires, now());
   res.setHeader('Set-Cookie', SESSION_COOKIE + '=' + token + '; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=' + SESSION_TTL_SECONDS);
   writeAudit('LOGIN_SUCCESS', row.username);
-  return res.json({ authenticated: true, expiresAt: expires });
+  return res.json({ authenticated: true, expiresAt: expires, sessionToken: token });
 });
 app.get('/v1/auth/session', ownerAuth, (req, res) => res.json({ authenticated: true, username: req.owner.username }));
 app.post('/v1/auth/logout', ownerAuth, (req, res) => {
