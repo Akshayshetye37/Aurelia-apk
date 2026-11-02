@@ -44,7 +44,7 @@ test('owner session is cookie-only and is never returned in JSON', () => {
 
 test('new device registrations remain pending until proof of possession exists', () => {
   assert.match(source, /ECDSA_P256_SHA256','PENDING'/);
-  assert.match(source, /proofOfPossessionRequired: true/);
+  assert.match(source, /proofOfPossessionRequired\s*:\s*true/);
 });
 
 test('legacy ACTIVE devices are downgraded once until proof-of-possession enrollment is implemented', () => {
