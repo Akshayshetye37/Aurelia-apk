@@ -42,6 +42,6 @@ test('PMS presents local native configuration before optional LAN/cloud infrastr
   assert.match(html, /Local Payment Gateway/);
   assert.match(html, /Save securely on this device/);
   assert.match(html, /Optional LAN \/ Cloud Payment Service/);
-  assert.match(html, /no Docker, hosting or an Aurelia cloud account required for local configuration/);
+  assert.match(html, /without Docker, hosting or an Aurelia cloud account required for local configuration/);
   assert.match(html, /refreshAureliaNativeGateway/);
 });
