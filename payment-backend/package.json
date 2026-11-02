@@ -3,10 +3,11 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/local-server.mjs",
-    "start:legacy-cloud": "node src/server.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
