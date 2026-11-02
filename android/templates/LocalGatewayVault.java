@@ -139,6 +139,7 @@ final class LocalGatewayVault {
   private JSONObject read(String provider, String environment) throws Exception {
     File file = file(provider, environment);
     if (!file.isFile()) return null;
+    if (file.length() <= 0 || file.length() > 65536) throw new IllegalStateException("gateway_vault_record_size_invalid");
     byte[] bytes = new byte[(int) file.length()];
     try (FileInputStream in = new FileInputStream(file)) {
       int offset = 0, count;
@@ -174,7 +175,11 @@ final class LocalGatewayVault {
     try (FileOutputStream out = new FileOutputStream(temp)) {
       out.write(output); out.getFD().sync();
     } finally { Arrays.fill(output, (byte) 0); }
-    if (target.exists() && !target.delete()) { temp.delete(); throw new IllegalStateException("gateway_vault_replace_failed"); }
-    if (!temp.renameTo(target)) { temp.delete(); throw new IllegalStateException("gateway_vault_commit_failed"); }
+    try {
+      android.system.Os.rename(temp.getAbsolutePath(), target.getAbsolutePath());
+    } catch (Exception commitError) {
+      temp.delete();
+      throw new IllegalStateException("gateway_vault_atomic_commit_failed", commitError);
+    }
   }
 }
