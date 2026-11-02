@@ -3886,6 +3886,7 @@ window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;
    if(!validateConfig(config)){
     const error=new Error('Missing or incomplete window.AURELIA_FIREBASE_CONFIG. Payment administration authentication is unavailable; local PMS remains available.');
     setState('offline',error,null);
+    initPromise=null; // Permit a later runtime config injection and retry.
     throw error;
    }
    setState('initializing',null,null);
@@ -3909,6 +3910,7 @@ window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;
     return auth;
    }catch(error){
     setState('error',error,null);
+    initPromise=null; // Permit retry after transient SDK/network initialization failures.
     throw error;
    }
   })();
