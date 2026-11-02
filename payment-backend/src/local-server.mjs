@@ -26,6 +26,7 @@ function requiredHex(name, bytes) {
 }
 const masterKey = requiredHex('GATEWAY_MASTER_KEY', 32);
 const sessionPepper = requiredHex('SESSION_TOKEN_PEPPER', 32);
+const ownerSetupToken = requiredHex('OWNER_SETUP_TOKEN', 32);
 const origins = new Set((process.env.AURELIA_OWNER_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean));
 if (!origins.size || [...origins].some(v => !/^https:\/\/[^/]+$/.test(v))) {
   throw new Error('AURELIA_OWNER_ORIGINS must contain exact HTTPS origins.');
@@ -180,7 +181,7 @@ function originGuard(req, res, next) {
     res.set('Access-Control-Allow-Origin', origin);
     res.set('Vary', 'Origin');
     res.set('Access-Control-Allow-Credentials', 'true');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, X-CSRF-Token, X-Aurelia-Session');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, X-Aurelia-Setup-Token');
     res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   }
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -214,7 +215,7 @@ function loginRateLimit(req, res, next) {
 function ownerAuth(req, res, next) {
   const cookieHeader = req.get('cookie') || '';
   const cookieToken = cookieHeader.split(';').map(v => v.trim()).find(v => v.startsWith(SESSION_COOKIE + '='))?.slice(SESSION_COOKIE.length + 1);
-  const token = cookieToken || req.get('x-aurelia-session');
+  const token = cookieToken;
   if (typeof token !== 'string' || token.length < 40 || token.length > 256) return fail(res, 401, 'owner_session_required');
   const digest = tokenDigest(token);
   const row = db.prepare('SELECT s.expires_at,o.id,o.username FROM sessions s JOIN owner o ON o.id=s.owner_id WHERE s.token_hash=?').get(digest);
@@ -251,13 +252,13 @@ app.post('/v1/admin/devices/register', ownerAuth, (req, res) => {
     return res.status(200).json({deviceId,status:existing.status,duplicate:true});
   }
   const register = db.transaction(() => {
-    db.prepare("INSERT INTO device_registrations(device_id,public_key_spki,key_algorithm,status,created_at) VALUES(?,?,'ECDSA_P256_SHA256','ACTIVE',?)").run(deviceId,der,now());
+    db.prepare("INSERT INTO device_registrations(device_id,public_key_spki,key_algorithm,status,created_at) VALUES(?,?,'ECDSA_P256_SHA256','PENDING',?)").run(deviceId,der,now());
     db.prepare('INSERT INTO device_cursors(device_id,last_applied_sequence,updated_at) VALUES(?,0,?)').run(deviceId,now());
     db.prepare('INSERT INTO device_sequence_counters(device_id,last_sequence) VALUES(?,0)').run(deviceId);
     writeAudit('PAYMENT_DEVICE_REGISTERED',deviceId);
   });
   try { register(); } catch { return fail(res,409,'device_registration_conflict'); }
-  return res.status(201).json({deviceId,status:'ACTIVE',keyAlgorithm:'ECDSA_P256_SHA256'});
+  return res.status(201).json({deviceId,status:'PENDING',keyAlgorithm:'ECDSA_P256_SHA256',proofOfPossessionRequired:true});
 });
 
 app.get('/v1/auth/setup-status', (_req, res) => {
@@ -265,6 +266,11 @@ app.get('/v1/auth/setup-status', (_req, res) => {
 });
 app.post('/v1/auth/setup', loginRateLimit, async (req, res) => {
   if (db.prepare('SELECT 1 FROM owner WHERE id=1').get()) return fail(res, 409, 'owner_already_configured');
+  const suppliedSetupToken = req.get('x-aurelia-setup-token') || '';
+  if (!/^[a-f0-9]{64}$/i.test(suppliedSetupToken) ||
+      !crypto.timingSafeEqual(Buffer.from(suppliedSetupToken, 'hex'), ownerSetupToken)) {
+    return fail(res, 403, 'owner_setup_token_invalid');
+  }
   const { username, password } = req.body || {};
   if (typeof username !== 'string' || !/^[A-Za-z0-9._-]{3,48}$/.test(username) ||
       typeof password !== 'string' || password.length < 14 || password.length > 1024) {
@@ -291,7 +297,7 @@ app.post('/v1/auth/login', loginRateLimit, async (req, res) => {
     .run(tokenDigest(token), row.id, expires, now());
   res.setHeader('Set-Cookie', SESSION_COOKIE + '=' + token + '; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=' + SESSION_TTL_SECONDS);
   writeAudit('LOGIN_SUCCESS', row.username);
-  return res.json({ authenticated: true, expiresAt: expires, sessionToken: token });
+  return res.json({ authenticated: true, expiresAt: expires });
 });
 app.get('/v1/auth/session', ownerAuth, (req, res) => res.json({ authenticated: true, username: req.owner.username }));
 app.post('/v1/auth/logout', ownerAuth, (req, res) => {
@@ -569,7 +575,7 @@ app.post('/v1/payments/:transactionId/reconcile', ownerAuth, async (req, res) =>
     }
     if (remote.captured === true) {
       const result = transitionPayment(tx.id,
-        ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED'],
+        ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED','FAILED'],
         'CAPTURED_PENDING_ACCOUNTING', 'provider_api_confirmed_capture', providerOrderId);
       return res.json({ transactionId: tx.id, status: result.status, folioSettlement: 'PENDING_OUTBOX' });
     }
@@ -605,6 +611,13 @@ app.post('/v1/webhooks/:provider/:environment', express.raw({ type: 'application
     const payloadHash = crypto.createHash('sha256').update(req.body).digest('hex');
     const inserted = db.prepare(`INSERT OR IGNORE INTO webhook_inbox(event_key,provider,environment,received_at,signature_verified,processing_status,payload_sha256)
       VALUES(?,?,?,?,1,'RECEIVED',?)`).run(key, provider, environment, now(), payloadHash);
+    if (inserted.changes === 0) {
+      const prior = db.prepare('SELECT payload_sha256 FROM webhook_inbox WHERE event_key=?').get(key);
+      if (!prior || prior.payload_sha256 !== payloadHash) {
+        writeAudit('WEBHOOK_EVENT_IDENTITY_CONFLICT', provider + ':' + environment);
+        return fail(res, 409, 'webhook_event_identity_conflict');
+      }
+    }
     writeAudit('WEBHOOK_SIGNATURE_VERIFIED', provider + ':' + environment);
     return res.status(200).json({ received: true, duplicate: inserted.changes === 0, accounting: 'not_implemented' });
   } catch { return fail(res, 503, 'webhook_processing_unavailable'); }
