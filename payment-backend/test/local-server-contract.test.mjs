@@ -54,3 +54,26 @@ test('local service requires trusted HTTPS proxy and exact HTTPS origins', () =>
   assert.match(source, /if \(!req\.secure\)/);
   assert.match(source, /AURELIA_OWNER_ORIGINS/);
 });
+
+test('payment dispatch persists an idempotent intent before provider network dispatch', () => {
+  assert.match(source, /CREATE TABLE IF NOT EXISTS transaction_journal/);
+  assert.match(source, /CREATE TABLE IF NOT EXISTS settlement_outbox/);
+  assert.match(source, /idempotency_key_payload_conflict/);
+  assert.match(source, /durable_intent_created/);
+  assert.match(source, /provider_dispatch_outcome_ambiguous/);
+  assert.match(source, /Never retry creation automatically/);
+});
+
+test('reconciliation queries provider API and checks amount, currency and order reference', () => {
+  assert.match(source, /adapter\.getPaymentStatus\(\{ orderId: tx\.provider_order_id \}\)/);
+  assert.match(source, /remote\.amountMinor !== tx\.amount_minor/);
+  assert.match(source, /remote\.currency !== tx\.currency/);
+  assert.match(source, /provider_api_confirmed_capture/);
+  assert.doesNotMatch(source, /externalStatusVerified\s*=\s*['"]captured['"]/);
+});
+
+test('verified capture creates one durable accounting outbox event, not a false folio success', () => {
+  assert.match(source, /CAPTURED_PENDING_ACCOUNTING/);
+  assert.match(source, /INSERT OR IGNORE INTO settlement_outbox/);
+  assert.match(source, /folioSettlement: 'PENDING_OUTBOX'/);
+});
