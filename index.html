@@ -3849,9 +3849,11 @@ window.testAureliaBackendConnection=async function(){
   finally{clearTimeout(timeout)}
   if(!response.ok)throw new Error('Backend returned HTTP '+response.status);
   const body=await response.json();
-  if(!body||body.ok!==true||body.checks?.firestore!==true||body.checks?.secretManager!==true)throw new Error('Backend infrastructure readiness checks did not pass');
-  S.set.backendConnection={...(S.set.backendConnection||{}),endpoint:url.origin,reachable:true,checkedAt:new Date().toISOString(),healthMessage:'HTTPS /readyz passed: Firestore and Secret Manager are reachable by the backend runtime identity. Owner authentication, merchant credentials, provider sandbox, webhook delivery, folio settlement and payment authorization remain unverified.'};
-  persist();render();toast('Backend infrastructure is ready. Payment authorization remains disabled and unverified.');
+  const localReady=body?.database==='ready';
+  const cloudReady=body?.checks?.firestore===true&&body?.checks?.secretManager===true;
+  if(!body||body.ok!==true||(!localReady&&!cloudReady))throw new Error('Backend readiness checks did not pass');
+  S.set.backendConnection={...(S.set.backendConnection||{}),endpoint:url.origin,reachable:true,checkedAt:new Date().toISOString(),healthMessage:'HTTPS /readyz passed: backend runtime dependencies are reachable. This is a readiness check only; owner authentication, device trust, merchant credentials, provider sandbox, webhook delivery, folio settlement and payment authorization remain unverified.'};
+  persist();render();toast('Backend is reachable. Payment authorization remains disabled and unverified.');
  }catch(error){
   S.set.backendConnection={...(S.set.backendConnection||{}),endpoint:url.origin,reachable:false,checkedAt:null,healthMessage:'Readiness check failed: '+(error?.name==='AbortError'?'request timed out':(error?.message||'connection unavailable'))};
   persist();render();toast('Backend readiness check failed: '+(error?.name==='AbortError'?'request timed out':(error?.message||'connection unavailable')));
