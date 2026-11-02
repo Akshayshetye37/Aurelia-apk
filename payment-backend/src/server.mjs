@@ -73,27 +73,43 @@ async function loadSecret(id) {
   return Buffer.from(version.payload.data).toString('utf8');
 }
 async function authenticateTenantMembership(req, res, next, allowedRoles, failureCode) {
+  const header = req.get('authorization') || '';
+  if (!/^Bearer\\s+[^\\s]+$/i.test(header)) return fail(res, 401, 'authentication_required');
+  let token;
   try {
-    const header = req.get('authorization') || '';
-    if (!header.startsWith('Bearer ')) return fail(res, 401, 'authentication_required');
-    const token = await auth.verifyIdToken(header.slice(7), true);
-    if (token.email_verified !== true) return fail(res, 403, 'verified_email_required');
-    if (!(token.firebase || {}).sign_in_second_factor) return fail(res, 403, 'mfa_required');
-    const ageSeconds = Date.now() / 1000 - token.auth_time;
-    if (!Number.isFinite(token.auth_time) || ageSeconds < 0 || ageSeconds > 600) {
-      return fail(res, 401, 'recent_mfa_sign_in_required');
+    // Firebase Admin validates signature, issuer, audience, expiry and revocation.
+    token = await auth.verifyIdToken(header.slice(7).trim(), true);
+  } catch (error) {
+    if (error?.code === 'auth/id-token-expired') return fail(res, 401, 'token_expired');
+    if (error?.code === 'auth/id-token-revoked' || error?.code === 'auth/user-disabled') {
+      return fail(res, 401, 'token_revoked');
     }
-    const membership = await membershipDoc(token.uid).get();
-    const m = membership.exists ? membership.data() : {};
-    if (m.status !== 'active' || !tenantIdPattern.test(m.tenantId || '') || !allowedRoles.includes(m.role)) {
-      return fail(res, 403, failureCode);
-    }
-    req.actor = token;
-    req.tenant = { id: m.tenantId, role: m.role };
-    return next();
-  } catch {
-    return fail(res, 401, 'invalid_or_revoked_token');
+    return fail(res, 401, 'invalid_token');
   }
+  if (token.email_verified !== true) return fail(res, 403, 'verified_email_required');
+  const secondFactor = token.firebase?.sign_in_second_factor;
+  if (typeof secondFactor !== 'string' || !['phone','totp'].includes(secondFactor)) {
+    return fail(res, 403, 'mfa_required');
+  }
+  const now = Math.floor(Date.now() / 1000);
+  if (!Number.isSafeInteger(token.auth_time) || token.auth_time <= 0 || token.auth_time > now) {
+    return fail(res, 401, 'invalid_auth_time');
+  }
+  if (now - token.auth_time > 600) return fail(res, 401, 'recent_mfa_sign_in_required');
+  let membership;
+  try {
+    membership = await membershipDoc(token.uid).get();
+  } catch {
+    // Infrastructure failure is not an authentication failure.
+    return fail(res, 503, 'membership_service_unavailable');
+  }
+  const m = membership.exists ? membership.data() : {};
+  if (m.status !== 'active' || !tenantIdPattern.test(m.tenantId || '') || !allowedRoles.includes(m.role)) {
+    return fail(res, 403, failureCode);
+  }
+  req.actor = token;
+  req.tenant = { id: m.tenantId, role: m.role };
+  return next();
 }
 function requireTenantAdmin(req, res, next) {
   return authenticateTenantMembership(req, res, next, ['owner', 'admin'], 'active_tenant_admin_membership_required');
