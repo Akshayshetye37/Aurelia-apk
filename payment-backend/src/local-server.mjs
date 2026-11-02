@@ -134,6 +134,15 @@ if (!transactionColumns.has('folio_id')) {
   db.exec('ALTER TABLE transactions ADD COLUMN folio_id TEXT');
 }
 
+// Existing registrations were previously marked ACTIVE without proof of
+// possession. Downgrade them once so an old database cannot bypass the new
+// pending-enrollment gate. PRAGMA user_version makes this migration one-shot.
+const deviceEnrollmentSchemaVersion = db.pragma('user_version', { simple: true });
+if (deviceEnrollmentSchemaVersion < 1) {
+  db.prepare("UPDATE device_registrations SET status='PENDING' WHERE status='ACTIVE'").run();
+  db.pragma('user_version = 1');
+}
+
 const now = () => new Date().toISOString();
 const fail = (res, status, error) => res.status(status).json({ error });
 const audit = db.prepare('INSERT INTO audit(action,subject,created_at) VALUES(?,?,?)');
