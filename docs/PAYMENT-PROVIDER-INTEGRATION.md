@@ -56,8 +56,8 @@ Razorpay's own Optimizer documentation distinguishes bank gateways from aggregat
 ## Security and implementation boundaries
 
 - No secret, salt, private key, webhook secret, API access token or merchant password may be stored in APK, browser storage, app backup, logs or Git.
-- The PMS settings screen stores only a public merchant identifier and an HTTPS backend URL. It is not a provider connection.
-- Pay Bridge remains a separate future APK and is not a substitute for the trusted backend.
+- The PMS stores only the owner-configured backend origin in local settings. The LAN owner console submits provider secrets directly to the trusted Docker backend; secrets are not persisted in PMS.
+- Pay Bridge remains a separate companion APK. Its current PMS-side handshake is not required for provider credential administration and does not yet implement checkout/refund/settlement IPC.
 - A browser redirect, Android intent result, screenshot, UPI notification or unsigned callback is not proof of payment.
 - Keep automatic folio settlement disabled until provider-specific sandbox and live end-to-end tests pass.
 
@@ -66,7 +66,7 @@ Razorpay's own Optimizer documentation distinguishes bank gateways from aggregat
 - Provider catalogue and official documentation references: added to the PMS payment workspace.
 - Single-provider-per-merchant selection: implemented in the PMS settings UI; selecting a new provider replaces the previous selected provider.
 - Provider-specific setup/verification guidance: included for every catalogue entry.
-- Actual provider API adapters, backend endpoints, webhook receivers and provider status polling: not implemented by this catalogue change.
+- Razorpay and Cashfree backend adapters: implemented for credential validation, order creation, provider status lookup, raw-body webhook signature verification and refund API calls. The local Docker service wires credential management, test dispatch, reconciliation lookup and webhook signature intake; full checkout/accounting/refund workflows remain incomplete.
 - Separate Aurelia Pay Bridge APK: not yet built.
-- Live merchant credentials and provider accounts: not connected.
-- Automatic folio settlement: disabled.
+- LAN owner console: integrated for Razorpay/Cashfree sandbox credential storage, validation and explicit test-mode activation. Merchant credentials are not yet connected in a deployed appliance.
+- Public webhook delivery, background reconciliation, refund lifecycle and atomic PMS folio settlement: not implemented; live collection remains disabled.
