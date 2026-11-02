@@ -221,6 +221,15 @@ function loginRateLimit(req, res, next) {
   if (item.count > 5) return fail(res, 429, 'login_rate_limited');
   next();
 }
+// SameSite=None is required for the cross-origin Capacitor WebView -> LAN appliance
+// cookie flow. Require exact-Origin validation on every cookie-authenticated
+// browser mutation so a hostile site cannot ride the HttpOnly session.
+function requireBrowserMutationOrigin(req, res, next) {
+  const origin = req.get('origin');
+  if (!origin || !origins.has(origin)) return fail(res, 403, 'origin_not_allowed');
+  return next();
+}
+
 function ownerAuth(req, res, next) {
   const cookieHeader = req.get('cookie') || '';
   const cookieToken = cookieHeader.split(';').map(v => v.trim()).find(v => v.startsWith(SESSION_COOKIE + '='))?.slice(SESSION_COOKIE.length + 1);
@@ -244,7 +253,7 @@ app.get('/readyz', (_req, res) => {
 });
 // The Android app generates and retains its private key in Android Keystore.
 // Only the P-256 public key is registered with this service.
-app.post('/v1/admin/devices/register', ownerAuth, (req, res) => {
+app.post('/v1/admin/devices/register', ownerAuth, requireBrowserMutationOrigin, (req, res) => {
   const { deviceId, publicKeyPem } = req.body || {};
   if (!validOpaqueId(deviceId) || typeof publicKeyPem !== 'string' || publicKeyPem.length > 4096)
     return fail(res, 400, 'invalid_device_registration');
@@ -281,7 +290,8 @@ app.post('/v1/auth/setup', loginRateLimit, async (req, res) => {
     return fail(res, 403, 'owner_setup_token_invalid');
   }
   const { username, password } = req.body || {};
-  if (typeof username !== 'string' || !/^[A-Za-z0-9._-]{3,48}$/.test(username) ||
+  if (!req.body || Object.keys(req.body).some(key => !['username', 'password'].includes(key)) ||
+      typeof username !== 'string' || !/^[A-Za-z0-9._-]{3,48}$/.test(username) ||
       typeof password !== 'string' || password.length < 14 || password.length > 1024) {
     return fail(res, 400, 'owner_setup_password_or_username_policy_failed');
   }
@@ -295,6 +305,11 @@ app.post('/v1/auth/setup', loginRateLimit, async (req, res) => {
 });
 app.post('/v1/auth/login', loginRateLimit, async (req, res) => {
   const { username, password } = req.body || {};
+  if (!req.body || Object.keys(req.body).some(key => !['username', 'password'].includes(key)) ||
+      typeof username !== 'string' || !/^[A-Za-z0-9._-]{3,48}$/.test(username) ||
+      typeof password !== 'string' || password.length < 1 || password.length > 1024) {
+    return fail(res, 400, 'invalid_login_schema');
+  }
   const row = db.prepare('SELECT * FROM owner WHERE username=?').get(username);
   if (!row || !(await verifyPassword(password, row))) {
     writeAudit('LOGIN_FAILED', typeof username === 'string' ? username.slice(0, 48) : null);
@@ -309,13 +324,13 @@ app.post('/v1/auth/login', loginRateLimit, async (req, res) => {
   return res.json({ authenticated: true, expiresAt: expires });
 });
 app.get('/v1/auth/session', ownerAuth, (req, res) => res.json({ authenticated: true, username: req.owner.username }));
-app.post('/v1/auth/logout', ownerAuth, (req, res) => {
+app.post('/v1/auth/logout', ownerAuth, requireBrowserMutationOrigin, (req, res) => {
   db.prepare('DELETE FROM sessions WHERE token_hash=?').run(req.sessionDigest);
   res.setHeader('Set-Cookie', SESSION_COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0');
   writeAudit('LOGOUT', req.owner.username);
   res.json({ authenticated: false });
 });
-app.post('/v1/auth/change-password', ownerAuth, async (req, res) => {
+app.post('/v1/auth/change-password', ownerAuth, requireBrowserMutationOrigin, async (req, res) => {
   const { oldPassword, newPassword } = req.body || {};
   const row = db.prepare('SELECT * FROM owner WHERE id=?').get(req.owner.id);
   if (!(await verifyPassword(oldPassword, row))) return fail(res, 400, 'current_password_incorrect');
@@ -357,7 +372,7 @@ app.get('/v1/admin/providers', ownerAuth, (_req, res) => {
       active: !!row?.active, updatedAt: row?.updated_at || null, unresolvedTransactions: unresolvedCount(provider, environment) };
   })) });
 });
-app.put('/v1/admin/providers/:provider/credentials', ownerAuth, (req, res) => {
+app.put('/v1/admin/providers/:provider/credentials', ownerAuth, requireBrowserMutationOrigin, (req, res) => {
   const { provider } = req.params, environment = req.query.environment || req.body?.environment;
   const credentials = req.body?.credentials;
   if (!PROVIDERS.has(provider) || !['test','live'].includes(environment) ||
@@ -370,7 +385,7 @@ app.put('/v1/admin/providers/:provider/credentials', ownerAuth, (req, res) => {
   writeAudit('PROVIDER_CREDENTIALS_ROTATED', provider + ':' + environment);
   res.status(202).json({ saved: true, validated: false, active: false });
 });
-app.post('/v1/admin/providers/:provider/validate', ownerAuth, async (req, res) => {
+app.post('/v1/admin/providers/:provider/validate', ownerAuth, requireBrowserMutationOrigin, async (req, res) => {
   const { provider } = req.params, environment = req.body?.environment;
   if (!PROVIDERS.has(provider) || !['test','live'].includes(environment)) return fail(res, 400, 'invalid_provider_environment');
   const row = providerRow(provider, environment);
@@ -389,7 +404,7 @@ app.post('/v1/admin/providers/:provider/validate', ownerAuth, async (req, res) =
     return fail(res, 502, 'provider_validation_failed');
   }
 });
-app.post('/v1/admin/providers/:provider/activate', ownerAuth, (req, res) => {
+app.post('/v1/admin/providers/:provider/activate', ownerAuth, requireBrowserMutationOrigin, (req, res) => {
   const { provider } = req.params, environment = req.body?.environment;
   if (!PROVIDERS.has(provider) || !['test','live'].includes(environment) || req.body?.confirm !== true) {
     return fail(res, 400, 'explicit_activation_confirmation_required');
@@ -403,7 +418,7 @@ app.post('/v1/admin/providers/:provider/activate', ownerAuth, (req, res) => {
   writeAudit('PROVIDER_ACTIVATED', provider + ':' + environment);
   res.json({ active: true, provider, environment });
 });
-app.post('/v1/admin/providers/:provider/deactivate', ownerAuth, (req, res) => {
+app.post('/v1/admin/providers/:provider/deactivate', ownerAuth, requireBrowserMutationOrigin, (req, res) => {
   const { provider } = req.params, environment = req.body?.environment;
   if (!PROVIDERS.has(provider) || !['test','live'].includes(environment)) return fail(res, 400, 'invalid_provider_environment');
   const count = unresolvedCount(provider, environment);
@@ -413,7 +428,7 @@ app.post('/v1/admin/providers/:provider/deactivate', ownerAuth, (req, res) => {
   writeAudit('PROVIDER_DEACTIVATED', provider + ':' + environment);
   res.json({ active: false });
 });
-app.delete('/v1/admin/providers/:provider/credentials', ownerAuth, (req, res) => {
+app.delete('/v1/admin/providers/:provider/credentials', ownerAuth, requireBrowserMutationOrigin, (req, res) => {
   const { provider } = req.params, environment = req.query.environment;
   if (!PROVIDERS.has(provider) || !['test','live'].includes(environment)) return fail(res, 400, 'invalid_provider_environment');
   const count = unresolvedCount(provider, environment);
@@ -481,7 +496,7 @@ function transitionPayment(transactionId, expectedStatuses, nextStatus, reason, 
 
 // Persist intent before making any network call. A repeated idempotency key
 // must describe the exact same economic operation or it is rejected.
-app.post('/v1/payments/dispatch', ownerAuth, async (req, res) => {
+app.post('/v1/payments/dispatch', ownerAuth, requireBrowserMutationOrigin, async (req, res) => {
   const b = req.body || {};
   const provider = b.provider, environment = b.environment || 'test';
   if (!PROVIDERS.has(provider) || environment !== 'test' ||
@@ -549,7 +564,7 @@ app.post('/v1/payments/dispatch', ownerAuth, async (req, res) => {
   }
 });
 
-app.post('/v1/payments/:transactionId/reconcile', ownerAuth, async (req, res) => {
+app.post('/v1/payments/:transactionId/reconcile', ownerAuth, requireBrowserMutationOrigin, async (req, res) => {
   const tx = db.prepare('SELECT * FROM transactions WHERE id=?').get(req.params.transactionId);
   if (!tx) return fail(res, 404, 'transaction_not_found');
   if (['CAPTURED_PENDING_ACCOUNTING','SETTLED'].includes(tx.status)) {
