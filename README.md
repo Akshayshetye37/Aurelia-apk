@@ -431,7 +431,7 @@ The Payment Gateway settings in `index.html` now describe the backend as a local
 
 The following backend schema and initial behavior are committed on `feature/multi-provider-payment-backend`:
 
-- `device_registrations`: owner-registered device identity and P-256 public key (SPKI); private keys are not uploaded.
+- `device_registrations`: owner-submitted P-256 public key (SPKI) is stored as `PENDING`; private keys are never uploaded. Existing legacy `ACTIVE` registrations are downgraded once. No device may dispatch payments until a proof-of-possession enrollment protocol is implemented.
 - `device_cursors` and `device_sequence_counters`: durable per-device applied cursor and serialized sequence allocation.
 - `settlement_commands`: immutable, per-device sequenced settlement command payloads with transaction, idempotency, folio, amount, currency and payload hash.
 - `device_command_state`: delivery lifecycle, lease fields, retry count and receipt storage fields.
@@ -449,7 +449,7 @@ Relevant commits:
 
 This is a schema and enqueue foundation, not a complete device synchronization protocol. The following remain outstanding:
 
-1. Device-authenticated enrollment/proof-of-possession and revocation workflow. The current registration endpoint is owner-authenticated; it is not a complete device-authentication protocol.
+1. Device-authenticated enrollment/proof-of-possession and revocation workflow. The current owner-authenticated registration endpoint creates only `PENDING` devices; it is not a complete device-authentication protocol.
 2. Authenticated cursor synchronization endpoint, command pagination, cursor advancement validation and reconnect/resume behavior.
 3. Atomic lease claim/renew/release operations and a durable retry/reconciliation worker.
 4. Canonical receipt serialization, ECDSA signature verification against registered device keys, nonce/replay handling and verified acknowledgement transitions.
