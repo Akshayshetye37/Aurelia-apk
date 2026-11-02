@@ -19,7 +19,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
     this.baseUrl = BASE[this.environment];
   }
 
-  async request(method, path, body, requestId) {
+  async request(method, path, body, requestId, idempotencyKey) {
     const response = await this.fetch(this.baseUrl + path, {
       method,
       headers: {
@@ -27,6 +27,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
         'x-client-secret': this.credentials.secretKey,
         'x-api-version': API_VERSION,
         'x-request-id': requestId || crypto.randomUUID(),
+        ...(idempotencyKey ? { 'x-idempotency-key': idempotencyKey } : {}),
         'Content-Type': 'application/json',
         Accept: 'application/json'
       },
@@ -54,7 +55,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
         typeof input?.returnUrl !== 'string' ||
         !input.returnUrl.startsWith('https://') ||
         !id(input?.idempotencyKey)) throw new TypeError('invalid_cashfree_order');
-    const data = await this.request('POST', '/orders', {
+    const idempotencyUuid = (() => {\n      const bytes = crypto.createHash('sha256').update(input.idempotencyKey).digest().subarray(0, 16);\n      bytes[6] = (bytes[6] & 0x0f) | 0x50;\n      bytes[8] = (bytes[8] & 0x3f) | 0x80;\n      const hex = bytes.toString('hex');\n      return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);\n    })();\n    const data = await this.request('POST', '/orders', {
       order_id: input.orderId,
       order_amount: input.amountMinor / 100,
       order_currency: 'INR',
@@ -64,7 +65,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
         ...(input.customer.email ? { customer_email: input.customer.email } : {})
       },
       order_meta: { return_url: input.returnUrl }
-    }, input.idempotencyKey);
+    }, crypto.randomUUID(), idempotencyUuid);
     if (!data.order_id || !data.payment_session_id) throw new Error('cashfree_checkout_session_missing');
     return {
       provider: 'cashfree',
@@ -75,6 +76,14 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
       currency: data.order_currency,
       status: data.order_status
     };
+  }
+
+  async findOrderByReference(input) {
+    if (!id(input?.reference)) throw new TypeError('invalid_cashfree_order_id');
+    const order = await this.request('GET', '/orders/' + encodeURIComponent(input.reference));
+    return { found: order.order_id === input.reference, orderId: order.order_id,
+      amountMinor: Math.round(Number(order.order_amount) * 100),
+      currency: order.order_currency, status: order.order_status };
   }
 
   async getPaymentStatus(input) {
