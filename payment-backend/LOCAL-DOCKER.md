@@ -12,14 +12,14 @@ This runtime is the local owner/provider-administration foundation. It is not ye
 ## First start
 
 1. Copy `.env.example` to `.env`.
-2. Generate two independent 32-byte secrets:
+2. Generate three independent 32-byte secrets:
    `openssl rand -hex 32`
-   Set one as `GATEWAY_MASTER_KEY` and the other as `SESSION_TOKEN_PEPPER`. Never reuse either value or commit `.env`.
+   Set them as `GATEWAY_MASTER_KEY`, `SESSION_TOKEN_PEPPER` and `OWNER_SETUP_TOKEN`. Never reuse these values or commit `.env`. Keep the setup token offline; it is required only for first-owner enrollment.
 3. Replace `YOUR-LAN-HOSTNAME` with the exact host name/IP used by the PMS device. Keep the origin exact, including `:8443`.
 4. Start with `docker compose up -d --build`.
 5. Check `https://YOUR-LAN-HOSTNAME:8443/healthz` and `/readyz`.
-6. Complete one-time owner setup through `POST /v1/auth/setup` with a username and a password of at least 14 characters. There is no default account or password.
-7. Sign in through `POST /v1/auth/login`. The backend returns a Secure, HttpOnly, SameSite=Strict cookie. Cross-origin clients must use credentialed requests and the exact configured origin.
+6. Complete one-time owner setup through `POST /v1/auth/setup` with `X-Aurelia-Setup-Token: <OWNER_SETUP_TOKEN>`, a username and a password of at least 14 characters. The setup token is checked in constant time, setup is single-use, and there is no default account or password. Do not expose the setup token in a browser URL, logs or screenshots.
+7. Sign in through `POST /v1/auth/login`. The backend sets a Secure, HttpOnly, SameSite=Strict cookie; it does not return the session token in JSON or accept a JavaScript-readable bearer token. Cross-origin clients must use credentialed requests and the exact configured origin.
 
 ## Persistence and key recovery
 
@@ -44,7 +44,7 @@ SQLite lives in the named `payment-data` volume. The encryption key and session 
 - Provider validation makes a real authenticated read-only API request through the existing provider adapter; it does not create a charge.
 - Saving or rotating credentials clears validation and activation.
 - Live activation and live payment collection are not enabled.
-- Provider removal checks persisted unresolved transaction states. Test-environment payment dispatch and provider API reconciliation are implemented as a restricted foundation. Durable capture outbox records are created transactionally, but asynchronous PMS folio delivery, webhook-driven reconciliation, automated recovery scheduling, refunds, and end-to-end exactly-once folio posting are not implemented. Do not enable live collection. A webhook signature being valid is recorded as an inbox event only; it is not a payment or settlement confirmation.
+- Provider removal checks persisted unresolved transaction states. Test-environment payment dispatch and provider API reconciliation are implemented as a restricted foundation. Durable capture outbox records are created transactionally, but asynchronous PMS folio delivery, webhook-driven reconciliation, automated recovery scheduling, refunds, and end-to-end exactly-once folio posting are not implemented. Do not enable live collection. A webhook signature being valid is recorded as an inbox event only; it is not a payment or settlement confirmation. Reuse of an event ID with a different payload hash is rejected as an identity conflict.
 - PMS integration must send the session cookie using `credentials: 'include'`; it must not put provider credentials or session tokens in localStorage, Android preferences, or APK resources.
 
 ## Operational caveats
