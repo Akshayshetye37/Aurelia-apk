@@ -5,7 +5,11 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('../src/server.mjs', import.meta.url), 'utf8');
 
 test('admin and payment actor authorization enforce tenant membership, verified email and MFA', () => {
-  assert.ok(source.includes('verifyIdToken(header.slice(7), true)'));
+  // Accept the production bearer-token normalization while pinning the
+  // security-critical revocation check. This avoids a brittle whitespace/
+  // wrapper-specific source-string assertion.
+  assert.match(source, /auth\.verifyIdToken\(header\.slice\(7\)\.trim\(\),\s*true\)/);
+  assert.match(source, /if \(!\/\^Bearer\\s\+\[\^\\s\]\+\$\/i\.test\(header\)\)/);
   assert.ok(source.includes('membershipDoc(token.uid)'));
   assert.ok(source.includes("m.status !== 'active'"));
   assert.ok(source.includes('!allowedRoles.includes(m.role)'));
