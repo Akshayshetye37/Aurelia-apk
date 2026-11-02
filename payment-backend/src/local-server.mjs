@@ -327,6 +327,10 @@ app.delete('/v1/admin/providers/:provider/credentials', ownerAuth, (req, res) =>
 });
 
 
+function providerReference(transactionId) {
+  return 'au_' + crypto.createHash('sha256').update(transactionId).digest('hex').slice(0, 37);
+}
+
 function validOpaqueId(value) {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(value);
 }
@@ -392,8 +396,8 @@ app.post('/v1/payments/dispatch', ownerAuth, async (req, res) => {
   try {
     const adapter = createProviderAdapter(provider, { credentials: decryptCredentials(config), environment });
     const orderInput = provider === 'razorpay'
-      ? { amountMinor: b.amountMinor, currency: b.currency, receipt: b.transactionId.slice(0, 40) }
-      : { orderId: b.transactionId, amountMinor: b.amountMinor, currency: b.currency,
+      ? { amountMinor: b.amountMinor, currency: b.currency, receipt: providerReference(b.transactionId) }
+      : { orderId: providerReference(b.transactionId), amountMinor: b.amountMinor, currency: b.currency,
           idempotencyKey: b.idempotencyKey, customer: b.customer, returnUrl: b.returnUrl };
     const order = await adapter.createOrder(orderInput);
     if (!order?.orderId || order.amountMinor !== b.amountMinor || order.currency !== b.currency) {
@@ -428,7 +432,7 @@ app.post('/v1/payments/:transactionId/reconcile', ownerAuth, async (req, res) =>
       if (typeof adapter.findOrderByReference !== 'function') {
         return fail(res, 409, 'provider_order_reference_missing_manual_review_required');
       }
-      const recovered = await adapter.findOrderByReference({ reference: tx.id.slice(0, 40) });
+      const recovered = await adapter.findOrderByReference({ reference: providerReference(tx.id) });
       if (!recovered?.found || recovered.amountMinor !== tx.amount_minor ||
           recovered.currency !== tx.currency || !recovered.orderId) {
         if (recovered?.ambiguous) transitionPayment(tx.id, ['DISPATCHING','UNKNOWN','AMBIGUOUS'], 'RECONCILIATION_REQUIRED', 'provider_reference_lookup_ambiguous');
