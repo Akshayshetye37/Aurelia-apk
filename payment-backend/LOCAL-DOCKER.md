@@ -44,7 +44,7 @@ SQLite lives in the named `payment-data` volume. The encryption key and session 
 - Provider validation makes a real authenticated read-only API request through the existing provider adapter; it does not create a charge.
 - Saving or rotating credentials clears validation and activation.
 - Live activation and live payment collection are not enabled.
-- Provider removal checks persisted unresolved transaction states. Payment creation, transaction dispatch, status reconciliation, refunds, and atomic PMS folio settlement are not implemented in this local runtime yet. A webhook signature being valid is recorded as an inbox event only; it is not a payment or settlement confirmation.
+- Provider removal checks persisted unresolved transaction states. Test-environment payment dispatch and provider API reconciliation are implemented as a restricted foundation. Durable capture outbox records are created transactionally, but asynchronous PMS folio delivery, webhook-driven reconciliation, automated recovery scheduling, refunds, and end-to-end exactly-once folio posting are not implemented. Do not enable live collection. A webhook signature being valid is recorded as an inbox event only; it is not a payment or settlement confirmation.
 - PMS integration must send the session cookie using `credentials: 'include'`; it must not put provider credentials or session tokens in localStorage, Android preferences, or APK resources.
 
 ## Operational caveats
