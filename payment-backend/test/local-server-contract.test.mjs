@@ -152,3 +152,49 @@ test('dispatch idempotency binds the target device and folio as immutable fields
   assert.match(source, /existing\.device_id === \(b\.deviceId \|\| null\)/);
   assert.match(source, /raced\.folio_id === \(b\.folioId \|\| null\)/);
 });
+
+
+test('LAN payment routes are isolated from the cloud prototype and require owner authentication', () => {
+  for (const route of [
+    "app.post('/v1/admin/devices/register', ownerAuth",
+    "app.get('/v1/admin/providers', ownerAuth",
+    "app.put('/v1/admin/providers/:provider/credentials', ownerAuth",
+    "app.post('/v1/payments/dispatch', ownerAuth",
+    "app.post('/v1/payments/:transactionId/reconcile', ownerAuth"
+  ]) assert.ok(source.includes(route), route + ' must remain owner authenticated');
+});
+
+test('LAN webhook route rejects live environment and never claims folio accounting', () => {
+  assert.match(source, /app\.post\('\/v1\/webhooks\/:provider\/:environment'/);
+  assert.match(source, /accounting: 'not_implemented'/);
+  assert.match(source, /environment === 'live'/);
+  assert.match(source, /live_payments_blocked_accounting_pipeline_incomplete/);
+});
+
+test('device registrations remain pending and cannot dispatch captured payments', () => {
+  assert.match(source, /status:'PENDING',keyAlgorithm:'ECDSA_P256_SHA256',proofOfPossessionRequired:true/);
+  assert.match(source, /device\?\.status !== 'ACTIVE'/);
+  assert.doesNotMatch(source, /app\.post\('\/v1\/admin\/devices\/activate'/);
+  assert.doesNotMatch(source, /app\.post\('\/v1\/devices\/:deviceId\/commands/);
+});
+
+test('LAN runtime does not advertise command leasing, receipts or cursor synchronization as implemented', () => {
+  assert.match(source, /CREATE TABLE IF NOT EXISTS settlement_commands/);
+  assert.match(source, /CREATE TABLE IF NOT EXISTS device_command_state/);
+  assert.doesNotMatch(source, /app\.post\('\/v1\/devices\/[^']*(?:lease|ack|receipt|cursor)/);
+  assert.doesNotMatch(source, /verifyDeviceReceipt|verifyProofOfPossession|advanceDeviceCursor/);
+});
+
+test('webhook ingestion does not directly settle or acknowledge a PMS folio', () => {
+  const webhookStart = source.indexOf("app.post('/v1/webhooks/:provider/:environment'");
+  const webhook = source.slice(webhookStart);
+  assert.doesNotMatch(webhook, /settlePayment\(|folio\.update|ACKNOWLEDGED|PROCESSED/);
+  assert.match(webhook, /accounting: 'not_implemented'/);
+});
+
+test('Docker healthcheck probes liveness only and backend requires TLS at the trusted proxy', () => {
+  assert.match(compose, /healthz/);
+  assert.match(source, /app\.set\('trust proxy', process\.env\.TRUST_PROXY_HOPS === '1' \? 1 : false\)/);
+  assert.match(source, /if \(!req\.secure\) return fail\(res, 403, 'https_required'\)/);
+  assert.match(compose, /payment-data:\/data/);
+});
