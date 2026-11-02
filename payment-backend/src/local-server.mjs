@@ -58,6 +58,16 @@ CREATE TABLE IF NOT EXISTS transactions (
  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS transactions_provider_status ON transactions(provider, environment, status);
+CREATE TABLE IF NOT EXISTS transaction_journal (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, transaction_id TEXT NOT NULL REFERENCES transactions(id),
+ from_status TEXT, to_status TEXT NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS settlement_outbox (
+ id TEXT PRIMARY KEY, transaction_id TEXT NOT NULL UNIQUE REFERENCES transactions(id),
+ event_type TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING',
+ attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, processed_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS webhook_inbox (
  event_key TEXT PRIMARY KEY, provider TEXT NOT NULL, environment TEXT NOT NULL,
  received_at TEXT NOT NULL, signature_verified INTEGER NOT NULL,
@@ -314,6 +324,129 @@ app.delete('/v1/admin/providers/:provider/credentials', ownerAuth, (req, res) =>
   db.prepare('DELETE FROM provider_config WHERE provider=? AND environment=?').run(provider, environment);
   writeAudit('PROVIDER_CREDENTIALS_REMOVED', provider + ':' + environment);
   res.json({ removed: true });
+});
+
+
+function validOpaqueId(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(value);
+}
+function transitionPayment(transactionId, expectedStatuses, nextStatus, reason, providerOrderId = null) {
+  const allowed = new Set(expectedStatuses);
+  const apply = db.transaction(() => {
+    const current = db.prepare('SELECT * FROM transactions WHERE id=?').get(transactionId);
+    if (!current) throw new Error('transaction_not_found');
+    if (!allowed.has(current.status)) return { changed: false, status: current.status };
+    db.prepare('UPDATE transactions SET status=?,provider_order_id=COALESCE(?,provider_order_id),updated_at=? WHERE id=?')
+      .run(nextStatus, providerOrderId, now(), transactionId);
+    db.prepare('INSERT INTO transaction_journal(transaction_id,from_status,to_status,reason,created_at) VALUES(?,?,?,?,?)')
+      .run(transactionId, current.status, nextStatus, reason, now());
+    if (nextStatus === 'CAPTURED_PENDING_ACCOUNTING') {
+      db.prepare('INSERT OR IGNORE INTO settlement_outbox(id,transaction_id,event_type,payload,status,created_at) VALUES(?,?,?,?,?,?)')
+        .run(crypto.randomUUID(), transactionId, 'PAYMENT_CAPTURED', JSON.stringify({
+          transactionId, amountMinor: current.amount_minor, currency: current.currency,
+          provider: current.provider, providerOrderId: providerOrderId || current.provider_order_id
+        }), 'PENDING', now());
+    }
+    writeAudit('PAYMENT_STATE_TRANSITION', transactionId + ':' + current.status + '->' + nextStatus);
+    return { changed: true, status: nextStatus };
+  });
+  return apply();
+}
+
+// Persist intent before making any network call. A repeated idempotency key
+// must describe the exact same economic operation or it is rejected.
+app.post('/v1/payments/dispatch', ownerAuth, async (req, res) => {
+  const b = req.body || {};
+  const provider = b.provider, environment = b.environment || 'test';
+  if (!PROVIDERS.has(provider) || environment !== 'test' ||
+      !validOpaqueId(b.transactionId) || !validOpaqueId(b.idempotencyKey) ||
+      !Number.isSafeInteger(b.amountMinor) || b.amountMinor <= 0 ||
+      b.currency !== 'INR') return fail(res, 400, 'invalid_payment_intent');
+  const config = providerRow(provider, environment);
+  if (!config?.configured || !config.validated || !config.active) return fail(res, 409, 'provider_not_active_and_validated');
+  const existing = db.prepare('SELECT * FROM transactions WHERE idempotency_key=?').get(b.idempotencyKey);
+  if (existing) {
+    const same = existing.id === b.transactionId && existing.provider === provider &&
+      existing.environment === environment && existing.amount_minor === b.amountMinor &&
+      existing.currency === b.currency;
+    if (!same) return fail(res, 409, 'idempotency_key_payload_conflict');
+    return res.status(200).json({ transactionId: existing.id, status: existing.status, duplicate: true });
+  }
+  const insert = db.transaction(() => {
+    db.prepare(`INSERT INTO transactions(id,provider,environment,amount_minor,currency,status,idempotency_key,created_at,updated_at)
+      VALUES(?,?,?,?,?,'DISPATCHING',?,?,?)`).run(
+      b.transactionId, provider, environment, b.amountMinor, b.currency, b.idempotencyKey, now(), now());
+    db.prepare('INSERT INTO transaction_journal(transaction_id,from_status,to_status,reason,created_at) VALUES(?,NULL,?,?,?)')
+      .run(b.transactionId, 'DISPATCHING', 'durable_intent_created', now());
+    writeAudit('PAYMENT_INTENT_CREATED', b.transactionId);
+  });
+  try { insert(); }
+  catch {
+    const raced = db.prepare('SELECT * FROM transactions WHERE idempotency_key=?').get(b.idempotencyKey);
+    if (raced && raced.id === b.transactionId && raced.provider === provider &&
+        raced.amount_minor === b.amountMinor && raced.currency === b.currency) {
+      return res.status(200).json({ transactionId: raced.id, status: raced.status, duplicate: true });
+    }
+    return fail(res, 409, 'idempotency_conflict');
+  }
+  try {
+    const adapter = createProviderAdapter(provider, { credentials: decryptCredentials(config), environment });
+    const orderInput = provider === 'razorpay'
+      ? { amountMinor: b.amountMinor, currency: b.currency, receipt: b.transactionId.slice(0, 40) }
+      : { orderId: b.transactionId, amountMinor: b.amountMinor, currency: b.currency,
+          idempotencyKey: b.idempotencyKey, customer: b.customer, returnUrl: b.returnUrl };
+    const order = await adapter.createOrder(orderInput);
+    if (!order?.orderId || order.amountMinor !== b.amountMinor || order.currency !== b.currency) {
+      transitionPayment(b.transactionId, ['DISPATCHING'], 'UNKNOWN', 'provider_order_response_mismatch');
+      return res.status(202).json({ transactionId: b.transactionId, status: 'UNKNOWN', reconciliationRequired: true });
+    }
+    transitionPayment(b.transactionId, ['DISPATCHING'], 'PENDING', 'provider_order_created', order.orderId);
+    return res.status(201).json({ transactionId: b.transactionId, status: 'PENDING',
+      providerOrderId: order.orderId, checkout: provider === 'cashfree'
+        ? { paymentSessionId: order.paymentSessionId, checkoutUrl: order.checkoutUrl }
+        : { keyId: order.keyId } });
+  } catch {
+    // The provider may have accepted the request before the connection failed.
+    // Never retry creation automatically; retain the durable intent as UNKNOWN.
+    transitionPayment(b.transactionId, ['DISPATCHING'], 'UNKNOWN', 'provider_dispatch_outcome_ambiguous');
+    return res.status(202).json({ transactionId: b.transactionId, status: 'UNKNOWN', reconciliationRequired: true });
+  }
+});
+
+app.post('/v1/payments/:transactionId/reconcile', ownerAuth, async (req, res) => {
+  const tx = db.prepare('SELECT * FROM transactions WHERE id=?').get(req.params.transactionId);
+  if (!tx) return fail(res, 404, 'transaction_not_found');
+  if (['CAPTURED_PENDING_ACCOUNTING','SETTLED'].includes(tx.status)) {
+    return res.json({ transactionId: tx.id, status: tx.status, duplicate: true });
+  }
+  const config = providerRow(tx.provider, tx.environment);
+  if (!config?.configured) return fail(res, 409, 'provider_credentials_unavailable');
+  if (!tx.provider_order_id) return fail(res, 409, 'provider_order_reference_missing_manual_review_required');
+  try {
+    const adapter = createProviderAdapter(tx.provider, { credentials: decryptCredentials(config), environment: tx.environment });
+    const remote = await adapter.getPaymentStatus({ orderId: tx.provider_order_id });
+    if (remote.amountMinor !== tx.amount_minor || remote.currency !== tx.currency ||
+        remote.orderId !== tx.provider_order_id) {
+      transitionPayment(tx.id, ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED'],
+        'RECONCILIATION_REQUIRED', 'provider_amount_currency_or_order_mismatch');
+      return fail(res, 409, 'provider_payment_details_mismatch_manual_review_required');
+    }
+    if (remote.captured === true) {
+      const result = transitionPayment(tx.id,
+        ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED'],
+        'CAPTURED_PENDING_ACCOUNTING', 'provider_api_confirmed_capture', remote.orderId);
+      return res.json({ transactionId: tx.id, status: result.status, folioSettlement: 'PENDING_OUTBOX' });
+    }
+    if (['failed','declined','cancelled','expired'].includes(String(remote.paymentStatus || '').toLowerCase())) {
+      const result = transitionPayment(tx.id,
+        ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED'],
+        'FAILED', 'provider_api_confirmed_failure', remote.orderId);
+      return res.json({ transactionId: tx.id, status: result.status });
+    }
+    return res.status(202).json({ transactionId: tx.id, status: tx.status, reconciliationRequired: true });
+  } catch {
+    return res.status(202).json({ transactionId: tx.id, status: tx.status, reconciliationRequired: true });
+  }
 });
 
 // Webhooks are parsed as raw bytes so the provider adapter verifies the exact signed payload.
