@@ -471,6 +471,7 @@ import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
@@ -499,6 +500,8 @@ public class MainActivity extends BridgeActivity {
 
   @Override public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    // LAN owner administration uses an HttpOnly Secure cookie across the app WebView and the configured appliance origin. Exact-origin CORS and Origin checks remain mandatory.
+    CookieManager.getInstance().setAcceptThirdPartyCookies(bridge.getWebView(), true);
     getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
       @Override public void handleOnBackPressed() {
         if (bridge == null || bridge.getWebView() == null) {
