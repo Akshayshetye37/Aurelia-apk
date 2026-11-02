@@ -122,6 +122,17 @@ CREATE TABLE IF NOT EXISTS audit (
 );
 `);
 
+// Additive migration for databases created by earlier backend versions.
+// Existing payment history is preserved; legacy transactions remain untargeted
+// until a future explicit routing migration assigns both fields.
+const transactionColumns = new Set(db.prepare('PRAGMA table_info(transactions)').all().map(column => column.name));
+if (!transactionColumns.has('device_id')) {
+  db.exec('ALTER TABLE transactions ADD COLUMN device_id TEXT REFERENCES device_registrations(device_id)');
+}
+if (!transactionColumns.has('folio_id')) {
+  db.exec('ALTER TABLE transactions ADD COLUMN folio_id TEXT');
+}
+
 const now = () => new Date().toISOString();
 const fail = (res, status, error) => res.status(status).json({ error });
 const audit = db.prepare('INSERT INTO audit(action,subject,created_at) VALUES(?,?,?)');
