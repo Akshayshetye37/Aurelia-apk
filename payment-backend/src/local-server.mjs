@@ -582,13 +582,32 @@ app.post('/v1/payments/:transactionId/reconcile', ownerAuth, requireBrowserMutat
       const recovered = await adapter.findOrderByReference({ reference: providerReference(tx.id) });
       if (!recovered?.found || recovered.amountMinor !== tx.amount_minor ||
           recovered.currency !== tx.currency || !recovered.orderId) {
-        if (recovered?.ambiguous) transitionPayment(tx.id, ['DISPATCHING','UNKNOWN','AMBIGUOUS'], 'RECONCILIATION_REQUIRED', 'provider_reference_lookup_ambiguous');
+        // An unsuccessful or ambiguous reference search does not establish
+        // definitive provider failure. Keep the transaction unresolved.
+        if (recovered?.ambiguous) {
+          transitionPayment(tx.id, ['DISPATCHING','UNKNOWN','AMBIGUOUS'], 'RECONCILIATION_REQUIRED', 'provider_reference_lookup_ambiguous');
+        }
         return res.status(202).json({ transactionId: tx.id, status: tx.status, reconciliationRequired: true,
           reason: recovered?.ambiguous ? 'provider_reference_lookup_ambiguous' : 'provider_order_not_found' });
       }
       providerOrderId = recovered.orderId;
-      db.prepare('UPDATE transactions SET provider_order_id=?,updated_at=? WHERE id=? AND provider_order_id IS NULL')
-        .run(providerOrderId, now(), tx.id);
+      const existingOrder = db.prepare('SELECT id FROM transactions WHERE provider=? AND environment=? AND provider_order_id=? AND id<>?')
+        .get(tx.provider, tx.environment, providerOrderId, tx.id);
+      if (existingOrder) {
+        transitionPayment(tx.id, ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED'],
+          'RECONCILIATION_REQUIRED', 'provider_order_already_bound_to_another_transaction');
+        return fail(res, 409, 'provider_order_binding_conflict_manual_review_required');
+      }
+      const bindOrder = db.transaction(() => {
+        const current = db.prepare('SELECT provider_order_id FROM transactions WHERE id=?').get(tx.id);
+        if (!current) throw new Error('transaction_not_found');
+        if (current.provider_order_id && current.provider_order_id !== providerOrderId) {
+          throw new Error('provider_order_binding_conflict');
+        }
+        db.prepare('UPDATE transactions SET provider_order_id=?,updated_at=? WHERE id=?')
+          .run(providerOrderId, now(), tx.id);
+      });
+      bindOrder();
     }
     const remote = await adapter.getPaymentStatus({ orderId: providerOrderId });
     if (remote.amountMinor !== tx.amount_minor || remote.currency !== tx.currency ||
