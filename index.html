@@ -3926,7 +3926,7 @@ window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;
   const a=await waitForReady(),user=a.currentUser;
   if(!user)throw new Error('Owner sign-in is required.');
   const result=await user.getIdTokenResult(true);
-  const authTime=Date.parse(result.claims.auth_time||'');
+  const authTime=Number(result.claims.auth_time)*1000;
   if(!Number.isFinite(authTime)||Date.now()-authTime>600000||Date.now()<authTime)throw new Error('Recent owner sign-in with MFA is required. Sign in again before administering payment providers.');
   if(result.claims.email_verified!==true)throw new Error('Verify the owner email address before administering payment providers.');
   if(!result.claims.firebase?.sign_in_second_factor)throw new Error('The backend requires a completed MFA sign-in.');
