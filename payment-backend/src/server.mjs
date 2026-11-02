@@ -74,7 +74,7 @@ async function loadSecret(id) {
 }
 async function authenticateTenantMembership(req, res, next, allowedRoles, failureCode) {
   const header = req.get('authorization') || '';
-  if (!/^Bearer\\s+[^\\s]+$/i.test(header)) return fail(res, 401, 'authentication_required');
+  if (!/^Bearer\s+[^\s]+$/i.test(header)) return fail(res, 401, 'authentication_required');
   let token;
   try {
     // Firebase Admin validates signature, issuer, audience, expiry and revocation.
