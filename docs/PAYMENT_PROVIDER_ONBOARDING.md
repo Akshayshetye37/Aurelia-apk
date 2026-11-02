@@ -1,13 +1,14 @@
 # Aurelia Payment Provider Onboarding and Credential Contract
 
-Status: research and integration contract. This document does not mean the provider adapters or production backend are implemented.
+Status: local credential vault implemented for Razorpay and Cashfree; provider checkout and production payment lifecycle remain incomplete.
 
 ## Non-negotiable trust boundaries
 
 - **PMS APK:** hotel UI, folio reference, amount display, launch/return from checkout, and staff review.
 - **Aurelia Pay Bridge APK:** native companion IPC and (when implemented) provider-specific checkout handoff and transaction evidence.
-- **Owner-controlled HTTPS backend:** merchant credentials, token generation, payment/order creation, signature/hash verification, webhook endpoints, status polling, idempotency, refunds, reconciliation, and provider activation.
-- Never enter API secrets, salts, private keys, passwords, or webhook secrets into PMS or Pay Bridge APK fields, local preferences, HTML, JavaScript bundles, logs, or Git.
+- **Android local native vault:** stores supported provider credential records encrypted at rest with a non-exportable Android Keystore AES-256-GCM key. Credentials are not exposed back to WebView JavaScript.
+- **Optional owner-controlled LAN/cloud backend:** may provide trusted order creation, signature/hash verification, public webhook endpoints, status polling, refunds and reconciliation for owners who choose to deploy one.
+- Never put API secrets, salts, private keys, passwords, or webhook secrets in WebView/localStorage/IndexedDB, plain Android preferences, HTML, JavaScript bundles, logs, or Git. The native vault accepts secrets only through its narrow Android bridge and encrypts them before disk persistence. Device-local storage is still a client-side trust boundary and is not equivalent to a trusted merchant server on a rooted or instrumented device.
 - The Pay Bridge handshake authenticates the companion APK. It does **not** authenticate a merchant's Razorpay/Cashfree/PayU/etc. account.
 - A provider is not active because an identifier was typed or a local preference was saved. Activation requires backend credential validation, a provider-specific test transaction, webhook verification, and an explicit owner enable action.
 - No unverified callback, redirect, screenshot, or client-side event may settle a folio. Keep staff confirmation mandatory.
@@ -37,17 +38,17 @@ Status: research and integration contract. This document does not mean the provi
 
 ## Provider onboarding boundary
 
-**Credential entry is now available through the LAN Payment Owner Console in PMS.** The console sends credentials only to the owner-configured HTTPS Docker origin, requires the backend's local owner session, and does not persist credentials in PMS settings or browser storage. The backend stores credentials using AES-256-GCM. The setup token and password are transient inputs. Exact-origin CORS/Origin checks and the backend's HttpOnly Secure session cookie protect the administration API. Do not use an arbitrary HTTPS host; use only the owner-controlled appliance whose TLS certificate is trusted by the installed APK.
+**Credential entry is available locally in the Android app for Razorpay and Cashfree.** The native vault stores test/live records under app-private no-backup storage, encrypted with an Android Keystore AES-256-GCM key. Secret values are never returned to JavaScript. The optional LAN Docker owner console remains available for owners who deploy that appliance. An owner-selected cloud backend may be connected separately; neither is required to save local provider credentials. This does not yet mean native order creation, checkout, trusted verification, webhooks, refunds or settlement are implemented.
 
 The production owner console must be a separately hosted, owner-authenticated web application on a pinned, owner-controlled origin. It must use MFA-backed sessions, CSRF protection where cookie sessions are used, strict origin/CORS policy, provider-specific schemas, managed envelope encryption, secret redaction, audit events without secret values, key rotation, and non-secret status projections. PMS may display only provider ID, environment, validation state, activation state and last-check timestamp. It must never receive or store merchant secrets.
 
 The local Docker API is implemented at `PUT /v1/admin/providers/{providerId}/credentials?environment=test` with `{ credentials }` for the two implemented adapters. The backend must authenticate an owner/admin, enforce an exact provider schema, reject unknown fields, encrypt secrets at rest, redact request bodies from logs/traces, and return only a non-secret status projection. HTTP success is not activation. Activation requires provider-specific validation, a verified webhook, an independently fetched payment status and an explicit owner action.
 
-The local Docker runtime includes the matching credential endpoint, AES-256-GCM encrypted SQLite credential storage, first-owner setup, cookie-based owner authentication, provider validation and explicit test activation. The PMS now includes the LAN owner console for Razorpay and Cashfree. The owner must still deploy Docker and configure the appliance; this repository does not deploy it automatically.
+The local Docker runtime remains an optional service with encrypted SQLite credential storage, first-owner setup, cookie-based owner authentication, provider validation and restricted test dispatch. It is not required for the Android local credential vault. The owner must deploy Docker only if they choose the LAN mode; this repository does not deploy it automatically.
 
 ## Required owner setup journey
 
-1. Owner signs in to the Aurelia owner-controlled backend console over HTTPS with MFA.
+1. In Local Native Mode, the owner opens More → Payment Gateway and enters supported provider credentials directly into the native Android vault. In optional LAN/Cloud mode, the owner authenticates to that separately configured service.
 2. Owner chooses exactly one provider and environment (Sandbox/Test or Production).
 3. Console displays only that provider's exact credential fields and links to the official dashboard instructions above.
 4. Credentials are submitted directly to the backend over TLS, encrypted at rest using a managed key service or equivalent envelope encryption, masked on subsequent views, and never returned to PMS.
