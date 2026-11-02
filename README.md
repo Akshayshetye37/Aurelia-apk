@@ -414,3 +414,46 @@ The demo HTML is only a visual/interaction prototype. It does not implement Argo
 - **Live payment and automatic folio settlement:** disabled pending trusted backend, executable IPC, verified provider events, durable reconciliation and atomic PMS ledger posting.
 
 For a new development session, start by checking out the PMS branch above, reading this README and the linked security/payment architecture documents, then inspect the current repository tree and CI status before editing. Do not create another repository or branch for these workstreams.
+
+
+## Local LAN payment appliance — implementation update (2026-11-02)
+
+The deployment target for the payment backend is now a Docker appliance on the same trusted local network as the Android PMS device. The Android application will initiate an authenticated outbound connection to the appliance. The design does not depend on the appliance reaching Android loopback, WebView storage, or an inbound listener on the phone.
+
+### PMS UI
+
+The Payment Gateway settings in `index.html` now describe the backend as a local-LAN payment appliance rather than a cloud payment service. The endpoint field remains HTTPS-only and accepts an origin, not a path or embedded credentials. The connection check is explicitly described as a reachability check only; a successful health response does not establish device identity, settlement synchronization, provider authorization or payment readiness.
+
+### Backend foundation implemented
+
+The following backend schema and initial behavior are committed on `feature/multi-provider-payment-backend`:
+
+- `device_registrations`: owner-registered device identity and P-256 public key (SPKI); private keys are not uploaded.
+- `device_cursors` and `device_sequence_counters`: durable per-device applied cursor and serialized sequence allocation.
+- `settlement_commands`: immutable, per-device sequenced settlement command payloads with transaction, idempotency, folio, amount, currency and payload hash.
+- `device_command_state`: delivery lifecycle, lease fields, retry count and receipt storage fields.
+- Device-targeted command creation is performed in the same SQLite transaction as the captured-payment transition, journal entry and settlement outbox event.
+- Payment dispatch optionally binds a transaction to both `deviceId` and `folioId`; idempotency comparisons include those routing fields.
+- Existing transaction databases receive additive `device_id` and `folio_id` columns.
+
+Relevant commits:
+- `1993632` — device registry and command schema.
+- `3ece01e` — immutable device/folio idempotency binding.
+- `71407f1` — source-contract assertions for the new foundation.
+- `b9f074c` — backward-compatible transaction-column migration.
+
+### Explicitly not implemented
+
+This is a schema and enqueue foundation, not a complete device synchronization protocol. The following remain outstanding:
+
+1. Device-authenticated enrollment/proof-of-possession and revocation workflow. The current registration endpoint is owner-authenticated; it is not a complete device-authentication protocol.
+2. Authenticated cursor synchronization endpoint, command pagination, cursor advancement validation and reconnect/resume behavior.
+3. Atomic lease claim/renew/release operations and a durable retry/reconciliation worker.
+4. Canonical receipt serialization, ECDSA signature verification against registered device keys, nonce/replay handling and verified acknowledgement transitions.
+5. Android Keystore key generation/signing bridge and its Capacitor native plugin.
+6. A transactional PMS persistence adapter that commits folio mutation and local idempotency/ledger acknowledgement together.
+7. Device-level LAN TLS provisioning/trust, reconnect tests, crash tests and end-to-end payment-provider/PMS tests.
+
+The schema includes `ACKNOWLEDGED`, `PROCESSED`, `AMBIGUOUS_RECONCILIATION` and `CONFLICT` states, but no worker or receipt-verification route currently drives those states. A stored public key alone does not authenticate a device request or verify a receipt.
+
+**Operational status:** the Docker appliance is not represented as deployed or paired with an Android device. Live gateway collection and automatic folio settlement remain disabled. Do not interpret a configured HTTPS endpoint or a successful health check as payment readiness. The backend test workflow result for these commits has not been verified.
