@@ -77,3 +77,37 @@ test('verified capture creates one durable accounting outbox event, not a false 
   assert.match(source, /INSERT OR IGNORE INTO settlement_outbox/);
   assert.match(source, /folioSettlement: 'PENDING_OUTBOX'/);
 });
+
+
+test('device registry accepts only registered P-256 public identities and never private keys', () => {
+  assert.match(source, /CREATE TABLE IF NOT EXISTS device_registrations/);
+  assert.match(source, /public_key_spki BLOB NOT NULL/);
+  assert.match(source, /crypto\.createPublicKey\(publicKeyPem\)/);
+  assert.match(source, /namedCurve !== 'prime256v1'/);
+  assert.match(source, /PAYMENT_DEVICE_REGISTERED/);
+});
+
+test('settlement commands use immutable per-device sequences and durable cursors', () => {
+  assert.match(source, /CREATE TABLE IF NOT EXISTS settlement_commands/);
+  assert.match(source, /UNIQUE\(device_id, sequence_id\)/);
+  assert.match(source, /CREATE TABLE IF NOT EXISTS device_cursors/);
+  assert.match(source, /CREATE TABLE IF NOT EXISTS device_sequence_counters/);
+  assert.match(source, /CREATE TABLE IF NOT EXISTS device_command_state/);
+  assert.match(source, /AMBIGUOUS_RECONCILIATION/);
+  assert.match(source, /payload_hash TEXT NOT NULL/);
+});
+
+test('captured payment, outbox event, sequence allocation and device command share one SQLite transaction', () => {
+  assert.match(source, /const apply = db\.transaction\(\(\) => \{/);
+  assert.match(source, /if \(nextStatus === 'CAPTURED_PENDING_ACCOUNTING'\)/);
+  assert.match(source, /const sequenceId = counter\.last_sequence \+ 1/);
+  assert.match(source, /UPDATE device_sequence_counters SET last_sequence=\?/);
+  assert.match(source, /INSERT INTO settlement_commands/);
+  assert.match(source, /INSERT INTO device_command_state/);
+});
+
+test('dispatch idempotency binds the target device and folio as immutable fields', () => {
+  assert.match(source, /b\.deviceId !== undefined && \(!validOpaqueId\(b\.deviceId\) \|\| !validOpaqueId\(b\.folioId\)\)/);
+  assert.match(source, /existing\.device_id === \(b\.deviceId \|\| null\)/);
+  assert.match(source, /raced\.folio_id === \(b\.folioId \|\| null\)/);
+});
