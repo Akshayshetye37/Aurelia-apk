@@ -475,7 +475,8 @@ app.post('/v1/payments/dispatch', ownerAuth, async (req, res) => {
   if (existing) {
     const same = existing.id === b.transactionId && existing.provider === provider &&
       existing.environment === environment && existing.amount_minor === b.amountMinor &&
-      existing.currency === b.currency;
+      existing.currency === b.currency && existing.device_id === (b.deviceId || null) &&
+      existing.folio_id === (b.folioId || null);
     if (!same) return fail(res, 409, 'idempotency_key_payload_conflict');
     return res.status(200).json({ transactionId: existing.id, status: existing.status, duplicate: true });
   }
@@ -492,7 +493,8 @@ app.post('/v1/payments/dispatch', ownerAuth, async (req, res) => {
   catch {
     const raced = db.prepare('SELECT * FROM transactions WHERE idempotency_key=?').get(b.idempotencyKey);
     if (raced && raced.id === b.transactionId && raced.provider === provider &&
-        raced.amount_minor === b.amountMinor && raced.currency === b.currency) {
+        raced.amount_minor === b.amountMinor && raced.currency === b.currency &&
+        raced.device_id === (b.deviceId || null) && raced.folio_id === (b.folioId || null)) {
       return res.status(200).json({ transactionId: raced.id, status: raced.status, duplicate: true });
     }
     return fail(res, 409, 'idempotency_conflict');
