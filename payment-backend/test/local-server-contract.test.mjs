@@ -38,7 +38,7 @@ test('first-owner setup requires a one-time high-entropy bootstrap token', () =>
 });
 
 test('owner session is cookie-only and is never returned in JSON', () => {
-  assert.match(source, /HttpOnly; Secure; SameSite=Strict/);
+  assert.match(source, /HttpOnly; Secure; SameSite=None/);
   assert.doesNotMatch(source, /sessionToken: token/);
   assert.doesNotMatch(source, /x-aurelia-session/);
 });
@@ -83,6 +83,8 @@ test('local service requires trusted HTTPS proxy and exact HTTPS origins', () =>
   assert.match(source, /TRUST_PROXY_HOPS !== '1'/);
   assert.match(source, /if \(!req\.secure\)/);
   assert.match(source, /AURELIA_OWNER_ORIGINS/);
+  assert.match(source, /SameSite=None/);
+  assert.match(source, /if \(origin && !origins\.has\(origin\)\)/);
 });
 
 test('payment dispatch persists an idempotent intent before provider network dispatch', () => {
