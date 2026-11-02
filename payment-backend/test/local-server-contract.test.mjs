@@ -47,6 +47,12 @@ test('new device registrations remain pending until proof of possession exists',
   assert.match(source, /proofOfPossessionRequired: true/);
 });
 
+test('legacy ACTIVE devices are downgraded once until proof-of-possession enrollment is implemented', () => {
+  assert.match(source, /deviceEnrollmentSchemaVersion < 1/);
+  assert.match(source, /UPDATE device_registrations SET status='PENDING' WHERE status='ACTIVE'/);
+  assert.match(source, /PRAGMA user_version/);
+});
+
 test('provider credential rotation invalidates validation and activation', () => {
   assert.match(source, /validated=0,active=0,updated_at=excluded\.updated_at/);
   assert.match(source, /await adapter\.validateCredentials\(\)/);
