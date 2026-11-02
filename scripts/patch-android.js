@@ -448,6 +448,9 @@ fs.copyFileSync(payBridgeTemplate, path.join(javaDir, 'PayBridgeClient.java'));
 const payBridgeProtocolTemplate = path.join(androidDir, 'templates', 'PayBridgeProtocol.java');
 if (!fs.existsSync(payBridgeProtocolTemplate)) throw new Error('PayBridgeProtocol.java template is missing.');
 fs.copyFileSync(payBridgeProtocolTemplate, path.join(javaDir, 'PayBridgeProtocol.java'));
+const localGatewayVaultTemplate = path.join(androidDir, 'templates', 'LocalGatewayVault.java');
+if (!fs.existsSync(localGatewayVaultTemplate)) throw new Error('LocalGatewayVault.java template is missing.');
+fs.copyFileSync(localGatewayVaultTemplate, path.join(javaDir, 'LocalGatewayVault.java'));
 
 const javaPath = path.join(javaDir, 'MainActivity.java');
 const java = String.raw`
@@ -496,6 +499,7 @@ public class MainActivity extends BridgeActivity {
   private boolean pendingIsBackup = false;
   private SharedPreferences prefs;
   private PayBridgeClient payBridgeClient;
+  private LocalGatewayVault localGatewayVault;
   private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor();
 
   @Override public void onCreate(Bundle savedInstanceState) {
@@ -523,6 +527,7 @@ public class MainActivity extends BridgeActivity {
       }
     });
     prefs = getSharedPreferences("aurelia_storage", MODE_PRIVATE);
+    localGatewayVault = new LocalGatewayVault(this);
     getWindow().setStatusBarColor(Color.rgb(5, 17, 13));
     getWindow().setNavigationBarColor(Color.rgb(5, 17, 13));
     getWindow().getDecorView().setSystemUiVisibility(0);
@@ -1069,6 +1074,18 @@ public class MainActivity extends BridgeActivity {
           if (payBridgeClient != null) payBridgeClient.retryNow();
         } else if ("payBridgeDisconnect".equals(type)) {
           if (payBridgeClient != null) payBridgeClient.disconnect();
+        } else if ("gatewayVaultStatus".equals(type)) {
+          JSONObject result = localGatewayVault.status(obj.optString("provider", ""), obj.optString("environment", "test"));
+          js("window.aureliaNativeGatewayResult && window.aureliaNativeGatewayResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
+        } else if ("gatewayVaultSave".equals(type)) {
+          JSONObject result = localGatewayVault.save(obj.optString("provider", ""), obj.optString("environment", "test"), obj.optJSONObject("credentials"));
+          js("window.aureliaNativeGatewayResult && window.aureliaNativeGatewayResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
+        } else if ("gatewayVaultRemove".equals(type)) {
+          JSONObject result = localGatewayVault.remove(obj.optString("provider", ""), obj.optString("environment", "test"));
+          js("window.aureliaNativeGatewayResult && window.aureliaNativeGatewayResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
+        } else if ("gatewayVaultActivate".equals(type)) {
+          JSONObject result = localGatewayVault.setActive(obj.optString("provider", ""), obj.optString("environment", "test"), obj.optBoolean("active", false));
+          js("window.aureliaNativeGatewayResult && window.aureliaNativeGatewayResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
         } else if ("photoStore".equals(type)) {
           String key = obj.optString("key", "");
           String data = obj.optString("data", "");
@@ -1269,7 +1286,8 @@ public class MainActivity extends BridgeActivity {
         }
       } catch (Exception error) {
         String message = error.getMessage() == null ? "Native backup operation failed." : error.getMessage();
-        if ("photoStore".equals(operationType) || "photoLoad".equals(operationType) || "photoArchive".equals(operationType) || "photoRestore".equals(operationType)) photoResult(operationRequestId, false, message);
+        if ("gatewayVaultStatus".equals(operationType) || "gatewayVaultSave".equals(operationType) || "gatewayVaultRemove".equals(operationType) || "gatewayVaultActivate".equals(operationType)) js("window.aureliaNativeGatewayResult && window.aureliaNativeGatewayResult(" + q(operationRequestId) + ",false," + q(message) + ")");
+        else if ("photoStore".equals(operationType) || "photoLoad".equals(operationType) || "photoArchive".equals(operationType) || "photoRestore".equals(operationType)) photoResult(operationRequestId, false, message);
         else if ("backupDeviceNow".equals(operationType)) backupResult(operationRequestId, false, message);
         else if ("recoverLatestBackup".equals(operationType)) recoveryResult(operationRequestId, false, message, "");
         else if ("deviceBackupStatus".equals(operationType)) js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(operationRequestId) + ",false,false,false,false)");
