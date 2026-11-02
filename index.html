@@ -3788,7 +3788,7 @@ if (typeof window.render === "function") window.render();
   if(!Array.isArray(platform.PMS_PROVIDER_CATALOGUE)||!platform.PMS_PROVIDER_CATALOGUE.length){
    return '<div class="card payment-platform-card"><h2>Payment Gateway</h2><p class="lab">Provider catalogue is empty or invalid.</p></div>';
   }
-  const status=bridgeStatus(),connected=bridgeConnected(),caps=Array.isArray(status.capabilities)?status.capabilities:[],canManage=connected&&caps.includes('provider.management');
+  const status=bridgeStatus(),connected=bridgeConnected(),caps=Array.isArray(status.capabilities)?status.capabilities:[];
   let bridge;
   const pairingHelp={
    untrusted_signer:'Signing certificate mismatch. Android permits this connection only when PMS and Pay Bridge use the same signing certificate. Uninstall both apps, then install the matching release-signed APK pair. Independently built debug APKs normally have different certificates.',
