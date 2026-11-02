@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../src/local-server.mjs', import.meta.url), 'utf8');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+const compose = await readFile(new URL('../compose.yaml', import.meta.url), 'utf8');
 
 test('local runtime is the default and does not require Firebase or Google Cloud packages', () => {
   assert.equal(packageJson.scripts.start, 'node src/local-server.mjs');
@@ -71,6 +72,11 @@ test('webhook signature verification receives raw request bytes', () => {
   assert.match(source, /type: req => !req\.path\.startsWith\('\/v1\/webhooks\/'\)/);
   assert.match(source, /express\.raw\(\{ type: 'application\/json', limit: '1mb' \}\)/);
   assert.match(source, /adapter\.verifyWebhook\(req\.body, req\.headers\)/);
+});
+
+test('Docker healthcheck supplies the trusted proxy HTTPS signal required by the app', () => {
+  assert.match(compose, /healthz.*X-Forwarded-Proto/);
+  assert.match(compose, /TRUST_PROXY_HOPS: "1"/);
 });
 
 test('local service requires trusted HTTPS proxy and exact HTTPS origins', () => {
