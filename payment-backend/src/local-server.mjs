@@ -126,7 +126,7 @@ app.use((req, res, next) => {
   if (!req.secure) return fail(res, 403, 'https_required');
   next();
 });
-app.use(express.json({ limit: '16kb', strict: true }));
+app.use(express.json({ limit: '16kb', strict: true, type: req => !req.path.startsWith('/v1/webhooks/') }));
 
 const loginAttempts = new Map();
 function loginRateLimit(req, res, next) {
@@ -139,7 +139,7 @@ function loginRateLimit(req, res, next) {
   next();
 }
 function ownerAuth(req, res, next) {
-  const token = req.cookies?.[SESSION_COOKIE] || req.get('x-aurelia-session');
+  const cookieHeader = req.get('cookie') || '';\n  const cookieToken = cookieHeader.split(';').map(v => v.trim()).find(v => v.startsWith(SESSION_COOKIE + '='))?.slice(SESSION_COOKIE.length + 1);\n  const token = cookieToken || req.get('x-aurelia-session');
   if (typeof token !== 'string' || token.length < 40 || token.length > 256) return fail(res, 401, 'owner_session_required');
   const digest = tokenDigest(token);
   const row = db.prepare('SELECT s.expires_at,o.id,o.username FROM sessions s JOIN owner o ON o.id=s.owner_id WHERE s.token_hash=?').get(digest);
