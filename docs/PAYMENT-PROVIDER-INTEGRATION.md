@@ -56,7 +56,7 @@ Razorpay's own Optimizer documentation distinguishes bank gateways from aggregat
 ## Security and implementation boundaries
 
 - No secret, salt, private key, webhook secret, API access token or merchant password may be stored in APK, browser storage, app backup, logs or Git.
-- The PMS stores only the owner-configured backend origin in local settings. The LAN owner console submits provider secrets directly to the trusted Docker backend; secrets are not persisted in PMS.
+- The Android app stores Razorpay/Cashfree test/live credential records in an Android Keystore AES-256-GCM native vault. Secrets are not stored in WebView storage or returned to JavaScript. The optional LAN owner console remains a separate administration mode.
 - Pay Bridge remains a separate companion APK. Its current PMS-side handshake is not required for provider credential administration and does not yet implement checkout/refund/settlement IPC.
 - A browser redirect, Android intent result, screenshot, UPI notification or unsigned callback is not proof of payment.
 - Keep automatic folio settlement disabled until provider-specific sandbox and live end-to-end tests pass.
@@ -66,7 +66,8 @@ Razorpay's own Optimizer documentation distinguishes bank gateways from aggregat
 - Provider catalogue and official documentation references: added to the PMS payment workspace.
 - Single-provider-per-merchant selection: implemented in the PMS settings UI; selecting a new provider replaces the previous selected provider.
 - Provider-specific setup/verification guidance: included for every catalogue entry.
-- Razorpay and Cashfree backend adapters: implemented for credential validation, order creation, provider status lookup, raw-body webhook signature verification and refund API calls. The local Docker service wires credential management, test dispatch, reconciliation lookup and webhook signature intake; full checkout/accounting/refund workflows remain incomplete.
+- Razorpay and Cashfree Node backend adapters: implement credential validation, order creation, provider status lookup, raw-body webhook signature verification and refund API calls. The Android native local vault stores credentials only; native order creation, SDK checkout handoff, payment verification, status polling, refunds and accounting are not yet integrated end-to-end.
 - Separate Aurelia Pay Bridge APK: not yet built.
-- LAN owner console: integrated for Razorpay/Cashfree sandbox credential storage, validation and explicit test-mode activation. Merchant credentials are not yet connected in a deployed appliance.
+- Android native local credential vault: implemented for Razorpay/Cashfree test and live records; credentials are encrypted at rest and never returned to JavaScript. Provider validation/activation is not yet wired to this vault.
+- Optional LAN owner console: integrated for Razorpay/Cashfree sandbox credential storage and validation; it requires the owner to deploy the Docker appliance.
 - Public webhook delivery, background reconciliation, refund lifecycle and atomic PMS folio settlement: not implemented; live collection remains disabled.
