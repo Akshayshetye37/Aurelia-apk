@@ -304,14 +304,14 @@ app.post('/v1/auth/login', loginRateLimit, async (req, res) => {
   const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
   db.prepare('INSERT INTO sessions(token_hash,owner_id,expires_at,created_at) VALUES(?,?,?,?)')
     .run(tokenDigest(token), row.id, expires, now());
-  res.setHeader('Set-Cookie', SESSION_COOKIE + '=' + token + '; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=' + SESSION_TTL_SECONDS);
+  res.setHeader('Set-Cookie', SESSION_COOKIE + '=' + token + '; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=' + SESSION_TTL_SECONDS);
   writeAudit('LOGIN_SUCCESS', row.username);
   return res.json({ authenticated: true, expiresAt: expires });
 });
 app.get('/v1/auth/session', ownerAuth, (req, res) => res.json({ authenticated: true, username: req.owner.username }));
 app.post('/v1/auth/logout', ownerAuth, (req, res) => {
   db.prepare('DELETE FROM sessions WHERE token_hash=?').run(req.sessionDigest);
-  res.setHeader('Set-Cookie', SESSION_COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
+  res.setHeader('Set-Cookie', SESSION_COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0');
   writeAudit('LOGOUT', req.owner.username);
   res.json({ authenticated: false });
 });
@@ -327,7 +327,7 @@ app.post('/v1/auth/change-password', ownerAuth, async (req, res) => {
     .run(hash.salt, hash.hash, hash.N, hash.r, hash.p, req.owner.id);
   db.prepare('DELETE FROM sessions').run();
   writeAudit('PASSWORD_CHANGED', req.owner.username);
-  res.setHeader('Set-Cookie', SESSION_COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
+  res.setHeader('Set-Cookie', SESSION_COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0');
   res.json({ changed: true, reauthenticationRequired: true });
 });
 
