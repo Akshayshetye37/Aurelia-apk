@@ -3860,7 +3860,86 @@ window.testAureliaBackendConnection=async function(){
 window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;if(!native||typeof native.postMessage!=='function')throw new Error('Native Pay Bridge client is unavailable. Update the PMS APK.');native.postMessage(JSON.stringify({type:'payBridgeConnect'}));toast('Checking Pay Bridge installation, signing identity and native service…');setTimeout(()=>{try{render()}catch(_){ }},350)}catch(e){toast(e.message||'Could not start Pay Bridge connection')}};
  window.disconnectAureliaPayBridge=function(){try{window.AureliaNative.postMessage(JSON.stringify({type:'payBridgeDisconnect'}));toast('Pay Bridge disconnected')}catch(_){toast('Native Pay Bridge client is unavailable')}};
  window.aureliaPayBridgeStatusChanged=function(){try{if(document.querySelector('.payment-platform-card'))render()}catch(_){ }};
- window.aureliaPaymentAdminRequest=async function(path,method='GET',body){
+ /* Optional Firebase owner authentication. Never initialized during local PMS startup. */
+(function(){
+ const VERSION='11.10.0',BASE='https://www.gstatic.com/firebasejs/'+VERSION+'/';
+ let auth=null,app=null,modules=null,initPromise=null,readyResolve=null;
+ let recaptcha=null;
+ const state={status:'unconfigured',error:null,user:null};
+ function publish(){window.dispatchEvent(new CustomEvent('aurelia-payment-auth-state',{detail:{...state,user:state.user?{uid:state.user.uid,email:state.user.email}:null}}));}
+ async function loadSdk(){
+  if(modules)return modules;
+  const [appSdk,authSdk]=await Promise.all([import(BASE+'firebase-app.js'),import(BASE+'firebase-auth.js')]);
+  modules={...appSdk,...authSdk};return modules;
+ }
+ async function configure(firebaseConfig){
+  if(!firebaseConfig||!firebaseConfig.apiKey||!firebaseConfig.authDomain||!firebaseConfig.projectId||!firebaseConfig.appId)throw new Error('Complete Firebase Web App configuration is required for optional payment administration.');
+  state.status='initializing';state.error=null;publish();
+  const sdk=await loadSdk();
+  const existing=sdk.getApps().find(x=>x.name==='aurelia-payment-owner');
+  app=existing||sdk.initializeApp(firebaseConfig,'aurelia-payment-owner');
+  auth=sdk.getAuth(app);
+  await sdk.setPersistence(auth,sdk.browserLocalPersistence);
+  await new Promise(resolve=>{
+   const unsubscribe=sdk.onAuthStateChanged(auth,user=>{state.user=user||null;state.status=user?'signed-in':'signed-out';publish();unsubscribe();resolve();});
+  });
+  state.status=auth.currentUser?'signed-in':'signed-out';state.user=auth.currentUser;publish();
+  return state.status;
+ }
+ async function waitForReady(){
+  if(!auth)throw new Error('Optional Firebase owner authentication is not configured. Local PMS remains available.');
+  return auth;
+ }
+ async function signIn(email,password){
+  const a=await waitForReady(),sdk=await loadSdk();
+  try{
+   const result=await sdk.signInWithEmailAndPassword(a,String(email||'').trim(),String(password||''));
+   state.user=result.user;state.status='signed-in';publish();return result.user;
+  }catch(error){
+   if(error.code!=='auth/multi-factor-auth-required')throw error;
+   const resolver=sdk.getMultiFactorResolver(a,error);
+   if(!resolver.hints.length)throw new Error('No enrolled MFA factor is available for this account.');
+   const choices=resolver.hints.map((h,i)=>i+': '+(h.factorId==='totp'?'Authenticator app':h.factorId==='phone'?'SMS to '+(h.phoneNumber||'enrolled phone'):h.factorId));
+   const selected=Number(window.prompt('Choose your enrolled MFA method:\n'+choices.join('\n'),'0'));
+   const hint=resolver.hints[selected];
+   if(!hint)throw new Error('Select a valid enrolled MFA method.');
+   let assertion;
+   if(hint.factorId==='totp'){
+    const code=window.prompt('Enter the 6-digit code from your authenticator app.');
+    if(!code||!/^\\d{6}$/.test(code.trim()))throw new Error('A valid 6-digit authenticator code is required.');
+    assertion=sdk.TotpMultiFactorGenerator.assertionForSignIn(resolver,code.trim());
+   }else if(hint.factorId==='phone'){
+    let host=document.getElementById('aurelia-payment-recaptcha');
+    if(!host){host=document.createElement('div');host.id='aurelia-payment-recaptcha';host.style.cssText='position:fixed;left:-10000px;top:0';document.body.appendChild(host);}
+    if(recaptcha){try{recaptcha.clear()}catch(_){}recaptcha=null;}
+    recaptcha=new sdk.RecaptchaVerifier(a,host,{size:'invisible'});
+    const verificationId=await sdk.PhoneAuthProvider.verifyPhoneNumber({multiFactorHint:hint,multiFactorSession:resolver.session},a,recaptcha);
+    const code=window.prompt('Enter the SMS verification code sent to '+(hint.phoneNumber||'your enrolled phone')+'.');
+    if(!code||!/^\\d{4,8}$/.test(code.trim()))throw new Error('A valid SMS verification code is required.');
+    assertion=sdk.PhoneMultiFactorGenerator.assertion(sdk.PhoneAuthProvider.credential(verificationId,code.trim()));
+   }else throw new Error('Unsupported enrolled MFA method: '+hint.factorId);
+   const result=await resolver.resolveSignIn(assertion);
+   state.user=result.user;state.status='signed-in';publish();return result.user;
+  }
+ }
+ async function getIdToken(){
+  const a=await waitForReady(),user=a.currentUser;
+  if(!user)throw new Error('Owner sign-in is required.');
+  const result=await user.getIdTokenResult(true);
+  const authTime=Date.parse(result.claims.auth_time||'');
+  if(!Number.isFinite(authTime)||Date.now()-authTime>600000||Date.now()<authTime)throw new Error('Recent owner sign-in with MFA is required. Sign in again before administering payment providers.');
+  if(result.claims.email_verified!==true)throw new Error('Verify the owner email address before administering payment providers.');
+  if(!result.claims.firebase?.sign_in_second_factor)throw new Error('The backend requires a completed MFA sign-in.');
+  return result.token;
+ }
+ async function signOut(){
+  if(!auth)return;const sdk=await loadSdk();await sdk.signOut(auth);
+  state.user=null;state.status='signed-out';publish();
+ }
+ window.AureliaPaymentAuth={configure,waitForReady,signIn,getIdToken,signOut,getState:()=>({...state,user:state.user?{uid:state.user.uid,email:state.user.email}:null})};
+ if(window.AURELIA_FIREBASE_CONFIG)configure(window.AURELIA_FIREBASE_CONFIG).catch(error=>{state.status='error';state.error=error.message;publish();});
+})();
+window.aureliaPaymentAdminRequest=async function(path,method='GET',body){
  const origin=(S.set.backendConnection?.endpoint||'').trim();
  if(!origin||S.set.backendConnection?.reachable!==true)throw new Error('Save and successfully test the deployed HTTPS backend first.');
  const auth=window.AureliaPaymentAuth;
