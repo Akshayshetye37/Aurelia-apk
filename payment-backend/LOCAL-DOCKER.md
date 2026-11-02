@@ -19,7 +19,7 @@ This runtime is the local owner/provider-administration foundation. It is not ye
 4. Start with `docker compose up -d --build`.
 5. Check `https://<AURELIA_LAN_HOSTNAME>:8443/healthz` and `/readyz`. The local `/readyz` response reports `database: ready`; it does not return the Cloud Run prototype's Firestore/Secret Manager check fields.
 6. Complete one-time owner setup through `POST /v1/auth/setup` with `X-Aurelia-Setup-Token: <OWNER_SETUP_TOKEN>`, a username and a password of at least 14 characters. The setup token is checked in constant time, setup is single-use, and there is no default account or password. Do not expose the setup token in a browser URL, logs or screenshots.
-7. Sign in through `POST /v1/auth/login`. The backend sets a Secure, HttpOnly, SameSite=Strict cookie; it does not return the session token in JSON or accept a JavaScript-readable bearer token. Cross-origin browser clients must send the exact configured PMS origin. The backend's CORS allowlist is the frontend origin (for Capacitor, `https://localhost`), not the backend host.
+7. Open More → Payment Gateway in Aurelia PMS, save the backend origin and run Test backend. The integrated LAN owner console checks setup status, performs first-owner setup or sign-in, and manages supported provider credentials. Sign-in uses a Secure, HttpOnly, SameSite=None cookie because the Capacitor WebView origin (`https://localhost`) differs from the appliance origin; the Android WebView accepts third-party cookies for this app. The backend still requires an exact allowlisted Origin and credentialed CORS. The cookie is never exposed to JavaScript or returned in JSON. For a browser preview, add that exact HTTPS origin to `AURELIA_OWNER_ORIGINS` only if you explicitly trust that preview origin.
 
 ## Persistence and key recovery
 
@@ -38,7 +38,7 @@ SQLite lives in the named `payment-data` volume. The encryption key and session 
 - `DELETE /v1/admin/providers/:provider/credentials?environment=test|live`
 - `POST /v1/webhooks/:provider/:environment` (raw request body; provider-specific signature verification)
 
-## Safety boundary
+## PMS owner-console integration\n\nThe PMS owner console is independent of Pay Bridge. It currently supports Razorpay and Cashfree sandbox credentials, credential validation, explicit test activation/deactivation and credential removal. It does not expose production activation. The provider catalogue entries without a backend adapter remain documentation-only.\n\n## Safety boundary
 
 - Credentials are encrypted at rest with AES-256-GCM and a fresh 12-byte IV per write.
 - Provider validation makes a real authenticated read-only API request through the existing provider adapter; it does not create a charge.
