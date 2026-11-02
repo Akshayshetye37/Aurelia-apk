@@ -27,10 +27,10 @@ The branch is the maintained source of truth for this workstream. Generated Capa
 
 - Aurelia PMS is intended to remain **local-first**. Ordinary hotel operations and local backup do not require an Aurelia-owned cloud or application server.
 - **Aurelia currently has no deployed cloud environment and no running Aurelia payment server.** No Cloud Run deployment, production Firestore, Secret Manager vault, or production tenant provisioning is claimed.
-- `payment-backend/` is only a partial reference implementation/scaffold in this repository. Its presence does not mean a backend is hosted, configured, reachable, or production-ready.
+- `payment-backend/` contains a local Docker administration and payment-dispatch foundation. It is not hosted automatically: the owner must deploy it on a trusted LAN appliance, configure its secrets/TLS, and complete owner setup. The PMS now includes a local owner console for Razorpay and Cashfree sandbox credential storage, validation and test-mode activation.
 - The PMS `Test backend` button checks `GET /readyz` over HTTPS. For the selected LAN Docker runtime, a successful response verifies that the local SQLite database is reachable (`database: ready`). The separate cloud prototype reports Firestore and Secret Manager readiness. Neither response verifies owner authentication, device identity, merchant credentials, provider sandbox, webhook delivery, folio settlement, reconciliation or payment capability.
 - Google Drive and a user-selected Shared Folder are optional file-backup destinations via Android Storage Access Framework (SAF). They are not the PMS live database, do not provide automatic multi-device database synchronization, and are independent of a payment backend.
-- Online gateway payment execution, trusted webhook verification, refunds and authoritative reconciliation require a separately deployed trusted backend. Those capabilities remain unavailable until that service and its controls are implemented and tested.
+- The LAN owner console can configure and validate Razorpay/Cashfree sandbox credentials. This is not yet a complete guest checkout/accounting product: public webhook reachability, webhook-driven reconciliation, scheduled status polling, refund lifecycle, Android checkout handoff and transactional PMS folio posting remain incomplete. Live collection remains blocked.
 
 ## Pay Bridge installation and connection diagnostics
 
@@ -134,7 +134,7 @@ PMS and the future Pay Bridge remain independent data owners. The PMS backup for
 
 ## Payment Gateway boundary
 
-The PMS catalogue exposes the agreed Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue providers. Provider configuration is locked until an authenticated Pay Bridge advertises the provider.management capability. This PMS branch's native Pay Bridge client currently implements the signer-checked protocol handshake only; it does not execute payments or provide provider adapters. API secrets and webhook secrets stay on the owner's trusted backend, and automatic folio settlement remains disabled.
+The PMS catalogue exposes the agreed Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue providers. Provider credential administration is performed by the authenticated LAN owner console and no longer depends on Pay Bridge's provider.management capability. The local backend currently accepts Razorpay and Cashfree credentials for sandbox/test configuration, validation and explicit test activation. The native Pay Bridge client still implements the signer-checked protocol handshake only; it does not execute checkout, refunds or settlement. API secrets and webhook secrets stay on the owner's trusted backend, and live collection/automatic folio settlement remain disabled.
 
 
 ---
