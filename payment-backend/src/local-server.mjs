@@ -51,11 +51,29 @@ CREATE TABLE IF NOT EXISTS provider_config (
  active INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
  PRIMARY KEY(provider, environment)
 );
+CREATE TABLE IF NOT EXISTS device_registrations (
+ device_id TEXT PRIMARY KEY, public_key_spki BLOB NOT NULL,
+ key_algorithm TEXT NOT NULL CHECK(key_algorithm='ECDSA_P256_SHA256'),
+ key_version INTEGER NOT NULL DEFAULT 1 CHECK(key_version > 0),
+ status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','ACTIVE','REVOKED')),
+ created_at TEXT NOT NULL, last_seen_at TEXT, revoked_at TEXT
+);
+CREATE TABLE IF NOT EXISTS device_cursors (
+ device_id TEXT PRIMARY KEY REFERENCES device_registrations(device_id),
+ last_applied_sequence INTEGER NOT NULL DEFAULT 0 CHECK(last_applied_sequence >= 0),
+ updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS device_sequence_counters (
+ device_id TEXT PRIMARY KEY REFERENCES device_registrations(device_id),
+ last_sequence INTEGER NOT NULL DEFAULT 0 CHECK(last_sequence >= 0)
+);
 CREATE TABLE IF NOT EXISTS transactions (
  id TEXT PRIMARY KEY, provider TEXT NOT NULL, environment TEXT NOT NULL,
  provider_order_id TEXT, amount_minor INTEGER NOT NULL, currency TEXT NOT NULL,
  status TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE,
- created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+ device_id TEXT REFERENCES device_registrations(device_id), folio_id TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ CHECK ((device_id IS NULL AND folio_id IS NULL) OR (device_id IS NOT NULL AND folio_id IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS transactions_provider_status ON transactions(provider, environment, status);
 CREATE TABLE IF NOT EXISTS transaction_journal (
@@ -68,6 +86,31 @@ CREATE TABLE IF NOT EXISTS settlement_outbox (
  attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, processed_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS settlement_commands (
+ command_id TEXT PRIMARY KEY,
+ device_id TEXT NOT NULL REFERENCES device_registrations(device_id),
+ sequence_id INTEGER NOT NULL CHECK(sequence_id > 0),
+ transaction_id TEXT NOT NULL REFERENCES transactions(id),
+ idempotency_key TEXT NOT NULL, folio_id TEXT NOT NULL,
+ amount_minor INTEGER NOT NULL CHECK(amount_minor > 0),
+ currency TEXT NOT NULL CHECK(currency='INR'),
+ payload_hash TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL,
+ UNIQUE(device_id, sequence_id), UNIQUE(device_id, transaction_id),
+ UNIQUE(device_id, idempotency_key)
+);
+CREATE TABLE IF NOT EXISTS device_command_state (
+ command_id TEXT PRIMARY KEY REFERENCES settlement_commands(command_id),
+ status TEXT NOT NULL DEFAULT 'PENDING'
+  CHECK(status IN ('PENDING','LEASED','DELIVERING','ACKNOWLEDGED','PROCESSED','AMBIGUOUS_RECONCILIATION','CONFLICT')),
+ lease_token TEXT, lease_expires_at TEXT,
+ attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
+ next_attempt_at TEXT, ledger_ack_id TEXT, receipt_payload TEXT, receipt_signature TEXT,
+ acknowledged_at TEXT, processed_at TEXT, last_error TEXT,
+ CHECK ((lease_token IS NULL AND lease_expires_at IS NULL) OR (lease_token IS NOT NULL AND lease_expires_at IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS commands_device_sequence ON settlement_commands(device_id,sequence_id);
+CREATE INDEX IF NOT EXISTS command_delivery_retry ON device_command_state(status,next_attempt_at);
+CREATE INDEX IF NOT EXISTS command_delivery_lease ON device_command_state(status,lease_expires_at);
 CREATE TABLE IF NOT EXISTS webhook_inbox (
  event_key TEXT PRIMARY KEY, provider TEXT NOT NULL, environment TEXT NOT NULL,
  received_at TEXT NOT NULL, signature_verified INTEGER NOT NULL,
@@ -178,6 +221,34 @@ app.get('/readyz', (_req, res) => {
   try { db.prepare('SELECT 1').get(); return res.json({ ok: true, database: 'ready' }); }
   catch { return fail(res, 503, 'database_unavailable'); }
 });
+// The Android app generates and retains its private key in Android Keystore.
+// Only the P-256 public key is registered with this service.
+app.post('/v1/admin/devices/register', ownerAuth, (req, res) => {
+  const { deviceId, publicKeyPem } = req.body || {};
+  if (!validOpaqueId(deviceId) || typeof publicKeyPem !== 'string' || publicKeyPem.length > 4096)
+    return fail(res, 400, 'invalid_device_registration');
+  let key;
+  try { key = crypto.createPublicKey(publicKeyPem); }
+  catch { return fail(res, 400, 'invalid_device_public_key'); }
+  if (key.asymmetricKeyType !== 'ec' || key.asymmetricKeyDetails?.namedCurve !== 'prime256v1')
+    return fail(res, 400, 'device_key_must_be_p256');
+  const der = key.export({type:'spki',format:'der'});
+  const existing = db.prepare('SELECT public_key_spki,status FROM device_registrations WHERE device_id=?').get(deviceId);
+  if (existing) {
+    if (!Buffer.from(existing.public_key_spki).equals(der) || existing.status === 'REVOKED')
+      return fail(res, 409, 'device_identity_conflict');
+    return res.status(200).json({deviceId,status:existing.status,duplicate:true});
+  }
+  const register = db.transaction(() => {
+    db.prepare("INSERT INTO device_registrations(device_id,public_key_spki,key_algorithm,status,created_at) VALUES(?,?,'ECDSA_P256_SHA256','ACTIVE',?)").run(deviceId,der,now());
+    db.prepare('INSERT INTO device_cursors(device_id,last_applied_sequence,updated_at) VALUES(?,0,?)').run(deviceId,now());
+    db.prepare('INSERT INTO device_sequence_counters(device_id,last_sequence) VALUES(?,0)').run(deviceId);
+    writeAudit('PAYMENT_DEVICE_REGISTERED',deviceId);
+  });
+  try { register(); } catch { return fail(res,409,'device_registration_conflict'); }
+  return res.status(201).json({deviceId,status:'ACTIVE',keyAlgorithm:'ECDSA_P256_SHA256'});
+});
+
 app.get('/v1/auth/setup-status', (_req, res) => {
   res.json({ setupRequired: !db.prepare('SELECT 1 FROM owner WHERE id=1').get() });
 });
@@ -345,11 +416,36 @@ function transitionPayment(transactionId, expectedStatuses, nextStatus, reason, 
     db.prepare('INSERT INTO transaction_journal(transaction_id,from_status,to_status,reason,created_at) VALUES(?,?,?,?,?)')
       .run(transactionId, current.status, nextStatus, reason, now());
     if (nextStatus === 'CAPTURED_PENDING_ACCOUNTING') {
+      const outboxId = crypto.randomUUID();
+      const capturedPayload = { transactionId, amountMinor: current.amount_minor,
+        currency: current.currency, provider: current.provider,
+        providerOrderId: providerOrderId || current.provider_order_id };
       db.prepare('INSERT OR IGNORE INTO settlement_outbox(id,transaction_id,event_type,payload,status,created_at) VALUES(?,?,?,?,?,?)')
-        .run(crypto.randomUUID(), transactionId, 'PAYMENT_CAPTURED', JSON.stringify({
-          transactionId, amountMinor: current.amount_minor, currency: current.currency,
-          provider: current.provider, providerOrderId: providerOrderId || current.provider_order_id
-        }), 'PENDING', now());
+        .run(outboxId,transactionId,'PAYMENT_CAPTURED',JSON.stringify(capturedPayload),'PENDING',now());
+      // The command, per-device sequence, and outbox event commit atomically
+      // with the captured payment transition.
+      if (current.device_id && current.folio_id) {
+        const prior = db.prepare('SELECT command_id FROM settlement_commands WHERE device_id=? AND transaction_id=?')
+          .get(current.device_id,transactionId);
+        if (!prior) {
+          db.prepare('INSERT OR IGNORE INTO device_sequence_counters(device_id,last_sequence) VALUES(?,0)').run(current.device_id);
+          const counter = db.prepare('SELECT last_sequence FROM device_sequence_counters WHERE device_id=?').get(current.device_id);
+          const sequenceId = counter.last_sequence + 1;
+          db.prepare('UPDATE device_sequence_counters SET last_sequence=? WHERE device_id=?').run(sequenceId,current.device_id);
+          const commandId = crypto.randomUUID();
+          const command = {commandId,deviceId:current.device_id,sequenceId,transactionId,
+            idempotencyKey:current.idempotency_key,folioId:current.folio_id,
+            amountMinor:current.amount_minor,currency:current.currency};
+          const payload = JSON.stringify(command);
+          const payloadHash = crypto.createHash('sha256').update(payload).digest('hex');
+          db.prepare(`INSERT INTO settlement_commands(command_id,device_id,sequence_id,transaction_id,
+            idempotency_key,folio_id,amount_minor,currency,payload_hash,payload,created_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(commandId,current.device_id,sequenceId,transactionId,
+              current.idempotency_key,current.folio_id,current.amount_minor,current.currency,payloadHash,payload,now());
+          db.prepare('INSERT INTO device_command_state(command_id,status,next_attempt_at) VALUES(?,?,?)')
+            .run(commandId,'PENDING',now());
+        }
+      }
     }
     writeAudit('PAYMENT_STATE_TRANSITION', transactionId + ':' + current.status + '->' + nextStatus);
     return { changed: true, status: nextStatus };
@@ -365,7 +461,14 @@ app.post('/v1/payments/dispatch', ownerAuth, async (req, res) => {
   if (!PROVIDERS.has(provider) || environment !== 'test' ||
       !validOpaqueId(b.transactionId) || !validOpaqueId(b.idempotencyKey) ||
       !Number.isSafeInteger(b.amountMinor) || b.amountMinor <= 0 ||
-      b.currency !== 'INR') return fail(res, 400, 'invalid_payment_intent');
+      b.currency !== 'INR' ||
+      ((b.deviceId === undefined) !== (b.folioId === undefined)) ||
+      (b.deviceId !== undefined && (!validOpaqueId(b.deviceId) || !validOpaqueId(b.folioId))))
+    return fail(res, 400, 'invalid_payment_intent');
+  if (b.deviceId) {
+    const device = db.prepare('SELECT status FROM device_registrations WHERE device_id=?').get(b.deviceId);
+    if (device?.status !== 'ACTIVE') return fail(res, 409, 'payment_device_not_registered');
+  }
   const config = providerRow(provider, environment);
   if (!config?.configured || !config.validated || !config.active) return fail(res, 409, 'provider_not_active_and_validated');
   const existing = db.prepare('SELECT * FROM transactions WHERE idempotency_key=?').get(b.idempotencyKey);
@@ -377,9 +480,10 @@ app.post('/v1/payments/dispatch', ownerAuth, async (req, res) => {
     return res.status(200).json({ transactionId: existing.id, status: existing.status, duplicate: true });
   }
   const insert = db.transaction(() => {
-    db.prepare(`INSERT INTO transactions(id,provider,environment,amount_minor,currency,status,idempotency_key,created_at,updated_at)
-      VALUES(?,?,?,?,?,'DISPATCHING',?,?,?)`).run(
-      b.transactionId, provider, environment, b.amountMinor, b.currency, b.idempotencyKey, now(), now());
+    db.prepare(`INSERT INTO transactions(id,provider,environment,amount_minor,currency,status,idempotency_key,device_id,folio_id,created_at,updated_at)
+      VALUES(?,?,?,?,?,'DISPATCHING',?,?,?,?,?)`).run(
+      b.transactionId, provider, environment, b.amountMinor, b.currency, b.idempotencyKey,
+      b.deviceId || null, b.folioId || null, now(), now());
     db.prepare('INSERT INTO transaction_journal(transaction_id,from_status,to_status,reason,created_at) VALUES(?,NULL,?,?,?)')
       .run(b.transactionId, 'DISPATCHING', 'durable_intent_created', now());
     writeAudit('PAYMENT_INTENT_CREATED', b.transactionId);
