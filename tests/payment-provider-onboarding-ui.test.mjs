@@ -4,35 +4,44 @@ import { readFile } from 'node:fs/promises';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
-test('PMS provider directory never renders merchant credential inputs', () => {
-  assert.match(html, /Provider credentials remain server-side/);
-  assert.match(html, /data-aurelia-backend-url/);
-  assert.match(html, /testAureliaBackendConnection/);
-  assert.match(html, /body\?\.database==='ready'/);
-  assert.match(html, /body\?\.checks\?\.firestore===true/);
-  assert.match(html, /url\.protocol!=='https:'/);
-  assert.doesNotMatch(html, /id="provider-backend-/);
-  assert.doesNotMatch(html, /id="provider-auth-/);
-  assert.doesNotMatch(html, /data-provider-field=/);
+test('PMS exposes LAN owner administration independently of Pay Bridge', () => {
+  assert.match(html, /LAN Payment Owner Console/);
+  assert.match(html, /setupLocalGatewayOwner/);
+  assert.match(html, /loginLocalGatewayOwner/);
+  assert.match(html, /refreshLocalGatewayOwner/);
+  assert.match(html, /Pay Bridge is not required to configure merchant credentials/);
 });
 
-test('PMS provider UI cannot submit merchant secrets to an arbitrary HTTPS host', () => {
-  assert.doesNotMatch(html, /fetch\(backend\+'\/api\/admin\/payment-providers/);
-  assert.doesNotMatch(html, /Authorization':\s*'Bearer '\+authToken/);
-  assert.match(html, /The LAN Docker backend includes owner-authenticated credential-management API endpoints/);
+test('local owner administration uses HTTPS-origin scoped HttpOnly-cookie sessions', () => {
+  assert.match(html, /credentials:'include'/);
+  assert.match(html, /SameSite=None/);
+  assert.match(html, /X-Aurelia-Setup-Token/);
+  assert.doesNotMatch(html, /localStorage\.setItem\([^\n]*(?:session|owner|gateway)/i);
+  assert.doesNotMatch(html, /sessionToken\s*:/);
 });
 
-test('provider catalogue remains documentation-only until trusted backend deployment', () => {
-  assert.match(html, /Provider Directory &amp; Onboarding|Provider Directory & Onboarding/);
-  assert.match(html, /LAN owner console\/client/);
-  assert.match(html, /PMS receives non-secret provider status only|Provider credentials remain server-side/);
+test('PMS submits provider secrets only to the configured LAN backend and clears write-only inputs', () => {
+  assert.match(html, /saveLocalGatewayCredentials/);
+  assert.match(html, /gw-\+provider\+\x27-\x27\+key/);
+  assert.match(html, /credentials\}\);/);
+  assert.match(html, /el\.value=\x27\x27/);
+  assert.match(html, /Provider secrets are submitted directly to the Docker backend and encrypted at rest/);
 });
 
+test('only implemented Razorpay and Cashfree adapters expose credential controls', () => {
+  assert.match(html, /const implemented=\['razorpay','cashfree'\]\.includes\(id\)/);
+  assert.match(html, /Adapter not implemented/);
+  assert.match(html, /Cashfree Payments/);
+  assert.match(html, /Razorpay/);
+});
 
-test('Pay Bridge connection UI diagnoses signing and protocol pairing failures', () => {
-  assert.match(html, /untrusted_signer/);
-  assert.match(html, /same signing certificate/);
-  assert.match(html, /Independently built debug APKs/);
-  assert.match(html, /protocol_mismatch/);
-  assert.match(html, /permission_denied/);
+test('UI does not claim live collection, webhook settlement, refunds or folio posting are ready', () => {
+  assert.match(html, /Production activation and live collection are intentionally unavailable/);
+  assert.match(html, /webhook reachability, reconciliation, refunds and transactional PMS folio posting/);
+  assert.doesNotMatch(html, /Live collection enabled/);
+});
+
+test('provider onboarding is no longer gated by the Pay Bridge handshake', () => {
+  assert.match(html, /localGatewayAdminHtml\(\)/);
+  assert.doesNotMatch(html, /canManage\s*&&[^\n]*provider\.management/);
 });
