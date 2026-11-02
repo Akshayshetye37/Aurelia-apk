@@ -8,6 +8,8 @@ test('PMS provider directory never renders merchant credential inputs', () => {
   assert.match(html, /Provider credentials remain server-side/);
   assert.match(html, /data-aurelia-backend-url/);
   assert.match(html, /testAureliaBackendConnection/);
+  assert.match(html, /body\?\.database==='ready'/);
+  assert.match(html, /body\?\.checks\?\.firestore===true/);
   assert.match(html, /url\.protocol!=='https:'/);
   assert.doesNotMatch(html, /id="provider-backend-/);
   assert.doesNotMatch(html, /id="provider-auth-/);
