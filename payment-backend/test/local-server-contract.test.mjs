@@ -29,6 +29,24 @@ test('encryption key is mandatory and AES-GCM uses fresh 12-byte IVs', () => {
   assert.match(source, /decipher\.setAuthTag\(tag\)/);
 });
 
+test('first-owner setup requires a one-time high-entropy bootstrap token', () => {
+  assert.match(source, /requiredHex\\('OWNER_SETUP_TOKEN', 32\\)/);
+  assert.match(source, /x-aurelia-setup-token/);
+  assert.match(source, /timingSafeEqual\\(Buffer\\.from\\(suppliedSetupToken, 'hex'\\), ownerSetupToken\\)/);
+  assert.match(source, /owner_setup_token_invalid/);
+});
+
+test('owner session is cookie-only and is never returned in JSON', () => {
+  assert.match(source, /HttpOnly; Secure; SameSite=Strict/);
+  assert.doesNotMatch(source, /sessionToken: token/);
+  assert.doesNotMatch(source, /x-aurelia-session/);
+});
+
+test('new device registrations remain pending until proof of possession exists', () => {
+  assert.match(source, /ECDSA_P256_SHA256','PENDING'/);
+  assert.match(source, /proofOfPossessionRequired: true/);
+});
+
 test('provider credential rotation invalidates validation and activation', () => {
   assert.match(source, /validated=0,active=0,updated_at=excluded\.updated_at/);
   assert.match(source, /await adapter\.validateCredentials\(\)/);
@@ -70,6 +88,15 @@ test('reconciliation queries provider API and checks amount, currency and order 
   assert.match(source, /remote\.currency !== tx\.currency/);
   assert.match(source, /provider_api_confirmed_capture/);
   assert.doesNotMatch(source, /externalStatusVerified\s*=\s*['"]captured['"]/);
+});
+
+test('late provider-confirmed capture can supersede a prior failure for reconciliation', () => {
+  assert.match(source, /'RECONCILIATION_REQUIRED','FAILED'[\\s\\S]*'CAPTURED_PENDING_ACCOUNTING'/);
+});
+
+test('webhook event ID reuse with a different payload is rejected', () => {
+  assert.match(source, /webhook_event_identity_conflict/);
+  assert.match(source, /prior\\.payload_sha256 !== payloadHash/);
 });
 
 test('verified capture creates one durable accounting outbox event, not a false folio success', () => {
