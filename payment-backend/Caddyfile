@@ -1,4 +1,4 @@
-:443 {
+{$AURELIA_LAN_HOSTNAME}:443 {
   tls internal
   encode zstd gzip
   reverse_proxy payment-backend:8085
