@@ -462,3 +462,97 @@ This is a schema and enqueue foundation, not a complete device synchronization p
 The schema includes `ACKNOWLEDGED`, `PROCESSED`, `AMBIGUOUS_RECONCILIATION` and `CONFLICT` states, but no worker or receipt-verification route currently drives those states. A stored public key alone does not authenticate a device request or verify a receipt.
 
 **Operational status:** the Docker appliance is not represented as deployed or paired with an Android device. Live gateway collection and automatic folio settlement remain disabled. Do not interpret a configured HTTPS endpoint or a successful health check as payment readiness. The backend test workflow result for these commits has not been verified.
+
+---
+
+## Payment system status — 2026-11-03
+
+This section records the verified state of the payment implementation on `feature/multi-provider-payment-backend`. It supersedes earlier aspirational or stale statements elsewhere in this README where they conflict with the status below. The architecture described here is the target; the phase table distinguishes implemented foundations from unfinished execution paths.
+
+### Locked operational controls
+
+- **Live collection: disabled.**
+- **Automatic folio settlement: disabled.** `AUTO_FOLIO_SETTLEMENT_ENABLED` remains hard-coded to `false` in `src/payments/settlement-gate.mjs`. Do not change it as part of ordinary implementation work.
+- **Provider credential onboarding: unavailable.** Do not enter merchant API secrets or webhook secrets in the PMS, browser, or APK. A trusted backend owner console and backend-only secret vault must exist before onboarding is enabled.
+- **Primary deployment target: local PMS + LAN Docker appliance.** The optional cloud prototype is not a dependency for local operation.
+- **Provider scope: Razorpay and Cashfree only** for the initial complete lifecycle. Other gateway integrations are deferred until the first two pass the full acceptance suite.
+
+### Verified implementation state
+
+| Area | Present in the repository | Remaining work / boundary |
+|---|---|---|
+| PMS folio model | `booking.pays`, `booking.p`, `booking.payments`, daily totals and audit are updated by `settlePayment()`. | The PMS projection is persisted through localStorage. It is not a durable accounting ledger or a cross-process transaction. |
+| Settlement service | Validates booking, amount, balance, method, reference, idempotency and persistence rollback. | It performs a local PMS mutation. It does not itself provide durable cross-store journal recovery. |
+| Settlement gate | Automatic source is rejected by default; `AUTO_FOLIO_SETTLEMENT_ENABLED = false`. | Must remain closed. Do not bypass it by relabelling gateway-originated payments as manual or staff-reviewed. |
+| Payment-intent journal | IndexedDB store exists for installation-local intent correlation and workflow recovery. | It is not a settlement journal, provider transaction authority or folio ledger. |
+| Settlement journal/application | No `src/payments/settlement-journal.mjs` or `src/payments/settlement-apply.mjs` is present at this branch revision. | Durable command journaling, immutable application keys, projection verification and crash recovery are not implemented. |
+| PMS startup | `loadAll()` loads the current localStorage projection; normal startup renders and runs maintenance on DOMContentLoaded. | No settlement-projection recovery barrier is wired into startup. |
+| LAN backend | SQLite schema, webhook inbox, provider adapter foundations, settlement outbox/command tables and device registration foundations exist under `payment-backend/`. | Webhook handling does not complete independent provider-status verification and folio delivery; the current response reports `accounting: 'not_implemented'`. |
+| Device trust and delivery | P-256 public-key registration, per-device cursor/sequence and command schema foundations exist. | Devices remain PENDING. Proof-of-possession activation, revocation, authenticated delivery, leases, receipt verification, acknowledgement and cursor advancement are incomplete. |
+| Providers | Razorpay and Cashfree adapter foundations exist. | Full sandbox lifecycle, ambiguous-outcome reconciliation, durable refunds and end-to-end acceptance are not established. |
+| Orchestrator | Treats Pay Bridge events as hints and requires backend verification evidence. | It does not yet complete the verified-success-to-durable-folio-command path. |
+| Pay Bridge IPC | PMS-side authenticated handshake foundation and contract documentation exist. | Current contract is handshake-only; payment, refund, provider, event/ack and reconciliation operations are not implemented end-to-end in both applications. |
+| Cloud backend | Separate optional Firebase/Firestore prototype exists. | It is not the primary deployment target and is not a deployed production service. |
+
+### Required settlement safety chain
+
+The intended chain is:
+
+```text
+Provider capture
+  -> backend signature validation and independent provider-status lookup
+  -> verify amount, currency, provider order, transaction and folio binding
+  -> persist immutable settlement command
+  -> deliver only to an authenticated ACTIVE device
+  -> durably record command at the PMS
+  -> apply to the folio with a stable application key
+  -> verify the persisted folio projection
+  -> acknowledge only after durable application
+  -> advance the backend device cursor
+```
+
+A webhook signature, browser callback, Pay Bridge event, health check, or backend reachability response is not by itself permission to credit a folio.
+
+### Accounting and recovery limitations
+
+The current PMS folio projection is localStorage-backed, while the proposed settlement journal would use IndexedDB. Those stores do not share an atomic transaction. A journal-first write followed by a localStorage projection can support replay-safe recovery only if every replay checks the actual persisted folio rows against the immutable application key and payload. The journal's `applied` flag alone cannot prove that the current projection still contains the payment—for example, after restoring an older backup.
+
+The existing `settlePayment()` rejects `source: "auto"` while the gate is disabled. Therefore, with the current locked controls, a gateway settlement command may be durably recorded for later processing, but it must not be automatically posted to the folio or acknowledged as applied. Do not work around this by using `manual` or `staff_review` as a gateway source.
+
+Manual payment recording currently uses the settlement service but does not participate in a unified durable accounting journal. Consequently, neither the localStorage projection nor a gateway-only IndexedDB journal should be described as an accounting-grade ledger or as providing a system-wide exactly-once accounting guarantee.
+
+### Ordered implementation and acceptance sequence
+
+1. **Accounting foundation:** design the durable folio authority and its relationship to both manual and gateway payments; implement immutable command records, payload-conflict detection, replay-safe projection verification and crash recovery. Add tests for duplicate delivery, altered payload, persistence failure, crash windows and disabled-gate behavior. Add a startup barrier so recovery finishes before normal PMS operation.
+2. **LAN backend delivery loop:** complete independent provider verification, durable command creation, ACTIVE-device-only lease/delivery, receipt verification, retry/recovery, acknowledgement and cursor advancement. Never acknowledge before durable PMS application.
+3. **Device trust:** implement P-256 proof-of-possession enrollment, activation and revocation; reject pending or revoked devices.
+4. **Razorpay and Cashfree lifecycle:** prove pre-dispatch definitive failure versus post-dispatch UNKNOWN behavior; implement sandbox capture, late webhook, mismatch, refund/partial refund and automated reconciliation scenarios.
+5. **PMS integration:** connect backend-verified outcomes to durable commands and add manager visibility for unresolved intents, reconciliation, pending projections and outbox lag. Keep live activation and credential onboarding unavailable.
+6. **Pay Bridge IPC:** implement and test the full versioned payment/refund/provider/event-ack/reconciliation/heartbeat contract on both apps, retaining signer and caller checks.
+7. **Operational readiness:** verify Docker backup/restore, LAN TLS trust, monitoring, device-level recovery and the complete sandbox acceptance matrix.
+8. **Additional gateways:** only after the first two providers and Phases 0–6 pass acceptance, and only against the exact merchant contract for each provider.
+
+### Development and test commands
+
+The repository uses Node's built-in test runner and already declares `fake-indexeddb` as a development dependency:
+
+```sh
+npm install
+npm test
+npm run build
+```
+
+A passing unit-test or APK-build workflow is not payment acceptance. Acceptance requires the full backend, provider sandbox, Android device, crash/replay, receipt and folio verification chain. Do not claim deployment, production readiness, or exactly-once accounting until those checks have actually passed.
+
+### Current handoff
+
+- Repository: [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
+- Working branch: `feature/multi-provider-payment-backend`
+- Payment backend: `payment-backend/` (LAN Docker is the primary target; not represented as deployed)
+- PMS payment code: `src/payments/`
+- PMS UI/startup: `index.html`
+- Tests: `tests/`
+- Separate Pay Bridge repository: [Akshayshetye37/aurelia-pay-bridge](https://github.com/Akshayshetye37/aurelia-pay-bridge)
+
+No live collection, automatic folio settlement, credential onboarding, or gate modification is authorized by this implementation plan.
+
