@@ -51,6 +51,18 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
       currency: order.currency, status: order.status, keyId: this.credentials.keyId };
   }
 
+  async findOrderByReference(input) {
+    if (!id(input?.reference)) throw new TypeError('invalid_razorpay_receipt');
+    const data = await this.request('GET', '/orders?receipt=' + encodeURIComponent(input.reference) + '&count=100');
+    const matches = Array.isArray(data.items)
+      ? data.items.filter(order => order.receipt === input.reference)
+      : [];
+    if (matches.length !== 1) return { found: false, ambiguous: matches.length > 1 };
+    const order = matches[0];
+    return { found: true, orderId: order.id, amountMinor: order.amount,
+      currency: order.currency, receipt: order.receipt, status: order.status };
+  }
+
   async getPaymentStatus(input) {
     if (!id(input?.paymentId) && !id(input?.orderId)) throw new TypeError('payment_or_order_id_required');
     const path = input.paymentId
