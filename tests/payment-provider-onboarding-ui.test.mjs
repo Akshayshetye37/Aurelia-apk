@@ -17,12 +17,12 @@ test('PMS provider directory never renders merchant credential inputs', () => {
 test('PMS provider UI cannot submit merchant secrets to an arbitrary HTTPS host', () => {
   assert.doesNotMatch(html, /fetch\(backend\+'\/api\/admin\/payment-providers/);
   assert.doesNotMatch(html, /Authorization':\s*'Bearer '\+authToken/);
-  assert.match(html, /Provider onboarding is disabled until the owner-controlled backend console is deployed/);
+  assert.match(html, /The LAN Docker backend includes owner-authenticated credential-management API endpoints/);
 });
 
 test('provider catalogue remains documentation-only until trusted backend deployment', () => {
   assert.match(html, /Provider Directory &amp; Onboarding|Provider Directory & Onboarding/);
-  assert.match(html, /owner-controlled backend console/);
+  assert.match(html, /LAN owner console\/client/);
   assert.match(html, /PMS receives non-secret provider status only|Provider credentials remain server-side/);
 });
 
