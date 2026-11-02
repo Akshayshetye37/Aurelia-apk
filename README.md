@@ -421,47 +421,32 @@ The demo HTML is only a visual/interaction prototype. It does not implement Argo
 For a new development session, start by checking out the PMS branch above, reading this README and the linked security/payment architecture documents, then inspect the current repository tree and CI status before editing. Do not create another repository or branch for these workstreams.
 
 
-## Local LAN payment appliance — implementation update (2026-11-02)
+## Local LAN payment appliance — verified implementation boundary (2026-11-03)
 
-The deployment target for the payment backend is now a Docker appliance on the same trusted local network as the Android PMS device. The Android application will initiate an authenticated outbound connection to the appliance. The design does not depend on the appliance reaching Android loopback, WebView storage, or an inbound listener on the phone.
+The selected optional deployment target is a Docker appliance on the same trusted LAN as the Android PMS device. The local runtime is `payment-backend/src/local-server.mjs`; it uses SQLite, an owner account, persisted sessions and an AES-256-GCM credential store. The separate Firebase/Firestore implementation in `payment-backend/src/server.mjs` is a cloud prototype and is not the Docker Compose entry point.
 
-### PMS UI
+### Implemented and verified from source
 
-The Payment Gateway settings in `index.html` now describe the backend as a local-LAN payment appliance rather than a cloud payment service. The endpoint field remains HTTPS-only and accepts an origin, not a path or embedded credentials. The connection check is explicitly described as a reachability check only; a successful health response does not establish device identity, settlement synchronization, provider authorization or payment readiness.
+- Docker Compose starts the LAN runtime behind Caddy's internal TLS CA. The app requires one trusted proxy hop, an exact HTTPS origin allowlist, HTTPS requests and an encrypted SQLite data volume.
+- First-owner enrollment requires a one-time 256-bit setup token. Owner passwords use scrypt; sessions are random, persisted as keyed digests and carried only in Secure, HttpOnly cookies.
+- Razorpay and Cashfree credential records are encrypted using AES-256-GCM with a fresh 12-byte IV. Credential changes clear validation and activation. Validation performs a provider API credential check; test activation requires explicit confirmation.
+- The local runtime accepts test-environment payment dispatch only. It durably records an idempotent transaction intent before provider network dispatch. If the provider outcome becomes ambiguous, the transaction remains `UNKNOWN`; the server does not blindly retry order creation.
+- Reconciliation performs a provider API status lookup and checks the bound provider order, amount and currency before recording a captured-pending-accounting transition.
+- A verified captured transition can atomically insert a local settlement outbox row and, if the intent was explicitly routed to a device/folio, an immutable sequenced command row and device-command state row.
+- Webhooks are parsed as raw bytes and passed to the provider adapter for signature validation. Event IDs are scoped by provider/environment; reusing an event ID with a different body hash is rejected.
 
-### Backend foundation implemented
+### Important limitations — not implemented
 
-The following backend schema and initial behavior are committed on `feature/multi-provider-payment-backend`:
+- New device registrations remain `PENDING`. The current registration endpoint stores a P-256 public key but no proof-of-possession challenge/signature workflow exists. The dispatch route rejects devices that are not `ACTIVE`; do not manually change their status.
+- The schema contains command, cursor, sequence and delivery-state tables, but there is no authenticated device sync/lease/receipt/acknowledgement/cursor API or background delivery worker.
+- Captured-payment commands are queued only when a transaction has an explicit device and folio binding. There is no connected PMS transaction adapter that durably commits a local folio mutation and idempotency record together.
+- The webhook route currently records verified signature evidence in the inbox and returns `accounting: not_implemented`. It does not independently reconcile a webhook to a trusted transaction or settle a folio.
+- The local `/readyz` route proves only that SQLite answers `SELECT 1`. It does not prove owner authentication, provider credentials, LAN TLS trust, device identity or payment capability.
+- No live collection, refunds, automated reconciliation worker, end-to-end PMS settlement, or production deployment is implemented.
 
-- `device_registrations`: owner-submitted P-256 public key (SPKI) is stored as `PENDING`; private keys are never uploaded. Existing legacy `ACTIVE` registrations are downgraded once. No device may dispatch payments until a proof-of-possession enrollment protocol is implemented.
-- `device_cursors` and `device_sequence_counters`: durable per-device applied cursor and serialized sequence allocation.
-- `settlement_commands`: immutable, per-device sequenced settlement command payloads with transaction, idempotency, folio, amount, currency and payload hash.
-- `device_command_state`: delivery lifecycle, lease fields, retry count and receipt storage fields.
-- Device-targeted command creation is performed in the same SQLite transaction as the captured-payment transition, journal entry and settlement outbox event.
-- Payment dispatch optionally binds a transaction to both `deviceId` and `folioId`; idempotency comparisons include those routing fields.
-- Existing transaction databases receive additive `device_id` and `folio_id` columns.
+Do not interpret a ready database, validated sandbox credential, provider order, verified webhook signature, or queued command as a completed payment or folio credit.
 
-Relevant commits:
-- `1993632` — device registry and command schema.
-- `3ece01e` — immutable device/folio idempotency binding.
-- `71407f1` — source-contract assertions for the new foundation.
-- `b9f074c` — backward-compatible transaction-column migration.
 
-### Explicitly not implemented
-
-This is a schema and enqueue foundation, not a complete device synchronization protocol. The following remain outstanding:
-
-1. Device-authenticated enrollment/proof-of-possession and revocation workflow. The current owner-authenticated registration endpoint creates only `PENDING` devices; it is not a complete device-authentication protocol.
-2. Authenticated cursor synchronization endpoint, command pagination, cursor advancement validation and reconnect/resume behavior.
-3. Atomic lease claim/renew/release operations and a durable retry/reconciliation worker.
-4. Canonical receipt serialization, ECDSA signature verification against registered device keys, nonce/replay handling and verified acknowledgement transitions.
-5. Android Keystore key generation/signing bridge and its Capacitor native plugin.
-6. A transactional PMS persistence adapter that commits folio mutation and local idempotency/ledger acknowledgement together.
-7. Device-level LAN TLS provisioning/trust, reconnect tests, crash tests and end-to-end payment-provider/PMS tests.
-
-The schema includes `ACKNOWLEDGED`, `PROCESSED`, `AMBIGUOUS_RECONCILIATION` and `CONFLICT` states, but no worker or receipt-verification route currently drives those states. A stored public key alone does not authenticate a device request or verify a receipt.
-
-**Operational status:** the Docker appliance is not represented as deployed or paired with an Android device. Live gateway collection and automatic folio settlement remain disabled. Do not interpret a configured HTTPS endpoint or a successful health check as payment readiness. The backend test workflow result for these commits has not been verified.
 
 ---
 
@@ -473,7 +458,7 @@ This section records the verified state of the payment implementation on `featur
 
 - **Live collection: disabled.**
 - **Automatic folio settlement: disabled.** `AUTO_FOLIO_SETTLEMENT_ENABLED` remains hard-coded to `false` in `src/payments/settlement-gate.mjs`. Do not change it as part of ordinary implementation work.
-- **Provider credential onboarding: unavailable.** Do not enter merchant API secrets or webhook secrets in the PMS, browser, or APK. A trusted backend owner console and backend-only secret vault must exist before onboarding is enabled.
+- **Credential onboarding: sandbox-only in the optional LAN owner console.** The console stores Razorpay/Cashfree test and live credential sets encrypted in SQLite, but live activation and collection are blocked. Keep credential entry unavailable in any PMS/browser surface that cannot securely authenticate to the owner console. Never store merchant secrets in the APK or general PMS settings.
 - **Primary deployment target: local PMS + LAN Docker appliance.** The optional cloud prototype is not a dependency for local operation.
 - **Provider scope: Razorpay and Cashfree only** for the initial complete lifecycle. Other gateway integrations are deferred until the first two pass the full acceptance suite.
 
@@ -487,8 +472,8 @@ This section records the verified state of the payment implementation on `featur
 | Payment-intent journal | IndexedDB store exists for installation-local intent correlation and workflow recovery. | It is not a settlement journal, provider transaction authority or folio ledger. |
 | Settlement journal/application | No `src/payments/settlement-journal.mjs` or `src/payments/settlement-apply.mjs` is present at this branch revision. | Durable command journaling, immutable application keys, projection verification and crash recovery are not implemented. |
 | PMS startup | `loadAll()` loads the current localStorage projection; normal startup renders and runs maintenance on DOMContentLoaded. | No settlement-projection recovery barrier is wired into startup. |
-| LAN backend | SQLite schema, webhook inbox, provider adapter foundations, settlement outbox/command tables and device registration foundations exist under `payment-backend/`. | Webhook handling does not complete independent provider-status verification and folio delivery; the current response reports `accounting: 'not_implemented'`. |
-| Device trust and delivery | P-256 public-key registration, per-device cursor/sequence and command schema foundations exist. | Devices remain PENDING. Proof-of-possession activation, revocation, authenticated delivery, leases, receipt verification, acknowledgement and cursor advancement are incomplete. |
+| LAN backend | `payment-backend/src/local-server.mjs` provides an optional SQLite/Caddy owner console, encrypted credential storage, test dispatch intent, provider API reconciliation and raw-body webhook signature validation. | Webhook route currently records signature evidence only; no authenticated device delivery/receipt/ack loop, background worker or folio application exists. |
+| Device trust and delivery | P-256 public-key registration, per-device cursor/sequence and command schema foundations exist. | Devices remain PENDING. No proof-of-possession activation, revocation, authenticated sync, command leases, receipt verification, acknowledgement or cursor advancement routes exist. |
 | Providers | Razorpay and Cashfree adapter foundations exist. | Full sandbox lifecycle, ambiguous-outcome reconciliation, durable refunds and end-to-end acceptance are not established. |
 | Orchestrator | Treats Pay Bridge events as hints and requires backend verification evidence. | It does not yet complete the verified-success-to-durable-folio-command path. |
 | Pay Bridge IPC | PMS-side authenticated handshake foundation and contract documentation exist. | Current contract is handshake-only; payment, refund, provider, event/ack and reconciliation operations are not implemented end-to-end in both applications. |
