@@ -30,9 +30,9 @@ test('encryption key is mandatory and AES-GCM uses fresh 12-byte IVs', () => {
 });
 
 test('first-owner setup requires a one-time high-entropy bootstrap token', () => {
-  assert.match(source, /requiredHex\\('OWNER_SETUP_TOKEN', 32\\)/);
+  assert.match(source, /requiredHex\('OWNER_SETUP_TOKEN', 32\)/);
   assert.match(source, /x-aurelia-setup-token/);
-  assert.match(source, /timingSafeEqual\\(Buffer\\.from\\(suppliedSetupToken, 'hex'\\), ownerSetupToken\\)/);
+  assert.match(source, /timingSafeEqual\(Buffer\.from\(suppliedSetupToken, 'hex'\), ownerSetupToken\)/);
   assert.match(source, /owner_setup_token_invalid/);
 });
 
@@ -89,7 +89,7 @@ test('payment dispatch persists an idempotent intent before provider network dis
 });
 
 test('reconciliation queries provider API and checks amount, currency and order reference', () => {
-  assert.match(source, /adapter\.getPaymentStatus\(\{ orderId: tx\.provider_order_id \}\)/);
+  assert.match(source, /adapter\.getPaymentStatus\(\{ orderId: providerOrderId \}\)/);
   assert.match(source, /remote\.amountMinor !== tx\.amount_minor/);
   assert.match(source, /remote\.currency !== tx\.currency/);
   assert.match(source, /provider_api_confirmed_capture/);
@@ -97,12 +97,12 @@ test('reconciliation queries provider API and checks amount, currency and order 
 });
 
 test('late provider-confirmed capture can supersede a prior failure for reconciliation', () => {
-  assert.match(source, /'RECONCILIATION_REQUIRED','FAILED'[\\s\\S]*'CAPTURED_PENDING_ACCOUNTING'/);
+  assert.match(source, /'RECONCILIATION_REQUIRED','FAILED'[\s\S]*'CAPTURED_PENDING_ACCOUNTING'/);
 });
 
 test('webhook event ID reuse with a different payload is rejected', () => {
   assert.match(source, /webhook_event_identity_conflict/);
-  assert.match(source, /prior\\.payload_sha256 !== payloadHash/);
+  assert.match(source, /prior\.payload_sha256 !== payloadHash/);
 });
 
 test('verified capture creates one durable accounting outbox event, not a false folio success', () => {
