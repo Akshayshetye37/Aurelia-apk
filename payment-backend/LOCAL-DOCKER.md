@@ -1,6 +1,6 @@
-# Aurelia local payment administration (Docker)
+# Aurelia optional LAN payment administration (Docker)
 
-This runtime is the local owner/provider-administration foundation. It is not yet a production payment-collection or PMS-settlement service. Live collection is intentionally blocked.
+This runtime is an optional LAN owner/provider-administration and payment-dispatch foundation for owners who have a trusted local appliance. It is not required for the Android app's local credential storage. It is not yet a production payment-collection or PMS-settlement service. Live collection is intentionally blocked.
 
 ## Prerequisites
 
@@ -38,14 +38,14 @@ SQLite lives in the named `payment-data` volume. The encryption key and session 
 - `DELETE /v1/admin/providers/:provider/credentials?environment=test|live`
 - `POST /v1/webhooks/:provider/:environment` (raw request body; provider-specific signature verification)
 
-## PMS owner-console integration\n\nThe PMS owner console is independent of Pay Bridge. It currently supports Razorpay and Cashfree sandbox credentials, credential validation, explicit test activation/deactivation and credential removal. It does not expose production activation. The provider catalogue entries without a backend adapter remain documentation-only.\n\n## Safety boundary
+## PMS owner-console integration\n\nThis optional LAN owner console is independent of Pay Bridge and independent of the Android native local credential vault. It currently supports Razorpay and Cashfree sandbox credentials, credential validation, explicit test activation/deactivation and credential removal. It does not expose production activation. The provider catalogue entries without a backend adapter remain documentation-only.\n\n## Safety boundary
 
 - Credentials are encrypted at rest with AES-256-GCM and a fresh 12-byte IV per write.
 - Provider validation makes a real authenticated read-only API request through the existing provider adapter; it does not create a charge.
 - Saving or rotating credentials clears validation and activation.
 - Live activation and live payment collection are not enabled.
 - Provider removal checks persisted unresolved transaction states. Test-environment payment dispatch and provider API reconciliation are implemented as a restricted foundation. Durable capture outbox records are created transactionally, but asynchronous PMS folio delivery, webhook-driven reconciliation, automated recovery scheduling, refunds, and end-to-end exactly-once folio posting are not implemented. Do not enable live collection. A webhook signature being valid is recorded as an inbox event only; it is not a payment or settlement confirmation. Reuse of an event ID with a different payload hash is rejected as an identity conflict.
-- PMS integration must send the session cookie using `credentials: 'include'`; it must not put provider credentials or session tokens in localStorage, Android preferences, or APK resources.
+- LAN-mode PMS integration must send the session cookie using `credentials: 'include'`; it must not put provider credentials or session tokens in localStorage, plain Android preferences, or APK resources. Local Native Mode uses the Android Keystore vault instead.
 
 ## Operational caveats
 
