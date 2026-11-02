@@ -318,11 +318,14 @@ The production implementation ledger is [docs/PMS-PAYMENT-ORCHESTRATION.md](docs
 
 ## Payment backend implementation status (2026-10-31)
 
-A separate `payment-backend/` service now contains a **partial Razorpay reference adapter** and a server-resolved tenant authorization foundation. Hotel identity is resolved from the platform-managed `paymentMemberships/{Firebase UID}` record, not from an APK-supplied tenant ID. Provider records and Secret Manager names are tenant-scoped. The existing PMS UI and colour system have not been changed in this backend work.
+The payment backend now has two distinct runtime implementations that must not be conflated:
 
-**This is not a working production payment integration.** The service is not deployed; the owner-controlled cloud project, Firebase MFA, Firestore, Secret Manager, Cloud Run, IAM, tenant provisioning and operational controls are not configured. Razorpay sandbox checkout/webhook E2E is not performed. The test-order route is not customer checkout. PMS folio settlement, Pay Bridge checkout, reconciliation, refunds and live processing are not integrated. Cashfree, PayU, PhonePe, Paytm, CCAvenue and JioPay server adapters remain unimplemented and must remain unavailable/disabled. See [payment-backend/README.md](payment-backend/README.md) and [docs/PAYMENT_PROVIDER_ONBOARDING.md](docs/PAYMENT_PROVIDER_ONBOARDING.md).
+- `payment-backend/src/local-server.mjs` is the selected **LAN Docker appliance runtime**. `payment-backend/compose.yaml` starts this runtime behind Caddy's private HTTPS CA, with SQLite persistence on a Docker volume and encrypted provider credentials. It does not require Firebase, Firestore, Secret Manager, Cloud Run or a cloud project.
+- `payment-backend/src/server.mjs` is a separate optional Firebase/Firestore/Secret Manager cloud prototype. It is not started by the Docker Compose file and is not required for the local-first product.
 
-The backend tests are security-contract regression checks, not cloud/provider integration tests. No production readiness claim is made. Ordinary PMS operations remain local-first; this optional payment service does not make the general PMS dependent on cloud availability.
+**Neither runtime is deployed or production-ready.** The LAN runtime currently supports owner setup/login, encrypted credential storage, credential validation, test-only order dispatch and provider status reconciliation. Its owner bootstrap now requires a one-time setup token; device registrations remain PENDING until proof-of-possession exists; webhook signatures are recorded as evidence only; and event-ID/payload conflicts are rejected. The PMS has no integrated LAN owner-administration console, and its current Pay Bridge IPC is handshake-only. Atomic PMS folio posting, a durable command-delivery/receipt-verification worker, authenticated device enrollment, complete reconciliation/refunds and merchant sandbox end-to-end acceptance remain unimplemented. Live collection and automatic settlement must remain disabled.
+
+Razorpay and Cashfree adapter code exists, but adapter presence and unit tests do not establish merchant acceptance or production readiness. PayU, PhonePe, Paytm, CCAvenue and JioPay remain unsupported. See [payment-backend/LOCAL-DOCKER.md](payment-backend/LOCAL-DOCKER.md), [payment-backend/README.md](payment-backend/README.md) and [docs/PAYMENT_PROVIDER_ONBOARDING.md](docs/PAYMENT_PROVIDER_ONBOARDING.md).
 
 
 
