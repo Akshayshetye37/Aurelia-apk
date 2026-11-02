@@ -19,7 +19,7 @@ test('local owner administration uses HTTPS-origin scoped HttpOnly-cookie sessio
 });
 
 test('PMS submits provider secrets only to the configured LAN backend and clears write-only inputs', () => {
-  for (const value of ['saveLocalGatewayCredentials',"document.getElementById('gw-'+provider+'-'+key)", "el.value=''", 'Provider secrets are submitted directly to the Docker backend and encrypted at rest']) {
+  for (const value of ['saveLocalGatewayCredentials',"document.getElementById('gw-'+provider+'-'+key)", "el.value=''", 'Secrets are submitted directly to the Docker backend and encrypted at rest']) {
     assert.ok(html.includes(value), 'missing credential boundary: ' + value);
   }
 });
@@ -33,7 +33,7 @@ test('only implemented Razorpay and Cashfree adapters expose credential controls
 
 test('UI does not claim live collection, webhook settlement, refunds or folio posting are ready', () => {
   assert.ok(html.includes('Production activation and live collection are intentionally unavailable'));
-  assert.ok(html.includes('webhook reachability, reconciliation, refunds and transactional PMS folio posting'));
+  assert.ok(html.includes('public webhook ingress, background reconciliation worker, refund lifecycle or transactional PMS folio posting'));
 });
 
 test('provider onboarding is no longer gated by the Pay Bridge handshake', () => {
