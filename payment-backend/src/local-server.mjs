@@ -421,26 +421,41 @@ app.post('/v1/payments/:transactionId/reconcile', ownerAuth, async (req, res) =>
   }
   const config = providerRow(tx.provider, tx.environment);
   if (!config?.configured) return fail(res, 409, 'provider_credentials_unavailable');
-  if (!tx.provider_order_id) return fail(res, 409, 'provider_order_reference_missing_manual_review_required');
   try {
     const adapter = createProviderAdapter(tx.provider, { credentials: decryptCredentials(config), environment: tx.environment });
-    const remote = await adapter.getPaymentStatus({ orderId: tx.provider_order_id });
+    let providerOrderId = tx.provider_order_id;
+    if (!providerOrderId) {
+      if (typeof adapter.findOrderByReference !== 'function') {
+        return fail(res, 409, 'provider_order_reference_missing_manual_review_required');
+      }
+      const recovered = await adapter.findOrderByReference({ reference: tx.id.slice(0, 40) });
+      if (!recovered?.found || recovered.amountMinor !== tx.amount_minor ||
+          recovered.currency !== tx.currency || !recovered.orderId) {
+        if (recovered?.ambiguous) transitionPayment(tx.id, ['DISPATCHING','UNKNOWN','AMBIGUOUS'], 'RECONCILIATION_REQUIRED', 'provider_reference_lookup_ambiguous');
+        return res.status(202).json({ transactionId: tx.id, status: tx.status, reconciliationRequired: true,
+          reason: recovered?.ambiguous ? 'provider_reference_lookup_ambiguous' : 'provider_order_not_found' });
+      }
+      providerOrderId = recovered.orderId;
+      db.prepare('UPDATE transactions SET provider_order_id=?,updated_at=? WHERE id=? AND provider_order_id IS NULL')
+        .run(providerOrderId, now(), tx.id);
+    }
+    const remote = await adapter.getPaymentStatus({ orderId: providerOrderId });
     if (remote.amountMinor !== tx.amount_minor || remote.currency !== tx.currency ||
-        remote.orderId !== tx.provider_order_id) {
+        remote.orderId !== providerOrderId) {
       transitionPayment(tx.id, ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED'],
-        'RECONCILIATION_REQUIRED', 'provider_amount_currency_or_order_mismatch');
+        'RECONCILIATION_REQUIRED', 'provider_amount_currency_or_order_mismatch', providerOrderId);
       return fail(res, 409, 'provider_payment_details_mismatch_manual_review_required');
     }
     if (remote.captured === true) {
       const result = transitionPayment(tx.id,
         ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED'],
-        'CAPTURED_PENDING_ACCOUNTING', 'provider_api_confirmed_capture', remote.orderId);
+        'CAPTURED_PENDING_ACCOUNTING', 'provider_api_confirmed_capture', providerOrderId);
       return res.json({ transactionId: tx.id, status: result.status, folioSettlement: 'PENDING_OUTBOX' });
     }
     if (['failed','declined','cancelled','expired'].includes(String(remote.paymentStatus || '').toLowerCase())) {
       const result = transitionPayment(tx.id,
         ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED'],
-        'FAILED', 'provider_api_confirmed_failure', remote.orderId);
+        'FAILED', 'provider_api_confirmed_failure', providerOrderId);
       return res.json({ transactionId: tx.id, status: result.status });
     }
     return res.status(202).json({ transactionId: tx.id, status: tx.status, reconciliationRequired: true });
