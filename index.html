@@ -3829,6 +3829,7 @@ function localGatewayAdminHtml(){
  const field=(id,label,type='text',placeholder='')=>'<label class="fld"><span>'+label+'</span><input id="'+id+'" type="'+type+'" autocomplete="off" placeholder="'+placeholder+'"></label>';
  let body='';
  if(!endpoint){body='<div class="tag out">LAN backend not configured</div><p class="lab">Enter the HTTPS origin of the Docker appliance. Example: https://payments.local:8443</p>';}
+ else if(cfg.reachable!==true){body='<div class="tag out">Backend not verified</div><p class="lab">Save the Docker appliance origin and run Test backend. Owner setup and sign-in appear only after the HTTPS readiness check succeeds.</p>';}
  else if(a.loading){body='<p class="lab">Checking owner session and provider configuration…</p>';}
  else if(a.authenticated){
   const rows=Array.isArray(a.providers)?a.providers:[];
@@ -3866,6 +3867,7 @@ async function localGatewayApi(path,method='GET',body,extraHeaders={}){
 }
 window.refreshLocalGatewayOwner=async function(){
  const a=window.AureliaLocalGatewayAdmin;if(a.loading)return;
+ if(!S.set.backendConnection?.endpoint||S.set.backendConnection?.reachable!==true){a.error=null;a.loading=false;return;}
  a.loading=true;a.error=null;render();
  try{
   const setup=await localGatewayApi('/v1/auth/setup-status');
