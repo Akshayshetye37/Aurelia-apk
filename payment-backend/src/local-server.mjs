@@ -108,6 +108,9 @@ async function verifyPassword(password, row) {
 }
 function originGuard(req, res, next) {
   const origin = req.get('origin');
+  const browserMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) &&
+    !req.path.startsWith('/v1/webhooks/');
+  if (browserMutation && !origin) return fail(res, 403, 'origin_required');
   if (origin && !origins.has(origin)) return fail(res, 403, 'origin_not_allowed');
   if (origin) {
     res.set('Access-Control-Allow-Origin', origin);
@@ -131,15 +134,23 @@ app.use(express.json({ limit: '16kb', strict: true, type: req => !req.path.start
 const loginAttempts = new Map();
 function loginRateLimit(req, res, next) {
   const key = req.ip || 'unknown', current = Date.now();
+  for (const [ip, entry] of loginAttempts) {
+    if (entry.reset <= current) loginAttempts.delete(ip);
+  }
+  if (!loginAttempts.has(key) && loginAttempts.size >= 10000) {
+    const oldest = loginAttempts.keys().next().value;
+    if (oldest !== undefined) loginAttempts.delete(oldest);
+  }
   const item = loginAttempts.get(key) || { count: 0, reset: current + 15 * 60_000 };
-  if (current > item.reset) { item.count = 0; item.reset = current + 15 * 60_000; }
   item.count++;
   loginAttempts.set(key, item);
   if (item.count > 5) return fail(res, 429, 'login_rate_limited');
   next();
 }
 function ownerAuth(req, res, next) {
-  const cookieHeader = req.get('cookie') || '';\n  const cookieToken = cookieHeader.split(';').map(v => v.trim()).find(v => v.startsWith(SESSION_COOKIE + '='))?.slice(SESSION_COOKIE.length + 1);\n  const token = cookieToken || req.get('x-aurelia-session');
+  const cookieHeader = req.get('cookie') || '';
+  const cookieToken = cookieHeader.split(';').map(v => v.trim()).find(v => v.startsWith(SESSION_COOKIE + '='))?.slice(SESSION_COOKIE.length + 1);
+  const token = cookieToken || req.get('x-aurelia-session');
   if (typeof token !== 'string' || token.length < 40 || token.length > 256) return fail(res, 401, 'owner_session_required');
   const digest = tokenDigest(token);
   const row = db.prepare('SELECT s.expires_at,o.id,o.username FROM sessions s JOIN owner o ON o.id=s.owner_id WHERE s.token_hash=?').get(digest);
@@ -259,7 +270,8 @@ app.post('/v1/admin/providers/:provider/validate', ownerAuth, async (req, res) =
   if (!row?.configured) return fail(res, 404, 'provider_not_configured');
   try {
     const adapter = createProviderAdapter(provider, { credentials: decryptCredentials(row), environment });
-    await adapter.validateCredentials();
+    const validation = await adapter.validateCredentials();
+    if (validation?.valid !== true) throw new Error('provider_validation_not_confirmed');
     db.prepare('UPDATE provider_config SET validated=1,active=0,updated_at=? WHERE provider=? AND environment=?')
       .run(now(), provider, environment);
     writeAudit('PROVIDER_VALIDATED', provider + ':' + environment);
@@ -287,6 +299,8 @@ app.post('/v1/admin/providers/:provider/activate', ownerAuth, (req, res) => {
 app.post('/v1/admin/providers/:provider/deactivate', ownerAuth, (req, res) => {
   const { provider } = req.params, environment = req.body?.environment;
   if (!PROVIDERS.has(provider) || !['test','live'].includes(environment)) return fail(res, 400, 'invalid_provider_environment');
+  const count = unresolvedCount(provider, environment);
+  if (count) return fail(res, 422, 'provider_deactivation_blocked_unresolved_transactions_' + count);
   db.prepare('UPDATE provider_config SET active=0,updated_at=? WHERE provider=? AND environment=?')
     .run(now(), provider, environment);
   writeAudit('PROVIDER_DEACTIVATED', provider + ':' + environment);
@@ -332,5 +346,6 @@ app.use((err, _req, res, _next) => {
   res.status(status).json({ error: status === 413 ? 'request_too_large' : 'invalid_request' });
 });
 app.listen(PORT, '0.0.0.0', () => {
-  process.stdout.write('Aurelia local payment administration listening on ' + PORT + '\\n');
+  process.stdout.write('Aurelia local payment administration listening on ' + PORT + '\
+');
 });
