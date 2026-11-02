@@ -18,7 +18,7 @@ Do not mix their environment variables, authentication models, databases, deploy
 Aurelia PMS must remain fully usable without a server, cloud account, Firebase project, or payment backend. Do not make backend deployment, sign-in to a cloud service, or remote connectivity a prerequisite for installing or using core PMS functions.
 
 - Default installation mode is **Local only**. Bookings, guests, rooms, manual payments, folio history, invoices and local backup continue to work using the existing PMS local data model.
-- The selected optional payment service is a Docker appliance on the owner's LAN. A future owner-controlled Settings option may configure its HTTPS origin after certificate trust and device identity are verified. Until the LAN owner console/client and device trust protocol are complete, payment administration from PMS remains unavailable.
+- The selected optional payment service is a Docker appliance on the owner's LAN. The PMS now includes a LAN Payment Owner Console for backend origin setup, first-owner enrollment, login, Razorpay/Cashfree sandbox credential storage, validation and explicit test activation. Device trust and payment settlement remain separate unfinished work.
 - Do not silently create a cloud project, deploy infrastructure, upload PMS/guest data, or transmit payment evidence.
 - Do not treat an arbitrary URL as a trusted payment backend. Endpoint configuration must be validated over HTTPS and authenticated against a documented service identity before use.
 - Remote payment configuration must be separate from optional backup destinations. A backup URL is not a payment API, and a payment API is not a backup destination.
@@ -26,7 +26,7 @@ Aurelia PMS must remain fully usable without a server, cloud account, Firebase p
 - If a configured backend is unavailable, core PMS operations remain available. Gateway checkout is unavailable and any already-dispatched payment with an ambiguous outcome remains UNKNOWN until it can be reconciled. Never fall back to an unverified client-side payment path.
 - Enabling remote payment processing is an explicit owner action and must not turn on live payments automatically. Sandbox verification, authorization, monitoring and a separate live-activation gate remain mandatory.
 
-This policy is a product/architecture requirement. The PMS has a backend-origin reachability check, but it does not implement the LAN owner login/admin console or authenticated device-enrollment workflow. Do not claim that owners can onboard providers or use gateway checkout from PMS Settings.
+This policy is a product/architecture requirement. The PMS implements the local owner login/admin console for the Docker runtime. It does not yet implement end-to-end guest checkout, webhook-driven reconciliation, refund lifecycle or atomic PMS folio settlement.
 
 ## 1. Architecture and trust boundaries
 
@@ -127,7 +127,7 @@ Do not add a second independent authentication or HTTPS implementation in anothe
 | Refund lifecycle | Adapter methods exist; lifecycle not wired | Refund intent/state machine, status reconciliation and ledger treatment |
 | Pay Bridge payment execution | Not implemented | Extend existing IPC contract after backend intent/session flow is stable |
 | Installed-device IPC test | Not verified | Test signed PMS/Bridge APKs on device |
-| Owner payment-backend Settings UI | Not implemented | Optional endpoint setup, trust verification, authentication and explicit enable/disable controls |
+| LAN owner-console UI | Implemented for Razorpay/Cashfree sandbox administration | Verify signed APK WebView cookie behavior on a physical Android device; then integrate checkout and settlement workflows |
 | Cloud deployment and operations | Not implemented | Owner may configure later; GCP project, IAM, secrets, ingress, monitoring, backups and runbooks required |
 
 ## 6. Execution plan and acceptance gates
