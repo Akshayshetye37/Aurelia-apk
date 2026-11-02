@@ -76,6 +76,15 @@ jobs:
           node --check payment-backend/src/server.mjs
           npm --prefix payment-backend test
 
+      - name: Validate LAN payment backend source
+        run: |
+          node --check payment-backend/src/local-server.mjs
+          node --check payment-backend/src/providers/razorpay.mjs
+          node --check payment-backend/src/providers/cashfree.mjs
+
+      - name: Test LAN payment backend contracts
+        run: npm --prefix payment-backend test
+
       - name: Prepare web app
         run: npm run build
 
