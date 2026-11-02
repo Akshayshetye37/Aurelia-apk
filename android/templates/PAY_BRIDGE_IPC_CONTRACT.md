@@ -65,8 +65,8 @@ Every payment operation must carry a unique request ID, transaction ID where app
 
 ## Provider-management capability gate
 
-The PMS provider-management UI remains locked unless the authenticated handshake advertises the exact capability string provider.management. A successful package/signature/nonce handshake alone does not authorize provider configuration.
+The PMS LAN Payment Owner Console manages provider credentials directly against the authenticated local Docker backend; this administration path does not depend on the Pay Bridge handshake or a provider.management capability. The capability string is reserved only for future provider-management operations that are explicitly delegated through Pay Bridge IPC.
 
-The future Pay Bridge may advertise provider.management only after it implements provider catalogue discovery, provider activation/configuration status, strict caller validation, and versioned request/response messages for those operations. Provider-specific adapters and payment execution are separate capabilities and must not be implied by provider.management.
+The future Pay Bridge may advertise provider.management only after it implements provider catalogue discovery, provider activation/configuration status, strict caller validation, and versioned request/response messages for those delegated operations. Provider-specific adapters and payment execution are separate capabilities and must not be implied by provider.management.
 
 The PMS may store only non-secret provider preferences and public merchant identifiers. Provider credentials, API secrets, private keys, salts and webhook secrets remain on the owner's trusted HTTPS backend. A provider must never become active in the PMS solely because a local preference was saved; Pay Bridge is authoritative for actual activation and availability.
