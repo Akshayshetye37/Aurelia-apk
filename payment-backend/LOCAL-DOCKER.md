@@ -5,8 +5,8 @@ This runtime is the local owner/provider-administration foundation. It is not ye
 ## Prerequisites
 
 - Docker Engine / Docker Desktop with Compose.
-- A stable LAN hostname or IP for the host.
-- A trusted local TLS certificate on every PMS browser/WebView device. Caddy's `tls internal` creates a private CA; install and trust that CA on each client device before using the HTTPS endpoint. Do not bypass certificate warnings.
+- A stable LAN hostname or IP for the host, resolvable from the Android device.
+- A trusted TLS certificate whose SAN matches `AURELIA_LAN_HOSTNAME`. Caddy's `tls internal` issues a certificate for that exact hostname/IP using a private CA; distribute and trust the CA through an administrator-controlled process on every client. Android apps may not trust user-installed CAs by default; verify trust in the actual signed PMS APK before proceeding. Never bypass certificate validation.
 - Node 22 is used in the container; host operating system does not determine the runtime.
 
 ## First start
@@ -15,11 +15,11 @@ This runtime is the local owner/provider-administration foundation. It is not ye
 2. Generate three independent 32-byte secrets:
    `openssl rand -hex 32`
    Set them as `GATEWAY_MASTER_KEY`, `SESSION_TOKEN_PEPPER` and `OWNER_SETUP_TOKEN`. Never reuse these values or commit `.env`. Keep the setup token offline; it is required only for first-owner enrollment.
-3. Replace `YOUR-LAN-HOSTNAME` with the exact host name/IP used by the PMS device. Keep the origin exact, including `:8443`.
+3. Set `AURELIA_LAN_HOSTNAME` to the stable DNS name or IP the Android device uses to reach the appliance. Set `AURELIA_OWNER_ORIGINS` to the exact PMS WebView origin, not the backend origin; the current Capacitor configuration uses `https://localhost`. The backend URL entered in PMS is `https://<AURELIA_LAN_HOSTNAME>:8443`.
 4. Start with `docker compose up -d --build`.
-5. Check `https://YOUR-LAN-HOSTNAME:8443/healthz` and `/readyz`.
+5. Check `https://<AURELIA_LAN_HOSTNAME>:8443/healthz` and `/readyz`. The local `/readyz` response reports `database: ready`; it does not return the Cloud Run prototype's Firestore/Secret Manager check fields.
 6. Complete one-time owner setup through `POST /v1/auth/setup` with `X-Aurelia-Setup-Token: <OWNER_SETUP_TOKEN>`, a username and a password of at least 14 characters. The setup token is checked in constant time, setup is single-use, and there is no default account or password. Do not expose the setup token in a browser URL, logs or screenshots.
-7. Sign in through `POST /v1/auth/login`. The backend sets a Secure, HttpOnly, SameSite=Strict cookie; it does not return the session token in JSON or accept a JavaScript-readable bearer token. Cross-origin clients must use credentialed requests and the exact configured origin.
+7. Sign in through `POST /v1/auth/login`. The backend sets a Secure, HttpOnly, SameSite=Strict cookie; it does not return the session token in JSON or accept a JavaScript-readable bearer token. Cross-origin browser clients must send the exact configured PMS origin. The backend's CORS allowlist is the frontend origin (for Capacitor, `https://localhost`), not the backend host.
 
 ## Persistence and key recovery
 
