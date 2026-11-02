@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const backend = await readFile(new URL('../payment-backend/src/local-server.mjs', import.meta.url), 'utf8');
 
 test('PMS exposes LAN owner administration independently of Pay Bridge', () => {
   assert.match(html, /LAN Payment Owner Console/);
@@ -14,7 +15,7 @@ test('PMS exposes LAN owner administration independently of Pay Bridge', () => {
 
 test('local owner administration uses HTTPS-origin scoped HttpOnly-cookie sessions', () => {
   assert.match(html, /credentials:'include'/);
-  assert.match(html, /SameSite=None/);
+  assert.match(backend, /SameSite=None/);
   assert.match(html, /X-Aurelia-Setup-Token/);
   assert.doesNotMatch(html, /localStorage\.setItem\([^\n]*(?:session|owner|gateway)/i);
   assert.doesNotMatch(html, /sessionToken\s*:/);
