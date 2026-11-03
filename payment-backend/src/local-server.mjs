@@ -200,7 +200,7 @@ async function verifyPassword(password, row) {
 function originGuard(req, res, next) {
   const origin = req.get('origin');
   const browserMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) &&
-    !req.path.startsWith('/v1/webhooks/');
+    !req.path.startsWith('/v1/webhooks/') && !req.path.startsWith('/v1/devices/');
   if (browserMutation && !origin) return fail(res, 403, 'origin_required');
   if (origin && !origins.has(origin)) return fail(res, 403, 'origin_not_allowed');
   if (origin) {
@@ -516,8 +516,9 @@ app.post('/v1/devices/:deviceId/commands/:commandId/ack', deviceAuth, (req, res)
       WHERE command_id=? AND status IN ('LEASED','DELIVERING')`)
       .run(ledgerAckId, receiptJson, req.deviceSignature, now(), now(), commandId);
     if (changed.changes !== 1) return { error: 'device_command_ack_race' };
-    db.prepare('UPDATE device_cursors SET last_applied_sequence=?,updated_at=? WHERE device_id=? AND last_applied_sequence=?')
+    const cursorUpdate = db.prepare('UPDATE device_cursors SET last_applied_sequence=?,updated_at=? WHERE device_id=? AND last_applied_sequence=?')
       .run(sequenceId, now(), deviceId, cursor.last_applied_sequence);
+    if (cursorUpdate.changes !== 1) throw new Error('device_cursor_advance_race');
     writeAudit('PAYMENT_DEVICE_COMMAND_ACKNOWLEDGED', deviceId + ':' + commandId);
     return { acknowledged: true, duplicate: false, cursor: sequenceId };
   });
