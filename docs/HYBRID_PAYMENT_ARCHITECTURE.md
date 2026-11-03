@@ -21,13 +21,7 @@ TRUSTED PAYMENT BACKEND (public HTTPS; managed runtime)
   Webhook ingress + provider status reconciliation
   Idempotent accounting/outbox coordinator
        | HTTPS, provider-specific auth/signatures
-       +--> Razorpay
-       +--> Cashfree
-       +--> PayU
-       +--> PhonePe
-       +--> Paytm
-       +--> JioPay
-       +--> CCAvenue
+       +--> Razorpay / Cashfree / PayU / PhonePe / Paytm / JioPay / CCAvenue
        |
        +--> durable payment events / settlement outbox
                  |
@@ -39,10 +33,10 @@ The existing `payment-backend/src/server.mjs` Firebase Admin + Firestore + Googl
 
 ## 2. Security boundaries
 
-- Merchant API secrets, salts, webhook secrets and provider signing material exist only in the backend Secret Manager. Never place them in the APK, JavaScript bundle, localStorage, IndexedDB, Android preferences, source control or client-visible API responses.
+- Merchant API secrets, salts, webhook secrets and provider signing material exist only in backend Secret Manager. Never place them in the APK, JavaScript bundle, localStorage, IndexedDB, Android preferences, source control or client-visible API responses.
 - Use workload identity / Application Default Credentials for Secret Manager and Firestore. Do not ship service-account JSON keys.
 - The Android client authenticates users and devices. The backend independently authorizes tenant, property, role, folio ownership, amount and currency. Client-supplied tenant IDs are never authorization evidence.
-- Provider webhooks terminate at the public backend over HTTPS. Verify each provider's signature against the exact raw request bytes and the correct environment secret. Deduplicate event IDs/payload hashes, then independently fetch authoritative provider status before accepting a financial state transition.
+- Provider webhooks terminate at the public backend over HTTPS. Verify each provider's signature against exact raw request bytes and the correct environment secret. Deduplicate event IDs/payload hashes, then independently fetch authoritative provider status before accepting a financial state transition.
 - A checkout redirect, SDK callback, client success screen or webhook alone does not prove payment capture.
 - Apply request-size limits, strict schemas, origin policy for browser calls, rate limits, audit logging with redaction, secret rotation, least-privilege IAM and TLS-only ingress.
 - Use integer minor units for amounts. Never use floating-point values for ledger calculations.
@@ -52,15 +46,15 @@ The existing `payment-backend/src/server.mjs` Firebase Admin + Firestore + Googl
 The mobile app talks only to Aurelia's API. Provider-specific details remain inside adapters.
 
 - `POST /v1/payments/intents` — reserve an intent against an authoritative open folio; requires an Idempotency-Key.
-- `POST /v1/payments/:intentId/checkout` — create/retrieve the provider order and return only public checkout data.
-- `GET /v1/payments/:intentId` — return the backend-authoritative payment state.
-- `POST /v1/payments/:intentId/reconcile` — trigger a rate-limited authoritative provider status lookup.
-- `POST /v1/payments/:intentId/refunds` — request a bounded full/partial refund with a separate idempotency key.
+- `POST /v1/payments/:intentId/checkout` — create/retrieve provider order and return only public checkout data.
+- `GET /v1/payments/intents/:intentId` — return backend-authoritative payment state.
+- `POST /v1/payments/:intentId/reconcile` — trigger rate-limited authoritative provider status lookup.
+- `POST /v1/payments/:intentId/refunds` — request bounded full/partial refund with a separate idempotency key.
 - `GET /v1/payments/:intentId/refunds/:refundId` — return refund state.
 - `POST /v1/webhooks/:provider/:environment` — provider-specific raw-body webhook ingress; public route, no browser session, signature verification and event deduplication required.
-- `GET /v1/devices/:deviceId/events` and acknowledgement routes — authenticated, ordered, replay-safe device synchronization.
+- Device event and acknowledgement routes — authenticated, ordered, replay-safe synchronization.
 
-The existing server/repository currently implements only a subset of this contract. Do not expose routes or advertise capabilities until the backing adapter, persistence, authorization and tests are present.
+The existing server/repository currently implements only a subset of this contract. Do not expose routes or advertise capabilities until backing adapter, persistence, authorization and tests are present.
 
 ## 4. Provider adapter contract
 
@@ -70,6 +64,7 @@ Each provider implements the same Aurelia-facing operations but retains its own 
 interface PaymentProvider {
   validateCredentials(): Promise<ValidationResult>;
   createOrder(input: CreateOrderInput): Promise<ProviderOrder>;
+  findOrderByReference(input: OrderReference): Promise<ProviderOrderLookup>;
   getPaymentStatus(input: StatusLookup): Promise<ProviderPaymentStatus>;
   verifyWebhook(rawBody: Buffer, headers: Headers): Promise<VerifiedWebhook>;
   createRefund(input: RefundInput): Promise<ProviderRefund>;
@@ -95,7 +90,7 @@ Immutable identity / amount / currency mismatch -> CONFLICT
 3. The app opens the provider's supported hosted checkout / SDK flow. It never handles merchant secrets.
 4. The app's result is a hint only. Backend status lookup and webhook processing both use provider-specific verification.
 5. Verify provider, environment, merchant account, order/payment references, amount, currency and transaction identity.
-6. A timeout after dispatch is ambiguous. Reconcile using the original provider references before any retry that might create another charge.
+6. A timeout after dispatch is ambiguous. Reconcile using original provider references before any retry that might create another charge.
 7. A verified capture enters CAPTURED_UNPOSTED. The accounting coordinator posts exactly one payment ledger entry and one unique receipt against the canonical PMS folio.
 8. If PMS accounting is in a separate database, use a transactional outbox and replay-safe saga; do not claim cross-database atomicity. Acknowledge device sync only after durable receipt read-back.
 9. Refunds are separate immutable operations. Enforce cumulative pending + successful refunds against captured value. Do not post a PMS reversal until provider-confirmed refund success.
@@ -121,16 +116,10 @@ Live collection remains OFF until all of the following are evidenced:
 
 ## 8. Current repository checkpoint
 
-Verified from the selected branch:
+- Cloud runtime foundation exists in `payment-backend/src/server.mjs`, but deployment, IAM, public ingress and readiness have not been independently verified.
+- Razorpay and Cashfree adapters exist but are partial. Refund-status lookup, durable webhook inbox/reconciliation and canonical folio settlement remain incomplete.
+- PayU, PhonePe, Paytm, JioPay and CCAvenue remain unimplemented and are deliberately not registered as working adapters.
+- An authenticated HTTPS client foundation now exists at `src/services/payment-api.mjs`. It injects a caller-supplied Firebase ID token, validates intent input, forwards stable idempotency keys and preserves ambiguous network failures as reconciliation-required errors. It is not yet wired into the app's sign-in/session lifecycle or payment UI.
+- A dependency-ordered execution plan and client unit tests have been added. Test execution, Android build, cloud deployment, provider sandbox/UAT and physical-device acceptance have not yet been verified.
 
-- `payment-backend/src/server.mjs` is a Firebase Admin / Firestore / Google Secret Manager backend prototype.
-- `payment-backend/src/intents/firestore-repository.mjs` and `payment-backend/src/providers/factory.mjs` currently whitelist only Razorpay and Cashfree.
-- `payment-backend/src/providers/` currently contains implemented Razorpay and Cashfree adapters only.
-- `payment-backend/package.json` did not declare the Firebase Admin or Google Secret Manager imports and did not provide a Cloud runtime start script.
-- `payment-backend/src/local-server.mjs` is a separate SQLite/LAN service and is not the selected public webhook/payment authority.
-
-The next implementation work is to make the selected cloud runtime buildable, expand the adapter contract and implement/test each provider independently, then complete backend webhook/reconciliation/refund and canonical folio integration. Until those gates pass, all providers beyond verified sandbox capability remain unavailable and live collection stays OFF.
-
-## 9. Official provider references
-
-See [PROVIDER_INTEGRATION_STATUS.md](./PROVIDER_INTEGRATION_STATUS.md) for the current implementation matrix and official documentation entry points.
+See [PAYMENT_IMPLEMENTATION_PLAN.md](./PAYMENT_IMPLEMENTATION_PLAN.md) for phase gates and next implementation actions. Live collection remains OFF.
