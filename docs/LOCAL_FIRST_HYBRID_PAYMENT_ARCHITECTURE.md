@@ -5,7 +5,7 @@
 
 ## 1. Deployment model
 
-Aurelia PMS and its payment runtime execute inside the Android application. No cloud service, Docker appliance, LAN payment server, loopback HTTP service or companion process is required.
+Aurelia PMS and its payment runtime execute inside the Android application. No cloud service, Docker appliance, LAN payment server, loopback HTTP service or companion process is required. Android production networking must keep cleartext traffic disabled (`usesCleartextTraffic=false`) and use HTTPS for provider API calls.
 
 ```text
 ANDROID DEVICE — OFFLINE-FIRST RUNTIME
