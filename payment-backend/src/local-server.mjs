@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS device_sequence_counters (
 );
 CREATE TABLE IF NOT EXISTS transactions (
  id TEXT PRIMARY KEY, provider TEXT NOT NULL, environment TEXT NOT NULL,
- provider_order_id TEXT, amount_minor INTEGER NOT NULL, currency TEXT NOT NULL,
+ provider_order_id TEXT, provider_payment_id TEXT, amount_minor INTEGER NOT NULL, currency TEXT NOT NULL,
  status TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE,
  device_id TEXT REFERENCES device_registrations(device_id), folio_id TEXT,
  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
@@ -149,6 +149,9 @@ if (!transactionColumns.has('device_id')) {
 }
 if (!transactionColumns.has('folio_id')) {
   db.exec('ALTER TABLE transactions ADD COLUMN folio_id TEXT');
+}
+if (!transactionColumns.has('provider_payment_id')) {
+  db.exec('ALTER TABLE transactions ADD COLUMN provider_payment_id TEXT');
 }
 
 // Existing registrations were previously marked ACTIVE without proof of
@@ -694,14 +697,14 @@ function providerReference(transactionId) {
 function validOpaqueId(value) {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(value);
 }
-function transitionPayment(transactionId, expectedStatuses, nextStatus, reason, providerOrderId = null) {
+function transitionPayment(transactionId, expectedStatuses, nextStatus, reason, providerOrderId = null, providerPaymentId = null) {
   const allowed = new Set(expectedStatuses);
   const apply = db.transaction(() => {
     const current = db.prepare('SELECT * FROM transactions WHERE id=?').get(transactionId);
     if (!current) throw new Error('transaction_not_found');
     if (!allowed.has(current.status)) return { changed: false, status: current.status };
-    db.prepare('UPDATE transactions SET status=?,provider_order_id=COALESCE(?,provider_order_id),updated_at=? WHERE id=?')
-      .run(nextStatus, providerOrderId, now(), transactionId);
+    db.prepare('UPDATE transactions SET status=?,provider_order_id=COALESCE(?,provider_order_id),provider_payment_id=COALESCE(?,provider_payment_id),updated_at=? WHERE id=?')
+      .run(nextStatus, providerOrderId, providerPaymentId, now(), transactionId);
     db.prepare('INSERT INTO transaction_journal(transaction_id,from_status,to_status,reason,created_at) VALUES(?,?,?,?,?)')
       .run(transactionId, current.status, nextStatus, reason, now());
     if (nextStatus === 'CAPTURED_PENDING_ACCOUNTING') {
@@ -722,9 +725,19 @@ function transitionPayment(transactionId, expectedStatuses, nextStatus, reason, 
           const sequenceId = counter.last_sequence + 1;
           db.prepare('UPDATE device_sequence_counters SET last_sequence=? WHERE device_id=?').run(sequenceId,current.device_id);
           const commandId = crypto.randomUUID();
-          const command = {commandId,deviceId:current.device_id,sequenceId,transactionId,
-            idempotencyKey:current.idempotency_key,folioId:current.folio_id,
-            amountMinor:current.amount_minor,currency:current.currency};
+          const command = {
+            commandId, deviceId: current.device_id, sequenceId, transactionId,
+            idempotencyKey: current.idempotency_key, folioId: current.folio_id,
+            amountMinor: current.amount_minor, currency: current.currency,
+            provider: current.provider, providerPaymentId: current.provider_payment_id || null,
+            settlement: {
+              provider: current.provider, commandId, bookingId: current.folio_id,
+              amount: current.amount_minor / 100, method: current.provider,
+              reference: current.provider_payment_id || current.provider_order_id || current.id,
+              source: 'staff_review', verificationConfirmed: true,
+              idempotencyKey: 'settlement:' + current.provider + ':command:' + commandId
+            }
+          };
           const payload = JSON.stringify(command);
           const payloadHash = crypto.createHash('sha256').update(payload).digest('hex');
           db.prepare(`INSERT INTO settlement_commands(command_id,device_id,sequence_id,transaction_id,
@@ -867,7 +880,7 @@ app.post('/v1/payments/:transactionId/reconcile', ownerAuth, requireBrowserMutat
     if (remote.captured === true) {
       const result = transitionPayment(tx.id,
         ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED','FAILED'],
-        'CAPTURED_PENDING_ACCOUNTING', 'provider_api_confirmed_capture', providerOrderId);
+        'CAPTURED_PENDING_ACCOUNTING', 'provider_api_confirmed_capture', providerOrderId, remote.paymentId || null);
       return res.json({ transactionId: tx.id, status: result.status, folioSettlement: 'PENDING_OUTBOX' });
     }
     if (['failed','declined','cancelled','expired'].includes(String(remote.paymentStatus || '').toLowerCase())) {
@@ -961,7 +974,7 @@ app.post('/v1/webhooks/:provider/:environment', express.raw({ type: 'application
     }
     const transition = transitionPayment(tx.id,
       ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED','FAILED'],
-      'CAPTURED_PENDING_ACCOUNTING', 'webhook_provider_api_confirmed_capture', providerOrderId);
+      'CAPTURED_PENDING_ACCOUNTING', 'webhook_provider_api_confirmed_capture', providerOrderId, remote.paymentId || null);
     const command = tx.device_id && tx.folio_id
       ? db.prepare('SELECT command_id,sequence_id,payload_hash FROM settlement_commands WHERE device_id=? AND transaction_id=?')
           .get(tx.device_id, tx.id)
