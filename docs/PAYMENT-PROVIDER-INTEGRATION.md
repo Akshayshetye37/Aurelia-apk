@@ -55,7 +55,7 @@ Razorpay's own Optimizer documentation distinguishes bank gateways from aggregat
 
 ## Security and implementation boundaries
 
-- No secret, salt, private key, webhook secret, API access token or merchant password may be stored in APK, browser storage, app backup, logs or Git.
+- No production secret, salt, private key, webhook secret, API access token or merchant password may be stored in an APK, browser storage, app backup, logs or Git. Sandbox-only credentials may be staged locally for development, but must never be reused for live collections.
 - The Android app's optional Keystore vault is **sandbox-only credential staging**, not a payment processor. It rejects live credentials and webhook secrets, and cannot create orders, launch checkout, verify payments or activate gateway execution. Even sandbox secrets are not a substitute for server-side credential custody; do not place production secrets in either APK. Production credentials belong only in the trusted backend.
 - Pay Bridge remains a separate companion APK. Its current PMS-side handshake is not required for provider credential administration and does not yet implement checkout/refund/settlement IPC.
 - A browser redirect, Android intent result, screenshot, UPI notification or unsigned callback is not proof of payment.
