@@ -6,7 +6,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import Database from 'better-sqlite3';
+let Database;
+try { Database = (await import('better-sqlite3')).default; } catch {}
 
 const packageRoot = path.resolve(new URL('..', import.meta.url).pathname);
 
@@ -35,7 +36,7 @@ function signDeviceRequest(privateKey, { deviceId, method, path: requestPath, bo
   };
 }
 
-test('LAN device enrollment, signed lease, durable acknowledgement, cursor and revocation', async t => {
+test('LAN device enrollment, signed lease, durable acknowledgement, cursor and revocation', { skip: !Database }, async t => {
   const temp = mkdtempSync(path.join(os.tmpdir(), 'aurelia-device-protocol-'));
   const databasePath = path.join(temp, 'payments.sqlite');
   const port = 18000 + Math.floor(Math.random() * 20000);
