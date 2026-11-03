@@ -95,7 +95,7 @@ test('device enrollment uses short-lived single-use P-256 proof-of-possession ch
 test('live activation and collection remain blocked', () => {
   assert.match(source, /if \(environment === 'live'\) return fail\(res, 409, 'live_payments_blocked_accounting_pipeline_incomplete'\)/);
   assert.match(source, /environment !== 'test'/);
-  assert.match(source, /accounting: 'not_implemented'/);
+  assert.match(source, /environment !== 'test'/);
 });
 
 test('payment dispatch is persisted before provider IO and ambiguous outcomes are not blindly retried', () => {
@@ -145,11 +145,22 @@ test('webhooks verify raw request bytes and event ID payload conflicts fail clos
   assert.match(source, /prior\.payload_sha256 !== payloadHash/);
 });
 
-test('webhook handler does not settle or acknowledge the PMS folio', () => {
+test('webhook capture requires independent provider API verification before command creation', () => {
   const webhookStart = source.indexOf("app.post('/v1/webhooks/:provider/:environment'");
-  const webhook = source.slice(webhookStart);
-  assert.match(webhook, /accounting: 'not_implemented'/);
-  assert.doesNotMatch(webhook, /settlePayment\(|folio\.update|ACKNOWLEDGED|PROCESSED/);
+  const webhook = source.slice(webhookStart, source.indexOf("app.use((err", webhookStart));
+  assert.match(webhook, /adapter\.verifyWebhook\(req\.body, req\.headers\)/);
+  assert.match(webhook, /adapter\.getPaymentStatus\(\{ orderId: providerOrderId/);
+  assert.match(webhook, /remote\.captured !== true/);
+  assert.match(webhook, /remote\.amountMinor !== tx\.amount_minor/);
+  assert.match(webhook, /remote\.currency !== tx\.currency/);
+  assert.match(webhook, /remote\.orderId !== providerOrderId/);
+  assert.match(webhook, /provider_status_binding_mismatch/);
+  assert.match(webhook, /transitionPayment\(/);
+  assert.match(webhook, /settlement_commands WHERE device_id/);
+  assert.match(webhook, /COMMAND_CREATED/);
+  assert.match(webhook, /CAPTURED_UNROUTED/);
+  assert.doesNotMatch(webhook, /settlePayment\(/);
+  assert.doesNotMatch(webhook, /accounting: 'not_implemented'/);
 });
 
 test('Docker publishes only the TLS reverse proxy and retains SQLite in a named volume', () => {
