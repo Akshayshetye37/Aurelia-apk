@@ -110,7 +110,7 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   const staleChallengeAttempt = await fetch(baseUrl + '/v1/admin/devices/enroll', {
     method: 'POST', headers: ownerHeaders,
     body: JSON.stringify({
-      deviceId, challengeId: replacementChallenge.challengeId, publicKeyPem,
+      deviceId, challengeId: enrollmentChallenge.challengeId, publicKeyPem,
       certificateChainBase64: [
         Buffer.alloc(128, 0x41).toString('base64'),
         Buffer.alloc(128, 0x42).toString('base64')
@@ -126,7 +126,7 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   const unavailableEnrollment = await fetch(baseUrl + '/v1/admin/devices/enroll', {
     method: 'POST', headers: ownerHeaders,
     body: JSON.stringify({
-      deviceId, challengeId: enrollmentChallenge.challengeId, publicKeyPem,
+      deviceId, challengeId: replacementChallenge.challengeId, publicKeyPem,
       certificateChainBase64: [
         Buffer.alloc(128, 0x41).toString('base64'),
         Buffer.alloc(128, 0x42).toString('base64')
