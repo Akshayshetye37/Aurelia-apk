@@ -4374,7 +4374,8 @@ window.startAureliaGatewayPayment=async function(index,provider){
 window.reviewAureliaGatewayPayments=async function(index){
  const booking=bk(index);if(!booking)return;
  try{const store=await AURELIA_GATEWAY_STORE_PROMISE,pending=(await store.listPending()).filter(x=>x.bookingId===String(booking.id));if(!pending.length){toast('No unresolved gateway payment exists for this folio.');return}
-  for(const record of pending){try{
+  for(let record of pending){try{
+   if(['FAILED','CANCELLED'].includes(record.state))record=await aureliaGatewayTransition(record,'RECONCILIATION');
    const result=await settlePayment({source:'gateway',provider:record.providerId,transactionId:record.backendSessionId||record.requestId,booking,amount:record.amountPaise/100,method:record.providerId==='razorpay'?'Razorpay':'Cashfree',idempotencyKey:'gateway:'+record.providerId+':'+record.requestId});
    if(result?.ok){await aureliaGatewayTransition(record,'SUCCESS',{backendVerified:true,settlementAuthorized:true,providerPaymentId:result.verification?.providerPaymentId||record.providerPaymentId||null});toast('Previously pending payment verified and posted.')}
    else if(result?.verification?.status==='FAILED'){await aureliaGatewayTransition(record,'FAILED');toast('Provider confirms the previous payment failed.')}
@@ -4423,6 +4424,7 @@ window.aureliaSettleVerifiedGatewayPayment = async input => {
   const expectedPaise = Math.round(Number(input.amount) * 100);
   if (verification.transactionId !== input.transactionId ||
       verification.provider !== input.provider ||
+      verification.environment !== 'test' ||
       verification.amountMinor !== expectedPaise ||
       verification.currency !== 'INR' ||
       typeof verification.providerPaymentId !== 'string' ||
