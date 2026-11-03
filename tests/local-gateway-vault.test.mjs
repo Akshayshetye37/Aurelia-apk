@@ -47,7 +47,10 @@ test('PMS presents sandbox staging separately from local-first folio operations 
   assert.match(html, /Save sandbox credentials/);
   assert.match(html, /Live keys and webhook secrets are rejected/);
   assert.match(html, /Delete legacy live credentials/);
-  assert.match(html, /Optional LAN \/ Cloud Payment Service/);
-  assert.match(html, /Internet-connected trusted backend/);
+  assert.match(html, /Payment service connection & merchant credentials|Trusted Payment Service/);
+  assert.match(html, /trusted HTTPS payment service|trusted payment service/i);
   assert.match(html, /refreshAureliaNativeGateway/);
+  assert.match(html, /startAureliaGatewayPayment/);
+  assert.match(html, /aureliaSettleVerifiedGatewayPayment/);
+  assert.match(html, /Check pending gateway payment/);
 });
