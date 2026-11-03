@@ -525,7 +525,7 @@ app.post('/v1/devices/:deviceId/commands/:commandId/ack', deviceAuth, (req, res)
     if (cursorUpdate.changes !== 1) throw new Error('device_cursor_advance_race');
     writeAudit('PAYMENT_DEVICE_COMMAND_ACKNOWLEDGED', deviceId + ':' + commandId);
     return { acknowledged: true, duplicate: false, cursor: sequenceId };
-  });
+  })();
   if (result.error) return fail(res, 409, result.error);
   return res.json(result);
 });
