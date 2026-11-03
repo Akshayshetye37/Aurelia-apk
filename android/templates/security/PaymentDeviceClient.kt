@@ -3,6 +3,7 @@ package com.aurelia.pms.security
 import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
@@ -29,9 +30,16 @@ class PaymentDeviceClient(
     private val baseUri: URI
     private val random = SecureRandom()
 
+    companion object {
+        private const val MAX_RESPONSE_BYTES = 1024 * 1024
+    }
+
     init {
-        require(deviceId.isNotBlank() && deviceId.length <= 128 &&
-            deviceId.none { it.code < 0x20 || it.code == 0x7f }) { "Invalid payment device ID." }
+        // Device IDs are inserted into signed URL path segments. Restrict the
+        // alphabet rather than attempting to repair or ambiguously encode them.
+        require(deviceId.matches(Regex("[A-Za-z0-9_-]{1,128}"))) {
+            "Invalid payment device ID."
+        }
         val parsed = URI(applianceBaseUrl)
         require(parsed.scheme.equals("https", ignoreCase = true) &&
             parsed.host != null && parsed.userInfo == null &&
@@ -109,7 +117,22 @@ class PaymentDeviceClient(
             connection.outputStream.use { it.write(bodyBytes) }
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val responseText = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            val responseBytes = stream?.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                var total = 0
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    require(total <= MAX_RESPONSE_BYTES) {
+                        "Payment appliance response exceeds the allowed size."
+                    }
+                    output.write(buffer, 0, count)
+                }
+                output.toByteArray()
+            } ?: ByteArray(0)
+            val responseText = responseBytes.toString(Charsets.UTF_8)
             if (status !in 200..299) {
                 throw PaymentDeviceProtocolException(status, responseCode(responseText))
             }
