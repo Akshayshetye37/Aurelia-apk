@@ -28,6 +28,10 @@ Aurelia PMS must remain fully usable without a server, cloud account, Firebase p
 
 This policy is a product/architecture requirement. The PMS implements the local owner login/admin console for the Docker runtime. It does not yet implement end-to-end guest checkout, Android device command consumption, refund lifecycle or atomic PMS folio settlement.
 
+## LAN runtime hardening
+
+See [LAN appliance hardening and release boundary](LAN-APPLIANCE-HARDENING.md) for the SQLite durability settings, shutdown behavior, backup requirements and LAN deployment constraints. These controls do not enable live payments or complete the missing accounting/Bridge workflows.
+
 ## 1. Architecture and trust boundaries
 
 - Firebase ID tokens are verified server-side, including revoked-token checking, verified email, MFA second-factor claim and recent authentication.
