@@ -6,7 +6,7 @@ This runtime is an optional LAN owner/provider-administration and payment-dispat
 
 - Docker Engine / Docker Desktop with Compose.
 - A stable LAN hostname or IP for the host, resolvable from the Android device.
-- A trusted TLS certificate whose SAN matches `AURELIA_LAN_HOSTNAME`. Caddy's `tls internal` issues a certificate for that exact hostname/IP using a private CA; distribute and trust the CA through an administrator-controlled process on every client. Android apps may not trust user-installed CAs by default; verify trust in the actual signed PMS APK before proceeding. Never bypass certificate validation.
+- A trusted TLS certificate whose SAN matches `AURELIA_LAN_HOSTNAME`. Caddy's `tls internal` issues a certificate for that exact hostname/IP using a private CA; install that CA through an administrator-controlled process on the Android device. The PMS APK's Network Security Config explicitly trusts system and user-installed CA roots while denying all cleartext traffic. Verify the hostname/SAN and TLS handshake in the actual signed APK. Never bypass certificate or hostname validation.
 - Node 22 is used in the container; host operating system does not determine the runtime.
 
 ## First start
@@ -16,7 +16,7 @@ This runtime is an optional LAN owner/provider-administration and payment-dispat
    `openssl rand -hex 32`
    Set them as `GATEWAY_MASTER_KEY`, `SESSION_TOKEN_PEPPER` and `OWNER_SETUP_TOKEN`. Never reuse these values or commit `.env`. Keep the setup token offline; it is required only for first-owner enrollment.
 3. Set `AURELIA_LAN_HOSTNAME` to the stable DNS name or IP the Android device uses to reach the appliance. Set `AURELIA_OWNER_ORIGINS` to the exact PMS WebView origin, not the backend origin; the current Capacitor configuration uses `https://localhost`. The backend URL entered in PMS is `https://<AURELIA_LAN_HOSTNAME>:8443`.
-4. Start with `docker compose up -d --build`.
+4. Start with `docker compose up -d --build`. Caddy accepts TLS 1.2/1.3 only and sends an HSTS response header. The backend container port is private to the Compose network; do not publish it or connect clients directly to it.
 5. Check `https://<AURELIA_LAN_HOSTNAME>:8443/healthz` and `/readyz`. The local `/readyz` response reports `database: ready`; it does not return the Cloud Run prototype's Firestore/Secret Manager check fields.
 6. Complete one-time owner setup through `POST /v1/auth/setup` with `X-Aurelia-Setup-Token: <OWNER_SETUP_TOKEN>`, a username and a password of at least 14 characters. The setup token is checked in constant time, setup is single-use, and there is no default account or password. Do not expose the setup token in a browser URL, logs or screenshots.
 7. Open More → Payment Gateway in Aurelia PMS, save the backend origin and run Test backend. The integrated LAN owner console checks setup status, performs first-owner setup or sign-in, and manages supported provider credentials. Sign-in uses a Secure, HttpOnly, SameSite=None cookie because the Capacitor WebView origin (`https://localhost`) differs from the appliance origin; the Android WebView accepts third-party cookies for this app. The backend still requires an exact allowlisted Origin and credentialed CORS. The cookie is never exposed to JavaScript or returned in JSON. For a browser preview, add that exact HTTPS origin to `AURELIA_OWNER_ORIGINS` only if you explicitly trust that preview origin.
