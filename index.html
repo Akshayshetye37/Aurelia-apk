@@ -4434,9 +4434,11 @@ window.aureliaSettleVerifiedGatewayPayment = async input => {
     `PROVIDER VERIFIED · ${input.provider.toUpperCase()}\\nCaptured: ₹${(expectedPaise / 100).toFixed(2)}\\nProvider payment: ${paymentReference}\\n\\nPost this verified payment to ${String(input.booking?.g || 'the guest')}'s folio?`
   );
   if (!approved) return { ok: false, awaitingStaffConfirmation: true, verification };
-  const result = settleLocalPayment({
+  // Use the existing staff-entered local ledger path after the explicit
+  // confirmation. Do not bypass the separate trusted native staff_review path.
+  const result = window.aureliaSettlePayment({
     state: input.state, booking: input.booking, amount: input.amount,
-    method: input.method, reference: paymentReference, source: 'staff_review',
+    method: input.method, reference: paymentReference, source: 'manual',
     idempotencyKey: 'gateway:' + input.provider + ':' + paymentReference,
     balanceDue: input.balanceDue, verificationConfirmed: true,
     persist: input.persist, audit: input.audit
