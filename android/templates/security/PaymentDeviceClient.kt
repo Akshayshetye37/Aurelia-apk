@@ -53,7 +53,7 @@ class PaymentDeviceClient(
         require(baseUri.path.isNullOrEmpty() || baseUri.path == "/") {
             "Payment appliance URL must not contain an API path."
         }
-        require(keyStore.hasIdentity()) { "Payment device identity is not enrolled." }
+        require(keyStore.hasAttestedIdentity()) { "Challenge-attested payment device identity is required." }
     }
 
     /** Returns a validated lease envelope; the lease token is required for acknowledgement. */
