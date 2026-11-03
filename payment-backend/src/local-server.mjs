@@ -68,6 +68,14 @@ CREATE TABLE IF NOT EXISTS device_challenges (
  consumed_at TEXT
 );
 CREATE INDEX IF NOT EXISTS device_challenge_expiry ON device_challenges(device_id,expires_at,consumed_at);
+CREATE TABLE IF NOT EXISTS device_request_nonces (
+ device_id TEXT NOT NULL REFERENCES device_registrations(device_id) ON DELETE CASCADE,
+ nonce_sha256 TEXT NOT NULL,
+ expires_at INTEGER NOT NULL,
+ created_at TEXT NOT NULL,
+ PRIMARY KEY(device_id,nonce_sha256)
+);
+CREATE INDEX IF NOT EXISTS device_request_nonce_expiry ON device_request_nonces(expires_at);
 CREATE TABLE IF NOT EXISTS device_cursors (
  device_id TEXT PRIMARY KEY REFERENCES device_registrations(device_id),
  last_applied_sequence INTEGER NOT NULL DEFAULT 0 CHECK(last_applied_sequence >= 0),
@@ -239,6 +247,54 @@ function requireBrowserMutationOrigin(req, res, next) {
   return next();
 }
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';
+  if (value && typeof value === 'object') {
+    return '{' + Object.keys(value).sort().map(key =>
+      JSON.stringify(key) + ':' + canonicalJson(value[key])
+    ).join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
+function deviceAuth(req, res, next) {
+  const deviceId = req.params.deviceId;
+  if (!validOpaqueId(deviceId)) return fail(res, 400, 'invalid_device_id');
+  const timestampText = req.get('x-aurelia-device-timestamp') || '';
+  const nonce = req.get('x-aurelia-device-nonce') || '';
+  const signature = req.get('x-aurelia-device-signature') || '';
+  if (!/^\\d{10}$/.test(timestampText) || !/^[A-Za-z0-9_-]{16,128}$/.test(nonce) ||
+      !/^[A-Za-z0-9_-]{80,160}$/.test(signature)) return fail(res, 401, 'device_request_signature_required');
+  const timestamp = Number(timestampText), current = Math.floor(Date.now() / 1000);
+  if (!Number.isSafeInteger(timestamp) || Math.abs(current - timestamp) > 60) return fail(res, 401, 'device_request_timestamp_out_of_range');
+  const device = db.prepare('SELECT public_key_spki,status FROM device_registrations WHERE device_id=?').get(deviceId);
+  if (!device || device.status !== 'ACTIVE') return fail(res, 403, 'device_not_active');
+  const bodyHash = crypto.createHash('sha256').update(canonicalJson(req.body || {})).digest('hex');
+  const transcript = [
+    'AURELIA_DEVICE_REQUEST_V1', deviceId, req.method.toUpperCase(),
+    req.originalUrl, timestampText, nonce, bodyHash
+  ].join('\\n');
+  let verified = false;
+  try {
+    const publicKey = crypto.createPublicKey({ key: Buffer.from(device.public_key_spki), type: 'spki', format: 'der' });
+    verified = crypto.verify('sha256', Buffer.from(transcript, 'utf8'), publicKey, Buffer.from(signature, 'base64url'));
+  } catch { verified = false; }
+  if (!verified) return fail(res, 403, 'device_request_signature_invalid');
+  const nonceHash = crypto.createHash('sha256').update(nonce).digest('hex');
+  try {
+    const accept = db.transaction(() => {
+      db.prepare('DELETE FROM device_request_nonces WHERE expires_at<=?').run(current);
+      db.prepare('INSERT INTO device_request_nonces(device_id,nonce_sha256,expires_at,created_at) VALUES(?,?,?,?)')
+        .run(deviceId, nonceHash, current + 5 * 60, now());
+      db.prepare('UPDATE device_registrations SET last_seen_at=? WHERE device_id=? AND status=\'ACTIVE\'')
+        .run(now(), deviceId);
+    });
+    accept();
+  } catch { return fail(res, 409, 'device_request_replay'); }
+  req.device = { deviceId };
+  req.deviceSignature = signature;
+  next();
+}
+
 function ownerAuth(req, res, next) {
   const cookieHeader = req.get('cookie') || '';
   const cookieToken = cookieHeader.split(';').map(v => v.trim()).find(v => v.startsWith(SESSION_COOKIE + '='))?.slice(SESSION_COOKIE.length + 1);
@@ -372,6 +428,101 @@ app.post('/v1/admin/devices/:deviceId/revoke', ownerAuth, requireBrowserMutation
   const result = revoke();
   if (result.missing) return fail(res, 404, 'device_not_found');
   return res.json({ deviceId, status: 'REVOKED', duplicate: !!result.duplicate });
+});
+
+// A device can lease only its next contiguous sequence. Lease expiry permits
+// redelivery; it never advances the cursor.
+app.post('/v1/devices/:deviceId/commands/lease', deviceAuth, (req, res) => {
+  const deviceId = req.device.deviceId;
+  const leaseSeconds = 60;
+  const leaseToken = randomBytes(32).toString('base64url');
+  const leaseDigest = crypto.createHash('sha256').update(leaseToken).digest('hex');
+  const currentTime = Math.floor(Date.now() / 1000);
+  const lease = db.transaction(() => {
+    const device = db.prepare('SELECT status FROM device_registrations WHERE device_id=?').get(deviceId);
+    if (!device || device.status !== 'ACTIVE') throw new Error('device_not_active');
+    const cursor = db.prepare('SELECT last_applied_sequence FROM device_cursors WHERE device_id=?').get(deviceId);
+    if (!cursor) throw new Error('device_cursor_missing');
+    const command = db.prepare(`SELECT c.*,s.status AS delivery_status,s.lease_expires_at
+      FROM settlement_commands c JOIN device_command_state s ON s.command_id=c.command_id
+      WHERE c.device_id=? AND c.sequence_id=?`).get(deviceId, cursor.last_applied_sequence + 1);
+    if (!command) return { command: null, cursor: cursor.last_applied_sequence };
+    const leaseExpired = command.lease_expires_at && Date.parse(command.lease_expires_at) <= Date.now();
+    if (command.delivery_status === 'PROCESSED' || command.delivery_status === 'ACKNOWLEDGED') {
+      return { command: null, cursor: cursor.last_applied_sequence };
+    }
+    if (!['PENDING','LEASED','DELIVERING'].includes(command.delivery_status) ||
+        (['LEASED','DELIVERING'].includes(command.delivery_status) && !leaseExpired)) {
+      return { command: null, cursor: cursor.last_applied_sequence };
+    }
+    const expiresAt = new Date(Date.now() + leaseSeconds * 1000).toISOString();
+    db.prepare(`UPDATE device_command_state SET status='LEASED',lease_token=?,lease_expires_at=?,
+      attempt_count=attempt_count+1,next_attempt_at=NULL,last_error=NULL WHERE command_id=?`)
+      .run(leaseDigest, expiresAt, command.command_id);
+    return {
+      command: {
+        commandId: command.command_id, deviceId, sequenceId: command.sequence_id,
+        transactionId: command.transaction_id, idempotencyKey: command.idempotency_key,
+        folioId: command.folio_id, amountMinor: command.amount_minor,
+        currency: command.currency, payload: JSON.parse(command.payload),
+        payloadHash: command.payload_hash
+      },
+      cursor: cursor.last_applied_sequence, leaseToken, leaseExpiresAt: expiresAt
+    };
+  });
+  try {
+    const result = lease();
+    return res.json(result);
+  } catch { return fail(res, 409, 'device_command_lease_conflict'); }
+});
+
+app.post('/v1/devices/:deviceId/commands/:commandId/ack', deviceAuth, (req, res) => {
+  const deviceId = req.device.deviceId;
+  const { commandId } = req.params;
+  const { leaseToken, sequenceId, payloadHash, durableApplied, ledgerAckId } = req.body || {};
+  if (!/^[0-9a-f-]{36}$/i.test(commandId) || typeof leaseToken !== 'string' ||
+      !/^[A-Za-z0-9_-]{40,64}$/.test(leaseToken) || !Number.isSafeInteger(sequenceId) ||
+      typeof payloadHash !== 'string' || !/^[a-f0-9]{64}$/.test(payloadHash) ||
+      durableApplied !== true || !validOpaqueId(ledgerAckId)) {
+    return fail(res, 400, 'invalid_device_command_receipt');
+  }
+  const leaseDigest = crypto.createHash('sha256').update(leaseToken).digest('hex');
+  const result = db.transaction(() => {
+    const device = db.prepare('SELECT status FROM device_registrations WHERE device_id=?').get(deviceId);
+    if (!device || device.status !== 'ACTIVE') throw new Error('device_not_active');
+    const command = db.prepare(`SELECT c.*,s.status AS delivery_status,s.lease_token,s.lease_expires_at,
+      s.ledger_ack_id,s.receipt_payload FROM settlement_commands c
+      JOIN device_command_state s ON s.command_id=c.command_id
+      WHERE c.command_id=? AND c.device_id=?`).get(commandId, deviceId);
+    if (!command) return { error: 'device_command_not_found' };
+    const receipt = { commandId, deviceId, sequenceId, payloadHash, durableApplied, ledgerAckId };
+    const receiptJson = canonicalJson(receipt);
+    if (command.delivery_status === 'PROCESSED') {
+      if (command.receipt_payload === receiptJson) return { acknowledged: true, duplicate: true };
+      return { error: 'device_command_receipt_conflict' };
+    }
+    if (command.sequence_id !== sequenceId || command.payload_hash !== payloadHash) {
+      return { error: 'device_command_binding_mismatch' };
+    }
+    const cursor = db.prepare('SELECT last_applied_sequence FROM device_cursors WHERE device_id=?').get(deviceId);
+    if (!cursor || sequenceId !== cursor.last_applied_sequence + 1) return { error: 'device_cursor_out_of_order' };
+    if (!command.lease_token || command.lease_token !== leaseDigest ||
+        !command.lease_expires_at || Date.parse(command.lease_expires_at) <= Date.now() ||
+        !['LEASED','DELIVERING'].includes(command.delivery_status)) {
+      return { error: 'device_command_lease_invalid' };
+    }
+    const changed = db.prepare(`UPDATE device_command_state SET status='PROCESSED',lease_token=NULL,
+      lease_expires_at=NULL,ledger_ack_id=?,receipt_payload=?,receipt_signature=?,acknowledged_at=?,processed_at=?
+      WHERE command_id=? AND status IN ('LEASED','DELIVERING')`)
+      .run(ledgerAckId, receiptJson, req.deviceSignature, now(), now(), commandId);
+    if (changed.changes !== 1) return { error: 'device_command_ack_race' };
+    db.prepare('UPDATE device_cursors SET last_applied_sequence=?,updated_at=? WHERE device_id=? AND last_applied_sequence=?')
+      .run(sequenceId, now(), deviceId, cursor.last_applied_sequence);
+    writeAudit('PAYMENT_DEVICE_COMMAND_ACKNOWLEDGED', deviceId + ':' + commandId);
+    return { acknowledged: true, duplicate: false, cursor: sequenceId };
+  });
+  if (result.error) return fail(res, 409, result.error);
+  return res.json(result);
 });
 
 app.get('/v1/auth/setup-status', (_req, res) => {
