@@ -49,10 +49,10 @@ test('only implemented Razorpay and Cashfree adapters expose credential controls
 });
 
 test('UI keeps live collection disabled and requires backend verification plus staff folio approval', () => {
-  assert.ok(html.includes('Live collection and automatic folio settlement remain disabled'));
+  assert.ok(html.includes('Live collection and automatic settlement remain disabled'));
   assert.ok(html.includes('PROVIDER VERIFIED'));
   assert.ok(html.includes('CAPTURED_PENDING_ACCOUNTING') || backend.includes('CAPTURED_PENDING_ACCOUNTING'));
-  assert.ok(html.includes('Live collection and automatic folio settlement remain disabled'));
+  assert.ok(html.includes('Live collection and automatic settlement remain disabled'));
 
 });
 
