@@ -79,3 +79,14 @@ Android versions, release-signed app identity, trusted appliance TLS,
 lease/hash validation, explicit staff approval, durable idempotent projection,
 read-back, signed acknowledgement, process-kill recovery and duplicate replay
 testing.
+
+
+## 2026-11-03 security hardening: activation gate and key preservation
+
+The Android key-generation routine now refuses to overwrite an existing attested alias. Android Keystore private keys cannot be safely renamed or copied to a staging alias, so automatic replacement would risk destroying the currently enrolled identity before the replacement had been verified and activated. Re-enrollment requires an explicit owner-controlled revoke/reset workflow.
+
+The appliance activation endpoint now fails closed with HTTP 503 and device_attestation_verifier_unavailable. It does not accept proof-of-possession as a substitute for Android Key Attestation and cannot promote a pending device to ACTIVE. The old proof-of-possession-only activation implementation has been removed.
+
+The transport integration test uses a direct SQLite status change only after asserting that the real activation endpoint leaves the device PENDING. That direct change is a test fixture for lease/ack protocol coverage, not a supported enrollment mechanism.
+
+Still outstanding: a trusted Google attestation chain verifier with revocation handling and parsing of the Android Key Attestation extension; challenge and leaf-key binding; package and signer digest policy; StrongBox/TEE security-level enforcement; device-lock and verified-boot policy; verifier fixtures and physical-device validation. Until these exist, no real device can activate through this appliance.
