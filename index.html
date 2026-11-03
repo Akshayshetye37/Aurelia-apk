@@ -4261,7 +4261,7 @@ window.aureliaSettlePayment=function(input){
  const state=input&&input.state,booking=input&&input.booking;
  const fail=(message,code)=>{const e=new Error(message);e.code=code||'SETTLEMENT_REJECTED';throw e};
  if(input.source==='auto')fail('Automatic gateway settlement is disabled.','AUTO_SETTLEMENT_DISABLED');
- if(!['manual','staff_review','reservation_advance'].includes(input.source||'manual'))fail('Unsupported payment source');
+ if(!['manual','reservation_advance'].includes(input.source||'manual'))fail('Unsupported payment source. Gateway and staff-review postings require the trusted native settlement authorization path.','UNTRUSTED_SETTLEMENT_SOURCE');
  if(input.verificationConfirmed!==true)fail('Confirm that the payment was independently received before recording it.','PAYMENT_CONFIRMATION_REQUIRED');
  if(!state||!Array.isArray(state.b)||!booking||!state.b.includes(booking))fail('Booking not found in PMS state');
  if(booking.st&&!['res','in','done'].includes(String(booking.st).toLowerCase()))fail('This booking cannot accept payments.');
@@ -4310,6 +4310,14 @@ window.aureliaSettlePayment=function(input){
 <script type="module" id="aurelia-local-settlement-adapter">
 import { settlePayment as settleLocalPayment } from './src/payments/settlement-service.mjs';
 window.aureliaSettlePayment = function(input) {
+  // This adapter is the local/manual PMS ledger path only. A WebView caller
+  // cannot turn a provider callback into an accounting approval by supplying
+  // source="staff_review" or verificationConfirmed=true.
+  if (input && input.source === 'staff_review') {
+    const error = new Error('Staff-review/provider settlements require the trusted native authorization and journal projector.');
+    error.code = 'TRUSTED_SETTLEMENT_PATH_REQUIRED';
+    throw error;
+  }
   return settleLocalPayment({
     state: input.state,
     booking: input.booking,
@@ -4334,15 +4342,25 @@ import {
 
 const journalPromise = Promise.resolve().then(() => new IndexedDbSettlementJournal());
 const project = async () => {
-  const error = new Error('Trusted native settlement projector is not installed');
+  const error = new Error('Trusted native settlement projector is not installed. No folio mutation or device acknowledgement is permitted.');
   error.code = 'SETTLEMENT_PROJECTOR_UNAVAILABLE';
   throw error;
 };
 
 window.aureliaApplyJournaledSettlement = async command => {
   const journal = await journalPromise;
+  // Deliberately no WebView authorize() callback is installed. The trusted
+  // native issuer/projector must be wired before this API can post a folio.
   return applyVerifiedSettlementCommand({ journal, command, project });
 };
+
+window.AureliaSettlementStatus = Object.freeze({
+  automaticFolioSettlementEnabled: false,
+  trustedAuthorizationIssuerInstalled: false,
+  nativeProjectorInstalled: false,
+  commandAcknowledgementEnabled: false,
+  localManualPaymentsEnabled: true
+});
 
 // loadAll() runs in the preceding application script. Recover before the
 // DOMContentLoaded render so an interrupted verified posting is reconciled
