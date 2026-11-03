@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS device_sequence_counters (
 );
 CREATE TABLE IF NOT EXISTS transactions (
  id TEXT PRIMARY KEY, provider TEXT NOT NULL, environment TEXT NOT NULL,
- provider_order_id TEXT, provider_payment_id TEXT, amount_minor INTEGER NOT NULL, currency TEXT NOT NULL,
+ provider_order_id TEXT, provider_payment_id TEXT, provider_checkout_session_id TEXT, amount_minor INTEGER NOT NULL, currency TEXT NOT NULL,
  status TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE,
  device_id TEXT REFERENCES device_registrations(device_id), folio_id TEXT,
  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
@@ -189,6 +189,9 @@ if (!transactionColumns.has('folio_id')) {
 }
 if (!transactionColumns.has('provider_payment_id')) {
   db.exec('ALTER TABLE transactions ADD COLUMN provider_payment_id TEXT');
+}
+if (!transactionColumns.has('provider_checkout_session_id')) {
+  db.exec('ALTER TABLE transactions ADD COLUMN provider_checkout_session_id TEXT');
 }
 
 // Existing registrations were previously marked ACTIVE without proof of
@@ -987,14 +990,14 @@ function providerReference(transactionId) {
 function validOpaqueId(value) {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(value);
 }
-function transitionPayment(transactionId, expectedStatuses, nextStatus, reason, providerOrderId = null, providerPaymentId = null) {
+function transitionPayment(transactionId, expectedStatuses, nextStatus, reason, providerOrderId = null, providerPaymentId = null, providerCheckoutSessionId = null) {
   const allowed = new Set(expectedStatuses);
   const apply = db.transaction(() => {
     const current = db.prepare('SELECT * FROM transactions WHERE id=?').get(transactionId);
     if (!current) throw new Error('transaction_not_found');
     if (!allowed.has(current.status)) return { changed: false, status: current.status };
-    db.prepare('UPDATE transactions SET status=?,provider_order_id=COALESCE(?,provider_order_id),provider_payment_id=COALESCE(?,provider_payment_id),updated_at=? WHERE id=?')
-      .run(nextStatus, providerOrderId, providerPaymentId, now(), transactionId);
+    db.prepare('UPDATE transactions SET status=?,provider_order_id=COALESCE(?,provider_order_id),provider_payment_id=COALESCE(?,provider_payment_id),provider_checkout_session_id=COALESCE(?,provider_checkout_session_id),updated_at=? WHERE id=?')
+      .run(nextStatus, providerOrderId, providerPaymentId, providerCheckoutSessionId, now(), transactionId);
     db.prepare('INSERT INTO transaction_journal(transaction_id,from_status,to_status,reason,created_at) VALUES(?,?,?,?,?)')
       .run(transactionId, current.status, nextStatus, reason, now());
     if (nextStatus === 'CAPTURED_PENDING_ACCOUNTING') {
@@ -1072,7 +1075,18 @@ app.post('/v1/payments/dispatch', ownerAuth, requireBrowserMutationOrigin, async
       existing.currency === b.currency && existing.device_id === (b.deviceId || null) &&
       existing.folio_id === (b.folioId || null);
     if (!same) return fail(res, 409, 'idempotency_key_payload_conflict');
-    return res.status(200).json({ transactionId: existing.id, status: existing.status, duplicate: true });
+    let checkout = null;
+    if (existing.provider_order_id && existing.status === 'PENDING') {
+      if (provider === 'razorpay') {
+        try { checkout = { keyId: decryptCredentials(config).keyId }; } catch { checkout = null; }
+      } else if (existing.provider_checkout_session_id) {
+        checkout = { paymentSessionId: existing.provider_checkout_session_id };
+      }
+    }
+    return res.status(200).json({ transactionId: existing.id, status: existing.status, duplicate: true,
+      ...(existing.provider_order_id ? { providerOrderId: existing.provider_order_id } : {}),
+      ...(checkout ? { checkout } : {}),
+      ...(!checkout && existing.status === 'PENDING' ? { reconciliationRequired: true } : {}) });
   }
   const insert = db.transaction(() => {
     db.prepare(`INSERT INTO transactions(id,provider,environment,amount_minor,currency,status,idempotency_key,device_id,folio_id,created_at,updated_at)
@@ -1104,7 +1118,7 @@ app.post('/v1/payments/dispatch', ownerAuth, requireBrowserMutationOrigin, async
       transitionPayment(b.transactionId, ['DISPATCHING'], 'UNKNOWN', 'provider_order_response_mismatch');
       return res.status(202).json({ transactionId: b.transactionId, status: 'UNKNOWN', reconciliationRequired: true });
     }
-    transitionPayment(b.transactionId, ['DISPATCHING'], 'PENDING', 'provider_order_created', order.orderId);
+    transitionPayment(b.transactionId, ['DISPATCHING'], 'PENDING', 'provider_order_created', order.orderId, null, order.paymentSessionId || null);
     return res.status(201).json({ transactionId: b.transactionId, status: 'PENDING',
       providerOrderId: order.orderId, checkout: provider === 'cashfree'
         ? { paymentSessionId: order.paymentSessionId, checkoutUrl: order.checkoutUrl }
