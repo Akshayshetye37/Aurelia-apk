@@ -178,6 +178,21 @@ test('device delivery uses signed requests, ordered leases, durable receipts and
   assert.match(source, /!req\.path\.startsWith\('\/v1\/devices\/'\)/);
 });
 
+test('signed durable device receipt atomically finalizes PMS settlement and capture outbox', () => {
+  const ackStart = source.indexOf("app.post('/v1/devices/:deviceId/commands/:commandId/ack'");
+  const ackEnd = source.indexOf("app.get('/v1/auth/setup-status'", ackStart);
+  const ack = source.slice(ackStart, ackEnd);
+  assert.match(ack, /durableApplied !== true/);
+  assert.match(ack, /payment_not_pending_accounting/);
+  assert.match(ack, /UPDATE transactions SET status='SETTLED'/);
+  assert.match(ack, /trusted_device_durable_folio_receipt/);
+  assert.match(ack, /UPDATE settlement_outbox SET status='PROCESSED'/);
+  assert.match(ack, /UPDATE device_cursors SET last_applied_sequence/);
+  assert.ok(ack.indexOf("UPDATE device_command_state SET status='PROCESSED'") <
+    ack.indexOf("UPDATE transactions SET status='SETTLED'"));
+  assert.match(ack, /PAYMENT_FOLIO_SETTLEMENT_COMMITTED/);
+});
+
 test('webhooks verify raw request bytes and event ID payload conflicts fail closed', () => {
   assert.match(source, /express\.raw\(\{ type: 'application\/json', limit: '1mb' \}\)/);
   assert.match(source, /adapter\.verifyWebhook\(req\.body, req\.headers\)/);
