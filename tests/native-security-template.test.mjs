@@ -102,6 +102,7 @@ test('payment device identity stages challenge-bound hardware attestation and ex
   assert.match(source, /certificateChainBase64/);
   assert.match(source, /Software-backed payment device keys are rejected/);
   assert.match(source, /ATTESTED_ALIAS/);
+  assert.match(source, /fun hasAttestedIdentity\(\): Boolean/);
 });
 
 test('native payment device transport is HTTPS-only, path-safe, signed, and response-bounded', () => {
@@ -110,6 +111,7 @@ test('native payment device transport is HTTPS-only, path-safe, signed, and resp
   assert.match(patcher, /'PaymentDeviceClient\.kt'/);
   assert.match(source, /parsed\.scheme\.equals\("https"/);
   assert.match(source, /deviceId\.matches\(Regex\("\[A-Za-z0-9_-\]\{1,128\}"\)\)/);
+  assert.match(source, /keyStore\.hasAttestedIdentity\(\)/);
   assert.match(source, /signRequest\(/);
   assert.match(source, /instanceFollowRedirects = false/);
   assert.match(source, /MAX_RESPONSE_BYTES/);
