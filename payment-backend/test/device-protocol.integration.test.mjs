@@ -150,6 +150,13 @@ test('LAN device enrollment, signed lease, durable acknowledgement, cursor and r
   assert.equal(lease.cursor, 0);
   assert.ok(lease.leaseToken);
 
+  const replayedLease = await fetch(baseUrl + leasePath, {
+    method: 'POST', headers: { ...leaseHeaders, 'Content-Type': 'application/json', 'X-Forwarded-Proto': 'https' },
+    body: JSON.stringify({})
+  });
+  assert.equal(replayedLease.status, 409);
+  assert.equal((await replayedLease.json()).error, 'device_request_replay');
+
   const ackPath = '/v1/devices/' + deviceId + '/commands/' + commandId + '/ack';
   const receipt = {
     leaseToken: lease.leaseToken, sequenceId: 1, payloadHash,
