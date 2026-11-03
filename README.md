@@ -1,5 +1,35 @@
 # Aurelia PMS
 
+## Current architecture decision — device-only, offline-first
+
+**This decision supersedes older LAN-appliance, cloud-backend and companion-server deployment descriptions elsewhere in this historical README.** Aurelia PMS is to run its payment engine inside the Android app. It must not require an Aurelia-hosted server, cloud service, Docker appliance, LAN payment server or separate payment companion.
+
+### Offline operation
+Bookings, guests, rooms, check-in/out, folios, invoices, reports, cash/manual UPI entries and local backups must continue working without Internet. SQLite is the durable local transaction store; device RAM is not a financial ledger. Gateway order creation, checkout, provider status verification, refunds and reconciliation require Internet. Offline gateway work must remain queued/unresolved and must never be displayed as money collected.
+
+### Payment architecture and provider scope
+The planned on-device provider set is Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue. Native Android code must own credentials, network requests, signature/evidence verification and transaction state. WebView JavaScript must never receive merchant secrets. Android Keystore encrypts credential records; SQLite stores durable intents and payment state. Provider return URLs and checkout callbacks are not proof of payment. Since an ordinary Android device behind NAT is not a public webhook receiver, status recovery must use authenticated provider API polling when online.
+
+### Actual implementation checkpoint on this branch
+- [x] Extended the Android credential-vault template to recognize all seven providers and their provider-specific environment names.
+- [x] Reworked the local ledger template for all seven provider IDs and local-only lifecycle states; added a v1-to-v2 migration that preserves prior Razorpay/Cashfree intent rows.
+- [x] Changed the checkout UI to fail closed rather than dispatch to the legacy LAN backend when the native device payment engine is absent.
+- [x] Updated the architecture document to make device-only/offline-first the source of truth.
+- [ ] Integrate and register the native Android payment-engine bridge in the actual Capacitor host.
+- [ ] Implement and test the seven provider-specific API adapters, including authentication, order creation, exact payment verification, refunds where the merchant account supports them, and ambiguous-outcome reconciliation.
+- [ ] Integrate verified captures with the actual local PMS folio database using idempotent accounting and durable read-back receipts.
+- [ ] Add native unit/instrumentation tests, run Android build and physical-device acceptance, and complete sandbox tests.
+
+**Release status: NOT READY FOR PAYMENT COLLECTION.** The native engine and provider adapters are not complete. The UI guard intentionally prevents the old server-based checkout path from being used as a fallback. Live and production activation remain blocked. No deployment, successful APK build or provider acceptance is claimed by these commits.
+
+**Security constraint:** a device-local credential vault is not equivalent to trusted server-side secret custody. Some providers may require server-side credentials under their API model or merchant agreement. Such a provider must remain unavailable in device-only mode unless its documented policy permits the chosen integration; do not evade that restriction by embedding production secrets in the APK.
+
+See [Device-local payment architecture](docs/LOCAL_FIRST_HYBRID_PAYMENT_ARCHITECTURE.md) for the current design and acceptance gates.
+
+---
+
+# Aurelia PMS
+
 
 ## Project status and deployment checklist — 2026-11-04
 
