@@ -36,7 +36,7 @@ function signDeviceRequest(privateKey, { deviceId, method, path: requestPath, bo
   };
 }
 
-test('LAN device enrollment, signed lease, durable acknowledgement, cursor and revocation', { skip: !Database }, async t => {
+test('LAN activation gate, signed lease transport, durable acknowledgement, cursor and revocation', { skip: !Database }, async t => {
   const temp = mkdtempSync(path.join(os.tmpdir(), 'aurelia-device-protocol-'));
   const databasePath = path.join(temp, 'payments.sqlite');
   const port = 18000 + Math.floor(Math.random() * 20000);
