@@ -3850,6 +3850,28 @@ function localGatewayNativeCall(type,provider,environment,extra={}){
   setTimeout(()=>{const pending=LOCAL_GATEWAY_PENDING.get(requestId);if(pending){LOCAL_GATEWAY_PENDING.delete(requestId);pending.reject(new Error('Native gateway request timed out.'));}},15000);
  });
 }
+const LOCAL_LEDGER_PENDING=new Map();
+let LOCAL_LEDGER_SEQUENCE=0;
+window.aureliaNativeLedgerResult=function(id,ok,payload){
+ const pending=LOCAL_LEDGER_PENDING.get(String(id));if(!pending)return;LOCAL_LEDGER_PENDING.delete(String(id));
+ if(ok){try{pending.resolve(typeof payload==='string'?JSON.parse(payload):payload)}catch(e){pending.reject(e)}}
+ else pending.reject(new Error(String(payload||'Native payment ledger operation failed')));
+};
+function localPaymentLedgerCall(type,extra={}){
+ return new Promise((resolve,reject)=>{
+  if(!window.AureliaNative){reject(new Error('The durable payment journal is available in the installed Android app only.'));return;}
+  const requestId='ledger-'+Date.now()+'-'+(++LOCAL_LEDGER_SEQUENCE);
+  LOCAL_LEDGER_PENDING.set(requestId,{resolve,reject});
+  if(!nat({type,requestId,...extra})){LOCAL_LEDGER_PENDING.delete(requestId);reject(new Error('Android native ledger bridge is unavailable.'));return;}
+  setTimeout(()=>{const pending=LOCAL_LEDGER_PENDING.get(requestId);if(pending){LOCAL_LEDGER_PENDING.delete(requestId);pending.reject(new Error('Native payment ledger request timed out.'));}},10000);
+ });
+}
+// Device journal is an offline-safe intent/outbox only. It never marks a payment as paid.
+window.AureliaLocalPaymentLedger=Object.freeze({
+ create:entry=>localPaymentLedgerCall('paymentLedgerCreate',{entry}),
+ listPending:(limit=50)=>localPaymentLedgerCall('paymentLedgerListPending',{limit}),
+ updateLocalStatus:(transactionId,status)=>localPaymentLedgerCall('paymentLedgerUpdateLocalStatus',{transactionId,status})
+});
 window.refreshAureliaNativeGateway=async function(){
  if(!window.AureliaNative)return;
  for(const provider of ['razorpay','cashfree']){
