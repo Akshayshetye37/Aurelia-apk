@@ -4,7 +4,7 @@ Status: source-level cryptographic primitive implemented; the Android device lif
 
 ## PaymentDeviceKeyStore
 
-android/templates/security/PaymentDeviceKeyStore.kt creates and retains a P-256 (secp256r1) signing key in Android Keystore. The private key is non-exportable. It provides:
+android/templates/security/PaymentDeviceKeyStore.kt creates and retains a P-256 (secp256r1) signing key in Android Keystore. The private key is non-exportable. Android Keystore may use hardware-backed storage when the device supports it; this source does not claim StrongBox or hardware-backed attestation. It provides:
 
 - Public-key export as PEM/SPKI for the owner-authenticated registration endpoint.
 - The exact domain-separated AURELIA_DEVICE_ACTIVATE_V1 proof-of-possession transcript used by the LAN server.
