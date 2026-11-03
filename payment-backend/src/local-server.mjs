@@ -469,6 +469,7 @@ app.post('/v1/devices/:deviceId/commands/lease', deviceAuth, (req, res) => {
         transactionId: command.transaction_id, idempotencyKey: command.idempotency_key,
         folioId: command.folio_id, amountMinor: command.amount_minor,
         currency: command.currency, payload: JSON.parse(command.payload),
+        payloadCanonical: canonicalJson(JSON.parse(command.payload)),
         payloadHash: command.payload_hash
       },
       cursor: cursor.last_applied_sequence, leaseToken, leaseExpiresAt: expiresAt
