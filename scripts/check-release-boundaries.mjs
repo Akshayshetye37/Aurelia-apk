@@ -40,5 +40,5 @@ export function scanProductionBundle(directory = path.resolve(process.cwd(), "ww
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const result = scanProductionBundle();
-  process.stdout.write("Release boundary check passed (" + result.scannedFiles + " production text assets scanned).\\n");
+  process.stdout.write("Release boundary check passed (" + result.scannedFiles + " production text assets scanned).\n");
 }
