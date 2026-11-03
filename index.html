@@ -1,9 +1,10 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="theme-color" content="#05110d"><meta name="mobile-web-app-capable" content="yes"><meta name="application-name" content="Aurelia PMS"><meta name="apple-mobile-web-app-title" content="Aurelia PMS"><meta name="description" content="Aurelia PMS — local-first property management for reservations, guests, rooms, folios and operational records.">
+<meta name="theme-color" content="#05110d"><meta name="mobile-web-app-capable" content="yes"><meta name="application-name" content="Aurelia PMS"><meta name="apple-mobile-web-app-title" content="Aurelia PMS"><meta name="description" content="Aurelia PMS — local-first property management with optional LAN and Internet integrations for payments, messaging, channels and AI.">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<!-- Source of truth: https://github.com/Akshayshetye37/Aurelia-apk | branch: feature/multi-provider-payment-backend
-     This UI is local-first. Backend/payment integrations are optional and remain gated until separately accepted.
-     Do not put merchant secrets, signing keys, or payment credentials in this HTML/WebView bundle. -->
+<!-- Aurelia operating policy: local-first core; LAN and Internet services are capability extensions.
+     Core PMS workflows must remain usable without Internet or the payment appliance.
+     Use external services when required, with bounded timeouts, durable queues and safe reconciliation.
+     Keep secrets, signing keys and provider credentials out of this HTML/WebView bundle. -->
 <title>Aurelia PMS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -394,7 +395,7 @@ window.AureliaAdsBridge = {
 </script>
 
 
-<div class="app"><div class="top"><div class="crest" id="crest"></div><div class="pill" id="connection-status"><i></i>Local PMS · Internet optional</div></div><main id="v"></main></div>
+<div class="app"><div class="top"><div class="crest" id="crest"></div><div class="pill" id="connection-status" role="status" aria-live="polite" aria-label="Local-first mode. Core PMS workflows are designed to work without Internet; connected services are used when required." title="Core PMS workflows stay local. Internet and LAN integrations are used when their features require them."><i></i>Local-first · Internet when needed</div></div><main id="v"></main></div>
 <nav class="dock" id="dock" style="--i:0"></nav>
 <div class="sheet" id="sh"><div class="scrim" onclick="closeS()"></div><div class="pan" id="pan"></div></div><div id="toast"></div>
 <script>
