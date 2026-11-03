@@ -34,6 +34,9 @@ final class LocalGatewayVault {
   synchronized JSONObject save(String provider, String environment, JSONObject credentials) throws Exception {
     String[] fields = fields(provider);
     validateEnvironment(provider, environment);
+    if ("live".equals(environment) || "production".equals(environment)) {
+      throw new IllegalStateException("live_credential_storage_blocked_until_release_acceptance");
+    }
     JSONObject clean = new JSONObject();
     for (String field : fields) {
       String value = credentials == null ? "" : credentials.optString(field, "").trim();
