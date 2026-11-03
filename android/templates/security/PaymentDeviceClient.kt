@@ -119,13 +119,21 @@ class PaymentDeviceClient(
         require(command.optString("deviceId") == deviceId) {
             "Appliance command belongs to another device."
         }
-        val payload = command.optJSONObject("payload")
-            ?: throw IllegalArgumentException("Appliance command payload is missing.")
-        val actualHash = sha256Hex(canonicalJson(payload).toByteArray(Charsets.UTF_8))
+        val payloadCanonical = command.optString("payloadCanonical")
+        require(payloadCanonical.isNotBlank() && payloadCanonical.length <= 64 * 1024) {
+            "Appliance canonical command payload is missing or oversized."
+        }
+        val actualHash = sha256Hex(payloadCanonical.toByteArray(Charsets.UTF_8))
         require(MessageDigest.isEqual(
             actualHash.toByteArray(Charsets.US_ASCII),
             payloadHash.toByteArray(Charsets.US_ASCII)
         )) { "Appliance command payload hash does not match." }
+        val payload = JSONObject(payloadCanonical)
+        val suppliedPayload = command.optJSONObject("payload")
+            ?: throw IllegalArgumentException("Appliance command payload is missing.")
+        require(canonicalJson(payload) == canonicalJson(suppliedPayload)) {
+            "Appliance parsed payload differs from its canonical representation."
+        }
 
         require(payload.optString("commandId") == commandId &&
             payload.optString("deviceId") == deviceId &&
