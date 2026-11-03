@@ -22,7 +22,7 @@ Release-gate ledger for `feature/multi-provider-payment-backend`. Source impleme
 
 ## P1 — Required before broad operational rollout
 
-- [~] Third-party QR endpoint removed; local UPI intent works, but QR rendering remains intentionally disabled until a local encoder is integrated.
+- [x] Third-party QR endpoint removed; a CI release-bundle scan now rejects known remote QR services. Local UPI intent works; QR rendering remains intentionally disabled until a local encoder is integrated.
 - [ ] Static CI guard for unauthorized folio/payment-field writes.
 - [ ] Orchestrator wired to the actual UI only after enrollment and IPC gates exist.
 - [ ] INR minor-unit Money value object used consistently.
