@@ -49,6 +49,9 @@ test('verifier is loopback-only, request-bounded, and included in readiness', ()
 
 test('enrollment binds challenge and verified attestation metadata to owner and property', () => {
   assert.match(server, /nonce_base64 TEXT/);
+  assert.match(server, /CREATE TABLE IF NOT EXISTS device_enrollment_challenges/);
+  assert.ok(server.includes("app.post('/v1/admin/devices/enrollment/challenge', ownerAuth"));
+  assert.ok(server.includes("app.post('/v1/admin/devices/enroll', ownerAuth"));
   assert.match(server, /owner_id INTEGER, property_id TEXT/);
   assert.match(server, /attestation_challenge_invalid_or_expired/);
   assert.match(server, /attestation_challenge_race_or_expiry/);
