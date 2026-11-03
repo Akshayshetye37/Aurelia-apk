@@ -37,6 +37,10 @@ class PaymentDeviceKeyStore {
         it.containsAlias(ATTESTED_ALIAS) || it.containsAlias(ALIAS)
     }
 
+    /** Payment-device network access requires the challenge-attested alias. */
+    @Synchronized
+    fun hasAttestedIdentity(): Boolean = keyStore().containsAlias(ATTESTED_ALIAS)
+
     /**
      * Creates a fresh challenge-bound key. StrongBox is preferred; TEE is the
      * only fallback. The appliance MUST independently verify the returned chain.
