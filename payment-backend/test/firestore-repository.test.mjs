@@ -206,3 +206,21 @@ test('pre-dispatch failure does not permit reuse of the same idempotency key wit
     /idempotency_key_payload_conflict/
   );
 });
+
+
+test('firestore transaction failure before provider invocation is not dispatched', async () => {
+  const s = setup();
+  const originalRunTransaction = s.db.runTransaction.bind(s.db);
+  let calls = 0;
+  s.db.runTransaction = async fn => {
+    calls++;
+    // Reservation transaction is first; pre-dispatch state marker is second.
+    if (calls === 2) throw new Error('firestore_write_unavailable_before_dispatch');
+    return originalRunTransaction(fn);
+  };
+  await assert.rejects(
+    s.repo.initializePaymentIntent('user_123', payload()),
+    /firestore_write_unavailable_before_dispatch/
+  );
+  assert.equal(s.dispatches, 0);
+});
