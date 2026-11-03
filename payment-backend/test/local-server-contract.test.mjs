@@ -122,7 +122,7 @@ test('provider checkout session is persisted and returned for safe idempotent re
   assert.match(source, /ALTER TABLE transactions ADD COLUMN provider_checkout_session_id TEXT/);
   assert.match(source, /providerCheckoutSessionId = null/);
   assert.match(source, /paymentSessionId: existing\.provider_checkout_session_id/);
-  assert.match(source, /checkout: \{ keyId: decryptCredentials\(config\)\.keyId \}/);
+  assert.match(source, /checkout = \{ keyId: decryptCredentials\(config\)\.keyId \}/);
   assert.match(source, /order\.paymentSessionId \|\| null/);
 });
 
