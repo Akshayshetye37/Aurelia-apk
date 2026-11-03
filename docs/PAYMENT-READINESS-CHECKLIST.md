@@ -8,20 +8,20 @@ Release-gate ledger for `feature/multi-provider-payment-backend`. Source impleme
 - [x] StrongBox requested first; TEE fallback only on StrongBox-unavailable signal.
 - [x] Software-backed keys rejected locally; staged key preserves the legacy identity.
 - [ ] Appliance verifies chain, challenge, package/signing digest, boot state, device lock and patch policy.
-- [ ] Owner-session challenge issuance, single-use storage, pending enrollment, activation and revocation.
-- [ ] Native client lifecycle, safe key rotation and revocation enforcement.
+- [x] Owner-session challenge issuance, single-use storage, pending enrollment, proof-of-possession activation and revocation exist on the LAN appliance; this does not yet verify Android hardware attestation.
+- [~] Native HTTPS device transport, attested-key requirement, signed lease/ack, lease-token retention, canonical payload hash and immutable command-binding checks are implemented; command consumption, safe key rotation and end-to-end revocation lifecycle remain incomplete.
 - [ ] StrongBox and TEE physical-device instrumentation tests.
 - [ ] LAN appliance TLS, owner authentication, durable storage, backup and restore.
 - [ ] Matching release-signed PMS/Bridge APKs tested on physical hardware.
 - [ ] Versioned executable IPC with per-call caller validation and replay protection.
-- [ ] Provider backend independently verifies raw-body webhooks and provider status.
+- [x] LAN provider backend independently verifies raw-body webhooks and provider status before enqueueing a device command; production provider activation remains blocked.
 - [ ] Durable idempotency, unknown-outcome reconciliation and crash/restart tests.
-- [ ] Atomic PMS folio projection with exact tenant/property/booking/folio/amount/currency/provider binding.
-- [ ] Provider sandbox E2E acceptance for duplicate, timeout, replay, app-death and backend-outage cases.
+- [ ] Atomic PMS folio projection with exact tenant/property/booking/folio/amount/currency/provider binding, durable receipt and read-back before device acknowledgement.
+- [ ] Provider sandbox E2E acceptance for duplicate, timeout, replay, app-death and backend-outage cases, including the physical device lease-to-ack path.
 
 ## P1 — Required before broad operational rollout
 
-- [ ] Local QR generation; third-party QR endpoint removed from production output.
+- [~] Third-party QR endpoint removed; local UPI intent works, but QR rendering remains intentionally disabled until a local encoder is integrated.
 - [ ] Static CI guard for unauthorized folio/payment-field writes.
 - [ ] Orchestrator wired to the actual UI only after enrollment and IPC gates exist.
 - [ ] INR minor-unit Money value object used consistently.
@@ -39,4 +39,4 @@ Release-gate ledger for `feature/multi-provider-payment-backend`. Source impleme
 - Ambiguous dispatched requests are reconciled before retry.
 - Core PMS hotel operations remain usable when Pay Bridge or the payment backend is unavailable.
 
-Update this checklist with evidence and commit references as each gate is completed. Never mark deployment, physical-device testing or production acceptance complete based only on source inspection.
+See [Native Device Delivery Boundary](NATIVE-DEVICE-DELIVERY-BOUNDARY.md) for the exact implemented transport contract and the remaining projector/attestation-verifier boundary. Update this checklist with evidence and commit references as each gate is completed. Never mark deployment, physical-device testing or production acceptance complete based only on source inspection.
