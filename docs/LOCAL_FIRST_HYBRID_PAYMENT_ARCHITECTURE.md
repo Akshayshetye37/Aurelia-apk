@@ -1,3 +1,52 @@
+# Device-local payment architecture — supersedes the legacy LAN/cloud design
+
+**Architecture decision (2026-11-04): Aurelia PMS must not require an Aurelia server, cloud service, LAN appliance, Docker container or companion payment server.** The Android application is the payment runtime. The older hybrid/LAN material below is retained as historical design context only and is not the target deployment.
+
+## Runtime boundaries
+
+- The Android application owns the payment orchestration lifecycle and provider network requests.
+- Native Android code owns merchant credentials, provider authentication, transaction state transitions and payment evidence validation. WebView code is presentation and must not receive merchant secrets.
+- Android Keystore encrypts merchant credential records; SQLite is the durable transaction journal. Device RAM is transient and is never the only copy of financial state.
+- PMS operational data remains local. Booking, guest, room, check-in/out, folio, invoice, reporting, cash/manual UPI recording and local backup must remain usable without Internet.
+- Gateway order creation, hosted checkout loading, provider status queries, refunds and reconciliation require Internet and provider availability. When offline, record an intent or queue an eligible operation; do not claim that money moved.
+- A normal Android device behind NAT cannot be treated as a public webhook receiver. The device must reconcile through authenticated provider APIs when online. A provider callback/return URL is a notification, not authoritative payment evidence.
+- A provider capture and a PMS folio credit are distinct states. Only native, independently verified evidence may advance to an accounting operation; the folio mutation must be idempotent and durably read back before the transaction is marked posted.
+
+## Provider coverage and release truth
+
+The target provider catalogue is Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue. A provider is usable only when its documented API flow, environment mapping, credential validation, order creation, status verification, refund support and tests have actually been implemented for the merchant's enabled account features. A catalogue entry or credential form is not an adapter.
+
+Current repository implementation checkpoint:
+- The Android credential vault template now recognizes all seven provider credential sets and their provider-specific environment labels.
+- The local payment journal template now accepts all seven provider IDs, migrates the previous two-provider schema without discarding existing intent rows, and separates saved intent, order, verified capture and folio-posted states.
+- The UI now fails closed rather than sending checkout requests to the legacy LAN payment endpoint.
+- **The native Android payment execution bridge, seven provider network adapters, authoritative verification/reconciliation, refund execution and atomic integration with the actual PMS folio store are not yet complete.**
+- Live and production activation must remain disabled. The current work is not provider sandbox acceptance and not production readiness.
+
+## Security trade-off
+
+A device-only design is a deliberate compromise: merchant API secrets are present on an endpoint that may be lost, rooted or instrumented. Android Keystore protects stored data and can make key extraction harder, but it cannot provide the isolation of a trusted merchant server while the app uses credentials. Before enabling any provider, confirm that the provider's merchant agreement and API credential model permit this architecture. If a provider requires server-side secret custody, do not put its production secret in the APK/device; mark that provider unsupported in device-only mode rather than bypassing the requirement.
+
+## Offline and recovery state model
+
+`SAVED_ON_DEVICE` means the user intent is durable locally; it does not mean a gateway request was sent. `READY_FOR_ONLINE` means it may be attempted once connectivity and an eligible sandbox provider are available. `ORDER_CREATED` and `AWAITING_PROVIDER` require provider references. `CAPTURED_UNPOSTED` requires independently verified provider evidence and is not a folio credit. `POSTED_TO_FOLIO` is only valid after an idempotent local accounting mutation and durable receipt. `RECONCILIATION_REQUIRED` is an ambiguous state and must never be retried as a fresh charge.
+
+No WebView callback, redirect parameter, screenshot, SMS, notification, or local user action may set a payment to captured or posted. On process death, restart from SQLite and query the provider using the original stable transaction/order reference; never create a replacement order merely because the original response was lost.
+
+## Implementation acceptance gates
+
+1. Native engine is registered in the actual Capacitor Android host and is callable only through a narrow validated bridge.
+2. Secrets never cross into JavaScript, logs, analytics, backups or shared storage.
+3. Every provider adapter has official-documentation-backed request signing/authentication and sandbox contract tests.
+4. Create-order idempotency and ambiguous-timeout recovery are tested per provider.
+5. Payment status is independently queried and checked against exact provider order, payment ID, amount and currency.
+6. Refunds are separately journaled, cumulative partial-refund limits are enforced, and refund status is independently reconciled.
+7. Folio posting and payment journal receipt are atomic where they share the PMS database; otherwise use a durable idempotent local outbox/inbox with read-back.
+8. Offline PMS tests, Android process-death tests, backup/restore tests and physical-device tests pass.
+9. Live activation remains blocked until all above gates and provider merchant policy review pass.
+
+---
+
 # Local-first hybrid payment architecture
 
 ## Goal
