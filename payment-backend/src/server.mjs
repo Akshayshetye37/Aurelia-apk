@@ -565,6 +565,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
         if (intentRef) {
           tx.set(intentRef, {
             providerPaymentId: paymentId,
+            providerEventId: eventId,
             providerVerifiedStatus: 'CAPTURED',
             providerVerifiedAt: FieldValue.serverTimestamp(),
             accountingStatus: 'PENDING',
