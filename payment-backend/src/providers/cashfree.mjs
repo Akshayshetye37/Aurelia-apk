@@ -101,7 +101,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
     ]);
     const matching = Array.isArray(payments)
       ? (input.paymentId
-          ? payments.find(p => p.cf_payment_id === input.paymentId)
+          ? payments.find(p => String(p.cf_payment_id) === String(input.paymentId))
           : payments.find(p => p.payment_status === 'SUCCESS'))
       : null;
     return {
