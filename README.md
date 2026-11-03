@@ -21,6 +21,7 @@ The selected backend foundation is `payment-backend/src/server.mjs` (Firebase Ad
 
 Architecture and implementation truth are defined in:
 - [Hybrid payment architecture](docs/HYBRID_PAYMENT_ARCHITECTURE.md)
+- [Payment implementation plan](docs/PAYMENT_IMPLEMENTATION_PLAN.md)
 - [Seven-provider integration status](docs/PROVIDER_INTEGRATION_STATUS.md)
 - [Payment engine / release specification](docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md)
 
@@ -48,6 +49,7 @@ A client callback or redirect is never payment proof. Provider status must be ve
 | `index.html` | PMS WebView application |
 | `android/` | Capacitor Android host and native integration |
 | `src/payments/` | Frontend payment client and offline PMS behavior |
+| `src/services/payment-api.mjs` | Authenticated HTTPS client for the cloud payment API |
 | `payment-backend/src/server.mjs` | Selected hybrid backend runtime |
 | `payment-backend/src/providers/` | Provider adapters |
 | `payment-backend/src/intents/` | Payment intent and state persistence |
