@@ -892,7 +892,9 @@ app.post('/v1/webhooks/:provider/:environment', express.raw({ type: 'application
   try {
     const adapter = createProviderAdapter(provider, { credentials: decryptCredentials(row), environment });
     const checked = await adapter.verifyWebhook(req.body, req.headers);
-    if (!checked.valid) return fail(res, 400, 'invalid_webhook_signature');
+    if (!checked.valid || !checked.event || typeof checked.event !== 'object') {
+      return fail(res, 400, 'invalid_webhook_signature_or_payload');
+    }
     const eventId = provider === 'razorpay'
       ? req.get('x-razorpay-event-id')
       : req.get('x-webhook-id') || crypto.createHash('sha256').update(req.body).digest('hex');
@@ -902,17 +904,82 @@ app.post('/v1/webhooks/:provider/:environment', express.raw({ type: 'application
     const inserted = db.prepare(`INSERT OR IGNORE INTO webhook_inbox(event_key,provider,environment,received_at,signature_verified,processing_status,payload_sha256)
       VALUES(?,?,?,?,1,'RECEIVED',?)`).run(key, provider, environment, now(), payloadHash);
     if (inserted.changes === 0) {
-      const prior = db.prepare('SELECT payload_sha256 FROM webhook_inbox WHERE event_key=?').get(key);
+      const prior = db.prepare('SELECT payload_sha256,processing_status FROM webhook_inbox WHERE event_key=?').get(key);
       if (!prior || prior.payload_sha256 !== payloadHash) {
         writeAudit('WEBHOOK_EVENT_IDENTITY_CONFLICT', provider + ':' + environment);
         return fail(res, 409, 'webhook_event_identity_conflict');
       }
+      if (prior.processing_status === 'COMMAND_CREATED') {
+        return res.status(200).json({ received: true, duplicate: true, accounting: 'command_created' });
+      }
     }
-    writeAudit('WEBHOOK_SIGNATURE_VERIFIED', provider + ':' + environment);
-    return res.status(200).json({ received: true, duplicate: inserted.changes === 0, accounting: 'not_implemented' });
-  } catch { return fail(res, 503, 'webhook_processing_unavailable'); }
+    // Webhook fields are lookup hints only. Provider API status below is the
+    // authority for capture, amount, currency, order and payment identity.
+    let providerOrderId = null, providerPaymentId = null;
+    if (provider === 'razorpay') {
+      const payment = checked.event?.payload?.payment?.entity;
+      providerOrderId = payment?.order_id || null;
+      providerPaymentId = payment?.id || null;
+      if (checked.event?.event !== 'payment.captured') {
+        db.prepare("UPDATE webhook_inbox SET processing_status='VERIFIED_NON_CAPTURE_EVENT' WHERE event_key=?").run(key);
+        return res.status(200).json({ received: true, accounting: 'not_a_capture_event' });
+      }
+    } else {
+      const data = checked.event?.data || {};
+      providerOrderId = data?.order?.order_id || null;
+      providerPaymentId = data?.payment?.cf_payment_id == null ? null : String(data.payment.cf_payment_id);
+      if (!String(checked.event?.type || '').toUpperCase().includes('PAYMENT_SUCCESS')) {
+        db.prepare("UPDATE webhook_inbox SET processing_status='VERIFIED_NON_CAPTURE_EVENT' WHERE event_key=?").run(key);
+        return res.status(200).json({ received: true, accounting: 'not_a_capture_event' });
+      }
+    }
+    if (typeof providerOrderId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(providerOrderId) ||
+        (providerPaymentId !== null && (typeof providerPaymentId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(providerPaymentId)))) {
+      db.prepare("UPDATE webhook_inbox SET processing_status='UNRESOLVED' WHERE event_key=?").run(key);
+      return res.status(202).json({ received: true, accounting: 'unresolved', reason: 'provider_order_or_payment_id_missing' });
+    }
+    const tx = db.prepare('SELECT * FROM transactions WHERE provider=? AND environment=? AND provider_order_id=?')
+      .get(provider, environment, providerOrderId);
+    if (!tx) {
+      db.prepare("UPDATE webhook_inbox SET processing_status='UNRESOLVED' WHERE event_key=?").run(key);
+      writeAudit('WEBHOOK_TRANSACTION_UNMATCHED', provider + ':' + providerOrderId);
+      return res.status(202).json({ received: true, accounting: 'unresolved', reason: 'local_transaction_not_found' });
+    }
+    const remote = await adapter.getPaymentStatus({ orderId: providerOrderId, ...(providerPaymentId ? { paymentId: providerPaymentId } : {}) });
+    if (remote.orderId !== providerOrderId ||
+        (providerPaymentId && remote.paymentId !== providerPaymentId) ||
+        remote.amountMinor !== tx.amount_minor || remote.currency !== tx.currency) {
+      db.prepare("UPDATE webhook_inbox SET processing_status='RECONCILIATION_REQUIRED' WHERE event_key=?").run(key);
+      writeAudit('WEBHOOK_PROVIDER_BINDING_MISMATCH', tx.id);
+      return res.status(202).json({ received: true, accounting: 'unresolved', reason: 'provider_status_binding_mismatch' });
+    }
+    if (remote.captured !== true) {
+      db.prepare("UPDATE webhook_inbox SET processing_status='VERIFIED_NOT_CAPTURED' WHERE event_key=?").run(key);
+      return res.status(202).json({ received: true, accounting: 'pending_provider_capture_confirmation' });
+    }
+    const transition = transitionPayment(tx.id,
+      ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED','FAILED'],
+      'CAPTURED_PENDING_ACCOUNTING', 'webhook_provider_api_confirmed_capture', providerOrderId);
+    const command = tx.device_id && tx.folio_id
+      ? db.prepare('SELECT command_id,sequence_id,payload_hash FROM settlement_commands WHERE device_id=? AND transaction_id=?')
+          .get(tx.device_id, tx.id)
+      : null;
+    const accounting = command ? 'command_created' : 'captured_unrouted';
+    db.prepare('UPDATE webhook_inbox SET processing_status=? WHERE event_key=?')
+      .run(command ? 'COMMAND_CREATED' : 'CAPTURED_UNROUTED', key);
+    writeAudit('WEBHOOK_PROVIDER_CAPTURE_RECONCILED', tx.id);
+    return res.status(200).json({
+      received: true, duplicate: inserted.changes === 0,
+      transactionId: tx.id, status: transition.status, accounting,
+      ...(command ? { commandId: command.command_id, sequenceId: command.sequence_id, payloadHash: command.payload_hash } : {})
+    });
+  } catch {
+    try {
+      if (typeof key === 'string') db.prepare("UPDATE webhook_inbox SET processing_status='RETRYABLE_ERROR' WHERE event_key=?").run(key);
+    } catch {}
+    return fail(res, 503, 'webhook_processing_unavailable');
+  }
 });
-
 app.use((err, _req, res, _next) => {
   const status = err?.type === 'entity.too.large' ? 413 : 400;
   res.status(status).json({ error: status === 413 ? 'request_too_large' : 'invalid_request' });
