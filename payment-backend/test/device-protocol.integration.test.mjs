@@ -149,6 +149,11 @@ test('LAN device enrollment, signed lease, durable acknowledgement, cursor and r
   const lease = leaseBody;
   assert.equal(lease.command.commandId, commandId);
   assert.equal(lease.command.payloadHash, payloadHash);
+  assert.equal(lease.command.payloadCanonical, canonicalJson(commandPayload));
+  assert.equal(
+    crypto.createHash('sha256').update(lease.command.payloadCanonical).digest('hex'),
+    lease.command.payloadHash
+  );
   assert.equal(lease.cursor, 0);
   assert.ok(lease.leaseToken);
 
