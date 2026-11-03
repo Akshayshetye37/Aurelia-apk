@@ -11,7 +11,8 @@ test('native security templates exist and are copied by the maintained Android g
     'AureliaCryptoEngine.kt',
     'AppLockManager.kt',
     'BiometricVaultManager.kt',
-    'AureliaAppManager.kt'
+    'AureliaAppManager.kt',
+    'PaymentDeviceKeyStore.kt'
   ]) {
     assert.ok(fs.existsSync(path.join(root, 'android/templates/security', name)), name);
   }
@@ -70,4 +71,20 @@ test('PIN policy is enforced by the cryptographic engine, not only by the launch
   assert.match(crypto, /PIN must contain 4–16 digits/);
   assert.match(gate, /Forgot PIN\?/);
   assert.match(gate, /recovery service, which is not yet available/);
+});
+
+
+test('payment device identity uses Android Keystore P-256 and domain-separated protocol transcripts', () => {
+  const source = read('android/templates/security/PaymentDeviceKeyStore.kt');
+  const patcher = read('scripts/patch-android.js');
+  assert.match(patcher, /'PaymentDeviceKeyStore\\.kt'/);
+  assert.match(source, /AndroidKeyStore/);
+  assert.match(source, /KEY_ALGORITHM_EC/);
+  assert.match(source, /secp256r1/);
+  assert.match(source, /AURELIA_DEVICE_ACTIVATE_V1/);
+  assert.match(source, /AURELIA_DEVICE_REQUEST_V1/);
+  assert.match(source, /SHA256withECDSA/);
+  assert.match(source, /PrivateKey/);
+  assert.doesNotMatch(source, /JavascriptInterface|addJavascriptInterface|WebView/);
+  assert.match(source, /not provider verification or accounting approval/);
 });

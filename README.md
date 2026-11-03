@@ -747,3 +747,10 @@ This section supersedes any implication that the native settlement path is alrea
 - No exactly-once, production-ready or deployed-appliance claim is made. Delivery is at-least-once with idempotent application and recovery; physical-device and deployment acceptance remain outstanding.
 
 **Release decision:** live collection must remain disabled until all required sandbox, recovery, refund, deployment and physical-device acceptance gates are evidenced and a separate explicit owner-controlled live activation mechanism is implemented and reviewed.
+
+
+### Native P-256 device identity foundation — 2026-11-03
+
+A native-only Android Keystore P-256 identity primitive has been added at `android/templates/security/PaymentDeviceKeyStore.kt` and included in the maintained Android source generator. It exports the public key and produces the backend's domain-separated activation and signed-device-request transcripts. The private key is non-exportable and no signing method is exposed through the WebView JavaScript interface.
+
+This is **not** the completed Android device client or settlement authorization issuer. Owner-session registration, challenge/activation orchestration, native lease polling, explicit accounting approval, trusted folio projection, acknowledgement and cursor handling are still outstanding. Device proof-of-possession must not be confused with provider verification or accounting approval. No end-to-end payment path or physical-device acceptance is claimed.
