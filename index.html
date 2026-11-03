@@ -4810,7 +4810,7 @@ window.aureliaSettlementRecovery = journalPromise.then(journal =>
       try {
         await navigator.share({
           title: 'Share with guest on WhatsApp',
-          text: String(message || 'Message guest') + '\\n' + url
+          text: String(message || 'Message guest') + String.fromCharCode(10) + url
         });
         if (typeof toast === 'function') toast('Choose WhatsApp in the share sheet, then select the guest chat.');
         return true;
