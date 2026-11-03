@@ -4102,7 +4102,7 @@ window.removeAureliaNativeGateway=async function(provider,environment){
  try{window.AureliaNativeGatewayState[provider][environment]=await localGatewayNativeCall('gatewayVaultRemove',provider,environment);render();toast('Local gateway credentials removed.');}
  catch(error){toast(error.message);}
 };
-window.addEventListener('aurelia-payment-platform-ready',()=>{setTimeout(()=>{window.refreshAureliaNativeGateway&&window.refreshAureliaNativeGateway();window.refreshLocalGatewayOwner&&window.refreshLocalGatewayOwner();},0);});
+window.addEventListener('aurelia-payment-platform-ready',()=>{setTimeout(()=>{window.refreshAureliaNativeGateway&&window.refreshAureliaNativeGateway();},0);});
 
 window.AureliaLocalGatewayAdmin=window.AureliaLocalGatewayAdmin||{loading:false,setupRequired:null,authenticated:false,username:'',providers:[],error:null};
 function localGatewayAdminHtml(){
