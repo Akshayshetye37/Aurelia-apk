@@ -90,6 +90,7 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   const cookie = (login.headers.get('set-cookie') || '').split(';')[0];
   assert.match(cookie, /^aurelia_owner_session=/);
 
+  const ownerHeaders = { ...originHeaders, Cookie: cookie, 'Content-Type': 'application/json' };
   const deviceId = 'device_test_001';
   const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
   const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' });
