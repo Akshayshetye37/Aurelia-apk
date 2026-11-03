@@ -7,6 +7,24 @@
 
 > **Local appliance architecture:** see [LAN appliance, Android discovery, HTTPS trust, offline behavior, and optional edge-AI design](docs/LOCAL-APPLIANCE-AND-EDGE-AI.md). This is the target architecture, not a claim that discovery or appliance deployment is already installed.
 
+### Operating model — local-first, Internet-enabled
+
+**The PMS runs locally first. Internet access is not a prerequisite for core property operations.** Use the local device/database for bookings, rooms, guests, check-in/check-out, folios, invoices, housekeeping, local reports and manual payment records.
+
+Use the property LAN appliance for shared services, payment orchestration, verified provider events, device services, local AI and local backup workflows when available. Use the Internet for integrations that need external systems: payment-provider APIs and hosted checkout, OTA/channel connectivity, messaging/email/SMS, cloud AI, software updates and encrypted off-site backup.
+
+- Keep local workflows responsive while remote calls run with bounded timeouts.
+- Persist eligible outbound work before sending it; retry safely with idempotency and backoff.
+- Never blindly retry an ambiguous payment create/capture/refund. Reconcile the original operation first.
+- Keep local operational records authoritative; accept provider transaction state only after server-side verification.
+- Synchronize with versioning, conflict handling and an audit trail; never silently overwrite newer records.
+- Minimize guest and financial data sent to external services. Cloud AI is optional and must not authorize payments, refunds or accounting changes.
+- When connectivity returns, resume eligible queued work and reconcile pending operations without duplicates.
+- Show degraded connectivity accurately; Internet or appliance loss must not disable core PMS workflows.
+
+The intended architecture uses **local device + property LAN + Internet services together**, each only where appropriate. This policy describes the target behavior; individual integrations remain subject to their implementation and release-acceptance gates.
+
+
 ### Project location
 
 - **PMS source:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
