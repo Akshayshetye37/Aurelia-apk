@@ -43,7 +43,7 @@ test('hybrid architecture documents HTTPS-only LAN and server-authoritative paym
 
 test('offline intent UI validates paise and clearly avoids claiming collection', () => {
   assert.match(html, /createAureliaLocalPaymentIntent/);
-  assert.match(html, /Math\\.round\\(amount\\*100\\)/);
+  assert.match(html, /Math\.round\(amount\*100\)/);
   assert.match(html, /No payment has been initiated or collected/);
   assert.match(html, /does not create a provider order, open checkout, collect money or mark a folio paid/);
   assert.match(html, /refreshAureliaLocalPaymentJournal/);
