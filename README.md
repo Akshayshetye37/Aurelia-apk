@@ -22,11 +22,22 @@
 | PMS LAN SQLite durability PR #7 | Draft/open; CI backend tests and checks previously passed; review/merge and remaining build checks must be confirmed before merge |
 | Pay Bridge handshake | Protocol v1 remains handshake-only |
 | Pay Bridge hardware evidence PR #2 | Draft/open; CI run [41646944152](https://github.com/Akshayshetye37/aurelia-pay-bridge/actions/runs/41646944152) passed unit tests and APK/instrumentation-APK compilation; instrumentation was **not executed** |
-| Appliance attestation enrollment | Official `android/keyattestation` v0.4 verifier sidecar integrated; challenge/chain verification and atomic metadata persistence implemented. Owner activation requires verified attestation. Docker build, configured signer identity and physical-device acceptance still pending |
+| Appliance attestation enrollment | Challenge-first API and official `android/keyattestation` v0.4 verifier sidecar integrated; atomic metadata persistence implemented. Backend tests and Docker build pass on current checkpoint. APK build and PMS quality checks pending; signer configuration and physical-device acceptance not completed |
 | Production QR privacy gate | CI scans the prepared production bundle for known third-party QR services; local QR encoding remains unimplemented and QR display stays disabled |
 | Physical-device acceptance | Not performed |
 | LAN appliance deployment / private CA | Not performed |
 | Provider sandbox and live payment E2E | Not accepted; live collection remains disabled |
+
+### Latest CI checkpoint — commit `e3af70ee099fb2d50ee0294c00d87902d82a36ad`
+
+| Workflow | Result |
+|---|---|
+| [Payment backend tests](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41687613373) | **Passed** |
+| [Payment backend checks / Docker build](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41687613211) | **Passed** |
+| [PMS quality checks](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41687613177) | Pending |
+| [Android APK build and verification](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41687613205) | In progress |
+
+These results apply only to the listed commit. A successful Docker build proves the container image builds; it does not prove real-device attestation, deployment, or live-payment readiness.
 
 ### Remaining implementation work — ordered release gates
 
@@ -910,11 +921,9 @@ This is source implementation, not deployment certification. No LAN appliance en
 A review found two unsafe gaps and they have been closed in source:
 
 - PaymentDeviceKeyStore.createAttestedIdentity() no longer deletes an existing attested alias before attempting enrollment. Re-enrollment now fails explicitly and requires an owner-controlled revoke/reset workflow. This avoids silently destroying an existing enrolled private key during a failed rotation attempt.
-- The LAN appliance no longer promotes a device to ACTIVE using proof-of-possession alone. The activation endpoint returns HTTP 503 with device_attestation_verifier_unavailable while a trusted Android Key Attestation verifier is absent. The previous proof-of-possession activation path has been removed.
+- The legacy public-key-only registration path is not the approved enrollment path. New enrollment uses the owner-authenticated challenge-first flow described in the current security checkpoint below. Do not manually insert or promote device registrations. The device-protocol integration test uses a direct SQLite fixture only to exercise transport endpoints; it is not evidence of successful device enrollment.
 
-The device-protocol integration test now checks that activation remains PENDING and separately promotes a test fixture directly in SQLite solely to exercise lease/ack transport. That fixture is not evidence of successful enrollment.
-
-**This is a security hardening step, not completion of attestation.** The appliance still needs a production verifier for the Google attestation trust chain, revocation policy, attestation challenge, application package and signing digest, hardware security level, device-lock and verified-boot state. No device can be enrolled as ACTIVE through the HTTP activation endpoint until that verifier is implemented and independently tested. Keep live payments, automatic folio settlement and payment-execution IPC disabled.
+**Implementation status is not deployment acceptance.** The verifier and challenge-first server routes are present in source, and the backend test/Docker-check workflows have passed on commit `e3af70ee099fb2d50ee0294c00d87902d82a36ad`. The APK build is still running and PMS quality checks are pending. The verifier has not yet been accepted on physical StrongBox and TEE devices. Keep live payments, automatic folio settlement and payment-execution IPC disabled.
 
 
 ## Security checkpoint — appliance Key Attestation verifier integrated (2026-11-03)
