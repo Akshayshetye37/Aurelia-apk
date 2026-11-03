@@ -275,7 +275,7 @@ function deviceAuth(req, res, next) {
   const transcript = [
     'AURELIA_DEVICE_REQUEST_V1', deviceId, req.method.toUpperCase(),
     req.originalUrl, timestampText, nonce, bodyHash
-  ].join('\\n');
+  ].join('\n');
   let verified = false;
   try {
     const publicKey = crypto.createPublicKey({ key: Buffer.from(device.public_key_spki), type: 'spki', format: 'der' });
@@ -360,7 +360,7 @@ app.post('/v1/admin/devices/:deviceId/challenge', ownerAuth, requireBrowserMutat
   const expiresAt = Math.floor(Date.now() / 1000) + 5 * 60;
   db.prepare('INSERT INTO device_challenges(challenge_id,device_id,nonce_sha256,expires_at,created_at) VALUES(?,?,?,?,?)')
     .run(challengeId, deviceId, crypto.createHash('sha256').update(nonce).digest('hex'), expiresAt, now());
-  const signingPayload = ['AURELIA_DEVICE_ACTIVATE_V1', deviceId, String(device.key_version), challengeId, nonce, String(expiresAt)].join('\\n');
+  const signingPayload = ['AURELIA_DEVICE_ACTIVATE_V1', deviceId, String(device.key_version), challengeId, nonce, String(expiresAt)].join('\n');
   writeAudit('PAYMENT_DEVICE_CHALLENGE_ISSUED', deviceId);
   return res.status(201).json({ deviceId, challengeId, nonce, expiresAt, algorithm: 'ECDSA_P256_SHA256', signingPayload });
 });
@@ -389,7 +389,7 @@ app.post('/v1/admin/devices/:deviceId/activate', ownerAuth, requireBrowserMutati
   const transcript = [
     'AURELIA_DEVICE_ACTIVATE_V1', deviceId, String(device.key_version),
     challengeId, nonce, String(challenge.expires_at)
-  ].join('\\n');
+  ].join('\n');
   let verified = false;
   try {
     const publicKey = crypto.createPublicKey({ key: Buffer.from(device.public_key_spki), type: 'spki', format: 'der' });
