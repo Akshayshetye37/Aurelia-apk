@@ -761,3 +761,33 @@ This is **not** the completed Android device client or settlement authorization 
 The Android generator explicitly removes the sensitive permission families that PMS does not use, including SMS, call log, contacts, camera, microphone, location, phone state, broad storage/media access, notification posting, broad package visibility and biometric permissions. Removal directives now cover ordinary and SDK-scoped permission declarations so transitive AAR manifest entries are removed by manifest merging as well. PMS retains only the required network permission and the narrowly scoped signature-protected Pay Bridge permission/package query. The payment-device Keystore and HTTPS protocol require no dangerous runtime permission; no permission prompt has been added. Photo Picker and SAF remain the file/image access paths.
 
 CI static tests verify the stripping policy. A physical APK's merged manifest still needs inspection as part of the Android build/device acceptance run.
+
+## Repository checkpoint — 2026-11-03 (permission-policy CI hardening)
+
+**Source branch:** `feature/multi-provider-payment-backend`  
+**Implementation commit:** `beb106d263356504014d7aebf195bd3ef709cfa9`
+
+### Android manifest permission policy
+
+The Android build-time manifest patch and CI merged-manifest denylist have been expanded together. The policy now covers additional messaging, microphone, phone-call/voicemail/SIP, Bluetooth, NFC and network-state permissions, as well as the existing sensitive permission families. The generator removes both ordinary and SDK-scoped permission declarations where applicable.
+
+The intended PMS permission boundary remains narrow:
+
+- Retain `INTERNET` for network access.
+- Retain only the narrowly scoped signature-protected Pay Bridge permission and package visibility required for the companion-app handshake.
+- Do not request dangerous runtime permissions for the payment-device key or HTTPS protocol.
+- Continue using Android Photo Picker and Storage Access Framework (SAF) for user-selected media and files.
+- Do not weaken the denylist or add runtime permission prompts merely to make an integration pass.
+
+The static regression test checks the permission policy, SDK-scoped declarations, required network/Pay Bridge declarations, package-visibility scope and absence of runtime permission requests. This is a source/CI policy check; it is not a substitute for inspecting the merged manifest in the produced APK and validating behavior on a physical device.
+
+### CI status for this commit
+
+- [PMS quality checks](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41567102725): **completed successfully** on `beb106d263356504014d7aebf195bd3ef709cfa9`.
+- [Build and verify Aurelia PMS APK](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41567102740): **pending at the time this checkpoint was written**. No Android APK build or merged-manifest audit pass is claimed until that workflow completes successfully.
+
+### Payment implementation boundary — unchanged
+
+This commit changes Android manifest permission hardening and CI checks only. It does not complete the payment integration. The trusted authorization issuer, startup recovery bridge, native device registration/activation and signed polling client, checkout dispatch, trusted folio projector, signed acknowledgement, refund lifecycle, Docker appliance deployment and physical-device end-to-end acceptance remain outstanding as described above.
+
+Keep `AUTO_FOLIO_SETTLEMENT_ENABLED = false`. Live collection remains disabled. Do not acknowledge a command or advance its cursor before durable PMS folio application and persisted-state verification. Do not claim production readiness, deployment, or exactly-once accounting.
