@@ -40,7 +40,7 @@ const command = {
   provider: "razorpay",
   providerTransactionId: "pay_abc123",
   bookingId: "B-100",
-  amount: 125,
+  amount: "125.00",
   method: "UPI",
   reference: "UTR-100",
   source: "staff_review",
