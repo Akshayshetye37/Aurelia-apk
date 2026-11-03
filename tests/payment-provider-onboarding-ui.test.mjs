@@ -24,6 +24,13 @@ test('PMS submits provider secrets only to the configured trusted backend and cl
   }
 });
 
+test('Razorpay and Cashfree onboarding requires only API credentials; webhook secret is optional', () => {
+  assert.ok(html.includes("Webhook Secret (optional)"));
+  assert.ok(html.includes("const required=provider==='razorpay'?['keyId','keySecret']:['appId','secretKey']"));
+  assert.ok(html.includes("if(required.some(k=>!credentials[k]))"));
+  assert.ok(backend.includes("c.webhookSecret === undefined"));
+});
+
 test('only implemented Razorpay and Cashfree adapters expose credential controls', () => {
   assert.ok(html.includes("const adapterFoundations=['razorpay','cashfree'].includes(id)"));
   assert.ok(html.includes("Backend adapter foundation"));
