@@ -30,10 +30,10 @@ gcloud run deploy aurelia-payment-backend \\
   --service-account aurelia-payment-runtime@PROJECT_ID.iam.gserviceaccount.com \\
   --port 8080 \\
   --set-env-vars GOOGLE_CLOUD_PROJECT=PROJECT_ID,AURELIA_HTTPS_TERMINATION=trusted-proxy,AURELIA_TRUST_PROXY_HOPS=1,AURELIA_OWNER_ORIGINS=https://localhost \\
-  --no-allow-unauthenticated
+  --allow-unauthenticated
 ```
 
-The command is a template: replace every placeholder and configure an authenticated public ingress/API gateway that allows provider webhook POSTs to the exact webhook routes while enforcing TLS and rate limits. The current server's authentication middleware and webhook routing must be reviewed together before production exposure. Do not enable unauthenticated access to all routes merely to receive webhooks.
+The command is a template: replace every placeholder. Cloud Run must allow public HTTPS transport so provider webhook POSTs can reach the application. This does NOT make payment APIs unauthenticated: user-facing routes must continue to enforce Firebase authentication, verified tenant membership and role checks; webhook routes must enforce provider-specific raw-body signature verification, event deduplication, tenant/order binding and authoritative status lookup. Keep health/readiness endpoints non-sensitive. Put rate limiting and abuse controls at the ingress, and review the complete route middleware before exposing the service.
 
 Grant the Cloud Run service identity only the required Firestore read/write and Secret Manager access. Use Secret Manager IAM at the narrowest practical scope. Do not create or download service-account JSON keys. Keep the provider secrets out of environment variables where practical; the application already uses Secret Manager for provider credentials.
 
