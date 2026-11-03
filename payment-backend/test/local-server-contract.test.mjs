@@ -120,6 +120,18 @@ test('captured command enqueue and per-device sequence allocation are transactio
   assert.match(source, /INSERT INTO device_command_state/);
 });
 
+test('captured commands retain exact provider and PMS folio settlement bindings', () => {
+  assert.match(source, /provider_payment_id TEXT/);
+  assert.match(source, /ALTER TABLE transactions ADD COLUMN provider_payment_id TEXT/);
+  assert.match(source, /providerPaymentId: current\.provider_payment_id/);
+  assert.match(source, /bookingId: current\.folio_id/);
+  assert.match(source, /amount: current\.amount_minor \/ 100/);
+  assert.match(source, /method: current\.provider/);
+  assert.match(source, /verificationConfirmed: true/);
+  assert.match(source, /idempotencyKey: 'settlement:' \+ current\.provider \+ ':command:' \+ commandId/);
+  assert.match(source, /providerPaymentId: remote\.paymentId/);
+});
+
 test('device delivery uses signed requests, ordered leases, durable receipts and cursor compare-and-set', () => {
   assert.match(source, /CREATE TABLE IF NOT EXISTS device_request_nonces/);
   assert.ok(source.includes("app.post('/v1/devices/:deviceId/commands/lease', deviceAuth"));
