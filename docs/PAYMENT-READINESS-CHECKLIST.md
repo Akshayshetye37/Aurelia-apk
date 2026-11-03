@@ -40,3 +40,12 @@ Release-gate ledger for `feature/multi-provider-payment-backend`. Source impleme
 - Core PMS hotel operations remain usable when Pay Bridge or the payment backend is unavailable.
 
 See [Native Device Delivery Boundary](NATIVE-DEVICE-DELIVERY-BOUNDARY.md) for the exact implemented transport contract and the remaining projector/attestation-verifier boundary. Update this checklist with evidence and commit references as each gate is completed. Never mark deployment, physical-device testing or production acceptance complete based only on source inspection.
+
+
+## Attestation activation hardening — 2026-11-03
+
+- Android enrollment refuses to overwrite an existing attested Keystore alias. Explicit revoke/reset is required before reenrollment.
+- Appliance activation is fail-closed and returns device_attestation_verifier_unavailable; proof-of-possession alone cannot activate a device.
+- The integration test isolates transport coverage by manually promoting a test-only database fixture after verifying that HTTP activation leaves it PENDING.
+
+This closes the proof-of-possession activation bypass but does not implement the Google Android Key Attestation verifier. Certificate-chain trust/revocation, attestation extension parsing, challenge and app-signer binding, verified-boot/device-lock policy, and physical StrongBox/TEE acceptance remain P0 blockers. Do not activate devices, payment execution, automatic settlement or live collection.
