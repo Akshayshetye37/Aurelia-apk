@@ -49,6 +49,26 @@ After checkout, Aurelia calls the backend's `/v1/payments/:transactionId/reconci
 
 Cashfree additionally requires a publicly reachable HTTPS return URL registered/allowed with Cashfree. A private LAN hostname is not publicly reachable by Cashfree. Provider webhooks likewise need a publicly reachable, secured ingress; the LAN endpoint alone is not sufficient.
 
+## Capture-to-folio settlement commit protocol
+
+This implementation uses a durable inbox/outbox plus a signed-device command saga. It is not a distributed SQL two-phase commit: the payment provider, backend SQLite database, Android app and PMS folio store cannot participate in one atomic transaction. The protocol therefore uses immutable identities, retryable delivery and explicit receipts to make each local commit idempotent.
+
+1. **Provider evidence:** the raw webhook body is verified using the selected provider/environment webhook secret. Webhook event IDs are deduplicated in `webhook_inbox`. The event payload is only a lookup hint; the backend independently fetches the exact provider payment and checks provider order ID, payment ID, amount and INR currency.
+2. **Backend prepare:** a confirmed capture transitions to `CAPTURED_PENDING_ACCOUNTING`. In the same SQLite transaction, Aurelia writes the capture outbox event, creates one immutable settlement command for the enrolled device, allocates its next contiguous sequence and records command delivery state.
+3. **Device delivery:** an active, attested Android device authenticates each request with its Android Keystore ECDSA key. The backend leases only the next sequence. The Android client validates the command's canonical payload hash and its transaction/folio/amount/provider bindings. Lease expiry permits redelivery but does not advance the cursor.
+4. **Local PMS commit:** a trusted native projector must first persist the idempotent settlement receipt and apply the corresponding PMS folio mutation, then read the durable result back. Only after that operation may it send the signed acknowledgement with `durableApplied=true` and its receipt ID.
+5. **Backend finalize:** the acknowledgement endpoint now atomically marks the command `PROCESSED`, advances the device cursor, transitions the transaction to `SETTLED`, appends the transaction journal entry and marks the capture outbox row `PROCESSED`. An identical acknowledgement is idempotent; a different receipt for the same command is a conflict.
+
+**Implementation boundary:** steps 1–3 and the backend half of step 5 are present. The Kotlin `PaymentDeviceClient` currently validates and transports leases/acknowledgements, but it explicitly does not apply PMS folio changes. The separate Pay Bridge remains handshake-only. The native projector that atomically applies the WebView PMS folio state, persists/read-backs its receipt and only then calls `acknowledge()` is still required. Until that client-side write path is implemented and tested on a generated Android APK, do not claim automatic folio posting is end-to-end enabled. The server acknowledgement endpoint must only be called by that future trusted projector.
+
+### Webhook and simulation policy
+
+The production webhook route accepts provider-authenticated raw payloads only and independently reconciles them against provider APIs. Do not add a generic mock webhook secret or a browser-callable "mark captured" endpoint. High-fidelity simulation belongs in isolated automated tests using test credentials, signed fixture payloads and mocked provider API responses. It must not create production transactions or be reachable from the guest/staff WebView.
+
+### Refund policy
+
+Refunds are intentionally unavailable until the PMS can durably reverse the original folio credit. The safe sequence is: create an idempotent refund intent, issue a signed reversal command to the same device/folio, confirm the reversal receipt, then call the provider refund API, and independently reconcile the provider refund status. A failed or ambiguous PMS reversal must stop before any provider refund request. Partial refunds require cumulative amount limits and their own immutable refund ledger; a payment's original capture record must never be overwritten.
+
 ## Retry and synchronization rules
 
 1. Persist the request before attempting LAN or Internet dispatch.
