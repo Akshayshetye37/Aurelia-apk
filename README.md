@@ -23,6 +23,7 @@
 | Pay Bridge handshake | Protocol v1 remains handshake-only |
 | Pay Bridge hardware evidence PR #2 | Draft/open; CI run [41646944152](https://github.com/Akshayshetye37/aurelia-pay-bridge/actions/runs/41646944152) passed unit tests and APK/instrumentation-APK compilation; instrumentation was **not executed** |
 | Appliance attestation enrollment | Blocked fail-closed; Android client can generate/export challenge-bound attestation, but appliance verifier is absent and activation returns 503 |
+| Production QR privacy gate | CI scans the prepared production bundle for known third-party QR services; local QR encoding remains unimplemented and QR display stays disabled |
 | Physical-device acceptance | Not performed |
 | LAN appliance deployment / private CA | Not performed |
 | Provider sandbox and live payment E2E | Not accepted; live collection remains disabled |
