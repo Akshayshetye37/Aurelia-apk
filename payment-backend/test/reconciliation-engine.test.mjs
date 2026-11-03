@@ -19,7 +19,7 @@ const valid = (overrides = {}) => ({
   id: 'intent-123',
   data: () => ({
     tenantId: 'tenant1', provider: 'razorpay', environment: 'test',
-    providerOrderId: 'order_123', providerPaymentId: 'pay_123',
+    providerOrderId: 'order_123', providerPaymentId: 'pay_123', providerEventId: 'evt_123',
     amountMinor: 25000, currency: 'INR', folioId: 'folio1',
     providerVerifiedStatus: 'CAPTURED', accountingStatus: 'PENDING',
     ...overrides
@@ -44,6 +44,8 @@ test('reconciliation re-verifies provider binding then posts once via settlement
   assert.equal(result.failed, 0);
   assert.equal(calls.length, 2);
   assert.equal(calls[1].eventId, 'reconciliation:intent-123');
+  assert.ok(db.updates.some(update => update.name === 'paymentWebhookInbox' &&
+    update.data.processingStatus === 'POSTED_TO_FOLIO'));
 });
 
 test('non-captured provider status remains pending and is not settled', async () => {
