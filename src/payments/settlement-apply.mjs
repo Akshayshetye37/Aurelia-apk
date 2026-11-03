@@ -35,7 +35,7 @@ function journalInputFor(command) {
     throw new TypeError("Invalid payment reference");
   }
   const amount = command.amount;
-  if (!(typeof amount === "number" || (typeof amount === "string" && /^\\d+(?:\\.\\d{1,2})?$/.test(amount.trim()))) ||
+  if (!(typeof amount === "number" || (typeof amount === "string" && /^\d+(?:\.\d{1,2})?$/.test(amount.trim()))) ||
       !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
     throw new TypeError("Invalid settlement amount");
   }
