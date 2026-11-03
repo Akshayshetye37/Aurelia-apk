@@ -212,7 +212,6 @@ export class FirestorePaymentRepository {
           ]);
           if (!intentSnap.exists || !idemSnap.exists || !lockSnap.exists ||
               intentSnap.data().state !== 'DISPATCHING' ||
-              intentSnap.data().providerRequestStartedAt ||
               idemSnap.data().intentId !== intentId || lockSnap.data().intentId !== intentId) return;
           const next = transitionIntent('DISPATCHING', {
             type: 'dispatch_rejected', definitive: true, requestMayHaveReachedProvider: false
