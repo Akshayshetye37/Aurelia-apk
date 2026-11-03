@@ -4632,8 +4632,8 @@ window.aureliaSettlementRecovery = journalPromise.then(journal =>
      * content: any one of those can taint a WebView canvas and block toBlob().
      */
     const source = String(invoice.innerText || invoice.textContent || '')
-      .replace(/\\u00a0/g, ' ')
-      .replace(/[ \\t]+/g, ' ')
+      .split(String.fromCharCode(160)).join(' ')
+      .split(String.fromCharCode(9)).join(' ')
       .trim();
     if (!source) throw new Error('Invoice contains no readable text.');
 
@@ -4644,12 +4644,12 @@ window.aureliaSettlementRecovery = journalPromise.then(journal =>
     const measure = document.createElement('canvas').getContext('2d');
     if (!measure) throw new Error('Canvas rendering is unavailable.');
 
-    const rawLines = source.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean);
+    const rawLines = source.split(String.fromCharCode(10)).map(line => line.trim()).filter(Boolean);
     const lines = [];
     const maxLineWidth = contentWidth;
     rawLines.forEach(line => {
       measure.font = '16px Arial, sans-serif';
-      const words = line.split(/\\s+/);
+      const words = line.split(' ').filter(Boolean);
       let current = '';
       words.forEach(word => {
         const candidate = current ? current + ' ' + word : word;
