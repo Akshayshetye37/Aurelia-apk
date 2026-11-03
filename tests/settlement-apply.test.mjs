@@ -48,7 +48,9 @@ const command = {
   authorizationToken: "test-trusted-token"
 };
 
-const authorize = async context => context.recovery === true || context.token === "test-trusted-token";
+const authorize = async context => context.recovery === true
+  ? context.token === undefined && typeof context.journalKey === "string" && /^[a-f0-9]{64}$/.test(context.payloadHash)
+  : context.token === "test-trusted-token";
 
 test("verified command is journaled before projection and applied after persistence", async () => {
   const journal = makeJournal();
