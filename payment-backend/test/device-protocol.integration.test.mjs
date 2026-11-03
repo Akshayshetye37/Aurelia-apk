@@ -134,7 +134,6 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
 
   // The remaining lease/ack assertions isolate the transport protocol. Promote
   // the fixture directly in SQLite; this is deliberately NOT an enrollment test.
-  db = new Database(databasePath);
   assert.equal(db.prepare('SELECT status FROM device_registrations WHERE device_id=?').get(deviceId).status, 'PENDING');
   db.prepare("UPDATE device_registrations SET status='ACTIVE' WHERE device_id=?").run(deviceId);
   const transactionId = 'txn_test_0001';
@@ -150,15 +149,15 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   };
   const payloadText = JSON.stringify(commandPayload);
   const payloadHash = crypto.createHash('sha256').update(canonicalJson(commandPayload)).digest('hex');
-  const stamp = new Date().toISOString();
+  const commandStamp = new Date().toISOString();
   db.prepare(`INSERT INTO transactions(id,provider,environment,amount_minor,currency,status,idempotency_key,device_id,folio_id,created_at,updated_at)
     VALUES(?,?,?,?,'INR','CAPTURED_PENDING_ACCOUNTING',?,?,?,?,?)`)
-    .run(transactionId, 'razorpay', 'test', 12500, 'idem_test_001', deviceId, 'folio_0001', stamp, stamp);
+    .run(transactionId, 'razorpay', 'test', 12500, 'idem_test_001', deviceId, 'folio_0001', commandStamp, commandStamp);
   db.prepare(`INSERT INTO settlement_commands(command_id,device_id,sequence_id,transaction_id,idempotency_key,folio_id,
     amount_minor,currency,payload_hash,payload,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(commandId, deviceId, 1, transactionId, 'idem_test_001', 'folio_0001', 12500, 'INR', payloadHash, payloadText, stamp);
+    .run(commandId, deviceId, 1, transactionId, 'idem_test_001', 'folio_0001', 12500, 'INR', payloadHash, payloadText, commandStamp);
   db.prepare('INSERT INTO device_command_state(command_id,status,next_attempt_at) VALUES(?,?,?)')
-    .run(commandId, 'PENDING', stamp);
+    .run(commandId, 'PENDING', commandStamp);
   db.prepare('UPDATE device_sequence_counters SET last_sequence=1 WHERE device_id=?').run(deviceId);
 
   const leasePath = '/v1/devices/' + deviceId + '/commands/lease';
