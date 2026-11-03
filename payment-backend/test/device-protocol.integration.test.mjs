@@ -52,7 +52,8 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
       SESSION_TOKEN_PEPPER: crypto.randomBytes(32).toString('hex'),
       OWNER_SETUP_TOKEN: setupToken,
       AURELIA_OWNER_ORIGINS: 'https://localhost',
-      TRUST_PROXY_HOPS: '1'
+      TRUST_PROXY_HOPS: '1',
+      AURELIA_PROPERTY_ID: 'test-property'
     },
     stdio: 'ignore'
   });
@@ -110,8 +111,8 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   const activate = await fetch(baseUrl + '/v1/admin/devices/' + deviceId + '/activate', {
     method: 'POST', headers: ownerHeaders, body: JSON.stringify({})
   });
-  assert.equal(activate.status, 503);
-  assert.equal((await activate.json()).error, 'device_attestation_verifier_unavailable');
+  assert.equal(activate.status, 409);
+  assert.equal((await activate.json()).error, 'device_attestation_required');
 
   // The remaining lease/ack assertions isolate the transport protocol. Promote
   // the fixture directly in SQLite; this is deliberately NOT an enrollment test.
