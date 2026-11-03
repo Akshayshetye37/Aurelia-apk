@@ -104,7 +104,7 @@ test('payment device identity stages challenge-bound hardware attestation and ex
   assert.match(source, /ATTESTED_ALIAS/);
   assert.match(source, /fun hasAttestedIdentity\(\): Boolean/);
   assert.match(source, /An attested identity already exists; revoke it explicitly before reenrollment/);
-  assert.match(source, /catch \(error: Exception\)[\\s\\S]*?deleteEntry\\(ATTESTED_ALIAS\\)/);
+  assert.match(source, /catch \(error: Exception\)[\s\S]*?deleteEntry\\(ATTESTED_ALIAS\\)/);
   const generationGuard = source.slice(source.indexOf('fun createAttestedIdentity'), source.indexOf('fun generate(preferStrongBox'));
   assert.doesNotMatch(generationGuard, /deleteEntry\(ATTESTED_ALIAS\)/);
 });
