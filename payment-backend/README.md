@@ -277,3 +277,10 @@ The sidecar listens only on `127.0.0.1:8091`; the LAN API includes its health in
 - `ATTESTATION_APP_SIGNER_SHA256`: 64-hex SHA-256 digest of the approved APK signing certificate. The example value is pinned to the certificate digest checked by the Android release workflow. If the signing certificate changes, update this value through a reviewed release process.
 
 The Docker build fetches the upstream repository at tag `v0.4`; the container requires outbound HTTPS to refresh Google's revocation status. If the verifier fails to start or the revocation cache becomes stale, LAN readiness and enrollment fail closed. A successful source build is not physical-device acceptance. OS/patch/rollback policy, native enrollment UI, StrongBox/TEE device testing, deployment and accounting integration remain outstanding.
+
+
+## LAN appliance durability hardening
+
+The LAN SQLite runtime uses WAL with FULL synchronous commits, a bounded busy timeout and WAL autocheckpointing. Readiness performs SQLite quick-check and foreign-key consistency checks in addition to verifying WAL/FULL durability settings. On SIGTERM/SIGINT, the HTTP server drains active requests before checkpointing and closing SQLite. Compose enables init/reaping, a bounded stop window, no-new-privileges and a reduced backend capability set.
+
+These are runtime reliability controls, not a backup system. A persistent Docker volume is not an off-host backup; use SQLite's online backup API or a coordinated consistent snapshot, encrypt backups, retain them off-device and prove restore in an isolated environment.
