@@ -902,3 +902,15 @@ The Android security templates now include `PaymentDeviceClient.kt`, a native-on
 The owner-authenticated lifecycle is intentionally split from device-authenticated traffic: registration, challenge issuance, activation, and revocation remain owner-console operations protected by the appliance's owner session and browser-origin checks. The native transport does not copy owner cookies or credentials. The client currently covers lease and acknowledgement only; it does not yet register or activate devices, project commands into PMS folios, or provide a trusted accounting authorization issuer. Acknowledgement must remain unreachable until native projection has durably applied and reread the folio state.
 
 This is source implementation, not deployment certification. No LAN appliance endpoint, private CA, physical Android device, provider sandbox, or live collection has been configured or tested by this commit. `AUTO_FOLIO_SETTLEMENT_ENABLED` remains disabled.
+
+
+## Security checkpoint — attestation activation remains blocked (2026-11-03)
+
+A review found two unsafe gaps and they have been closed in source:
+
+- PaymentDeviceKeyStore.createAttestedIdentity() no longer deletes an existing attested alias before attempting enrollment. Re-enrollment now fails explicitly and requires an owner-controlled revoke/reset workflow. This avoids silently destroying an existing enrolled private key during a failed rotation attempt.
+- The LAN appliance no longer promotes a device to ACTIVE using proof-of-possession alone. The activation endpoint returns HTTP 503 with device_attestation_verifier_unavailable while a trusted Android Key Attestation verifier is absent. The previous proof-of-possession activation path has been removed.
+
+The device-protocol integration test now checks that activation remains PENDING and separately promotes a test fixture directly in SQLite solely to exercise lease/ack transport. That fixture is not evidence of successful enrollment.
+
+**This is a security hardening step, not completion of attestation.** The appliance still needs a production verifier for the Google attestation trust chain, revocation policy, attestation challenge, application package and signing digest, hardware security level, device-lock and verified-boot state. No device can be enrolled as ACTIVE through the HTTP activation endpoint until that verifier is implemented and independently tested. Keep live payments, automatic folio settlement and payment-execution IPC disabled.
