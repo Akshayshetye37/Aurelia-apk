@@ -40,8 +40,8 @@ test('web runtime exposes the native journal without storing credentials in brow
 
 test('hybrid architecture documents HTTPS-only LAN and server-authoritative payment status', () => {
   assert.match(docs, /usesCleartextTraffic=false/);
-  assert.match(docs, /must not set SYNCED/);
-  assert.match(docs, /not a complete payment flow/);
+  assert.match(docs, /offline gateway intent is not a payment/i);
+  assert.match(docs, /Exactly-once network delivery is not claimed/);
 });
 
 test('offline intent UI validates paise and clearly avoids claiming collection', () => {
