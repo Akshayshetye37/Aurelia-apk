@@ -18,7 +18,7 @@ Do not mix their environment variables, authentication models, databases, deploy
 Aurelia PMS must remain fully usable without a server, cloud account, Firebase project, or payment backend. Do not make backend deployment, sign-in to a cloud service, or remote connectivity a prerequisite for installing or using core PMS functions.
 
 - Default installation mode is **Local only**. Bookings, guests, rooms, manual payments, folio history, invoices and local backup continue to work using the existing PMS local data model.
-- The selected optional payment service is a Docker appliance on the owner's LAN. The PMS now includes a LAN Payment Owner Console for backend origin setup, first-owner enrollment, login, Razorpay/Cashfree sandbox credential storage, validation and explicit test activation. The LAN API now includes P-256 device challenge/activation/revocation and signed command lease/ack endpoints. Android native signer/consumer integration and end-to-end PMS folio settlement remain unfinished.
+- The selected optional payment service is a Docker appliance on the owner's LAN. The PMS includes a LAN Payment Owner Console for backend origin setup, first-owner enrollment, login, Razorpay/Cashfree sandbox credential storage, validation and explicit test activation. The LAN API includes P-256 registration, owner/property-bound attestation challenge and submission, verifier-gated activation/revocation, and signed command lease/ack endpoints. Native enrollment UI, command projection and end-to-end PMS folio settlement remain unfinished.
 - Do not silently create a cloud project, deploy infrastructure, upload PMS/guest data, or transmit payment evidence.
 - Do not treat an arbitrary URL as a trusted payment backend. Endpoint configuration must be validated over HTTPS and authenticated against a documented service identity before use.
 - Remote payment configuration must be separate from optional backup destinations. A backup URL is not a payment API, and a payment API is not a backup destination.
@@ -250,3 +250,30 @@ The Provider Directory UI now distinguishes documentation from working integrati
 5. Live credentials may be stored separately, but live payment collection remains hard-blocked by the backend until accounting, settlement, refund and reconciliation gates are complete.
 
 A successful `/healthz` response proves liveness only. It does not prove owner authentication, Firestore access, Secret Manager access, provider credential validity, or payment readiness.
+
+
+## Android Key Attestation verifier (LAN appliance)
+
+The Docker image builds and runs a loopback-only Kotlin/JVM verifier against the official [`android/keyattestation` v0.4 source](https://github.com/android/keyattestation/tree/v0.4). It is not an in-house ASN.1 implementation. The verifier uses the upstream Google trust-anchor set and verifies the X.509 attestation path, exact server challenge, expected attestation application ID, and revocation status. Revocation serials are cached for six hours; refresh uses bounded HTTPS timeouts, and a stale or unavailable list rejects verification.
+
+The verifier additionally enforces:
+- Expected app package, minimum version and SHA-256 signing-certificate digest.
+- `TRUSTED_ENVIRONMENT` or `STRONG_BOX` security level; software-backed keys are rejected.
+- `VerifiedBootState.VERIFIED` and `deviceLocked=true`.
+- The attested leaf public key must equal the P-256 SPKI registered for that device.
+
+The sidecar listens only on `127.0.0.1:8091`; the LAN API includes its health in `/readyz`. The owner-authenticated enrollment sequence is:
+1. Register the device's P-256 public key as `PENDING`.
+2. Request `POST /v1/admin/devices/:deviceId/challenge`. The challenge is 32 random bytes, single-use, five-minute TTL, and bound to owner, property and device.
+3. Generate the Android Keystore key using the exact decoded challenge and submit the leaf-first X.509 chain to `POST /v1/admin/devices/:deviceId/attestation`.
+4. The appliance verifies the chain and key binding, then atomically stores verified metadata while retaining `PENDING`.
+5. The owner explicitly calls `POST /v1/admin/devices/:deviceId/activate`; activation succeeds only with verified TEE/StrongBox attestation and locked VERIFIED boot state.
+
+### Required `.env` values
+
+- `AURELIA_PROPERTY_ID`: unique safe identifier for this appliance's property.
+- `ATTESTATION_APP_PACKAGE`: currently `com.aurelia.pms`.
+- `ATTESTATION_APP_MIN_VERSION`: minimum accepted Android version code.
+- `ATTESTATION_APP_SIGNER_SHA256`: 64-hex SHA-256 digest of the approved APK signing certificate. The example value is pinned to the certificate digest checked by the Android release workflow. If the signing certificate changes, update this value through a reviewed release process.
+
+The Docker build fetches the upstream repository at tag `v0.4`; the container requires outbound HTTPS to refresh Google's revocation status. If the verifier fails to start or the revocation cache becomes stale, LAN readiness and enrollment fail closed. A successful source build is not physical-device acceptance. OS/patch/rollback policy, native enrollment UI, StrongBox/TEE device testing, deployment and accounting integration remain outstanding.
