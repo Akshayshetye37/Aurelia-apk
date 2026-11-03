@@ -1,5 +1,36 @@
 # Aurelia payment execution and settlement design
 
+## 0. Live collection master switch (mandatory release control)
+
+Live collection is a separately controlled capability, not a side effect of saving credentials or selecting a provider.
+
+- The master switch is **OFF by default** on every installation and after every app upgrade, restore, database migration, native-engine reset, or loss of release authorization.
+- The property manager may turn live collection **OFF at any time**. OFF is a kill switch: native code must reject every new live order/checkout dispatch regardless of WebView state, provider activation, cached UI state, or queued work. It must not cancel, erase, or relabel an already-dispatched payment. Such in-flight transactions remain tracked and are reconciled with the provider.
+- Turning the switch **ON** is permitted only when the signed release-acceptance record confirms every mandatory gate in this specification, the selected provider is approved and independently validated, the merchant account is live/KYC-approved, and the native engine verifies the release authorization. A UI toggle alone can never authorize live collection.
+- The native engine is the enforcement point. WebView UI only requests a state change and displays the authoritative native status. Missing bridge, stale status, invalid authorization, clock/state inconsistency, or persistence failure means OFF (fail closed).
+- Persist the switch in the native device database with an audit event (actor, timestamp, prior/new state, reason, app/build version, device key ID). Do not store it in localStorage, IndexedDB, PMS preferences, or HTML.
+- Require explicit confirmation when enabling; show provider, merchant account suffix/identifier, environment, and a concise list of passed release gates. Disabling should be immediate and should not require a confirmation dialog.
+- If multiple staff accounts share a device, only an authorized property-owner/administrator role may enable live collection. Any permitted staff member may invoke the emergency OFF action.
+- The UI must distinguish **Live collection: OFF**, **Live collection: ON**, and **Live collection: BLOCKED — release gates incomplete**. “ON” must be rendered only from native authoritative state.
+- Provider credentials remain separately controlled. Disabling the master switch must not delete credentials, alter sandbox mode, or mutate payment/folio records.
+
+Current repository state: **BLOCKED / OFF**. The native payment engine and trusted bridge are not implemented, production credential storage is blocked, and the release gates below are incomplete. Do not expose a working ON control until the native enforcement and acceptance record exist. A visible OFF status and an emergency OFF control may be added before then, but they must not imply that live processing is available.
+
+### Live release gates
+
+The release-authorization record must be generated only after all applicable checks pass:
+
+1. Merchant KYC, live account approval, RBI-regulated PA/provider contracting, permitted business category, settlement bank verification, and provider-specific production access are confirmed. Do not describe PCI DSS Level 1 as an automatic property of every provider integration; verify the actual provider's certification and Aurelia's own PCI scope.
+2. Provider-specific API version, credentials, signing/verification algorithm, amount/currency/reference matching, status polling, timeout recovery, webhook strategy (where applicable), refund and dispute flows are tested against official documentation and merchant sandbox/live certification.
+3. The Android native engine, origin-restricted bridge, Keystore-backed device identity, durable SQLite journal, migration/recovery behavior, and tamper/compromise response pass security review.
+4. Capture-to-folio posting uses the actual canonical PMS accounting schema and one atomic transaction with a unique immutable receipt, or a formally accepted replay-safe saga where a single database transaction is not technically possible. No cross-store atomicity may be claimed.
+5. Network timeout after dispatch produces AMBIGUOUS_RECONCILIATION (or the canonical equivalent RECONCILIATION_REQUIRED), never an automatic retry that could create a second charge. The transaction is held for provider lookup and administrative review when unresolved.
+6. Refunds, partial refunds, duplicate callbacks, duplicate polls, app termination, device reboot, offline recovery, clock skew, and concurrent staff actions pass automated and physical-device tests.
+7. Operational dashboard exposes pending, captured-unposted, posted, ambiguous, conflicting, refunded, and disputed records with provider references and immutable audit history.
+8. Emergency OFF behavior is tested during normal operation, app restart, offline state, and while other checkout screens remain open. Already-dispatched payments are reconciled; new dispatches are blocked.
+
+Provider features such as 15-minute/on-demand settlements, Flash UPI, biometric/passkey authentication, AI risk tools, and departmental split settlement are not guaranteed merely by switching to live mode. They require provider, merchant, device, account, and product eligibility and must be separately verified; do not advertise a conversion uplift or fraud-reduction percentage without Aurelia-specific measured evidence.
+
 **Status:** implementation specification — not a production-readiness claim  
 **Architecture:** Android-device-local, offline-first  
 **Last reviewed:** 2026-11-04
