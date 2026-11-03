@@ -4626,57 +4626,80 @@ window.aureliaSettlementRecovery = journalPromise.then(journal =>
   }
 
   async function renderInvoicePng(invoice) {
-    const clone = invoice.cloneNode(true);
-    clone.removeAttribute('id');
-    clone.querySelectorAll('.noprint,#invoice-export-actions,button').forEach(node => node.remove());
-    clone.querySelectorAll('iframe,object,embed,video,audio').forEach(node => node.remove());
-    copyComputedStyles(invoice, clone);
-    clone.style.cssText += ';display:block!important;position:static!important;transform:none!important;opacity:1!important;filter:none!important;width:720px!important;max-width:720px!important;height:auto!important;overflow:visible!important;margin:0!important;box-sizing:border-box!important;background:#fffdf8!important;color:#202b25!important;';
-    await inlineSafeImages(clone);
-    await nextFrame();
+    /*
+     * Deliberately draw text and rules directly onto a fresh canvas.
+     * Do not draw DOM, SVG, images, CSS backgrounds, QR canvases or foreignObject
+     * content: any one of those can taint a WebView canvas and block toBlob().
+     */
+    const source = String(invoice.innerText || invoice.textContent || '')
+      .replace(/\\u00a0/g, ' ')
+      .replace(/[ \\t]+/g, ' ')
+      .trim();
+    if (!source) throw new Error('Invoice contains no readable text.');
 
-    const width = 720;
-    const measureHost = document.createElement('div');
-    measureHost.style.cssText = 'position:fixed;left:-100000px;top:0;width:720px;visibility:hidden;pointer-events:none;z-index:-1;';
-    measureHost.appendChild(clone);
-    document.body.appendChild(measureHost);
-    await nextFrame();
-    const height = Math.max(240, Math.min(6000, Math.ceil(clone.scrollHeight || clone.getBoundingClientRect().height || 900)));
-    measureHost.removeChild(clone);
-    measureHost.remove();
-    const wrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
-    wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-    wrapper.style.cssText = 'width:' + width + 'px;min-height:' + height + 'px;background:#fffdf8;color:#202b25;overflow:visible;';
-    wrapper.appendChild(clone);
-    const serialized = new XMLSerializer().serializeToString(wrapper);
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xhtml="http://www.w3.org/1999/xhtml" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '"><foreignObject x="0" y="0" width="100%" height="100%">' + serialized + '</foreignObject></svg>';
-    const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    const objectUrl = URL.createObjectURL(svgBlob);
-    try {
-      const image = new Image();
-      image.decoding = 'async';
-      await new Promise((resolve, reject) => {
-        image.onload = resolve;
-        image.onerror = () => reject(new Error('The browser cannot rasterize this invoice layout.'));
-        image.src = objectUrl;
+    const width = 900;
+    const padding = 54;
+    const contentWidth = width - padding * 2;
+    const scale = Math.min(2.5, Math.max(1.5, window.devicePixelRatio || 1.5));
+    const measure = document.createElement('canvas').getContext('2d');
+    if (!measure) throw new Error('Canvas rendering is unavailable.');
+
+    const rawLines = source.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean);
+    const lines = [];
+    const maxLineWidth = contentWidth;
+    rawLines.forEach(line => {
+      measure.font = '16px Arial, sans-serif';
+      const words = line.split(/\\s+/);
+      let current = '';
+      words.forEach(word => {
+        const candidate = current ? current + ' ' + word : word;
+        if (current && measure.measureText(candidate).width > maxLineWidth) {
+          lines.push(current);
+          current = word;
+        } else current = candidate;
       });
-      const scale = Math.min(2.5, Math.max(1.5, window.devicePixelRatio || 1.5));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(width * scale);
-      canvas.height = Math.round(height * scale);
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('Canvas rendering is unavailable.');
-      context.fillStyle = '#fffdf8';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.setTransform(scale, 0, 0, scale, 0, 0);
-      context.drawImage(image, 0, 0, width, height);
-      const blob = await new Promise((resolve, reject) => {
-        canvas.toBlob(value => value ? resolve(value) : reject(new Error('PNG encoding failed.')), 'image/png');
-      });
-      return blob;
-    } finally {
-      URL.revokeObjectURL(objectUrl);
-    }
+      if (current) lines.push(current);
+    });
+
+    const lineHeight = 27;
+    const height = Math.max(320, padding * 2 + lines.length * lineHeight + 24);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(width * scale);
+    canvas.height = Math.ceil(height * scale);
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) throw new Error('Canvas rendering is unavailable.');
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#fffdf8';
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = '#202b25';
+    ctx.textBaseline = 'top';
+
+    let y = padding;
+    lines.forEach((line, index) => {
+      const upper = line.toUpperCase();
+      const isHeading = index === 0 || /^(INVOICE|BILLED TO|PAYMENT|PAYMENTS|TOTAL|BALANCE|ROOM|GUEST DETAILS|TAX|SUBTOTAL)\\b/.test(upper);
+      const isTotal = /\\b(TOTAL|BALANCE DUE|AMOUNT DUE)\\b/.test(upper);
+      ctx.font = isTotal ? 'bold 19px Arial, sans-serif' : (isHeading ? 'bold 17px Arial, sans-serif' : '15px Arial, sans-serif');
+      ctx.fillStyle = isTotal ? '#173f32' : '#202b25';
+      ctx.fillText(line, padding, y, contentWidth);
+      y += isHeading ? lineHeight + 3 : lineHeight;
+      if (isHeading && index > 0) {
+        ctx.strokeStyle = '#d9ded7';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, y - 5);
+        ctx.lineTo(width - padding, y - 5);
+        ctx.stroke();
+      }
+    });
+
+    return await new Promise((resolve, reject) => {
+      try {
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('PNG encoding failed.')), 'image/png');
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 
   function nativePrintFallback(invoice, booking) {
@@ -4770,7 +4793,33 @@ window.aureliaSettlementRecovery = journalPromise.then(journal =>
     }
     exportInvoicePngV2(id, phone);
   };
-  window.AureliaInvoiceExport = Object.freeze({ version: 2, renderer: 'isolated-svg-foreignObject', usesHtml2Canvas: false });
+  /* Open WhatsApp outside the WebView. Loading wa.me as a WebView page can show
+     "refused to connect"; Android's openUrl bridge should launch an external app. */
+  function openWhatsAppExternally(phone, message) {
+    const digits = String(phone || '').replace(/[^0-9]/g, '');
+    if (!digits) { if (typeof toast === 'function') toast('Add the guest phone number with country code first'); return false; }
+    const url = 'https://wa.me/' + digits + (message ? '?text=' + encodeURIComponent(message) : '');
+    if (window.AureliaNative && typeof window.nat === 'function') {
+      if (window.nat({ type: 'openUrl', requestId: 'whatsapp-' + Date.now(), url: url })) return true;
+      if (typeof toast === 'function') toast('Android could not launch WhatsApp. Check that WhatsApp is installed.');
+      return false;
+    }
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened && typeof toast === 'function') toast('Allow external links or install WhatsApp to continue.');
+    return !!opened;
+  }
+
+  window.waS = function (id) {
+    const booking = typeof bk === 'function' ? bk(id) : null;
+    const guest = booking && typeof gOf === 'function' ? gOf(booking.g) : null;
+    const phone = guest && guest.ph || '';
+    if (!booking) { if (typeof toast === 'function') toast('Booking not found'); return; }
+    openWhatsAppExternally(phone, typeof itx === 'function' ? itx(booking) : 'Hello ' + (booking.g || 'guest'));
+  };
+  window.guestWhatsAppAction = function (phone, name) {
+    openWhatsAppExternally(phone, 'Hello ' + String(name || 'guest') + ', this is ' + String(S.set && S.set.name || 'the hotel') + '.');
+  };
+  window.AureliaInvoiceExport = Object.freeze({ version: 3, renderer: 'taint-free-text-canvas', usesHtml2Canvas: false, usesForeignObject: false });
 })();
 </script>
 
