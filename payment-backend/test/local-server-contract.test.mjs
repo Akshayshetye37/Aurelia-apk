@@ -212,9 +212,9 @@ test('LAN SQLite durability and readiness verify integrity and foreign-key consi
 });
 
 test('LAN runtime drains HTTP connections and checkpoints WAL during shutdown', () => {
-  assert.match(source, /const server = app\\.listen/);
-  assert.match(source, /server\\.close\\(\\(\\) =>/);
-  assert.match(source, /wal_checkpoint\\(TRUNCATE\\)/);
-  assert.match(source, /process\\.on\\('SIGTERM'/);
-  assert.match(source, /process\\.on\\('SIGINT'/);
+  assert.match(source, /const server = app\.listen/);
+  assert.match(source, /server\.close\(\(\) =>/);
+  assert.match(source, /wal_checkpoint\(TRUNCATE\)/);
+  assert.match(source, /process\.on\('SIGTERM'/);
+  assert.match(source, /process\.on\('SIGINT'/);
 });
