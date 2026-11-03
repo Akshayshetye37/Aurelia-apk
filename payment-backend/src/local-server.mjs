@@ -1162,9 +1162,13 @@ app.post('/v1/payments/:transactionId/reconcile', ownerAuth, requireBrowserMutat
       });
       bindOrder();
     }
-    const remote = await adapter.getPaymentStatus({ orderId: providerOrderId });
+    const requestedPaymentId = req.body?.paymentId;
+    if (requestedPaymentId !== undefined && (typeof requestedPaymentId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(requestedPaymentId))) {
+      return fail(res, 400, 'invalid_provider_payment_id');
+    }
+    const remote = await adapter.getPaymentStatus({ orderId: providerOrderId, ...(requestedPaymentId ? { paymentId: requestedPaymentId } : {}) });
     if (remote.amountMinor !== tx.amount_minor || remote.currency !== tx.currency ||
-        remote.orderId !== providerOrderId) {
+        remote.orderId !== providerOrderId || (requestedPaymentId && remote.paymentId !== requestedPaymentId)) {
       transitionPayment(tx.id, ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED'],
         'RECONCILIATION_REQUIRED', 'provider_amount_currency_or_order_mismatch', providerOrderId);
       return fail(res, 409, 'provider_payment_details_mismatch_manual_review_required');
