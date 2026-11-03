@@ -207,9 +207,10 @@ export async function applyJournaledSettlement({ journal, input, applyProjection
     throw new TypeError("Journal and projection callback are required");
   }
   const { record, duplicate } = await journal.append(input);
+  let appliedRecord = record;
   if (record.status !== "APPLIED") {
     await applyProjection(clone(record.payload), record);
-    await journal.markApplied(record.key, record.payloadHash);
+    appliedRecord = await journal.markApplied(record.key, record.payloadHash);
   }
-  return { ok: true, duplicate, record };
+  return { ok: true, duplicate, record: appliedRecord };
 }
