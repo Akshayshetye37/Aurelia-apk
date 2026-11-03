@@ -34,6 +34,12 @@ SQLite lives in the named `payment-data` volume. The encryption key and session 
 - `PUT /v1/admin/providers/:provider/credentials?environment=test|live` with body `{ "credentials": { ... } }`
 - `POST /v1/admin/providers/:provider/validate` with `{ "environment": "test|live" }`
 - `POST /v1/admin/providers/:provider/activate` with `{ "environment": "test", "confirm": true }`
+- `POST /v1/admin/devices/register` with a P-256 SPKI public key
+- `POST /v1/admin/devices/:deviceId/challenge` → five-minute single-use nonce and exact `signingPayload` transcript
+- `POST /v1/admin/devices/:deviceId/activate` with challenge ID, nonce and base64url DER signature
+- `POST /v1/admin/devices/:deviceId/revoke`
+- `POST /v1/devices/:deviceId/commands/lease` (device P-256 request signature required)
+- `POST /v1/devices/:deviceId/commands/:commandId/ack` (signed durable receipt; exact sequence and payload hash required)
 - `POST /v1/admin/providers/:provider/deactivate`
 - `DELETE /v1/admin/providers/:provider/credentials?environment=test|live`
 - `POST /v1/webhooks/:provider/:environment` (raw request body; provider-specific signature verification)
@@ -44,7 +50,7 @@ SQLite lives in the named `payment-data` volume. The encryption key and session 
 - Provider validation makes a real authenticated read-only API request through the existing provider adapter; it does not create a charge.
 - Saving or rotating credentials clears validation and activation.
 - Live activation and live payment collection are not enabled.
-- Provider removal checks persisted unresolved transaction states. Test-environment payment dispatch and provider API reconciliation are implemented as a restricted foundation. Durable capture outbox records are created transactionally, but asynchronous PMS folio delivery, webhook-driven reconciliation, automated recovery scheduling, refunds, and end-to-end exactly-once folio posting are not implemented. Do not enable live collection. A webhook signature being valid is recorded as an inbox event only; it is not a payment or settlement confirmation. Reuse of an event ID with a different payload hash is rejected as an identity conflict.
+- Provider removal checks persisted unresolved transaction states. Test-environment payment dispatch and provider API reconciliation are implemented as a restricted foundation. Device registration now requires P-256 proof-of-possession before activation; command leases and acknowledgements require signed device requests, contiguous sequence, exact payload hash, and durable-applied receipt. Provider webhooks are signature-checked and followed by an independent provider API status fetch; a verified capture is durably enqueued as a device settlement command only when the transaction has a device/folio binding. This does not itself post the PMS folio. Android native signer/consumer wiring, recovery authorization, end-to-end exactly-once folio posting, refunds, and operational reconciliation scheduling remain unfinished. Do not enable live collection. Reuse of an event ID with a different payload hash is rejected as an identity conflict.
 - LAN-mode PMS integration must send the session cookie using `credentials: 'include'`; it must not put provider credentials or session tokens in localStorage, plain Android preferences, or APK resources. Local Native Mode uses the Android Keystore vault instead.
 
 ## Operational caveats
