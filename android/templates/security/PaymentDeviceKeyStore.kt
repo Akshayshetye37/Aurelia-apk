@@ -60,63 +60,76 @@ class PaymentDeviceKeyStore {
             throw SecurityException("An attested identity already exists; revoke it explicitly before reenrollment.")
         }
 
-        fun generate(preferStrongBox: Boolean) {
-            val builder = KeyGenParameterSpec.Builder(
-                ATTESTED_ALIAS,
-                KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
-            )
-                .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
-                .setDigests(KeyProperties.DIGEST_SHA256)
-                .setUserAuthenticationRequired(false)
-                .setAttestationChallenge(serverChallenge.clone())
-            if (preferStrongBox) builder.setIsStrongBoxBacked(true)
-            KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, STORE).apply {
-                initialize(builder.build())
-                generateKeyPair()
-            }
-            store.load(null)
-        }
-
+        // The alias was absent above, so any alias present after an exception belongs
+        // to this failed enrollment attempt and is safe to remove. Without this outer
+        // cleanup, a provider/TEE or certificate-read failure can leave a poisoned
+        // alias that permanently blocks a later enrollment attempt.
         try {
-            generate(true)
-        } catch (_: StrongBoxUnavailableException) {
-            if (store.containsAlias(ATTESTED_ALIAS)) store.deleteEntry(ATTESTED_ALIAS)
-            generate(false)
-        }
-
-        val privateKey = store.getKey(ATTESTED_ALIAS, null) as? PrivateKey
-            ?: throw SecurityException("Attested private key is unavailable.")
-        val publicKey = store.getCertificate(ATTESTED_ALIAS)?.publicKey
-            ?: throw SecurityException("Attested public key is unavailable.")
-        val info = KeyFactory.getInstance(privateKey.algorithm, STORE)
-            .getKeySpec(privateKey, KeyInfo::class.java)
-        val level = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            when (info.securityLevel) {
-                KeyProperties.SECURITY_LEVEL_STRONGBOX -> "STRONGBOX"
-                KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT -> "TRUSTED_ENVIRONMENT"
-                else -> throw SecurityException("Software-backed payment device keys are rejected.")
+            fun generate(preferStrongBox: Boolean) {
+                val builder = KeyGenParameterSpec.Builder(
+                    ATTESTED_ALIAS,
+                    KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+                )
+                    .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+                    .setDigests(KeyProperties.DIGEST_SHA256)
+                    .setUserAuthenticationRequired(false)
+                    .setAttestationChallenge(serverChallenge.clone())
+                if (preferStrongBox) builder.setIsStrongBoxBacked(true)
+                KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, STORE).apply {
+                    initialize(builder.build())
+                    generateKeyPair()
+                }
+                store.load(null)
             }
-        } else {
-            if (!info.isInsideSecureHardware) {
-                throw SecurityException("Software-backed payment device keys are rejected.")
-            }
-            "HARDWARE_BACKED_UNCLASSIFIED"
-        }
 
-        val chain = store.getCertificateChain(ATTESTED_ALIAS)
-            ?.map { it as? X509Certificate
-                ?: throw SecurityException("Attestation chain contains a non-X.509 certificate.") }
-            ?: emptyList()
-        if (chain.isEmpty() || !chain.first().publicKey.encoded.contentEquals(publicKey.encoded)) {
-            store.deleteEntry(ATTESTED_ALIAS)
-            throw SecurityException("Attestation chain is missing or does not bind the generated key.")
+            try {
+                generate(true)
+            } catch (_: StrongBoxUnavailableException) {
+                if (store.containsAlias(ATTESTED_ALIAS)) store.deleteEntry(ATTESTED_ALIAS)
+                generate(false)
+            }
+
+            val privateKey = store.getKey(ATTESTED_ALIAS, null) as? PrivateKey
+                ?: throw SecurityException("Attested private key is unavailable.")
+            val publicKey = store.getCertificate(ATTESTED_ALIAS)?.publicKey
+                ?: throw SecurityException("Attested public key is unavailable.")
+            val info = KeyFactory.getInstance(privateKey.algorithm, STORE)
+                .getKeySpec(privateKey, KeyInfo::class.java)
+            val level = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                when (info.securityLevel) {
+                    KeyProperties.SECURITY_LEVEL_STRONGBOX -> "STRONGBOX"
+                    KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT -> "TRUSTED_ENVIRONMENT"
+                    else -> throw SecurityException("Software-backed payment device keys are rejected.")
+                }
+            } else {
+                if (!info.isInsideSecureHardware) {
+                    throw SecurityException("Software-backed payment device keys are rejected.")
+                }
+                "HARDWARE_BACKED_UNCLASSIFIED"
+            }
+
+            val chain = store.getCertificateChain(ATTESTED_ALIAS)
+                ?.map { it as? X509Certificate
+                    ?: throw SecurityException("Attestation chain contains a non-X.509 certificate.") }
+                ?: emptyList()
+            if (chain.isEmpty() || !chain.first().publicKey.encoded.contentEquals(publicKey.encoded)) {
+                throw SecurityException("Attestation chain is missing or does not bind the generated key.")
+            }
+            return AttestedIdentity(
+                ATTESTED_ALIAS,
+                pem(publicKey.encoded),
+                chain.map { Base64.encodeToString(it.encoded, Base64.NO_WRAP) },
+                level
+            )
+        } catch (error: Exception) {
+            try {
+                if (store.containsAlias(ATTESTED_ALIAS)) store.deleteEntry(ATTESTED_ALIAS)
+            } catch (_: Exception) {
+                // Preserve the original enrollment failure. The caller must still
+                // fail closed and require an owner-controlled reset if cleanup fails.
+            }
+            throw error
         }
-        return AttestedIdentity(
-            ATTESTED_ALIAS,
-            pem(publicKey.encoded),
-            chain.map { Base64.encodeToString(it.encoded, Base64.NO_WRAP) },
-            level
-        )
     }
 
     @Synchronized
