@@ -33,7 +33,7 @@ final class LocalGatewayVault {
 
   synchronized JSONObject save(String provider, String environment, JSONObject credentials) throws Exception {
     String[] fields = fields(provider);
-    validateEnvironment(environment);
+    validateEnvironment(provider, environment);
     JSONObject clean = new JSONObject();
     for (String field : fields) {
       String value = credentials == null ? "" : credentials.optString(field, "").trim();
@@ -55,7 +55,7 @@ final class LocalGatewayVault {
   }
 
   synchronized JSONObject status(String provider, String environment) throws Exception {
-    fields(provider); validateEnvironment(environment);
+    fields(provider); validateEnvironment(provider, environment);
     JSONObject record = read(provider, environment);
     JSONObject out = new JSONObject();
     out.put("provider", provider);
@@ -69,14 +69,14 @@ final class LocalGatewayVault {
   }
 
   synchronized JSONObject remove(String provider, String environment) throws Exception {
-    fields(provider); validateEnvironment(environment);
+    fields(provider); validateEnvironment(provider, environment);
     File file = file(provider, environment);
     if (file.exists() && !file.delete()) throw new IllegalStateException("credential_remove_failed");
     return status(provider, environment);
   }
 
   synchronized JSONObject setActive(String provider, String environment, boolean active) throws Exception {
-    fields(provider); validateEnvironment(environment);
+    fields(provider); validateEnvironment(provider, environment);
     JSONObject record = read(provider, environment);
     if (record == null) throw new IllegalStateException("provider_credentials_not_configured");
     if (active && ("live".equals(environment) || "production".equals(environment))) throw new IllegalStateException("live_activation_blocked_until_production_lifecycle_is_certified");
@@ -90,7 +90,7 @@ final class LocalGatewayVault {
   }
 
   synchronized JSONObject markValidation(String provider, String environment, boolean valid) throws Exception {
-    fields(provider); validateEnvironment(environment);
+    fields(provider); validateEnvironment(provider, environment);
     JSONObject record = read(provider, environment);
     if (record == null) throw new IllegalStateException("provider_credentials_not_configured");
     record.put("validation", valid ? "VALIDATED" : "INVALID");
@@ -111,7 +111,8 @@ final class LocalGatewayVault {
     throw new IllegalArgumentException("provider_adapter_not_available_locally");
   }
 
-  private void validateEnvironment(String environment) {
+  private void validateEnvironment(String provider, String environment) {
+    fields(provider);
     if (!("test".equals(environment) || "live".equals(environment) ||
         "uat".equals(environment) || "production".equals(environment) ||
         "staging".equals(environment))) throw new IllegalArgumentException("invalid_environment");
