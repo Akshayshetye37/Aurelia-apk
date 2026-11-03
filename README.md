@@ -10,7 +10,11 @@ Bookings, guests, rooms, check-in/out, folios, invoices, reports, cash/manual UP
 ### Payment architecture and provider scope
 The planned on-device provider set is Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue. Native Android code must own credentials, network requests, signature/evidence verification and transaction state. WebView JavaScript must never receive merchant secrets. Android Keystore encrypts credential records; SQLite stores durable intents and payment state. Provider return URLs and checkout callbacks are not proof of payment. Since an ordinary Android device behind NAT is not a public webhook receiver, status recovery must use authenticated provider API polling when online.
 
-### Actual implementation checkpoint on this branch
+### Engineering specification
+
+The detailed native bridge, payment lifecycle, atomic folio settlement, local outbox, refund, provider adapter, security, and release acceptance contracts are documented in [Device-local payment engine specification](docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md). This is the implementation target; it does not imply those components have already been completed.
+
+## Actual implementation checkpoint on this branch
 - [x] Extended the Android credential-vault template to recognize all seven providers and their provider-specific environment names.
 - [x] Reworked the local ledger template for all seven provider IDs and local-only lifecycle states; added a v1-to-v2 migration that preserves prior Razorpay/Cashfree intent rows.
 - [x] Changed the checkout UI to fail closed rather than dispatch to the legacy LAN backend when the native device payment engine is absent.
