@@ -185,19 +185,48 @@ export class FirestorePaymentRepository {
 
     // This transaction records that invocation of the remote provider API is
     // next. If it cannot be committed, the provider API is not called.
-    await this.db.runTransaction(async tx => {
-      const [intentSnap, idemSnap, lockSnap] = await Promise.all([
-        tx.get(intentRef), tx.get(idemRef), tx.get(lockRef)
-      ]);
-      if (!intentSnap.exists || !idemSnap.exists || !lockSnap.exists ||
-          intentSnap.data().state !== 'DISPATCHING' ||
-          idemSnap.data().intentId !== intentId || lockSnap.data().intentId !== intentId) {
-        throw new Error('payment_reservation_lost_before_dispatch');
+    try {
+      await this.db.runTransaction(async tx => {
+        const [intentSnap, idemSnap, lockSnap] = await Promise.all([
+          tx.get(intentRef), tx.get(idemRef), tx.get(lockRef)
+        ]);
+        if (!intentSnap.exists || !idemSnap.exists || !lockSnap.exists ||
+            intentSnap.data().state !== 'DISPATCHING' ||
+            idemSnap.data().intentId !== intentId || lockSnap.data().intentId !== intentId) {
+          throw new Error('payment_reservation_lost_before_dispatch');
+        }
+        tx.update(intentRef, { providerRequestStartedAt: this.clock().toISOString(), version: 2 });
+        tx.update(idemRef, { dispatchStartedAt: this.clock().toISOString() });
+        tx.update(lockRef, { dispatchStartedAt: this.clock().toISOString() });
+      });
+    } catch (dispatchMarkerError) {
+      // The provider has not been invoked. Best-effort cleanup converts this
+      // reservation into a definitive pre-dispatch failure and releases the
+      // folio lock. If Firestore is still unavailable, leave the lock intact:
+      // that is fail-closed and can be recovered operationally without risking
+      // a second charge.
+      try {
+        await this.db.runTransaction(async tx => {
+          const [intentSnap, idemSnap, lockSnap] = await Promise.all([
+            tx.get(intentRef), tx.get(idemRef), tx.get(lockRef)
+          ]);
+          if (!intentSnap.exists || !idemSnap.exists || !lockSnap.exists ||
+              intentSnap.data().state !== 'DISPATCHING' ||
+              intentSnap.data().providerRequestStartedAt ||
+              idemSnap.data().intentId !== intentId || lockSnap.data().intentId !== intentId) return;
+          const next = transitionIntent('DISPATCHING', {
+            type: 'dispatch_rejected', definitive: true, requestMayHaveReachedProvider: false
+          });
+          const failedAt = this.clock().toISOString();
+          tx.update(intentRef, { state: next, updatedAt: failedAt, version: 2 });
+          tx.update(idemRef, { state: next, updatedAt: failedAt });
+          tx.update(lockRef, { state: next, active: false, updatedAt: failedAt });
+        });
+      } catch {
+        // Preserve the active reservation if cleanup cannot be committed.
       }
-      tx.update(intentRef, { providerRequestStartedAt: this.clock().toISOString(), version: 2 });
-      tx.update(idemRef, { dispatchStartedAt: this.clock().toISOString() });
-      tx.update(lockRef, { dispatchStartedAt: this.clock().toISOString() });
-    });
+      throw dispatchMarkerError;
+    }
 
     // From the adapter invocation onward, the request may have been transmitted.
     // A timeout, transport error or malformed response remains UNKNOWN and locked.
