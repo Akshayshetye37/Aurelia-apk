@@ -6,13 +6,13 @@ This document is the implementation ledger for the payment workstream. It separa
 
 ## 1. Local-first operation and optional remote services
 
-Aurelia PMS must not require a server, cloud account, Firebase project or network connection for core hotel operations. The default mode is Local only: bookings, guests, rooms, manual/cash folio accounting, invoices and local backup continue to use the existing PMS storage. Remote payment processing is an optional owner-enabled capability that may be configured later from Settings after a secure endpoint identity and authentication contract exist. No endpoint, cloud project, guest data upload or provider credential is provisioned automatically. Backup destinations remain separate from payment-service endpoints. If no payment backend is configured, gateway checkout is unavailable; it must not fall back to client-side provider calls or unverified callbacks. A configured backend outage must not block core PMS operations. This Settings workflow is not implemented yet, so documentation must not imply it is available.
+Aurelia PMS must not require a server, cloud account, Firebase project or network connection for core hotel operations. The default mode is Local only: bookings, guests, rooms, manual/cash folio accounting, invoices and local backup continue to use the existing PMS storage. Staff-entered UPI/bank/card receipts remain local manual accounting entries; a UPI app redirect, screenshot, notification or typed UTR is evidence for staff review, not gateway verification. Remote payment processing is an optional owner-enabled capability that may be configured later from Settings after a secure endpoint identity and authentication contract exist. No endpoint, cloud project, guest data upload or provider credential is provisioned automatically. Backup destinations remain separate from payment-service endpoints. If no payment backend is configured, gateway checkout is unavailable; it must not fall back to client-side provider calls or unverified callbacks. A configured backend outage must not block core PMS operations. This Settings workflow is not implemented yet, so documentation must not imply it is available.
 
 ## 1. Data ownership and trust boundaries
 
 - **Aurelia PMS owns:** bookings, guests, rooms, folios, hotel accounting, staff-facing payment history and the atomic folio posting boundary.
 - **Aurelia Pay Bridge owns:** provider execution, device-side checkout adapters, provider transaction references, refund execution UI/state, provider configuration UI and its independent local transaction database/backup.
-- **Trusted payment backend owns:** provider credentials, server-side provider API calls, payment-session authority, webhook signature verification, canonical payment/refund status, idempotency, provider event journal, and payment/refund reconciliation.
+- **Trusted payment backend owns:** production provider credentials, server-side provider API calls, payment-session authority, webhook signature verification, canonical payment/refund status, idempotency, provider event journal, and payment/refund reconciliation. The local appliance contains Razorpay/Cashfree adapter and dispatch/reconciliation foundations, but this is not yet a deployed PMS payment-session service.
 - **PMS local intent journal:** stores only the correlation and folio intent needed to resume/reconcile after a WebView restart. It is installation-local and is not the provider transaction database, cross-device ledger or payment authority.
 - **PMS folio ledger:** records hotel accounting entries only after an independently verified backend result. Folio settlement must be an atomic, uniquely constrained accounting operation.
 
@@ -24,17 +24,19 @@ Google Drive, owner cloud backup and SAF shared folders remain optional backup/f
 - src/payments/indexeddb-payment-intent-store.mjs: IndexedDB-backed, installation-local PMS intent-journal adapter. It validates immutable booking/folio/amount/provider bindings, rejects illegal state regression, protects verification/settlement flags from downgrade, and exposes pending records after restart. The adapter is unit-tested but is not yet wired into the PMS runtime or a live payment UI.
 - Orchestrator now preserves any ambiguous failure after request dispatch as UNKNOWN. It does not infer that a backend or Bridge request failed merely because the client lost its response.
 - Unit tests cover backend verification gating, mismatched bindings, idempotency, disconnected Bridge, ambiguous backend-session response, durable local persistence, invalid state changes and settlement authorization invariants.
-- Existing Android IPC still performs the signer-checked nonce handshake only. Reserved payment message IDs are not executable payment operations.
+- Existing Android IPC still performs the signer-checked nonce handshake only. Reserved payment message IDs are not executable payment operations. The separate Pay Bridge repository is also handshake-only.
 - Automatic folio settlement remains disabled.
+- The Android credential vault is now sandbox-only staging. It rejects live credentials and webhook secrets and explicitly reports `executionEnabled: false`; it cannot initiate or verify a provider payment.
+- Local-only operation remains available through the existing PMS folio writer. Real gateway order creation and verification require Internet access to a trusted backend; no offline gateway authorization is claimed.
 
 ## 3. Production component status
 
 | Component | Current status | Boundary / next implementation |
 |---|---|---|
 | Transactional payment database | **Not implemented** | Must be implemented in trusted backend and Pay Bridge according to their ownership. PMS IndexedDB journal is only a local recovery mirror. |
-| Backend payment-session service | **Contract only** | Requires a backend repository, deployment, authentication, tenant/property authorization and idempotency. |
+| Backend payment-session service | **Partial / not PMS-wired** | Local appliance has provider dispatch and reconciliation routes, but the PMS session/verification contract is not deployed or wired end-to-end; tenant/property authorization and cross-app authentication remain release gates. |
 | Backend webhook verification | **Not implemented** | Requires provider-specific raw-body signature verification, replay protection and durable event ingestion on backend. |
-| Provider adapters | **Not implemented** | Implement in Pay Bridge/backend only after provider onboarding and API contract. No credentials in PMS. |
+| Provider adapters | **Backend foundations implemented** | Razorpay/Cashfree adapters exist in the local backend for credential validation, order creation, status lookup, webhook verification and refunds; they are not yet connected to executable Pay Bridge checkout IPC or the PMS runtime. |
 | Executable payment IPC in both APKs | **Handshake only** | PMS and separate Pay Bridge source must implement the same versioned request/response/event contract and caller validation. |
 | Atomic folio ledger | **Not implemented** | PMS needs a single transactional posting boundary, unique payment/transaction constraint and rollback-safe balance update. |
 | Refund execution backend | **Contract only** | Backend authorization and provider execution plus independent refund records/status are required. |
@@ -109,4 +111,4 @@ PMS reservations, guests, rooms, check-in/out and manual/cash accounting remain 
 
 ## PMS runtime status clarification
 
-The payment orchestration, IndexedDB intent journal, payment engine, evidence store and reconciliation coordinator are included in the prepared web bundle as optional modules. They are **not yet wired into the active PMS payment UI or native Bridge payment IPC**. The active PMS folio writer remains the local settlement service. The optional reconciliation evidence modules do not post payments. Remote checkout, automatic reconciliation settlement and refunds remain unavailable.
+The payment orchestration, IndexedDB intent journal, payment engine, evidence store and reconciliation coordinator are included in the prepared web bundle as optional modules. They are **not yet wired into the active PMS payment UI or native Bridge payment IPC**. The Android vault only stages sandbox credentials and has no payment execution function. The active PMS folio writer remains the local settlement service. The optional reconciliation evidence modules do not post payments. Remote checkout, automatic reconciliation settlement and refunds remain unavailable.
