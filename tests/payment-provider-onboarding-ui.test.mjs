@@ -25,7 +25,8 @@ test('PMS submits provider secrets only to the configured LAN backend and clears
 });
 
 test('only implemented Razorpay and Cashfree adapters expose credential controls', () => {
-  assert.ok(html.includes("const implemented=['razorpay','cashfree'].includes(id)"));
+  assert.ok(html.includes("const adapterFoundations=['razorpay','cashfree'].includes(id)"));
+  assert.ok(html.includes("Backend adapter foundation"));
   assert.ok(html.includes('Adapter not implemented'));
   assert.ok(html.includes('Cashfree Payments'));
   assert.ok(html.includes('Razorpay'));
