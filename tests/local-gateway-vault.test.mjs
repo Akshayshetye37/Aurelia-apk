@@ -38,10 +38,11 @@ test('Android build patch installs and exposes the local vault through narrow br
   }
 });
 
-test('PMS presents local native configuration before optional LAN/cloud infrastructure', () => {
-  assert.match(html, /Local Payment Gateway/);
-  assert.match(html, /Save securely on this device/);
-  assert.match(html, /Optional LAN \/ Cloud Payment Service/);
-  assert.match(html, /no Docker, cloud account or separate server required for local configuration/);
+test('PMS separates the device-only credential vault from operational secure checkout', () => {
+  assert.match(html, /Device Credential Vault/);
+  assert.match(html, /encrypted at rest on this device only/);
+  assert.match(html, /does not validate provider keys, create orders, open checkout or verify captures/);
+  assert.match(html, /Secure Payment Engine · LAN/);
+  assert.match(html, /Pay Bridge is not required to configure merchant credentials/);
   assert.match(html, /refreshAureliaNativeGateway/);
 });
