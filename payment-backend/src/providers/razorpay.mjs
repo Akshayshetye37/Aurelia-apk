@@ -8,7 +8,7 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
   constructor(options) {
     super(options);
     if (!['test', 'live'].includes(this.environment)) throw new TypeError('unsupported_environment');
-    if (!this.credentials.keyId || !this.credentials.keySecret || !this.credentials.webhookSecret) {
+    if (!this.credentials.keyId || !this.credentials.keySecret) {
       throw new TypeError('razorpay_credentials_incomplete');
     }
     if ((this.environment === 'test') !== this.credentials.keyId.startsWith('rzp_test_') ||
@@ -97,6 +97,7 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
   }
 
   async verifyWebhook(rawBody, headers) {
+    if (typeof this.credentials.webhookSecret !== 'string' || !this.credentials.webhookSecret) return { valid: false };
     const signature = headers['x-razorpay-signature'] || headers['X-Razorpay-Signature'];
     if (!Buffer.isBuffer(rawBody) || typeof signature !== 'string' || !/^[a-f0-9]{64}$/i.test(signature)) {
       return { valid: false };
