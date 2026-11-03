@@ -9,7 +9,6 @@ import android.database.sqlite.SQLiteOpenHelper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -90,10 +89,10 @@ final class LocalPaymentLedger extends SQLiteOpenHelper {
     try (Cursor c = db.rawQuery("SELECT local_status FROM payment_ledger WHERE transaction_id=?", new String[]{tx})) {
       if (!c.moveToFirst()) throw new IllegalArgumentException("payment_ledger_entry_not_found");
       String old = c.getString(0);
-      boolean allowed = "SAVED_ON_DEVICE".equals(old) ||
+      boolean allowed = old.equals(status) ||
+        ("SAVED_ON_DEVICE".equals(old) && "SENT_TO_LAN".equals(status)) ||
         ("SENT_TO_LAN".equals(old) && ("PROCESSED_BY_LAN".equals(status) || "RECONCILIATION_REQUIRED".equals(status))) ||
-        ("PROCESSED_BY_LAN".equals(old) && "RECONCILIATION_REQUIRED".equals(status)) ||
-        old.equals(status);
+        ("PROCESSED_BY_LAN".equals(old) && "RECONCILIATION_REQUIRED".equals(status));
       if (!allowed) throw new IllegalStateException("invalid_payment_ledger_transition");
     }
     ContentValues values = new ContentValues(); values.put("local_status", status); values.put("updated_at", System.currentTimeMillis());
