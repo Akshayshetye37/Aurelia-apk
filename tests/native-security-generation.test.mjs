@@ -66,3 +66,11 @@ test('native PIN and data-key material are not exposed through JavaScript interf
   assert.match(manager, /currentDataKeyCopy/);
   assert.doesNotMatch(gate, /addJavascriptInterface|evaluateJavascript/);
 });
+
+
+test('PIN enrollment and confirmation fields both accept the full 4–16 digit policy', () => {
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.match(gate, /first\.size !in 4\.\.16/);
+  assert.equal((gate.match(/InputFilter\.LengthFilter\(16\)/g) || []).length, 2);
+  assert.doesNotMatch(gate, /LengthFilter\(12\)/);
+});
