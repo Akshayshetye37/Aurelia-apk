@@ -135,6 +135,7 @@ test('captured commands retain exact provider and PMS folio settlement bindings'
 test('native device command hashes use canonical JSON for independent client verification', () => {
   assert.match(source, /const payloadHash = crypto\.createHash\('sha256'\)\.update\(canonicalJson\(command\)\)\.digest\('hex'\)/);
   assert.match(source, /payloadHash: command\.payload_hash/);
+  assert.match(source, /payloadCanonical: canonicalJson\(JSON\.parse\(command\.payload\)\)/);
 });
 
 test('device delivery uses signed requests, ordered leases, durable receipts and cursor compare-and-set', () => {
