@@ -600,3 +600,96 @@ At the implementation checkpoint recorded for this update, the PMS quality workf
 
 The backend protocol integration test is automated test evidence, not proof of Android native integration, real provider sandbox acceptance, physical-device operation, deployment, or end-to-end folio settlement.
 
+
+
+---
+
+## Remaining implementation and deployment baseline — 2026-11-03
+
+This section is the current execution handoff for the Android ↔ LAN backend ↔ PMS folio integration. It updates the remaining-work summary using the implementation state recorded above. It does not claim deployment or end-to-end payment acceptance.
+
+### Implemented and integration-tested backend protocol
+
+| Item | Status |
+|---|---|
+| PIN confirmation accepts 4–16 digits | Implemented |
+| Authorization-token settlement gate | Implemented; trusted issuer integration remains open |
+| Device challenge, P-256 proof-of-possession activation and revocation | Implemented in the LAN backend |
+| Signed device lease and acknowledgement protocol | Implemented in the LAN backend |
+| Durable device cursor advancement after valid acknowledgement | Implemented in the LAN backend |
+| Webhook signature validation, independent provider-status verification and settlement-command creation | Implemented in the LAN backend, subject to required device/folio binding |
+| Device protocol integration tests against the local server and SQLite | Passed at the recorded implementation checkpoint |
+
+Server-side protocol implementation and tests do not establish native Android integration or a completed accounting path.
+
+### Remaining implementation work — ordered
+
+| Priority | Workstream | Required implementation and acceptance boundary |
+|---|---|---|
+| **P0** | Trusted authorization issuer → PMS settlement adapter | Connect a trusted native component or authenticated backend session to issue short-lived authorization tokens only after independent provider verification. Pass the token and trusted verifier into the settlement adapter. WebView must never mint tokens or receive a general-purpose native signing capability. |
+| **P0** | Startup recovery of pending journal rows | After PMS state has loaded, invoke `recoverPendingSettlements` only when the trusted verifier is available. If it is absent or rejects authorization, recovery must fail closed and normal operation must not misrepresent pending entries as applied. |
+| **P1** | Native Android device protocol | Generate a P-256 key in Android Keystore; register its public key; sign and complete the activation challenge; perform authenticated signed lease polling; validate command bindings; and sign acknowledgements. Keep private keys and signing operations outside WebView JavaScript. |
+| **P1** | PMS checkout → backend dispatch | Connect the owner-console sandbox checkout flow to `POST /v1/payments/dispatch`. Enforce sandbox-only environment and explicit device/folio binding. Live collection remains blocked. |
+| **P1** | Native folio application and signed acknowledgement | Consume a verified command on-device; durably journal it; apply the trusted projection to `booking.pays`, `booking.p` and `booking.payments`; verify the persisted result against the immutable command/application key; then issue a signed acknowledgement. Never acknowledge or advance the cursor before durable application and verification. |
+| **P2** | Refund lifecycle | Implement provider refund requests, idempotency, status reconciliation, partial refunds and corresponding PMS accounting records. |
+| **P2** | Razorpay and Cashfree sandbox acceptance matrix | Exercise successful capture, late capture/webhook, network interruption and ambiguous outcomes, amount/currency/order mismatch, duplicate delivery, refund and partial-refund scenarios. Record evidence from actual provider sandbox transactions. |
+| **P2** | Docker deployment and physical-device acceptance | Deploy the LAN appliance; verify persistent-volume behavior, internal TLS CA trust on the Android device, backup/restore, restart recovery, device enrollment/revocation and the complete sandbox flow on physical hardware. |
+| **P3** | Public webhook reachability | For a private LAN appliance, explicitly implement and secure either public ingress or an outbound provider-reconciliation mechanism. Do not assume a public provider can reach a private LAN address. |
+| **P3** | Pay Bridge full IPC | Extend the separate Pay Bridge repository beyond handshake to the versioned payment/refund/provider/event-ack/reconciliation contract, retaining signer and caller authentication. |
+| **P3** | PIN recovery service | Build and deploy the approved backend OTP authorization plus KMS/HSM recovery-envelope protocol. Until then, PIN recovery remains unavailable and fail-closed. |
+
+### Required end-to-end acceptance chain
+
+The first complete sandbox acceptance path is:
+
+```text
+PMS sandbox checkout
+  -> LAN backend dispatch
+  -> provider sandbox capture
+  -> webhook signature validation
+  -> independent provider status lookup
+  -> amount / currency / order / transaction / folio binding checks
+  -> immutable settlement command
+  -> authenticated ACTIVE Android device
+  -> signed lease and command delivery
+  -> durable local journal
+  -> trusted authorization
+  -> folio projection application
+  -> persisted projection verification
+  -> signed acknowledgement
+  -> backend acknowledgement validation and cursor advancement
+```
+
+Each transition must be independently retry-safe. Duplicate delivery must not create duplicate folio credits; altered payloads or mismatched bindings must be rejected. A webhook, callback, queued command, successful health check or backend reachability response is not proof of folio credit.
+
+### Deployment status — not deployed / not accepted
+
+| Component | Current reality |
+|---|---|
+| LAN Docker appliance | Source and Compose configuration exist; no running owner appliance deployment or physical-device acceptance is claimed. |
+| Cloud backend | Prototype only; not the selected deployment target and not a production dependency. |
+| OTP/KMS PIN recovery backend | Not built or deployed; recovery remains unavailable. |
+| Live payment collection | Disabled by design. |
+| Automatic folio settlement | `AUTO_FOLIO_SETTLEMENT_ENABLED = false`; this control must remain unchanged. |
+| Complete Android ↔ backend ↔ folio path | Not yet integrated and accepted end-to-end. |
+
+### Locked safety controls
+
+- Keep `AUTO_FOLIO_SETTLEMENT_ENABLED = false`.
+- Do not enable live collection or live credential activation.
+- Never accept authorization tokens, proof of payment or trusted signing requests minted by WebView.
+- Never acknowledge a settlement command or advance a device cursor before durable folio application and persisted-projection verification.
+- Do not relabel gateway-originated transactions as manual or staff-reviewed to bypass the settlement gate.
+- Do not claim production readiness, deployment, or exactly-once accounting until the full chain passes on a real Android device connected to a deployed LAN appliance, including crash/replay and recovery tests.
+
+### Next execution sequence
+
+1. Complete the trusted authorization issuer and connect it to the PMS settlement adapter.
+2. Wire startup recovery behind the trusted verifier and fail-closed behavior.
+3. Implement the Android Keystore P-256 enrollment, activation, lease and acknowledgement client.
+4. Connect sandbox checkout to backend dispatch.
+5. Implement trusted native folio application, durable verification and signed acknowledgement.
+6. Prove one complete Razorpay or Cashfree sandbox transaction on a physical device and LAN appliance.
+7. Proceed to refunds, the full provider matrix, deployment hardening and remaining P3 work.
+
+This handoff is a plan and status record, not evidence that the remaining work has been implemented or deployed.
