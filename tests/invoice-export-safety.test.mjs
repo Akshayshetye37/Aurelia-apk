@@ -10,7 +10,7 @@ test("active invoice PNG renderer cannot taint its canvas with external content"
   const start = active.indexOf("async function renderInvoicePng(invoice)");
   const end = active.indexOf("function nativePrintFallback", start);
   assert.ok(start >= 0 && end > start, "active invoice renderer must be present");
-  const renderer = active.slice(start, end);
+  const renderer = active.slice(start, end).replace(/\/\*[\s\S]*?\*\//g, '');
 
   assert.match(renderer, /canvas\.toBlob/);
   assert.doesNotMatch(renderer, /drawImage|foreignObject|html2canvas|img\.src|fetch\(/i);
@@ -25,7 +25,7 @@ test("WhatsApp fallback never navigates the PMS WebView to wa.me", () => {
   const start = active.indexOf("async function openWhatsAppExternally");
   const end = active.indexOf("window.waS =", start);
   assert.ok(start >= 0 && end > start, "external WhatsApp helper must exist");
-  const helper = active.slice(start, end);
+  const helper = active.slice(start, end).replace(/\/\*[\s\S]*?\*\//g, '');
 
   assert.match(helper, /type: 'openUrl'/);
   assert.match(helper, /navigator\.share/);
