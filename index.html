@@ -1669,7 +1669,15 @@ const _r3=render;render=function(){try{if(!S||typeof S!=='object')throw new Erro
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)auto()});setInterval(auto,60000);
 nat({type:'deviceBackupStatus',requestId:'bs'+Date.now(),hash:curHash()});
 nat({type:'getBackupServerStatus',requestId:'bss'+Date.now()});
-window.addEventListener('DOMContentLoaded',()=>{render();auto();},{once:true});
+window.addEventListener('DOMContentLoaded',()=>{
+ Promise.resolve(window.aureliaSettlementRecovery).then(()=>{
+  render();auto();
+ }).catch(error=>{
+  console.error('Aurelia pending settlement recovery failed',error);
+  render();
+  toast('A pending verified payment could not be recovered. The journal remains pending; contact support before retrying that transaction.');
+ });
+},{once:true});
 
 
 /* OCR each ID photo upload with Google ML Kit on-device. */
@@ -4316,6 +4324,47 @@ window.aureliaSettlePayment = function(input) {
     audit: input.audit
   });
 };
+</script>
+<script>
+/* Journaled projection is reserved for independently verified backend commands.
+   Existing manual payments and reservation advances keep the synchronous path. */
+window.__aureliaProjectJournaledSettlement = function(payload) {
+  if (!payload || typeof payload !== 'object') throw new Error('Verified settlement payload is invalid');
+  const booking = S.b.find(item => item && String(item.id) === String(payload.bookingId));
+  if (!booking) throw new Error('Booking not found during settlement recovery');
+  return settlePayment({
+    booking,
+    amount: payload.amount,
+    method: payload.method,
+    reference: payload.reference || '',
+    source: 'staff_review',
+    idempotencyKey: payload.idempotencyKey,
+    verificationConfirmed: payload.verificationConfirmed === true
+  });
+};
+</script>
+<script type="module" id="aurelia-journaled-settlement-adapter">
+import { IndexedDbSettlementJournal } from './src/payments/settlement-journal.mjs';
+import {
+  applyVerifiedSettlementCommand,
+  recoverPendingSettlements
+} from './src/payments/settlement-apply.mjs';
+
+const journal = new IndexedDbSettlementJournal();
+const project = payload => {
+  if (typeof window.__aureliaProjectJournaledSettlement !== 'function') {
+    throw new Error('PMS settlement projector is not ready');
+  }
+  return window.__aureliaProjectJournaledSettlement(payload);
+};
+
+window.aureliaApplyJournaledSettlement = command =>
+  applyVerifiedSettlementCommand({ journal, command, project });
+
+// loadAll() runs in the preceding application script. Recover before the
+// DOMContentLoaded render so an interrupted verified posting is reconciled
+// before staff see the folio. This path never emits an acknowledgement.
+window.aureliaSettlementRecovery = recoverPendingSettlements({ journal, project });
 </script>
 </body>
 </html>
