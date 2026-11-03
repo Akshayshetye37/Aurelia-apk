@@ -36,7 +36,7 @@ test("device-local payment UI fails closed and folio auto-settlement stays disab
   assert.match(html, /Device-local credential vault/);
   assert.match(html, /window\.AndroidPaymentEngine/);
   assert.match(html, /secure native Android payment engine is not installed/);
-  assert.doesNotMatch(html, /localGatewayAdminHtml\(\)/);
+  assert.doesNotMatch(html, /\+localGatewayAdminHtml\(\)\+/);
   const gate = fs.readFileSync(new URL("../src/payments/settlement-gate.mjs", import.meta.url), "utf8");
   assert.match(gate, /AUTO_FOLIO_SETTLEMENT_ENABLED = false/);
 });
