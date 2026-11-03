@@ -100,6 +100,25 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   const enrollmentChallenge = await enrollmentChallengeResponse.json();
   assert.match(enrollmentChallenge.challengeId, /^[0-9a-f-]{36}$/i);
   assert.match(enrollmentChallenge.nonce, /^[A-Za-z0-9_-]{40,64}$/);
+  const replacementChallengeResponse = await fetch(baseUrl + '/v1/admin/devices/enrollment/challenge', {
+    method: 'POST', headers: ownerHeaders, body: JSON.stringify({ deviceId })
+  });
+  assert.equal(replacementChallengeResponse.status, 201);
+  const replacementChallenge = await replacementChallengeResponse.json();
+
+  // A newer challenge invalidates the previous outstanding challenge.
+  const staleChallengeAttempt = await fetch(baseUrl + '/v1/admin/devices/enroll', {
+    method: 'POST', headers: ownerHeaders,
+    body: JSON.stringify({
+      deviceId, challengeId: replacementChallenge.challengeId, publicKeyPem,
+      certificateChainBase64: [
+        Buffer.alloc(128, 0x41).toString('base64'),
+        Buffer.alloc(128, 0x42).toString('base64')
+      ]
+    })
+  });
+  assert.equal(staleChallengeAttempt.status, 409);
+  assert.equal((await staleChallengeAttempt.json()).error, 'attestation_challenge_invalid_or_expired');
 
   // No verifier sidecar is started in this transport integration test. The
   // challenge-first enrollment endpoint must fail closed and must not create
