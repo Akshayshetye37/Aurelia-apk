@@ -3373,71 +3373,55 @@ window.aureliaGatewayFolioHtml=function(i){
 document.addEventListener('change',e=>{if(e.target?.id==='aurelia-online-provider'){const box=document.getElementById('aurelia-cashfree-details');if(box)box.hidden=e.target.value!=='cashfree';}});
 window.startAureliaGatewayCheckout=async function(i){
  const b=bk(i);if(!b){toast('Booking not found');return}
- // Device-only architecture: never silently fall back to the legacy LAN backend.
- // Checkout stays fail-closed until the native Android payment engine is installed and accepted.
- if(!window.AureliaPaymentEngine||typeof window.AureliaPaymentEngine.createOrder!=='function'){
-  const status=document.getElementById('aurelia-gateway-checkout-status');
-  if(status)status.textContent='Online gateway checkout is not enabled: the on-device Android payment engine is not yet integrated. Your booking, folio, cash/manual payments and offline PMS functions remain available. No payment was initiated.';
-  toast('On-device payment engine is not installed. No payment was initiated.');return;
+ const status=document.getElementById('aurelia-gateway-checkout-status');
+ const stop=message=>{if(status)status.textContent=message;toast(message);return false;};
+ // Fail closed until the native Android host registers and attests the supported bridge.
+ // Never dispatch to localGatewayApi, a LAN appliance, or a browser-side provider SDK.
+ const engine=window.AndroidPaymentEngine;
+ if(!engine||typeof engine.getEngineStatus!=='function'||
+    typeof engine.createPaymentIntent!=='function'||
+    typeof engine.startCheckout!=='function'){
+  return stop('Gateway checkout is disabled: the secure native Android payment engine is not installed. No payment request was sent.');
+ }
+ let engineStatus;
+ try{engineStatus=await engine.getEngineStatus();}
+ catch(_){return stop('Gateway checkout is unavailable: native payment-engine status could not be verified. No payment request was sent.');}
+ if(!engineStatus||engineStatus.ready!==true||engineStatus.livePaymentsEnabled===true){
+  // Live processing remains disabled until formal release gates are accepted.
+  if(!engineStatus||engineStatus.ready!==true)
+   return stop('Gateway checkout is unavailable: native payment engine is not ready. No payment request was sent.');
  }
  const provider=document.getElementById('aurelia-online-provider')?.value||'';
- const amount=Number(document.getElementById('aurelia-online-amount')?.value),amountMinor=Math.round(amount*100);
+ const amount=Number(document.getElementById('aurelia-online-amount')?.value);
+ const amountMinor=Math.round(amount*100);
  const due=Math.round(Math.max(0,Number(dueB(b))||0)*100);
- const status=document.getElementById('aurelia-gateway-checkout-status');
- const setStatus=v=>{if(status)status.textContent=v;};
- if(!['razorpay','cashfree'].includes(provider)||!Number.isSafeInteger(amountMinor)||amountMinor<=0||Math.abs(amount*100-amountMinor)>1e-7||amountMinor>due){toast('Enter a valid amount up to the current folio balance.');return;}
- const providerState=(window.AureliaLocalGatewayAdmin?.providers||[]).find(x=>x.provider===provider&&x.environment==='test');
- if(!providerState?.active){toast('This sandbox provider is not active.');return;}
- if(provider==='cashfree'){
-  const phone=document.getElementById('aurelia-cashfree-phone')?.value?.trim()||'',returnUrl=document.getElementById('aurelia-cashfree-return')?.value?.trim()||'';
-  if(!/^\+?[0-9]{10,15}$/.test(phone)||!/^https:\/\//i.test(returnUrl)){toast('Cashfree requires a valid guest mobile number and public HTTPS return URL.');return;}
+ if(!['razorpay','cashfree'].includes(provider)||!Number.isSafeInteger(amountMinor)||
+    amountMinor<=0||Math.abs(amount*100-amountMinor)>1e-7||amountMinor>due){
+  return stop('Enter a valid payment amount up to the current folio balance.');
  }
- const transactionId=globalThis.crypto?.randomUUID?.()||('au-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12));
- const idempotencyKey='gateway-'+transactionId;
- const method=provider==='razorpay'?'Razorpay':'Cashfree';
- const record={transactionId,idempotencyKey,provider,environment:'test',amountMinor,currency:'INR',status:'CREATED',createdAt:new Date().toISOString(),providerOrderId:null,providerPaymentId:null};
- b.gatewayPayments=Array.isArray(b.gatewayPayments)?b.gatewayPayments:[];b.gatewayPayments.push(record);persist();
+ const providerState=(window.AureliaLocalGatewayAdmin?.providers||[])
+  .find(x=>x.provider===provider&&x.environment==='test');
+ if(!providerState?.active)return stop('This sandbox provider is not configured and validated on this device.');
+ const transactionId=globalThis.crypto?.randomUUID?.();
+ if(!transactionId)return stop('Secure transaction ID generation is unavailable on this device.');
+ const payload={transactionId,idempotencyKey:'aurelia-'+transactionId,provider,
+  environment:'test',folioId:'booking-'+String(b.id),amountMinor,currency:'INR'};
  try{
-  if(window.AureliaLocalPaymentLedger&&window.AureliaNative){
-   await window.AureliaLocalPaymentLedger.create({transactionId,provider,environment:'test',folioId:'booking-'+String(b.id),amountMinor,currency:'INR'});
-   await window.AureliaLocalPaymentLedger.updateLocalStatus(transactionId,'SENT_TO_LAN');
-  }
-  setStatus('Creating a provider order securely…');
-  const body={transactionId,idempotencyKey,provider,environment:'test',amountMinor,currency:'INR'};
-  if(provider==='cashfree'){
-   body.customer={id:'guest-'+String(b.id).replace(/[^A-Za-z0-9_-]/g,'').slice(0,48),phone:document.getElementById('aurelia-cashfree-phone').value.trim()};
-   body.returnUrl=document.getElementById('aurelia-cashfree-return').value.trim();
-  }
-  const order=await localGatewayApi('/v1/payments/dispatch','POST',body);
-  record.status=order.status||'PENDING';record.providerOrderId=order.providerOrderId||null;record.updatedAt=new Date().toISOString();persist();
-  const reconcileButton=document.createElement('button');reconcileButton.type='button';reconcileButton.className='btn sm ghost';reconcileButton.textContent='Reconcile this transaction';reconcileButton.onclick=()=>window.reconcileAureliaGatewayPayment(i,transactionId,record.providerPaymentId||undefined);status?.insertAdjacentElement('afterend',reconcileButton);
-  if(order.status==='UNKNOWN'||order.reconciliationRequired){setStatus('The provider order result is uncertain. Do not create another order. Reconcile this transaction before any retry.');toast('Order outcome needs reconciliation.');return;}
-  if(!order.providerOrderId||order.status!=='PENDING')throw new Error('Provider did not return a usable pending order.');
-  setStatus('Opening '+method+' secure checkout…');
-  await loadAureliaCheckoutScript(provider);
-  if(provider==='razorpay'){
-   await new Promise((resolve,reject)=>{
-    let finished=false;const finish=(fn,value)=>{if(finished)return;finished=true;fn(value)};
-    const checkout=new window.Razorpay({
-     key:order.checkout?.keyId,amount:amountMinor,currency:'INR',name:String(S.set.name||'Aurelia PMS').slice(0,80),
-     description:'Folio '+String(b.id),order_id:order.providerOrderId,
-     prefill:{name:String(b.g||'Guest').slice(0,80)},
-     handler:response=>finish(resolve,response),
-     modal:{ondismiss:()=>finish(reject,new Error('Checkout closed. Payment status will remain pending until reconciled.'))}
-    });
-    checkout.on('payment.failed',response=>finish(reject,new Error(response?.error?.description||'Payment was not completed.')));
-    checkout.open();
-   }).then(response=>reconcileAureliaGatewayPayment(i,transactionId,response?.razorpay_payment_id));
-  }else{
-   const cashfree=window.Cashfree({mode:'sandbox'});
-   await cashfree.checkout({paymentSessionId:order.checkout?.paymentSessionId,redirectTarget:'_modal'});
-   await reconcileAureliaGatewayPayment(i,transactionId);
-  }
+  const intent=await engine.createPaymentIntent(payload);
+  if(!intent||intent.transactionId!==transactionId)
+   return stop('Native engine rejected the payment intent. No checkout was opened.');
+  const result=await engine.startCheckout({transactionId});
+  if(!result||!['PENDING','AWAITING_PROVIDER','RECONCILIATION_REQUIRED'].includes(result.status))
+   return stop('Checkout did not return a recognized pending state. Check the local payment ledger.');
+  const record={...payload,status:result.status,providerOrderId:result.providerOrderId||null,
+   createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  b.gatewayPayments=Array.isArray(b.gatewayPayments)?b.gatewayPayments:[];
+  if(!b.gatewayPayments.some(x=>x.transactionId===transactionId))b.gatewayPayments.push(record);
+  persist();
+  if(status)status.textContent='Payment request submitted. The PMS will not record payment until the native engine independently verifies provider capture and the folio ledger commits.';
+  return true;
  }catch(error){
-  record.status='RECONCILIATION_REQUIRED';record.lastError=String(error?.message||'checkout_error').slice(0,180);record.updatedAt=new Date().toISOString();persist();
-  if(window.AureliaLocalPaymentLedger&&window.AureliaNative){try{await window.AureliaLocalPaymentLedger.updateLocalStatus(transactionId,'RECONCILIATION_REQUIRED');}catch(_){}}
-  setStatus((error?.message||'Checkout interrupted')+' Payment status is not yet confirmed. Reconcile before retrying.');
-  toast(error?.message||'Checkout interrupted; reconcile transaction status.');
+  return stop('Payment outcome requires reconciliation. Do not create another payment attempt. '+String(error?.message||'').slice(0,120));
  }
 };
 window.reconcileAureliaGatewayPayment=async function(i,transactionId,paymentId){
