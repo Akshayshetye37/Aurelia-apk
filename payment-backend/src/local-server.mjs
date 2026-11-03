@@ -265,7 +265,7 @@ function deviceAuth(req, res, next) {
   const timestampText = req.get('x-aurelia-device-timestamp') || '';
   const nonce = req.get('x-aurelia-device-nonce') || '';
   const signature = req.get('x-aurelia-device-signature') || '';
-  if (!/^\\d{10}$/.test(timestampText) || !/^[A-Za-z0-9_-]{16,128}$/.test(nonce) ||
+  if (!/^\d{10}$/.test(timestampText) || !/^[A-Za-z0-9_-]{16,128}$/.test(nonce) ||
       !/^[A-Za-z0-9_-]{80,160}$/.test(signature)) return fail(res, 401, 'device_request_signature_required');
   const timestamp = Number(timestampText), current = Math.floor(Date.now() / 1000);
   if (!Number.isSafeInteger(timestamp) || Math.abs(current - timestamp) > 60) return fail(res, 401, 'device_request_timestamp_out_of_range');
