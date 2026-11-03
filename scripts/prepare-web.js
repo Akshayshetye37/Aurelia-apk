@@ -7,7 +7,7 @@ const settlementSrc=path.join(root,'src','payments','settlement-service.mjs');
 if(!fs.existsSync(settlementSrc))throw new Error('Settlement service not found: '+settlementSrc);
 const settlementDest=path.join(dest,'src','payments');
 fs.mkdirSync(settlementDest,{recursive:true});
-for(const name of ['settlement-service.mjs','settlement-gate.mjs','payment-engine.mjs','evidence-store.mjs','reconciliation-service.mjs','backend-router.mjs']){
+for(const name of ['settlement-service.mjs','settlement-gate.mjs','settlement-journal.mjs','payment-engine.mjs','evidence-store.mjs','reconciliation-service.mjs','backend-router.mjs']){
  const source=path.join(root,'src','payments',name);
  if(!fs.existsSync(source))throw new Error('Payment module not found: '+source);
  fs.copyFileSync(source,path.join(settlementDest,name));
