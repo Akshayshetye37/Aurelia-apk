@@ -63,6 +63,13 @@ test('Razorpay status lookup never substitutes a different captured payment for 
   assert.equal(status.captured, false);
 });
 
+test('Razorpay API credentials work without a webhook secret; webhook verification stays disabled', async () => {
+  const mock = mockFetch(async () => ({ status: 200, body: { items: [] } }));
+  const adapter = new RazorpayAdapter({ credentials: { keyId: 'rzp_test_12345678', keySecret: 'secret' }, environment: 'test', fetchImpl: mock.fetchImpl });
+  assert.deepEqual(await adapter.validateCredentials(), { valid: true });
+  assert.deepEqual(await adapter.verifyWebhook(Buffer.from('{}'), {}), { valid: false });
+});
+
 test('Razorpay webhook verifies exact raw bytes with constant-time comparison', async () => {
   const raw = Buffer.from('{"event":"payment.captured"}');
   const sig = crypto.createHmac('sha256', 'hook').update(raw).digest('hex');
