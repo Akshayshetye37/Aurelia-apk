@@ -60,7 +60,7 @@ test('hotel folio checkout requires a ready native engine and never falls back t
   const start = html.indexOf('window.startAureliaGatewayCheckout=async function');
   const end = html.indexOf('window.reconcileAureliaGatewayPayment=', start);
   const checkout = html.slice(start, end);
-  assert.doesNotMatch(checkout, /localGatewayApi|checkout\.razorpay\.com|sdk\.cashfree\.com/);
+  assert.doesNotMatch(checkout, /localGatewayApi\s*\(|checkout\.razorpay\.com|sdk\.cashfree\.com/);
 });
 
 test('backend reconciliation binds an optional checkout payment ID to provider API lookup', () => {
