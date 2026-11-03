@@ -15,6 +15,11 @@ Aurelia's Android application is the operational runtime and local source of tru
 - **No public webhook assumption:** an Android device behind ordinary NAT is not a public webhook receiver. Recover payment state through authenticated provider status APIs.
 - **Accounting separation:** provider capture is not a PMS folio credit. Only verified capture evidence can enter the idempotent PMS accounting boundary; a durable receipt must be read back before the payment is marked posted.
 
+
+## Live collection master switch
+
+Live collection must have a native-enforced master kill switch, OFF by default. Property administrators can disable it at any time; doing so blocks every new live dispatch but preserves and reconciles payments already sent to a provider. Enabling it is allowed only after all production release gates pass and the native engine verifies signed release authorization. A WebView toggle or saved merchant credential can never authorize live collection. **Current status: BLOCKED / OFF**; the native engine, trusted bridge, provider adapters and canonical settlement integration are incomplete. See the [live collection control and release gates](docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md#0-live-collection-master-switch).
+
 ## Gateway scope
 
 The agreed provider catalogue is:
