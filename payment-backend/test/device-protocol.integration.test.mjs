@@ -93,21 +93,39 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   const deviceId = 'device_test_001';
   const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
   const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' });
-  const ownerHeaders = { ...originHeaders, Cookie: cookie, 'Content-Type': 'application/json' };
-  const register = await fetch(baseUrl + '/v1/admin/devices/register', {
-    method: 'POST', headers: ownerHeaders, body: JSON.stringify({ deviceId, publicKeyPem })
+  const enrollmentChallengeResponse = await fetch(baseUrl + '/v1/admin/devices/enrollment/challenge', {
+    method: 'POST', headers: ownerHeaders, body: JSON.stringify({ deviceId })
   });
-  assert.equal(register.status, 201);
-  assert.equal((await register.json()).status, 'PENDING');
+  assert.equal(enrollmentChallengeResponse.status, 201);
+  const enrollmentChallenge = await enrollmentChallengeResponse.json();
+  assert.match(enrollmentChallenge.challengeId, /^[0-9a-f-]{36}$/i);
+  assert.match(enrollmentChallenge.nonce, /^[A-Za-z0-9_-]{40,64}$/);
 
-  const challengeResponse = await fetch(baseUrl + '/v1/admin/devices/' + deviceId + '/challenge', {
-    method: 'POST', headers: ownerHeaders, body: JSON.stringify({})
+  // No verifier sidecar is started in this transport integration test. The
+  // challenge-first enrollment endpoint must fail closed and must not create
+  // a device registration when independent attestation verification is absent.
+  const unavailableEnrollment = await fetch(baseUrl + '/v1/admin/devices/enroll', {
+    method: 'POST', headers: ownerHeaders,
+    body: JSON.stringify({
+      deviceId, challengeId: enrollmentChallenge.challengeId, publicKeyPem,
+      certificateChainBase64: [
+        Buffer.alloc(128, 0x41).toString('base64'),
+        Buffer.alloc(128, 0x42).toString('base64')
+      ]
+    })
   });
-  assert.equal(challengeResponse.status, 201);
-  const challenge = await challengeResponse.json();
-  assert.equal(challenge.attestationRequired, true);
-  assert.equal(challenge.attestationChallenge, challenge.nonce);
-  assert.match(challenge.attestationChallenge, /^[A-Za-z0-9_-]{40,64}$/);
+  assert.equal(unavailableEnrollment.status, 503);
+  assert.equal((await unavailableEnrollment.json()).error, 'device_attestation_verifier_unavailable');
+
+  db = new Database(databasePath);
+  assert.equal(db.prepare('SELECT device_id FROM device_registrations WHERE device_id=?').get(deviceId), undefined);
+  const ownerId = db.prepare('SELECT id FROM owner WHERE username=?').get('device-owner').id;
+  const stamp = new Date().toISOString();
+  db.prepare("INSERT INTO device_registrations(device_id,public_key_spki,key_algorithm,status,created_at,owner_id,property_id) VALUES(?,?,'ECDSA_P256_SHA256','PENDING',?,?,?)")
+    .run(deviceId, publicKey.export({ type: 'spki', format: 'der' }), stamp, ownerId, 'test-property');
+  db.prepare('INSERT INTO device_cursors(device_id,last_applied_sequence,updated_at) VALUES(?,0,?)').run(deviceId, stamp);
+  db.prepare('INSERT INTO device_sequence_counters(device_id,last_sequence) VALUES(?,0)').run(deviceId);
+
   const activate = await fetch(baseUrl + '/v1/admin/devices/' + deviceId + '/activate', {
     method: 'POST', headers: ownerHeaders, body: JSON.stringify({})
   });
