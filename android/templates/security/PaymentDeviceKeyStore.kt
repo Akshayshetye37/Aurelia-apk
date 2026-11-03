@@ -1,21 +1,31 @@
 package com.aurelia.pms.security
 
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
+import android.security.keystore.StrongBoxUnavailableException
 import android.util.Base64
+import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.KeyStore
+import java.security.PrivateKey
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
+import java.security.cert.X509Certificate
 
-/**
- * Android Keystore-backed device identity primitives for the LAN payment protocol.
- * No WebView/JavascriptInterface methods and no network requests are exposed.
- * Device-key possession is not provider verification or accounting approval.
- */
+/** Native Keystore identity. No WebView interface or network transport is exposed. */
 class PaymentDeviceKeyStore {
+    data class AttestedIdentity(
+        val keyAlias: String,
+        val publicKeyPem: String,
+        val certificateChainBase64: List<String>,
+        val securityLevel: String
+    )
+
     companion object {
         const val ALIAS = "com.aurelia.pms.payment-device.p256.v1"
+        const val ATTESTED_ALIAS = "com.aurelia.pms.payment-device.attested.p256.v1"
         private const val STORE = "AndroidKeyStore"
         private const val DOMAIN_ACTIVATE = "AURELIA_DEVICE_ACTIVATE_V1"
         private const val DOMAIN_REQUEST = "AURELIA_DEVICE_REQUEST_V1"
@@ -23,27 +33,103 @@ class PaymentDeviceKeyStore {
     }
 
     @Synchronized
-    fun hasIdentity(): Boolean = keyStore().containsAlias(ALIAS)
+    fun hasIdentity(): Boolean = keyStore().let {
+        it.containsAlias(ATTESTED_ALIAS) || it.containsAlias(ALIAS)
+    }
+
+    /**
+     * Creates a fresh challenge-bound key. StrongBox is preferred; TEE is the
+     * only fallback. The appliance MUST independently verify the returned chain.
+     * The legacy active key is retained until enrollment/activation succeeds.
+     */
+    @Synchronized
+    fun createAttestedIdentity(serverChallenge: ByteArray): AttestedIdentity {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            throw SecurityException("Android Key Attestation requires Android 9 or later.")
+        }
+        require(serverChallenge.size in 16..128) { "Attestation challenge must be 16–128 bytes." }
+        val store = keyStore()
+        if (store.containsAlias(ATTESTED_ALIAS)) store.deleteEntry(ATTESTED_ALIAS)
+
+        fun generate(preferStrongBox: Boolean) {
+            val builder = KeyGenParameterSpec.Builder(
+                ATTESTED_ALIAS,
+                KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+            )
+                .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+                .setDigests(KeyProperties.DIGEST_SHA256)
+                .setUserAuthenticationRequired(false)
+                .setAttestationChallenge(serverChallenge.clone())
+            if (preferStrongBox) builder.setIsStrongBoxBacked(true)
+            KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, STORE).apply {
+                initialize(builder.build())
+                generateKeyPair()
+            }
+            store.load(null)
+        }
+
+        try {
+            generate(true)
+        } catch (_: StrongBoxUnavailableException) {
+            if (store.containsAlias(ATTESTED_ALIAS)) store.deleteEntry(ATTESTED_ALIAS)
+            generate(false)
+        }
+
+        val privateKey = store.getKey(ATTESTED_ALIAS, null) as? PrivateKey
+            ?: throw SecurityException("Attested private key is unavailable.")
+        val publicKey = store.getCertificate(ATTESTED_ALIAS)?.publicKey
+            ?: throw SecurityException("Attested public key is unavailable.")
+        val info = KeyFactory.getInstance(privateKey.algorithm, STORE)
+            .getKeySpec(privateKey, KeyInfo::class.java)
+        val level = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            when (info.securityLevel) {
+                KeyProperties.SECURITY_LEVEL_STRONGBOX -> "STRONGBOX"
+                KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT -> "TRUSTED_ENVIRONMENT"
+                else -> throw SecurityException("Software-backed payment device keys are rejected.")
+            }
+        } else {
+            if (!info.isInsideSecureHardware) {
+                throw SecurityException("Software-backed payment device keys are rejected.")
+            }
+            "HARDWARE_BACKED_UNCLASSIFIED"
+        }
+
+        val chain = store.getCertificateChain(ATTESTED_ALIAS)
+            ?.map { it as? X509Certificate
+                ?: throw SecurityException("Attestation chain contains a non-X.509 certificate.") }
+            ?: emptyList()
+        if (chain.isEmpty() || !chain.first().publicKey.encoded.contentEquals(publicKey.encoded)) {
+            store.deleteEntry(ATTESTED_ALIAS)
+            throw SecurityException("Attestation chain is missing or does not bind the generated key.")
+        }
+        return AttestedIdentity(
+            ATTESTED_ALIAS,
+            pem(publicKey.encoded),
+            chain.map { Base64.encodeToString(it.encoded, Base64.NO_WRAP) },
+            level
+        )
+    }
 
     @Synchronized
     fun ensureIdentity(): String {
         val store = keyStore()
-        if (!store.containsAlias(ALIAS)) {
-            val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, STORE)
-            generator.initialize(
-                KeyGenParameterSpec.Builder(
-                    ALIAS,
-                    KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+        if (!store.containsAlias(ATTESTED_ALIAS) && !store.containsAlias(ALIAS)) {
+            KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, STORE).apply {
+                initialize(
+                    KeyGenParameterSpec.Builder(
+                        ALIAS, KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+                    )
+                        .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+                        .setDigests(KeyProperties.DIGEST_SHA256)
+                        .setUserAuthenticationRequired(false)
+                        .build()
                 )
-                    .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
-                    .setDigests(KeyProperties.DIGEST_SHA256)
-                    .setUserAuthenticationRequired(false)
-                    .build()
-            )
-            generator.generateKeyPair()
+                generateKeyPair()
+            }
             store.load(null)
         }
-        val publicKey = store.getCertificate(ALIAS)?.publicKey
+        val alias = if (store.containsAlias(ATTESTED_ALIAS)) ATTESTED_ALIAS else ALIAS
+        val publicKey = store.getCertificate(alias)?.publicKey
             ?: throw SecurityException("Payment device public key is unavailable.")
         require(publicKey.algorithm.equals("EC", ignoreCase = true)) {
             "Payment device key is not elliptic-curve."
@@ -54,16 +140,14 @@ class PaymentDeviceKeyStore {
     /** Exact transcript required by /v1/admin/devices/:id/activate. */
     @Synchronized
     fun signActivation(
-        deviceId: String,
-        keyVersion: Long,
-        challengeId: String,
-        nonce: String,
-        expiresAt: Long
+        deviceId: String, keyVersion: Long, challengeId: String, nonce: String, expiresAt: Long
     ): String {
         requireOpaque(deviceId, "deviceId")
         require(challengeId.matches(Regex("[0-9a-fA-F-]{36}"))) { "Invalid challenge ID." }
         require(nonce.matches(Regex("[A-Za-z0-9_-]{40,64}"))) { "Invalid challenge nonce." }
-        require(keyVersion > 0 && expiresAt > System.currentTimeMillis() / 1000) { "Invalid activation metadata." }
+        require(keyVersion > 0 && expiresAt > System.currentTimeMillis() / 1000) {
+            "Invalid activation metadata."
+        }
         val transcript = listOf(
             DOMAIN_ACTIVATE, deviceId, keyVersion.toString(), challengeId, nonce, expiresAt.toString()
         ).joinToString("\n")
@@ -73,12 +157,8 @@ class PaymentDeviceKeyStore {
     /** bodyHash is SHA-256 of the backend-compatible canonical JSON body. */
     @Synchronized
     fun signRequest(
-        deviceId: String,
-        method: String,
-        originalUrl: String,
-        timestampSeconds: String,
-        nonce: String,
-        bodyHash: String
+        deviceId: String, method: String, originalUrl: String, timestampSeconds: String,
+        nonce: String, bodyHash: String
     ): String {
         requireOpaque(deviceId, "deviceId")
         require(method.matches(Regex("GET|POST|PUT|PATCH|DELETE"))) { "Invalid HTTP method." }
@@ -97,23 +177,26 @@ class PaymentDeviceKeyStore {
     fun deleteIdentity() {
         val store = keyStore()
         if (store.containsAlias(ALIAS)) store.deleteEntry(ALIAS)
+        if (store.containsAlias(ATTESTED_ALIAS)) store.deleteEntry(ATTESTED_ALIAS)
     }
 
     private fun sign(message: ByteArray): String {
         require(message.size in 1..8192) { "Signing transcript size is invalid." }
-        val privateKey = keyStore().getKey(ALIAS, null) as? java.security.PrivateKey
+        val store = keyStore()
+        val alias = if (store.containsAlias(ATTESTED_ALIAS)) ATTESTED_ALIAS else ALIAS
+        val privateKey = store.getKey(alias, null) as? PrivateKey
             ?: throw SecurityException("Payment device identity is not enrolled on this device.")
-        val signer = Signature.getInstance("SHA256withECDSA")
-        signer.initSign(privateKey)
-        signer.update(message)
-        return Base64.encodeToString(signer.sign(), URL_SAFE_FLAGS)
+        Signature.getInstance("SHA256withECDSA").run {
+            initSign(privateKey)
+            update(message)
+            return Base64.encodeToString(sign(), URL_SAFE_FLAGS)
+        }
     }
 
     private fun keyStore(): KeyStore = KeyStore.getInstance(STORE).apply { load(null) }
 
     private fun pem(der: ByteArray): String =
-        "-----BEGIN PUBLIC KEY-----\n" +
-            Base64.encodeToString(der, Base64.NO_WRAP) +
+        "-----BEGIN PUBLIC KEY-----\n" + Base64.encodeToString(der, Base64.NO_WRAP) +
             "\n-----END PUBLIC KEY-----"
 
     private fun requireOpaque(value: String, label: String) {
