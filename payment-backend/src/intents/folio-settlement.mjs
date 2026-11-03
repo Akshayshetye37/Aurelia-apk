@@ -1,5 +1,5 @@
+import crypto from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
-import { paymentFolioDocumentId } from './firestore-repository.mjs';
 
 /**
  * Posts an independently provider-verified payment intent to the authoritative
@@ -25,8 +25,8 @@ export async function settleVerifiedPaymentIntent({ db, intentId, eventId, provi
         intent.providerVerifiedStatus !== 'CAPTURED') {
       throw new Error('payment_intent_not_authoritatively_verified');
     }
-    const folioRef = db.collection('paymentFolios')
-      .doc(paymentFolioDocumentId(intent.tenantId, intent.folioId));
+    const folioId = crypto.createHash('sha256').update(intent.tenantId + ':' + intent.folioId).digest('hex');
+    const folioRef = db.collection('paymentFolios').doc(folioId);
     const journalRef = folioRef.collection('journalEntries').doc(intentId);
     const [folioSnap, journalSnap] = await Promise.all([tx.get(folioRef), tx.get(journalRef)]);
     if (!folioSnap.exists) throw new Error('authoritative_payment_folio_missing');
