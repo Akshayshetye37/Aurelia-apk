@@ -9,6 +9,7 @@ import java.net.URI
 import java.net.URL
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 /**
@@ -67,8 +68,9 @@ class PaymentDeviceClient(
         require(token.matches(Regex("[A-Za-z0-9_-]{40,64}"))) {
             "Appliance lease token is missing or malformed."
         }
-        require(cursor >= 0L && expiresAt.isNotBlank() && expiresAt.length <= 64) {
-            "Appliance lease metadata is invalid."
+        require(cursor >= 0L && expiresAt.isNotBlank() && expiresAt.length <= 64 &&
+            Instant.parse(expiresAt).isAfter(Instant.now())) {
+            "Appliance lease metadata is invalid or expired."
         }
         validateCommand(command)
         require(command.getLong("sequenceId") == cursor + 1L) {
@@ -85,6 +87,11 @@ class PaymentDeviceClient(
     fun acknowledge(lease: Lease, ledgerAckId: String): JSONObject {
         val command = lease.command
         validateCommand(command)
+        require(lease.leaseToken.matches(Regex("[A-Za-z0-9_-]{40,64}")) &&
+            lease.cursor >= 0L && command.getLong("sequenceId") == lease.cursor + 1L &&
+            Instant.parse(lease.leaseExpiresAt).isAfter(Instant.now())) {
+            "Lease is malformed, expired, or no longer contiguous."
+        }
         require(ledgerAckId.isNotBlank() && ledgerAckId.length <= 128 &&
             ledgerAckId.none { it.code < 0x20 || it.code == 0x7f }) {
             "Invalid durable ledger receipt."
