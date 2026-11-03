@@ -4,7 +4,7 @@ These notes reflect a preliminary static review of the supplied `index.html`; th
 
 ## Address before production
 
-1. **UPI QR generation uses a third-party endpoint.** The QR image URL includes an encoded UPI payment URI. That URI can contain the payee, amount, guest-related text, and transaction reference. Prefer generating QR images locally or in a trusted backend, and avoid sending guest/payment details to third-party URL services.
+1. **Third-party UPI QR transmission has been removed.** The PMS now creates the UPI intent locally and offers an Open UPI app action; QR image display is temporarily disabled until an on-device QR encoder is integrated. Do not reintroduce remote QR image endpoints that receive payee, amount, guest or transaction metadata.
 2. **Booking API credentials are handled in client-side settings.** A browser-delivered HTML app cannot keep a shared API secret confidential. Do not store production bearer tokens in local storage or expose privileged API credentials in frontend code. Use a backend proxy with appropriate authentication and authorization.
 3. **Guest information is sensitive.** Guest names, contact details, ID-document data, occupancy details, invoices, and balances need access controls, retention rules, backups, and secure transport/storage appropriate to the deployment.
 4. **External dependencies require network access.** The app references CDN-hosted libraries and remote services. Pin and review dependencies, consider self-hosting critical libraries, and establish a dependency-update process.
