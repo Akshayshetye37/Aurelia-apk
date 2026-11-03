@@ -32,6 +32,23 @@ Allowed local statuses are SAVED_ON_DEVICE, SENT_TO_LAN, PROCESSED_BY_LAN, and R
 
 **Important boundary:** this journal is an offline-safe intent/outbox foundation, not a complete payment flow. It deliberately has no client-callable method to mark a payment captured, set cloud sync to SYNCED, or post a folio receipt. Those transitions require a trusted signed backend result and the PMS accounting transaction. Until that integration is implemented, rows remain pending and no UI should describe them as paid.
 
+## Sandbox checkout wired into the PMS
+
+The Payment Gateway screen now presents the secure LAN Owner Console as the operational credential-entry path. Provider-issued Razorpay Key ID/Secret/Webhook Secret and Cashfree App ID/Secret/Webhook Secret are submitted over the configured HTTPS origin and encrypted at rest by the payment backend. The Android Keystore vault is explicitly labelled device-local storage only; credentials saved there are not silently treated as active checkout credentials.
+
+The hotel folio now exposes a sandbox online-checkout panel when:
+- The HTTPS backend readiness check has passed.
+- The owner has an authenticated session.
+- The selected provider's test credentials are saved, validated and activated.
+
+The checkout flow persists a local journal intent first, calls the backend's idempotent `/v1/payments/dispatch` endpoint, and then opens the provider's hosted checkout SDK. Razorpay receives only the public Key ID and order ID. Cashfree receives its payment-session ID; the operator must supply the guest mobile number and a provider-approved public HTTPS return URL. No provider secret is sent to WebView JavaScript.
+
+After checkout, Aurelia calls the backend's `/v1/payments/:transactionId/reconcile` endpoint. The backend queries the provider API and, when supplied, binds reconciliation to the exact payment ID. A checkout callback or redirect is never treated as proof of capture. Ambiguous orders remain unresolved and must be reconciled before another order is created.
+
+**Current settlement boundary:** an authoritative capture is returned as `CAPTURED_PENDING_ACCOUNTING`. It is not yet posted to the PMS folio automatically. The native Pay Bridge remains handshake-only, device enrollment/command delivery is not connected to this checkout screen, and the trusted settlement projector is not installed. Do not manually record the same online payment while its provider transaction is unresolved.
+
+Cashfree additionally requires a publicly reachable HTTPS return URL registered/allowed with Cashfree. A private LAN hostname is not publicly reachable by Cashfree. Provider webhooks likewise need a publicly reachable, secured ingress; the LAN endpoint alone is not sufficient.
+
 ## Retry and synchronization rules
 
 1. Persist the request before attempting LAN or Internet dispatch.
