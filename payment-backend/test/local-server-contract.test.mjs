@@ -118,7 +118,8 @@ test('payment dispatch is persisted before provider IO and ambiguous outcomes ar
 });
 
 test('provider reconciliation checks trusted order, amount and currency', () => {
-  assert.match(source, /adapter\.getPaymentStatus\(\{ orderId: providerOrderId \}\)/);
+  assert.match(source, /adapter\.getPaymentStatus\(\{ orderId: providerOrderId, \...\(requestedPaymentId \? \{ paymentId: requestedPaymentId \} : \{\}\) \}\)/);
+  assert.match(source, /remote\.paymentId !== requestedPaymentId/);
   assert.match(source, /remote\.amountMinor !== tx\.amount_minor/);
   assert.match(source, /remote\.currency !== tx\.currency/);
   assert.match(source, /provider_api_confirmed_capture/);
