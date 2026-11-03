@@ -79,7 +79,8 @@ class LockGateActivity : Activity() {
                 this.hint = "Confirm PIN"
                 setTextColor(android.graphics.Color.WHITE)
                 setHintTextColor(android.graphics.Color.GRAY)
-                filters = arrayOf(android.text.InputFilter.LengthFilter(12))
+                // Must match the primary PIN field and the 4–16 digit security engine.
+                filters = arrayOf(android.text.InputFilter.LengthFilter(16))
             }
             root.addView(confirmField, LinearLayout.LayoutParams(-1, -2))
         }
