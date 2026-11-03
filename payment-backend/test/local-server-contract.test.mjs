@@ -129,7 +129,7 @@ test('captured commands retain exact provider and PMS folio settlement bindings'
   assert.match(source, /method: current\.provider/);
   assert.match(source, /verificationConfirmed: true/);
   assert.match(source, /idempotencyKey: 'settlement:' \+ current\.provider \+ ':command:' \+ commandId/);
-  assert.match(source, /providerPaymentId: remote\.paymentId/);
+  assert.match(source, /providerOrderId, remote\.paymentId \|\| null/);
 });
 
 test('device delivery uses signed requests, ordered leases, durable receipts and cursor compare-and-set', () => {
