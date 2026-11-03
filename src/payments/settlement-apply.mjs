@@ -74,13 +74,19 @@ export async function recoverPendingSettlements({ journal, project } = {}) {
   const pending = await journal.listPending();
   const recovered = [];
   for (const record of pending) {
-    const input = {
+    const input = journalInputFor({
+      ...record.payload,
       provider: record.provider,
       ...(record.providerTransactionId
         ? { providerTransactionId: record.providerTransactionId }
-        : { commandId: record.commandId }),
-      payload: record.payload
-    };
+        : { commandId: record.commandId })
+    });
+    const expectedKey = input.provider + ":" + (input.providerTransactionId
+      ? "transaction:" + input.providerTransactionId
+      : "command:" + input.commandId);
+    if (record.key !== expectedKey) {
+      throw new Error("Pending settlement journal identity is inconsistent");
+    }
     const result = await applyJournaledSettlement({
       journal,
       input,
