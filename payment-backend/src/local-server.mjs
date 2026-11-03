@@ -356,6 +356,16 @@ function ownerAuth(req, res, next) {
 }
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
+app.get('/payment-return', (req, res) => {
+  // Provider redirect is a navigation hint only. The PMS must call the
+  // authenticated reconciliation endpoint before showing a captured result.
+  const transactionId = String(req.query.transaction_id || '');
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(transactionId)) {
+    return res.status(400).type('text/plain').send('Invalid Aurelia payment reference. Return to the PMS and review the folio.');
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  res.type('html').send('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Return to Aurelia</title><body style="font:16px system-ui;max-width:34rem;margin:12vh auto;padding:24px;color:#17352b"><h2>Payment attempt returned</h2><p>This redirect does not confirm payment. Return to Aurelia PMS and use <b>Check payment status</b>. The provider status will be verified securely before staff can post it to the folio.</p><p>Reference: <code>' + transactionId.replace(/[&<>"]/g, '') + '</code></p></body></html>');
+});
 app.get('/readyz', async (_req, res) => {
   try {
     db.prepare('SELECT 1').get();
@@ -1185,7 +1195,7 @@ app.post('/v1/payments/:transactionId/reconcile', ownerAuth, requireBrowserMutat
       const result = transitionPayment(tx.id,
         ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED','FAILED'],
         'CAPTURED_PENDING_ACCOUNTING', 'provider_api_confirmed_capture', providerOrderId, remote.paymentId || null);
-      return res.json({ transactionId: tx.id, status: result.status, folioSettlement: 'PENDING_OUTBOX' });
+      return res.json({ transactionId: tx.id, status: result.status, providerOrderId, providerPaymentId: remote.paymentId || null, amountMinor: tx.amount_minor, currency: tx.currency, folioSettlement: 'PENDING_OUTBOX' });
     }
     if (['failed','declined','cancelled','expired'].includes(String(remote.paymentStatus || '').toLowerCase())) {
       const result = transitionPayment(tx.id,
