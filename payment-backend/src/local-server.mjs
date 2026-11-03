@@ -247,7 +247,7 @@ app.use((req, res, next) => {
   if (!req.secure) return fail(res, 403, 'https_required');
   next();
 });
-app.use(express.json({ limit: '16kb', strict: true, type: req => !req.path.startsWith('/v1/webhooks/') }));
+app.use(express.json({ limit: '512kb', strict: true, type: req => !req.path.startsWith('/v1/webhooks/') }));
 
 const loginAttempts = new Map();
 function loginRateLimit(req, res, next) {
