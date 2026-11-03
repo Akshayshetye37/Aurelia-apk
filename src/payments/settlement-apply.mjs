@@ -151,14 +151,13 @@ export async function recoverPendingSettlements({
       typeof project !== "function") {
     throw new TypeError("Settlement journal and projection callback are required");
   }
+  const pending = await journal.listPending();
+  if (pending.length === 0) return { scanned: 0, recovered: [] };
   if (typeof authorize !== "function") {
     const error = new Error("Settlement authorization callback is required for recovery");
     error.code = "SETTLEMENT_AUTHORIZATION_REQUIRED";
     throw error;
   }
-
-  const pending = await journal.listPending();
-  if (pending.length === 0) return { scanned: 0, recovered: [] };
   const recovered = [];
   for (const record of pending) {
     const recoveryToken = "recovery:" + record.key + ":" + record.payloadHash;
