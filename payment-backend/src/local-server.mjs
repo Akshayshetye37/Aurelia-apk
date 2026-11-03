@@ -889,6 +889,7 @@ app.post('/v1/webhooks/:provider/:environment', express.raw({ type: 'application
   }
   const row = providerRow(provider, environment);
   if (!row?.configured) return fail(res, 404, 'provider_not_configured');
+  let key = null;
   try {
     const adapter = createProviderAdapter(provider, { credentials: decryptCredentials(row), environment });
     const checked = await adapter.verifyWebhook(req.body, req.headers);
@@ -899,7 +900,7 @@ app.post('/v1/webhooks/:provider/:environment', express.raw({ type: 'application
       ? req.get('x-razorpay-event-id')
       : req.get('x-webhook-id') || crypto.createHash('sha256').update(req.body).digest('hex');
     if (typeof eventId !== 'string' || !/^[A-Za-z0-9._:-]{1,200}$/.test(eventId)) return fail(res, 400, 'invalid_event_id');
-    const key = crypto.createHash('sha256').update(provider + ':' + environment + ':' + eventId).digest('hex');
+    key = crypto.createHash('sha256').update(provider + ':' + environment + ':' + eventId).digest('hex');
     const payloadHash = crypto.createHash('sha256').update(req.body).digest('hex');
     const inserted = db.prepare(`INSERT OR IGNORE INTO webhook_inbox(event_key,provider,environment,received_at,signature_verified,processing_status,payload_sha256)
       VALUES(?,?,?,?,1,'RECEIVED',?)`).run(key, provider, environment, now(), payloadHash);
@@ -947,7 +948,7 @@ app.post('/v1/webhooks/:provider/:environment', express.raw({ type: 'application
     }
     const remote = await adapter.getPaymentStatus({ orderId: providerOrderId, ...(providerPaymentId ? { paymentId: providerPaymentId } : {}) });
     if (remote.orderId !== providerOrderId ||
-        (providerPaymentId && remote.paymentId !== providerPaymentId) ||
+        (providerPaymentId && String(remote.paymentId) !== providerPaymentId) ||
         remote.amountMinor !== tx.amount_minor || remote.currency !== tx.currency) {
       db.prepare("UPDATE webhook_inbox SET processing_status='RECONCILIATION_REQUIRED' WHERE event_key=?").run(key);
       writeAudit('WEBHOOK_PROVIDER_BINDING_MISMATCH', tx.id);
