@@ -222,6 +222,18 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   assert.equal(ack.cursor, 1);
   assert.equal(db.prepare('SELECT last_applied_sequence FROM device_cursors WHERE device_id=?').get(deviceId).last_applied_sequence, 1);
   assert.equal(db.prepare('SELECT status FROM device_command_state WHERE command_id=?').get(commandId).status, 'PROCESSED');
+  assert.equal(db.prepare('SELECT status FROM transactions WHERE id=?').get(transactionId).status, 'SETTLED');
+  assert.equal(db.prepare("SELECT status FROM settlement_outbox WHERE transaction_id=? AND event_type='PAYMENT_CAPTURED'").get(transactionId).status, 'PROCESSED');
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM transaction_journal WHERE transaction_id=? AND to_status=\'SETTLED\'').get(transactionId).count, 1);
+
+  const duplicateAckHeaders = signDeviceRequest(privateKey, { deviceId, method: 'POST', path: ackPath, body: receipt });
+  const duplicateAck = await fetch(baseUrl + ackPath, {
+    method: 'POST', headers: { ...duplicateAckHeaders, 'Content-Type': 'application/json', 'X-Forwarded-Proto': 'https' },
+    body: JSON.stringify(receipt)
+  });
+  assert.equal(duplicateAck.status, 200);
+  assert.equal((await duplicateAck.json()).duplicate, true);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM transaction_journal WHERE transaction_id=? AND to_status=\'SETTLED\'').get(transactionId).count, 1);
 
   const revoke = await fetch(baseUrl + '/v1/admin/devices/' + deviceId + '/revoke', {
     method: 'POST', headers: ownerHeaders, body: JSON.stringify({})
