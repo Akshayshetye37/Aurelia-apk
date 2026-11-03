@@ -4325,24 +4325,6 @@ window.aureliaSettlePayment = function(input) {
   });
 };
 </script>
-<script>
-/* Journaled projection is reserved for independently verified backend commands.
-   Existing manual payments and reservation advances keep the synchronous path. */
-window.__aureliaProjectJournaledSettlement = function(payload) {
-  if (!payload || typeof payload !== 'object') throw new Error('Verified settlement payload is invalid');
-  const booking = S.b.find(item => item && String(item.id) === String(payload.bookingId));
-  if (!booking) throw new Error('Booking not found during settlement recovery');
-  return settlePayment({
-    booking,
-    amount: payload.amount,
-    method: payload.method,
-    reference: payload.reference || '',
-    source: 'staff_review',
-    idempotencyKey: payload.idempotencyKey,
-    verificationConfirmed: payload.verificationConfirmed === true
-  });
-};
-</script>
 <script type="module" id="aurelia-journaled-settlement-adapter">
 import { IndexedDbSettlementJournal } from './src/payments/settlement-journal.mjs';
 import {
