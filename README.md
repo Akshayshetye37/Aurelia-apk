@@ -693,3 +693,16 @@ Each transition must be independently retry-safe. Duplicate delivery must not cr
 7. Proceed to refunds, the full provider matrix, deployment hardening and remaining P3 work.
 
 This handoff is a plan and status record, not evidence that the remaining work has been implemented or deployed.
+
+
+---
+
+## Execution checkpoint — 2026-11-03
+
+The Phase A integration is **not complete**. The following narrowly scoped regression-test correction was committed while beginning the execution sequence:
+
+- Recovery-test authorization fixture now checks the actual journal identity (provider:transaction:providerTransactionId) and independently binds the recovery decision to provider, transaction, booking, amount and the 64-character payload digest. The previous fixture incorrectly expected the journal key itself to be a SHA-256 digest, which prevented the intended crash-recovery test from authorizing its valid test record.
+- Commit: ebedb999de09bd4489fe8d7169924ea4b7cf1d1b.
+- CI run: [PMS quality checks](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41564882480) was queued at this checkpoint; no pass is claimed until GitHub reports a completed successful run.
+
+This correction does **not** implement the missing trusted issuer, native projector, startup recovery bridge, Android Keystore client, checkout dispatch or end-to-end folio path. Those remain blocked until the corresponding native trust/projector implementation exists. In particular, do not replace the unavailable native projector with a WebView-controlled callback, do not mint authorization tokens in JavaScript, and do not acknowledge a command based on a local journal status alone. The locked automatic-settlement and live-collection controls remain unchanged.
