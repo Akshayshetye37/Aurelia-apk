@@ -76,18 +76,26 @@ test('cookie-authenticated state mutations require an exact allowlisted Origin',
   ]) assert.ok(source.includes(route), route);
 });
 
-test('device enrollment cannot activate on proof-of-possession without a trusted Android attestation verifier', () => {
+test('device enrollment verifies Google Key Attestation before owner activation', () => {
   assert.match(source, /ECDSA_P256_SHA256','PENDING'/);
   assert.match(source, /CREATE TABLE IF NOT EXISTS device_challenges/);
-  assert.match(source, /expires_at INTEGER NOT NULL/);
+  assert.match(source, /nonce_base64 TEXT/);
+  assert.match(source, /ATTESTATION_VERIFIER_URL/);
+  assert.match(source, /android\/keyattestation/);
   assert.ok(source.includes("app.post('/v1/admin/devices/:deviceId/challenge', ownerAuth"));
+  assert.ok(source.includes("app.post('/v1/admin/devices/:deviceId/attestation', ownerAuth"));
+  assert.match(source, /attestation_challenge_invalid_or_expired/);
+  assert.match(source, /attestation_challenge_race_or_expiry/);
+  assert.match(source, /device_attestation_key_binding_failed/);
+  assert.match(source, /attestation_verified_at/);
+  assert.match(source, /status='PENDING' AND owner_id/);
   const activationStart = source.indexOf("app.post('/v1/admin/devices/:deviceId/activate'");
   const activationEnd = source.indexOf("app.post('/v1/admin/devices/:deviceId/revoke'", activationStart);
   const activation = source.slice(activationStart, activationEnd);
-  assert.match(activation, /device_attestation_verifier_unavailable/);
-  assert.match(activation, /Proof-of-possession is not Android Key Attestation/);
-  assert.doesNotMatch(activation, /crypto\.verify\(/);
-  assert.doesNotMatch(activation, /status='ACTIVE'/);
+  assert.match(activation, /device_attestation_required/);
+  assert.match(activation, /attestation_verified_boot_state !== 'VERIFIED'/);
+  assert.match(activation, /attestation_device_locked !== 1/);
+  assert.match(activation, /status='ACTIVE'/);
   assert.ok(source.includes("app.post('/v1/admin/devices/:deviceId/revoke', ownerAuth"));
   assert.match(source, /status='REVOKED'/);
   assert.match(source, /device_revoked/);
