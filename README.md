@@ -29,6 +29,8 @@
 
 ### Remaining implementation work — ordered release gates
 
+Track implementation and acceptance evidence in [docs/PAYMENT-READINESS-CHECKLIST.md](docs/PAYMENT-READINESS-CHECKLIST.md).
+
 #### P0 — Secure device enrollment before accepting evidence
 
 - Replace/retire the legacy public-key-only registration path for new devices.
