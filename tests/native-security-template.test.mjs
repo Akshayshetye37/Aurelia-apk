@@ -81,7 +81,7 @@ test('payment device identity uses Android Keystore P-256 and domain-separated p
   assert.match(source, /AndroidKeyStore/);
   assert.match(source, /KEY_ALGORITHM_EC/);
   assert.match(source, /secp256r1/);
-  assert.match(source, /AURELIA_DEVICE_ACTIVATE_V1/);
+  assert.doesNotMatch(source, /AURELIA_DEVICE_ACTIVATE_V1|signActivation\(/);
   assert.match(source, /AURELIA_DEVICE_REQUEST_V1/);
   assert.match(source, /SHA256withECDSA/);
   assert.match(source, /PrivateKey/);
