@@ -68,3 +68,13 @@ test("payment and core PMS keep a minimal permission surface", () => {
   assert.doesNotMatch(patcher, /QUERY_ALL_PACKAGES[^\n]*uses-permission/);
   assert.doesNotMatch(patcher, /requestPermissions\s*\(/);
 });
+
+
+test("Android application explicitly denies cleartext and supports owner-installed HTTPS CA trust", () => {
+  assert.match(patcher, /android:usesCleartextTraffic="false"/);
+  assert.match(patcher, /android:networkSecurityConfig="@xml\\/aurelia_network_security_config"/);
+  assert.match(patcher, /cleartextTrafficPermitted="false"/);
+  assert.match(patcher, /<certificates src="system" \/>/);
+  assert.match(patcher, /<certificates src="user" \/>/);
+  assert.match(patcher, /aurelia_network_security_config\\.xml/);
+});

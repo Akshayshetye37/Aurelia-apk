@@ -791,3 +791,15 @@ The static regression test checks the permission policy, SDK-scoped declarations
 This commit changes Android manifest permission hardening and CI checks only. It does not complete the payment integration. The trusted authorization issuer, startup recovery bridge, native device registration/activation and signed polling client, checkout dispatch, trusted folio projector, signed acknowledgement, refund lifecycle, Docker appliance deployment and physical-device end-to-end acceptance remain outstanding as described above.
 
 Keep `AUTO_FOLIO_SETTLEMENT_ENABLED = false`. Live collection remains disabled. Do not acknowledge a command or advance its cursor before durable PMS folio application and persisted-state verification. Do not claim production readiness, deployment, or exactly-once accounting.
+
+## HTTPS-only Android and LAN transport boundary — 2026-11-03
+
+The Android manifest patch now explicitly sets `android:usesCleartextTraffic="false"` and attaches a generated Network Security Config with `cleartextTrafficPermitted="false"`. This applies to the Android app's WebView and platform networking policy; HTTP fallback is not permitted.
+
+The Network Security Config trusts Android system roots and user-installed CA roots. This permits an owner to install and trust the private CA used by the LAN appliance's Caddy TLS endpoint. Install the CA through Android's certificate settings and verify the appliance hostname matches the certificate SAN. Do not accept certificate warnings, disable hostname verification, add trust-all code, or silently fall back to HTTP. User-installed CA trust is intentionally an owner-controlled trust decision; only install a CA you control.
+
+The Capacitor app origin remains HTTPS via `androidScheme: "https"`. The LAN Compose deployment publishes only Caddy's TLS port; the Node service is not published to the host and is reachable only on the private Docker network. Caddy terminates client TLS and proxies to the backend over that isolated Docker network. The internal proxy hop is HTTP inside the private Compose network; it is not an HTTPS client endpoint and must never be exposed directly to the LAN or Internet. Backend request handling rejects requests that do not arrive as secure requests through the configured TLS proxy.
+
+Static regression coverage verifies the explicit cleartext prohibition and system/user CA trust declarations. This is not a substitute for verifying the built APK's merged manifest, certificate hostname/SAN, TLS handshake and rejection of HTTP on a physical Android device.
+
+**Operational rule:** configure the PMS backend origin as `https://<appliance-hostname>:8443` (or the exact HTTPS origin configured by the owner). Never configure an `http://` backend URL. No HTTP redirect or insecure fallback is an acceptable security control.

@@ -143,6 +143,28 @@ if (!manifest.includes('com.aurelia.pms.security.LockGateActivity')) {
   const gateActivity = '<activity android:name="com.aurelia.pms.security.LockGateActivity" android:exported="true" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.NoActionBar"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>';
   manifest = manifest.replace(mainMatch[0], internalMain + '\n        ' + gateActivity);
 }
+// Enforce HTTPS at the Android application boundary. User-installed CAs are
+// included so an owner-installed private LAN CA (for example, Caddy's CA) can
+// authenticate the appliance. Cleartext remains denied for WebView and native APIs.
+manifest = manifest.replace(/<application\\b([^>]*)>/, (match, attrs) => {
+  attrs = attrs.replace(/\\s+android:usesCleartextTraffic="[^"]*"/, '')
+    .replace(/\\s+android:networkSecurityConfig="[^"]*"/, '');
+  return '<application' + attrs +
+    ' android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/aurelia_network_security_config">';
+});
+const xmlDir = path.join(appDir, 'res', 'xml');
+fs.mkdirSync(xmlDir, { recursive: true });
+fs.writeFileSync(path.join(xmlDir, 'aurelia_network_security_config.xml'),
+  '<?xml version="1.0" encoding="utf-8"?>' +
+  '<network-security-config>' +
+    '<base-config cleartextTrafficPermitted="false">' +
+      '<trust-anchors>' +
+        '<certificates src="system" />' +
+        '<certificates src="user" />' +
+      '</trust-anchors>' +
+    '</base-config>' +
+  '</network-security-config>');
+
 // Keep the future Pay Bridge discovery narrowly scoped; never request QUERY_ALL_PACKAGES.
 fs.writeFileSync(manifestPath, manifest);
 
