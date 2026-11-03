@@ -81,13 +81,13 @@ test('device enrollment uses short-lived single-use P-256 proof-of-possession ch
   assert.match(source, /proofOfPossessionRequired:true/);
   assert.match(source, /CREATE TABLE IF NOT EXISTS device_challenges/);
   assert.match(source, /expires_at INTEGER NOT NULL/);
-  assert.match(source, /app\\.post\\('\/v1\/admin\/devices\/:deviceId\/challenge', ownerAuth/);
-  assert.match(source, /app\\.post\\('\/v1\/admin\/devices\/:deviceId\/activate', ownerAuth/);
+  assert.ok(source.includes("app.post('/v1/admin/devices/:deviceId/challenge', ownerAuth"));
+  assert.ok(source.includes("app.post('/v1/admin/devices/:deviceId/activate', ownerAuth"));
   assert.match(source, /AURELIA_DEVICE_ACTIVATE_V1/);
   assert.match(source, /crypto\\.verify\\('sha256'/);
   assert.match(source, /consumed_at IS NULL AND expires_at/);
   assert.match(source, /status='ACTIVE'.*status='PENDING'/);
-  assert.match(source, /app\\.post\\('\/v1\/admin\/devices\/:deviceId\/revoke', ownerAuth/);
+  assert.ok(source.includes("app.post('/v1/admin/devices/:deviceId/revoke', ownerAuth"));
   assert.match(source, /status='REVOKED'/);
   assert.match(source, /device_revoked/);
 });
