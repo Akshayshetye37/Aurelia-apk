@@ -9,7 +9,9 @@ Release-gate ledger for `feature/multi-provider-payment-backend`. Source impleme
 - [x] Software-backed keys rejected locally; staged key preserves the legacy identity.
 - [ ] Appliance verifies chain, challenge, package/signing digest, boot state, device lock and patch policy.
 - [x] Owner-session attestation-challenge issuance, single-use storage, pending enrollment and device revocation exist on the LAN appliance.
-- [ ] Trusted Android Key Attestation verification (Google chain, revocation, challenge, app signer, security level, device lock and verified boot) is absent; activation returns 503 and cannot promote a device.
+- [x] Official `android/keyattestation` v0.4 verifier sidecar integrated with Google trust anchors, six-hour fail-closed revocation cache, challenge validation, expected app identity, TEE/StrongBox-only security, locked VERIFIED boot and leaf-key binding.
+- [x] Owner/property/device-bound single-use challenge and atomic attestation metadata persistence added; owner activation requires verified attestation.
+- [ ] Docker build/CI, actual configured signer digest, valid chain tests, physical StrongBox + TEE acceptance and OS/patch/rollback policy review remain pending.
 - [~] Native HTTPS device transport, attested-key requirement, signed lease/ack, lease-token retention, canonical payload hash and immutable command-binding checks are implemented; command consumption, safe key rotation and end-to-end revocation lifecycle remain incomplete.
 - [ ] StrongBox and TEE physical-device instrumentation tests.
 - [ ] LAN appliance TLS, owner authentication, durable storage, backup and restore.
@@ -46,7 +48,21 @@ See [Native Device Delivery Boundary](NATIVE-DEVICE-DELIVERY-BOUNDARY.md) for th
 ## Attestation activation hardening — 2026-11-03
 
 - Android enrollment refuses to overwrite an existing attested Keystore alias. Explicit revoke/reset is required before reenrollment.
-- Appliance activation is fail-closed and returns device_attestation_verifier_unavailable; proof-of-possession alone cannot activate a device.
+- Proof-of-possession alone cannot activate a device. The new activation API requires persisted verifier success, hardware security level, locked VERIFIED boot and owner/property binding.
 - The integration test isolates transport coverage by manually promoting a test-only database fixture after verifying that HTTP activation leaves it PENDING.
 
-This closes the proof-of-possession activation bypass but does not implement the Google Android Key Attestation verifier. Certificate-chain trust/revocation, attestation extension parsing, challenge and app-signer binding, verified-boot/device-lock policy, and physical StrongBox/TEE acceptance remain P0 blockers. Do not activate devices, payment execution, automatic settlement or live collection.
+This implements the appliance verifier path using the official v0.4 library. CI Docker build, runtime signer/property configuration, physical StrongBox/TEE acceptance and policy review are still required. Do not enable payment execution, automatic settlement or live collection.
+
+
+## Appliance Key Attestation verifier implementation — 2026-11-03
+
+- [x] Official upstream verifier v0.4 integrated as a loopback-only JVM sidecar; upstream source tag is pinned in the Docker build.
+- [x] Google trust anchors and revocation status validation; six-hour cache with fail-closed refresh behavior.
+- [x] Exact challenge, expected app package/signing digest, hardware security level, locked VERIFIED boot and leaf SPKI checks.
+- [x] Owner/property/device challenge binding and atomic persistence of verified metadata.
+- [ ] Confirm CI Docker build and tests pass on the latest commit.
+- [ ] Run valid enrollment on physical StrongBox and TEE-only devices.
+- [ ] Complete owner-console enrollment/status UI, native enrollment orchestration, staged rotation and OS/patch/rollback policy.
+- [ ] LAN deployment, backup/restore, accounting projector, recovery, refund and end-to-end acceptance remain separate release gates.
+
+Activation is now possible only after verifier success and explicit owner-session action. This does not authorise payment execution or live collection.
