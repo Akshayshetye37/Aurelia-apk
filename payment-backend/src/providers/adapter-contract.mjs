@@ -13,25 +13,13 @@ export class PaymentProviderAdapter {
     this.fetch = fetchImpl;
   }
 
-  async validateCredentials() {
-    throw new Error('adapter_operation_not_implemented');
-  }
-
-  async createOrder(_input) {
-    throw new Error('adapter_operation_not_implemented');
-  }
-
-  async getPaymentStatus(_input) {
-    throw new Error('adapter_operation_not_implemented');
-  }
-
-  async verifyWebhook(_rawBody, _headers) {
-    throw new Error('adapter_operation_not_implemented');
-  }
-
-  async createRefund(_input) {
-    throw new Error('adapter_operation_not_implemented');
-  }
+  async validateCredentials() { throw new Error('adapter_operation_not_implemented'); }
+  async createOrder(_input) { throw new Error('adapter_operation_not_implemented'); }
+  async findOrderByReference(_input) { throw new Error('adapter_operation_not_implemented'); }
+  async getPaymentStatus(_input) { throw new Error('adapter_operation_not_implemented'); }
+  async verifyWebhook(_rawBody, _headers) { throw new Error('adapter_operation_not_implemented'); }
+  async createRefund(_input) { throw new Error('adapter_operation_not_implemented'); }
+  async getRefundStatus(_input) { throw new Error('adapter_operation_not_implemented'); }
 }
 
 export function assertAdapterCapabilities(adapter, required = []) {
