@@ -6,6 +6,7 @@ const ledger = readFileSync(new URL('../android/templates/LocalPaymentLedger.jav
 const patch = readFileSync(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const docs = readFileSync(new URL('../docs/LOCAL_FIRST_HYBRID_PAYMENT_ARCHITECTURE.md', import.meta.url), 'utf8');
+const paymentServer = readFileSync(new URL('../payment-backend/src/local-server.mjs', import.meta.url), 'utf8');
 
 test('native payment journal is durable and idempotent', () => {
   assert.match(ledger, /extends SQLiteOpenHelper/);
@@ -47,4 +48,20 @@ test('offline intent UI validates paise and clearly avoids claiming collection',
   assert.match(html, /No payment has been initiated or collected/);
   assert.match(html, /does not create a provider order, open checkout, collect money or mark a folio paid/);
   assert.match(html, /refreshAureliaLocalPaymentJournal/);
+});
+
+test('hotel folio checkout uses the authenticated backend and provider SDKs', () => {
+  assert.match(html, /localGatewayApi\('\/v1\/payments\/dispatch','POST',body\)/);
+  assert.match(html, /checkout\.razorpay\.com\/v1\/checkout\.js/);
+  assert.match(html, /sdk\.cashfree\.com\/js\/v3\/cashfree\.js/);
+  assert.match(html, /reconcileAureliaGatewayPayment/);
+  assert.match(html, /CAPTURED_PENDING_ACCOUNTING/);
+  assert.match(html, /checkout success screen alone never posts a PMS receipt/);
+  assert.match(html, /device vault is a separate at-rest store/);
+});
+
+test('backend reconciliation binds an optional checkout payment ID to provider API lookup', () => {
+  assert.match(paymentServer, /requestedPaymentId = req\.body\?\.paymentId/);
+  assert.match(paymentServer, /remote\.paymentId !== requestedPaymentId/);
+  assert.match(paymentServer, /provider_amount_currency_or_order_mismatch/);
 });
