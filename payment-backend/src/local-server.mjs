@@ -13,10 +13,7 @@ app.set('trust proxy', process.env.TRUST_PROXY_HOPS === '1' ? 1 : false);
 const PORT = Number(process.env.PORT || 8085);
 const DB_PATH = process.env.DATABASE_PATH || '/data/aurelia-payments.sqlite';
 const PROPERTY_ID = process.env.AURELIA_PROPERTY_ID || '';
-const ATTESTATION_VERIFIER_URL = process.env.ATTESTATION_VERIFIER_URL || 'http://127.0.0.1:8091/verify';
-const attestationVerifierUrl = new URL(ATTESTATION_VERIFIER_URL);
-if (attestationVerifierUrl.protocol !== 'http:' || !['127.0.0.1', '::1'].includes(attestationVerifierUrl.hostname))
-  throw new Error('ATTESTATION_VERIFIER_URL_must_be_loopback_HTTP_only');
+const ATTESTATION_VERIFIER_URL = 'http://127.0.0.1:8091/verify';
 if (!/^[A-Za-z0-9_-]{3,64}$/.test(PROPERTY_ID)) throw new Error('AURELIA_PROPERTY_ID_must_be_configured_as_3_to_64_safe_characters');
 const SESSION_TTL_SECONDS = 2 * 60 * 60;
 const SESSION_COOKIE = 'aurelia_owner_session';
