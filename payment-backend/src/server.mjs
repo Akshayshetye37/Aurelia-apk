@@ -197,6 +197,30 @@ async function providerAdapterForTenant(tenantId, provider, environment) {
   const { createProviderAdapter } = await import('./providers/factory.mjs');
   return { adapter: createProviderAdapter(provider, { credentials, environment }), state: state.data() };
 }
+
+app.post('/v1/admin/payments/reconcile', requireTenantAdmin,
+  express.json({ limit: '1kb', strict: true }), async (req, res) => {
+    const limit = req.body?.limit === undefined ? 50 : req.body.limit;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50 ||
+        Object.keys(req.body || {}).some(key => key !== 'limit')) {
+      return fail(res, 400, 'invalid_reconciliation_request');
+    }
+    try {
+      const { runDurableReconciliationWorker } = await import('./workers/reconciliation-engine.mjs');
+      const summary = await runDurableReconciliationWorker({
+        db,
+        tenantId: req.tenant.id,
+        limit,
+        adapterResolver: async (tenantId, provider, environment) => {
+          const { adapter } = await providerAdapterForTenant(tenantId, provider, environment);
+          return adapter;
+        }
+      });
+      return res.json({ authenticated: true, ...summary });
+    } catch {
+      return fail(res, 503, 'payment_reconciliation_unavailable');
+    }
+  });
 app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit: '8kb', strict: true }), async (req, res) => {
   const body = req.body || {};
   const allowed = ['folioId', 'amountMinor', 'currency', 'provider', 'environment', 'idempotencyKey', 'customer', 'returnUrl'];
