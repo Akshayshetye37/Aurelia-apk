@@ -9,7 +9,9 @@ import java.net.URI
 import java.net.URL
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.time.Instant
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 /**
@@ -69,7 +71,7 @@ class PaymentDeviceClient(
             "Appliance lease token is missing or malformed."
         }
         require(cursor >= 0L && expiresAt.isNotBlank() && expiresAt.length <= 64 &&
-            Instant.parse(expiresAt).isAfter(Instant.now())) {
+            parseLeaseExpiry(expiresAt) > System.currentTimeMillis()) {
             "Appliance lease metadata is invalid or expired."
         }
         validateCommand(command)
@@ -89,7 +91,7 @@ class PaymentDeviceClient(
         validateCommand(command)
         require(lease.leaseToken.matches(Regex("[A-Za-z0-9_-]{40,64}")) &&
             lease.cursor >= 0L && command.getLong("sequenceId") == lease.cursor + 1L &&
-            Instant.parse(lease.leaseExpiresAt).isAfter(Instant.now())) {
+            parseLeaseExpiry(lease.leaseExpiresAt) > System.currentTimeMillis()) {
             "Lease is malformed, expired, or no longer contiguous."
         }
         require(ledgerAckId.isNotBlank() && ledgerAckId.length <= 128 &&
@@ -219,6 +221,15 @@ class PaymentDeviceClient(
         } finally {
             connection.disconnect()
         }
+    }
+
+    /** Parses the backend's UTC ISO timestamp without requiring API 26 java.time. */
+    private fun parseLeaseExpiry(value: String): Long {
+        val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+            isLenient = false
+        }
+        return parser.parse(value)?.time ?: throw IllegalArgumentException("Invalid lease expiry timestamp.")
     }
 
     private fun responseCode(raw: String): String = try {
