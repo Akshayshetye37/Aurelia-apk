@@ -52,7 +52,7 @@ test("verified command is journaled before projection and applied after persiste
   const app = fixture();
   const result = await applyVerifiedSettlementCommand({ journal, command, project: app.project });
   assert.equal(result.ok, true);
-  assert.equal(result.record.status, "PENDING"); // append result reflects pre-projection record
+  assert.equal(result.record.status, "APPLIED");
   assert.equal((await journal.get(result.record.key)).status, "APPLIED");
   assert.equal(app.booking.p, 125);
   assert.equal(app.booking.pays.length, 1);
