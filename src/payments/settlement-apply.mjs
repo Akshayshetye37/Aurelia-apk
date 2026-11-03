@@ -160,9 +160,7 @@ export async function recoverPendingSettlements({
   }
   const recovered = [];
   for (const record of pending) {
-    const recoveryToken = "recovery:" + record.key + ":" + record.payloadHash;
     const decision = await authorize({
-      token: recoveryToken,
       provider: record.provider,
       providerTransactionId: record.providerTransactionId,
       commandId: record.commandId,
@@ -188,7 +186,6 @@ export async function recoverPendingSettlements({
       provider: record.provider,
       source: "staff_review",
       verificationConfirmed: true,
-      authorizationToken: recoveryToken,
       ...(record.providerTransactionId
         ? { providerTransactionId: record.providerTransactionId }
         : { commandId: record.commandId })
