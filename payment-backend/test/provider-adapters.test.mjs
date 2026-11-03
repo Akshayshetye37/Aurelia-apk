@@ -104,6 +104,13 @@ test('Cashfree status lookup prefers the payment ID associated with the webhook'
   assert.equal(status.captured, false);
 });
 
+test('Cashfree API credentials work without a webhook secret; webhook verification stays disabled', async () => {
+  const mock = mockFetch(async () => ({ status: 200, body: { data: [], cursor: null } }));
+  const adapter = new CashfreeAdapter({ credentials: { appId: 'sandbox-app', secretKey: 'secret' }, environment: 'test', fetchImpl: mock.fetchImpl });
+  assert.deepEqual(await adapter.validateCredentials(), { valid: true });
+  assert.deepEqual(await adapter.verifyWebhook(Buffer.from('{}'), {}), { valid: false });
+});
+
 test('Cashfree webhook signature uses timestamp concatenated with raw body', async () => {
   const raw = Buffer.from('{"type":"PAYMENT_SUCCESS_WEBHOOK"}');
   const timestamp = String(Math.floor(Date.now() / 1000));
