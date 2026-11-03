@@ -1848,16 +1848,15 @@ async function downloadBillPng(elementId,fileName){
   const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;a.rel='noopener';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);toast('PNG bill exported');
  }catch(e){console.error(e);toast('PNG export failed. Use Print / Save PDF.');}
 }
-/* Dynamic UPI intent QR; amount is generated from the current balance/restaurant bill. */
+/* Build a UPI intent locally. Never transmit payee, amount or guest metadata to a QR service. */
 function upiIntentUri(amount,guest,reference){
  const receiver=String(S.set?.upi||S.restaurant?.upi||'').trim();if(!receiver||!receiver.includes('@'))return '';
  const params=new URLSearchParams({pa:receiver,pn:String(S.set?.name||S.restaurant?.name||'Aurelia PMS'),am:(Math.max(0,Number(amount)||0)).toFixed(2),cu:'INR',tn:'Invoice payment '+String(guest||''),tr:String(reference||('AUR'+Date.now()))});
  return 'upi://pay?'+params.toString();
 }
 function dynamicUpiQr(amount,guest,reference){
- const uri=upiIntentUri(amount,guest,reference);if(!uri)return '<div style="padding:12px;color:#7a6a45">Set a valid UPI ID in Settings to generate an amount-specific QR.</div>';
- const qr='https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data='+encodeURIComponent(uri);
- return '<img alt="UPI QR for exact amount" src="'+qr+'" style="display:block;width:min(240px,100%);height:auto;margin:12px auto;border:8px solid #fff;background:#fff;border-radius:6px"><div style="font:12px Arial;color:#7a6a45;overflow-wrap:anywhere">UPI ID: '+esc(String(S.set?.upi||S.restaurant?.upi||''))+'</div>';
+ const uri=upiIntentUri(amount,guest,reference);if(!uri)return '<div style="padding:12px;color:#7a6a45">Set a valid UPI ID in Settings to enable UPI payment.</div>';
+ return '<div style="padding:12px;border:1px dashed #cdb27a;border-radius:10px"><div style="font-weight:600">UPI intent ready</div><a href="'+esc(uri)+'" style="display:inline-block;margin:10px 0;padding:10px 14px;border-radius:8px;background:#2a5d43;color:white;text-decoration:none">Open UPI app</a><div style="font:12px Arial;color:#7a6a45;overflow-wrap:anywhere">UPI ID: '+esc(String(S.set?.upi||S.restaurant?.upi||''))+'</div><small>QR display is temporarily disabled until an on-device QR encoder is integrated. No payment data is sent to a third-party QR service.</small></div>';
 }
 const _invBeforeDynamicUpi=inv;
 inv=function(i){
@@ -3247,7 +3246,7 @@ function restaurantUPI(){
 function exactUPIBox(amount,guest,ref){
  const id=restaurantUPI();if(!id)return '<div class="lab">Set a valid UPI ID in Restaurant Settings to show an exact-amount QR.</div>';
  const uri='upi://pay?'+new URLSearchParams({pa:id,pn:String(S.restaurant&&S.restaurant.name||S.set&&S.set.name||'Restaurant'),am:(Math.max(0,Number(amount)||0)).toFixed(2),cu:'INR',tn:'Payment '+String(guest||'customer'),tr:String(ref||('AUR'+Date.now()))}).toString();
- return '<div class="exact-upi-card" style="margin-top:14px;padding:14px;border:1px solid var(--ln);border-radius:14px;text-align:center;background:#fffaf0;color:#213a2d"><b>Pay exact amount · '+esc(rk(amount))+'</b><img alt="Exact amount UPI QR" src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data='+encodeURIComponent(uri)+'" style="display:block;width:min(250px,100%);height:auto;margin:12px auto;background:#fff;padding:6px"><div>UPI ID: '+esc(id)+'</div><small>Verify the recipient and amount in your UPI app before paying.</small></div>';
+ return '<div class="exact-upi-card" style="margin-top:14px;padding:14px;border:1px solid var(--ln);border-radius:14px;text-align:center;background:#fffaf0;color:#213a2d"><b>Pay exact amount · '+esc(rk(amount))+'</b><a href="'+esc(uri)+'" style="display:inline-block;margin:12px auto;padding:10px 14px;border-radius:8px;background:#2a5d43;color:white;text-decoration:none">Open UPI app</a><div>UPI ID: '+esc(id)+'</div><small>Verify the recipient and amount in your UPI app before paying. QR display is temporarily disabled until local QR encoding is integrated.</small></div>';
 }
 function guestPhoneFor(name,source){
  const direct=String(source&&source.phone||source&&source.ph||'').trim();if(direct)return direct;
