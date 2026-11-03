@@ -528,7 +528,7 @@ The selected optional deployment target is a Docker appliance on the same truste
 
 ### Important limitations — not implemented
 
-- New device registrations remain `PENDING`. The registration endpoint stores a P-256 public key and issues an attestation challenge; activation is deliberately blocked until trusted Android Key Attestation verification exists. The dispatch route rejects devices that are not `ACTIVE`; do not manually change their status.
+- New device enrollment is challenge-first: an owner session requests a 32-byte challenge bound to the intended device and property, then the device submits its P-256 public key and full attestation chain. The appliance verifies the chain before atomically creating a `PENDING` registration; explicit owner activation requires verified TEE/StrongBox, locked VERIFIED boot and matching app signer. The dispatch route rejects devices that are not `ACTIVE`; do not manually change their status.
 - The schema contains command, cursor, sequence and delivery-state tables, but there is no authenticated device sync/lease/receipt/acknowledgement/cursor API or background delivery worker.
 - Captured-payment commands are queued only when a transaction has an explicit device and folio binding. There is no connected PMS transaction adapter that durably commits a local folio mutation and idempotency record together.
 - The webhook route currently records verified signature evidence in the inbox and returns `accounting: not_implemented`. It does not independently reconcile a webhook to a trusted transaction or settle a folio.
