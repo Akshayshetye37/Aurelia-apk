@@ -175,3 +175,26 @@ Live processing remains disabled until all applicable gates pass:
 7. Security review confirms provider terms permit the chosen device-local credential model.
 
 Until then, the application is not ready to collect gateway payments. Do not label a provider "complete" because its name appears in the UI or vault.
+
+
+## 11. Current repository storage reality — integration blocker
+
+The target design above is not yet the repository's fully integrated runtime. Current code has multiple persistence boundaries:
+
+- `android/templates/LocalPaymentLedger.java` is a native Android SQLite journal for payment intents and provider references.
+- `src/payments/indexeddb-payment-intent-store.mjs` stores WebView-side payment correlation intents in IndexedDB.
+- `src/payments/settlement-journal.mjs` stores settlement replay records in a separate IndexedDB database.
+- `src/payments/settlement-apply.mjs` requires an authorization token and an injected authorization callback, then invokes a PMS projection callback and marks its IndexedDB journal record applied.
+
+These stores do not share one SQLite transaction. The current settlement sequence performs the PMS projection and the IndexedDB `markApplied` as separate operations. A process crash between those operations can replay the projection; therefore the projection itself must be idempotent. The native payment engine does not yet issue the trusted settlement authorization token, and the canonical PMS folio persistence has not yet been mapped to a native SQLite connection.
+
+**Do not describe the current implementation as an atomic cross-store folio commit.** Before enabling payment capture, choose and implement one explicit integration boundary:
+
+1. Move the canonical PMS folio/payment ledger into the same device-local SQLite database used by the native engine and perform the folio mutation plus receipt in one SQLite transaction; or
+2. Keep the existing PMS projection model and implement a durable, replay-safe native-to-WebView inbox/outbox protocol whose projection is idempotent and whose receipt is verified by read-back.
+
+The first option offers a clearer local accounting transaction but requires a deliberate migration of the PMS data model. The second avoids an immediate data-store migration but is a saga, not a single atomic transaction. Do not pretend that a JavaScript callback, a second SQLite file, or IndexedDB can participate in one Android SQLite transaction.
+
+## 12. Current implementation boundary
+
+The repository currently contains a credential-vault template, a native SQLite payment-intent journal, WebView IndexedDB intent/settlement journals, a trusted settlement-authorization contract, and a checkout fail-closed guard. The native checkout bridge, provider adapters, provider-authoritative verification, recovery worker, refund flow, canonical PMS accounting integration and physical-device acceptance remain incomplete.
