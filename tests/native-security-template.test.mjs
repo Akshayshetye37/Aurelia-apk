@@ -77,7 +77,7 @@ test('PIN policy is enforced by the cryptographic engine, not only by the launch
 test('payment device identity uses Android Keystore P-256 and domain-separated protocol transcripts', () => {
   const source = read('android/templates/security/PaymentDeviceKeyStore.kt');
   const patcher = read('scripts/patch-android.js');
-  assert.match(patcher, /'PaymentDeviceKeyStore\\.kt'/);
+  assert.match(patcher, /'PaymentDeviceKeyStore\.kt'/);
   assert.match(source, /AndroidKeyStore/);
   assert.match(source, /KEY_ALGORITHM_EC/);
   assert.match(source, /secp256r1/);
