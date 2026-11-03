@@ -104,11 +104,11 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   });
   assert.equal(challengeResponse.status, 201);
   const challenge = await challengeResponse.json();
-  assert.match(challenge.signingPayload, /^AURELIA_DEVICE_ACTIVATE_V1\n/);
-  const activationSignature = crypto.sign('sha256', Buffer.from(challenge.signingPayload), privateKey).toString('base64url');
+  assert.equal(challenge.attestationRequired, true);
+  assert.equal(challenge.attestationChallenge, challenge.nonce);
+  assert.match(challenge.attestationChallenge, /^[A-Za-z0-9_-]{40,64}$/);
   const activate = await fetch(baseUrl + '/v1/admin/devices/' + deviceId + '/activate', {
-    method: 'POST', headers: ownerHeaders,
-    body: JSON.stringify({ challengeId: challenge.challengeId, nonce: challenge.nonce, signature: activationSignature })
+    method: 'POST', headers: ownerHeaders, body: JSON.stringify({})
   });
   assert.equal(activate.status, 503);
   assert.equal((await activate.json()).error, 'device_attestation_verifier_unavailable');
