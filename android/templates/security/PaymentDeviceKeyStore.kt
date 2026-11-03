@@ -9,7 +9,7 @@ import java.security.Signature
 import java.security.spec.ECGenParameterSpec
 
 /**
- * Hardware-backed device identity primitives for the LAN payment protocol.
+ * Android Keystore-backed device identity primitives for the LAN payment protocol.
  * No WebView/JavascriptInterface methods and no network requests are exposed.
  * Device-key possession is not provider verification or accounting approval.
  */
@@ -41,6 +41,7 @@ class PaymentDeviceKeyStore {
                     .build()
             )
             generator.generateKeyPair()
+            store.load(null)
         }
         val publicKey = store.getCertificate(ALIAS)?.publicKey
             ?: throw SecurityException("Payment device public key is unavailable.")
