@@ -56,7 +56,7 @@ Razorpay's own Optimizer documentation distinguishes bank gateways from aggregat
 ## Security and implementation boundaries
 
 - No secret, salt, private key, webhook secret, API access token or merchant password may be stored in APK, browser storage, app backup, logs or Git.
-- The Android app stores Razorpay/Cashfree test/live credential records in an Android Keystore AES-256-GCM native vault. Secrets are not stored in WebView storage or returned to JavaScript. The optional LAN owner console remains a separate administration mode.
+- The Android app's optional Keystore vault is **sandbox-only credential staging**, not a payment processor. It rejects live credentials and webhook secrets, and cannot create orders, launch checkout, verify payments or activate gateway execution. Even sandbox secrets are not a substitute for server-side credential custody; do not place production secrets in either APK. Production credentials belong only in the trusted backend.
 - Pay Bridge remains a separate companion APK. Its current PMS-side handshake is not required for provider credential administration and does not yet implement checkout/refund/settlement IPC.
 - A browser redirect, Android intent result, screenshot, UPI notification or unsigned callback is not proof of payment.
 - Keep automatic folio settlement disabled until provider-specific sandbox and live end-to-end tests pass.
@@ -66,8 +66,8 @@ Razorpay's own Optimizer documentation distinguishes bank gateways from aggregat
 - Provider catalogue and official documentation references: added to the PMS payment workspace.
 - Single-provider-per-merchant selection: implemented in the PMS settings UI; selecting a new provider replaces the previous selected provider.
 - Provider-specific setup/verification guidance: included for every catalogue entry.
-- Razorpay and Cashfree Node backend adapters: implement credential validation, order creation, provider status lookup, raw-body webhook signature verification and refund API calls. The Android native local vault stores credentials only; native order creation, SDK checkout handoff, payment verification, status polling, refunds and accounting are not yet integrated end-to-end.
-- Separate Aurelia Pay Bridge APK: not yet built.
-- Android native local credential vault: implemented for Razorpay/Cashfree test and live records; credentials are encrypted at rest and never returned to JavaScript. Provider validation/activation is not yet wired to this vault.
+- Razorpay and Cashfree Node backend adapters: implement credential validation, order creation, provider status lookup, raw-body webhook signature verification and refund API calls in the backend. They are not yet wired end-to-end to the PMS and Pay Bridge checkout lifecycle. The Android sandbox vault is staging-only and does not call these adapters.
+- Separate Aurelia Pay Bridge source repository exists; the current service and PMS client implement a signer-checked handshake only. Payment checkout/status/cancel/refund IPC is not implemented.
+- Android native credential vault: sandbox-only Razorpay/Cashfree staging; live environments and webhook secrets are rejected. It does not expose credentials to JavaScript and has no provider execution capability.
 - Optional LAN owner console: integrated for Razorpay/Cashfree sandbox credential storage and validation; it requires the owner to deploy the Docker appliance.
-- Public webhook delivery, background reconciliation, refund lifecycle and atomic PMS folio settlement: not implemented; live collection remains disabled.
+- Provider adapters and local appliance webhook/reconciliation foundations exist, but production webhook delivery, PMS runtime orchestration, cross-process event delivery, refund lifecycle and atomic backend-authorized PMS folio settlement are not certified end-to-end. Live collection remains disabled.
