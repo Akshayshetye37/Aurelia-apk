@@ -32,8 +32,8 @@ test("all inline JavaScript in index.html parses before packaging", () => {
 
 
 test('UPI payment intent never sends guest or payment metadata to a third-party QR endpoint', () => {
-  const html = read('index.html');
-  assert.doesNotMatch(html, /api\\.qrserver\\.com/);
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(html, /api\.qrserver\.com/);
   assert.match(html, /upi:\/\/pay\\?/);
   assert.match(html, /Open UPI app/);
   assert.match(html, /QR display is temporarily disabled/);
