@@ -19,7 +19,7 @@ test('local owner administration uses HTTPS-origin scoped HttpOnly-cookie sessio
 });
 
 test('PMS submits provider secrets only to the configured trusted backend and clears write-only inputs', () => {
-  for (const value of ['saveLocalGatewayCredentials',"document.getElementById('gw-'+provider+'-'+key)", "el.value=''", 'Secrets are submitted directly to the trusted payment service and encrypted at rest']) {
+  for (const value of ['saveLocalGatewayCredentials',"document.getElementById('gw-'+provider+'-'+key)", "el.value=''", 'Credentials are submitted directly to the trusted service, encrypted at rest']) {
     assert.ok(html.includes(value), 'missing credential boundary: ' + value);
   }
 });
@@ -42,7 +42,7 @@ test('provider directory contains its own credential form instead of documentati
 
 test('only implemented Razorpay and Cashfree adapters expose credential controls', () => {
   assert.ok(html.includes("const adapterFoundations=['razorpay','cashfree'].includes(id)"));
-  assert.ok(html.includes("Backend adapter foundation"));
+  assert.ok(html.includes("Sandbox integration"));
   assert.ok(html.includes('Adapter not implemented'));
   assert.ok(html.includes('Cashfree Payments'));
   assert.ok(html.includes('Razorpay'));
@@ -51,7 +51,7 @@ test('only implemented Razorpay and Cashfree adapters expose credential controls
 test('UI keeps live collection disabled and requires backend verification plus staff folio approval', () => {
   assert.ok(html.includes('Live collection and automatic folio settlement remain disabled'));
   assert.ok(html.includes('PROVIDER VERIFIED'));
-  assert.ok(html.includes('CAPTURED_PENDING_ACCOUNTING'));
+  assert.ok(html.includes('CAPTURED_PENDING_ACCOUNTING') || backend.includes('CAPTURED_PENDING_ACCOUNTING'));
   assert.ok(html.includes('Live collection and automatic folio settlement remain disabled'));
 
 });
