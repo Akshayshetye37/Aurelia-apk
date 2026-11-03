@@ -53,7 +53,13 @@ class PaymentDeviceKeyStore {
         }
         require(serverChallenge.size in 16..128) { "Attestation challenge must be 16–128 bytes." }
         val store = keyStore()
-        if (store.containsAlias(ATTESTED_ALIAS)) store.deleteEntry(ATTESTED_ALIAS)
+        // Never destroy an existing enrolled key while attempting rotation. Android
+        // Keystore does not support renaming private-key aliases, so replacing the
+        // active alias here would create an avoidable identity-loss window. Rotation
+        // requires an explicit owner-controlled revoke/reset workflow.
+        if (store.containsAlias(ATTESTED_ALIAS)) {
+            throw SecurityException("An attested identity already exists; revoke it explicitly before reenrollment.")
+        }
 
         fun generate(preferStrongBox: Boolean) {
             val builder = KeyGenParameterSpec.Builder(
