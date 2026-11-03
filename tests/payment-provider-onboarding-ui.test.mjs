@@ -31,6 +31,15 @@ test('Razorpay and Cashfree onboarding requires only API credentials; webhook se
   assert.ok(backend.includes("c.webhookSecret === undefined"));
 });
 
+test('provider directory contains its own credential form instead of documentation-only cards', () => {
+  assert.ok(html.includes('function localGatewayProviderConfigHtml(provider)'));
+  assert.ok(html.includes("const credentialPanel=adapterFoundations?localGatewayProviderConfigHtml(id):''"));
+  assert.ok(html.includes("Sandbox integration"));
+  assert.ok(html.includes("Save credentials"));
+  assert.ok(html.includes("Validate credentials"));
+  assert.ok(html.includes("Remove credentials"));
+});
+
 test('only implemented Razorpay and Cashfree adapters expose credential controls', () => {
   assert.ok(html.includes("const adapterFoundations=['razorpay','cashfree'].includes(id)"));
   assert.ok(html.includes("Backend adapter foundation"));
