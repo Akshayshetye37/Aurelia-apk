@@ -1,9 +1,32 @@
 # Aurelia PMS
 
 
-## Project status and deployment checklist — 2026-11-03
+## Project status and deployment checklist — 2026-11-04
 
 > **Current state: active development; not production-deployed and not approved for live payment collection.** This section is the operational summary. The detailed architecture and historical checkpoints below provide supporting context.
+
+
+### Payment integration status — current implementation boundary
+
+The payment workstream uses a provider-neutral backend and a durable device-command settlement protocol. The backend can verify provider-side evidence, record a captured payment as `CAPTURED_PENDING_ACCOUNTING`, and prepare a signed command for the enrolled device. The backend acknowledgement endpoint now finalizes the backend transaction, journal entry, settlement outbox event and audit record atomically **after** a valid device receipt is acknowledged.
+
+That backend commit is not, by itself, proof that the PMS folio was updated. The trusted native Android settlement projector that consumes the command, validates it, writes the folio credit, reads back the durable PMS receipt and only then acknowledges the command is **not yet integrated end-to-end**. Do not call the acknowledgement endpoint from WebView JavaScript, a placeholder bridge, or a test-only simulator.
+
+| Payment stage | Status |
+|---|---|
+| Provider evidence verification / webhook validation | Backend implementation exists; provider-specific production sandbox acceptance remains outstanding |
+| Captured payment durable state | Backend records `CAPTURED_PENDING_ACCOUNTING` |
+| Device settlement command and signed receipt protocol | Backend-side command/acknowledgement path exists |
+| Atomic backend settlement finalization on acknowledgement | Implemented with transaction, journal, outbox and audit updates in one SQLite transaction |
+| Native Android projector → actual PMS folio write → durable read-back → acknowledgement | **Not integrated / not accepted** |
+| Background reconciliation worker | Not complete |
+| Refund reversal and provider refund lifecycle | Not complete; refunds remain disabled |
+| Live payment collection | **Disabled** |
+
+**Accounting invariant:** a provider capture is not a PMS payment. A folio is settled only after the trusted native projector has durably applied the exact credit and verified its read-back receipt. Ambiguous outcomes must be reconciled; never create a duplicate charge or acknowledge a command to make a payment appear settled.
+
+The architecture is a durable inbox/outbox saga across independent systems, not distributed two-phase commit. Each system commits its own durable state and uses idempotency plus reconciliation to recover from partial failure. See [the local-first hybrid payment architecture](docs/LOCAL_FIRST_HYBRID_PAYMENT_ARCHITECTURE.md) and [payment readiness checklist](docs/PAYMENT-READINESS-CHECKLIST.md).
+
 
 ### Project location
 
