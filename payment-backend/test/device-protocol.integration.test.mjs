@@ -173,6 +173,9 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   db.prepare(`INSERT INTO transactions(id,provider,environment,amount_minor,currency,status,idempotency_key,device_id,folio_id,created_at,updated_at)
     VALUES(?,?,?,?,'INR','CAPTURED_PENDING_ACCOUNTING',?,?,?,?,?)`)
     .run(transactionId, 'razorpay', 'test', 12500, 'idem_test_001', deviceId, 'folio_0001', commandStamp, commandStamp);
+  db.prepare(`INSERT INTO settlement_outbox(id,transaction_id,event_type,payload,status,created_at)
+    VALUES(?,?,'PAYMENT_CAPTURED',?,'PENDING',?)`)
+    .run(crypto.randomUUID(), transactionId, JSON.stringify({ transactionId, amountMinor: 12500, currency: 'INR', provider: 'razorpay' }), commandStamp);
   db.prepare(`INSERT INTO settlement_commands(command_id,device_id,sequence_id,transaction_id,idempotency_key,folio_id,
     amount_minor,currency,payload_hash,payload,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
     .run(commandId, deviceId, 1, transactionId, 'idem_test_001', 'folio_0001', 12500, 'INR', payloadHash, payloadText, commandStamp);
