@@ -12,9 +12,9 @@ app.set('trust proxy', process.env.TRUST_PROXY_HOPS === '1' ? 1 : false);
 
 const PORT = Number(process.env.PORT || 8085);
 const DB_PATH = process.env.DATABASE_PATH || '/data/aurelia-payments.sqlite';
-const PROPERTY_ID = process.env.AURELIA_PROPERTY_ID || 'default';
+const PROPERTY_ID = process.env.AURELIA_PROPERTY_ID || '';
 const ATTESTATION_VERIFIER_URL = 'http://127.0.0.1:8091/verify';
-if (!/^[A-Za-z0-9_-]{3,64}$/.test(PROPERTY_ID)) throw new Error('AURELIA_PROPERTY_ID_must_be_3_to_64_safe_characters');
+if (!/^[A-Za-z0-9_-]{3,64}$/.test(PROPERTY_ID)) throw new Error('AURELIA_PROPERTY_ID_must_be_configured_as_3_to_64_safe_characters');
 const SESSION_TTL_SECONDS = 2 * 60 * 60;
 const SESSION_COOKIE = 'aurelia_owner_session';
 const PROVIDERS = new Set(['razorpay', 'cashfree']);
@@ -365,6 +365,10 @@ app.post('/v1/admin/devices/register', ownerAuth, requireBrowserMutationOrigin, 
         (existing.owner_id !== null && existing.owner_id !== req.owner.id) ||
         (existing.property_id !== null && existing.property_id !== PROPERTY_ID))
       return fail(res, 409, 'device_identity_conflict');
+    if (existing.owner_id === null && existing.property_id === null && existing.status === 'PENDING') {
+      db.prepare('UPDATE device_registrations SET owner_id=?,property_id=? WHERE device_id=? AND owner_id IS NULL AND property_id IS NULL')
+        .run(req.owner.id, PROPERTY_ID, deviceId);
+    }
     return res.status(200).json({deviceId,status:existing.status,duplicate:true});
   }
   const register = db.transaction(() => {
