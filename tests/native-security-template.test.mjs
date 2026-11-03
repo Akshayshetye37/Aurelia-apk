@@ -103,3 +103,17 @@ test('payment device identity stages challenge-bound hardware attestation and ex
   assert.match(source, /Software-backed payment device keys are rejected/);
   assert.match(source, /ATTESTED_ALIAS/);
 });
+
+test('native payment device transport is HTTPS-only, path-safe, signed, and response-bounded', () => {
+  const source = read('android/templates/security/PaymentDeviceClient.kt');
+  const patcher = read('scripts/patch-android.js');
+  assert.match(patcher, /'PaymentDeviceClient\.kt'/);
+  assert.match(source, /parsed\.scheme\.equals\("https"/);
+  assert.match(source, /deviceId\.matches\(Regex\("\[A-Za-z0-9_-\]\{1,128\}"\)\)/);
+  assert.match(source, /signRequest\(/);
+  assert.match(source, /instanceFollowRedirects = false/);
+  assert.match(source, /MAX_RESPONSE_BYTES/);
+  assert.match(source, /leaseNext\(/);
+  assert.match(source, /acknowledge\(/);
+  assert.doesNotMatch(source, /@JavascriptInterface|addJavascriptInterface\s*\(/);
+});
