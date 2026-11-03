@@ -18,7 +18,9 @@ test('native payment journal is durable and idempotent', () => {
 test('local journal cannot claim provider capture or mark cloud sync complete', () => {
   assert.match(ledger, /SAVED_ON_DEVICE/);
   assert.match(ledger, /RECONCILIATION_REQUIRED/);
-  assert.doesNotMatch(ledger, /CAPTURED|PAYMENT_SUCCESS|markCloudSynced|setCloudSyncStatus/);
+  assert.match(ledger, /CAPTURED_UNPOSTED/);
+  assert.match(ledger, /recordVerifiedCapture/);
+  assert.doesNotMatch(ledger, /PAYMENT_SUCCESS|markCloudSynced|setCloudSyncStatus|recordFolioPosted/);
   assert.doesNotMatch(ledger, /cloud_sync_status.*SYNCED.*UPDATE/i);
 });
 
@@ -50,14 +52,15 @@ test('offline intent UI validates paise and clearly avoids claiming collection',
   assert.match(html, /refreshAureliaLocalPaymentJournal/);
 });
 
-test('hotel folio checkout uses the authenticated backend and provider SDKs', () => {
-  assert.match(html, /localGatewayApi\('\/v1\/payments\/dispatch','POST',body\)/);
-  assert.match(html, /checkout\.razorpay\.com\/v1\/checkout\.js/);
-  assert.match(html, /sdk\.cashfree\.com\/js\/v3\/cashfree\.js/);
-  assert.match(html, /reconcileAureliaGatewayPayment/);
-  assert.match(html, /CAPTURED_PENDING_ACCOUNTING/);
+test('hotel folio checkout requires a ready native engine and never falls back to LAN or browser SDKs', () => {
+  assert.match(html, /window\.AndroidPaymentEngine/);
+  assert.match(html, /engineStatus\.ready!==true/);
+  assert.match(html, /No payment request was sent/);
   assert.match(html, /checkout success screen alone never posts a PMS receipt/);
-  assert.match(html, /Android-only vault is a separate at-rest store/);
+  const start = html.indexOf('window.startAureliaGatewayCheckout=async function');
+  const end = html.indexOf('window.reconcileAureliaGatewayPayment=', start);
+  const checkout = html.slice(start, end);
+  assert.doesNotMatch(checkout, /localGatewayApi|checkout\.razorpay\.com|sdk\.cashfree\.com/);
 });
 
 test('backend reconciliation binds an optional checkout payment ID to provider API lookup', () => {
