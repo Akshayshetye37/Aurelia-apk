@@ -17,12 +17,10 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
 /**
- * Device-local credential vault. Secrets are encrypted with a non-exportable
- * Android Keystore AES-256-GCM key and are never returned to JavaScript.
- *
- * This protects credentials at rest; it does not make a rooted/compromised
- * device equivalent to a trusted merchant server. Provider production use
- * still requires provider-specific verification and transaction lifecycle work.
+ * Sandbox-only credential staging vault. Secrets are encrypted with a
+ * non-exportable Android Keystore AES-256-GCM key and never returned to JS.
+ * This vault does not execute provider requests or authorize payments. Live
+ * credentials and webhook secrets belong only in the trusted payment backend.
  */
 final class LocalGatewayVault {
   private static final String KEY_ALIAS = "aurelia.local.gateway.v1";
@@ -61,7 +59,8 @@ final class LocalGatewayVault {
     out.put("provider", provider);
     out.put("environment", environment);
     out.put("configured", record != null);
-    out.put("active", record != null && record.optBoolean("active", false));
+    out.put("active", false);
+    out.put("executionEnabled", false);
     out.put("validation", record == null ? "NOT_CONFIGURED" : record.optString("validation", "NOT_VALIDATED"));
     out.put("savedAt", record == null ? JSONObject.NULL : record.optLong("savedAt", 0));
     out.put("credentialFields", new org.json.JSONArray(Arrays.asList(fields(provider))));
@@ -69,9 +68,25 @@ final class LocalGatewayVault {
   }
 
   synchronized JSONObject remove(String provider, String environment) throws Exception {
-    fields(provider); validateEnvironment(environment);
+    fields(provider);
+    // Permit deletion of legacy live records created by older app builds, but
+    // never permit reading, saving, activating or using live credentials here.
+    if (!"test".equals(environment) && !"live".equals(environment)) {
+      throw new IllegalArgumentException("invalid_environment");
+    }
     File file = file(provider, environment);
     if (file.exists() && !file.delete()) throw new IllegalStateException("credential_remove_failed");
+    if ("live".equals(environment)) {
+      JSONObject out = new JSONObject();
+      out.put("provider", provider);
+      out.put("environment", "live");
+      out.put("configured", false);
+      out.put("active", false);
+      out.put("executionEnabled", false);
+      out.put("validation", "REMOVED");
+      out.put("credentialFields", new org.json.JSONArray(Arrays.asList(fields(provider))));
+      return out;
+    }
     return status(provider, environment);
   }
 
@@ -79,7 +94,7 @@ final class LocalGatewayVault {
     fields(provider); validateEnvironment(environment);
     JSONObject record = read(provider, environment);
     if (record == null) throw new IllegalStateException("provider_credentials_not_configured");
-    if (active && "live".equals(environment)) throw new IllegalStateException("live_activation_blocked_until_production_lifecycle_is_certified");
+    if (active) throw new IllegalStateException("local_gateway_execution_not_implemented");
     if (active && !"VALIDATED".equals(record.optString("validation", ""))) {
       throw new IllegalStateException("provider_credentials_must_be_validated_before_activation");
     }
@@ -101,13 +116,13 @@ final class LocalGatewayVault {
   }
 
   private String[] fields(String provider) {
-    if ("razorpay".equals(provider)) return new String[]{"keyId", "keySecret", "webhookSecret"};
-    if ("cashfree".equals(provider)) return new String[]{"appId", "secretKey", "webhookSecret"};
+    if ("razorpay".equals(provider)) return new String[]{"keyId", "keySecret"};
+    if ("cashfree".equals(provider)) return new String[]{"appId", "secretKey"};
     throw new IllegalArgumentException("provider_adapter_not_available_locally");
   }
 
   private void validateEnvironment(String environment) {
-    if (!"test".equals(environment) && !"live".equals(environment)) throw new IllegalArgumentException("invalid_environment");
+    if (!"test".equals(environment)) throw new IllegalArgumentException("live_credentials_must_only_be_stored_on_trusted_backend");
   }
 
   private File directory() {

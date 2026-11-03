@@ -13,7 +13,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
   constructor(options) {
     super(options);
     if (!['test', 'live'].includes(this.environment)) throw new TypeError('unsupported_environment');
-    if (!this.credentials.appId || !this.credentials.secretKey || !this.credentials.webhookSecret) {
+    if (!this.credentials.appId || !this.credentials.secretKey) {
       throw new TypeError('cashfree_credentials_incomplete');
     }
     this.baseUrl = BASE[this.environment];
@@ -117,6 +117,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
   }
 
   async verifyWebhook(rawBody, headers) {
+    if (typeof this.credentials.webhookSecret !== 'string' || !this.credentials.webhookSecret) return { valid: false };
     const timestamp = headers['x-webhook-timestamp'] || headers['X-Webhook-Timestamp'];
     const signature = headers['x-webhook-signature'] || headers['X-Webhook-Signature'];
     if (typeof timestamp !== 'string' || !/^\d{10,16}$/.test(timestamp) ||

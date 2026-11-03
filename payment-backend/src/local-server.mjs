@@ -38,6 +38,10 @@ if (process.env.TRUST_PROXY_HOPS !== '1') throw new Error('Configure one trusted
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+// Favor acknowledged-commit durability over marginal write throughput.
+db.pragma('synchronous = FULL');
+db.pragma('busy_timeout = 5000');
+db.pragma('wal_autocheckpoint = 1000');
 db.exec(`
 CREATE TABLE IF NOT EXISTS owner (
  id INTEGER PRIMARY KEY CHECK(id=1), username TEXT NOT NULL UNIQUE,
@@ -352,12 +356,30 @@ function ownerAuth(req, res, next) {
 }
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
+app.get('/payment-return', (req, res) => {
+  // Provider redirect is a navigation hint only. The PMS must call the
+  // authenticated reconciliation endpoint before showing a captured result.
+  const transactionId = String(req.query.transaction_id || '');
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(transactionId)) {
+    return res.status(400).type('text/plain').send('Invalid Aurelia payment reference. Return to the PMS and review the folio.');
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  res.type('html').send('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Return to Aurelia</title><body style="font:16px system-ui;max-width:34rem;margin:12vh auto;padding:24px;color:#17352b"><h2>Payment attempt returned</h2><p>This redirect does not confirm payment. Return to Aurelia PMS and use <b>Check payment status</b>. The provider status will be verified securely before staff can post it to the folio.</p><p>Reference: <code>' + transactionId.replace(/[&<>"]/g, '') + '</code></p></body></html>');
+});
 app.get('/readyz', async (_req, res) => {
   try {
     db.prepare('SELECT 1').get();
+    const integrity = db.pragma('quick_check', { simple: true });
+    const foreignKeyViolations = db.pragma('foreign_key_check');
+    const journalMode = String(db.pragma('journal_mode', { simple: true })).toLowerCase();
+    const synchronous = Number(db.pragma('synchronous', { simple: true }));
+    if (integrity !== 'ok' || foreignKeyViolations.length !== 0 ||
+        journalMode !== 'wal' || synchronous !== 2) {
+      return fail(res, 503, 'database_integrity_or_durability_check_failed');
+    }
     const verifier = await fetch('http://127.0.0.1:8091/healthz', { signal: AbortSignal.timeout(2500) });
     if (!verifier.ok) return fail(res, 503, 'attestation_verifier_unready');
-    return res.json({ ok: true, database: 'ready', attestationVerifier: 'ready' });
+    return res.json({ ok: true, database: 'ready', durability: 'wal_full', attestationVerifier: 'ready' });
   } catch { return fail(res, 503, 'attestation_verifier_or_database_unavailable'); }
 });
 // Challenge-first enrollment: the device key does not exist until the owner-bound
@@ -889,13 +911,16 @@ app.post('/v1/auth/change-password', ownerAuth, requireBrowserMutationOrigin, as
 
 function validateCredentialShape(provider, environment, c) {
   if (!c || typeof c !== 'object' || Array.isArray(c)) return false;
+  const optionalWebhookValid = c.webhookSecret === undefined ||
+    (typeof c.webhookSecret === 'string' && c.webhookSecret.length >= 8 && c.webhookSecret.length <= 512);
+  if (!optionalWebhookValid) return false;
   if (provider === 'razorpay') return Object.keys(c).every(k => ['keyId','keySecret','webhookSecret'].includes(k)) &&
     /^rzp_(test|live)_[A-Za-z0-9]{8,}$/.test(c.keyId || '') &&
     (environment === 'test' ? c.keyId.startsWith('rzp_test_') : c.keyId.startsWith('rzp_live_')) &&
-    ['keySecret','webhookSecret'].every(k => typeof c[k] === 'string' && c[k].length >= 8 && c[k].length <= 512);
+    typeof c.keySecret === 'string' && c.keySecret.length >= 8 && c.keySecret.length <= 512;
   return Object.keys(c).every(k => ['appId','secretKey','webhookSecret'].includes(k)) &&
     typeof c.appId === 'string' && /^[A-Za-z0-9_-]{6,128}$/.test(c.appId) &&
-    ['secretKey','webhookSecret'].every(k => typeof c[k] === 'string' && c[k].length >= 8 && c[k].length <= 512);
+    typeof c.secretKey === 'string' && c.secretKey.length >= 8 && c.secretKey.length <= 512;
 }
 function providerRow(provider, environment) {
   return db.prepare('SELECT * FROM provider_config WHERE provider=? AND environment=?').get(provider, environment);
@@ -1173,7 +1198,7 @@ app.post('/v1/payments/:transactionId/reconcile', ownerAuth, requireBrowserMutat
       const result = transitionPayment(tx.id,
         ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED','FAILED'],
         'CAPTURED_PENDING_ACCOUNTING', 'provider_api_confirmed_capture', providerOrderId, remote.paymentId || null);
-      return res.json({ transactionId: tx.id, status: result.status, folioSettlement: 'PENDING_OUTBOX' });
+      return res.json({ transactionId: tx.id, provider: tx.provider, environment: tx.environment, status: result.status, providerOrderId, providerPaymentId: remote.paymentId || null, amountMinor: tx.amount_minor, currency: tx.currency, folioSettlement: 'PENDING_OUTBOX' });
     }
     if (['failed','declined','cancelled','expired'].includes(String(remote.paymentStatus || '').toLowerCase())) {
       const result = transitionPayment(tx.id,
@@ -1291,7 +1316,31 @@ app.use((err, _req, res, _next) => {
   const status = err?.type === 'entity.too.large' ? 413 : 400;
   res.status(status).json({ error: status === 413 ? 'request_too_large' : 'invalid_request' });
 });
-app.listen(PORT, '0.0.0.0', () => {
-  process.stdout.write('Aurelia local payment administration listening on ' + PORT + '\
-');
+const server = app.listen(PORT, '0.0.0.0', () => {
+  process.stdout.write('Aurelia local payment administration listening on ' + PORT + '\\n');
 });
+
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  process.stdout.write('Aurelia payment backend shutting down after ' + signal + '\\n');
+  const forceExit = setTimeout(() => {
+    process.stderr.write('Graceful shutdown timed out; forcing exit.\\n');
+    process.exit(1);
+  }, 15000);
+  forceExit.unref();
+  server.close(() => {
+    try {
+      db.pragma('wal_checkpoint(TRUNCATE)');
+      db.close();
+      clearTimeout(forceExit);
+      process.exit(0);
+    } catch (error) {
+      process.stderr.write('Database shutdown failed: ' + String(error?.message || error) + '\\n');
+      process.exit(1);
+    }
+  });
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

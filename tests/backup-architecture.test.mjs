@@ -33,7 +33,8 @@ test("owner server credentials use Android Keystore and HTTPS only", () => {
 });
 
 test("LAN provider administration is owner-authenticated and folio auto-settlement stays disabled", () => {
-  assert.match(html, /LAN Payment Owner Console/);
+  assert.match(html, /Trusted Payment Service/);
+  assert.match(html, /Provider Directory & Onboarding/);
   assert.match(html, /localGatewayApi/);
   assert.doesNotMatch(html, /Credential onboarding unavailable/);
   const gate = fs.readFileSync(new URL("../src/payments/settlement-gate.mjs", import.meta.url), "utf8");

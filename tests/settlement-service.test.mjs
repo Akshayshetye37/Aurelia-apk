@@ -213,7 +213,9 @@ test("reservation advance is validated before the booking is committed", async (
 test("manual folio submissions reuse one request key for the open payment sheet", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /id="payment-request-id" value="\$\{requestId\}"/);
-  assert.match(html, /idempotencyKey:reference\?\('ref:'\+reference\):\(\$\('#payment-request-id'\)/);
+  const activePay = html.slice(html.lastIndexOf('function pay(i){'));
+  assert.match(activePay, /requestId=\$\('#payment-request-id'\)/);
+  assert.match(activePay, /idempotencyKey:r\?\('ref:'\+r\):requestId/);
 });
 
 test("settlement rejects non-decimal amount encodings and unsafe methods", () => {

@@ -6,7 +6,7 @@ const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const backend = await readFile(new URL('../payment-backend/src/local-server.mjs', import.meta.url), 'utf8');
 
 test('PMS exposes LAN owner administration independently of Pay Bridge', () => {
-  for (const value of ['LAN Payment Owner Console','setupLocalGatewayOwner','loginLocalGatewayOwner','refreshLocalGatewayOwner','Pay Bridge is not required to configure merchant credentials']) {
+  for (const value of ['Trusted Payment Service','setupLocalGatewayOwner','loginLocalGatewayOwner','refreshLocalGatewayOwner','Provider Directory & Onboarding']) {
     assert.ok(html.includes(value), 'missing UI contract: ' + value);
   }
 });
@@ -18,22 +18,42 @@ test('local owner administration uses HTTPS-origin scoped HttpOnly-cookie sessio
   assert.ok(!html.includes('sessionToken:'));
 });
 
-test('PMS submits provider secrets only to the configured LAN backend and clears write-only inputs', () => {
-  for (const value of ['saveLocalGatewayCredentials',"document.getElementById('gw-'+provider+'-'+key)", "el.value=''", 'Secrets are submitted directly to the Docker backend and encrypted at rest']) {
+test('PMS submits provider secrets only to the configured trusted backend and clears write-only inputs', () => {
+  for (const value of ['saveLocalGatewayCredentials',"document.getElementById('gw-'+provider+'-'+key)", "el.value=''", 'Credentials are submitted directly to the trusted service, encrypted at rest']) {
     assert.ok(html.includes(value), 'missing credential boundary: ' + value);
   }
 });
 
+test('Razorpay and Cashfree onboarding requires only API credentials; webhook secret is optional', () => {
+  assert.ok(html.includes("Webhook Secret (optional)"));
+  assert.ok(html.includes("const required=provider==='razorpay'?['keyId','keySecret']:['appId','secretKey']"));
+  assert.ok(html.includes("if(required.some(k=>!credentials[k]))"));
+  assert.ok(backend.includes("c.webhookSecret === undefined"));
+});
+
+test('provider directory contains its own credential form instead of documentation-only cards', () => {
+  assert.ok(html.includes('function localGatewayProviderConfigHtml(provider)'));
+  assert.ok(html.includes("const credentialPanel=adapterFoundations?localGatewayProviderConfigHtml(id):''"));
+  assert.ok(html.includes("Sandbox integration"));
+  assert.ok(html.includes("Save credentials"));
+  assert.ok(html.includes("Validate credentials"));
+  assert.ok(html.includes("Remove credentials"));
+});
+
 test('only implemented Razorpay and Cashfree adapters expose credential controls', () => {
-  assert.ok(html.includes("const implemented=['razorpay','cashfree'].includes(id)"));
+  assert.ok(html.includes("const adapterFoundations=['razorpay','cashfree'].includes(id)"));
+  assert.ok(html.includes("Sandbox integration"));
   assert.ok(html.includes('Adapter not implemented'));
   assert.ok(html.includes('Cashfree Payments'));
   assert.ok(html.includes('Razorpay'));
 });
 
-test('UI does not claim live collection, webhook settlement, refunds or folio posting are ready', () => {
-  assert.ok(html.includes('Production activation and live collection are intentionally unavailable'));
-  assert.ok(html.includes('public webhook ingress, background reconciliation worker, refund lifecycle or transactional PMS folio posting'));
+test('UI keeps live collection disabled and requires backend verification plus staff folio approval', () => {
+  assert.ok(html.includes('Live collection and automatic settlement remain disabled'));
+  assert.ok(html.includes('PROVIDER VERIFIED'));
+  assert.ok(html.includes('CAPTURED_PENDING_ACCOUNTING') || backend.includes('CAPTURED_PENDING_ACCOUNTING'));
+  assert.ok(html.includes('Live collection and automatic settlement remain disabled'));
+
 });
 
 test('provider onboarding is no longer gated by the Pay Bridge handshake', () => {
