@@ -14,7 +14,7 @@ import java.security.Signature
 import java.security.spec.ECGenParameterSpec
 import java.security.cert.X509Certificate
 
-/** Native Keystore identity. No WebView interface or network transport is exposed. */
+/** Native Keystore identity. No WebView interface or network transport is exposed.\n * Device-key possession is not provider verification or accounting approval.\n */
 class PaymentDeviceKeyStore {
     data class AttestedIdentity(
         val keyAlias: String,
