@@ -32,3 +32,39 @@ test("PMS does not request broad media/storage/camera permissions for picker acc
     assert.ok(patcher.includes("'" + permission + "'"), permission + " must remain explicitly removed");
   }
 });
+
+
+test("payment and core PMS keep a minimal permission surface", () => {
+  const removed = [
+    "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.CAMERA",
+    "android.permission.RECORD_AUDIO",
+    "android.permission.ACCESS_FINE_LOCATION",
+    "android.permission.ACCESS_COARSE_LOCATION",
+    "android.permission.READ_SMS",
+    "android.permission.RECEIVE_SMS",
+    "android.permission.READ_PHONE_STATE",
+    "android.permission.READ_CONTACTS",
+    "android.permission.READ_CALL_LOG",
+    "android.permission.READ_EXTERNAL_STORAGE",
+    "android.permission.WRITE_EXTERNAL_STORAGE",
+    "android.permission.READ_MEDIA_IMAGES",
+    "android.permission.READ_MEDIA_VIDEO",
+    "android.permission.READ_MEDIA_AUDIO",
+    "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+    "android.permission.MANAGE_EXTERNAL_STORAGE",
+    "android.permission.POST_NOTIFICATIONS",
+    "android.permission.QUERY_ALL_PACKAGES",
+    "android.permission.USE_BIOMETRIC",
+    "android.permission.USE_FINGERPRINT"
+  ];
+  for (const permission of removed) {
+    assert.ok(patcher.includes("'" + permission + "'"), permission + " must be explicitly stripped");
+  }
+  assert.match(patcher, /uses-permission-sdk-23/);
+  assert.match(patcher, /uses-permission-sdk-m/);
+  assert.match(patcher, /android\.permission\.INTERNET/);
+  assert.match(patcher, /com\.aurelia\.paybridge\.permission\.BIND_PAY_BRIDGE/);
+  assert.doesNotMatch(patcher, /QUERY_ALL_PACKAGES[^\n]*uses-permission/);
+  assert.doesNotMatch(patcher, /requestPermissions\s*\(/);
+});

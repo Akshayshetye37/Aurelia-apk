@@ -40,6 +40,7 @@ const permissionsToRemove = [
   'android.permission.BIND_ACCESSIBILITY_SERVICE',
   'android.permission.BIND_VPN_SERVICE',
   'android.permission.ACCESS_MEDIA_LOCATION',
+  'android.permission.ACCESS_NETWORK_STATE',
   'android.permission.READ_CALENDAR',
   'android.permission.WRITE_CALENDAR',
   'android.permission.READ_VOICEMAIL',
@@ -119,8 +120,12 @@ const permissionsToRemove = [
   'android.permission.REQUEST_DELETE_PACKAGES'
 ];
 for (const permission of permissionsToRemove) {
-  const marker = '<uses-permission android:name="' + permission + '" tools:node="remove" />';
-  if (!manifest.includes(marker)) manifest = manifest.replace('</manifest>', '    ' + marker + '\n</manifest>');
+  // Remove direct and SDK-scoped declarations contributed by transitive AAR manifests.
+  // The PMS has no dangerous runtime-permission use case; network access needs INTERNET only.
+  for (const tag of ['uses-permission', 'uses-permission-sdk-23', 'uses-permission-sdk-m']) {
+    const marker = '<' + tag + ' android:name="' + permission + '" tools:node="remove" />';
+    if (!manifest.includes(marker)) manifest = manifest.replace('</manifest>', '    ' + marker + '\n</manifest>');
+  }
 }
 
 // Native PIN gate is the only exported launcher. MainActivity remains internal,

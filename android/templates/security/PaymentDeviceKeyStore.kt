@@ -63,7 +63,7 @@ class PaymentDeviceKeyStore {
         requireOpaque(deviceId, "deviceId")
         require(challengeId.matches(Regex("[0-9a-fA-F-]{36}"))) { "Invalid challenge ID." }
         require(nonce.matches(Regex("[A-Za-z0-9_-]{40,64}"))) { "Invalid challenge nonce." }
-        require(keyVersion >= 0 && expiresAt > 0) { "Invalid activation metadata." }
+        require(keyVersion > 0 && expiresAt > System.currentTimeMillis() / 1000) { "Invalid activation metadata." }
         val transcript = listOf(
             DOMAIN_ACTIVATE, deviceId, keyVersion.toString(), challengeId, nonce, expiresAt.toString()
         ).joinToString("\n")

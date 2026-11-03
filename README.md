@@ -754,3 +754,10 @@ This section supersedes any implication that the native settlement path is alrea
 A native-only Android Keystore P-256 identity primitive has been added at `android/templates/security/PaymentDeviceKeyStore.kt` and included in the maintained Android source generator. It exports the public key and produces the backend's domain-separated activation and signed-device-request transcripts. The private key is non-exportable and no signing method is exposed through the WebView JavaScript interface.
 
 This is **not** the completed Android device client or settlement authorization issuer. Owner-session registration, challenge/activation orchestration, native lease polling, explicit accounting approval, trusted folio projection, acknowledgement and cursor handling are still outstanding. Device proof-of-possession must not be confused with provider verification or accounting approval. No end-to-end payment path or physical-device acceptance is claimed.
+
+
+### Android permission audit — 2026-11-03
+
+The Android generator explicitly removes the sensitive permission families that PMS does not use, including SMS, call log, contacts, camera, microphone, location, phone state, broad storage/media access, notification posting, broad package visibility and biometric permissions. Removal directives now cover ordinary and SDK-scoped permission declarations so transitive AAR manifest entries are removed by manifest merging as well. PMS retains only the required network permission and the narrowly scoped signature-protected Pay Bridge permission/package query. The payment-device Keystore and HTTPS protocol require no dangerous runtime permission; no permission prompt has been added. Photo Picker and SAF remain the file/image access paths.
+
+CI static tests verify the stripping policy. A physical APK's merged manifest still needs inspection as part of the Android build/device acceptance run.
