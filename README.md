@@ -706,3 +706,44 @@ The Phase A integration is **not complete**. The following narrowly scoped regre
 - CI run: [PMS quality checks](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41564882480) was queued at this checkpoint; no pass is claimed until GitHub reports a completed successful run.
 
 This correction does **not** implement the missing trusted issuer, native projector, startup recovery bridge, Android Keystore client, checkout dispatch or end-to-end folio path. Those remain blocked until the corresponding native trust/projector implementation exists. In particular, do not replace the unavailable native projector with a WebView-controlled callback, do not mint authorization tokens in JavaScript, and do not acknowledge a command based on a local journal status alone. The locked automatic-settlement and live-collection controls remain unchanged.
+
+
+## Native settlement bridge status — 2026-11-03
+
+This section supersedes any implication that the native settlement path is already operational. It records the current implementation boundary after inspection of the Android bridge templates, PMS settlement adapter, journal and local backend.
+
+### Verified current state
+
+- The PMS Android integration has a native `AureliaNative` JavaScript interface and a Pay Bridge connection/handshake integration. The handshake validates peer identity and protocol negotiation; it is **not** a settlement authorization issuer.
+- The Pay Bridge IPC client currently implements connection and protocol negotiation. Payment initiation, settlement authorization, folio projection, refund operations and payment evidence transfer are not implemented as an end-to-end native capability.
+- The PMS journal persists provider/command identity, payload and payload hash, and supports PENDING/APPLIED state with idempotent replay handling.
+- The journaled settlement adapter still has no trusted native authorization issuer wired into `index.html`; the projector remains unavailable and fails closed with `SETTLEMENT_PROJECTOR_UNAVAILABLE`.
+- Startup recovery must remain blocked whenever the trusted verifier/projector is unavailable. A missing verifier must never be treated as approval.
+- The local backend contains device registration, P-256 public-key identity, challenge, device cursor, command, lease and acknowledgement persistence structures. Their existence does not prove that the PMS Android client completes the device lifecycle or the end-to-end folio protocol.
+
+### Required native implementation before Phase A can pass
+
+1. Implement a versioned native settlement bridge in the PMS Android module, using Android Keystore P-256 key material and authenticated communication with the owner's LAN backend.
+2. Obtain authorization only from a trusted backend/native verification path. Bind the authorization decision to the immutable provider, provider transaction ID, backend command ID, device ID, booking/folio ID, amount in paise, currency and canonical payload hash. Reject missing, expired, mismatched, replayed or revoked-device authorization.
+3. Implement a native-mediated projector with a narrowly defined request/response contract. It must invoke the existing PMS settlement service using the verified command bindings, persist the resulting PMS state, read back and verify the durable record, and return success only after that verification.
+4. Keep manual payments and reservation advances on their existing synchronous paths. Do not route gateway success through `staff_review` or another manual source to bypass the authorization boundary.
+5. Wire `authorize`, `project` and startup recovery only after the native capability handshake and verifier are ready. Otherwise leave commands PENDING and fail closed.
+6. Add Android and PMS regression tests for invalid authorization, altered command bindings, revoked device, duplicate delivery, projection failure, process death, restart recovery and persistence verification.
+
+### Dependency and release gates
+
+- **Phase A:** trusted authorization, trusted projector, startup recovery and regression tests. Not complete.
+- **Phase B:** native P-256 registration, challenge/sign/activate, signed lease/poll, signed acknowledgement and revocation. Not complete as an on-device acceptance flow.
+- **Phase C:** checkout dispatch, provider sandbox verification, ACTIVE-device delivery, durable folio projection and signed acknowledgement/cursor advancement. Not complete.
+- **Phases D/E:** refunds and reconciliation, Razorpay/Cashfree sandbox matrix, Docker LAN deployment and backup/restore, physical-device acceptance, webhook reachability, full Pay Bridge IPC and PIN recovery. Not complete.
+
+### Safety controls — unchanged
+
+- `AUTO_FOLIO_SETTLEMENT_ENABLED = false`.
+- Live collection remains disabled; no live provider activation or live payment collection is authorized by this checkpoint.
+- No authorization token may be minted or fabricated by WebView JavaScript.
+- Provider capture or webhook success is not, by itself, permission to credit a PMS folio. A separate trusted, explicit owner/staff accounting approval is required while automatic settlement is disabled.
+- Never acknowledge a command before the folio projection is durably applied and verified. Never advance a device cursor before the backend validates the signed acknowledgement.
+- No exactly-once, production-ready or deployed-appliance claim is made. Delivery is at-least-once with idempotent application and recovery; physical-device and deployment acceptance remain outstanding.
+
+**Release decision:** live collection must remain disabled until all required sandbox, recovery, refund, deployment and physical-device acceptance gates are evidenced and a separate explicit owner-controlled live activation mechanism is implemented and reviewed.
