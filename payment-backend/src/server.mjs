@@ -5,6 +5,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
+import { settleVerifiedPaymentIntent } from './intents/folio-settlement.mjs';
 
 const projectId = process.env.GOOGLE_CLOUD_PROJECT;
 const origins = new Set((process.env.AURELIA_OWNER_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean));
@@ -536,9 +537,23 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
       return { duplicate: false, verified };
     });
 
+    let accounting = 'not_verified';
+    if (outcome.verified && orderData.intentId) {
+      try {
+        await settleVerifiedPaymentIntent({ db, intentId: orderData.intentId, eventId, providerPaymentId: paymentId });
+        accounting = 'posted';
+      } catch (accountingError) {
+        // Keep the independently verified capture durable and retryable. Never
+        // acknowledge accounting as complete when the PMS journal did not post.
+        accounting = 'pending';
+      }
+    } else if (outcome.verified) {
+      // Legacy onboarding orders have no canonical payment intent/folio binding.
+      accounting = 'pending_legacy_order_requires_migration';
+    }
     return res.status(200).json({
       received: true, verified: outcome.verified, duplicate: outcome.duplicate === true,
-      accounting: outcome.verified ? 'pending' : 'not_verified'
+      accounting
     });
   } catch {
     return fail(res, 503, 'webhook_processing_unavailable');
