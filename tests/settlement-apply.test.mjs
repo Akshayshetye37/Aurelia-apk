@@ -81,7 +81,7 @@ test("crash after projection but before APPLIED is repaired without a second fol
   };
   const app = fixture();
   await assert.rejects(
-    applyVerifiedSettlementCommand({ journal, command, project: app.project }),
+    applyVerifiedSettlementCommand({ journal, command, project: app.project, authorize }),
     /simulated process loss/
   );
   assert.equal((await base.listPending()).length, 1);
@@ -103,7 +103,7 @@ test("crash after projection but before APPLIED is repaired without a second fol
 test("duplicate command is idempotent and changed command payload conflicts before projection", async () => {
   const journal = makeJournal();
   const app = fixture();
-  await applyVerifiedSettlementCommand({ journal, command, project: app.project });
+  await applyVerifiedSettlementCommand({ journal, command, project: app.project, authorize });
   const duplicate = await applyVerifiedSettlementCommand({ journal, command, project: app.project });
   assert.equal(duplicate.duplicate, true);
   await assert.rejects(
