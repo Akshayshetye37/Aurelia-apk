@@ -119,7 +119,8 @@ test('native payment device transport is HTTPS-only, path-safe, signed, and resp
   assert.match(source, /data class Lease/);
   assert.match(source, /leaseToken/);
   assert.match(source, /validateCommand\(/);
-  assert.match(source, /canonicalJson\(payload\)/);
+  assert.match(source, /payloadCanonical/);
+  assert.match(source, /sha256Hex\(payloadCanonical\.toByteArray/);
   assert.match(source, /MessageDigest\.isEqual/);
   assert.match(source, /durableApplied/);
   assert.match(source, /acknowledge\(lease: Lease/);
