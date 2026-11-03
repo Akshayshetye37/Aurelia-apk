@@ -359,9 +359,17 @@ app.get('/healthz', (_req, res) => res.json({ ok: true }));
 app.get('/readyz', async (_req, res) => {
   try {
     db.prepare('SELECT 1').get();
+    const integrity = db.pragma('quick_check', { simple: true });
+    const foreignKeyViolations = db.pragma('foreign_key_check');
+    const journalMode = String(db.pragma('journal_mode', { simple: true })).toLowerCase();
+    const synchronous = Number(db.pragma('synchronous', { simple: true }));
+    if (integrity !== 'ok' || foreignKeyViolations.length !== 0 ||
+        journalMode !== 'wal' || synchronous !== 2) {
+      return fail(res, 503, 'database_integrity_or_durability_check_failed');
+    }
     const verifier = await fetch('http://127.0.0.1:8091/healthz', { signal: AbortSignal.timeout(2500) });
     if (!verifier.ok) return fail(res, 503, 'attestation_verifier_unready');
-    return res.json({ ok: true, database: 'ready', attestationVerifier: 'ready' });
+    return res.json({ ok: true, database: 'ready', durability: 'wal_full', attestationVerifier: 'ready' });
   } catch { return fail(res, 503, 'attestation_verifier_or_database_unavailable'); }
 });
 // Challenge-first enrollment: the device key does not exist until the owner-bound
