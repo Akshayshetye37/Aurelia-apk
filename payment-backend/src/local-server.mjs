@@ -349,7 +349,7 @@ app.post('/v1/admin/devices/register', ownerAuth, requireBrowserMutationOrigin, 
 app.post('/v1/admin/devices/:deviceId/challenge', ownerAuth, requireBrowserMutationOrigin, (req, res) => {
   const deviceId = req.params.deviceId;
   if (!validOpaqueId(deviceId)) return fail(res, 400, 'invalid_device_id');
-  const device = db.prepare('SELECT status FROM device_registrations WHERE device_id=?').get(deviceId);
+  const device = db.prepare('SELECT status,key_version FROM device_registrations WHERE device_id=?').get(deviceId);
   if (!device) return fail(res, 404, 'device_not_found');
   if (device.status !== 'PENDING') return fail(res, 409, 'device_not_pending');
   const challengeId = crypto.randomUUID();
@@ -357,8 +357,9 @@ app.post('/v1/admin/devices/:deviceId/challenge', ownerAuth, requireBrowserMutat
   const expiresAt = Math.floor(Date.now() / 1000) + 5 * 60;
   db.prepare('INSERT INTO device_challenges(challenge_id,device_id,nonce_sha256,expires_at,created_at) VALUES(?,?,?,?,?)')
     .run(challengeId, deviceId, crypto.createHash('sha256').update(nonce).digest('hex'), expiresAt, now());
+  const signingPayload = ['AURELIA_DEVICE_ACTIVATE_V1', deviceId, String(device.key_version), challengeId, nonce, String(expiresAt)].join('\\n');
   writeAudit('PAYMENT_DEVICE_CHALLENGE_ISSUED', deviceId);
-  return res.status(201).json({ deviceId, challengeId, nonce, expiresAt, algorithm: 'ECDSA_P256_SHA256' });
+  return res.status(201).json({ deviceId, challengeId, nonce, expiresAt, algorithm: 'ECDSA_P256_SHA256', signingPayload });
 });
 
 // The device signs a domain-separated transcript with its Android Keystore
