@@ -801,6 +801,11 @@ app.post('/v1/devices/:deviceId/commands/:commandId/ack', deviceAuth, (req, res)
     if (command.sequence_id !== sequenceId || command.payload_hash !== payloadHash) {
       return { error: 'device_command_binding_mismatch' };
     }
+    const transaction = db.prepare('SELECT status FROM transactions WHERE id=? AND device_id=? AND folio_id=?')
+      .get(command.transaction_id, deviceId, command.folio_id);
+    if (!transaction || transaction.status !== 'CAPTURED_PENDING_ACCOUNTING') {
+      return { error: 'payment_not_pending_accounting' };
+    }
     const cursor = db.prepare('SELECT last_applied_sequence FROM device_cursors WHERE device_id=?').get(deviceId);
     if (!cursor || sequenceId !== cursor.last_applied_sequence + 1) return { error: 'device_cursor_out_of_order' };
     if (!command.lease_token || command.lease_token !== leaseDigest ||
@@ -808,16 +813,31 @@ app.post('/v1/devices/:deviceId/commands/:commandId/ack', deviceAuth, (req, res)
         !['LEASED','DELIVERING'].includes(command.delivery_status)) {
       return { error: 'device_command_lease_invalid' };
     }
+    const acknowledgedAt = now();
     const changed = db.prepare(`UPDATE device_command_state SET status='PROCESSED',lease_token=NULL,
       lease_expires_at=NULL,ledger_ack_id=?,receipt_payload=?,receipt_signature=?,acknowledged_at=?,processed_at=?
       WHERE command_id=? AND status IN ('LEASED','DELIVERING')`)
-      .run(ledgerAckId, receiptJson, req.deviceSignature, now(), now(), commandId);
+      .run(ledgerAckId, receiptJson, req.deviceSignature, acknowledgedAt, acknowledgedAt, commandId);
     if (changed.changes !== 1) return { error: 'device_command_ack_race' };
     const cursorUpdate = db.prepare('UPDATE device_cursors SET last_applied_sequence=?,updated_at=? WHERE device_id=? AND last_applied_sequence=?')
-      .run(sequenceId, now(), deviceId, cursor.last_applied_sequence);
+      .run(sequenceId, acknowledgedAt, deviceId, cursor.last_applied_sequence);
     if (cursorUpdate.changes !== 1) throw new Error('device_cursor_advance_race');
+    // Finalize the PMS settlement boundary in the same SQLite transaction as
+    // the signed device receipt and sequence cursor. A retry can never post a
+    // second credit or advance accounting without its matching durable receipt.
+    const settled = db.prepare(`UPDATE transactions SET status='SETTLED',updated_at=?
+      WHERE id=? AND device_id=? AND folio_id=? AND status='CAPTURED_PENDING_ACCOUNTING'`)
+      .run(acknowledgedAt, command.transaction_id, deviceId, command.folio_id);
+    if (settled.changes !== 1) throw new Error('payment_settlement_state_race');
+    db.prepare(`INSERT INTO transaction_journal(transaction_id,from_status,to_status,reason,created_at)
+      VALUES(?,'CAPTURED_PENDING_ACCOUNTING','SETTLED','trusted_device_durable_folio_receipt',?)`)
+      .run(command.transaction_id, acknowledgedAt);
+    db.prepare(`UPDATE settlement_outbox SET status='PROCESSED',processed_at=?
+      WHERE transaction_id=? AND event_type='PAYMENT_CAPTURED' AND status='PENDING'`)
+      .run(acknowledgedAt, command.transaction_id);
     writeAudit('PAYMENT_DEVICE_COMMAND_ACKNOWLEDGED', deviceId + ':' + commandId);
-    return { acknowledged: true, duplicate: false, cursor: sequenceId };
+    writeAudit('PAYMENT_FOLIO_SETTLEMENT_COMMITTED', command.transaction_id);
+    return { acknowledged: true, duplicate: false, cursor: sequenceId, transactionStatus: 'SETTLED' };
   })();
   if (result.error) return fail(res, 409, result.error);
   return res.json(result);
