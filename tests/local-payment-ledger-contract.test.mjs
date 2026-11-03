@@ -57,7 +57,7 @@ test('hotel folio checkout uses the authenticated backend and provider SDKs', ()
   assert.match(html, /reconcileAureliaGatewayPayment/);
   assert.match(html, /CAPTURED_PENDING_ACCOUNTING/);
   assert.match(html, /checkout success screen alone never posts a PMS receipt/);
-  assert.match(html, /device vault is a separate at-rest store/);
+  assert.match(html, /Android-only vault is a separate at-rest store/);
 });
 
 test('backend reconciliation binds an optional checkout payment ID to provider API lookup', () => {
