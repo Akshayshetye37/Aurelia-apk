@@ -146,9 +146,9 @@ if (!manifest.includes('com.aurelia.pms.security.LockGateActivity')) {
 // Enforce HTTPS at the Android application boundary. User-installed CAs are
 // included so an owner-installed private LAN CA (for example, Caddy's CA) can
 // authenticate the appliance. Cleartext remains denied for WebView and native APIs.
-manifest = manifest.replace(/<application\\b([^>]*)>/, (match, attrs) => {
-  attrs = attrs.replace(/\\s+android:usesCleartextTraffic="[^"]*"/, '')
-    .replace(/\\s+android:networkSecurityConfig="[^"]*"/, '');
+manifest = manifest.replace(/<application([^>]*)>/, (match, attrs) => {
+  attrs = attrs.replace(/\s+android:usesCleartextTraffic="[^"]*"/, '')
+    .replace(/\s+android:networkSecurityConfig="[^"]*"/, '');
   return '<application' + attrs +
     ' android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/aurelia_network_security_config">';
 });
