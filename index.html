@@ -4795,18 +4795,31 @@ window.aureliaSettlementRecovery = journalPromise.then(journal =>
   };
   /* Open WhatsApp outside the WebView. Loading wa.me as a WebView page can show
      "refused to connect"; Android's openUrl bridge should launch an external app. */
-  function openWhatsAppExternally(phone, message) {
+  async function openWhatsAppExternally(phone, message) {
     const digits = String(phone || '').replace(/[^0-9]/g, '');
     if (!digits) { if (typeof toast === 'function') toast('Add the guest phone number with country code first'); return false; }
     const url = 'https://wa.me/' + digits + (message ? '?text=' + encodeURIComponent(message) : '');
+    /* Prefer the Android host so wa.me is opened by an external ACTION_VIEW intent,
+       never rendered as a page inside the PMS WebView. */
     if (window.AureliaNative && typeof window.nat === 'function') {
       if (window.nat({ type: 'openUrl', requestId: 'whatsapp-' + Date.now(), url: url })) return true;
-      if (typeof toast === 'function') toast('Android could not launch WhatsApp. Check that WhatsApp is installed.');
-      return false;
     }
-    const opened = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!opened && typeof toast === 'function') toast('Allow external links or install WhatsApp to continue.');
-    return !!opened;
+    /* Web Share is a safe browser fallback: the user chooses WhatsApp from the
+       system share sheet. Do not window.open(wa.me) inside the embedded WebView. */
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Share with guest on WhatsApp',
+          text: String(message || 'Message guest') + '\\n' + url
+        });
+        if (typeof toast === 'function') toast('Choose WhatsApp in the share sheet, then select the guest chat.');
+        return true;
+      } catch (error) {
+        if (error && error.name === 'AbortError') return false;
+      }
+    }
+    if (typeof toast === 'function') toast('WhatsApp could not be opened externally. The Android app needs an openUrl intent handler.');
+    return false;
   }
 
   window.waS = function (id) {
