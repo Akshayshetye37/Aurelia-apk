@@ -22,7 +22,7 @@
 | PMS LAN SQLite durability PR #7 | Draft/open; CI backend tests and checks previously passed; review/merge and remaining build checks must be confirmed before merge |
 | Pay Bridge handshake | Protocol v1 remains handshake-only |
 | Pay Bridge hardware evidence PR #2 | Draft/open; CI run [41646944152](https://github.com/Akshayshetye37/aurelia-pay-bridge/actions/runs/41646944152) passed unit tests and APK/instrumentation-APK compilation; instrumentation was **not executed** |
-| Appliance attestation enrollment | Not implemented; existing public-key registration/proof-of-possession is not Android Key Attestation verification |
+| Appliance attestation enrollment | Blocked fail-closed; Android client can generate/export challenge-bound attestation, but appliance verifier is absent and activation returns 503 |
 | Physical-device acceptance | Not performed |
 | LAN appliance deployment / private CA | Not performed |
 | Provider sandbox and live payment E2E | Not accepted; live collection remains disabled |
@@ -415,7 +415,7 @@ The payment backend now has two distinct runtime implementations that must not b
 - `payment-backend/src/local-server.mjs` is the selected **LAN Docker appliance runtime**. `payment-backend/compose.yaml` starts this runtime behind Caddy's private HTTPS CA, with SQLite persistence on a Docker volume and encrypted provider credentials. It does not require Firebase, Firestore, Secret Manager, Cloud Run or a cloud project.
 - `payment-backend/src/server.mjs` is a separate optional Firebase/Firestore/Secret Manager cloud prototype. It is not started by the Docker Compose file and is not required for the local-first product.
 
-**Neither runtime is deployed or production-ready.** The LAN runtime currently supports owner setup/login, encrypted credential storage, credential validation, test-only order dispatch and provider status reconciliation. Its owner bootstrap now requires a one-time setup token; device registrations remain PENDING until proof-of-possession exists; webhook signatures are recorded as evidence only; and event-ID/payload conflicts are rejected. The PMS has no integrated LAN owner-administration console, and its current Pay Bridge IPC is handshake-only. Atomic PMS folio posting, a durable command-delivery/receipt-verification worker, authenticated device enrollment, complete reconciliation/refunds and merchant sandbox end-to-end acceptance remain unimplemented. Live collection and automatic settlement must remain disabled.
+**Neither runtime is deployed or production-ready.** The LAN runtime currently supports owner setup/login, encrypted credential storage, credential validation, test-only order dispatch and provider status reconciliation. Its owner bootstrap now requires a one-time setup token; device registrations remain PENDING because the Android Key Attestation verifier is not implemented; webhook signatures are recorded as evidence only; and event-ID/payload conflicts are rejected. The PMS has no integrated LAN owner-administration console, and its current Pay Bridge IPC is handshake-only. Atomic PMS folio posting, a durable command-delivery/receipt-verification worker, authenticated device enrollment, complete reconciliation/refunds and merchant sandbox end-to-end acceptance remain unimplemented. Live collection and automatic settlement must remain disabled.
 
 Razorpay and Cashfree adapter code exists, but adapter presence and unit tests do not establish merchant acceptance or production readiness. PayU, PhonePe, Paytm, CCAvenue and JioPay remain unsupported. See [payment-backend/LOCAL-DOCKER.md](payment-backend/LOCAL-DOCKER.md), [payment-backend/README.md](payment-backend/README.md) and [docs/PAYMENT_PROVIDER_ONBOARDING.md](docs/PAYMENT_PROVIDER_ONBOARDING.md).
 
@@ -527,7 +527,7 @@ The selected optional deployment target is a Docker appliance on the same truste
 
 ### Important limitations — not implemented
 
-- New device registrations remain `PENDING`. The current registration endpoint stores a P-256 public key but no proof-of-possession challenge/signature workflow exists. The dispatch route rejects devices that are not `ACTIVE`; do not manually change their status.
+- New device registrations remain `PENDING`. The registration endpoint stores a P-256 public key and issues an attestation challenge; activation is deliberately blocked until trusted Android Key Attestation verification exists. The dispatch route rejects devices that are not `ACTIVE`; do not manually change their status.
 - The schema contains command, cursor, sequence and delivery-state tables, but there is no authenticated device sync/lease/receipt/acknowledgement/cursor API or background delivery worker.
 - Captured-payment commands are queued only when a transaction has an explicit device and folio binding. There is no connected PMS transaction adapter that durably commits a local folio mutation and idempotency record together.
 - The webhook route currently records verified signature evidence in the inbox and returns `accounting: not_implemented`. It does not independently reconcile a webhook to a trusted transaction or settle a folio.
@@ -563,7 +563,7 @@ This section records the verified state of the payment implementation on `featur
 | Settlement journal/application | No `src/payments/settlement-journal.mjs` or `src/payments/settlement-apply.mjs` is present at this branch revision. | Durable command journaling, immutable application keys, projection verification and crash recovery are not implemented. |
 | PMS startup | `loadAll()` loads the current localStorage projection; normal startup renders and runs maintenance on DOMContentLoaded. | No settlement-projection recovery barrier is wired into startup. |
 | LAN backend | `payment-backend/src/local-server.mjs` provides an optional SQLite/Caddy owner console, encrypted credential storage, test dispatch intent, provider API reconciliation and raw-body webhook signature validation. | Webhook route currently records signature evidence only; no authenticated device delivery/receipt/ack loop, background worker or folio application exists. |
-| Device trust and delivery | P-256 public-key registration, per-device cursor/sequence and command schema foundations exist. | Devices remain PENDING. No proof-of-possession activation, revocation, authenticated sync, command leases, receipt verification, acknowledgement or cursor advancement routes exist. |
+| Device trust and delivery | P-256 public-key registration, per-device cursor/sequence and command schema foundations exist. | Devices remain PENDING because trusted Android Key Attestation verification is absent. Revocation and signed lease/ack transport exist, but activation, native folio projection, durable receipt verification and on-device recovery are not complete. |
 | Providers | Razorpay and Cashfree adapter foundations exist. | Full sandbox lifecycle, ambiguous-outcome reconciliation, durable refunds and end-to-end acceptance are not established. |
 | Orchestrator | Treats Pay Bridge events as hints and requires backend verification evidence. | It does not yet complete the verified-success-to-durable-folio-command path. |
 | Pay Bridge IPC | PMS-side authenticated handshake foundation and contract documentation exist. | Current contract is handshake-only; payment, refund, provider, event/ack and reconciliation operations are not implemented end-to-end in both applications. |
@@ -600,7 +600,7 @@ Manual payment recording currently uses the settlement service but does not part
 
 1. **Accounting foundation:** design the durable folio authority and its relationship to both manual and gateway payments; implement immutable command records, payload-conflict detection, replay-safe projection verification and crash recovery. Add tests for duplicate delivery, altered payload, persistence failure, crash windows and disabled-gate behavior. Add a startup barrier so recovery finishes before normal PMS operation.
 2. **LAN backend delivery loop:** complete independent provider verification, durable command creation, ACTIVE-device-only lease/delivery, receipt verification, retry/recovery, acknowledgement and cursor advancement. Never acknowledge before durable PMS application.
-3. **Device trust:** implement P-256 proof-of-possession enrollment, activation and revocation; reject pending or revoked devices.
+3. **Device trust:** implement Google Android Key Attestation chain/revocation verification and policy validation; keep activation blocked and reject pending or revoked devices until verified.
 4. **Razorpay and Cashfree lifecycle:** prove pre-dispatch definitive failure versus post-dispatch UNKNOWN behavior; implement sandbox capture, late webhook, mismatch, refund/partial refund and automated reconciliation scenarios.
 5. **PMS integration:** connect backend-verified outcomes to durable commands and add manager visibility for unresolved intents, reconciliation, pending projections and outbox lag. Keep live activation and credential onboarding unavailable.
 6. **Pay Bridge IPC:** implement and test the full versioned payment/refund/provider/event-ack/reconciliation/heartbeat contract on both apps, retaining signer and caller checks.
@@ -658,7 +658,7 @@ The GitHub repository is the canonical source location. A local filesystem path 
 - Journaled settlement application requires a non-empty authorization token and an asynchronous-capable trusted authorization callback. Missing or rejected authorization fails closed.
 - Pending journal recovery requires a trusted authorization callback. The former synthetic recovery token was removed.
 - The WebView-controlled settlement projector was removed. The adapter now fails closed while the trusted native projector is unavailable.
-- The LAN backend exposes device challenge, P-256 proof-of-possession activation, and device revocation endpoints.
+- The LAN backend exposes an attestation challenge and device revocation. Activation is fail-closed until a trusted Android Key Attestation verifier is available.
 - Device lease and acknowledgement endpoints authenticate P-256-signed requests, reject timestamp/nonce replay, enforce ACTIVE device state, bind leases to command ID/sequence/payload hash, and advance the durable cursor only after a valid durable-application acknowledgement.
 - The device protocol integration test exercises challenge, activation, lease, replay rejection, acknowledgement/cursor advancement, and revocation against the local server and SQLite.
 - The webhook path validates the provider signature over the raw body, independently queries provider payment status, checks order/payment identity, amount and currency, and creates a durable settlement command only when the required device/folio binding exists.
@@ -704,7 +704,7 @@ This section is the current execution handoff for the Android ↔ LAN backend �
 |---|---|
 | PIN confirmation accepts 4–16 digits | Implemented |
 | Authorization-token settlement gate | Implemented; trusted issuer integration remains open |
-| Device challenge, P-256 proof-of-possession activation and revocation | Implemented in the LAN backend |
+| Attestation challenge and device revocation | Implemented; activation blocked until trusted verifier exists |
 | Signed device lease and acknowledgement protocol | Implemented in the LAN backend |
 | Durable device cursor advancement after valid acknowledgement | Implemented in the LAN backend |
 | Webhook signature validation, independent provider-status verification and settlement-command creation | Implemented in the LAN backend, subject to required device/folio binding |
