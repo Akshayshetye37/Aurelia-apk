@@ -218,3 +218,13 @@ test('LAN runtime drains HTTP connections and checkpoints WAL during shutdown', 
   assert.match(source, /process\.on\('SIGTERM'/);
   assert.match(source, /process\.on\('SIGINT'/);
 });
+
+test('sandbox payment return page is informational and reconciliation response exposes bound provider identity', () => {
+  assert.match(source, /app\.get\('\/payment-return'/);
+  assert.match(source, /This redirect does not confirm payment/);
+  assert.match(source, /app\.post\('\/v1\/payments\/dispatch'/);
+  assert.match(source, /app\.post\('\/v1\/payments\/:transactionId\/reconcile'/);
+  assert.match(source, /provider: tx\.provider, environment: tx\.environment, status: result\.status, providerOrderId, providerPaymentId: remote\.paymentId/);
+  assert.match(source, /remote\.amountMinor !== tx\.amount_minor/);
+  assert.match(source, /remote\.currency !== tx\.currency/);
+});
