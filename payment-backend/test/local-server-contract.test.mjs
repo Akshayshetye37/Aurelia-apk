@@ -120,11 +120,22 @@ test('captured command enqueue and per-device sequence allocation are transactio
   assert.match(source, /INSERT INTO device_command_state/);
 });
 
-test('device command schema does not imply a working synchronization protocol', () => {
-  assert.match(source, /CREATE TABLE IF NOT EXISTS settlement_commands/);
-  assert.match(source, /CREATE TABLE IF NOT EXISTS device_cursors/);
-  assert.match(source, /CREATE TABLE IF NOT EXISTS device_command_state/);
-  assert.doesNotMatch(source, /app\.post\('\/v1\/devices\/[^']*(?:lease|ack|receipt|cursor)/);
+test('device delivery uses signed requests, ordered leases, durable receipts and cursor compare-and-set', () => {
+  assert.match(source, /CREATE TABLE IF NOT EXISTS device_request_nonces/);
+  assert.ok(source.includes("app.post('/v1/devices/:deviceId/commands/lease', deviceAuth"));
+  assert.ok(source.includes("app.post('/v1/devices/:deviceId/commands/:commandId/ack', deviceAuth"));
+  assert.match(source, /AURELIA_DEVICE_REQUEST_V1/);
+  assert.match(source, /device_request_replay/);
+  assert.match(source, /cursor\.last_applied_sequence \+ 1/);
+  assert.match(source, /lease_expires_at/);
+  assert.match(source, /durableApplied !== true/);
+  assert.match(source, /command\.payload_hash !== payloadHash/);
+  assert.match(source, /device_cursor_out_of_order/);
+  assert.match(source, /device_cursor_advance_race/);
+  assert.match(source, /UPDATE device_cursors SET last_applied_sequence/);
+  assert.match(source, /status='PROCESSED'/);
+  assert.match(source, /device\.status !== 'ACTIVE'/);
+  assert.match(source, /!req\.path\.startsWith\('\/v1\/devices\/'\)/);
 });
 
 test('webhooks verify raw request bytes and event ID payload conflicts fail closed', () => {
