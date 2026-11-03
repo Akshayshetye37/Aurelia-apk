@@ -739,7 +739,9 @@ function transitionPayment(transactionId, expectedStatuses, nextStatus, reason, 
             }
           };
           const payload = JSON.stringify(command);
-          const payloadHash = crypto.createHash('sha256').update(payload).digest('hex');
+          // Hash the protocol's canonical representation, not insertion-order JSON.
+          // Native clients independently canonicalize the parsed payload before accepting it.
+          const payloadHash = crypto.createHash('sha256').update(canonicalJson(command)).digest('hex');
           db.prepare(`INSERT INTO settlement_commands(command_id,device_id,sequence_id,transaction_id,
             idempotency_key,folio_id,amount_minor,currency,payload_hash,payload,created_at)
             VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(commandId,current.device_id,sequenceId,transactionId,
