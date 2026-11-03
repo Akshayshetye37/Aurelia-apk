@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { settleVerifiedPaymentIntent } from '../intents/folio-settlement.mjs';
 
 const SUPPORTED = new Set(['razorpay', 'cashfree']);
@@ -81,6 +82,20 @@ export async function runDurableReconciliationWorker({
         eventId: 'reconciliation:' + doc.id,
         providerPaymentId: intent.providerPaymentId
       });
+
+      // Close the original inbox event as well, so subsequent deliveries see
+      // the same terminal POSTED_TO_FOLIO state as the intent journal.
+      if (typeof intent.providerEventId === 'string' && intent.providerEventId) {
+        const inboxId = crypto.createHash('sha256')
+          .update(tenantId + ':' + intent.provider + ':' + intent.environment + ':' + intent.providerEventId)
+          .digest('hex');
+        await db.collection('paymentWebhookInbox').doc(inboxId).set({
+          accountingStatus: 'POSTED',
+          processingStatus: 'POSTED_TO_FOLIO',
+          accountingPostedAt: new Date(),
+          lastAttemptAt: new Date()
+        }, { merge: true });
+      }
 
       summary.posted++;
       item.result = 'POSTED';
