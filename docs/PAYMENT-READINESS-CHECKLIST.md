@@ -1,0 +1,42 @@
+# Aurelia PMS payment readiness checklist
+
+Release-gate ledger for `feature/multi-provider-payment-backend`. Source implementation, unit tests and APK builds do not establish deployment or physical-device acceptance.
+
+## P0 — Required before payment execution
+
+- [x] Native challenge-bound Android Key Attestation primitive added.
+- [x] StrongBox requested first; TEE fallback only on StrongBox-unavailable signal.
+- [x] Software-backed keys rejected locally; staged key preserves the legacy identity.
+- [ ] Appliance verifies chain, challenge, package/signing digest, boot state, device lock and patch policy.
+- [ ] Owner-session challenge issuance, single-use storage, pending enrollment, activation and revocation.
+- [ ] Native client lifecycle, safe key rotation and revocation enforcement.
+- [ ] StrongBox and TEE physical-device instrumentation tests.
+- [ ] LAN appliance TLS, owner authentication, durable storage, backup and restore.
+- [ ] Matching release-signed PMS/Bridge APKs tested on physical hardware.
+- [ ] Versioned executable IPC with per-call caller validation and replay protection.
+- [ ] Provider backend independently verifies raw-body webhooks and provider status.
+- [ ] Durable idempotency, unknown-outcome reconciliation and crash/restart tests.
+- [ ] Atomic PMS folio projection with exact tenant/property/booking/folio/amount/currency/provider binding.
+- [ ] Provider sandbox E2E acceptance for duplicate, timeout, replay, app-death and backend-outage cases.
+
+## P1 — Required before broad operational rollout
+
+- [ ] Local QR generation; third-party QR endpoint removed from production output.
+- [ ] Static CI guard for unauthorized folio/payment-field writes.
+- [ ] Orchestrator wired to the actual UI only after enrollment and IPC gates exist.
+- [ ] INR minor-unit Money value object used consistently.
+- [ ] Evidence synchronization is cache/mirror only; local evidence never authorizes settlement.
+- [ ] Refund workflow has separate idempotency, verification and atomic folio reversal.
+- [ ] Monitoring, backup retention, restore drills and incident/revocation procedures.
+
+## Safety invariants
+
+- `LIVE_PAYMENTS=false`.
+- Automatic folio settlement remains disabled.
+- Provider and webhook secrets never enter either APK.
+- Handshake-only IPC remains the only executable Pay Bridge capability until the complete contract is accepted.
+- No local evidence, Bridge callback, client signature or attestation result independently authorizes folio credit.
+- Ambiguous dispatched requests are reconciled before retry.
+- Core PMS hotel operations remain usable when Pay Bridge or the payment backend is unavailable.
+
+Update this checklist with evidence and commit references as each gate is completed. Never mark deployment, physical-device testing or production acceptance complete based only on source inspection.
