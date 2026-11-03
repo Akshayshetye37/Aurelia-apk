@@ -541,3 +541,62 @@ A passing unit-test or APK-build workflow is not payment acceptance. Acceptance 
 
 No live collection, automatic folio settlement, credential onboarding, or gate modification is authorized by this implementation plan.
 
+---
+
+## Verified implementation update — 2026-11-03
+
+This section is the current implementation record for the payment workstream on `feature/multi-provider-payment-backend`. Where older payment-status descriptions elsewhere in this README conflict with this section, this section takes precedence.
+
+### Project location
+
+- **Main Aurelia PMS repository:** [`Akshayshetye37/Aurelia-apk`](https://github.com/Akshayshetye37/Aurelia-apk)
+- **Working branch:** [`feature/multi-provider-payment-backend`](https://github.com/Akshayshetye37/Aurelia-apk/tree/feature/multi-provider-payment-backend)
+- **Main application:** [`index.html`](https://github.com/Akshayshetye37/Aurelia-apk/blob/feature/multi-provider-payment-backend/index.html)
+- **Payment implementation:** [`src/payments/`](https://github.com/Akshayshetye37/Aurelia-apk/tree/feature/multi-provider-payment-backend/src/payments)
+- **LAN payment backend:** [`payment-backend/`](https://github.com/Akshayshetye37/Aurelia-apk/tree/feature/multi-provider-payment-backend/payment-backend)
+- **Backend runtime:** [`payment-backend/src/local-server.mjs`](https://github.com/Akshayshetye37/Aurelia-apk/blob/feature/multi-provider-payment-backend/payment-backend/src/local-server.mjs)
+- **Backend integration test:** [`payment-backend/test/device-protocol.integration.test.mjs`](https://github.com/Akshayshetye37/Aurelia-apk/blob/feature/multi-provider-payment-backend/payment-backend/test/device-protocol.integration.test.mjs)
+- **Android native templates:** [`android/templates/`](https://github.com/Akshayshetye37/Aurelia-apk/tree/feature/multi-provider-payment-backend/android/templates)
+- **CI workflows:** [`.github/workflows/`](https://github.com/Akshayshetye37/Aurelia-apk/tree/feature/multi-provider-payment-backend/.github/workflows)
+- **Separate Pay Bridge application:** [`Akshayshetye37/aurelia-pay-bridge`](https://github.com/Akshayshetye37/aurelia-pay-bridge). This is a separate repository/application, not a subdirectory of the PMS repository.
+
+The GitHub repository is the canonical source location. A local filesystem path is machine-specific and exists only wherever the repository has been cloned.
+
+### Implemented in this branch
+
+- The native PIN confirmation input filter accepts up to 16 digits, consistent with the security policy.
+- Journaled settlement application requires a non-empty authorization token and an asynchronous-capable trusted authorization callback. Missing or rejected authorization fails closed.
+- Pending journal recovery requires a trusted authorization callback. The former synthetic recovery token was removed.
+- The WebView-controlled settlement projector was removed. The adapter now fails closed while the trusted native projector is unavailable.
+- The LAN backend exposes device challenge, P-256 proof-of-possession activation, and device revocation endpoints.
+- Device lease and acknowledgement endpoints authenticate P-256-signed requests, reject timestamp/nonce replay, enforce ACTIVE device state, bind leases to command ID/sequence/payload hash, and advance the durable cursor only after a valid durable-application acknowledgement.
+- The device protocol integration test exercises challenge, activation, lease, replay rejection, acknowledgement/cursor advancement, and revocation against the local server and SQLite.
+- The webhook path validates the provider signature over the raw body, independently queries provider payment status, checks order/payment identity, amount and currency, and creates a durable settlement command only when the required device/folio binding exists.
+- Backend documentation describes the LAN runtime and its current boundaries.
+
+### Not yet integrated or accepted
+
+- The trusted native/backend authorization issuer is not connected to the PMS settlement adapter.
+- Startup recovery of pending settlement journal records is not operational; it deliberately fails closed without the trusted verifier.
+- Native Android P-256 key generation, device registration, challenge signing, signed polling/lease and acknowledgement are not integrated.
+- PMS booking checkout is not connected to backend payment dispatch.
+- Android command consumption, trusted native folio projection, durable application receipt and signed acknowledgement are not integrated end-to-end.
+- Refund lifecycle and the full Razorpay/Cashfree sandbox acceptance matrix remain incomplete.
+- Docker appliance deployment, LAN TLS trust on a physical device, backup/restore, restart recovery and physical Android acceptance have not been completed.
+- Public provider webhooks cannot directly reach a private LAN appliance without an explicitly configured public ingress or an outbound reconciliation mechanism.
+
+### Locked safety controls
+
+- `AUTO_FOLIO_SETTLEMENT_ENABLED = false` remains mandatory.
+- Live collection remains disabled.
+- Do not treat a webhook signature, provider callback, queued command, successful health check or backend reachability as proof of folio credit.
+- Do not acknowledge a command or advance the device cursor until the PMS has durably applied and verified the corresponding accounting mutation.
+- Do not expose a general-purpose native signing function to WebView JavaScript.
+- Do not describe this implementation as production-ready, fully operational, or exactly-once accounting.
+
+### CI status and verification
+
+At the implementation checkpoint recorded for this update, the PMS quality workflow, payment-backend test workflow (including the device protocol integration test), and payment-backend checks passed. The Android APK build was still in progress at the time of that checkpoint and is therefore **not recorded as passed** here. Check the [repository Actions page](https://github.com/Akshayshetye37/Aurelia-apk/actions) for current run status.
+
+The backend protocol integration test is automated test evidence, not proof of Android native integration, real provider sandbox acceptance, physical-device operation, deployment, or end-to-end folio settlement.
+
