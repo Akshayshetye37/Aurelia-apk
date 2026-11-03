@@ -30,6 +30,8 @@ test('device credential vault contains all seven agreed providers', () => {
   }
   assert.match(vault, /Android Keystore/);
   assert.match(vault, /does not validate provider keys/);
+  assert.match(vault, /phonepe:\['uat','production'\]/);
+  assert.match(vault, /paytm:\['staging','production'\]/);
 });
 
 test('native payment journal cannot mark a payment posted by status-only mutation', () => {
@@ -39,6 +41,8 @@ test('native payment journal cannot mark a payment posted by status-only mutatio
   assert.doesNotMatch(ledger, /recordFolioPosted\s*\(/);
   assert.match(ledger, /SAFE_PROVIDER_REF/);
   assert.match(ledger, /payment_provider_payment_idx/);
+  const androidPatcher = read('scripts/patch-android.js');
+  assert.doesNotMatch(androidPatcher, /setAcceptThirdPartyCookies/);
 });
 
 test('project documentation preserves the device-only deployment decision', () => {
