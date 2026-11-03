@@ -168,3 +168,25 @@ test("empty startup recovery scan succeeds without inventing a recovery authoriz
   assert.deepEqual(result, { scanned: 0, recovered: [] });
   assert.equal(app.booking.p, 0);
 });
+
+
+test("pending recovery remains blocked when no trusted verifier is wired", async () => {
+  const journal = makeJournal();
+  const app = fixture();
+  await journal.append({
+    provider: "razorpay",
+    commandId: "backend-command-001",
+    payload: {
+      bookingId: "B-100", amount: 125, method: "razorpay", reference: "pay_001",
+      source: "staff_review", verificationConfirmed: true,
+      idempotencyKey: "settlement:razorpay:command:backend-command-001"
+    }
+  });
+  await assert.rejects(
+    recoverPendingSettlements({ journal, project: app.project }),
+    error => error.code === "SETTLEMENT_AUTHORIZATION_REQUIRED"
+  );
+  assert.equal((await journal.listPending()).length, 1);
+  assert.equal(app.booking.p, 0);
+  assert.equal(app.booking.pays.length, 0);
+});
