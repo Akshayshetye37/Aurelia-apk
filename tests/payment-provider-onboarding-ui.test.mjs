@@ -26,8 +26,7 @@ test('native credential administration supports the seven-provider schema catalo
 test('production credential storage and activation remain blocked', () => {
   assert.ok(vault.includes('live_credential_storage_blocked_until_release_acceptance'));
   assert.ok(vault.includes('live_activation_blocked_until_production_lifecycle_is_certified'));
-  assert.ok(html.includes('Live credentials may be stored locally') === false);
-  assert.ok(html.includes('Live credentials are not accepted or stored before release approval') === false || html.includes('Live · journal only'));
+  assert.ok(html.includes('Production credential entry and storage are disabled.'));
 });
 
 test('legacy LAN backend code is not used as the checkout fallback', () => {
