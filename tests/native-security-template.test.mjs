@@ -66,6 +66,8 @@ test('PIN policy is enforced by the cryptographic engine, not only by the launch
   const crypto = read('android/templates/security/AureliaCryptoEngine.kt');
   const gate = read('android/templates/security/LockGateActivity.kt');
   assert.match(crypto, /pin\.size in 6\.\.12 && pin\.all \{ it in '0'\.\.'9' \}/);
-  assert.match(gate, /first\.size !in 6\.\.12/);
-  assert.match(crypto, /PIN must contain 6–12 digits/);
+  assert.match(gate, /first\.size !in 4\.\.16/);
+  assert.match(crypto, /PIN must contain 4–16 digits/);
+  assert.match(gate, /Forgot PIN\\?/);
+  assert.match(gate, /recovery service, which is not yet available/);
 });
