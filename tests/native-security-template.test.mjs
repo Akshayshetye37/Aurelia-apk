@@ -113,7 +113,13 @@ test('native payment device transport is HTTPS-only, path-safe, signed, and resp
   assert.match(source, /signRequest\(/);
   assert.match(source, /instanceFollowRedirects = false/);
   assert.match(source, /MAX_RESPONSE_BYTES/);
-  assert.match(source, /leaseNext\(/);
-  assert.match(source, /acknowledge\(/);
+  assert.match(source, /fun leaseNext\(\): Lease\?/);
+  assert.match(source, /data class Lease/);
+  assert.match(source, /leaseToken/);
+  assert.match(source, /validateCommand\(/);
+  assert.match(source, /canonicalJson\(payload\)/);
+  assert.match(source, /MessageDigest\.isEqual/);
+  assert.match(source, /durableApplied/);
+  assert.match(source, /acknowledge\(lease: Lease/);
   assert.doesNotMatch(source, /@JavascriptInterface|addJavascriptInterface\s*\(/);
 });
