@@ -59,6 +59,15 @@ CREATE TABLE IF NOT EXISTS device_registrations (
  status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','ACTIVE','REVOKED')),
  created_at TEXT NOT NULL, last_seen_at TEXT, revoked_at TEXT
 );
+CREATE TABLE IF NOT EXISTS device_challenges (
+ challenge_id TEXT PRIMARY KEY,
+ device_id TEXT NOT NULL REFERENCES device_registrations(device_id) ON DELETE CASCADE,
+ nonce_sha256 TEXT NOT NULL,
+ expires_at INTEGER NOT NULL,
+ created_at TEXT NOT NULL,
+ consumed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS device_challenge_expiry ON device_challenges(device_id,expires_at,consumed_at);
 CREATE TABLE IF NOT EXISTS device_cursors (
  device_id TEXT PRIMARY KEY REFERENCES device_registrations(device_id),
  last_applied_sequence INTEGER NOT NULL DEFAULT 0 CHECK(last_applied_sequence >= 0),
@@ -277,6 +286,92 @@ app.post('/v1/admin/devices/register', ownerAuth, requireBrowserMutationOrigin, 
   });
   try { register(); } catch { return fail(res,409,'device_registration_conflict'); }
   return res.status(201).json({deviceId,status:'PENDING',keyAlgorithm:'ECDSA_P256_SHA256',proofOfPossessionRequired:true});
+});
+
+// Owner-authorized challenge issuance. The nonce is returned once; only its
+// digest and a short expiry are retained by the appliance.
+app.post('/v1/admin/devices/:deviceId/challenge', ownerAuth, requireBrowserMutationOrigin, (req, res) => {
+  const deviceId = req.params.deviceId;
+  if (!validOpaqueId(deviceId)) return fail(res, 400, 'invalid_device_id');
+  const device = db.prepare('SELECT status FROM device_registrations WHERE device_id=?').get(deviceId);
+  if (!device) return fail(res, 404, 'device_not_found');
+  if (device.status !== 'PENDING') return fail(res, 409, 'device_not_pending');
+  const challengeId = crypto.randomUUID();
+  const nonce = randomBytes(32).toString('base64url');
+  const expiresAt = Math.floor(Date.now() / 1000) + 5 * 60;
+  db.prepare('INSERT INTO device_challenges(challenge_id,device_id,nonce_sha256,expires_at,created_at) VALUES(?,?,?,?,?)')
+    .run(challengeId, deviceId, crypto.createHash('sha256').update(nonce).digest('hex'), expiresAt, now());
+  writeAudit('PAYMENT_DEVICE_CHALLENGE_ISSUED', deviceId);
+  return res.status(201).json({ deviceId, challengeId, nonce, expiresAt, algorithm: 'ECDSA_P256_SHA256' });
+});
+
+// The device signs a domain-separated transcript with its Android Keystore
+// P-256 key. A challenge is single-use and activation is an atomic state change.
+app.post('/v1/admin/devices/:deviceId/activate', ownerAuth, requireBrowserMutationOrigin, (req, res) => {
+  const deviceId = req.params.deviceId;
+  const { challengeId, nonce, signature } = req.body || {};
+  if (!validOpaqueId(deviceId) || typeof challengeId !== 'string' ||
+      !/^[0-9a-f-]{36}$/i.test(challengeId) ||
+      typeof nonce !== 'string' || !/^[A-Za-z0-9_-]{40,64}$/.test(nonce) ||
+      typeof signature !== 'string' || !/^[A-Za-z0-9_-]{80,160}$/.test(signature)) {
+    return fail(res, 400, 'invalid_device_activation_proof');
+  }
+  const device = db.prepare('SELECT public_key_spki,status,key_version FROM device_registrations WHERE device_id=?').get(deviceId);
+  if (!device) return fail(res, 404, 'device_not_found');
+  if (device.status !== 'PENDING') return fail(res, 409, 'device_not_pending');
+  const challenge = db.prepare('SELECT * FROM device_challenges WHERE challenge_id=? AND device_id=?')
+    .get(challengeId, deviceId);
+  const currentTime = Math.floor(Date.now() / 1000);
+  if (!challenge || challenge.consumed_at || challenge.expires_at <= currentTime ||
+      challenge.nonce_sha256 !== crypto.createHash('sha256').update(nonce).digest('hex')) {
+    return fail(res, 409, 'device_challenge_invalid_or_expired');
+  }
+  const transcript = [
+    'AURELIA_DEVICE_ACTIVATE_V1', deviceId, String(device.key_version),
+    challengeId, nonce, String(challenge.expires_at)
+  ].join('\\n');
+  let verified = false;
+  try {
+    const publicKey = crypto.createPublicKey({ key: Buffer.from(device.public_key_spki), type: 'spki', format: 'der' });
+    verified = crypto.verify('sha256', Buffer.from(transcript, 'utf8'), publicKey, Buffer.from(signature, 'base64url'));
+  } catch { verified = false; }
+  if (!verified) {
+    writeAudit('PAYMENT_DEVICE_ACTIVATION_REJECTED', deviceId);
+    return fail(res, 403, 'device_proof_of_possession_invalid');
+  }
+  const activate = db.transaction(() => {
+    const consumed = db.prepare('UPDATE device_challenges SET consumed_at=? WHERE challenge_id=? AND device_id=? AND consumed_at IS NULL AND expires_at>?')
+      .run(now(), challengeId, deviceId, currentTime);
+    if (consumed.changes !== 1) throw new Error('device_challenge_replayed');
+    const changed = db.prepare("UPDATE device_registrations SET status='ACTIVE',last_seen_at=? WHERE device_id=? AND status='PENDING'")
+      .run(now(), deviceId);
+    if (changed.changes !== 1) throw new Error('device_state_changed');
+    writeAudit('PAYMENT_DEVICE_ACTIVATED', deviceId);
+  });
+  try { activate(); }
+  catch { return fail(res, 409, 'device_activation_race_or_replay'); }
+  return res.json({ deviceId, status: 'ACTIVE', keyAlgorithm: 'ECDSA_P256_SHA256' });
+});
+
+app.post('/v1/admin/devices/:deviceId/revoke', ownerAuth, requireBrowserMutationOrigin, (req, res) => {
+  const deviceId = req.params.deviceId;
+  if (!validOpaqueId(deviceId)) return fail(res, 400, 'invalid_device_id');
+  const revoke = db.transaction(() => {
+    const device = db.prepare('SELECT status FROM device_registrations WHERE device_id=?').get(deviceId);
+    if (!device) return { missing: true };
+    if (device.status === 'REVOKED') return { duplicate: true };
+    db.prepare("UPDATE device_registrations SET status='REVOKED',revoked_at=?,last_seen_at=? WHERE device_id=?")
+      .run(now(), now(), deviceId);
+    db.prepare('UPDATE device_challenges SET consumed_at=COALESCE(consumed_at,?) WHERE device_id=?')
+      .run(now(), deviceId);
+    db.prepare("UPDATE device_command_state SET status='CONFLICT',lease_token=NULL,lease_expires_at=NULL,last_error='device_revoked' WHERE command_id IN (SELECT command_id FROM settlement_commands WHERE device_id=?) AND status IN ('PENDING','LEASED','DELIVERING')")
+      .run(deviceId);
+    writeAudit('PAYMENT_DEVICE_REVOKED', deviceId);
+    return { revoked: true };
+  });
+  const result = revoke();
+  if (result.missing) return fail(res, 404, 'device_not_found');
+  return res.json({ deviceId, status: 'REVOKED', duplicate: !!result.duplicate });
 });
 
 app.get('/v1/auth/setup-status', (_req, res) => {
