@@ -29,7 +29,7 @@ function requiredId(value, label, max = 256) {
  * The token itself is validated by the supplied authorize() callback (native
  * bridge or backend session). This module never treats plain JS flags as proof.
  */
-function assertAuthorized(command, authorize) {
+async function assertAuthorized(command, authorize) {
   if (typeof authorize !== "function") {
     const error = new Error("Settlement authorization callback is required");
     error.code = "SETTLEMENT_AUTHORIZATION_REQUIRED";
@@ -41,7 +41,7 @@ function assertAuthorized(command, authorize) {
     error.code = "SETTLEMENT_NOT_AUTHORIZED";
     throw error;
   }
-  const decision = authorize({
+  const decision = await authorize({
     token: token.trim(),
     provider: command.provider,
     providerTransactionId: command.providerTransactionId,
@@ -129,7 +129,7 @@ export async function applyVerifiedSettlementCommand({
   if (typeof project !== "function") {
     throw new TypeError("Settlement projection callback is required");
   }
-  assertAuthorized(command, authorize);
+  await assertAuthorized(command, authorize);
   const input = journalInputFor(command);
   return applyJournaledSettlement({
     journal,
@@ -158,10 +158,11 @@ export async function recoverPendingSettlements({
   }
 
   const pending = await journal.listPending();
+  if (pending.length === 0) return { scanned: 0, recovered: [] };
   const recovered = [];
   for (const record of pending) {
     const recoveryToken = "recovery:" + record.key + ":" + record.payloadHash;
-    const decision = authorize({
+    const decision = await authorize({
       token: recoveryToken,
       provider: record.provider,
       providerTransactionId: record.providerTransactionId,
