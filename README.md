@@ -57,6 +57,22 @@ A client callback or redirect is never payment proof. Provider status must be ve
 | `docs/` | Architecture, provider status and release specifications |
 | `tests/` | Automated application and payment tests |
 
+## Payment reconciliation recovery
+
+The cloud backend exposes an authenticated, tenant-admin-only recovery sweep:
+
+```http
+POST /v1/admin/payments/reconcile
+Authorization: Bearer <recent-MFA Firebase ID token>
+Content-Type: application/json
+
+{"limit":50}
+```
+
+The request is tenant-scoped from the verified Firebase membership, accepts a maximum batch size of 50, and independently polls the configured Razorpay/Cashfree adapter before retrying idempotent settlement. It processes only intents already recorded as provider-verified captures with accounting still pending or requiring reconciliation. It never treats a browser redirect as payment proof.
+
+This worker currently targets the backend's existing `paymentFolios/{tenant+folio hash}` and `journalEntries/{intentId}` model. The repository does not yet establish that this is the deployed PMS reservation/folio schema. Do not migrate production folio records or enable live collection until the canonical PMS folio path, currency model, journal contract and optimistic-concurrency field are confirmed against the production data model.
+
 ## Build and test
 
 Root app:
