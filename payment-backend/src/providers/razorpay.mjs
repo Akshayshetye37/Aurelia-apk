@@ -23,8 +23,7 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
       method,
       headers: {
         Authorization: 'Basic ' + Buffer.from(this.credentials.keyId + ':' + this.credentials.keySecret).toString('base64'),
-        'Content-Type': 'application/json',
-        Accept: 'application/json'
+        'Content-Type': 'application/json', Accept: 'application/json'
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(15000)
@@ -54,9 +53,7 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
   async findOrderByReference(input) {
     if (!id(input?.reference)) throw new TypeError('invalid_razorpay_receipt');
     const data = await this.request('GET', '/orders?receipt=' + encodeURIComponent(input.reference) + '&count=100');
-    const matches = Array.isArray(data.items)
-      ? data.items.filter(order => order.receipt === input.reference)
-      : [];
+    const matches = Array.isArray(data.items) ? data.items.filter(order => order.receipt === input.reference) : [];
     if (matches.length !== 1) return { found: false, ambiguous: matches.length > 1 };
     const order = matches[0];
     return { found: true, orderId: order.id, amountMinor: order.amount,
@@ -65,57 +62,47 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
 
   async getPaymentStatus(input) {
     if (!id(input?.paymentId) && !id(input?.orderId)) throw new TypeError('payment_or_order_id_required');
-    const path = input.paymentId
-      ? '/payments/' + encodeURIComponent(input.paymentId)
+    const path = input.paymentId ? '/payments/' + encodeURIComponent(input.paymentId)
       : '/orders/' + encodeURIComponent(input.orderId) + '/payments';
     const data = await this.request('GET', path);
     const orderedPayments = Array.isArray(data.items)
-      ? [...data.items].sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))
-      : null;
-    // A requested payment ID is an exact binding, never a preference. Falling
-    // back to another payment from the same order can falsely settle an intent.
+      ? [...data.items].sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0)) : null;
     const payment = orderedPayments
-      ? (input.paymentId
-          ? orderedPayments.find(p => p.id === input.paymentId)
-          : orderedPayments[0])
-      : (input.paymentId
-          ? (data.id === input.paymentId ? data : null)
-          : data);
-    if (!payment) return {
-      provider: 'razorpay', orderId: input.orderId, paymentId: null,
-      paymentStatus: 'pending', captured: false
-    };
-    return {
-      provider: 'razorpay',
-      orderId: payment.order_id || input.orderId,
-      paymentId: payment.id,
-      paymentStatus: payment.status,
-      amountMinor: payment.amount,
-      currency: payment.currency,
-      captured: payment.captured === true
-    };
+      ? (input.paymentId ? orderedPayments.find(p => p.id === input.paymentId) : orderedPayments[0])
+      : (input.paymentId ? (data.id === input.paymentId ? data : null) : data);
+    if (!payment) return { provider: 'razorpay', orderId: input.orderId, paymentId: null,
+      paymentStatus: 'pending', captured: false };
+    return { provider: 'razorpay', orderId: payment.order_id || input.orderId,
+      paymentId: payment.id, paymentStatus: payment.status, amountMinor: payment.amount,
+      currency: payment.currency, captured: payment.captured === true };
   }
 
   async verifyWebhook(rawBody, headers) {
     const signature = headers['x-razorpay-signature'] || headers['X-Razorpay-Signature'];
-    if (!Buffer.isBuffer(rawBody) || typeof signature !== 'string' || !/^[a-f0-9]{64}$/i.test(signature)) {
-      return { valid: false };
-    }
+    if (!Buffer.isBuffer(rawBody) || typeof signature !== 'string' || !/^[a-f0-9]{64}$/i.test(signature)) return { valid: false };
     const expected = crypto.createHmac('sha256', this.credentials.webhookSecret).update(rawBody).digest();
     const received = Buffer.from(signature, 'hex');
     const valid = received.length === expected.length && crypto.timingSafeEqual(received, expected);
-    return { valid, ...(valid ? { event: JSON.parse(rawBody.toString('utf8')) } : {}) };
+    if (!valid) return { valid: false };
+    try { return { valid: true, event: JSON.parse(rawBody.toString('utf8')) }; }
+    catch { return { valid: false }; }
   }
 
   async createRefund(input) {
-    if (!id(input?.paymentId) || !minor(input?.amountMinor) || !id(input?.receipt)) {
-      throw new TypeError('invalid_razorpay_refund');
-    }
+    if (!id(input?.paymentId) || !minor(input?.amountMinor) || !id(input?.receipt)) throw new TypeError('invalid_razorpay_refund');
     const refund = await this.request('POST', '/payments/' + encodeURIComponent(input.paymentId) + '/refund', {
-      amount: input.amountMinor,
-      notes: { ...(input.notes || {}), aurelia_refund_reference: input.receipt }
+      amount: input.amountMinor, notes: { ...(input.notes || {}), aurelia_refund_reference: input.receipt }
     });
-    return { provider: 'razorpay', refundId: refund.id, status: refund.status,
-      amountMinor: refund.amount, currency: refund.currency };
+    return { provider: 'razorpay', refundId: refund.id, paymentId: refund.payment_id,
+      status: refund.status, amountMinor: refund.amount, currency: refund.currency };
+  }
+
+  async getRefundStatus(input) {
+    if (!id(input?.refundId)) throw new TypeError('invalid_razorpay_refund_id');
+    const refund = await this.request('GET', '/refunds/' + encodeURIComponent(input.refundId));
+    if (refund.id !== input.refundId) throw new Error('razorpay_refund_identity_mismatch');
+    if (input.paymentId && refund.payment_id !== input.paymentId) throw new Error('razorpay_refund_payment_mismatch');
+    return { provider: 'razorpay', refundId: refund.id, paymentId: refund.payment_id,
+      status: refund.status, amountMinor: refund.amount, currency: refund.currency };
   }
 }
