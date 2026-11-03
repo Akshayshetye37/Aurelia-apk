@@ -79,6 +79,10 @@ test('cookie-authenticated state mutations require an exact allowlisted Origin',
 test('device enrollment verifies Google Key Attestation before owner activation', () => {
   assert.match(source, /ECDSA_P256_SHA256','PENDING'/);
   assert.match(source, /CREATE TABLE IF NOT EXISTS device_challenges/);
+  assert.match(source, /CREATE TABLE IF NOT EXISTS device_enrollment_challenges/);
+  assert.ok(source.includes("app.post('/v1/admin/devices/enrollment/challenge', ownerAuth"));
+  assert.ok(source.includes("app.post('/v1/admin/devices/enroll', ownerAuth"));
+  assert.match(source, /ATTESTATION_VERIFIER_URL_must_be_loopback_HTTP_only/);
   assert.match(source, /nonce_base64 TEXT/);
   assert.match(source, /ATTESTATION_VERIFIER_URL/);
   assert.match(source, /android\/keyattestation/);
