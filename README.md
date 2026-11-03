@@ -1,6 +1,6 @@
 # Aurelia PMS
 
-Aurelia is an offline-first property-management system with a planned device-local Android payment engine.
+Aurelia is an offline-first property-management system. Its device-local Android payment engine is planned/incomplete and remains gated from live collection.
 
 > **Payment release status: NOT READY FOR LIVE PAYMENT COLLECTION.** The native payment engine, complete provider adapters, verified settlement-to-folio integration, refund workflow and physical-device acceptance are not yet complete. Live activation must remain disabled.
 
