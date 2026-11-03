@@ -8,7 +8,8 @@ Release-gate ledger for `feature/multi-provider-payment-backend`. Source impleme
 - [x] StrongBox requested first; TEE fallback only on StrongBox-unavailable signal.
 - [x] Software-backed keys rejected locally; staged key preserves the legacy identity.
 - [ ] Appliance verifies chain, challenge, package/signing digest, boot state, device lock and patch policy.
-- [x] Owner-session challenge issuance, single-use storage, pending enrollment, proof-of-possession activation and revocation exist on the LAN appliance; this does not yet verify Android hardware attestation.
+- [x] Owner-session attestation-challenge issuance, single-use storage, pending enrollment and device revocation exist on the LAN appliance.
+- [ ] Trusted Android Key Attestation verification (Google chain, revocation, challenge, app signer, security level, device lock and verified boot) is absent; activation returns 503 and cannot promote a device.
 - [~] Native HTTPS device transport, attested-key requirement, signed lease/ack, lease-token retention, canonical payload hash and immutable command-binding checks are implemented; command consumption, safe key rotation and end-to-end revocation lifecycle remain incomplete.
 - [ ] StrongBox and TEE physical-device instrumentation tests.
 - [ ] LAN appliance TLS, owner authentication, durable storage, backup and restore.
