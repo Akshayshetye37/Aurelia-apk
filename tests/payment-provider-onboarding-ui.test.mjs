@@ -3,40 +3,39 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-const backend = await readFile(new URL('../payment-backend/src/local-server.mjs', import.meta.url), 'utf8');
+const vault = await readFile(new URL('../android/templates/LocalGatewayVault.java', import.meta.url), 'utf8');
+const patch = await readFile(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
 
-test('PMS exposes LAN owner administration independently of Pay Bridge', () => {
-  for (const value of ['LAN Payment Owner Console','setupLocalGatewayOwner','loginLocalGatewayOwner','refreshLocalGatewayOwner','Pay Bridge is not required to configure merchant credentials']) {
-    assert.ok(html.includes(value), 'missing UI contract: ' + value);
+test('PMS presents the device-local vault and does not render the retired LAN owner console', () => {
+  assert.ok(html.includes('Device-local credential vault'));
+  assert.ok(html.includes('Device-local Gateway Credential Vault'));
+  assert.ok(!html.includes(">'+localGatewayAdminHtml()+'"));
+  assert.ok(html.includes('No LAN or Docker payment appliance is used.'));
+});
+
+test('native credential administration supports the seven-provider schema catalogue', () => {
+  for (const provider of ['razorpay','cashfree','payu','phonepe','paytm','ccavenue','jiopay']) {
+    assert.ok(html.includes(provider), 'missing provider: ' + provider);
+    assert.ok(vault.includes('"'+provider+'".equals(provider)'), 'native vault missing provider: ' + provider);
   }
+  assert.ok(html.includes('gatewayVaultSave'));
+  assert.ok(html.includes('gatewayVaultStatus'));
+  assert.ok(html.includes('gatewayVaultRemove'));
 });
 
-test('local owner administration uses HTTPS-origin scoped HttpOnly-cookie sessions', () => {
-  assert.ok(html.includes("credentials:'include'"));
-  assert.ok(backend.includes('SameSite=None'));
-  assert.ok(html.includes('X-Aurelia-Setup-Token'));
-  assert.ok(!html.includes('sessionToken:'));
+test('production credential storage and activation remain blocked', () => {
+  assert.ok(vault.includes('live_credential_storage_blocked_until_release_acceptance'));
+  assert.ok(vault.includes('live_activation_blocked_until_production_lifecycle_is_certified'));
+  assert.ok(html.includes('Live credentials may be stored locally') === false);
+  assert.ok(html.includes('Live credentials are not accepted or stored before release approval') === false || html.includes('Live · journal only'));
 });
 
-test('PMS submits provider secrets only to the configured LAN backend and clears write-only inputs', () => {
-  for (const value of ['saveLocalGatewayCredentials',"document.getElementById('gw-'+provider+'-'+key)", "el.value=''", 'Secrets are submitted directly to the Docker backend and encrypted at rest']) {
-    assert.ok(html.includes(value), 'missing credential boundary: ' + value);
-  }
-});
-
-test('only implemented Razorpay and Cashfree adapters expose credential controls', () => {
-  assert.ok(html.includes("const implemented=['razorpay','cashfree'].includes(id)"));
-  assert.ok(html.includes('Adapter not implemented'));
-  assert.ok(html.includes('Cashfree Payments'));
-  assert.ok(html.includes('Razorpay'));
-});
-
-test('UI does not claim live collection, webhook settlement, refunds or folio posting are ready', () => {
-  assert.ok(html.includes('Production activation and live collection are intentionally unavailable'));
-  assert.ok(html.includes('public webhook ingress, background reconciliation worker, refund lifecycle or transactional PMS folio posting'));
-});
-
-test('provider onboarding is no longer gated by the Pay Bridge handshake', () => {
-  assert.ok(html.includes('localGatewayAdminHtml()'));
-  assert.ok(!html.includes('canManage&&'));
+test('legacy LAN backend code is not used as the checkout fallback', () => {
+  const start = html.indexOf('window.startAureliaGatewayCheckout=async function');
+  const end = html.indexOf('window.reconcileAureliaGatewayPayment=', start);
+  const checkout = html.slice(start, end);
+  assert.ok(checkout.includes('window.AndroidPaymentEngine'));
+  assert.ok(checkout.includes('engineStatus.ready!==true'));
+  assert.ok(!checkout.includes('localGatewayApi('));
+  assert.ok(!patch.includes('setAcceptThirdPartyCookies'));
 });
