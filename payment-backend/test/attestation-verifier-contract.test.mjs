@@ -11,7 +11,8 @@ const server = await readFile(new URL('../src/local-server.mjs', import.meta.url
 test('attestation verifier is pinned to the official v0.4 source build', () => {
   assert.match(build, /com\.android\.keyattestation:keyattestation:0\.4/);
   assert.match(settings, /includeBuild\("\/opt\/keyattestation"\)/);
-  assert.match(docker, /git clone --depth 1 --branch v0\.4 https:\/\/github\.com\/android\/keyattestation\.git/);
+  assert.match(docker, /git clone --depth 1 --branch v0\\.4 https:\/\/github\.com\/android\/keyattestation\\.git/);
+  assert.match(docker, /621149c4ebaeeea844d6f43098687c73c4d370a3/);
   assert.match(docker, /aurelia-attestation-verifier\.jar/);
 });
 
