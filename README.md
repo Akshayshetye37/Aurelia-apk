@@ -1,5 +1,93 @@
 # Aurelia PMS
 
+
+## Project status and deployment checklist — 2026-11-03
+
+> **Current state: active development; not production-deployed and not approved for live payment collection.** This section is the operational summary. The detailed architecture and historical checkpoints below provide supporting context.
+
+### Project location
+
+- **PMS source:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
+- **Active payment-integration branch:** `feature/multi-provider-payment-backend`
+- **Separate Android payment companion:** [Akshayshetye37/aurelia-pay-bridge](https://github.com/Akshayshetye37/aurelia-pay-bridge)
+- **Pay Bridge working branch:** `feature/hardware-backed-evidence-key`
+- **PMS application entry point:** `index.html`; Android packaging uses Capacitor and the maintained native templates/scripts.
+- **Physical property / appliance location:** not recorded in this repository status. The GitHub repository location is the source-code location, not a physical hotel, homestay, or LAN server address. Do not infer the deployment site from the owner's unrelated property references.
+
+### Verified repository checkpoints
+
+| Item | Current state |
+|---|---|
+| PMS payment dispatch boundary PR #6 | Merged into `feature/multi-provider-payment-backend` (not proof of production deployment) |
+| PMS LAN SQLite durability PR #7 | Draft/open; CI backend tests and checks previously passed; review/merge and remaining build checks must be confirmed before merge |
+| Pay Bridge handshake | Protocol v1 remains handshake-only |
+| Pay Bridge hardware evidence PR #2 | Draft/open; CI run [41646944152](https://github.com/Akshayshetye37/aurelia-pay-bridge/actions/runs/41646944152) passed unit tests and APK/instrumentation-APK compilation; instrumentation was **not executed** |
+| Appliance attestation enrollment | Not implemented; existing public-key registration/proof-of-possession is not Android Key Attestation verification |
+| Physical-device acceptance | Not performed |
+| LAN appliance deployment / private CA | Not performed |
+| Provider sandbox and live payment E2E | Not accepted; live collection remains disabled |
+
+### Remaining implementation work — ordered release gates
+
+#### P0 — Secure device enrollment before accepting evidence
+
+- Replace/retire the legacy public-key-only registration path for new devices.
+- Implement owner-session-gated challenge issuance, bound to owner, property and intended device; challenges must be random, short-lived, single-use and replay-resistant.
+- Implement appliance-side Google Android Key Attestation verification: trusted root set and revocation policy, challenge, leaf/public-key binding, attested package and signing digest, StrongBox/TEE security levels, device lock and verified-boot state, OS/patch and rollback policy.
+- Persist verified attestation metadata and the device public key atomically as `PENDING_ACTIVATION`; failed verification must leave no active registration.
+- Add explicit owner-console activation, status visibility, immediate revocation and safe key rotation. Keep the old active key until its replacement is verified and safely activated.
+- Fix Bridge key staging/rotation so a failed new enrollment cannot destroy the currently active key.
+- Run the Bridge instrumentation test on supported physical hardware. Record StrongBox or TEE classification, non-empty chain, leaf/public-key match and software-key rejection. APK compilation alone is insufficient.
+
+#### P0 — Finish the LAN appliance and native device lifecycle
+
+- Complete and review [PR #7](https://github.com/Akshayshetye37/Aurelia-apk/pull/7); run real SQLite crash/restart, WAL recovery, backup and restore tests. Current source-contract tests are not crash-recovery proof.
+- Provision an owner-controlled host, Docker Engine/Compose, persistent encrypted storage, firewall rules, DNS/hostname and a valid TLS certificate/private CA. The repository does not provision or deploy the owner's appliance.
+- Configure and validate the Caddy TLS endpoint, HTTPS-only Android trust and the exact owner origin; reject cleartext and certificate/hostname mismatch.
+- Complete native device registration/activation, signed polling, lease/acknowledgement, durable cursor recovery and revocation enforcement. Never acknowledge a command before its corresponding PMS-side durable application is verified.
+- Add protected audit logs, operational backup/retention and tested restore procedures. SQLite WAL is a durability setting, not an off-host backup strategy.
+
+#### P1 — Evidence protocol and payment verification
+
+- Define a deterministic, versioned, domain-separated signed evidence envelope with device/job/request IDs, property/folio binding, amount in minor units, currency, provider reference, server nonce, timestamps, expiry and replay rules.
+- Add authenticated IPC only after device enrollment is verified. Keep protocol v1 handshake-only; do not add payment-execution messages yet.
+- Implement provider-specific server adapters and independent provider verification/webhook signature validation. SDK callbacks and Bridge signatures are not proof that a customer paid.
+- Implement durable idempotency and explicit job states including ambiguous outcomes. Never blindly redispatch after timeout or uncertain provider acceptance.
+- Add a trusted appliance-side accounting authorization issuer and native PMS settlement projector. Only the appliance may authorize a folio credit after independent provider-evidence verification.
+
+#### P1/P2 — Accounting, reconciliation and recovery
+
+- Implement atomic, idempotent folio posting with evidence reference, durable ledger entry and job state in one transaction or a recoverable outbox protocol.
+- Add reconciliation for ambiguous jobs, verified-but-unposted evidence, orphan evidence and orphan folio credits.
+- Keep cash/manual settlement local and independent of Pay Bridge.
+- Complete Direct UPI listener ingestion, conservative matching, staff review queue and bank-statement reconciliation. SMS/notification evidence must not auto-settle a folio.
+- Implement refunds as separate, idempotent refund jobs linked to a verified and posted original payment; enforce cumulative partial-refund limits and verified refund evidence before folio reversal.
+- Finish app-lock/PIN and recovery protocol only with the approved backend/KMS/SMS components, and test backup restore and key-envelope rotation. Do not expose recovery flows that lack their full server-side trust chain.
+
+#### Release acceptance — mandatory before any live payment
+
+Run and record the complete signed-release, physical-device, appliance and provider-sandbox matrix, including at minimum:
+
+1. Cash/manual settlement works with Pay Bridge unavailable.
+2. Wrong Bridge package or signer is rejected.
+3. Happy-path sandbox payment is independently verified before folio posting.
+4. Killing Bridge after dispatch produces an ambiguous state, with no blind retry or folio credit.
+5. Appliance/PMS restart resumes the same durable job without creating another charge.
+6. Replayed request IDs/nonces are rejected.
+7. Duplicate posting creates exactly one folio line.
+8. Forged client/Bridge success cannot authorize settlement.
+9. Unregistered, pending or revoked devices cannot poll or submit accepted evidence.
+10. Live configuration disabled means no real-money movement.
+
+Then complete provider-specific webhook, refund, restore, security and operational acceptance. Enable live collection only for one approved provider and one explicitly enrolled device after all gates pass.
+
+### Deployment prerequisites and current non-deployable items
+
+Not yet supplied or verified: appliance host/OS and network ownership, production TLS/CA setup, durable off-host backup and restore, merchant/provider production onboarding, provider credentials in the appliance secret store, owner/property enrollment, approved release-signed APK pair on physical hardware, and end-to-end operational sign-off.
+
+**Safety invariants:** `LIVE_PAYMENTS=false`; automatic folio settlement disabled; no provider secrets in either APK; no trust-all TLS or HTTP fallback; no payment-execution IPC until attested enrollment and evidence contracts are accepted; no Bridge signature treated as payment proof; no deployment or physical-device acceptance claimed until actually performed.
+
+
 Aurelia PMS is a browser-based property-management interface supplied as a single HTML file and packaged as an Android application through Capacitor in GitHub Actions; the release workflow builds and signs a release APK on push/manual dispatch.
 
 ## Project location and working source
