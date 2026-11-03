@@ -18,7 +18,7 @@ Do not mix their environment variables, authentication models, databases, deploy
 Aurelia PMS must remain fully usable without a server, cloud account, Firebase project, or payment backend. Do not make backend deployment, sign-in to a cloud service, or remote connectivity a prerequisite for installing or using core PMS functions.
 
 - Default installation mode is **Local only**. Bookings, guests, rooms, manual payments, folio history, invoices and local backup continue to work using the existing PMS local data model.
-- The selected optional payment service is a Docker appliance on the owner's LAN. The PMS includes a LAN Payment Owner Console for backend origin setup, first-owner enrollment, login, Razorpay/Cashfree sandbox credential storage, validation and explicit test activation. The LAN API includes P-256 registration, owner/property-bound attestation challenge and submission, verifier-gated activation/revocation, and signed command lease/ack endpoints. Native enrollment UI, command projection and end-to-end PMS folio settlement remain unfinished.
+- The selected optional payment service is a Docker appliance on the owner's LAN. The PMS includes a LAN Payment Owner Console for backend origin setup, first-owner enrollment, login, Razorpay/Cashfree sandbox credential storage, validation and explicit test activation. The LAN API includes challenge-first P-256 attested enrollment, owner/property-bound attestation challenge and submission, verifier-gated activation/revocation, and signed command lease/ack endpoints. Native enrollment UI, command projection and end-to-end PMS folio settlement remain unfinished.
 - Do not silently create a cloud project, deploy infrastructure, upload PMS/guest data, or transmit payment evidence.
 - Do not treat an arbitrary URL as a trusted payment backend. Endpoint configuration must be validated over HTTPS and authenticated against a documented service identity before use.
 - Remote payment configuration must be separate from optional backup destinations. A backup URL is not a payment API, and a payment API is not a backup destination.
@@ -263,10 +263,10 @@ The verifier additionally enforces:
 - The attested leaf public key must equal the P-256 SPKI registered for that device.
 
 The sidecar listens only on `127.0.0.1:8091`; the LAN API includes its health in `/readyz`. The owner-authenticated enrollment sequence is:
-1. Register the device's P-256 public key as `PENDING`.
-2. Request `POST /v1/admin/devices/:deviceId/challenge`. The challenge is 32 random bytes, single-use, five-minute TTL, and bound to owner, property and device.
-3. Generate the Android Keystore key using the exact decoded challenge and submit the leaf-first X.509 chain to `POST /v1/admin/devices/:deviceId/attestation`.
-4. The appliance verifies the chain and key binding, then atomically stores verified metadata while retaining `PENDING`.
+1. Request `POST /v1/admin/devices/enrollment/challenge` with the intended `deviceId`. No device registration or key exists yet.
+2. The appliance returns a 32-byte random challenge and challenge ID. It is single-use, has a five-minute TTL, and is bound to the authenticated owner, configured property and intended device ID.
+3. Generate the Android Keystore key using the exact decoded challenge. Submit `deviceId`, `challengeId`, P-256 `publicKeyPem` and the leaf-first X.509 chain to `POST /v1/admin/devices/enroll`.
+4. The appliance verifies the chain and exact public-key binding, then atomically consumes the challenge and creates the `PENDING` registration, verified metadata, cursor and sequence counter in one SQLite transaction.
 5. The owner explicitly calls `POST /v1/admin/devices/:deviceId/activate`; activation succeeds only with verified TEE/StrongBox attestation and locked VERIFIED boot state.
 
 ### Required `.env` values
