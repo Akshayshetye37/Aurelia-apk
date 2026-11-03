@@ -1330,6 +1330,7 @@ public class MainActivity extends BridgeActivity {
       } catch (Exception error) {
         String message = error.getMessage() == null ? "Native backup operation failed." : error.getMessage();
         if ("gatewayVaultStatus".equals(operationType) || "gatewayVaultSave".equals(operationType) || "gatewayVaultRemove".equals(operationType) || "gatewayVaultActivate".equals(operationType)) js("window.aureliaNativeGatewayResult && window.aureliaNativeGatewayResult(" + q(operationRequestId) + ",false," + q(message) + ")");
+        else if ("paymentLedgerCreate".equals(operationType) || "paymentLedgerListPending".equals(operationType) || "paymentLedgerUpdateLocalStatus".equals(operationType)) js("window.aureliaNativeLedgerResult && window.aureliaNativeLedgerResult(" + q(operationRequestId) + ",false," + q(message) + ")");
         else if ("photoStore".equals(operationType) || "photoLoad".equals(operationType) || "photoArchive".equals(operationType) || "photoRestore".equals(operationType)) photoResult(operationRequestId, false, message);
         else if ("backupDeviceNow".equals(operationType)) backupResult(operationRequestId, false, message);
         else if ("recoverLatestBackup".equals(operationType)) recoveryResult(operationRequestId, false, message, "");
