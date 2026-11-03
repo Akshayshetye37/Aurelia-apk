@@ -49,7 +49,13 @@ const command = {
 };
 
 const authorize = async context => context.recovery === true
-  ? context.token === undefined && typeof context.journalKey === "string" && /^[a-f0-9]{64}$/.test(context.payloadHash)
+  ? context.token === undefined &&
+    context.journalKey === "razorpay:transaction:pay_abc123" &&
+    /^[a-f0-9]{64}$/.test(context.payloadHash) &&
+    context.provider === "razorpay" &&
+    context.providerTransactionId === "pay_abc123" &&
+    context.bookingId === "B-100" &&
+    Number(context.amount) === 125
   : context.token === "test-trusted-token";
 
 test("verified command is journaled before projection and applied after persistence", async () => {
