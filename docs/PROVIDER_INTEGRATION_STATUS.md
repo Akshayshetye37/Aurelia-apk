@@ -1,17 +1,26 @@
 # Aurelia PMS — Seven-provider integration status
 
 **Architecture:** Hybrid production backend (see [HYBRID_PAYMENT_ARCHITECTURE.md](./HYBRID_PAYMENT_ARCHITECTURE.md)).  
-**Release status:** All live payment collection OFF. No provider is declared production-ready by this document.
+**Execution plan:** [Dependency-ordered payment implementation plan](./PAYMENT_IMPLEMENTATION_PLAN.md).  
+**Release status:** All live payment collection OFF. No provider is declared production-ready.
 
-| Provider | Current repository implementation | Required work before enablement |
+| Provider | Adapter status | Lifecycle gaps / gate |
 |---|---|---|
-| Razorpay | Backend adapter exists in `payment-backend/src/providers/razorpay.mjs`; cloud repository currently allows it | Review API version and webhook event coverage; verify refund status/idempotency; add contract/fault tests; complete accounting and UAT |
-| Cashfree | Backend adapter exists in `payment-backend/src/providers/cashfree.mjs`; cloud repository currently allows it | Review API version, amount representation, webhook/status matching and refund idempotency; add contract/fault tests; complete accounting and UAT |
-| PayU | No adapter found in selected branch | Implement chosen PayU product (Hosted Checkout or supported S2S); exact hash/auth algorithms; verify-payment API; webhooks; refund/status; sandbox tests |
-| PhonePe | No adapter found in selected branch | Implement Standard Checkout product and current auth/token flow; order status; webhook verification; refund/status; UAT |
-| Paytm | No adapter found in selected branch | Implement Initiate Transaction, checksum/signature, Transaction Status, refund and refund-status; webhook verification; staging tests |
-| JioPay | No adapter found in selected branch | Obtain merchant-specific API credentials/product spec; implement payment initiation, secureHash, status/refund commands and callbacks; UAT |
-| CCAvenue | No adapter found in selected branch | Confirm enabled merchant integration product and current integration kit; implement hosted checkout request/response encryption/decryption, status and refund workflow; sandbox tests |
+| Razorpay | Adapter exists; partial backend integration | Complete reference lifecycle: durable webhook inbox/deduplication, authoritative status reconciliation, refund-status lookup/idempotency, failure recovery, folio settlement and contract tests |
+| Cashfree | Adapter exists; partial backend integration | Complete reference lifecycle: versioned webhook/status matching, durable deduplication, refund-status/idempotency, failure recovery, folio settlement and contract tests |
+| PayU | Missing — not registered as working | Select exact India Hosted Checkout or S2S product/API version; implement hash/auth, verify-payment, webhook, refund/status and sandbox contract |
+| PhonePe | Missing — not registered as working | Confirm merchant Standard Checkout product/API version; implement token lifecycle, order/status, callback verification, refund/status and UAT |
+| Paytm | Missing — not registered as working | Confirm merchant PG product; implement checksum/signature, initiate/status, callback verification, refund/status and staging tests |
+| JioPay | Missing — not registered as working | Obtain merchant-specific API pack; implement secureHash, initiation, status/refund command and callback verification |
+| CCAvenue | Missing — not registered as working | Obtain merchant-specific integration kit/API version; implement request encryption, response decryption, status/refund workflow and callback validation |
+
+## Delivery sequence
+
+1. Harden and verify cloud runtime; wire the authenticated Android API client to the app's actual Firebase session provider.
+2. Complete Razorpay and Cashfree as reference implementations against one shared lifecycle contract.
+3. Implement PayU, PhonePe, Paytm, JioPay and CCAvenue as independent adapters. Share utilities, never provider signing or callback assumptions.
+4. Complete webhook inbox, refunds, reconciliation, transactional outbox and canonical PMS folio settlement.
+5. Run sandbox, end-to-end, duplicate-event, timeout, outage, process-death and recovery tests. Obtain provider UAT evidence before any live eligibility decision.
 
 ## Official documentation entry points
 
@@ -25,4 +34,4 @@
 
 ## Enablement rule
 
-A provider can move from `DOCUMENTATION_ONLY` to `SANDBOX_IMPLEMENTED` only after its adapter implements all advertised operations and automated contract tests pass. It can move to `LIVE_ELIGIBLE` only after merchant UAT, provider approval, security review, webhook reachability, refund/reconciliation and folio acceptance are signed off. UI labels must be derived from backend capability state, not hard-coded claims.
+A provider can move from `DOCUMENTATION_ONLY` to `ADAPTER_IN_PROGRESS` to `SANDBOX_VERIFIED` only as its code and evidence justify. It can move to `LIVE_ELIGIBLE` only after merchant UAT, provider approval, security review, webhook reachability, refund/reconciliation and folio acceptance are signed off. UI labels must be derived from backend capability state, not hard-coded claims.
