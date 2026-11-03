@@ -2,7 +2,7 @@ import { applyJournaledSettlement } from "./settlement-journal.mjs";
 
 function requiredId(value, label, max = 256) {
   if (typeof value !== "string" || !value.trim() || value.length > max ||
-      /[\\u0000-\\u001f\\u007f]/.test(value)) {
+      /[\u0000-\u001f\u007f]/.test(value)) {
     throw new TypeError("Invalid " + label);
   }
   return value.trim();
@@ -31,7 +31,7 @@ function journalInputFor(command) {
   const bookingId = requiredId(String(command.bookingId ?? ""), "bookingId", 128);
   const method = requiredId(String(command.method ?? ""), "payment method", 40);
   const reference = command.reference == null ? "" : String(command.reference).trim();
-  if (reference.length > 256 || /[\\u0000-\\u001f\\u007f]/.test(reference)) {
+  if (reference.length > 256 || /[\u0000-\u001f\u007f]/.test(reference)) {
     throw new TypeError("Invalid payment reference");
   }
   const amount = command.amount;
