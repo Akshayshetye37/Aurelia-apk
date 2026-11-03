@@ -19,7 +19,7 @@ import java.util.regex.Pattern;
  */
 final class LocalPaymentLedger extends SQLiteOpenHelper {
   private static final String DB_NAME = "aurelia-local-ledger.db";
-  private static final int DB_VERSION = 2;
+  private static final int DB_VERSION = 3;
   private static final Pattern SAFE_ID = Pattern.compile("^[A-Za-z0-9._:-]{8,128}$");
   private static final Pattern SAFE_PROVIDER_REF = Pattern.compile("^[A-Za-z0-9._:-]{1,256}$");
   private static final Set<String> PROVIDERS = new HashSet<>(Arrays.asList(
@@ -62,6 +62,9 @@ final class LocalPaymentLedger extends SQLiteOpenHelper {
         db.execSQL("DROP TABLE payment_ledger_v1");
         db.setTransactionSuccessful();
       } finally { db.endTransaction(); }
+    }
+    if (oldVersion < 3) {
+      db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS payment_provider_payment_idx ON payment_ledger(provider,environment,provider_payment_id) WHERE provider_payment_id IS NOT NULL");
     }
   }
 
