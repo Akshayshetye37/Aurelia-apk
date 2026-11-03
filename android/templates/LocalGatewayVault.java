@@ -79,7 +79,7 @@ final class LocalGatewayVault {
     fields(provider); validateEnvironment(environment);
     JSONObject record = read(provider, environment);
     if (record == null) throw new IllegalStateException("provider_credentials_not_configured");
-    if (active && "live".equals(environment)) throw new IllegalStateException("live_activation_blocked_until_production_lifecycle_is_certified");
+    if (active && ("live".equals(environment) || "production".equals(environment))) throw new IllegalStateException("live_activation_blocked_until_production_lifecycle_is_certified");
     if (active && !"VALIDATED".equals(record.optString("validation", ""))) {
       throw new IllegalStateException("provider_credentials_must_be_validated_before_activation");
     }
