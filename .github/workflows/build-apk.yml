@@ -88,6 +88,9 @@ jobs:
       - name: Prepare web app
         run: npm run build
 
+      - name: Enforce production payment privacy boundaries
+        run: node scripts/check-release-boundaries.mjs
+
       - name: Generate Android project from Capacitor and native templates
         shell: bash
         run: |
