@@ -143,8 +143,9 @@ test('LAN device enrollment, signed lease, durable acknowledgement, cursor and r
     method: 'POST', headers: { ...leaseHeaders, 'Content-Type': 'application/json', 'X-Forwarded-Proto': 'https' },
     body: JSON.stringify({})
   });
-  assert.equal(leaseResponse.status, 200);
-  const lease = await leaseResponse.json();
+  const leaseBody = await leaseResponse.json();
+  assert.equal(leaseResponse.status, 200, JSON.stringify(leaseBody));
+  const lease = leaseBody;
   assert.equal(lease.command.commandId, commandId);
   assert.equal(lease.command.payloadHash, payloadHash);
   assert.equal(lease.cursor, 0);
