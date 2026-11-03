@@ -25,4 +25,4 @@ COPY --from=attestation-build /opt/aurelia-attestation-verifier/build/libs/aurel
 RUN mkdir -p /data && chown -R node:node /app /data
 USER node
 EXPOSE 8085
-CMD ["sh","-c","java -jar /app/aurelia-attestation-verifier.jar & exec node /app/src/local-server.mjs"]
+CMD ["sh","-c","java --add-modules jdk.httpserver -jar /app/aurelia-attestation-verifier.jar & exec node /app/src/local-server.mjs"]
