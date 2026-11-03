@@ -104,7 +104,7 @@ test("duplicate command is idempotent and changed command payload conflicts befo
   const journal = makeJournal();
   const app = fixture();
   await applyVerifiedSettlementCommand({ journal, command, project: app.project, authorize });
-  const duplicate = await applyVerifiedSettlementCommand({ journal, command, project: app.project });
+  const duplicate = await applyVerifiedSettlementCommand({ journal, command, project: app.project, authorize });
   assert.equal(duplicate.duplicate, true);
   await assert.rejects(
     applyVerifiedSettlementCommand({
