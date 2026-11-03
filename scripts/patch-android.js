@@ -327,6 +327,7 @@ for (const file of [
   'AureliaSecurityRuntime.kt',
   'AureliaEnvelopeStore.kt',
   'PaymentDeviceKeyStore.kt',
+  'PaymentDeviceClient.kt',
   'LockGateActivity.kt'
 ]) {
   const source = path.join(securityTemplateDir, file);

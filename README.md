@@ -803,3 +803,12 @@ The Capacitor app origin remains HTTPS via `androidScheme: "https"`. The LAN Com
 Static regression coverage verifies the explicit cleartext prohibition and system/user CA trust declarations. This is not a substitute for verifying the built APK's merged manifest, certificate hostname/SAN, TLS handshake and rejection of HTTP on a physical Android device.
 
 **Operational rule:** configure the PMS backend origin as `https://<appliance-hostname>:8443` (or the exact HTTPS origin configured by the owner). Never configure an `http://` backend URL. No HTTP redirect or insecure fallback is an acceptable security control.
+
+
+## Native LAN payment-device client — implementation boundary
+
+The Android security templates now include `PaymentDeviceClient.kt`, a native-only HTTPS transport for signed device command leasing and acknowledgement. It uses the non-exportable P-256 Android Keystore identity, canonical JSON request hashing, fresh request nonces, timestamped request signatures, redirect denial, and the platform TLS trust chain. It does not expose signing or network operations through a JavaScript interface.
+
+The owner-authenticated lifecycle is intentionally split from device-authenticated traffic: registration, challenge issuance, activation, and revocation remain owner-console operations protected by the appliance's owner session and browser-origin checks. The native transport does not copy owner cookies or credentials. The client currently covers lease and acknowledgement only; it does not yet register or activate devices, project commands into PMS folios, or provide a trusted accounting authorization issuer. Acknowledgement must remain unreachable until native projection has durably applied and reread the folio state.
+
+This is source implementation, not deployment certification. No LAN appliance endpoint, private CA, physical Android device, provider sandbox, or live collection has been configured or tested by this commit. `AUTO_FOLIO_SETTLEMENT_ENABLED` remains disabled.
