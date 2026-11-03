@@ -4335,7 +4335,7 @@ window.refreshAureliaGatewayFolioActions=async function(index){
  const root=document.getElementById('pan'),booking=bk(index),methods=root?.querySelector('#pm');if(!root||!booking||!methods)return;
  let box=root.querySelector('#aurelia-gateway-actions');if(!box){box=document.createElement('div');box.id='aurelia-gateway-actions';box.style.cssText='display:grid;gap:8px;margin:10px 0';methods.insertAdjacentElement('afterend',box)}
  const active=['razorpay','cashfree'].filter(aureliaGatewayProviderActive);
- box.innerHTML=active.map(p=>'<button type="button" class="btn sm" onclick="startAureliaGatewayPayment('+Number(index)+',\\''+p+'\\')">Pay with '+(p==='razorpay'?'Razorpay':'Cashfree')+' · Test</button>').join('');
+ box.innerHTML=active.map(p=>'<button type="button" class="btn sm" onclick="startAureliaGatewayPayment('+Number(index)+',&quot;'+p+'&quot;)">Pay with '+(p==='razorpay'?'Razorpay':'Cashfree')+' · Test</button>').join('');
  try{const pending=(await (await AURELIA_GATEWAY_STORE_PROMISE).listPending()).filter(x=>x.bookingId===String(booking.id));if(pending.length)box.innerHTML+='<button type="button" class="btn sm ghost" onclick="reviewAureliaGatewayPayments('+Number(index)+')">Check pending gateway payment ('+pending.length+')</button>'}catch(e){console.warn('Gateway intent recovery is unavailable',e)}
  if(!active.length&&!box.innerHTML)box.innerHTML='<p class="lab">Gateway checkout appears here after a provider is validated and activated in Payment Gateway settings.</p>';
 };
@@ -4350,7 +4350,7 @@ window.startAureliaGatewayPayment=async function(index,provider){
   const store=await AURELIA_GATEWAY_STORE_PROMISE,requestId=aureliaGatewayId(),amountPaise=Math.round(amount*100),createdAt=new Date().toISOString();
   record={requestId,bookingId:String(booking.id),folioId:String(booking.iv||booking.id),amountPaise,currency:'INR',providerId:provider,state:'CREATED',backendVerified:false,settlementAuthorized:false,bridgeDispatchStarted:false,createdAt,updatedAt:createdAt,history:[{state:'CREATED',at:createdAt}]};
   await store.put(record);record=await aureliaGatewayTransition(record,'REQUESTED');
-  const origin=S.set.backendConnection.endpoint,phone=String(guestPhoneFor(booking.g,booking)||'').replace(/\\D/g,'');
+  const origin=S.set.backendConnection.endpoint,phone=String(guestPhoneFor(booking.g,booking)||'').replace(/\D/g,'');
   if(provider==='cashfree'&&phone.length<10)throw new Error('Add the guest mobile number (at least 10 digits) before Cashfree checkout.');
   const returnUrl=new URL('/payment-return',origin);returnUrl.searchParams.set('transaction_id',requestId);
   const customer={id:'guest_'+aureliaGatewayId().replace(/-/g,'').slice(0,32),...(phone?{phone:phone.slice(-10)}:{})};
@@ -4431,10 +4431,7 @@ window.aureliaSettleVerifiedGatewayPayment = async input => {
   }
   const paymentReference = verification.providerPaymentId;
   const approved = window.confirm(
-    'PROVIDER VERIFIED · ' + input.provider.toUpperCase() +
-    '\\nCaptured: ₹' + (expectedPaise / 100).toFixed(2) +
-    '\\nProvider payment: ' + paymentReference +
-    '\\n\\nPost this verified payment to ' + String(input.booking?.g || 'the guest') + '\\'s folio?'
+    `PROVIDER VERIFIED · ${input.provider.toUpperCase()}\\nCaptured: ₹${(expectedPaise / 100).toFixed(2)}\\nProvider payment: ${paymentReference}\\n\\nPost this verified payment to ${String(input.booking?.g || 'the guest')}'s folio?`
   );
   if (!approved) return { ok: false, awaitingStaffConfirmation: true, verification };
   const result = settleLocalPayment({
