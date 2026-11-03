@@ -480,6 +480,9 @@ fs.copyFileSync(payBridgeProtocolTemplate, path.join(javaDir, 'PayBridgeProtocol
 const localGatewayVaultTemplate = path.join(androidDir, 'templates', 'LocalGatewayVault.java');
 if (!fs.existsSync(localGatewayVaultTemplate)) throw new Error('LocalGatewayVault.java template is missing.');
 fs.copyFileSync(localGatewayVaultTemplate, path.join(javaDir, 'LocalGatewayVault.java'));
+const localPaymentLedgerTemplate = path.join(androidDir, 'templates', 'LocalPaymentLedger.java');
+if (!fs.existsSync(localPaymentLedgerTemplate)) throw new Error('LocalPaymentLedger.java template is missing.');
+fs.copyFileSync(localPaymentLedgerTemplate, path.join(javaDir, 'LocalPaymentLedger.java'));
 
 const javaPath = path.join(javaDir, 'MainActivity.java');
 const java = String.raw`
@@ -529,6 +532,7 @@ public class MainActivity extends BridgeActivity {
   private SharedPreferences prefs;
   private PayBridgeClient payBridgeClient;
   private LocalGatewayVault localGatewayVault;
+  private LocalPaymentLedger localPaymentLedger;
   private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor();
 
   @Override public void onCreate(Bundle savedInstanceState) {
@@ -557,6 +561,7 @@ public class MainActivity extends BridgeActivity {
     });
     prefs = getSharedPreferences("aurelia_storage", MODE_PRIVATE);
     localGatewayVault = new LocalGatewayVault(this);
+    localPaymentLedger = new LocalPaymentLedger(this);
     getWindow().setStatusBarColor(Color.rgb(5, 17, 13));
     getWindow().setNavigationBarColor(Color.rgb(5, 17, 13));
     getWindow().getDecorView().setSystemUiVisibility(0);
@@ -1103,6 +1108,15 @@ public class MainActivity extends BridgeActivity {
           if (payBridgeClient != null) payBridgeClient.retryNow();
         } else if ("payBridgeDisconnect".equals(type)) {
           if (payBridgeClient != null) payBridgeClient.disconnect();
+        } else if ("paymentLedgerCreate".equals(type)) {
+          JSONObject result = localPaymentLedger.create(obj.optJSONObject("entry"));
+          js("window.aureliaNativeLedgerResult && window.aureliaNativeLedgerResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
+        } else if ("paymentLedgerListPending".equals(type)) {
+          org.json.JSONArray result = localPaymentLedger.listPending(obj.optInt("limit", 50));
+          js("window.aureliaNativeLedgerResult && window.aureliaNativeLedgerResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
+        } else if ("paymentLedgerUpdateLocalStatus".equals(type)) {
+          JSONObject result = localPaymentLedger.updateLocalStatus(obj.optString("transactionId", ""), obj.optString("status", ""));
+          js("window.aureliaNativeLedgerResult && window.aureliaNativeLedgerResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
         } else if ("gatewayVaultStatus".equals(type)) {
           JSONObject result = localGatewayVault.status(obj.optString("provider", ""), obj.optString("environment", "test"));
           js("window.aureliaNativeGatewayResult && window.aureliaNativeGatewayResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
