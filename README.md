@@ -1,140 +1,83 @@
 # Aurelia PMS
 
-Aurelia is an offline-first property-management system. Its device-local Android payment engine is planned/incomplete and remains gated from live collection.
+Aurelia is an offline-first property-management system with a hybrid production payment architecture.
 
-> **Payment release status: NOT READY FOR LIVE PAYMENT COLLECTION.** The native payment engine, complete provider adapters, verified settlement-to-folio integration, refund workflow and physical-device acceptance are not yet complete. Live activation must remain disabled.
+> **Payment release status: NOT READY FOR LIVE PAYMENT COLLECTION.** Live collection remains OFF until all provider, security, reconciliation, refund, accounting and operational release gates pass.
 
 ## Project location
 
-**Canonical repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)  
-**Working branch:** `feature/multi-provider-payment-backend`  
-**Project root:** repository root (`/`)  
-**Primary application entry point:** `index.html`
-
-Key directories and files:
-
-| Repository path | Responsibility |
-|---|---|
-| `index.html` | Main PMS WebView application |
-| `android/` | Android host project and native integration |
-| `android/templates/` | Android native implementation templates |
-| `src/payments/` | WebView-side payment intent and settlement modules |
-| `payment-backend/` | Legacy/development payment backend; not required by the device-local target |
-| `docs/` | Architecture, security and acceptance specifications |
-| `tests/` | Automated application and payment-contract tests |
-
-All project edits requested for this workstream target the repository and branch above. Do not confuse the repository root with a local computer path: the source of truth is the GitHub branch.
+- **Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
+- **Working branch:** `feature/multi-provider-payment-backend`
+- **Project root:** `/`
+- **Primary application:** `index.html`
 
 ## Architecture decision
 
-Aurelia's Android application is the operational runtime and local source of truth. It does not require an Aurelia cloud service, Docker appliance, LAN payment server, local HTTP server or companion process.
+**Selected: Architecture A — Hybrid Production Architecture.**
 
-- **Offline-first PMS:** bookings, guests, rooms, check-in/out, folios, invoices, reports, cash/manual UPI recording and local backups must remain usable without Internet.
-- **Online-only gateway operations:** provider order creation, hosted checkout, payment verification, refunds and reconciliation require Internet and provider availability. Offline intents remain explicitly queued; they are never shown as collected payments.
-- **Native trust boundary:** Android native code owns merchant credentials, provider API calls, cryptographic verification and payment state transitions. WebView JavaScript is presentation and cannot mark a payment captured or posted.
-- **Durability:** Android Keystore protects encryption/signing keys. SQLite stores payment intents, provider references, idempotency keys, evidence state, recovery work and accounting receipts. Device RAM is not a financial ledger.
-- **No public webhook assumption:** an Android device behind ordinary NAT is not a public webhook receiver. Recover payment state through authenticated provider status APIs.
-- **Accounting separation:** provider capture is not a PMS folio credit. Only verified capture evidence can enter the idempotent PMS accounting boundary; a durable receipt must be read back before the payment is marked posted.
+The Android/Capacitor app remains the offline-first PMS client. A trusted, publicly reachable HTTPS backend owns merchant credentials, provider API calls, webhook ingress, authoritative payment verification, refund processing, reconciliation and payment orchestration. Provider secrets belong in Google Secret Manager (or an equivalent managed secret store) and never in the APK or frontend.
 
+The selected backend foundation is `payment-backend/src/server.mjs` (Firebase Admin + Firestore + Google Secret Manager). It must run behind a public HTTPS ingress so provider webhooks can reach it. The separate `payment-backend/src/local-server.mjs` SQLite/LAN runtime is development/administration only; it is not the production payment authority or public webhook receiver.
 
-## Live collection master switch
+Architecture and implementation truth are defined in:
+- [Hybrid payment architecture](docs/HYBRID_PAYMENT_ARCHITECTURE.md)
+- [Seven-provider integration status](docs/PROVIDER_INTEGRATION_STATUS.md)
+- [Payment engine / release specification](docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md)
 
-Live collection must have a native-enforced master kill switch, OFF by default. Property administrators can disable it at any time; doing so blocks every new live dispatch but preserves and reconciles payments already sent to a provider. Enabling it is allowed only after all production release gates pass and the native engine verifies signed release authorization. A WebView toggle or saved merchant credential can never authorize live collection. **Current status: BLOCKED / OFF**; the native engine, trusted bridge, provider adapters and canonical settlement integration are incomplete. See the [live collection control and release gates](docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md#0-live-collection-master-switch).
+## Seven-provider scope
 
-## Gateway scope
+Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue share one Aurelia-facing API and independent provider adapters. The current backend repository contains Razorpay and Cashfree adapters only; the other five are not implemented. A provider catalogue entry or documentation link is not a functioning integration. See the integration status matrix.
 
-The agreed provider catalogue is:
-
-1. Razorpay
-2. Cashfree
-3. PayU
-4. PhonePe
-5. Paytm
-6. JioPay
-7. CCAvenue
-
-A provider name in a registry or credential form does not mean its adapter is implemented. Each provider requires documented API/version mapping, credential-policy review, authenticated order creation, authoritative status verification, timeout recovery, and refund support/tests where available. Do not embed production secrets in JavaScript, APK resources or source control. If a provider requires server-side secret custody, it must remain unavailable in the device-only deployment.
-
-## Current implementation checkpoint
-
-- [x] Android credential-vault template recognizes seven provider credential sets and environment labels.
-- [x] Local payment-journal template supports the seven provider IDs and includes a v1-to-v2 migration path for the earlier Razorpay/Cashfree records.
-- [x] WebView checkout fails closed when the native payment engine is absent; the legacy LAN checkout is not a fallback.
-- [x] Device-local architecture and implementation contract are documented.
-- [ ] Register and implement the native payment bridge in the actual Capacitor Android host.
-- [ ] Implement and test the seven provider adapters against current official API documentation and merchant sandbox accounts.
-- [ ] Implement provider-authoritative verification and crash-safe reconciliation.
-- [ ] Integrate verified capture with Aurelia's actual PMS folio schema using one atomic transaction and durable idempotency receipt.
-- [ ] Implement independently journaled refund execution and reconciliation where supported.
-- [ ] Complete automated tests, Android builds, migration tests and physical-device acceptance.
-
-No successful APK build, provider sandbox acceptance or live deployment is claimed by this checkpoint.
-
-## Payment lifecycle
+## Required financial lifecycle
 
 ```text
-SAVED_ON_DEVICE
-  -> READY_FOR_ONLINE
-  -> ORDER_CREATED
-  -> AWAITING_PROVIDER
-  -> CAPTURED_UNPOSTED
-  -> POSTED_TO_FOLIO
+CREATED -> ORDER_CREATED -> AWAITING_PROVIDER
+  -> CAPTURED_UNPOSTED -> POSTED_TO_FOLIO
 
-Uncertain outcome -> RECONCILIATION_REQUIRED
-Verified terminal failure -> FAILED
-Immutable evidence mismatch -> CONFLICT (manual review)
+Unknown result / timeout -> RECONCILIATION_REQUIRED
+Verified terminal decline -> FAILED
+Immutable evidence mismatch -> CONFLICT
 ```
 
-Retries must reuse the original transaction/idempotency identity. A timeout is ambiguous, not proof of failure. Never create a replacement charge until the provider has been queried using the original references. Exactly-once network delivery is not promised; the design relies on replay-safe operations, unique accounting keys, atomic local commits and durable receipt read-back.
+A client callback or redirect is never payment proof. Provider status must be verified server-side. Capture is not folio settlement. Refunds are separately journaled and reconciled. All financial operations use integer minor units, stable idempotency keys and durable receipts.
 
 ## Repository layout
 
-| Path | Purpose |
+| Path | Responsibility |
 |---|---|
 | `index.html` | PMS WebView application |
-| `android/templates/` | Native Android implementation templates |
-| `payment-backend/` | Legacy/development backend and provider research code; not a required runtime dependency for the device-only target |
-| `docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md` | Normative device-local payment, bridge, ledger, refund and acceptance contract |
-| `docs/LOCAL_FIRST_HYBRID_PAYMENT_ARCHITECTURE.md` | Architecture decision and historical design context |
-| `tests/` | Application and payment contract tests |
-
-## Engineering rules
-
-- Never store financial state only in memory.
-- Never trust a WebView callback, redirect, screenshot, SMS or notification as payment proof.
-- Never log or expose credentials, authorization headers, private keys or full sensitive provider payloads.
-- Use integer minor units for money; do not use floating-point arithmetic for accounting.
-- Preserve ambiguous and conflicting records for reconciliation; never silently discard them.
-- Use Aurelia's real folio and ledger schema. Do not introduce a parallel accounting model or update a paid total without a canonical ledger entry.
-- Keep live activation disabled until every applicable release gate in the device-local specification has passed.
+| `android/` | Capacitor Android host and native integration |
+| `src/payments/` | Frontend payment client and offline PMS behavior |
+| `payment-backend/src/server.mjs` | Selected hybrid backend runtime |
+| `payment-backend/src/providers/` | Provider adapters |
+| `payment-backend/src/intents/` | Payment intent and state persistence |
+| `payment-backend/src/local-server.mjs` | Separate LAN/dev runtime; not production webhook authority |
+| `docs/` | Architecture, provider status and release specifications |
+| `tests/` | Automated application and payment tests |
 
 ## Build and test
 
-Root application:
-
+Root app:
 ```bash
 npm install
 npm test
 npm run build
 ```
 
-Android synchronization (after the Android project has been added and configured):
-
-```bash
-npm run android:sync
-```
-
-Payment-backend development tests (legacy/dev tooling only; not the device-only production runtime):
-
+Selected cloud backend (after dependency installation and Google Cloud configuration):
 ```bash
 cd payment-backend
 npm install
+npm run start:cloud
 npm test
 ```
 
-A passing JavaScript test suite is not equivalent to Android build acceptance, provider sandbox certification, or live-payment approval.
+The cloud runtime requires a Google Cloud project, Firestore, Secret Manager, workload identity / Application Default Credentials, public HTTPS ingress and exact allowed HTTPS origins. Do not create or deploy cloud infrastructure without explicit owner configuration and approval. Do not commit credentials or service-account keys.
 
-## Architecture and acceptance documents
+The local development runtime remains separate:
+```bash
+cd payment-backend
+npm start
+```
 
-- [Device-local payment engine specification](docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md)
-- [Device-local architecture decision](docs/LOCAL_FIRST_HYBRID_PAYMENT_ARCHITECTURE.md)
+A passing unit test is not merchant sandbox certification, Android physical-device acceptance or approval for live payment collection.
