@@ -1,5 +1,10 @@
 {$AURELIA_LAN_HOSTNAME}:443 {
-  tls internal
+  tls internal {
+    protocols tls1.2 tls1.3
+  }
+  header {
+    Strict-Transport-Security "max-age=31536000"
+  }
   encode zstd gzip
   reverse_proxy payment-backend:8085
 }
