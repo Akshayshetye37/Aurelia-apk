@@ -1,6 +1,7 @@
 FROM gradle:8.10-jdk21 AS attestation-build
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch v0.4 https://github.com/android/keyattestation.git /opt/keyattestation
+RUN git clone --depth 1 --branch v0.4 https://github.com/android/keyattestation.git /opt/keyattestation \
+    && test "$(git -C /opt/keyattestation rev-parse HEAD)" = "621149c4ebaeeea844d6f43098687c73c4d370a3"
 COPY attestation-verifier /opt/aurelia-attestation-verifier
 WORKDIR /opt/aurelia-attestation-verifier
 RUN gradle --no-daemon shadowJar
