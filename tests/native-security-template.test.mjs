@@ -88,3 +88,18 @@ test('payment device identity uses Android Keystore P-256 and domain-separated p
   assert.doesNotMatch(source, /@JavascriptInterface|addJavascriptInterface\s*\(/);
   assert.match(source, /not provider verification or accounting approval/);
 });
+
+
+test('payment device identity stages challenge-bound hardware attestation and exports its chain', () => {
+  const source = read('android/templates/security/PaymentDeviceKeyStore.kt');
+  assert.match(source, /createAttestedIdentity\(serverChallenge: ByteArray\)/);
+  assert.match(source, /setAttestationChallenge\(serverChallenge\.clone\(\)\)/);
+  assert.match(source, /setIsStrongBoxBacked\(true\)/);
+  assert.match(source, /StrongBoxUnavailableException/);
+  assert.match(source, /SECURITY_LEVEL_STRONGBOX/);
+  assert.match(source, /SECURITY_LEVEL_TRUSTED_ENVIRONMENT/);
+  assert.match(source, /isInsideSecureHardware/);
+  assert.match(source, /certificateChainBase64/);
+  assert.match(source, /Software-backed payment device keys are rejected/);
+  assert.match(source, /ATTESTED_ALIAS/);
+});
