@@ -4409,6 +4409,43 @@ window.aureliaSettlePayment = function(input) {
     audit: input.audit
   });
 };
+window.aureliaSettleVerifiedGatewayPayment = async input => {
+  if (!input || input.source !== 'gateway' ||
+      !['razorpay','cashfree'].includes(input.provider) ||
+      typeof input.transactionId !== 'string' ||
+      typeof window.aureliaReconcileGatewayPayment !== 'function') {
+    throw new Error('Invalid gateway settlement request');
+  }
+  const verification = await window.aureliaReconcileGatewayPayment(input.transactionId);
+  if (verification?.status !== 'CAPTURED_PENDING_ACCOUNTING') {
+    return { ok: false, verification };
+  }
+  const expectedPaise = Math.round(Number(input.amount) * 100);
+  if (verification.transactionId !== input.transactionId ||
+      verification.provider !== input.provider ||
+      verification.amountMinor !== expectedPaise ||
+      verification.currency !== 'INR' ||
+      typeof verification.providerPaymentId !== 'string' ||
+      !verification.providerPaymentId) {
+    throw new Error('Backend payment verification did not match this folio, provider and amount');
+  }
+  const paymentReference = verification.providerPaymentId;
+  const approved = window.confirm(
+    'PROVIDER VERIFIED · ' + input.provider.toUpperCase() +
+    '\\nCaptured: ₹' + (expectedPaise / 100).toFixed(2) +
+    '\\nProvider payment: ' + paymentReference +
+    '\\n\\nPost this verified payment to ' + String(input.booking?.g || 'the guest') + '\\'s folio?'
+  );
+  if (!approved) return { ok: false, awaitingStaffConfirmation: true, verification };
+  const result = settleLocalPayment({
+    state: input.state, booking: input.booking, amount: input.amount,
+    method: input.method, reference: paymentReference, source: 'staff_review',
+    idempotencyKey: 'gateway:' + input.provider + ':' + paymentReference,
+    balanceDue: input.balanceDue, verificationConfirmed: true,
+    persist: input.persist, audit: input.audit
+  });
+  return { ...result, verification };
+};
 </script>
 <script type="module" id="aurelia-journaled-settlement-adapter">
 import { IndexedDbSettlementJournal } from './src/payments/settlement-journal.mjs';
