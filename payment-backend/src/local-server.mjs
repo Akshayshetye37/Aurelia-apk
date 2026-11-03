@@ -13,7 +13,10 @@ app.set('trust proxy', process.env.TRUST_PROXY_HOPS === '1' ? 1 : false);
 const PORT = Number(process.env.PORT || 8085);
 const DB_PATH = process.env.DATABASE_PATH || '/data/aurelia-payments.sqlite';
 const PROPERTY_ID = process.env.AURELIA_PROPERTY_ID || '';
-const ATTESTATION_VERIFIER_URL = 'http://127.0.0.1:8091/verify';
+const ATTESTATION_VERIFIER_URL = process.env.ATTESTATION_VERIFIER_URL || 'http://127.0.0.1:8091/verify';
+const attestationVerifierUrl = new URL(ATTESTATION_VERIFIER_URL);
+if (attestationVerifierUrl.protocol !== 'http:' || !['127.0.0.1', '::1'].includes(attestationVerifierUrl.hostname))
+  throw new Error('ATTESTATION_VERIFIER_URL_must_be_loopback_HTTP_only');
 if (!/^[A-Za-z0-9_-]{3,64}$/.test(PROPERTY_ID)) throw new Error('AURELIA_PROPERTY_ID_must_be_configured_as_3_to_64_safe_characters');
 const SESSION_TTL_SECONDS = 2 * 60 * 60;
 const SESSION_COOKIE = 'aurelia_owner_session';
@@ -76,6 +79,19 @@ CREATE TABLE IF NOT EXISTS device_challenges (
  consumed_at TEXT
 );
 CREATE INDEX IF NOT EXISTS device_challenge_expiry ON device_challenges(device_id,expires_at,consumed_at);
+CREATE TABLE IF NOT EXISTS device_enrollment_challenges (
+ challenge_id TEXT PRIMARY KEY,
+ device_id TEXT NOT NULL,
+ owner_id INTEGER NOT NULL,
+ property_id TEXT NOT NULL,
+ nonce_sha256 TEXT NOT NULL,
+ nonce_base64 TEXT NOT NULL,
+ expires_at INTEGER NOT NULL,
+ created_at TEXT NOT NULL,
+ consumed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS device_enrollment_challenge_expiry
+ ON device_enrollment_challenges(device_id,owner_id,property_id,expires_at,consumed_at);
 CREATE TABLE IF NOT EXISTS device_request_nonces (
  device_id TEXT NOT NULL REFERENCES device_registrations(device_id) ON DELETE CASCADE,
  nonce_sha256 TEXT NOT NULL,
@@ -347,6 +363,154 @@ app.get('/readyz', async (_req, res) => {
     return res.json({ ok: true, database: 'ready', attestationVerifier: 'ready' });
   } catch { return fail(res, 503, 'attestation_verifier_or_database_unavailable'); }
 });
+// Challenge-first enrollment: the device key does not exist until the owner-bound
+// challenge has been issued. This is the canonical flow for challenge-bound Android
+// Key Attestation; it avoids registering a legacy, unattested key before key creation.
+app.post('/v1/admin/devices/enrollment/challenge', ownerAuth, requireBrowserMutationOrigin, (req, res) => {
+  const { deviceId } = req.body || {};
+  if (!validOpaqueId(deviceId)) return fail(res, 400, 'invalid_device_id');
+  const existing = db.prepare('SELECT status,owner_id,property_id,attestation_verified_at FROM device_registrations WHERE device_id=?')
+    .get(deviceId);
+  if (existing && (existing.status !== 'PENDING' || existing.owner_id !== req.owner.id ||
+      existing.property_id !== PROPERTY_ID || existing.attestation_verified_at))
+    return fail(res, 409, 'device_identity_already_enrolled_or_conflicted');
+
+  const challengeId = crypto.randomUUID();
+  const nonce = randomBytes(32).toString('base64url');
+  const expiresAt = Math.floor(Date.now() / 1000) + 5 * 60;
+  const issue = db.transaction(() => {
+    db.prepare('UPDATE device_enrollment_challenges SET consumed_at=COALESCE(consumed_at,?) WHERE device_id=? AND owner_id=? AND property_id=? AND consumed_at IS NULL')
+      .run(now(), deviceId, req.owner.id, PROPERTY_ID);
+    db.prepare('INSERT INTO device_enrollment_challenges(challenge_id,device_id,owner_id,property_id,nonce_sha256,nonce_base64,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?)')
+      .run(challengeId, deviceId, req.owner.id, PROPERTY_ID,
+        crypto.createHash('sha256').update(Buffer.from(nonce, 'base64url')).digest('hex'),
+        nonce, expiresAt, now());
+    writeAudit('PAYMENT_DEVICE_ATTESTATION_CHALLENGE_ISSUED', deviceId);
+  });
+  issue();
+  return res.status(201).json({ challengeId, nonce });
+});
+
+app.post('/v1/admin/devices/enroll', ownerAuth, requireBrowserMutationOrigin, async (req, res) => {
+  const { deviceId, challengeId, publicKeyPem, certificateChainBase64 } = req.body || {};
+  if (!validOpaqueId(deviceId) || typeof challengeId !== 'string' ||
+      !/^[0-9a-f-]{36}$/i.test(challengeId) || typeof publicKeyPem !== 'string' ||
+      publicKeyPem.length > 4096 || !Array.isArray(certificateChainBase64) ||
+      certificateChainBase64.length < 2 || certificateChainBase64.length > 8 ||
+      certificateChainBase64.some(value => typeof value !== 'string' || value.length < 128 || value.length > 90000))
+    return fail(res, 400, 'invalid_attested_enrollment_submission');
+
+  let suppliedKey;
+  try { suppliedKey = crypto.createPublicKey(publicKeyPem); }
+  catch { return fail(res, 400, 'invalid_device_public_key'); }
+  if (suppliedKey.asymmetricKeyType !== 'ec' || suppliedKey.asymmetricKeyDetails?.namedCurve !== 'prime256v1')
+    return fail(res, 400, 'device_key_must_be_p256');
+  const suppliedSpki = suppliedKey.export({ type: 'spki', format: 'der' });
+
+  const challenge = db.prepare('SELECT * FROM device_enrollment_challenges WHERE challenge_id=? AND device_id=?')
+    .get(challengeId, deviceId);
+  const current = Math.floor(Date.now() / 1000);
+  if (!challenge || challenge.consumed_at || challenge.expires_at <= current ||
+      challenge.owner_id !== req.owner.id || challenge.property_id !== PROPERTY_ID)
+    return fail(res, 409, 'attestation_challenge_invalid_or_expired');
+  const challengeBytes = Buffer.from(challenge.nonce_base64, 'base64url');
+  if (crypto.createHash('sha256').update(challengeBytes).digest('hex') !== challenge.nonce_sha256)
+    return fail(res, 409, 'attestation_challenge_integrity_failure');
+
+  const existing = db.prepare('SELECT status,owner_id,property_id,attestation_verified_at FROM device_registrations WHERE device_id=?')
+    .get(deviceId);
+  if (existing && (existing.status !== 'PENDING' || existing.owner_id !== req.owner.id ||
+      existing.property_id !== PROPERTY_ID || existing.attestation_verified_at))
+    return fail(res, 409, 'device_identity_already_enrolled_or_conflicted');
+
+  let verification;
+  try {
+    const response = await fetch(ATTESTATION_VERIFIER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeBase64: challenge.nonce_base64, certificateChainBase64 }),
+      signal: AbortSignal.timeout(30000)
+    });
+    verification = await response.json();
+    if (!response.ok || verification?.status !== 'VERIFIED') {
+      db.prepare('UPDATE device_enrollment_challenges SET consumed_at=? WHERE challenge_id=? AND consumed_at IS NULL')
+        .run(now(), challengeId);
+      writeAudit('PAYMENT_DEVICE_ATTESTATION_REJECTED', deviceId + ':' + String(verification?.reason || 'verifier_rejected').slice(0, 80));
+      return fail(res, 422, 'device_attestation_verification_failed');
+    }
+  } catch {
+    writeAudit('PAYMENT_DEVICE_ATTESTATION_VERIFIER_UNAVAILABLE', deviceId);
+    return fail(res, 503, 'device_attestation_verifier_unavailable');
+  }
+
+  const verifiedSpki = Buffer.from(verification.publicKeySpkiBase64 || '', 'base64');
+  if (!verifiedSpki.length || !verifiedSpki.equals(suppliedSpki)) {
+    db.prepare('UPDATE device_enrollment_challenges SET consumed_at=? WHERE challenge_id=? AND consumed_at IS NULL')
+      .run(now(), challengeId);
+    writeAudit('PAYMENT_DEVICE_ATTESTATION_KEY_BINDING_REJECTED', deviceId);
+    return fail(res, 422, 'device_attestation_key_binding_failed');
+  }
+
+  let chainDigest;
+  try {
+    const chainBytes = certificateChainBase64.map(value => Buffer.from(value, 'base64'));
+    if (chainBytes.some((value, index) => !value.length || value.length > 65536 ||
+        value.toString('base64').replace(/=+$/, '') !== certificateChainBase64[index].replace(/=+$/, '')))
+      throw new Error('certificate_encoding_invalid');
+    chainDigest = crypto.createHash('sha256').update(Buffer.concat(chainBytes)).digest('hex');
+  } catch {
+    db.prepare('UPDATE device_enrollment_challenges SET consumed_at=? WHERE challenge_id=? AND consumed_at IS NULL')
+      .run(now(), challengeId);
+    writeAudit('PAYMENT_DEVICE_ATTESTATION_CHAIN_ENCODING_REJECTED', deviceId);
+    return fail(res, 422, 'device_attestation_chain_invalid');
+  }
+
+  const verifiedAt = now();
+  const metadata = {
+    verifier: 'android/keyattestation',
+    verifierVersion: 'v0.4',
+    challengeId,
+    ownerId: req.owner.id,
+    propertyId: PROPERTY_ID,
+    securityLevel: verification.securityLevel,
+    verifiedBootState: verification.verifiedBootState,
+    deviceLocked: verification.deviceLocked === true,
+    certificateChainSha256: chainDigest,
+    publicKeySha256: crypto.createHash('sha256').update(verifiedSpki).digest('hex')
+  };
+  const persist = db.transaction(() => {
+    const consumed = db.prepare('UPDATE device_enrollment_challenges SET consumed_at=? WHERE challenge_id=? AND device_id=? AND owner_id=? AND property_id=? AND consumed_at IS NULL AND expires_at>?')
+      .run(verifiedAt, challengeId, deviceId, req.owner.id, PROPERTY_ID, current);
+    if (consumed.changes !== 1) throw new Error('attestation_challenge_race_or_expiry');
+    if (existing) {
+      const updated = db.prepare("UPDATE device_registrations SET public_key_spki=?,key_algorithm='ECDSA_P256_SHA256',attestation_verified_at=?,attestation_security_level=?,attestation_verified_boot_state=?,attestation_device_locked=1,attestation_chain_sha256=?,attestation_metadata=? WHERE device_id=? AND status='PENDING' AND owner_id=? AND property_id=? AND attestation_verified_at IS NULL")
+        .run(verifiedSpki, verifiedAt, verification.securityLevel, verification.verifiedBootState,
+          chainDigest, JSON.stringify(metadata), deviceId, req.owner.id, PROPERTY_ID);
+      if (updated.changes !== 1) throw new Error('device_attestation_persistence_conflict');
+    } else {
+      db.prepare("INSERT INTO device_registrations(device_id,public_key_spki,key_algorithm,status,created_at,owner_id,property_id,attestation_verified_at,attestation_security_level,attestation_verified_boot_state,attestation_device_locked,attestation_chain_sha256,attestation_metadata) VALUES(?,?,'ECDSA_P256_SHA256','PENDING',?,?,?,?,?,?,1,?,?)")
+        .run(deviceId, verifiedSpki, verifiedAt, req.owner.id, PROPERTY_ID, verifiedAt,
+          verification.securityLevel, verification.verifiedBootState, chainDigest, JSON.stringify(metadata));
+    }
+    db.prepare('INSERT OR IGNORE INTO device_cursors(device_id,last_applied_sequence,updated_at) VALUES(?,0,?)')
+      .run(deviceId, verifiedAt);
+    db.prepare('INSERT OR IGNORE INTO device_sequence_counters(device_id,last_sequence) VALUES(?,0)')
+      .run(deviceId);
+    writeAudit('PAYMENT_DEVICE_ATTESTATION_VERIFIED', deviceId);
+  });
+  try { persist(); }
+  catch {
+    writeAudit('PAYMENT_DEVICE_ATTESTATION_PERSISTENCE_REJECTED', deviceId);
+    return fail(res, 409, 'device_attestation_persistence_conflict');
+  }
+  return res.status(201).json({
+    deviceId, status: 'PENDING', attestationVerified: true,
+    securityLevel: verification.securityLevel,
+    verifiedBootState: verification.verifiedBootState,
+    deviceLocked: true
+  });
+});
+
 // The Android app generates and retains its private key in Android Keystore.
 // Only the P-256 public key is registered with this service.
 app.post('/v1/admin/devices/register', ownerAuth, requireBrowserMutationOrigin, (req, res) => {
