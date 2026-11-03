@@ -1,5 +1,12 @@
 services:
   payment-backend:
+    init: true
+    stop_grace_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
     build:
       context: .
       dockerfile: Dockerfile
@@ -21,6 +28,10 @@ services:
       timeout: 5s
       retries: 5
   https:
+    init: true
+    stop_grace_period: 20s
+    security_opt:
+      - no-new-privileges:true
     image: caddy:2
     environment:
       AURELIA_LAN_HOSTNAME: ${AURELIA_LAN_HOSTNAME:?Set AURELIA_LAN_HOSTNAME in .env}

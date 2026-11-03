@@ -182,3 +182,22 @@ test('Docker publishes only the TLS reverse proxy and retains SQLite in a named 
   assert.doesNotMatch(compose, /8085:8085/);
   assert.match(compose, /TRUST_PROXY_HOPS: "1"/);
 });
+
+
+test('LAN SQLite uses crash-durable WAL settings and readiness verifies integrity', () => {
+  assert.match(source, /journal_mode = WAL/);
+  assert.match(source, /synchronous = FULL/);
+  assert.match(source, /busy_timeout = 5000/);
+  assert.match(source, /wal_autocheckpoint = 1000/);
+  assert.match(source, /quick_check/);
+  assert.match(source, /foreign_key_check/);
+  assert.match(source, /database_integrity_or_durability_check_failed/);
+});
+
+test('LAN runtime drains HTTP requests and checkpoints WAL on graceful shutdown', () => {
+  assert.match(source, /const server = app\.listen/);
+  assert.match(source, /server\.close\(\(\) =>/);
+  assert.match(source, /wal_checkpoint\(TRUNCATE\)/);
+  assert.match(source, /process\.on\('SIGTERM'/);
+  assert.match(source, /process\.on\('SIGINT'/);
+});
