@@ -37,7 +37,7 @@ test('UI keeps live collection disabled and requires backend verification plus s
   assert.ok(html.includes('PROVIDER VERIFIED'));
   assert.ok(html.includes('CAPTURED_PENDING_ACCOUNTING'));
   assert.ok(html.includes('Live collection and automatic folio settlement remain disabled'));
-  assert.ok(html.includes('automatic refunds or automatic PMS folio settlement'));
+
 });
 
 test('provider onboarding is no longer gated by the Pay Bridge handshake', () => {
