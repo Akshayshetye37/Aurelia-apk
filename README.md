@@ -5,6 +5,8 @@
 
 > **Current state: active development; not production-deployed and not approved for live payment collection.** This section is the operational summary. The detailed architecture and historical checkpoints below provide supporting context.
 
+> **Local appliance architecture:** see [LAN appliance, Android discovery, HTTPS trust, offline behavior, and optional edge-AI design](docs/LOCAL-APPLIANCE-AND-EDGE-AI.md). This is the target architecture, not a claim that discovery or appliance deployment is already installed.
+
 ### Project location
 
 - **PMS source:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
