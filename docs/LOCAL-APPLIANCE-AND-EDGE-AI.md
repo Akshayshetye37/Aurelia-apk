@@ -48,6 +48,30 @@ Do **not** add TensorFlow Lite, PyTorch, an LLM, camera/microphone permissions, 
  └────────────────────────────────────────────────────────────────┘
 ```
 
+## Operating principle: local-first core, internet-enabled extensions
+
+The PMS is a local-first application. Its essential property-management workflows must continue to operate on the device/local property network without Internet access. Internet connectivity is an enhancement path for features that genuinely require an external provider or deliver better results online; it is not a prerequisite for opening or operating the PMS.
+
+### Capability routing
+
+- **Local by default:** bookings, room inventory/status, guest records, check-in/check-out, folios, invoices, housekeeping/operations, reports based on locally available data, manual payments, and local audit history.
+- **LAN appliance when available:** payment orchestration, provider webhook intake, device enrollment/commands, shared property data/services, backups and optional local AI inference. Loss of the appliance must not disable core PMS workflows.
+- **Internet when required or useful:** payment-provider APIs and hosted checkout, webhook delivery, OTA/channel integrations, messaging/email/SMS providers, cloud AI/model APIs, external maps or other third-party services, software updates, and off-site backup replication. Each integration must declare its network dependency and timeout/failure behavior.
+- **Local and cloud AI may coexist:** prefer an on-device or appliance model for supported, privacy-sensitive, low-latency tasks. Use a cloud model when the task requires stronger capability or the local model is unavailable, subject to explicit data-minimization, consent, cost and retention controls. If neither is reachable, expose a clear unavailable state or a deterministic non-AI fallback. AI output is advisory and never authorizes financial or security actions.
+
+### Connectivity and data rules
+
+1. Do not block local PMS screens or local transactions while waiting for an Internet request. Use bounded timeouts, background jobs and visible per-integration connection status.
+2. Separate local transaction commits from remote delivery. Persist an outbox/job before attempting network delivery; use stable idempotency keys and bounded retries with backoff for operations whose semantics permit retry.
+3. Never blindly retry an ambiguous payment create/capture/refund. Query by the original idempotency key/provider reference and reconcile before offering another attempt.
+4. Keep a clear source of truth for each record. Local PMS data remains authoritative for local operational records; payment-provider state is authoritative only for provider transaction outcomes after server-side verification. Do not resolve conflicts by silently overwriting newer data.
+5. Synchronize incrementally with versioning, timestamps and conflict handling. Preserve an audit trail for merges and rejected updates. Do not treat device wall-clock time alone as proof of ordering or authorization.
+6. Minimize what leaves the property. Do not send guest identity/contact details, folio contents or payment data to cloud AI or unrelated services unless the feature requires it and the data-flow, consent, access and retention policy has been reviewed.
+7. When Internet returns, resume queued eligible integrations and reconcile pending states. Recovery must be idempotent and must not create duplicate bookings, messages, charges or accounting entries.
+8. Make degraded operation explicit: distinguish local-only, LAN-connected, Internet-connected, provider-unavailable and synchronization-pending states. Do not display a generic "online" indicator as proof that every integration is healthy.
+
+This policy means **use both local and Internet capabilities where each is appropriate**. It does not mean making every feature depend on the cloud, or sending all local data online.
+
 ## 1. Discovery: DNS-SD/mDNS, not a hard-coded IP
 
 Advertise the payment endpoint as `_aurelia-payment._tcp.local.` from the appliance. The service record should resolve to the appliance hostname and HTTPS port 8443. TXT records may contain only non-secret metadata, for example:
