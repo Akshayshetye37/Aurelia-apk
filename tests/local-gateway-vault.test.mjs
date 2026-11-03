@@ -21,6 +21,7 @@ test('local vault accepts only sandbox provider schemas and bounded credential v
   assert.match(vault, /provider_adapter_not_available_locally/);
   assert.match(vault, /value\.length\(\) > 4096/);
   assert.match(vault, /live_credentials_must_only_be_stored_on_trusted_backend/);
+  assert.match(vault, /Permit deletion of legacy live records/);
   assert.doesNotMatch(vault, /webhookSecret/);
   assert.match(vault, /file\.length\(\) > 65536/);
 });
@@ -45,6 +46,7 @@ test('PMS presents sandbox staging separately from local-first folio operations 
   assert.match(html, /Sandbox Credential Staging/);
   assert.match(html, /Save sandbox credentials/);
   assert.match(html, /Live keys and webhook secrets are rejected/);
+  assert.match(html, /Delete legacy live credentials/);
   assert.match(html, /Optional LAN \/ Cloud Payment Service/);
   assert.match(html, /Internet-connected trusted backend/);
   assert.match(html, /refreshAureliaNativeGateway/);
