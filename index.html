@@ -3450,13 +3450,13 @@ window.reconcileAureliaGatewayPayment=async function(i,transactionId,paymentId){
   const result=await localGatewayApi('/v1/payments/'+encodeURIComponent(transactionId)+'/reconcile','POST',paymentId?{paymentId}:{});
   record.status=result.status||'PENDING';record.providerPaymentId=paymentId||record.providerPaymentId||null;record.lastReconciledAt=new Date().toISOString();persist();
   if(result.status==='CAPTURED_PENDING_ACCOUNTING'){
-   if(status)status.textContent='Provider confirms capture. PMS folio posting is awaiting the trusted settlement projector; do not record this as a manual payment.';
+   if(status)status.textContent=window.aureliaGatewaySettlementLabel(result.status)+'. The provider capture is verified, but no PMS credit is recorded until the trusted Android settlement projector applies the folio mutation, reads back its durable receipt and acknowledges it.';
    toast('Provider capture verified. Folio accounting is pending trusted settlement.');
   }else if(result.status==='FAILED'){
    if(status)status.textContent='Provider confirms this payment failed. The folio remains unpaid.';
    toast('Provider confirmed payment failure.');
   }else{
-   if(status)status.textContent='Provider has not confirmed capture yet. The transaction remains pending; reconcile again later.';
+   if(status)status.textContent=window.aureliaGatewaySettlementLabel(result.status)+'. The folio remains unpaid. Reconcile again later; do not create a duplicate order.';
    toast('Payment is still pending provider confirmation.');
   }
  }catch(error){if(status)status.textContent='Reconciliation could not complete: '+(error.message||'unknown error');toast(error.message||'Reconciliation failed.');}
