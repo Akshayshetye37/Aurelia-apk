@@ -4122,17 +4122,11 @@ function localGatewayAdminHtml(){
  if(a.error)body+='<p class="lab" role="alert">'+esc(a.error)+'</p>';
  return '<section id="aurelia-gateway-admin" class="card" style="margin-top:12px"><h3>Secure Payment Engine · LAN</h3><p class="lab">Secure local administration for Razorpay and Cashfree. Configure the backend origin below, then authenticate with the owner account created during Docker setup.</p><label class="fld"><span>Docker appliance HTTPS origin</span><input data-aurelia-backend-url type="url" inputmode="url" autocomplete="url" placeholder="https://payments.local:8443" value="'+esc(endpoint)+'"></label><div class="row" style="flex-wrap:wrap;gap:6px"><button class="btn sm" onclick="saveAureliaBackendEndpoint()">Save backend</button><button class="btn sm ghost" onclick="testAureliaBackendConnection()">Test backend</button><button class="btn sm ghost" onclick="refreshLocalGatewayOwner()">Refresh owner status</button></div><p class="lab" data-aurelia-backend-status role="status">'+esc(cfg.healthMessage||'The backend must be reachable over trusted HTTPS. Health checks do not authenticate the owner.')+'</p>'+body+'</section>';
 }
-async function localGatewayApi(path,method='GET',body,extraHeaders={}){
- const origin=(S.set.backendConnection?.endpoint||'').trim();
- if(!origin||S.set.backendConnection?.reachable!==true)throw new Error('Save and successfully test the HTTPS Docker backend first.');
- const target=new URL(path,origin);
- if(target.origin!==origin||!target.pathname.startsWith('/v1/'))throw new Error('Request target is outside the configured payment API origin.');
- const options={method,mode:'cors',credentials:'include',cache:'no-store',redirect:'error',headers:{Accept:'application/json',...extraHeaders}};
- if(body!==undefined){options.headers['Content-Type']='application/json';options.body=JSON.stringify(body);}
- const response=await fetch(target.href,options);
- const data=await response.json().catch(()=>({}));
- if(!response.ok)throw new Error(data.error||('Backend returned HTTP '+response.status));
- return data;
+async function localGatewayApi(){
+ // Retired by the device-only architecture decision. Never contact a LAN/Docker
+ // payment appliance from the WebView. Native local vault administration will
+ // be exposed only through the validated Android bridge when that module ships.
+ throw new Error('The legacy LAN payment backend is disabled. Device-local native gateway administration is not yet integrated.');
 }
 window.refreshLocalGatewayOwner=async function(){
  const a=window.AureliaLocalGatewayAdmin;if(a.loading)return;
