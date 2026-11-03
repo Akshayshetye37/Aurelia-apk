@@ -38,6 +38,12 @@ This policy is a product/architecture requirement. The PMS implements the local 
 - HTTPS-only is enforced at startup and per request. Production must set `AURELIA_HTTPS_TERMINATION=trusted-proxy` and `AURELIA_TRUST_PROXY_HOPS=1`; Express trusts exactly one TLS-terminating ingress hop, validates `req.secure`, rejects cleartext with HTTP 403 (no redirect), and emits HSTS. The ingress must overwrite `X-Forwarded-Proto`, enforce modern TLS (TLS 1.2 minimum, TLS 1.3 preferred), and be the only network path to the container. Never expose the container directly or trust client-supplied forwarded headers.
 - Firestore membership and payment authority collections must not be writable by mobile clients. Enforce this with Firestore Security Rules and IAM.
 
+## Local-first Android payment journal
+
+The Android APK now includes a native SQLite operation journal (`android/templates/LocalPaymentLedger.java`) and exposes it through `window.AureliaLocalPaymentLedger`. It persists idempotent payment-request metadata on-device and tracks local dispatch plus pending cloud-sync state. It intentionally cannot mark a payment captured, mark cloud sync complete, or post a PMS folio receipt. Those operations require trusted provider verification and an exactly-once PMS settlement boundary. See [Local-first hybrid payment architecture](../docs/LOCAL_FIRST_HYBRID_PAYMENT_ARCHITECTURE.md) for routing, retry, network-security and acceptance rules.
+
+This is a persistence/orchestration foundation, not a completed checkout or background sync worker. WorkManager scheduling is deferred until a signed, authenticated sync acknowledgement contract exists.
+
 ## 2. Implemented foundations
 
 ### Provider adapters
