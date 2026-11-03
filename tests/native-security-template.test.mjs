@@ -103,6 +103,8 @@ test('payment device identity stages challenge-bound hardware attestation and ex
   assert.match(source, /Software-backed payment device keys are rejected/);
   assert.match(source, /ATTESTED_ALIAS/);
   assert.match(source, /fun hasAttestedIdentity\(\): Boolean/);
+  assert.match(source, /An attested identity already exists; revoke it explicitly before reenrollment/);
+  assert.doesNotMatch(source, /if \(store\.containsAlias\(ATTESTED_ALIAS\)\) store\.deleteEntry\(ATTESTED_ALIAS\)/);
 });
 
 test('native payment device transport is HTTPS-only, path-safe, signed, and response-bounded', () => {
