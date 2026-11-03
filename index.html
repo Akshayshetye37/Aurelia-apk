@@ -4333,11 +4333,10 @@ import {
 } from './src/payments/settlement-apply.mjs';
 
 const journalPromise = Promise.resolve().then(() => new IndexedDbSettlementJournal());
-const project = payload => {
-  if (typeof window.__aureliaProjectJournaledSettlement !== 'function') {
-    throw new Error('PMS settlement projector is not ready');
-  }
-  return window.__aureliaProjectJournaledSettlement(payload);
+const project = async () => {
+  const error = new Error('Trusted native settlement projector is not installed');
+  error.code = 'SETTLEMENT_PROJECTOR_UNAVAILABLE';
+  throw error;
 };
 
 window.aureliaApplyJournaledSettlement = async command => {
