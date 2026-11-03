@@ -126,7 +126,7 @@ test('LAN device enrollment, signed lease, durable acknowledgement, cursor and r
     }
   };
   const payloadText = JSON.stringify(commandPayload);
-  const payloadHash = crypto.createHash('sha256').update(payloadText).digest('hex');
+  const payloadHash = crypto.createHash('sha256').update(canonicalJson(commandPayload)).digest('hex');
   const stamp = new Date().toISOString();
   db.prepare(`INSERT INTO transactions(id,provider,environment,amount_minor,currency,status,idempotency_key,device_id,folio_id,created_at,updated_at)
     VALUES(?,?,?,?,'INR','CAPTURED_PENDING_ACCOUNTING',?,?,?,?,?)`)
