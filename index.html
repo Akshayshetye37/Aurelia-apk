@@ -3365,14 +3365,21 @@ window.aureliaGatewayFolioHtml=function(i){
  const booking=bk(i),pending=(booking?.gatewayPayments||[]).filter(x=>!['FAILED','POSTED_TO_FOLIO'].includes(x.status));
  const pendingHtml=pending.length?'<div class="card" style="margin:10px 0"><b>Unresolved online transactions</b>'+pending.map(x=>'<div class="ln"><span>'+esc(x.provider)+' · '+esc(x.status)+'<br><small>'+esc(x.transactionId)+'</small></span><button class="btn sm ghost" onclick="reconcileAureliaGatewayPayment('+Number(i)+',\''+esc(x.transactionId)+'\')">Reconcile</button></div>').join('')+'</div>':'';
  const setup='<button class="btn sm ghost" onclick="go(\'more\');setTimeout(()=>openAureliaGatewayAdmin(),100)">Open payment setup</button>';
- if(!S.set.backendConnection?.reachable||!a.authenticated)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">Connect the trusted HTTPS LAN payment engine and sign in to its Owner Console. Online checkout is unavailable until a provider is configured, validated and activated in sandbox mode. Cash/manual payments continue to work locally.</p>'+setup;
- if(!supported.length)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">No sandbox provider is active. Save credentials, validate them and activate Razorpay or Cashfree in the Payment Gateway settings.</p>'+setup;
+ if(!S.set.backendConnection?.reachable||!a.authenticated)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">Online checkout is temporarily unavailable while the device-only Android payment engine is being integrated. No server or LAN appliance is required by the target architecture. Bookings, folios and cash/manual payments continue to work offline.</p>'+setup;
+ if(!supported.length)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">No device-local sandbox provider is active. Gateway credentials and provider execution must be integrated through the Android native engine before checkout can be enabled.</p>'+setup;
  const options=supported.map(x=>'<option value="'+esc(x.provider)+'">'+(x.provider==='razorpay'?'Razorpay':'Cashfree')+' · Sandbox</option>').join('');
  return '<h3>Online payment · Sandbox</h3>'+pendingHtml+'<p class="lab">Provider checkout is created by the authenticated payment engine. The provider independently confirms payment; a checkout success screen alone never posts a PMS receipt.</p><label class="fld"><span>Payment provider</span><select id="aurelia-online-provider">'+options+'</select></label><label class="fld"><span>Amount (INR)</span><input id="aurelia-online-amount" type="number" min="0.01" step="0.01" value="'+Math.max(0,Number(dueB(booking))||0).toFixed(2)+'"></label><div id="aurelia-cashfree-details" hidden><label class="fld"><span>Guest mobile number (Cashfree)</span><input id="aurelia-cashfree-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number"></label><label class="fld"><span>Public HTTPS return URL (Cashfree)</span><input id="aurelia-cashfree-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><button class="btn" style="width:100%" onclick="startAureliaGatewayCheckout('+Number(i)+')">Create secure checkout</button><div id="aurelia-gateway-checkout-status" class="lab" role="status" style="margin-top:8px"></div>';
 };
 document.addEventListener('change',e=>{if(e.target?.id==='aurelia-online-provider'){const box=document.getElementById('aurelia-cashfree-details');if(box)box.hidden=e.target.value!=='cashfree';}});
 window.startAureliaGatewayCheckout=async function(i){
  const b=bk(i);if(!b){toast('Booking not found');return}
+ // Device-only architecture: never silently fall back to the legacy LAN backend.
+ // Checkout stays fail-closed until the native Android payment engine is installed and accepted.
+ if(!window.AureliaPaymentEngine||typeof window.AureliaPaymentEngine.createOrder!=='function'){
+  const status=document.getElementById('aurelia-gateway-checkout-status');
+  if(status)status.textContent='Online gateway checkout is not enabled: the on-device Android payment engine is not yet integrated. Your booking, folio, cash/manual payments and offline PMS functions remain available. No payment was initiated.';
+  toast('On-device payment engine is not installed. No payment was initiated.');return;
+ }
  const provider=document.getElementById('aurelia-online-provider')?.value||'';
  const amount=Number(document.getElementById('aurelia-online-amount')?.value),amountMinor=Math.round(amount*100);
  const due=Math.round(Math.max(0,Number(dueB(b))||0)*100);
