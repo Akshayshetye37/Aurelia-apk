@@ -12,6 +12,15 @@ const origins = new Set((process.env.AURELIA_OWNER_ORIGINS || '').split(',').map
 if (!projectId || origins.size === 0 || [...origins].some(v => !/^https:\/\/[^/]+$/.test(v))) {
   throw new Error('Set GOOGLE_CLOUD_PROJECT and exact HTTPS AURELIA_OWNER_ORIGINS before startup.');
 }
+if (process.env.NODE_ENV === 'production') {
+  const port = process.env.PORT;
+  if (!/^[0-9]{1,5}$/.test(port || '') || Number(port) < 1 || Number(port) > 65535) {
+    throw new Error('PRODUCTION_CONFIG_INVALID: explicit valid PORT is required.');
+  }
+  if ([...origins].some(value => /localhost|127\\.0\\.0\\.1|\\[::1\\]|\\.local(?::|$)/i.test(value))) {
+    throw new Error('PRODUCTION_CONFIG_INVALID: local development origins are forbidden.');
+  }
+}
 if (!getApps().length) initializeApp({ credential: applicationDefault(), projectId });
 const auth = getAuth();
 const db = getFirestore();
