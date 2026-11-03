@@ -68,6 +68,6 @@ test('PIN policy is enforced by the cryptographic engine, not only by the launch
   assert.match(crypto, /pin\.size in 4\.\.16 && pin\.all \{ it in '0'\.\.'9' \}/);
   assert.match(gate, /first\.size !in 4\.\.16/);
   assert.match(crypto, /PIN must contain 4–16 digits/);
-  assert.match(gate, /Forgot PIN\\?/);
+  assert.match(gate, /Forgot PIN\?/);
   assert.match(gate, /recovery service, which is not yet available/);
 });
