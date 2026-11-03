@@ -29,3 +29,12 @@ test("all inline JavaScript in index.html parses before packaging", () => {
   }
   assert.ok(checked > 0, "at least one inline JavaScript block must be syntax-checked");
 });
+
+
+test('UPI payment intent never sends guest or payment metadata to a third-party QR endpoint', () => {
+  const html = read('index.html');
+  assert.doesNotMatch(html, /api\\.qrserver\\.com/);
+  assert.match(html, /upi:\/\/pay\\?/);
+  assert.match(html, /Open UPI app/);
+  assert.match(html, /QR display is temporarily disabled/);
+});
