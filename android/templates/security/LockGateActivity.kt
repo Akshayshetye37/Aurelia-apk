@@ -1,6 +1,7 @@
 package com.aurelia.pms.security
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
@@ -57,7 +58,7 @@ class LockGateActivity : Activity() {
         }
         root.addView(title, LinearLayout.LayoutParams(-1, -2))
         val hint = TextView(this).apply {
-            text = if (enrollmentMode) "Create a 6–12 digit PIN. Keep it private." else "Enter your PIN to open the PMS."
+            text = if (enrollmentMode) "Create a 4–16 digit PIN. Keep it private." else "Enter your PIN to open the PMS."
             textSize = 14f
             setTextColor(android.graphics.Color.LTGRAY)
             gravity = Gravity.CENTER
@@ -69,7 +70,7 @@ class LockGateActivity : Activity() {
             this.hint = if (enrollmentMode) "New PIN" else "PIN"
             setTextColor(android.graphics.Color.WHITE)
             setHintTextColor(android.graphics.Color.GRAY)
-            filters = arrayOf(android.text.InputFilter.LengthFilter(12))
+            filters = arrayOf(android.text.InputFilter.LengthFilter(16))
         }
         root.addView(pinField, LinearLayout.LayoutParams(-1, -2))
         if (enrollmentMode) {
@@ -87,6 +88,13 @@ class LockGateActivity : Activity() {
             setOnClickListener { submit() }
         }
         root.addView(button, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 24 })
+        if (!enrollmentMode) {
+            val forgot = Button(this).apply {
+                text = "Forgot PIN?"
+                setOnClickListener { showRecoveryUnavailable() }
+            }
+            root.addView(forgot, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 8 })
+        }
         setContentView(root)
     }
 
@@ -97,8 +105,8 @@ class LockGateActivity : Activity() {
         val secondField = confirmField?.text
         val second = secondField?.let { CharArray(it.length).also { chars -> it.getChars(0, it.length, chars, 0) } }
         try {
-            if (first.size !in 6..12 || first.any { it !in '0'..'9' }) {
-                showError("PIN must be 6–12 digits.")
+            if (first.size !in 4..16 || first.any { it !in '0'..'9' }) {
+                showError("PIN must be 4–16 digits.")
                 return
             }
             if (enrollmentMode) {
@@ -125,6 +133,14 @@ class LockGateActivity : Activity() {
             pinField?.text?.clear()
             confirmField?.text?.clear()
         }
+    }
+
+    private fun showRecoveryUnavailable() {
+        AlertDialog.Builder(this)
+            .setTitle("PIN recovery unavailable")
+            .setMessage("PIN recovery requires the recovery service, which is not yet available. Contact support or use a known backup. Do not uninstall the app or clear its data if you may need this device to access your encrypted data. No OTP has been sent.")
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun writeEnvelope(value: String) = envelopeStore.write(value)
