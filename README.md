@@ -4,6 +4,27 @@ Aurelia is an offline-first property-management system. Its device-local Android
 
 > **Payment release status: NOT READY FOR LIVE PAYMENT COLLECTION.** The native payment engine, complete provider adapters, verified settlement-to-folio integration, refund workflow and physical-device acceptance are not yet complete. Live activation must remain disabled.
 
+## Project location
+
+**Canonical repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)  
+**Working branch:** `feature/multi-provider-payment-backend`  
+**Project root:** repository root (`/`)  
+**Primary application entry point:** `index.html`
+
+Key directories and files:
+
+| Repository path | Responsibility |
+|---|---|
+| `index.html` | Main PMS WebView application |
+| `android/` | Android host project and native integration |
+| `android/templates/` | Android native implementation templates |
+| `src/payments/` | WebView-side payment intent and settlement modules |
+| `payment-backend/` | Legacy/development payment backend; not required by the device-local target |
+| `docs/` | Architecture, security and acceptance specifications |
+| `tests/` | Automated application and payment-contract tests |
+
+All project edits requested for this workstream target the repository and branch above. Do not confuse the repository root with a local computer path: the source of truth is the GitHub branch.
+
 ## Architecture decision
 
 Aurelia's Android application is the operational runtime and local source of truth. It does not require an Aurelia cloud service, Docker appliance, LAN payment server, local HTTP server or companion process.
