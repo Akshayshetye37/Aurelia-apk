@@ -3436,6 +3436,7 @@ window.startAureliaGatewayCheckout=async function(i){
   }
  }catch(error){
   record.status='RECONCILIATION_REQUIRED';record.lastError=String(error?.message||'checkout_error').slice(0,180);record.updatedAt=new Date().toISOString();persist();
+  if(window.AureliaLocalPaymentLedger&&window.AureliaNative){try{await window.AureliaLocalPaymentLedger.updateLocalStatus(transactionId,'RECONCILIATION_REQUIRED');}catch(_){}}
   setStatus((error?.message||'Checkout interrupted')+' Payment status is not yet confirmed. Reconcile before retrying.');
   toast(error?.message||'Checkout interrupted; reconcile transaction status.');
  }
