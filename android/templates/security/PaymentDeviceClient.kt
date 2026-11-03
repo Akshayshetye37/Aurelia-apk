@@ -14,19 +14,23 @@ import java.util.concurrent.TimeUnit
 /**
  * Native-only transport for the signed LAN device protocol.
  *
- * Owner registration/challenge/activation/revocation deliberately remain on
- * the owner-authenticated PMS console. This class never accepts owner cookies,
- * credentials, arbitrary URLs, or WebView-provided signatures.
- *
- * It implements only device-authenticated lease and acknowledgement calls.
- * The caller must durably apply and independently verify a command before it
- * calls acknowledge(). The backend cursor advances only after that call.
+ * This is deliberately transport and protocol validation only. It does not
+ * mutate PMS folios, approve accounting, or acknowledge a command on its own.
+ * A future projector must require owner/staff approval, persist an idempotent
+ * ledger receipt, re-read the folio, and only then call acknowledge().
  */
 class PaymentDeviceClient(
     applianceBaseUrl: String,
     private val deviceId: String,
     private val keyStore: PaymentDeviceKeyStore
 ) {
+    data class Lease(
+        val command: JSONObject,
+        val leaseToken: String,
+        val cursor: Long,
+        val leaseExpiresAt: String
+    )
+
     private val baseUri: URI
     private val random = SecureRandom()
 
@@ -35,8 +39,6 @@ class PaymentDeviceClient(
     }
 
     init {
-        // Device IDs are inserted into signed URL path segments. Restrict the
-        // alphabet rather than attempting to repair or ambiguously encode them.
         require(deviceId.matches(Regex("[A-Za-z0-9_-]{1,128}"))) {
             "Invalid payment device ID."
         }
@@ -54,40 +56,99 @@ class PaymentDeviceClient(
         require(keyStore.hasIdentity()) { "Payment device identity is not enrolled." }
     }
 
-    /** Returns the next contiguous command, or null when no command is ready. */
-    fun leaseNext(): JSONObject? {
+    /** Returns a validated lease envelope; the lease token is required for acknowledgement. */
+    fun leaseNext(): Lease? {
         val response = post("/v1/devices/$deviceId/commands/lease", JSONObject())
         if (!response.has("command") || response.isNull("command")) return null
-        return response.getJSONObject("command")
+        val command = response.getJSONObject("command")
+        val token = response.optString("leaseToken")
+        val cursor = response.optLong("cursor", -1L)
+        val expiresAt = response.optString("leaseExpiresAt")
+        require(token.matches(Regex("[A-Za-z0-9_-]{40,64}"))) {
+            "Appliance lease token is missing or malformed."
+        }
+        require(cursor >= 0L && expiresAt.isNotBlank() && expiresAt.length <= 64) {
+            "Appliance lease metadata is invalid."
+        }
+        validateCommand(command)
+        require(command.getLong("sequenceId") == cursor + 1L) {
+            "Appliance returned a non-contiguous command sequence."
+        }
+        return Lease(command, token, cursor, expiresAt)
     }
 
     /**
-     * Acknowledges only a command with a caller-supplied durable ledger receipt.
-     * This method does not apply the folio and must only be called after the
-     * native projector has verified the durable PMS state.
+     * Acknowledges a command only when the caller supplies the ID of a durable
+     * local ledger receipt. This class cannot establish that receipt itself.
+     * The caller is responsible for approval, atomic persistence and read-back.
      */
-    fun acknowledge(
-        command: JSONObject,
-        leaseToken: String,
-        ledgerAckId: String
-    ): JSONObject {
-        val commandId = command.getString("commandId")
-        val sequenceId = command.getLong("sequenceId")
-        val payloadHash = command.getString("payloadHash")
-        require(commandId.matches(Regex("[0-9a-fA-F-]{36}"))) { "Invalid command ID." }
-        require(sequenceId > 0) { "Invalid command sequence." }
-        require(payloadHash.matches(Regex("[a-f0-9]{64}"))) { "Invalid command payload hash." }
-        require(leaseToken.matches(Regex("[A-Za-z0-9_-]{40,64}"))) { "Invalid lease token." }
+    fun acknowledge(lease: Lease, ledgerAckId: String): JSONObject {
+        val command = lease.command
+        validateCommand(command)
         require(ledgerAckId.isNotBlank() && ledgerAckId.length <= 128 &&
-            ledgerAckId.none { it.code < 0x20 || it.code == 0x7f }) { "Invalid durable ledger receipt." }
-
+            ledgerAckId.none { it.code < 0x20 || it.code == 0x7f }) {
+            "Invalid durable ledger receipt."
+        }
         val body = JSONObject()
-            .put("leaseToken", leaseToken)
-            .put("sequenceId", sequenceId)
-            .put("payloadHash", payloadHash)
+            .put("leaseToken", lease.leaseToken)
+            .put("sequenceId", command.getLong("sequenceId"))
+            .put("payloadHash", command.getString("payloadHash"))
             .put("durableApplied", true)
             .put("ledgerAckId", ledgerAckId)
-        return post("/v1/devices/$deviceId/commands/$commandId/ack", body)
+        return post(
+            "/v1/devices/$deviceId/commands/${command.getString("commandId")}/ack",
+            body
+        )
+    }
+
+    private fun validateCommand(command: JSONObject) {
+        val commandId = command.optString("commandId")
+        val sequenceId = command.optLong("sequenceId", -1L)
+        val transactionId = command.optString("transactionId")
+        val folioId = command.optString("folioId")
+        val amountMinor = command.optLong("amountMinor", -1L)
+        val currency = command.optString("currency")
+        val payloadHash = command.optString("payloadHash")
+        require(commandId.matches(Regex("[0-9a-fA-F-]{36}")) &&
+            transactionId.isNotBlank() && transactionId.length <= 128 &&
+            folioId.isNotBlank() && folioId.length <= 128 &&
+            sequenceId > 0L && amountMinor > 0L && currency == "INR" &&
+            payloadHash.matches(Regex("[a-f0-9]{64}"))) {
+            "Appliance command envelope is invalid."
+        }
+        require(command.optString("deviceId") == deviceId) {
+            "Appliance command belongs to another device."
+        }
+        val payload = command.optJSONObject("payload")
+            ?: throw IllegalArgumentException("Appliance command payload is missing.")
+        val actualHash = sha256Hex(canonicalJson(payload).toByteArray(Charsets.UTF_8))
+        require(MessageDigest.isEqual(
+            actualHash.toByteArray(Charsets.US_ASCII),
+            payloadHash.toByteArray(Charsets.US_ASCII)
+        )) { "Appliance command payload hash does not match." }
+
+        require(payload.optString("commandId") == commandId &&
+            payload.optString("deviceId") == deviceId &&
+            payload.optLong("sequenceId", -1L) == sequenceId &&
+            payload.optString("transactionId") == transactionId &&
+            payload.optString("folioId") == folioId &&
+            payload.optLong("amountMinor", -1L) == amountMinor &&
+            payload.optString("currency") == currency) {
+            "Appliance command payload binding does not match its envelope."
+        }
+        val provider = payload.optString("provider")
+        val settlement = payload.optJSONObject("settlement")
+            ?: throw IllegalArgumentException("Appliance settlement binding is missing.")
+        require(provider.isNotBlank() && provider.length <= 64 &&
+            settlement.optString("provider") == provider &&
+            settlement.optString("commandId") == commandId &&
+            settlement.optString("bookingId") == folioId &&
+            settlement.optString("method") == provider &&
+            settlement.optDouble("amount", Double.NaN) == amountMinor.toDouble() / 100.0 &&
+            settlement.optString("source") == "staff_review" &&
+            settlement.optBoolean("verificationConfirmed", false)) {
+            "Appliance settlement binding is inconsistent."
+        }
     }
 
     private fun post(path: String, body: JSONObject): JSONObject {
