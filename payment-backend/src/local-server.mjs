@@ -35,6 +35,11 @@ if (process.env.TRUST_PROXY_HOPS !== '1') throw new Error('Configure one trusted
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+// FULL synchronous mode prioritizes acknowledged-commit durability across
+// host crashes and sudden power loss over marginal write throughput.
+db.pragma('synchronous = FULL');
+db.pragma('busy_timeout = 5000');
+db.pragma('wal_autocheckpoint = 1000');
 db.exec(`
 CREATE TABLE IF NOT EXISTS owner (
  id INTEGER PRIMARY KEY CHECK(id=1), username TEXT NOT NULL UNIQUE,
@@ -316,8 +321,20 @@ function ownerAuth(req, res, next) {
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 app.get('/readyz', (_req, res) => {
-  try { db.prepare('SELECT 1').get(); return res.json({ ok: true, database: 'ready' }); }
-  catch { return fail(res, 503, 'database_unavailable'); }
+  try {
+    db.prepare('SELECT 1').get();
+    const integrity = db.pragma('quick_check', { simple: true });
+    const foreignKeys = db.pragma('foreign_key_check');
+    const journalMode = db.pragma('journal_mode', { simple: true });
+    const synchronous = db.pragma('synchronous', { simple: true });
+    if (integrity !== 'ok' || foreignKeys.length !== 0 ||
+        String(journalMode).toLowerCase() !== 'wal' || Number(synchronous) !== 2) {
+      return fail(res, 503, 'database_integrity_or_durability_check_failed');
+    }
+    return res.json({ ok: true, database: 'ready', journalMode: 'wal', synchronous: 'full' });
+  } catch {
+    return fail(res, 503, 'database_unavailable');
+  }
 });
 // The Android app generates and retains its private key in Android Keystore.
 // Only the P-256 public key is registered with this service.
@@ -999,7 +1016,31 @@ app.use((err, _req, res, _next) => {
   const status = err?.type === 'entity.too.large' ? 413 : 400;
   res.status(status).json({ error: status === 413 ? 'request_too_large' : 'invalid_request' });
 });
-app.listen(PORT, '0.0.0.0', () => {
-  process.stdout.write('Aurelia local payment administration listening on ' + PORT + '\
-');
+const server = app.listen(PORT, '0.0.0.0', () => {
+  process.stdout.write('Aurelia local payment administration listening on ' + PORT + '\\n');
 });
+
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  process.stdout.write('Aurelia payment backend shutting down after ' + signal + '\\n');
+  const forceExit = setTimeout(() => {
+    process.stderr.write('Graceful shutdown timed out; forcing exit.\\n');
+    process.exit(1);
+  }, 15000);
+  forceExit.unref();
+  server.close(() => {
+    try {
+      db.pragma('wal_checkpoint(TRUNCATE)');
+      db.close();
+      clearTimeout(forceExit);
+      process.exit(0);
+    } catch (error) {
+      process.stderr.write('Database shutdown failed: ' + String(error?.message || error) + '\\n');
+      process.exit(1);
+    }
+  });
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
