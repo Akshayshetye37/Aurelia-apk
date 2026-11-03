@@ -1195,7 +1195,7 @@ app.post('/v1/payments/:transactionId/reconcile', ownerAuth, requireBrowserMutat
       const result = transitionPayment(tx.id,
         ['DISPATCHING','PENDING','UNKNOWN','AMBIGUOUS','RECONCILIATION_REQUIRED','FAILED'],
         'CAPTURED_PENDING_ACCOUNTING', 'provider_api_confirmed_capture', providerOrderId, remote.paymentId || null);
-      return res.json({ transactionId: tx.id, status: result.status, providerOrderId, providerPaymentId: remote.paymentId || null, amountMinor: tx.amount_minor, currency: tx.currency, folioSettlement: 'PENDING_OUTBOX' });
+      return res.json({ transactionId: tx.id, provider: tx.provider, environment: tx.environment, status: result.status, providerOrderId, providerPaymentId: remote.paymentId || null, amountMinor: tx.amount_minor, currency: tx.currency, folioSettlement: 'PENDING_OUTBOX' });
     }
     if (['failed','declined','cancelled','expired'].includes(String(remote.paymentStatus || '').toLowerCase())) {
       const result = transitionPayment(tx.id,
