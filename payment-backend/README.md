@@ -1,295 +1,35 @@
 # Aurelia Payment Backend
 
-**Repository:** `Akshayshetye37/Aurelia-apk`  
-**Branch:** `feature/multi-provider-payment-backend`  
-**Path:** `payment-backend/`  
-**Deployment status:** Not deployed; hosting is optional and may be configured by the owner later.  
-**Payment acceptance status:** Not production-ready; live payments must remain disabled.
+**Selected runtime:** `src/server.mjs` — hybrid production backend foundation (Firebase Admin, Firestore, Google Secret Manager). **Status: prototype; not approved for live collection.**
 
-This directory contains **two deliberately separate runtimes**:
+The Android application is an offline-first PMS client. This backend is the only intended production payment authority: it owns merchant credentials, provider API calls, public webhook ingress, authoritative verification, refund processing and reconciliation. Deploy it only behind public HTTPS ingress with managed identity, Firestore, Secret Manager, monitoring and least-privilege IAM.
 
-- **LAN appliance (selected deployment target):** `npm start` runs `src/local-server.mjs`. `compose.yaml` builds this runtime and places it behind Caddy TLS. It uses SQLite and an owner password/session model; it does not call Firebase or Google Cloud.
-- **Optional cloud prototype:** `src/server.mjs` uses Firebase Authentication, Firestore and Secret Manager. It is not started by `compose.yaml`, is not deployed, and is not required for Aurelia's local-first operation.
+The separate `src/local-server.mjs` and Docker/LAN setup are development/administration tools only. A private LAN endpoint behind NAT is not a production provider-webhook receiver and must not be represented as the hybrid production backend.
 
-Do not mix their environment variables, authentication models, databases, deployment instructions or API contracts. The LAN runtime is the current target for the Docker appliance described in [LOCAL-DOCKER.md](LOCAL-DOCKER.md).
+## Runtime setup
 
-## Deployment policy: local-first and optional
-
-Aurelia PMS must remain fully usable without a server, cloud account, Firebase project, or payment backend. Do not make backend deployment, sign-in to a cloud service, or remote connectivity a prerequisite for installing or using core PMS functions.
-
-- Default installation mode is **Local only**. Bookings, guests, rooms, manual payments, folio history, invoices and local backup continue to work using the existing PMS local data model.
-- The selected optional payment service is a Docker appliance on the owner's LAN. The PMS includes a LAN Payment Owner Console for backend origin setup, first-owner enrollment, login, Razorpay/Cashfree sandbox credential storage, validation and explicit test activation. The LAN API includes challenge-first P-256 attested enrollment, owner/property-bound attestation challenge and submission, verifier-gated activation/revocation, and signed command lease/ack endpoints. Native enrollment UI, command projection and end-to-end PMS folio settlement remain unfinished.
-- Do not silently create a cloud project, deploy infrastructure, upload PMS/guest data, or transmit payment evidence.
-- Do not treat an arbitrary URL as a trusted payment backend. Endpoint configuration must be validated over HTTPS and authenticated against a documented service identity before use.
-- Remote payment configuration must be separate from optional backup destinations. A backup URL is not a payment API, and a payment API is not a backup destination.
-- Never store provider API secrets, webhook secrets, service-account keys, or backend credentials in PMS settings, localStorage, either APK, or client-side configuration. Merchant credentials belong in a trusted server-side secret store.
-- If a configured backend is unavailable, core PMS operations remain available. Gateway checkout is unavailable and any already-dispatched payment with an ambiguous outcome remains UNKNOWN until it can be reconciled. Never fall back to an unverified client-side payment path.
-- Enabling remote payment processing is an explicit owner action and must not turn on live payments automatically. Sandbox verification, authorization, monitoring and a separate live-activation gate remain mandatory.
-
-This policy is a product/architecture requirement. The PMS implements the local owner login/admin console for the Docker runtime. It does not yet implement end-to-end guest checkout, Android device command consumption, refund lifecycle or atomic PMS folio settlement.
-
-## 1. Architecture and trust boundaries
-
-- Firebase ID tokens are verified server-side, including revoked-token checking, verified email, MFA second-factor claim and recent authentication.
-- Tenant identity is resolved from the trusted Firestore membership document `paymentMemberships/{firebaseUid}`; a client-supplied tenant ID is never an authorization source.
-- Provider credential administration and activation require an active `owner` or `admin` membership. Customer payment-intent creation and lookup accept active `owner`, `admin` or `staff` memberships. All authenticated routes require a verified email, MFA claim, revoked-token checking and authentication within the last ten minutes.
-- Provider credentials and webhook secrets belong in Google Secret Manager. No merchant secret may be embedded in the PMS APK, Pay Bridge APK, browser code or client configuration.
-- Webhook tenant/order identifiers are lookup hints only. Resolve a pre-existing trusted provider-order binding, verify the raw-body signature, and independently fetch provider status before accepting a payment outcome.
-- HTTPS-only is enforced at startup and per request. Production must set `AURELIA_HTTPS_TERMINATION=trusted-proxy` and `AURELIA_TRUST_PROXY_HOPS=1`; Express trusts exactly one TLS-terminating ingress hop, validates `req.secure`, rejects cleartext with HTTP 403 (no redirect), and emits HSTS. The ingress must overwrite `X-Forwarded-Proto`, enforce modern TLS (TLS 1.2 minimum, TLS 1.3 preferred), and be the only network path to the container. Never expose the container directly or trust client-supplied forwarded headers.
-- Firestore membership and payment authority collections must not be writable by mobile clients. Enforce this with Firestore Security Rules and IAM.
-
-## PMS sandbox checkout integration
-
-The PMS Payment Gateway settings expose the HTTPS LAN Owner Console as the operational credential-entry path. Razorpay and Cashfree test credentials are encrypted by this backend, validated against the provider API, and explicitly activated for sandbox use.
-
-Hotel folios now call the authenticated `POST /v1/payments/dispatch` endpoint and open Razorpay Checkout or Cashfree hosted checkout. The browser receives only provider public checkout data. After checkout, the PMS calls `POST /v1/payments/:transactionId/reconcile`; the backend independently queries the provider and binds an optional exact payment ID to the order, amount and INR currency.
-
-This flow is sandbox-only. The backend verifies signed raw-body webhooks and independently reconciles provider status before preparing a device-bound settlement command. A capture remains `CAPTURED_PENDING_ACCOUNTING` until an active attested Android device applies the matching PMS folio credit, persists and reads back a durable receipt, and sends its signed acknowledgement. The acknowledgement handler now atomically advances the command, transaction (`SETTLED`), transaction journal, device cursor and capture outbox in SQLite; identical receipts are idempotent and conflicting receipts are rejected. However, the Android command projector and native folio write/read-back path are not yet wired, so the acknowledgement endpoint must not be called by the current WebView or a placeholder bridge. Cashfree return URLs and provider webhooks need public HTTPS ingress; a private LAN hostname is not reachable by provider infrastructure.
-
-Strictly speaking, this is a durable inbox/outbox and signed-device command saga, not a distributed two-phase commit across independent databases. Exactly-once guarantees apply at each idempotent local commit boundary; external side effects still require reconciliation. Refunds remain disabled until an idempotent PMS reversal receipt can be proven before the provider refund call.
-
-## Local-first Android payment journal
-
-The Android APK now includes a native SQLite operation journal (`android/templates/LocalPaymentLedger.java`) and exposes it through `window.AureliaLocalPaymentLedger`. It persists idempotent payment-request metadata on-device and tracks local dispatch plus pending cloud-sync state. It intentionally cannot mark a payment captured, mark cloud sync complete, or post a PMS folio receipt. Those operations require trusted provider verification and an exactly-once PMS settlement boundary. See [Local-first hybrid payment architecture](../docs/LOCAL_FIRST_HYBRID_PAYMENT_ARCHITECTURE.md) for routing, retry, network-security and acceptance rules.
-
-This is a persistence/orchestration foundation, not a completed checkout or background sync worker. WorkManager scheduling is deferred until a signed, authenticated sync acknowledgement contract exists.
-
-## 2. Implemented foundations
-
-### Provider adapters
-
-- `src/providers/razorpay.mjs`: credential validation, INR order creation using paise, server-side order/payment lookup, raw-body HMAC webhook verification and refund creation.
-- `src/providers/cashfree.mjs`: credential validation, hosted checkout session creation, server-side order/payment lookup, timestamp plus raw-body webhook signature verification and refund creation.
-- `src/providers/adapter-contract.mjs`: common adapter interface and capability checks.
-- `src/providers/factory.mjs`: factory for the implemented Razorpay and Cashfree adapters; unsupported providers fail closed.
-- `src/providers/registry.mjs`: provider implementation/capability status. PayU, PhonePe, Paytm, CCAvenue and JioPay are not implemented.
-
-Both adapters are registered in the HTTP service. Their merchant credential lifecycle, validation endpoint, test-order utility and webhook verification routes are provider-neutral. Adapter unit/contract tests exist, but merchant sandbox end-to-end verification, production onboarding and complete accounting settlement remain unverified.
-
-### Payment domain and state machine
-
-- `src/payment-domain.mjs`: integer minor-unit validation, INR handling, provider/tenant/environment/order/amount/currency binding and conservative status normalization.
-- `src/intents/intent-state-machine.mjs`: canonical states `DISPATCHING`, `CREATED`, `PENDING`, `AUTHORIZED`, `UNKNOWN`, `CAPTURED`, `FAILED_TO_INITIATE` and `FAILED`.
-- Client callbacks and unverified webhook payloads are not authoritative payment evidence.
-- `UNKNOWN` is deliberately non-terminal. It must remain reserved until an authoritative provider lookup resolves the outcome.
-- A late verified capture may supersede a previously reported failure. A captured intent must not regress.
-
-### Firestore intent reservation repository
-
-- `src/intents/firestore-repository.mjs` creates durable payment intent reservations using deterministic Firestore documents:
-  - `paymentIntentIdempotency/{hash}`
-  - `paymentFolioLocks/{hash}`
-  - `paymentIntents/{intentId}`
-  - `paymentProviderOrders/{hash}`
-- Idempotency reservation and folio-lock acquisition are performed in a Firestore transaction.
-- The provider network request is performed outside the Firestore transaction.
-- Repeated requests with the same idempotency key and same payload return the existing intent; changed payloads conflict.
-- A different active intent cannot acquire the same tenant/folio lock.
-- Provider order responses are checked against expected amount and currency before the provider-order binding is stored.
-- An ambiguous provider outcome is recorded as `UNKNOWN`; the folio lock is retained and a blind retry is not allowed.
-- The repository is exposed through `POST /v1/payments/intents` and `GET /v1/payments/intents/:intentId`. It resolves tenant membership from the verified Firebase UID and requires a pre-provisioned authoritative folio.
-
-**Important limitation:** the repository's current catch boundary still needs refinement. It conservatively treats failures across secret loading, adapter construction and provider dispatch as `UNKNOWN`. The next change must distinguish failures proven to occur before the provider request could be transmitted (eligible for `FAILED_TO_INITIATE` and lock release) from failures after transmission may have begun (must remain `UNKNOWN`). Generic error messages alone are not sufficient proof of pre-dispatch failure.
-
-### Tests currently present
-
-- Provider adapter and state-machine unit tests.
-- `test/firestore-repository.test.mjs` uses a serialized fake Firestore transaction implementation to test idempotency, folio-lock contention, payload conflicts, ambiguous outcomes, membership rejection and amount validation.
-
-The fake-store concurrency test is useful unit coverage, **not proof of Firestore Emulator or production Firestore transaction behavior**. A real emulator integration suite has not yet been completed or verified.
-
-## 3. HTTPS-only service transport
-
-The Node process listens on an internal container port; this is not permission to expose a public HTTP endpoint. Public access must be through a managed HTTPS ingress/load balancer. Configure both required environment variables above. The ingress must terminate TLS, overwrite forwarded-protocol headers, and prevent direct Internet access to the container. The application rejects any request it cannot verify as secure. It does not redirect HTTP requests, especially payment POSTs. Local plain-HTTP development is intentionally unsupported; use a local HTTPS reverse proxy or a dedicated test harness.
-
-## 4. Current HTTPS service routes
-
-The current `src/server.mjs` exposes the following provider-neutral routes:
-
-- `GET /healthz` — process liveness only; it does not probe dependencies.
-- `GET /readyz` — verifies the runtime identity can read Firestore and access the provisioned Secret Manager health secret. It reports dependency readiness only, not owner authentication, merchant configuration, provider status, webhooks, folio settlement or payment readiness.
-- `POST /v1/payments/intents` and `GET /v1/payments/intents/:intentId` — authenticated payment-intent API. Checkout is test-environment only; live collection is hard-blocked in the server.
-- `GET /v1/payments/capabilities` — authenticated, explicit capability declaration. It reports live collection, folio settlement, refunds and reconciliation as unavailable until their complete workflows are implemented.
-- `GET /v1/admin/providers` — provider/environment status, including operation-level capability and production-readiness flags.
-- `PUT /v1/admin/providers/{razorpay|cashfree}/credentials` — write-only credential intake; secrets are stored in Secret Manager.
-- `POST /v1/admin/providers/{razorpay|cashfree}/validate` — provider credential validation.
-- `POST /v1/admin/providers/{razorpay|cashfree}/test-orders` — test-environment onboarding order utility with idempotency protection.
-- `POST /v1/admin/providers/{razorpay|cashfree}/activate` — explicit environment activation gate.
-- `POST /v1/webhooks/{razorpay|cashfree}/{tenantId}/{test|live}` — raw-body signature validation followed by a provider-side status fetch and trusted order binding check.
-
-All admin/provider onboarding routes require an owner/admin membership. Payment-intent routes additionally allow active staff members. Only Razorpay and Cashfree are registered as implemented adapters; all other catalogue entries remain unsupported and fail closed.
-
-**Integration boundary:** verified webhook events update provider-order evidence and payment-intent verification metadata. They do not post a PMS folio ledger entry, release an unresolved folio lock, or establish exactly-once accounting. Provider adapters expose refund API methods, but there is no trusted refund-intent lifecycle or refund accounting. No durable reconciliation worker exists. The service therefore hard-rejects every live payment-intent request and every live-provider activation attempt, even if legacy provider configuration documents say `active: true`. The capability endpoint reports these workflows as unavailable.
-
-Do not add a second independent authentication or HTTPS implementation in another router. The payment routes reuse the shared Firebase authentication, tenant-membership and HTTPS middleware.
-
-## 5. Not implemented or not verified
-
-| Component | Current status | Remaining work |
-|---|---|---|
-| Razorpay adapter | Implemented and wired to provider-neutral routes; not end-to-end verified | Merchant sandbox checkout, webhook and refund tests |
-| Cashfree adapter | Implemented and wired to provider-neutral routes; not end-to-end verified | Merchant sandbox checkout, webhook and refund tests |
-| PayU | Not implemented | Select supported API product/version; obtain merchant staging access |
-| PhonePe | Not implemented | Confirm merchant-enabled PG product/API version and staging access |
-| Paytm | Not implemented | Confirm merchant product, API contract and staging access |
-| CCAvenue | Not implemented | Obtain current merchant integration kit/specification; do not guess crypto or request fields |
-| JioPay | Not implemented | Confirm merchant UAT product, credentials and contract |
-| Customer payment-intent HTTP API | Implemented; end-to-end accounting not verified | Integrate and verify against actual PMS folio schema and ledger settlement |
-| Actual PMS folio validation | Blocked on schema inspection | Confirm real folio/ledger collection, ownership, open-state and balance calculation |
-| Pre-dispatch vs ambiguous failure boundary | Partially implemented; refinement required | Explicit dispatch marker and state-machine-backed failure classification |
-| Firestore Emulator tests | Not implemented/verified | Real emulator transaction, contention and cleanup tests |
-| Reconciliation worker | Not implemented | Claim/lease, provider status polling, retry policy, alerting and lock resolution |
-| Atomic folio ledger posting | Not implemented | Deterministic posting ID and transactionally enforced exactly-once posting |
-| Refund lifecycle | Adapter methods exist; lifecycle not wired | Refund intent/state machine, status reconciliation and ledger treatment |
-| Pay Bridge payment execution | Not implemented | Extend existing IPC contract after backend intent/session flow is stable |
-| Installed-device IPC test | Not verified | Test signed PMS/Bridge APKs on device |
-| LAN owner-console UI | Implemented for Razorpay/Cashfree sandbox administration | Verify signed APK WebView cookie behavior on a physical Android device; then integrate checkout and settlement workflows |
-| Cloud deployment and operations | Not implemented | Owner may configure later; GCP project, IAM, secrets, ingress, monitoring, backups and runbooks required |
-
-## 6. Execution plan and acceptance gates
-
-Work in this order. Do not skip ahead to live payments.
-
-### Phase 1 — Establish the real PMS accounting contract
-
-1. Inspect the PMS repository's actual folio, reservation and ledger implementation.
-2. Identify the authoritative folio ID, tenant/property ownership, open/closed status, outstanding balance calculation, currency and posting model.
-3. Confirm whether a successful guest payment is represented as a folio credit/receipt or another ledger event. Do not assume a debit transaction.
-4. Define the backend-to-PMS contract and reject client-provided tenant, balance and authoritative amount values.
-
-**Exit gate:** the folio read and ledger posting schemas are evidenced by current PMS source, with tests for tenant isolation and balance calculations.
-
-### Phase 2 — Harden the intent repository
-
-1. Align membership roles with the existing authorization policy.
-2. Refine the dispatch boundary: proven pre-dispatch failures become `FAILED_TO_INITIATE` and release the lock; potentially transmitted requests become `UNKNOWN` and retain it.
-3. Use `transitionIntent` for every state transition.
-4. Align adapter response contracts and provider-specific idempotency/recovery behavior.
-5. Validate folio ownership and outstanding balance inside a trusted server-side transaction boundary; protect against balance changes between preflight and reservation.
-6. Define lock release rules for every authoritative terminal outcome.
-
-**Exit gate:** deterministic unit tests cover every transition and failure boundary; no generic exception can incorrectly release a possibly paid folio.
-
-### Phase 3 — Verify authenticated intent API and Firestore Emulator
-
-1. Add the payment-intent router to the existing Express application, reusing existing authentication and HTTPS middleware.
-2. Add strict schema validation, integer minor-unit money, request limits, rate limits and safe error responses.
-3. Add Firestore Emulator integration tests using the actual repository and actual collection paths.
-4. Test same-key concurrency, different-key folio contention, tenant isolation, balance limits, pre-dispatch failure, ambiguous timeout and provider-order binding.
-5. Run the complete backend test suite and record CI results.
-
-**Exit gate:** emulator tests and CI pass; the API cannot create an intent against an unowned, closed or insufficient-balance folio.
-
-### Phase 4 — Provider onboarding and reconciliation
-
-1. Wire Razorpay first, then Cashfree, through the common factory and tenant-scoped secret lifecycle.
-2. Complete sandbox order creation, actual sandbox payment, signed webhook, status lookup, duplicate/replay/out-of-order event and refund tests.
-3. Implement a reconciliation worker with durable leases/claims and provider status verification.
-4. Keep ambiguous intents locked until authoritative status resolves them. Never blindly create a second order after a timeout.
-5. Add monitoring, alerting, audit events and operational recovery procedures.
-
-**Exit gate:** each enabled provider passes repeatable sandbox end-to-end tests, including ambiguous network outcomes and webhook replay.
-
-### Phase 5 — Exactly-once PMS accounting
-
-1. Implement a deterministic ledger posting identity per captured payment.
-2. In a Firestore transaction, verify captured intent binding, tenant, folio, amount, currency and folio state.
-3. Post exactly once and update intent/folio lock consistently.
-4. Reconcile duplicate captures, late events, partial refunds and full refunds.
-
-**Exit gate:** repeated webhooks and worker retries cannot double-post a folio payment; ledger totals reconcile with provider transactions.
-
-### Phase 6 — Pay Bridge and release
-
-1. Connect the PMS to the backend intent/session flow.
-2. Extend the existing Pay Bridge IPC service; do not replace the established Binder/Messenger service contract.
-3. Verify caller package/signing identity, message sender UID, schema, amount, currency, intent/session and local journal behavior.
-4. Test the production-signed PMS and Bridge APKs installed together on a physical device.
-5. Complete security review, deployment controls, backups, alerting and incident runbooks.
-
-**Exit gate:** end-to-end device tests and security review pass. Only then consider controlled live-provider activation.
-
-## 6. Provider scope and implementation order
-
-Implement one provider end-to-end before expanding the provider list. Razorpay is the first integration target because its current onboarding routes already exist. Cashfree follows once the common intent, webhook and reconciliation contracts are stable. PayU, PhonePe, Paytm, CCAvenue and JioPay remain out of scope until their exact merchant product/API contracts and test credentials are available.
-
-A provider is not considered production-ready merely because an adapter file exists or credential validation succeeds. It must pass checkout, payment verification, webhook, reconciliation, refund and ledger integration tests.
-
-## 7. Local development and verification
-
-From `payment-backend/`:
+Node.js 22 or later is required. Configure a Google Cloud project, enable Firestore and Secret Manager, grant the runtime service identity least-privilege access, configure exact HTTPS browser origins, and deploy behind a public TLS ingress. Use Application Default Credentials/workload identity; never ship service-account JSON keys.
 
 ```bash
+npm install
+npm run start:cloud
 npm test
 ```
 
-A Firestore Emulator test command should be added only alongside the emulator test suite and its declared tooling/configuration. The proposed `tests/firestoreEmulator.test.js` from the design discussion is not currently compatible with this repository's filenames, ESM imports, constructor signatures, factory API, collection names or field conventions; do not run it unchanged.
+Required environment: `GOOGLE_CLOUD_PROJECT`, `AURELIA_OWNER_ORIGINS`, `AURELIA_HTTPS_TERMINATION=trusted-proxy`, and `AURELIA_TRUST_PROXY_HOPS=1`. Configure the ingress to overwrite forwarded-protocol headers and make the service unreachable except through that ingress.
 
-Tests that use a fake Firestore implementation do not establish emulator correctness. Emulator tests do not establish production IAM, Secret Manager, provider sandbox or installed-device correctness.
+## Implemented provider coverage
 
-## 8. Release rule
+The current cloud repository and provider factory allow only Razorpay and Cashfree. The other providers (PayU, PhonePe, Paytm, JioPay and CCAvenue) are not implemented in the cloud runtime. Do not mark them configured, validated, active or live-capable until their adapters, API contract tests, merchant sandbox/UAT and webhook/refund/reconciliation flows are complete.
 
-Until every applicable acceptance gate above passes:
+See [Hybrid Payment Architecture](../docs/HYBRID_PAYMENT_ARCHITECTURE.md) and [Provider Integration Status](../docs/PROVIDER_INTEGRATION_STATUS.md).
 
-- Keep production/live payment activation disabled.
-- Do not expose merchant credentials to clients.
-- Do not treat client callbacks or unsigned webhook data as payment proof.
-- Do not release a folio lock on an ambiguous provider outcome.
-- Do not post a folio payment without a provider-verified captured state and exact binding.
-- Do not claim production readiness based on compilation, adapter unit tests or a successful test-order API call alone.
+## Financial safety
 
-
-## Provider credential onboarding (owner-only)
-
-The Provider Directory UI now distinguishes documentation from working integrations. It offers credential entry only for the two providers that have server adapters wired today: Razorpay and Cashfree Payments. PayU, PhonePe, Paytm, JioPay and CCAvenue remain documentation/catalogue entries; entering credentials for them is intentionally disabled because no compatible adapter is implemented.
-
-### Required merchant values
-
-| Provider | Environment | Required values | Official source |
-|---|---|---|---|
-| Razorpay | Test or Live | Key ID, Key Secret, Webhook Secret | [API keys](https://razorpay.com/docs/payments/dashboard/account-settings/api-keys/) and [webhook setup](https://razorpay.com/docs/webhooks/) |
-| Cashfree Payments | Sandbox or Production | App ID, Secret Key, Webhook Secret | [Cashfree Payments docs](https://www.cashfree.com/docs/) and [API authentication](https://www.cashfree.com/docs/api-reference/authentication) |
-| PayU India | Test or Live | Merchant Key and Salt (Salt Index only if the merchant product assigns one) | [PayU hosted checkout](https://docs.payu.in/docs/custom-checkout-merchant-hosted) |
-| PhonePe PG | UAT or Production | Client ID, Client Secret, Client Version, Merchant ID (confirm exact product/version with PhonePe onboarding) | [PhonePe PG docs](https://developer.phonepe.com/payment-gateway/) |
-| Paytm PG | Staging or Production | MID, Merchant Key, Website/Industry Type as issued for the merchant account | [Paytm developer docs](https://developer.paytm.com/docs/) |
-| JioPay | Merchant-specific | Do not assume generic field names; use the API credentials and contract issued for the enabled Jio payment product | [Jio developer portal](https://developer.jio.com/) |
-| CCAvenue | Test or Live | Merchant ID, Access Code, Working Key | [CCAvenue integration resources](https://www.ccavenue.com/) (use the current merchant MARS integration kit) |
-
-**Security rules:** never enter merchant secrets into the backend URL field, PMS local settings, browser storage, GitHub, or an APK. Credential forms submit only to the configured HTTPS backend using an owner/admin Firebase ID token. The backend stores secrets in Google Secret Manager. Secret inputs are write-only and are cleared after submission. Reset removes the selected provider/environment's Secret Manager secrets and Firestore configuration; it does not delete historical PMS payment records.
-
-### Required setup before credential submission
-
-1. Deploy the existing `payment-backend/` service to a trusted HTTPS host and configure Firestore, Secret Manager, service identity and ingress.
-2. Provision the owner/admin's verified Firebase account, MFA and `paymentMemberships/{uid}` tenant membership.
-3. Complete the PMS Firebase owner-auth integration so the UI can supply a fresh ID token through `window.AureliaPaymentAuth.getIdToken()`. Until that integration is available, the UI deliberately refuses to transmit credentials.
-4. Save and health-check the backend origin, then enter sandbox/test credentials first and validate them.
-5. Live credentials may be stored separately, but live payment collection remains hard-blocked by the backend until accounting, settlement, refund and reconciliation gates are complete.
-
-A successful `/healthz` response proves liveness only. It does not prove owner authentication, Firestore access, Secret Manager access, provider credential validity, or payment readiness.
-
-
-## Android Key Attestation verifier (LAN appliance)
-
-The Docker image builds and runs a loopback-only Kotlin/JVM verifier against the official [`android/keyattestation` v0.4 source](https://github.com/android/keyattestation/tree/v0.4). It is not an in-house ASN.1 implementation. The verifier uses the upstream Google trust-anchor set and verifies the X.509 attestation path, exact server challenge, expected attestation application ID, and revocation status. Revocation serials are cached for six hours; refresh uses bounded HTTPS timeouts, and a stale or unavailable list rejects verification.
-
-The verifier additionally enforces:
-- Expected app package, minimum version and SHA-256 signing-certificate digest.
-- `TRUSTED_ENVIRONMENT` or `STRONG_BOX` security level; software-backed keys are rejected.
-- `VerifiedBootState.VERIFIED` and `deviceLocked=true`.
-- The attested leaf public key must equal the P-256 SPKI registered for that device.
-
-The sidecar listens only on `127.0.0.1:8091`; the LAN API includes its health in `/readyz`. The owner-authenticated enrollment sequence is:
-1. Request `POST /v1/admin/devices/enrollment/challenge` with the intended `deviceId`. No device registration or key exists yet.
-2. The appliance returns a 32-byte random challenge and challenge ID. It is single-use, has a five-minute TTL, and is bound to the authenticated owner, configured property and intended device ID.
-3. Generate the Android Keystore key using the exact decoded challenge. Submit `deviceId`, `challengeId`, P-256 `publicKeyPem` and the leaf-first X.509 chain to `POST /v1/admin/devices/enroll`.
-4. The appliance verifies the chain and exact public-key binding, then atomically consumes the challenge and creates the `PENDING` registration, verified metadata, cursor and sequence counter in one SQLite transaction.
-5. The owner explicitly calls `POST /v1/admin/devices/:deviceId/activate`; activation succeeds only with verified TEE/StrongBox attestation and locked VERIFIED boot state.
-
-### Required `.env` values
-
-- `AURELIA_PROPERTY_ID`: unique safe identifier for this appliance's property.
-- `ATTESTATION_APP_PACKAGE`: currently `com.aurelia.pms`.
-- `ATTESTATION_APP_MIN_VERSION`: minimum accepted Android version code.
-- `ATTESTATION_APP_SIGNER_SHA256`: 64-hex SHA-256 digest of the approved APK signing certificate. The example value is pinned to the certificate digest checked by the Android release workflow. If the signing certificate changes, update this value through a reviewed release process.
-
-The Docker build fetches the upstream repository at tag `v0.4`; the container requires outbound HTTPS to refresh Google's revocation status. If the verifier fails to start or the revocation cache becomes stale, LAN readiness and enrollment fail closed. A successful source build is not physical-device acceptance. OS/patch/rollback policy, native enrollment UI, StrongBox/TEE device testing, deployment and accounting integration remain outstanding.
+- Never expose merchant secrets to Android, JavaScript, logs, analytics or source control.
+- Verify provider status independently; client callbacks are untrusted hints.
+- Persist idempotency identities and immutable provider references before dispatch.
+- Treat network timeouts as ambiguous and reconcile before retrying.
+- Capture and folio settlement are separate states. Use a durable outbox/saga if the payment database and PMS accounting database differ.
+- Refunds are separate operations and require provider-confirmed status before PMS reversal posting.
+- Keep live collection OFF until every release gate has an auditable pass.
