@@ -68,9 +68,25 @@ final class LocalGatewayVault {
   }
 
   synchronized JSONObject remove(String provider, String environment) throws Exception {
-    fields(provider); validateEnvironment(environment);
+    fields(provider);
+    // Permit deletion of legacy live records created by older app builds, but
+    // never permit reading, saving, activating or using live credentials here.
+    if (!"test".equals(environment) && !"live".equals(environment)) {
+      throw new IllegalArgumentException("invalid_environment");
+    }
     File file = file(provider, environment);
     if (file.exists() && !file.delete()) throw new IllegalStateException("credential_remove_failed");
+    if ("live".equals(environment)) {
+      JSONObject out = new JSONObject();
+      out.put("provider", provider);
+      out.put("environment", "live");
+      out.put("configured", false);
+      out.put("active", false);
+      out.put("executionEnabled", false);
+      out.put("validation", "REMOVED");
+      out.put("credentialFields", new org.json.JSONArray(Arrays.asList(fields(provider))));
+      return out;
+    }
     return status(provider, environment);
   }
 
