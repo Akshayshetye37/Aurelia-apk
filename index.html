@@ -693,7 +693,9 @@ function settlePayment(input){
   const savedBooking=saved&&Array.isArray(saved.b)?saved.b.find(x=>x.id===b.id):null;
   if(!savedBooking||Number(savedBooking.p)!==Number(b.p)||JSON.stringify(savedBooking.pays||[])!==JSON.stringify(b.pays||[])||JSON.stringify(savedBooking.payments||[])!==JSON.stringify(b.payments||[])||Number(saved.today||0)!==Number(S.today||0)||JSON.stringify(saved.aud||[])!==JSON.stringify(S.aud||[]))throw new Error('Payment could not be verified in device storage');
  };
- return window.aureliaSettlePayment({...input,state:S,balanceDue:dueB(b),persist:persistSettlement,audit:(kind,detail)=>aud(kind,detail)});
+ const context={...input,state:S,balanceDue:dueB(b),persist:persistSettlement,audit:(kind,detail)=>aud(kind,detail)};
+ if(input.source==='gateway'){if(typeof window.aureliaSettleVerifiedGatewayPayment!=='function')throw new Error('Verified gateway settlement module is not ready');return window.aureliaSettleVerifiedGatewayPayment(context)}
+ return window.aureliaSettlePayment(context);
 }
 function addPay(b,a,m,r,auto){return settlePayment({booking:b,amount:a,method:m,reference:r||'',source:auto?'auto':'manual',idempotencyKey:r?('ref:'+r):undefined})}
 let mchips=id=>`<div class="chips" id="${id}">${PM.map((p,k)=>`<button class="chip ${k?'':'on'}" onclick="$$('#${id} .chip').forEach(c=>c.classList.remove('on'));this.classList.add('on')">${p}</button>`).join('')}</div>`;
@@ -3328,6 +3330,7 @@ folio=function(i){
   }));
  }
  const confirm=root.querySelector('#pc');if(confirm){const lab=confirm.closest('label');if(lab)lab.classList.add('payment-confirm-row')}
+ if(methods&&b)window.refreshAureliaGatewayFolioActions&&window.refreshAureliaGatewayFolioActions(i);
 };
 /* Keep original accounting and validation, then show the invoice instead of reopening a due folio after payment. */
 pay=function(i){
@@ -4312,6 +4315,73 @@ window.aureliaSettlePayment=function(input){
   if(priorAudit&&Array.isArray(state.aud))state.aud.splice(0,state.aud.length,...priorAudit);
   throw error;
  }
+};
+</script>
+<script>
+/* Official sandbox checkout runs in the WebView; merchant secrets remain server-side. */
+const AURELIA_GATEWAY_STORE_PROMISE=import('./src/payments/indexeddb-payment-intent-store.mjs').then(({IndexedDbPaymentIntentStore})=>new IndexedDbPaymentIntentStore());
+const AURELIA_GATEWAY_BUSY=new Set();
+function aureliaGatewayId(){return globalThis.crypto?.randomUUID?.()||('gw-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,14))}
+async function aureliaGatewayTransition(record,state,patch={}){const next={...record,...patch,state,updatedAt:new Date().toISOString(),history:[...(record.history||[]).slice(-99),{state,at:new Date().toISOString()}]};return (await AURELIA_GATEWAY_STORE_PROMISE).put(next)}
+async function aureliaLoadCheckoutScript(provider){
+ const src=provider==='razorpay'?'https://checkout.razorpay.com/v1/checkout.js':'https://sdk.cashfree.com/js/v3/cashfree.js',ready=()=>provider==='razorpay'?typeof window.Razorpay==='function':typeof window.Cashfree==='function';
+ if(ready())return;
+ await new Promise((resolve,reject)=>{const prior=document.querySelector('script[data-aurelia-gateway="'+provider+'"]');if(prior){prior.addEventListener('load',resolve,{once:true});prior.addEventListener('error',()=>reject(new Error('Provider checkout SDK failed to load')),{once:true});return}const s=document.createElement('script');s.src=src;s.async=true;s.dataset.aureliaGateway=provider;s.onload=resolve;s.onerror=()=>reject(new Error('Provider checkout SDK failed to load. Check Internet access.'));document.head.appendChild(s)});
+ if(!ready())throw new Error('Provider checkout SDK did not initialize');
+}
+function aureliaGatewayProviderActive(provider){const x=(window.AureliaLocalGatewayAdmin?.providers||[]).find(x=>x.provider===provider&&x.environment==='test');return !!(x&&x.configured&&x.validated&&x.active)}
+window.aureliaReconcileGatewayPayment=async function(transactionId){if(!/^[A-Za-z0-9_-]{8,64}$/.test(String(transactionId||'')))throw new Error('Invalid payment reference');return localGatewayApi('/v1/payments/'+encodeURIComponent(transactionId)+'/reconcile','POST',{})};
+window.refreshAureliaGatewayFolioActions=async function(index){
+ const root=document.getElementById('pan'),booking=bk(index),methods=root?.querySelector('#pm');if(!root||!booking||!methods)return;
+ let box=root.querySelector('#aurelia-gateway-actions');if(!box){box=document.createElement('div');box.id='aurelia-gateway-actions';box.style.cssText='display:grid;gap:8px;margin:10px 0';methods.insertAdjacentElement('afterend',box)}
+ const active=['razorpay','cashfree'].filter(aureliaGatewayProviderActive);
+ box.innerHTML=active.map(p=>'<button type="button" class="btn sm" onclick="startAureliaGatewayPayment('+Number(index)+',\\''+p+'\\')">Pay with '+(p==='razorpay'?'Razorpay':'Cashfree')+' · Test</button>').join('');
+ try{const pending=(await (await AURELIA_GATEWAY_STORE_PROMISE).listPending()).filter(x=>x.bookingId===String(booking.id));if(pending.length)box.innerHTML+='<button type="button" class="btn sm ghost" onclick="reviewAureliaGatewayPayments('+Number(index)+')">Check pending gateway payment ('+pending.length+')</button>'}catch(e){console.warn('Gateway intent recovery is unavailable',e)}
+ if(!active.length&&!box.innerHTML)box.innerHTML='<p class="lab">Gateway checkout appears here after a provider is validated and activated in Payment Gateway settings.</p>';
+};
+window.startAureliaGatewayPayment=async function(index,provider){
+ const booking=bk(index),amount=Number(document.getElementById('pa')?.value),due=booking?Number(dueB(booking)):0;if(!booking||!['razorpay','cashfree'].includes(provider))return;
+ const lock=String(booking.id);if(AURELIA_GATEWAY_BUSY.has(lock))return;
+ if(!aureliaGatewayProviderActive(provider)){toast('Validate and activate this sandbox provider in Payment Gateway settings first.');return}
+ if(!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100||amount>due+0.000001){toast('Enter a valid amount within the outstanding folio balance.');return}
+ if(S.set.backendConnection?.reachable!==true){toast('Connect and test the trusted HTTPS payment service first.');return}
+ AURELIA_GATEWAY_BUSY.add(lock);let record=null;
+ try{
+  const store=await AURELIA_GATEWAY_STORE_PROMISE,requestId=aureliaGatewayId(),amountPaise=Math.round(amount*100),createdAt=new Date().toISOString();
+  record={requestId,bookingId:String(booking.id),folioId:String(booking.iv||booking.id),amountPaise,currency:'INR',providerId:provider,state:'CREATED',backendVerified:false,settlementAuthorized:false,bridgeDispatchStarted:false,createdAt,updatedAt:createdAt,history:[{state:'CREATED',at:createdAt}]};
+  await store.put(record);record=await aureliaGatewayTransition(record,'REQUESTED');
+  const origin=S.set.backendConnection.endpoint,phone=String(guestPhoneFor(booking.g,booking)||'').replace(/\\D/g,'');
+  if(provider==='cashfree'&&phone.length<10)throw new Error('Add the guest mobile number (at least 10 digits) before Cashfree checkout.');
+  const returnUrl=new URL('/payment-return',origin);returnUrl.searchParams.set('transaction_id',requestId);
+  const customer={id:'guest_'+aureliaGatewayId().replace(/-/g,'').slice(0,32),...(phone?{phone:phone.slice(-10)}:{})};
+  const body={provider,environment:'test',transactionId:requestId,idempotencyKey:requestId,amountMinor:amountPaise,currency:'INR',returnUrl:returnUrl.toString(),...(provider==='cashfree'?{customer}:{})};
+  const dispatched=await localGatewayApi('/v1/payments/dispatch','POST',body);
+  record=await aureliaGatewayTransition(record,dispatched.status==='PENDING'?'PROCESSING':'UNKNOWN',{backendSessionId:requestId,providerOrderId:dispatched.providerOrderId||null});
+  if(dispatched.status!=='PENDING'){toast('Order result is '+(dispatched.status||'UNKNOWN')+'. No duplicate order was started. Reconcile this payment before retrying.');return}
+  await aureliaLoadCheckoutScript(provider);
+  if(provider==='razorpay'){
+   await new Promise(resolve=>{let done=false;const finish=()=>{if(done)return;done=true;resolve()};const checkout=new window.Razorpay({key:dispatched.checkout?.keyId,order_id:dispatched.providerOrderId,amount:amountPaise,currency:'INR',name:S.set.name||'Aurelia PMS',description:'Folio '+String(booking.iv||booking.id),handler:finish,modal:{ondismiss:finish},theme:{color:'#176b52'}});checkout.on('payment.failed',finish);checkout.open()});
+  }else{const cf=window.Cashfree({mode:'sandbox'});try{await cf.checkout({paymentSessionId:dispatched.checkout?.paymentSessionId,redirectTarget:'_modal'})}catch(e){console.warn('Cashfree checkout returned; reconcile provider status',e)}}
+  const result=await settlePayment({source:'gateway',provider,transactionId:requestId,booking,amount,method:provider==='razorpay'?'Razorpay':'Cashfree',idempotencyKey:'gateway:'+provider+':'+requestId});
+  if(result?.ok){const paymentId=result.verification?.providerPaymentId||requestId;record=await aureliaGatewayTransition(record,'SUCCESS',{backendVerified:true,settlementAuthorized:true,providerPaymentId:paymentId,providerOrderId:result.verification?.providerOrderId||dispatched.providerOrderId||null});render();inv(index);toast(K(amount)+' gateway payment verified and posted to the folio.')}
+  else if(result?.verification?.status==='FAILED'){await aureliaGatewayTransition(record,'FAILED');toast('Provider confirms failure. No folio payment was posted.')}
+  else{await aureliaGatewayTransition(record,'RECONCILIATION');toast(result?.awaitingStaffConfirmation?'Verified payment awaits staff confirmation.':'Payment remains unresolved. Use Check pending gateway payment; do not retry a new charge.')}
+ }catch(error){
+  if(record){try{const latest=await (await AURELIA_GATEWAY_STORE_PROMISE).get(record.requestId);if(latest&&['REQUESTED','PROCESSING'].includes(latest.state))await aureliaGatewayTransition(latest,'UNKNOWN',{lastErrorCode:String(error?.code||error?.name||'GATEWAY_OUTCOME_UNKNOWN').slice(0,64)})}catch(_){}}
+  toast(error.message||'Gateway payment could not be completed. Reconcile before retrying.');
+ }finally{AURELIA_GATEWAY_BUSY.delete(lock)}
+};
+window.reviewAureliaGatewayPayments=async function(index){
+ const booking=bk(index);if(!booking)return;
+ try{const store=await AURELIA_GATEWAY_STORE_PROMISE,pending=(await store.listPending()).filter(x=>x.bookingId===String(booking.id));if(!pending.length){toast('No unresolved gateway payment exists for this folio.');return}
+  for(const record of pending){try{
+   const result=await settlePayment({source:'gateway',provider:record.providerId,transactionId:record.backendSessionId||record.requestId,booking,amount:record.amountPaise/100,method:record.providerId==='razorpay'?'Razorpay':'Cashfree',idempotencyKey:'gateway:'+record.providerId+':'+record.requestId});
+   if(result?.ok){await aureliaGatewayTransition(record,'SUCCESS',{backendVerified:true,settlementAuthorized:true,providerPaymentId:result.verification?.providerPaymentId||record.providerPaymentId||null});toast('Previously pending payment verified and posted.')}
+   else if(result?.verification?.status==='FAILED'){await aureliaGatewayTransition(record,'FAILED');toast('Provider confirms the previous payment failed.')}
+   else if(result?.awaitingStaffConfirmation)await aureliaGatewayTransition(record,'RECONCILIATION');
+  }catch(e){toast(e.message||'Pending payment could not be reconciled.')}}
+  render();folio(index);
+ }catch(e){toast(e.message||'Payment recovery journal is unavailable.')}
 };
 </script>
 <script type="module" id="aurelia-local-settlement-adapter">
