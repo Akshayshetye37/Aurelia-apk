@@ -1,5 +1,7 @@
 import { RazorpayAdapter } from './razorpay.mjs';
 import { CashfreeAdapter } from './cashfree.mjs';
+import { PayUAdapter } from './payu-adapter.mjs';
+import { PhonePeAdapter } from './phonepe-adapter.mjs';
 import { assertAdapterCapabilities } from './adapter-contract.mjs';
 
 const REQUIRED_CHECKOUT_OPERATIONS = Object.freeze([
@@ -8,7 +10,9 @@ const REQUIRED_CHECKOUT_OPERATIONS = Object.freeze([
 ]);
 const FACTORIES = Object.freeze({
   razorpay: options => new RazorpayAdapter(options),
-  cashfree: options => new CashfreeAdapter(options)
+  cashfree: options => new CashfreeAdapter(options),
+  payu: options => new PayUAdapter(options),
+  phonepe: options => new PhonePeAdapter(options)
 });
 
 export function createProviderAdapter(providerId, options) {
@@ -18,7 +22,6 @@ export function createProviderAdapter(providerId, options) {
   assertAdapterCapabilities(adapter, REQUIRED_CHECKOUT_OPERATIONS);
   return adapter;
 }
-
 export function implementedProviderAdapters() { return Object.keys(FACTORIES); }
 export function providerCapabilities(providerId) {
   return FACTORIES[providerId] ? [...REQUIRED_CHECKOUT_OPERATIONS] : null;
