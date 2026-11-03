@@ -32,10 +32,11 @@ test("owner server credentials use Android Keystore and HTTPS only", () => {
   assert.match(backupContract, /GET from the configured endpoint/);
 });
 
-test("LAN provider administration is owner-authenticated and folio auto-settlement stays disabled", () => {
-  assert.match(html, /LAN Payment Owner Console/);
-  assert.match(html, /localGatewayApi/);
-  assert.doesNotMatch(html, /Credential onboarding unavailable/);
+test("device-local payment UI fails closed and folio auto-settlement stays disabled", () => {
+  assert.match(html, /Device-local credential vault/);
+  assert.match(html, /window\.AndroidPaymentEngine/);
+  assert.match(html, /secure native Android payment engine is not installed/);
+  assert.doesNotMatch(html, /localGatewayAdminHtml\(\)/);
   const gate = fs.readFileSync(new URL("../src/payments/settlement-gate.mjs", import.meta.url), "utf8");
   assert.match(gate, /AUTO_FOLIO_SETTLEMENT_ENABLED = false/);
 });
