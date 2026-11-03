@@ -3467,6 +3467,25 @@ window.reconcileAureliaPendingGatewayPayments=async function(i){
  const last=pending[pending.length-1];await reconcileAureliaGatewayPayment(i,last.transactionId,last.providerPaymentId||undefined);
 };
 
+/* Settlement visibility: provider capture and PMS folio settlement are separate financial states. */
+window.aureliaGatewaySettlementLabel=function(state){
+ const labels={
+  CREATED:'Intent saved · not paid',
+  PENDING:'Awaiting provider confirmation',
+  CAPTURED_PENDING_ACCOUNTING:'Payment captured · PMS posting pending',
+  SETTLED:'Payment posted to PMS folio',
+  FAILED:'Payment failed · folio remains unpaid',
+  RECONCILIATION_REQUIRED:'Payment status requires reconciliation',
+  UNKNOWN:'Payment outcome unknown · reconcile before retry',
+  REFUNDED:'Refund confirmed by provider',
+  REFUND_PENDING:'Refund pending provider confirmation'
+ };
+ return labels[String(state||'').toUpperCase()]||'Payment status: '+String(state||'Unknown');
+};
+window.refreshAureliaGatewaySettlement=function(i,transactionId){
+ return window.reconcileAureliaGatewayPayment(i,transactionId);
+};
+
 /* Invoice QR rules: remove duplicated QR insertions, show one exact QR only for a positive unpaid balance. */
 /* Keep exact QR amount synchronized with partial or full hotel payment amount. */
 document.addEventListener('input',function(e){
