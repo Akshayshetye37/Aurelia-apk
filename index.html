@@ -3893,6 +3893,11 @@ window.removeAureliaNativeGateway=async function(provider,environment){
  try{window.AureliaNativeGatewayState[provider][environment]=await localGatewayNativeCall('gatewayVaultRemove',provider,environment);render();toast('Local gateway credentials removed.');}
  catch(error){toast(error.message);}
 };
+window.removeAureliaLegacyLiveGateway=async function(provider){
+ if(!confirm('Delete any legacy LIVE '+provider+' credentials saved by an older version? This cannot be undone.'))return;
+ try{await localGatewayNativeCall('gatewayVaultRemove',provider,'live');toast('Legacy live credentials deleted.');}
+ catch(error){toast(error.message);}
+};
 window.addEventListener('aurelia-payment-platform-ready',()=>{setTimeout(()=>{window.refreshAureliaNativeGateway&&window.refreshAureliaNativeGateway();window.refreshLocalGatewayOwner&&window.refreshLocalGatewayOwner();},0);});
 
 window.AureliaLocalGatewayAdmin=window.AureliaLocalGatewayAdmin||{loading:false,setupRequired:null,authenticated:false,username:'',providers:[],error:null};
