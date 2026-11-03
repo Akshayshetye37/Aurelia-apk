@@ -21,6 +21,7 @@ final class LocalPaymentLedger extends SQLiteOpenHelper {
   private static final String DB_NAME = "aurelia-local-ledger.db";
   private static final int DB_VERSION = 2;
   private static final Pattern SAFE_ID = Pattern.compile("^[A-Za-z0-9._:-]{8,128}$");
+  private static final Pattern SAFE_PROVIDER_REF = Pattern.compile("^[A-Za-z0-9._:-]{1,256}$");
   private static final Set<String> PROVIDERS = new HashSet<>(Arrays.asList(
       "razorpay", "cashfree", "payu", "phonepe", "paytm", "ccavenue", "jiopay"));
   private static final String COLUMNS = "transaction_id,provider,environment,folio_id,amount_minor,currency,local_status,provider_order_id,provider_payment_id,created_at,updated_at";
@@ -44,6 +45,7 @@ final class LocalPaymentLedger extends SQLiteOpenHelper {
       "updated_at INTEGER NOT NULL)");
     db.execSQL("CREATE INDEX IF NOT EXISTS payment_ledger_pending_idx ON payment_ledger(local_status,created_at)");
     db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS payment_provider_order_idx ON payment_ledger(provider,environment,provider_order_id) WHERE provider_order_id IS NOT NULL");
+    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS payment_provider_payment_idx ON payment_ledger(provider,environment,provider_payment_id) WHERE provider_payment_id IS NOT NULL");
   }
 
   @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
@@ -122,37 +124,41 @@ final class LocalPaymentLedger extends SQLiteOpenHelper {
     return get(tx);
   }
 
-  /** Native provider engine only. Must be called after an authenticated provider response. */
+  /** Native provider engine only. Persist the first provider order reference; never replace it on replay. */
   synchronized JSONObject recordProviderOrder(String tx, String orderId) {
-    if (!safe(tx) || !safe(orderId)) throw new IllegalArgumentException("invalid_provider_order_reference");
+    if (!safe(tx) || !safeProviderRef(orderId)) throw new IllegalArgumentException("invalid_provider_order_reference");
     ContentValues v = new ContentValues(); v.put("local_status", "ORDER_CREATED");
     v.put("provider_order_id", orderId); v.put("updated_at", System.currentTimeMillis());
     int changed = getWritableDatabase().update("payment_ledger", v,
-        "transaction_id=? AND local_status IN ('READY_FOR_ONLINE','ORDER_CREATED','RECONCILIATION_REQUIRED')", new String[]{tx});
-    if (changed != 1) throw new IllegalStateException("payment_order_transition_rejected");
+        "transaction_id=? AND (provider_order_id IS NULL OR provider_order_id=?) AND local_status IN ('READY_FOR_ONLINE','ORDER_CREATED','RECONCILIATION_REQUIRED')", new String[]{tx, orderId});
+    if (changed != 1) throw new IllegalStateException("payment_order_transition_rejected_or_reference_conflict");
+    return get(tx);
+  }
+
+  /** Native provider engine only. Marks the order as handed to the provider; this is not payment evidence. */
+  synchronized JSONObject recordAwaitingProvider(String tx) {
+    if (!safe(tx)) throw new IllegalArgumentException("invalid_transaction_id");
+    ContentValues v = new ContentValues(); v.put("local_status", "AWAITING_PROVIDER"); v.put("updated_at", System.currentTimeMillis());
+    int changed = getWritableDatabase().update("payment_ledger", v,
+        "transaction_id=? AND local_status IN ('ORDER_CREATED','AWAITING_PROVIDER') AND provider_order_id IS NOT NULL", new String[]{tx});
+    if (changed != 1) throw new IllegalStateException("payment_awaiting_provider_transition_rejected");
     return get(tx);
   }
 
   /** Native provider engine only. Provider capture is not yet a PMS folio credit. */
   synchronized JSONObject recordVerifiedCapture(String tx, String paymentId) {
-    if (!safe(tx) || !safe(paymentId)) throw new IllegalArgumentException("invalid_provider_payment_reference");
+    if (!safe(tx) || !safeProviderRef(paymentId)) throw new IllegalArgumentException("invalid_provider_payment_reference");
     ContentValues v = new ContentValues(); v.put("local_status", "CAPTURED_UNPOSTED");
     v.put("provider_payment_id", paymentId); v.put("updated_at", System.currentTimeMillis());
     int changed = getWritableDatabase().update("payment_ledger", v,
-        "transaction_id=? AND local_status IN ('ORDER_CREATED','AWAITING_PROVIDER','RECONCILIATION_REQUIRED')", new String[]{tx});
+        "transaction_id=? AND (provider_payment_id IS NULL OR provider_payment_id=?) AND local_status IN ('ORDER_CREATED','AWAITING_PROVIDER','RECONCILIATION_REQUIRED')", new String[]{tx, paymentId});
     if (changed != 1) throw new IllegalStateException("payment_capture_transition_rejected");
     return get(tx);
   }
 
-  /** Folio posting must be invoked only by the native PMS accounting transaction. */
-  synchronized JSONObject recordFolioPosted(String tx) {
-    if (!safe(tx)) throw new IllegalArgumentException("invalid_transaction_id");
-    ContentValues v = new ContentValues(); v.put("local_status", "POSTED_TO_FOLIO"); v.put("updated_at", System.currentTimeMillis());
-    int changed = getWritableDatabase().update("payment_ledger", v,
-        "transaction_id=? AND local_status='CAPTURED_UNPOSTED'", new String[]{tx});
-    if (changed != 1) throw new IllegalStateException("folio_post_transition_rejected");
-    return get(tx);
-  }
+  /** No public status-only method may mark a payment posted. The canonical PMS
+   * accounting transaction must be implemented before this transition exists.
+   */
 
   synchronized JSONObject get(String tx) {
     try (Cursor c = getReadableDatabase().rawQuery("SELECT " + COLUMNS + " FROM payment_ledger WHERE transaction_id=?", new String[]{tx})) {
@@ -173,6 +179,7 @@ final class LocalPaymentLedger extends SQLiteOpenHelper {
   }
 
   private boolean safe(String value) { return value != null && SAFE_ID.matcher(value).matches(); }
+  private boolean safeProviderRef(String value) { return value != null && SAFE_PROVIDER_REF.matcher(value).matches(); }
 
   private JSONObject row(Cursor c) {
     JSONObject out = new JSONObject();
