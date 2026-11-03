@@ -208,13 +208,13 @@ test('pre-dispatch failure does not permit reuse of the same idempotency key wit
 });
 
 
-test('firestore transaction failure before provider invocation is not dispatched', async () => {
+test('firestore dispatch-marker failure releases reservation when cleanup commits', async () => {
   const s = setup();
   const originalRunTransaction = s.db.runTransaction.bind(s.db);
   let calls = 0;
   s.db.runTransaction = async fn => {
     calls++;
-    // Reservation transaction is first; pre-dispatch state marker is second.
+    // Reservation transaction is first; dispatch marker is second; cleanup is third.
     if (calls === 2) throw new Error('firestore_write_unavailable_before_dispatch');
     return originalRunTransaction(fn);
   };
@@ -223,4 +223,36 @@ test('firestore transaction failure before provider invocation is not dispatched
     /firestore_write_unavailable_before_dispatch/
   );
   assert.equal(s.dispatches, 0);
+  const intent = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentIntents/'))?.[1];
+  const idem = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentIntentIdempotency/'))?.[1];
+  const lock = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentFolioLocks/'))?.[1];
+  assert.equal(intent?.state, 'FAILED_TO_INITIATE');
+  assert.equal(idem?.state, 'FAILED_TO_INITIATE');
+  assert.equal(lock?.active, false);
+
+  // A fresh operator-approved attempt can reserve the folio; the failed attempt
+  // itself is never redispatched.
+  const retry = await s.repo.initializePaymentIntent('user_123', payload({ idempotencyKey: 'checkout-key-retry-123' }));
+  assert.equal(retry.status, 'CREATED');
+  assert.equal(s.dispatches, 1);
+});
+
+test('failed dispatch-marker cleanup preserves the lock and never calls provider', async () => {
+  const s = setup();
+  const originalRunTransaction = s.db.runTransaction.bind(s.db);
+  let calls = 0;
+  s.db.runTransaction = async fn => {
+    calls++;
+    // Both the dispatch marker and cleanup transaction fail.
+    if (calls === 2 || calls === 3) throw new Error('firestore_unavailable');
+    return originalRunTransaction(fn);
+  };
+  await assert.rejects(
+    s.repo.initializePaymentIntent('user_123', payload()),
+    /firestore_unavailable/
+  );
+  assert.equal(s.dispatches, 0);
+  const lock = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentFolioLocks/'))?.[1];
+  assert.equal(lock?.active, true);
+  assert.equal(lock?.state, 'DISPATCHING');
 });
