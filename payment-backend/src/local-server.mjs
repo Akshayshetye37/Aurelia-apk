@@ -911,13 +911,16 @@ app.post('/v1/auth/change-password', ownerAuth, requireBrowserMutationOrigin, as
 
 function validateCredentialShape(provider, environment, c) {
   if (!c || typeof c !== 'object' || Array.isArray(c)) return false;
+  const optionalWebhookValid = c.webhookSecret === undefined ||
+    (typeof c.webhookSecret === 'string' && c.webhookSecret.length >= 8 && c.webhookSecret.length <= 512);
+  if (!optionalWebhookValid) return false;
   if (provider === 'razorpay') return Object.keys(c).every(k => ['keyId','keySecret','webhookSecret'].includes(k)) &&
     /^rzp_(test|live)_[A-Za-z0-9]{8,}$/.test(c.keyId || '') &&
     (environment === 'test' ? c.keyId.startsWith('rzp_test_') : c.keyId.startsWith('rzp_live_')) &&
-    ['keySecret','webhookSecret'].every(k => typeof c[k] === 'string' && c[k].length >= 8 && c[k].length <= 512);
+    typeof c.keySecret === 'string' && c.keySecret.length >= 8 && c.keySecret.length <= 512;
   return Object.keys(c).every(k => ['appId','secretKey','webhookSecret'].includes(k)) &&
     typeof c.appId === 'string' && /^[A-Za-z0-9_-]{6,128}$/.test(c.appId) &&
-    ['secretKey','webhookSecret'].every(k => typeof c[k] === 'string' && c[k].length >= 8 && c[k].length <= 512);
+    typeof c.secretKey === 'string' && c.secretKey.length >= 8 && c.secretKey.length <= 512;
 }
 function providerRow(provider, environment) {
   return db.prepare('SELECT * FROM provider_config WHERE provider=? AND environment=?').get(provider, environment);
