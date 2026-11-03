@@ -544,7 +544,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
             providerVerifiedStatus: 'CAPTURED',
             providerVerifiedAt: FieldValue.serverTimestamp(),
             accountingStatus: 'PENDING',
-            accountingBlockReason: 'authoritative_pms_ledger_mapping_not_implemented'
+            accountingBlockReason: FieldValue.delete()
           }, { merge: true });
         }
         tx.set(providerTenantDoc(tenantId, provider, environment), {
