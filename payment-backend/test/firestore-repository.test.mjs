@@ -237,6 +237,29 @@ test('firestore dispatch-marker failure releases reservation when cleanup commit
   assert.equal(s.dispatches, 1);
 });
 
+test('uncertain dispatch-marker commit is cleaned up before provider invocation', async () => {
+  const s = setup();
+  const originalRunTransaction = s.db.runTransaction.bind(s.db);
+  let calls = 0;
+  s.db.runTransaction = async fn => {
+    calls++;
+    const result = await originalRunTransaction(fn);
+    // Simulate a lost transaction response after Firestore committed the marker.
+    if (calls === 2) throw new Error('firestore_commit_response_lost');
+    return result;
+  };
+  await assert.rejects(
+    s.repo.initializePaymentIntent('user_123', payload()),
+    /firestore_commit_response_lost/
+  );
+  assert.equal(s.dispatches, 0);
+  const intent = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentIntents/'))?.[1];
+  const lock = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentFolioLocks/'))?.[1];
+  assert.equal(intent?.state, 'FAILED_TO_INITIATE');
+  assert.equal(typeof intent?.providerRequestStartedAt, 'string');
+  assert.equal(lock?.active, false);
+});
+
 test('failed dispatch-marker cleanup preserves the lock and never calls provider', async () => {
   const s = setup();
   const originalRunTransaction = s.db.runTransaction.bind(s.db);
