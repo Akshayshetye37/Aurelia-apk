@@ -3386,11 +3386,10 @@ window.startAureliaGatewayCheckout=async function(i){
  let engineStatus;
  try{engineStatus=await engine.getEngineStatus();}
  catch(_){return stop('Gateway checkout is unavailable: native payment-engine status could not be verified. No payment request was sent.');}
- if(!engineStatus||engineStatus.ready!==true||engineStatus.livePaymentsEnabled===true){
-  // Live processing remains disabled until formal release gates are accepted.
-  if(!engineStatus||engineStatus.ready!==true)
-   return stop('Gateway checkout is unavailable: native payment engine is not ready. No payment request was sent.');
- }
+ if(!engineStatus||engineStatus.ready!==true)
+  return stop('Gateway checkout is unavailable: native payment engine is not ready. No payment request was sent.');
+ if(engineStatus.livePaymentsEnabled===true)
+  return stop('Gateway checkout is blocked because live-payment activation is not authorized for this release.');
  const provider=document.getElementById('aurelia-online-provider')?.value||'';
  const amount=Number(document.getElementById('aurelia-online-amount')?.value);
  const amountMinor=Math.round(amount*100);
