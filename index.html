@@ -3310,6 +3310,10 @@ const _folioPaymentUx=folio;
 folio=function(i){
  _folioPaymentUx(i);
  const b=bk(i),root=document.getElementById('pan');if(!b||!root)return;window.__lastFolioBooking=Number(i);
+ const online=document.createElement('section');online.id='aurelia-folio-online-payment';online.className='card';online.style.marginTop='14px';
+ online.innerHTML=window.aureliaGatewayFolioHtml?window.aureliaGatewayFolioHtml(i):'<h3>Online payment</h3><p class="lab">Loading payment capability…</p>';
+ root.querySelector('#pm')?.closest('.chips')?.insertAdjacentElement('afterend',online);
+
  root.querySelectorAll('img[alt*="QR"],img[alt*="qr"]').forEach(img=>{const box=img.closest('.invoice-due-upi,.hotel-payment-qr,.exact-upi-card')||img.parentElement;if(box&&box!==root)box.remove()});
  root.querySelectorAll('.exact-upi-card').forEach(x=>x.remove());
  const old=root.querySelector('#folio-upi-dynamic');if(old)old.remove();
@@ -3342,6 +3346,122 @@ pay=function(i){
   render();inv(i);toast(result.duplicate?'This payment reference was already recorded':K(amount)+' payment recorded');
  }catch(e){toast(e&&e.message||'Payment was not recorded')}
 };
+
+// Provider checkout is intentionally routed through the authenticated LAN engine.
+// The browser receives only the public checkout token/key; provider secrets stay server-side.
+const AURELIA_CHECKOUT_SCRIPTS={
+ razorpay:'https://checkout.razorpay.com/v1/checkout.js',
+ cashfree:'https://sdk.cashfree.com/js/v3/cashfree.js'
+};
+const AURELIA_SCRIPT_PROMISES=new Map();
+function loadAureliaCheckoutScript(provider){
+ const url=AURELIA_CHECKOUT_SCRIPTS[provider];if(!url)return Promise.reject(new Error('Unsupported checkout provider'));
+ if(provider==='razorpay'&&window.Razorpay)return Promise.resolve();
+ if(provider==='cashfree'&&window.Cashfree)return Promise.resolve();
+ if(AURELIA_SCRIPT_PROMISES.has(provider))return AURELIA_SCRIPT_PROMISES.get(provider);
+ const task=new Promise((resolve,reject)=>{
+  const script=document.createElement('script');script.src=url;script.async=true;script.crossOrigin='anonymous';
+  script.onload=()=>provider==='razorpay'?(window.Razorpay?resolve():reject(new Error('Razorpay checkout SDK did not initialize'))):(window.Cashfree?resolve():reject(new Error('Cashfree checkout SDK did not initialize')));
+  script.onerror=()=>reject(new Error('Could not load the '+provider+' checkout SDK. Check Internet connectivity.'));
+  document.head.appendChild(script);
+ });
+ AURELIA_SCRIPT_PROMISES.set(provider,task);task.catch(()=>AURELIA_SCRIPT_PROMISES.delete(provider));return task;
+}
+window.aureliaGatewayFolioHtml=function(i){
+ const a=window.AureliaLocalGatewayAdmin||{},providers=(a.providers||[]).filter(x=>x.environment==='test'&&x.active);
+ const supported=providers.filter(x=>['razorpay','cashfree'].includes(x.provider));
+ if(!S.set.backendConnection?.reachable||!a.authenticated)return '<h3>Online payment</h3><p class="lab">Connect the trusted HTTPS LAN payment engine and sign in to its Owner Console. Online checkout is unavailable until a provider is configured, validated and activated in sandbox mode. Cash/manual payments continue to work locally.</p><button class="btn sm ghost" onclick="go(\'more\');setTimeout(()=>openAureliaGatewayAdmin(),100)">Open payment setup</button>';
+ if(!supported.length)return '<h3>Online payment</h3><p class="lab">No sandbox provider is active. Save credentials, validate them and activate Razorpay or Cashfree in the Payment Gateway settings.</p><button class="btn sm ghost" onclick="go(\'more\');setTimeout(()=>openAureliaGatewayAdmin(),100)">Configure provider</button>';
+ const options=supported.map(x=>'<option value="'+esc(x.provider)+'">'+(x.provider==='razorpay'?'Razorpay':'Cashfree')+' · Sandbox</option>').join('');
+ return '<h3>Online payment · Sandbox</h3><p class="lab">Provider checkout is created by the authenticated payment engine. The provider independently confirms payment; a checkout success screen alone never posts a PMS receipt.</p><label class="fld"><span>Payment provider</span><select id="aurelia-online-provider">'+options+'</select></label><label class="fld"><span>Amount (INR)</span><input id="aurelia-online-amount" type="number" min="0.01" step="0.01" value="'+Math.max(0,Number(dueB(bk(i)))||0).toFixed(2)+'"></label><div id="aurelia-cashfree-details" hidden><label class="fld"><span>Guest mobile number (Cashfree)</span><input id="aurelia-cashfree-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number"></label><label class="fld"><span>Public HTTPS return URL (Cashfree)</span><input id="aurelia-cashfree-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><button class="btn" style="width:100%" onclick="startAureliaGatewayCheckout('+Number(i)+')">Create secure checkout</button><div id="aurelia-gateway-checkout-status" class="lab" role="status" style="margin-top:8px"></div>';
+};
+document.addEventListener('change',e=>{if(e.target?.id==='aurelia-online-provider'){const box=document.getElementById('aurelia-cashfree-details');if(box)box.hidden=e.target.value!=='cashfree';}});
+window.startAureliaGatewayCheckout=async function(i){
+ const b=bk(i);if(!b){toast('Booking not found');return}
+ const provider=document.getElementById('aurelia-online-provider')?.value||'';
+ const amount=Number(document.getElementById('aurelia-online-amount')?.value),amountMinor=Math.round(amount*100);
+ const due=Math.round(Math.max(0,Number(dueB(b))||0)*100);
+ const status=document.getElementById('aurelia-gateway-checkout-status');
+ const setStatus=v=>{if(status)status.textContent=v;};
+ if(!['razorpay','cashfree'].includes(provider)||!Number.isSafeInteger(amountMinor)||amountMinor<=0||Math.abs(amount*100-amountMinor)>1e-7||amountMinor>due){toast('Enter a valid amount up to the current folio balance.');return;}
+ const providerState=(window.AureliaLocalGatewayAdmin?.providers||[]).find(x=>x.provider===provider&&x.environment==='test');
+ if(!providerState?.active){toast('This sandbox provider is not active.');return;}
+ if(provider==='cashfree'){
+  const phone=document.getElementById('aurelia-cashfree-phone')?.value?.trim()||'',returnUrl=document.getElementById('aurelia-cashfree-return')?.value?.trim()||'';
+  if(!/^\+?[0-9]{10,15}$/.test(phone)||!/^https:\/\//i.test(returnUrl)){toast('Cashfree requires a valid guest mobile number and public HTTPS return URL.');return;}
+ }
+ const transactionId=globalThis.crypto?.randomUUID?.()||('au-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12));
+ const idempotencyKey='gateway-'+transactionId;
+ const method=provider==='razorpay'?'Razorpay':'Cashfree';
+ const record={transactionId,idempotencyKey,provider,environment:'test',amountMinor,currency:'INR',status:'CREATED',createdAt:new Date().toISOString(),providerOrderId:null,providerPaymentId:null};
+ b.gatewayPayments=Array.isArray(b.gatewayPayments)?b.gatewayPayments:[];b.gatewayPayments.push(record);persist();
+ try{
+  if(window.AureliaLocalPaymentLedger&&window.AureliaNative){
+   await window.AureliaLocalPaymentLedger.create({transactionId,provider,environment:'test',folioId:'booking-'+String(b.id),amountMinor,currency:'INR'});
+   await window.AureliaLocalPaymentLedger.updateLocalStatus(transactionId,'SENT_TO_LAN');
+  }
+  setStatus('Creating a provider order securely…');
+  const body={transactionId,idempotencyKey,provider,environment:'test',amountMinor,currency:'INR'};
+  if(provider==='cashfree'){
+   body.customer={id:'guest-'+String(b.id).replace(/[^A-Za-z0-9_-]/g,'').slice(0,48),phone:document.getElementById('aurelia-cashfree-phone').value.trim()};
+   body.returnUrl=document.getElementById('aurelia-cashfree-return').value.trim();
+  }
+  const order=await localGatewayApi('/v1/payments/dispatch','POST',body);
+  record.status=order.status||'PENDING';record.providerOrderId=order.providerOrderId||null;record.updatedAt=new Date().toISOString();persist();
+  if(order.status==='UNKNOWN'||order.reconciliationRequired){setStatus('The provider order result is uncertain. Do not create another order. Use Reconcile payment below.');toast('Order outcome needs reconciliation.');return;}
+  if(!order.providerOrderId||order.status!=='PENDING')throw new Error('Provider did not return a usable pending order.');
+  setStatus('Opening '+method+' secure checkout…');
+  await loadAureliaCheckoutScript(provider);
+  if(provider==='razorpay'){
+   await new Promise((resolve,reject)=>{
+    let finished=false;const finish=(fn,value)=>{if(finished)return;finished=true;fn(value)};
+    const checkout=new window.Razorpay({
+     key:order.checkout?.keyId,amount:amountMinor,currency:'INR',name:String(S.set.name||'Aurelia PMS').slice(0,80),
+     description:'Folio '+String(b.id),order_id:order.providerOrderId,
+     prefill:{name:String(b.g||'Guest').slice(0,80)},
+     handler:response=>finish(resolve,response),
+     modal:{ondismiss:()=>finish(reject,new Error('Checkout closed. Payment status will remain pending until reconciled.'))}
+    });
+    checkout.on('payment.failed',response=>finish(reject,new Error(response?.error?.description||'Payment was not completed.')));
+    checkout.open();
+   }).then(response=>reconcileAureliaGatewayPayment(i,transactionId,response?.razorpay_payment_id));
+  }else{
+   const cashfree=window.Cashfree({mode:'sandbox'});
+   await cashfree.checkout({paymentSessionId:order.checkout?.paymentSessionId,redirectTarget:'_modal'});
+   await reconcileAureliaGatewayPayment(i,transactionId);
+  }
+ }catch(error){
+  record.status='RECONCILIATION_REQUIRED';record.lastError=String(error?.message||'checkout_error').slice(0,180);record.updatedAt=new Date().toISOString();persist();
+  setStatus((error?.message||'Checkout interrupted')+' Payment status is not yet confirmed. Reconcile before retrying.');
+  toast(error?.message||'Checkout interrupted; reconcile transaction status.');
+ }
+};
+window.reconcileAureliaGatewayPayment=async function(i,transactionId,paymentId){
+ const b=bk(i);if(!b)return;
+ const record=(b.gatewayPayments||[]).find(x=>x.transactionId===transactionId);if(!record){toast('Payment transaction record not found.');return;}
+ const status=document.getElementById('aurelia-gateway-checkout-status');
+ if(status)status.textContent='Checking the provider API for the authoritative payment status…';
+ try{
+  const result=await localGatewayApi('/v1/payments/'+encodeURIComponent(transactionId)+'/reconcile','POST',paymentId?{paymentId}:{});
+  record.status=result.status||'PENDING';record.providerPaymentId=paymentId||record.providerPaymentId||null;record.lastReconciledAt=new Date().toISOString();persist();
+  if(result.status==='CAPTURED_PENDING_ACCOUNTING'){
+   if(status)status.textContent='Provider confirms capture. PMS folio posting is awaiting the trusted settlement projector; do not record this as a manual payment.';
+   toast('Provider capture verified. Folio accounting is pending trusted settlement.');
+  }else if(result.status==='FAILED'){
+   if(status)status.textContent='Provider confirms this payment failed. The folio remains unpaid.';
+   toast('Provider confirmed payment failure.');
+  }else{
+   if(status)status.textContent='Provider has not confirmed capture yet. The transaction remains pending; reconcile again later.';
+   toast('Payment is still pending provider confirmation.');
+  }
+ }catch(error){if(status)status.textContent='Reconciliation could not complete: '+(error.message||'unknown error');toast(error.message||'Reconciliation failed.');}
+};
+window.reconcileAureliaPendingGatewayPayments=async function(i){
+ const b=bk(i);if(!b)return;const pending=(b.gatewayPayments||[]).filter(x=>!['FAILED','POSTED_TO_FOLIO'].includes(x.status));
+ if(!pending.length){toast('No unresolved online payment transactions for this folio.');return;}
+ const last=pending[pending.length-1];await reconcileAureliaGatewayPayment(i,last.transactionId,last.providerPaymentId||undefined);
+};
+
 /* Invoice QR rules: remove duplicated QR insertions, show one exact QR only for a positive unpaid balance. */
 /* Keep exact QR amount synchronized with partial or full hotel payment amount. */
 document.addEventListener('input',function(e){
@@ -3827,11 +3947,11 @@ if (typeof window.render === "function") window.render();
    const docs=guide.docs.map(link=>'<li><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">'+esc(link.label)+'</a></li>').join('');
    const implemented=['razorpay','cashfree'].includes(id);
    const guideHtml='<p class="lab">'+esc(definition.category)+' · '+esc(definition.integration)+'<br>Methods: '+esc(definition.methods.join(', '))+'<br>'+esc(definition.verification)+'</p><ul>'+docs+'</ul>';
-   const availability=implemented?'<p class="lab">Native local credential storage is available inside the Android app. Enter your provider-issued Key ID/App ID and secret in the secure on-device form. The LAN/cloud administration service is optional for credential storage; it is not optional for trusted server-side order creation and payment verification. Checkout, provider validation, webhook processing, refunds and PMS folio posting are separate capabilities and are not yet production-enabled.</p><button class="btn sm ghost" style="margin:8px 0" data-provider="'+id+'" onclick="openAureliaNativeGateway(this.dataset.provider)">Configure credentials on this device</button>':'<div class="tag out">Adapter not implemented</div><p class="lab">This provider is catalogue/documentation only. Its API adapter, credential schema, checkout, webhook verification, status reconciliation and refund lifecycle have not been implemented. Do not enter credentials or assume it is supported.</p>';
+   const availability=implemented?'<p class="lab">Supported provider adapter. To make payments operational, configure the HTTPS LAN payment engine below, then enter the provider-issued test credentials in its Owner Console. Secrets are encrypted by the payment backend and never stored in PMS settings. The Android-only vault is a separate at-rest store and is not the checkout execution engine.</p><button class="btn sm ghost" style="margin:8px 0" data-provider="'+id+'" onclick="openAureliaGatewayAdmin(this.dataset.provider)">Open secure payment setup</button>':'<div class="tag out">Adapter not implemented</div><p class="lab">This provider is catalogue/documentation only. Its API adapter, credential schema, checkout, webhook verification, status reconciliation and refund lifecycle have not been implemented. Do not enter credentials or assume it is supported.</p>';
    return '<details><summary>'+esc(name)+' · '+(implemented?'Integration':'Documentation')+'</summary>'+guideHtml+availability+'</details>';
   }).join('');
   const providerBody=providers||'<p class="lab">No providers are available in the catalogue.</p>';
-  return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateway</h2><p class="lab">Local-first operation: configure supported gateway credentials inside the Android app without Docker, hosting or an Aurelia cloud account. The LAN Docker appliance and owner-selected cloud service are optional extensions for centralized administration and server-side payment operations.</p>'+localNativeGatewayHtml()+'<details><summary>Optional LAN / Cloud Payment Service</summary>'+localGatewayAdminHtml()+'</details><details><summary>Pay Bridge Connection · optional native checkout handoff</summary>'+bridge+'<p class="lab">Pay Bridge is not required to configure merchant credentials. Its current native IPC implementation is handshake-only, so it is not yet used for checkout, refunds or settlement.</p></details><details><summary>Provider Directory & Onboarding</summary>'+providerBody+'</details><p class="lab">Razorpay and Cashfree currently have native local credential storage and separate Node backend adapter foundations. The native credential vault is not a completed checkout integration. Live collection remains blocked until native/provider checkout, trusted payment verification, refunds, reconciliation, recovery and transactional folio posting are completed and verified.</p></div>';
+  return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateway</h2><p class="lab">Aurelia PMS remains local-first. Bookings, folios and operational records stay on the device. Actual online collections require an authenticated HTTPS payment engine to protect merchant secrets, create provider orders and independently verify payment status. Configure the optional LAN appliance below; ordinary PMS operation does not depend on it.</p>'+localGatewayAdminHtml()+'<details><summary>Device credential vault · local encrypted storage only</summary>'+localNativeGatewayHtml()+'</details><details><summary>Pay Bridge Connection · optional native settlement handoff</summary>'+bridge+'<p class="lab">Pay Bridge currently implements an authenticated handshake only. It is not yet enabled for payment commands, refunds or folio settlement.</p></details><details><summary>Provider Directory & Onboarding</summary>'+providerBody+'</details><p class="lab">Razorpay and Cashfree have provider adapters and sandbox order/reconciliation foundations. Online checkout is enabled only through a configured and activated sandbox payment engine. Live collections and automatic PMS folio posting remain disabled until the trusted settlement projector, public webhook delivery, refund lifecycle and recovery tests are complete.</p></div>';
  }
 
 const LOCAL_GATEWAY_PENDING=new Map();
@@ -3985,7 +4105,7 @@ function localGatewayAdminHtml(){
   body='<div class="tag out">Owner sign-in required</div>'+field('gw-owner-login','Owner username','text','Owner username')+field('gw-owner-login-password','Owner password','password','Owner password')+'<button class="btn sm" onclick="loginLocalGatewayOwner()">Sign in</button>';
  }
  if(a.error)body+='<p class="lab" role="alert">'+esc(a.error)+'</p>';
- return '<section class="card" style="margin-top:12px"><h3>LAN Payment Owner Console</h3><p class="lab">Secure local administration for Razorpay and Cashfree. Configure the backend origin below, then authenticate with the owner account created during Docker setup.</p><label class="fld"><span>Docker appliance HTTPS origin</span><input data-aurelia-backend-url type="url" inputmode="url" autocomplete="url" placeholder="https://payments.local:8443" value="'+esc(endpoint)+'"></label><div class="row" style="flex-wrap:wrap;gap:6px"><button class="btn sm" onclick="saveAureliaBackendEndpoint()">Save backend</button><button class="btn sm ghost" onclick="testAureliaBackendConnection()">Test backend</button><button class="btn sm ghost" onclick="refreshLocalGatewayOwner()">Refresh owner status</button></div><p class="lab" data-aurelia-backend-status role="status">'+esc(cfg.healthMessage||'The backend must be reachable over trusted HTTPS. Health checks do not authenticate the owner.')+'</p>'+body+'</section>';
+ return '<section id="aurelia-gateway-admin" class="card" style="margin-top:12px"><h3>Secure Payment Engine · LAN</h3><p class="lab">Secure local administration for Razorpay and Cashfree. Configure the backend origin below, then authenticate with the owner account created during Docker setup.</p><label class="fld"><span>Docker appliance HTTPS origin</span><input data-aurelia-backend-url type="url" inputmode="url" autocomplete="url" placeholder="https://payments.local:8443" value="'+esc(endpoint)+'"></label><div class="row" style="flex-wrap:wrap;gap:6px"><button class="btn sm" onclick="saveAureliaBackendEndpoint()">Save backend</button><button class="btn sm ghost" onclick="testAureliaBackendConnection()">Test backend</button><button class="btn sm ghost" onclick="refreshLocalGatewayOwner()">Refresh owner status</button></div><p class="lab" data-aurelia-backend-status role="status">'+esc(cfg.healthMessage||'The backend must be reachable over trusted HTTPS. Health checks do not authenticate the owner.')+'</p>'+body+'</section>';
 }
 async function localGatewayApi(path,method='GET',body,extraHeaders={}){
  const origin=(S.set.backendConnection?.endpoint||'').trim();
@@ -4065,6 +4185,12 @@ window.removeLocalGatewayCredentials=async function(provider){
  if(!confirm('Remove the stored '+provider+' sandbox credentials?'))return;
  try{await localGatewayApi('/v1/admin/providers/'+provider+'/credentials?environment=test','DELETE');await window.refreshLocalGatewayOwner();toast('Provider credentials removed.');}
  catch(error){toast(error.message);}
+};
+window.openAureliaGatewayAdmin=function(provider){
+ const details=document.getElementById('aurelia-gateway-admin')?.closest('details');
+ const section=document.getElementById('aurelia-gateway-admin');
+ if(details)details.open=true;
+ if(section){section.scrollIntoView({behavior:'smooth',block:'start'});if(provider)toast('Configure '+(provider==='razorpay'?'Razorpay':'Cashfree')+' test credentials in the secure Owner Console.');}
 };
 window.addEventListener('aurelia-payment-platform-ready',()=>{setTimeout(()=>window.refreshLocalGatewayOwner&&window.refreshLocalGatewayOwner(),0);});
 
