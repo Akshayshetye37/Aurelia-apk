@@ -108,7 +108,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
       provider: 'cashfree',
       orderId: order.order_id,
       orderStatus: order.order_status,
-      paymentId: matching?.cf_payment_id || null,
+      paymentId: matching?.cf_payment_id == null ? null : String(matching.cf_payment_id),
       paymentStatus: matching?.payment_status || order.order_status,
       captured: matching?.payment_status === 'SUCCESS',
       amountMinor: Math.round(Number(order.order_amount) * 100),
