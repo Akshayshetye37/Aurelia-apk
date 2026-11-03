@@ -110,10 +110,14 @@ test('LAN device enrollment, signed lease, durable acknowledgement, cursor and r
     method: 'POST', headers: ownerHeaders,
     body: JSON.stringify({ challengeId: challenge.challengeId, nonce: challenge.nonce, signature: activationSignature })
   });
-  assert.equal(activate.status, 200);
-  assert.equal((await activate.json()).status, 'ACTIVE');
+  assert.equal(activate.status, 503);
+  assert.equal((await activate.json()).error, 'device_attestation_verifier_unavailable');
 
+  // The remaining lease/ack assertions isolate the transport protocol. Promote
+  // the fixture directly in SQLite; this is deliberately NOT an enrollment test.
   db = new Database(databasePath);
+  assert.equal(db.prepare('SELECT status FROM device_registrations WHERE device_id=?').get(deviceId).status, 'PENDING');
+  db.prepare("UPDATE device_registrations SET status='ACTIVE' WHERE device_id=?").run(deviceId);
   const transactionId = 'txn_test_0001';
   const commandId = crypto.randomUUID();
   const commandPayload = {
