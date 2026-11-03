@@ -507,7 +507,12 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
             prior.paymentId !== paymentId) {
           throw new Error('webhook_event_identity_conflict');
         }
-        if (prior.providerFetchVerified === true) return { duplicate: true, verified: true };
+        // Only a completed folio post is terminal. Verified captures that have
+        // not posted must re-enter the settlement path on duplicate delivery.
+        if (prior.accountingStatus === 'POSTED' ||
+            prior.processingStatus === 'POSTED_TO_FOLIO') {
+          return { duplicate: true, verified: true, accountingPosted: true };
+        }
       }
       if (intentRef && (!currentIntent?.exists ||
           currentIntent.data().tenantId !== tenantId ||
@@ -517,15 +522,19 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
           currentIntent.data().currency !== currentOrder.data().currency)) {
         throw new Error('payment_intent_binding_mismatch');
       }
+      // Do not downgrade previously persisted capture verification evidence
+      // if a retry races a transient provider-status response.
+      const captureVerified = verified || (seen.exists && seen.data().providerFetchVerified === true);
       const evidence = {
         eventId, tenantId, provider, environment, paymentId, providerOrderId,
-        signatureVerified: true, providerFetchVerified: verified,
-        processingStatus: verified ? 'CAPTURED_VERIFIED_PENDING_ACCOUNTING' : 'UNVERIFIED_RETRYABLE',
+        signatureVerified: true, providerFetchVerified: captureVerified,
+        processingStatus: captureVerified ? 'CAPTURED_VERIFIED_PENDING_ACCOUNTING' : 'UNVERIFIED_RETRYABLE',
+        accountingStatus: seen.exists ? (seen.data().accountingStatus || 'PENDING') : 'PENDING',
         receivedAt: seen.exists ? (seen.data().receivedAt || FieldValue.serverTimestamp()) : FieldValue.serverTimestamp(),
         lastAttemptAt: FieldValue.serverTimestamp()
       };
       tx.set(inbox, evidence, { merge: true });
-      if (verified) {
+      if (captureVerified) {
         tx.set(orderRef, {
           state: 'captured_verified', paymentId, verifiedAt: FieldValue.serverTimestamp()
         }, { merge: true });
@@ -543,21 +552,30 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
           webhookVerified: true, active: false, lastVerifiedWebhookAt: FieldValue.serverTimestamp()
         }, { merge: true });
       }
-      return { duplicate: false, verified };
+      return { duplicate: false, verified: captureVerified };
     });
 
-    let accounting = 'not_verified';
-    if (outcome.verified && orderData.intentId) {
+    let accounting = outcome.accountingPosted ? 'posted' : 'not_verified';
+    if (outcome.verified && orderData.intentId && !outcome.accountingPosted) {
       try {
         await settleVerifiedPaymentIntent({ db, intentId: orderData.intentId, eventId, providerPaymentId: paymentId });
+        await inbox.set({
+          accountingStatus: 'POSTED',
+          processingStatus: 'POSTED_TO_FOLIO',
+          accountingPostedAt: FieldValue.serverTimestamp(),
+          lastAttemptAt: FieldValue.serverTimestamp()
+        }, { merge: true });
         accounting = 'posted';
       } catch (accountingError) {
-        // Keep the independently verified capture durable and retryable. Never
-        // acknowledge accounting as complete when the PMS journal did not post.
+        await inbox.set({
+          accountingStatus: 'RECONCILIATION_REQUIRED',
+          processingStatus: 'CAPTURED_VERIFIED_PENDING_ACCOUNTING',
+          lastAccountingError: String(accountingError?.message || 'settlement_failed').slice(0, 160),
+          lastAttemptAt: FieldValue.serverTimestamp()
+        }, { merge: true }).catch(() => {});
         accounting = 'pending';
       }
-    } else if (outcome.verified) {
-      // Legacy onboarding orders have no canonical payment intent/folio binding.
+    } else if (outcome.verified && !outcome.accountingPosted) {
       accounting = 'pending_legacy_order_requires_migration';
     }
     return res.status(200).json({
