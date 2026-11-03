@@ -379,6 +379,15 @@ app.post('/v1/admin/devices/:deviceId/activate', ownerAuth, requireBrowserMutati
   const device = db.prepare('SELECT public_key_spki,status,key_version FROM device_registrations WHERE device_id=?').get(deviceId);
   if (!device) return fail(res, 404, 'device_not_found');
   if (device.status !== 'PENDING') return fail(res, 409, 'device_not_pending');
+
+  // Proof-of-possession proves control of a private key, not Android hardware
+  // attestation. Do not promote a device until a trusted verifier has validated
+  // the Google attestation chain, challenge, app identity, security level and
+  // verified-boot policy. No verifier is currently configured in this runtime.
+  return fail(res, 503, 'device_attestation_verifier_unavailable');
+
+  /* Legacy proof-of-possession activation is intentionally unreachable. It is
+     retained temporarily as migration context, not as an accepted trust path. */
   const challenge = db.prepare('SELECT * FROM device_challenges WHERE challenge_id=? AND device_id=?')
     .get(challengeId, deviceId);
   const currentTime = Math.floor(Date.now() / 1000);
