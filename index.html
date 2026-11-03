@@ -3859,7 +3859,8 @@ window.refreshAureliaNativeGateway=async function(){
   }
   if(window.AureliaPaymentPlatformLoadState==='ready')render();
  };
- function localNativeGatewayHtml(){
+ /* Sandbox keys are staging-only; live provider execution and verification stay on the trusted backend. */
+function localNativeGatewayHtml(){
   const names={razorpay:'Razorpay',cashfree:'Cashfree Payments'};
   const definitions={
    razorpay:[['keyId','Sandbox Key ID','text','rzp_test_…'],['keySecret','Sandbox Key Secret','password','Write-only']],
