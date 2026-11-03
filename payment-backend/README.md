@@ -38,6 +38,14 @@ This policy is a product/architecture requirement. The PMS implements the local 
 - HTTPS-only is enforced at startup and per request. Production must set `AURELIA_HTTPS_TERMINATION=trusted-proxy` and `AURELIA_TRUST_PROXY_HOPS=1`; Express trusts exactly one TLS-terminating ingress hop, validates `req.secure`, rejects cleartext with HTTP 403 (no redirect), and emits HSTS. The ingress must overwrite `X-Forwarded-Proto`, enforce modern TLS (TLS 1.2 minimum, TLS 1.3 preferred), and be the only network path to the container. Never expose the container directly or trust client-supplied forwarded headers.
 - Firestore membership and payment authority collections must not be writable by mobile clients. Enforce this with Firestore Security Rules and IAM.
 
+## PMS sandbox checkout integration
+
+The PMS Payment Gateway settings expose the HTTPS LAN Owner Console as the operational credential-entry path. Razorpay and Cashfree test credentials are encrypted by this backend, validated against the provider API, and explicitly activated for sandbox use.
+
+Hotel folios now call the authenticated `POST /v1/payments/dispatch` endpoint and open Razorpay Checkout or Cashfree hosted checkout. The browser receives only provider public checkout data. After checkout, the PMS calls `POST /v1/payments/:transactionId/reconcile`; the backend independently queries the provider and binds an optional exact payment ID to the order, amount and INR currency.
+
+This flow is sandbox-only. A provider-confirmed capture remains `CAPTURED_PENDING_ACCOUNTING`: the current Android Pay Bridge is handshake-only and the trusted device settlement projector is not yet installed, so the backend does not claim that a PMS folio receipt was posted. Cashfree return URLs and provider webhooks need public HTTPS ingress; a private LAN hostname is not reachable by provider infrastructure.
+
 ## Local-first Android payment journal
 
 The Android APK now includes a native SQLite operation journal (`android/templates/LocalPaymentLedger.java`) and exposes it through `window.AureliaLocalPaymentLedger`. It persists idempotent payment-request metadata on-device and tracks local dispatch plus pending cloud-sync state. It intentionally cannot mark a payment captured, mark cloud sync complete, or post a PMS folio receipt. Those operations require trusted provider verification and an exactly-once PMS settlement boundary. See [Local-first hybrid payment architecture](../docs/LOCAL_FIRST_HYBRID_PAYMENT_ARCHITECTURE.md) for routing, retry, network-security and acceptance rules.
