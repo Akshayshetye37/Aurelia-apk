@@ -3424,24 +3424,37 @@ window.startAureliaGatewayCheckout=async function(i){
  }
 };
 window.reconcileAureliaGatewayPayment=async function(i,transactionId,paymentId){
- const b=bk(i);if(!b)return;
- const record=(b.gatewayPayments||[]).find(x=>x.transactionId===transactionId);if(!record){toast('Payment transaction record not found.');return;}
+ const b=bk(i);if(!b)return false;
+ const record=(b.gatewayPayments||[]).find(x=>x.transactionId===transactionId);
+ if(!record){toast('Payment transaction record not found.');return false;}
  const status=document.getElementById('aurelia-gateway-checkout-status');
- if(status)status.textContent='Checking the provider API for the authoritative payment status…';
+ const engine=window.AndroidPaymentEngine;
+ if(!engine||typeof engine.getPaymentStatus!=='function'){
+  if(status)status.textContent='Reconciliation is unavailable because the native Android payment engine is not installed. The payment remains unresolved; do not create another order.';
+  toast('Native reconciliation engine unavailable.');return false;
+ }
  try{
-  const result=await localGatewayApi('/v1/payments/'+encodeURIComponent(transactionId)+'/reconcile','POST',paymentId?{paymentId}:{});
-  record.status=result.status||'PENDING';record.providerPaymentId=paymentId||record.providerPaymentId||null;record.lastReconciledAt=new Date().toISOString();persist();
-  if(result.status==='CAPTURED_PENDING_ACCOUNTING'){
-   if(status)status.textContent=window.aureliaGatewaySettlementLabel(result.status)+'. The provider capture is verified, but no PMS credit is recorded until the trusted Android settlement projector applies the folio mutation, reads back its durable receipt and acknowledges it.';
-   toast('Provider capture verified. Folio accounting is pending trusted settlement.');
-  }else if(result.status==='FAILED'){
-   if(status)status.textContent='Provider confirms this payment failed. The folio remains unpaid.';
-   toast('Provider confirmed payment failure.');
-  }else{
-   if(status)status.textContent=window.aureliaGatewaySettlementLabel(result.status)+'. The folio remains unpaid. Reconcile again later; do not create a duplicate order.';
-   toast('Payment is still pending provider confirmation.');
+  const result=await engine.getPaymentStatus({transactionId,paymentId:paymentId||record.providerPaymentId||null});
+  if(!result||result.transactionId!==transactionId||
+     !['SAVED_ON_DEVICE','READY_FOR_ONLINE','ORDER_CREATED','AWAITING_PROVIDER',
+       'CAPTURED_UNPOSTED','POSTED_TO_FOLIO','FAILED','RECONCILIATION_REQUIRED','CONFLICT'].includes(result.status)){
+   throw new Error('Native engine returned an invalid payment status.');
   }
- }catch(error){if(status)status.textContent='Reconciliation could not complete: '+(error.message||'unknown error');toast(error.message||'Reconciliation failed.');}
+  record.status=result.status;
+  record.providerPaymentId=result.providerPaymentId||record.providerPaymentId||null;
+  record.lastReconciledAt=new Date().toISOString();persist();
+  if(status)status.textContent=result.status==='POSTED_TO_FOLIO'
+   ?'Payment is verified and posted to the PMS folio.'
+   :result.status==='CAPTURED_UNPOSTED'
+    ?'Provider capture is verified. Folio accounting is still pending; the folio remains unpaid in the PMS.'
+    :result.status==='FAILED'
+     ?'Provider confirms payment failure. The folio remains unpaid.'
+     :'Payment status: '+result.status+'. Do not create a duplicate order while this transaction is unresolved.';
+  return result;
+ }catch(error){
+  if(status)status.textContent='Reconciliation could not complete. The transaction remains unresolved: '+String(error?.message||'unknown error').slice(0,160);
+  toast('Payment reconciliation remains unresolved.');return false;
+ }
 };
 window.reconcileAureliaPendingGatewayPayments=async function(i){
  const b=bk(i);if(!b)return;const pending=(b.gatewayPayments||[]).filter(x=>!['FAILED','POSTED_TO_FOLIO'].includes(x.status));
