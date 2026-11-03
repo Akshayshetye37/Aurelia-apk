@@ -4350,7 +4350,7 @@ import {
   recoverPendingSettlements
 } from './src/payments/settlement-apply.mjs';
 
-const journal = new IndexedDbSettlementJournal();
+const journalPromise = Promise.resolve().then(() => new IndexedDbSettlementJournal());
 const project = payload => {
   if (typeof window.__aureliaProjectJournaledSettlement !== 'function') {
     throw new Error('PMS settlement projector is not ready');
@@ -4358,13 +4358,17 @@ const project = payload => {
   return window.__aureliaProjectJournaledSettlement(payload);
 };
 
-window.aureliaApplyJournaledSettlement = command =>
-  applyVerifiedSettlementCommand({ journal, command, project });
+window.aureliaApplyJournaledSettlement = async command => {
+  const journal = await journalPromise;
+  return applyVerifiedSettlementCommand({ journal, command, project });
+};
 
 // loadAll() runs in the preceding application script. Recover before the
 // DOMContentLoaded render so an interrupted verified posting is reconciled
 // before staff see the folio. This path never emits an acknowledgement.
-window.aureliaSettlementRecovery = recoverPendingSettlements({ journal, project });
+window.aureliaSettlementRecovery = journalPromise.then(journal =>
+  recoverPendingSettlements({ journal, project })
+);
 </script>
 </body>
 </html>
