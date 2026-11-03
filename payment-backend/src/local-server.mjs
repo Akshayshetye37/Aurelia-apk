@@ -344,7 +344,10 @@ app.post('/v1/admin/devices/register', ownerAuth, requireBrowserMutationOrigin, 
     writeAudit('PAYMENT_DEVICE_REGISTERED',deviceId);
   });
   try { register(); } catch { return fail(res,409,'device_registration_conflict'); }
-  return res.status(201).json({deviceId,status:'PENDING',keyAlgorithm:'ECDSA_P256_SHA256',proofOfPossessionRequired:true});
+  return res.status(201).json({
+    deviceId, status: 'PENDING', keyAlgorithm: 'ECDSA_P256_SHA256',
+    attestationVerificationRequired: true, activationBlockedUntilVerifier: true
+  });
 });
 
 // Owner-authorized challenge issuance. The nonce is returned once; only its
@@ -360,9 +363,13 @@ app.post('/v1/admin/devices/:deviceId/challenge', ownerAuth, requireBrowserMutat
   const expiresAt = Math.floor(Date.now() / 1000) + 5 * 60;
   db.prepare('INSERT INTO device_challenges(challenge_id,device_id,nonce_sha256,expires_at,created_at) VALUES(?,?,?,?,?)')
     .run(challengeId, deviceId, crypto.createHash('sha256').update(nonce).digest('hex'), expiresAt, now());
-  const signingPayload = ['AURELIA_DEVICE_ACTIVATE_V1', deviceId, String(device.key_version), challengeId, nonce, String(expiresAt)].join('\n');
-  writeAudit('PAYMENT_DEVICE_CHALLENGE_ISSUED', deviceId);
-  return res.status(201).json({ deviceId, challengeId, nonce, expiresAt, algorithm: 'ECDSA_P256_SHA256', signingPayload });
+  // The exact decoded nonce bytes are the Android Key Attestation challenge.
+  // The verifier must compare the extension challenge to these bytes.
+  writeAudit('PAYMENT_DEVICE_ATTESTATION_CHALLENGE_ISSUED', deviceId);
+  return res.status(201).json({
+    deviceId, challengeId, nonce, attestationChallenge: nonce, expiresAt,
+    algorithm: 'ECDSA_P256_SHA256', attestationRequired: true
+  });
 });
 
 // The device signs a domain-separated transcript with its Android Keystore
