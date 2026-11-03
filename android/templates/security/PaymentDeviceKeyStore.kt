@@ -27,7 +27,6 @@ class PaymentDeviceKeyStore {
         const val ALIAS = "com.aurelia.pms.payment-device.p256.v1"
         const val ATTESTED_ALIAS = "com.aurelia.pms.payment-device.attested.p256.v1"
         private const val STORE = "AndroidKeyStore"
-        private const val DOMAIN_ACTIVATE = "AURELIA_DEVICE_ACTIVATE_V1"
         private const val DOMAIN_REQUEST = "AURELIA_DEVICE_REQUEST_V1"
         private val URL_SAFE_FLAGS = Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
     }
@@ -145,23 +144,6 @@ class PaymentDeviceKeyStore {
             "Payment device key is not elliptic-curve."
         }
         return pem(publicKey.encoded)
-    }
-
-    /** Exact transcript required by /v1/admin/devices/:id/activate. */
-    @Synchronized
-    fun signActivation(
-        deviceId: String, keyVersion: Long, challengeId: String, nonce: String, expiresAt: Long
-    ): String {
-        requireOpaque(deviceId, "deviceId")
-        require(challengeId.matches(Regex("[0-9a-fA-F-]{36}"))) { "Invalid challenge ID." }
-        require(nonce.matches(Regex("[A-Za-z0-9_-]{40,64}"))) { "Invalid challenge nonce." }
-        require(keyVersion > 0 && expiresAt > System.currentTimeMillis() / 1000) {
-            "Invalid activation metadata."
-        }
-        val transcript = listOf(
-            DOMAIN_ACTIVATE, deviceId, keyVersion.toString(), challengeId, nonce, expiresAt.toString()
-        ).joinToString("\n")
-        return sign(transcript.toByteArray(Charsets.UTF_8))
     }
 
     /** bodyHash is SHA-256 of the backend-compatible canonical JSON body. */
