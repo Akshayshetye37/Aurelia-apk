@@ -129,3 +129,18 @@ test('Cashfree refund lookup rejects response order or merchant refund identity 
     orderId: 'order_123', refundId: 'merchant_ref_123', paymentId: '918812'
   }), /cashfree_refund_identity_mismatch/);
 });
+
+test('Cashfree create refund rejects a refund bound to a different captured payment', async () => {
+  const mock = mockFetch(async () => ({ status: 200, body: {
+    refund_id: 'merchant_ref_123', cf_refund_id: '1553338', cf_payment_id: 'different_payment',
+    order_id: 'order_123', refund_amount: 12.5, refund_currency: 'INR', refund_status: 'PENDING'
+  } }));
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  await assert.rejects(adapter.createRefund({
+    orderId: 'order_123', refundId: 'merchant_ref_123', amountMinor: 1250,
+    paymentId: '918812', idempotencyKey: 'refund-idem-123456'
+  }), /cashfree_refund_response_binding_mismatch/);
+});
