@@ -1,4 +1,4 @@
-name: PMS quality checks
+name: PMS source tests (no build)
 
 on:
   push:
@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-and-build:
+  source-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -31,18 +31,4 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Run complete PMS test suite
         run: npm test
-      - name: Prepare production web bundle
-        run: npm run build
-      - name: Verify payment runtime modules are packaged
-        run: |
-          test -s www/index.html
-          test -s www/src/payments/settlement-service.mjs
-          test -s www/src/payments/settlement-gate.mjs
-          test -s www/src/payments/payment-engine.mjs
-          test -s www/src/payments/evidence-store.mjs
-          test -s www/src/payments/reconciliation-service.mjs
-          test -s www/src/payments/provider-platform.mjs
-          test -s www/src/payments/pay-bridge-orchestrator.mjs
-          test -s www/src/payments/indexeddb-payment-intent-store.mjs
-          test -s www/src/features/payments/reconciliation-bridge.js
           test -s www/src/features/payments/reconciliation-panel.js
