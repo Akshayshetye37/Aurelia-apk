@@ -62,3 +62,7 @@ export function validateCancellationRefund({
     reference: ""
   };
 }
+
+if (typeof window !== "undefined") {
+  window.AureliaCancellationPolicy = Object.freeze({ validateCancellationRefund, CANCELLATION_REFUND_ACTIONS });
+}
