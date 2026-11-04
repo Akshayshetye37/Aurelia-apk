@@ -148,7 +148,10 @@ test("cancellation journal validator rejects imbalance, fractional paise and dua
 test("cancellation journal validator rejects unsafe totals and invalid references", () => {
   assert.equal(validateCancellationJournal({
     reference: "CANCEL-123",
-    lines: [{ account: "Cash", debit: Number.MAX_SAFE_INTEGER / 100, credit: 0 }]
+    lines: [
+      { account: "Cash A", debit: Number.MAX_SAFE_INTEGER / 100, credit: 0 },
+      { account: "Cash B", debit: Number.MAX_SAFE_INTEGER / 100, credit: 0 }
+    ]
   }).code, "CANCELLATION_JOURNAL_TOTAL_OUT_OF_RANGE");
   assert.equal(validateCancellationJournal({
     reference: "CANCEL-123/other",
