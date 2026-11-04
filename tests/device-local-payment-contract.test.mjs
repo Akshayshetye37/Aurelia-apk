@@ -48,7 +48,7 @@ test('native payment journal cannot mark a payment posted by status-only mutatio
 test('project documentation preserves the selected hybrid production architecture and release gates', () => {
   const spec = read('docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md');
   const readme = read('README.md');
-  assert.match(spec, /Hybrid Production Architecture \\(Architecture A\\)/);
+  assert.ok(spec.includes('Hybrid Production Architecture (Architecture A)'));
   assert.match(read('docs/HYBRID_PAYMENT_ARCHITECTURE.md'), /public HTTPS backend/i);
   assert.match(spec, /Exactly-once network delivery is not promised/);
   assert.match(readme, /NOT READY FOR LIVE PAYMENT COLLECTION/);
