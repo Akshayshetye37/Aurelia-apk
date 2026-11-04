@@ -45,10 +45,11 @@ test('native payment journal cannot mark a payment posted by status-only mutatio
   assert.doesNotMatch(androidPatcher, /setAcceptThirdPartyCookies/);
 });
 
-test('project documentation preserves the device-only deployment decision', () => {
+test('project documentation preserves the selected hybrid production architecture and release gates', () => {
   const spec = read('docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md');
   const readme = read('README.md');
-  assert.match(spec, /no required cloud service, Docker appliance, LAN payment server/i);
+  assert.match(spec, /superseded by the formally selected Hybrid Production Architecture/i);
+  assert.match(read('docs/HYBRID_PAYMENT_ARCHITECTURE.md'), /public HTTPS backend/i);
   assert.match(spec, /Exactly-once network delivery is not promised/);
   assert.match(readme, /NOT READY FOR LIVE PAYMENT COLLECTION/);
   assert.match(readme, /Razorpay[\s\S]*Cashfree[\s\S]*PayU[\s\S]*PhonePe[\s\S]*Paytm[\s\S]*JioPay[\s\S]*CCAvenue/);
