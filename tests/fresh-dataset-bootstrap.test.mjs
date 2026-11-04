@@ -70,3 +70,11 @@ test("reset cannot erase the active dataset before a current backup is verified"
   assert.match(html, /Reset blocked\. Save and verify a backup first/);
   assert.match(html, /function resetAll\(\)\{try\{\(window\.__aureliaStorage\|\|localStorage\)\.removeItem\(SK\)\}/);
 });
+
+
+test("quarantined data cannot be replaced by a blank backup or reset", () => {
+  assert.match(html, /if\(LOCAL_STATE_STATUS==='invalid'\|\|RECOVERY_CHECK_PENDING\)\{if\(!auto\)toast\('Backup blocked/);
+  assert.match(html, /async function autoBackup\(\)\{if\(LOCAL_STATE_STATUS==='invalid'\|\|RECOVERY_CHECK_PENDING/);
+  assert.match(html, /function resetAll\(\)\{if\(LOCAL_STATE_STATUS==='invalid'\|\|RECOVERY_CHECK_PENDING\|\|!S\.bk\?\.verified/);
+  assert.match(html, /existing dataset remains quarantined; no blank replacement or backup will be created/);
+});
