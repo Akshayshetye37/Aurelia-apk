@@ -1,36 +1,43 @@
-name: Aurelia payment architecture CI
+name: Aurelia payment backend CI
 
 on:
   push:
     branches:
       - feature/multi-provider-payment-backend
+    paths:
+      - "payment-backend/**"
+      - ".github/workflows/payment-backend-ci.yml"
   pull_request:
     branches:
       - feature/multi-provider-payment-backend
+    paths:
+      - "payment-backend/**"
+      - ".github/workflows/payment-backend-ci.yml"
 
 permissions:
   contents: read
 
-jobs:
-  pms-web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm install --no-audit --no-fund
-      - run: npm test
+concurrency:
+  group: aurelia-payment-backend-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
   payment-backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: payment-backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - run: npm install --no-audit --no-fund
-      - run: npm test
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: payment-backend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run payment backend contract and security tests
+        run: npm test
