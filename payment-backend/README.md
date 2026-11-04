@@ -24,7 +24,7 @@ Required environment: `GOOGLE_CLOUD_PROJECT`, `AURELIA_OWNER_ORIGINS`, `AURELIA_
 - Cloud Run shutdown handles `SIGTERM` and `SIGINT`, stops accepting new connections, drains in-flight requests for a bounded period, then closes Firestore and Secret Manager clients.
 - The production Cloud Run image runs as the unprivileged `node` user.
 - Terraform configures startup and liveness probes against `/healthz`, and a readiness probe against `/readyz` for Firestore and Secret Manager reachability. The two probe paths are non-sensitive and are the only routes exempted from forwarded-HTTPS enforcement.
-- Provider credential removal disables the latest secret versions while retaining the Secret Manager resources for safe re-provisioning. The runtime IAM role does not receive project-wide secret deletion permission.
+- Provider credential removal disables every enabled Secret Manager version while retaining the Secret Manager resources for safe re-provisioning. The runtime IAM role does not receive project-wide secret deletion permission.
 - Payment backend CI runs the backend tests, builds the Cloud Run image, verifies the image's non-root user, and validates Terraform formatting and configuration.
 
 These controls improve runtime reliability and deployment safety; they do not complete the native settlement bridge, canonical PMS ledger integration, provider merchant certification or live-payment release gates.
