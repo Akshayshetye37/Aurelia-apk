@@ -66,7 +66,7 @@ The application catalogue is descriptive. Adapter class presence, credential fie
 - Google Secret Manager integration for provider credentials.
 - Razorpay and Cashfree adapter/factory foundations and webhook verification/status lookup paths.
 - Payment-intent persistence and server-side capability reporting.
-- Raw-body webhook ingress and provider status verification logic.
+- Raw-body webhook ingress and provider status verification logic. Webhook inbox replay keys are additionally bound to the exact signed request-body SHA-256 fingerprint and tenant/provider/environment/order/payment identity; changed payloads reusing an event ID are rejected.
 - Bounded reconciliation worker prototype; the exposed reconciliation endpoint remains blocked because it writes to a separate Firestore payment-folio model, not the current PMS local folio ledger.
 - Local settlement service, IndexedDB command journal and accounting consistency diagnostic.
 - Cancellation/refund workflow blocks a refund from being marked paid without explicit settlement confirmation and an external bank/provider transaction reference. Pending refunds remain refund-payable liabilities. Journal idempotency now prevents duplicate cancellation postings and allows a pending liability to be settled only once for the exact originally recorded amount. This is an operator control, not automated bank reconciliation or proof-of-payment integration.
