@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateCancellationRefund } from "../src/bookings/cancellation-policy.mjs";
+import { validateCancellationRefund, validateCancellationJournalTransition, validateCancellationJournal } from "../src/bookings/cancellation-policy.mjs";
 
 test("pending refund is accepted as a liability without pretending cash was paid", () => {
   assert.deepEqual(
