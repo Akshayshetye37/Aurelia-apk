@@ -715,7 +715,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
           }, { merge: true });
         }
         tx.set(providerTenantDoc(tenantId, provider, environment),
-          verifiedWebhookProviderPatch(environment, FieldValue.serverTimestamp),
+          verifiedWebhookProviderPatch(environment, () => FieldValue.serverTimestamp()),
           { merge: true });
       }
       return { duplicate: false, verified: captureVerified };
