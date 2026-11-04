@@ -3691,8 +3691,12 @@ window.commitCancellationRefund=function(i){
  const validation=policy.validateCancellationRefund({paid,refund:rawRefund,action,confirmed:$('#refund-confirmed')?.checked===true,reference:$('#refund-reference')?.value||''});
  if(!validation.ok){toast(validation.message);return}
  const refund=validation.refundAmount;
- const ref='CANCEL-'+String(b.id||('GUEST-'+String(b.g||'').replace(/[^a-z0-9]/gi,'').slice(0,18)+'-'+String(b.cancelledAt||i).replace(/[^0-9]/g,'').slice(0,14)));
- const priorEntries=(S.financialLedger||[]).filter(e=>e.reference===ref&&e.bookingId=== (b.id||null));
+ if(b.id==null||String(b.id).trim()===''){toast('This booking has no stable booking ID. No cancellation journal was posted; repair the booking identity first.');return}
+ const bookingId=String(b.id).trim();
+ const ref='CANCEL-'+bookingId;
+ const referenceEntries=(S.financialLedger||[]).filter(e=>e&&e.reference===ref);
+ if(referenceEntries.some(e=>String(e.bookingId??'').trim()!==bookingId)){toast('Cancellation reference is already assigned to a different booking. No journal was posted.');return}
+ const priorEntries=referenceEntries.filter(e=>String(e.bookingId??'').trim()===bookingId);
  const priorPendingEntry=priorEntries.find(e=>e.kind==='refund_pending');
  const transition=policy.validateCancellationJournalTransition({
   priorEntries,
