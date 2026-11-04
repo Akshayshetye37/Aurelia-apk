@@ -49,7 +49,7 @@ test('project documentation preserves the selected hybrid production architectur
   const spec = read('docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md');
   const readme = read('README.md');
   assert.ok(spec.includes('Hybrid Production Architecture (Architecture A)'));
-  assert.match(read('docs/HYBRID_PAYMENT_ARCHITECTURE.md'), /public HTTPS backend/i);
+  assert.match(read('docs/HYBRID_PAYMENT_ARCHITECTURE.md'), /publicly reachable HTTPS backend/i);
   assert.match(spec, /Exactly-once network delivery is not promised/);
   assert.match(readme, /NOT READY FOR LIVE PAYMENT COLLECTION/);
   assert.match(readme, /Razorpay[\s\S]*Cashfree[\s\S]*PayU[\s\S]*PhonePe[\s\S]*Paytm[\s\S]*JioPay[\s\S]*CCAvenue/);
