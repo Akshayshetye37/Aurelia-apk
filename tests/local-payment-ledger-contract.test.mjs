@@ -40,7 +40,7 @@ test('web runtime exposes the native journal without storing credentials in brow
 
 test('hybrid architecture documents HTTPS-only LAN and server-authoritative payment status', () => {
   assert.match(docs, /publicly reachable HTTPS backend/i);
-  assert.match(paymentServer, /AURELIA_HTTPS_TERMINATION !== 'trusted-proxy'/);
+  assert.match(paymentServer, /TRUST_PROXY_HOPS !== '1'/);
   assert.match(docs, /offline gateway intent is not a payment/i);
   assert.match(docs, /Uncertain in-flight operations remain pending reconciliation/);
 });
