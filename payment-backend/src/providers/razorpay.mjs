@@ -89,19 +89,34 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
   }
 
   async createRefund(input) {
-    if (!id(input?.paymentId) || !minor(input?.amountMinor) || !id(input?.receipt)) throw new TypeError('invalid_razorpay_refund');
+    const notes = input?.notes == null ? {} : input.notes;
+    if (!id(input?.paymentId) || !minor(input?.amountMinor) || !id(input?.receipt) ||
+        !notes || typeof notes !== 'object' || Array.isArray(notes)) {
+      throw new TypeError('invalid_razorpay_refund');
+    }
     const refund = await this.request('POST', '/payments/' + encodeURIComponent(input.paymentId) + '/refund', {
-      amount: input.amountMinor, notes: { ...(input.notes || {}), aurelia_refund_reference: input.receipt }
+      amount: input.amountMinor, notes: { ...notes, aurelia_refund_reference: input.receipt }
     });
+    if (!id(refund?.id) || refund.payment_id !== input.paymentId ||
+        refund.amount !== input.amountMinor || refund.currency !== 'INR' ||
+        typeof refund.status !== 'string' || !refund.status) {
+      throw new Error('razorpay_refund_response_binding_mismatch');
+    }
     return { provider: 'razorpay', refundId: refund.id, paymentId: refund.payment_id,
       status: refund.status, amountMinor: refund.amount, currency: refund.currency };
   }
 
   async getRefundStatus(input) {
-    if (!id(input?.refundId)) throw new TypeError('invalid_razorpay_refund_id');
+    if (!id(input?.refundId) || (input.paymentId != null && !id(input.paymentId))) {
+      throw new TypeError('invalid_razorpay_refund_id');
+    }
     const refund = await this.request('GET', '/refunds/' + encodeURIComponent(input.refundId));
     if (refund.id !== input.refundId) throw new Error('razorpay_refund_identity_mismatch');
     if (input.paymentId && refund.payment_id !== input.paymentId) throw new Error('razorpay_refund_payment_mismatch');
+    if (!Number.isSafeInteger(refund.amount) || refund.amount <= 0 ||
+        refund.currency !== 'INR' || typeof refund.status !== 'string' || !refund.status) {
+      throw new Error('razorpay_refund_amount_or_currency_invalid');
+    }
     return { provider: 'razorpay', refundId: refund.id, paymentId: refund.payment_id,
       status: refund.status, amountMinor: refund.amount, currency: refund.currency };
   }
