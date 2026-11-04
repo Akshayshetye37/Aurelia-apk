@@ -216,3 +216,28 @@ The current repository therefore has a local-first PMS ledger and a separate clo
 - `src/payments/settlement-journal.mjs`: IndexedDB journal transaction and pending/applied states.
 - `src/payments/settlement-apply.mjs`: token/callback authorization requirement and pending recovery.
 - `payment-backend/src/intents/folio-settlement.mjs`: separate Firestore paymentFolios settlement prototype.
+
+
+## 10. Consistency diagnostic — implementation and operating procedure
+
+A read-only diagnostic is available at `src/payments/accounting-consistency-diagnostic.mjs`.
+
+It compares stored `booking.p` against the integer-paise sum of canonical `booking.pays[]` rows for both active `state.b` and `state.cancelled` collections. It imports the same `moneyToPaise()` helper used by `settlePayment()`. A valid integer `amountPaise` is preferred; legacy rows fall back to `a` or `amount`.
+
+The report includes:
+- number of scanned, affected and malformed bookings;
+- total absolute discrepancy in paise;
+- signed per-booking delta, declared paid total, canonical row sum, booking ID, room, status and active/cancelled collection;
+- legacy-history presence, canonical payment-row count and a largest-discrepancy shortlist.
+
+Malformed records are reported separately. Invalid values are not coerced to zero, and the function does not mutate state, call persistence, append audit events or repair financial history.
+
+### Controlled execution
+
+1. Obtain an authorized, current backup from the target PMS installation. Do not commit the backup or unredacted guest data to source control.
+2. Decode the backup using the application's supported restore/backup path in an isolated test copy. Supply the resulting state object to `diagnoseAccountingConsistency(state)`.
+3. Save the report locally. Redact guest names, contact details and other personal data before sharing or retaining it in project documentation.
+4. Review every discrepancy against source receipts, legacy records and invoice history. Classify each finding; do not infer which side is correct from the arithmetic alone.
+5. Only after staff approval and evidence review may a separate, reversible reconciliation plan be drafted. This diagnostic itself never changes balances.
+
+**Evidence status:** The implementation and fixture tests are present, but no real PMS backup or physical-device export was available during this repository change. Accordingly, no real-data affected count or discrepancy total is claimed. The diagnostic must be run against an authorized export before any accounting migration or settlement bridge work proceeds.
