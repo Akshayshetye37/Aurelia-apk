@@ -1215,7 +1215,7 @@ function testBackupServer(){if(!nat({type:'testBackupServer',requestId:'bst'+Dat
 function clearBackupServer(){if(!confirm('Remove the saved server destination and encrypted token? Local backups remain.'))return;nat({type:'clearBackupServerConfig',requestId:'bsd'+Date.now()});S.bk.serverConfigured=false;S.bk.serverUrl='';S.bk.serverRetry=false;persist();render()}
 window.aureliaNativeBackupServerResult=(id,ok,message)=>{toast(message||(ok?'Server backup settings updated':'Server backup operation failed'));if(ok&&id.startsWith('bsc')){S.bk.serverConfigured=true;S.bk.serverUrl=$('#backup-server-url')?.value||'';S.bk.verified=false;persist();autoBackup();render()}};
 window.aureliaNativeBackupServerStatusResult=(id,configured,url)=>{S.bk.serverConfigured=!!configured;S.bk.serverUrl=url||'';persist()};
-async function autoBackup(){if(LOCAL_STATE_STATUS==='invalid'||RECOVERY_CHECK_PENDING||S.au.backup===false||BKB)return;if(!(await hasBackupVault()))return;if(curHash()!==S.bk.hash||S.bk.serverRetry===true||S.bk.driveRetry===true||S.bk.sharedRetry===true)runBackup(true)}
+async function autoBackup(){if(LOCAL_STATE_STATUS==='invalid'||RECOVERY_CHECK_PENDING||S.au.backup===false||BKB)return;if(!(await hasBackupVault()))return;if(!BACKUP_VERIFIED_THIS_SESSION||curHash()!==S.bk.hash||S.bk.serverRetry===true||S.bk.driveRetry===true||S.bk.sharedRetry===true)runBackup(true)}
 async function pickDir(purpose='drive'){
  const requestId='bf'+Date.now();
  pendingBackupFolderRequestId=requestId;pendingBackupFolderPurpose=purpose;
