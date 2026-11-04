@@ -77,3 +77,13 @@ test("valid two-decimal monetary values survive floating-point representation", 
   assert.equal(validateCancellationRefund({ paid: 10.29, refund: 5.29, action: "pending" }).ok, true);
   assert.equal(validateCancellationRefund({ paid: 10.29, refund: 5.291, action: "pending" }).code, "INVALID_REFUND_PRECISION");
 });
+
+test("a malformed prior refund liability cannot be treated as settled", () => {
+  const result = validateCancellationJournalTransition({
+    priorEntries: [{ kind: "refund_pending", refundAmount: 400.001 }],
+    priorPendingRefund: 400.001,
+    action: "partial",
+    refund: 400
+  });
+  assert.equal(result.code, "CANCELLATION_JOURNAL_ALREADY_EXISTS");
+});
