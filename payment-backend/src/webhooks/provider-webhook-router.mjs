@@ -76,3 +76,30 @@ export function createProviderWebhookRouter({
   }
   return router;
 }
+
+/**
+ * Verify a webhook redelivery is byte-for-byte the same signed event under
+ * the same tenant/provider/environment/order/payment identity.
+ */
+export function assertWebhookReplayIntegrity(prior, current) {
+  if (!prior || typeof prior !== 'object' || !current || typeof current !== 'object') {
+    throw new TypeError('webhook_replay_evidence_required');
+  }
+  const fields = ['tenantId', 'provider', 'environment', 'providerOrderId', 'paymentId'];
+  if (fields.some(field => prior[field] !== current[field])) {
+    const error = new Error('webhook_event_identity_conflict');
+    error.code = 'WEBHOOK_EVENT_IDENTITY_CONFLICT';
+    throw error;
+  }
+  if (typeof prior.payloadHash !== 'string' || !/^[a-f0-9]{64}$/.test(prior.payloadHash)) {
+    const error = new Error('webhook_prior_payload_fingerprint_missing');
+    error.code = 'WEBHOOK_PRIOR_FINGERPRINT_MISSING';
+    throw error;
+  }
+  if (prior.payloadHash !== current.payloadHash) {
+    const error = new Error('webhook_event_payload_conflict');
+    error.code = 'WEBHOOK_EVENT_PAYLOAD_CONFLICT';
+    throw error;
+  }
+  return true;
+}
