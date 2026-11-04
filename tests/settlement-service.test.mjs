@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { settlePayment } from "../src/payments/settlement-service.mjs";
+import { settlePayment, assertBookingAccountingConsistent } from "../src/payments/settlement-service.mjs";
 import { PAYMENT_SAFETY_LOCKS } from "../src/payments/payment-safety-gate.mjs";
 
 function fixture() {
@@ -108,4 +108,32 @@ test("legacy direct checkout and restaurant settlement mutators are fail-closed"
   assert.equal((html.match(/function settleGo\(\)\{toast\('Legacy restaurant settlement is disabled/g)||[]).length, 2);
   assert.match(html, /function settle\(\)\{toast\('Legacy table settlement is disabled/);
   assert.match(html, /function recordRestPay\(\)/);
+});
+
+
+test("new settlement requires the stored paid total to equal canonical payment rows", () => {
+  const booking = { id: 50, p: 25, pays: [{ a: 25, amountPaise: 2500 }] };
+  assert.deepEqual(assertBookingAccountingConsistent(booking), {
+    declaredPaidPaise: 2500, rowSumPaise: 2500, historyRowCount: null
+  });
+  assert.throws(() => assertBookingAccountingConsistent({
+    id: 51, p: 25, pays: [{ a: 10, amountPaise: 1000 }]
+  }), error => error.code === "BOOKING_PAID_TOTAL_MISMATCH");
+});
+
+test("new settlement rejects mismatched major-unit and paise payment values", () => {
+  assert.throws(() => assertBookingAccountingConsistent({
+    id: 52, p: 10, pays: [{ a: 10, amountPaise: 1001 }]
+  }), /major-unit and paise values disagree/);
+});
+
+test("new settlement requires compatibility payment history to match canonical rows", () => {
+  const canonical = { a: 25, amountPaise: 2500, m: "UPI", r: "UTR-50", source: "manual", bookingId: 53, idempotencyKey: "ref:UTR-50" };
+  const history = { amount: 25, amountPaise: 2500, method: "UPI", reference: "UTR-50", source: "manual", bookingId: 53, idempotencyKey: "ref:UTR-50" };
+  assert.equal(assertBookingAccountingConsistent({
+    id: 53, p: 25, pays: [canonical], payments: [history]
+  }).historyRowCount, 1);
+  assert.throws(() => assertBookingAccountingConsistent({
+    id: 53, p: 25, pays: [canonical], payments: []
+  }), error => error.code === "BOOKING_PAYMENT_HISTORY_MISMATCH");
 });
