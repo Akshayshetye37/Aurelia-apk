@@ -88,7 +88,7 @@ export async function updatePaymentControls({
   }
 
   const controlRef = db.doc("paymentControls/" + tenantId);
-  const auditRef = db.collection("paymentControlAudit").doc();
+  const auditRef = controlRef.collection("audit").doc();
   return db.runTransaction(async tx => {
     const snap = await tx.get(controlRef);
     const current = snap.exists
