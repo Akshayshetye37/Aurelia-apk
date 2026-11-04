@@ -59,7 +59,7 @@ test('recovery code is not silently enabled by the local native security foundat
   const recovery = read('docs/PIN-BACKUP-RECOVERY-STRATEGY.md');
   assert.match(recovery, /OTP verification alone must not return a DEK/);
   assert.match(recovery, /KMS\/HSM/);
-  assert.match(readme, /not production-ready|planned\/incomplete/i);
+  assert.match(readme, /not production-ready|planned\/incomplete|recovery support is not yet production-ready/i);
 });
 
 
