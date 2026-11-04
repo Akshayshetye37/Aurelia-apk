@@ -513,7 +513,7 @@ app.delete('/v1/admin/providers/:provider/credentials', requireTenantAdmin, asyn
       providerSecretId(req.tenant.id, provider, environment, 'webhook')
     ];
     for (const id of ids) {
-      await disableLatestSecretVersion(sm, secretName(id));
+      await disableAllEnabledSecretVersions(sm, secretName(id));
     }
     await stateRef.delete();
     return res.json({ removed: true, provider, environment, active: false });
