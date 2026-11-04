@@ -27,9 +27,13 @@ function paymentAmountPaise(row, label) {
 }
 
 function historySignature(row) {
-  const amount = Number.isSafeInteger(row.amountPaise)
-    ? row.amountPaise
-    : toPaise(row.a ?? row.amount, "History payment amount", { allowZero: false });
+  let amount;
+  if (Number.isSafeInteger(row.amountPaise)) {
+    if (row.amountPaise <= 0) throw new RangeError("History payment amount must be a positive safe integer in paise");
+    amount = row.amountPaise;
+  } else {
+    amount = toPaise(row.a ?? row.amount, "History payment amount", { allowZero: false });
+  }
   return JSON.stringify([
     amount,
     keyPart(row.m ?? row.method).toLowerCase(),
