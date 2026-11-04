@@ -1357,6 +1357,7 @@ function normaliseImportedBooking(b){
 }
 async function restoreGo(){
  const d=S.rst;if(!d){toast('No JSON records are ready to import');return}
+ if(LOCAL_STATE_STATUS==='invalid'&&S.rstMode==='export'){toast('The saved dataset is quarantined. Restore a complete verified PMS backup; record imports are blocked until recovery succeeds.');return}
  if(S.rstMode==='export'){
   let roomsAdded=0,ga=0,ba=0,sk=0,expensesAdded=0,inventoryAdded=0,guestFromBooking=0,roomsCreatedForBooking=0;
   const roomKey=v=>String(v??'').trim().toLowerCase();
@@ -1422,7 +1423,7 @@ async function restoreGo(){
  const validBookings=[];
  for(const booking of restored.b){const normal=normaliseImportedBooking(booking);if(!normal){toast('Restore cancelled: a booking is invalid. Current data was not changed.');return}validBookings.push(normal)}
  restored.b=validBookings;
- const liveBefore=cloneLiveSnapshot(),oldId=id;
+ const liveBefore=cloneLiveSnapshot(),oldId=id,priorLocalStatus=LOCAL_STATE_STATUS;
  let oldPhotos;
  try{oldPhotos=await photoArchive()}catch(e){toast('Restore cancelled: could not create a rollback copy of current photos.');return}
  try{
@@ -1432,11 +1433,14 @@ async function restoreGo(){
   DK.forEach(k=>{if(restored[k]!==undefined)S[k]=restored[k]});
   ['rooms','b','g','t','exp','inv','aud'].forEach(k=>{if(!Array.isArray(S[k]))throw new Error('Restored '+k+' data is invalid')});
   id=Math.max(id,0,...S.b.map(b=>+b.id||0));
+  RESTORE_WRITE_ALLOWED=true;
   persist();
   const saved=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
   if(!saved||DK.some(k=>JSON.stringify(saved[k])!==JSON.stringify(S[k])))throw new Error('Saved application state did not pass read-back verification.');
+  LOCAL_STATE_STATUS='valid';RESTORE_WRITE_ALLOWED=false;
   S.rst=null;S.rstMode=null;location.reload();return true;
  }catch(e){
+  RESTORE_WRITE_ALLOWED=false;LOCAL_STATE_STATUS=priorLocalStatus;
   console.error('Transactional restore failed',e);
   try{if(oldPhotos)await photoRestore(oldPhotos)}catch(photoRollbackError){console.error('Photo rollback failed',photoRollbackError)}
   DK.forEach(k=>{if(liveBefore[k]!==undefined)S[k]=liveBefore[k]});id=oldId;
@@ -1446,8 +1450,8 @@ async function restoreGo(){
 }
 const useMenu=m=>{Object.keys(MENU).forEach(k=>delete MENU[k]);Object.assign(MENU,m);S.menu=MENU};
 let LOCAL_STORAGE_WARNING_SHOWN=false;
-function persist(){if(RECOVERY_CHECK_PENDING)return;try{const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);(window.__aureliaStorage||localStorage).setItem(SK,JSON.stringify(o));if(window.__aureliaStorage&&window.__aureliaStorage.memoryOnly&&!LOCAL_STORAGE_WARNING_SHOWN){LOCAL_STORAGE_WARNING_SHOWN=true;toast('WARNING: Device persistence is unavailable. Data is session-only; export a backup before closing the app.')}}catch(e){if(!S.qw){S.qw=1;toast('Device storage is unavailable or full. Changes may not be saved. Export a backup before closing the app.')}}}
-let LOCAL_STATE_STATUS='missing',RECOVERY_CHECK_PENDING=false,AUTO_RECOVERY_REQUEST_ID=null,AUTO_RECOVERY_EXCLUDED=[];
+function persist(){if(RECOVERY_CHECK_PENDING||(LOCAL_STATE_STATUS==='invalid'&&!RESTORE_WRITE_ALLOWED))return;try{const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);(window.__aureliaStorage||localStorage).setItem(SK,JSON.stringify(o));if(window.__aureliaStorage&&window.__aureliaStorage.memoryOnly&&!LOCAL_STORAGE_WARNING_SHOWN){LOCAL_STORAGE_WARNING_SHOWN=true;toast('WARNING: Device persistence is unavailable. Data is session-only; export a backup before closing the app.')}}catch(e){if(!S.qw){S.qw=1;toast('Device storage is unavailable or full. Changes may not be saved. Export a backup before closing the app.')}}}
+let RESTORE_WRITE_ALLOWED=false,LOCAL_STATE_STATUS='missing',RECOVERY_CHECK_PENDING=false,AUTO_RECOVERY_REQUEST_ID=null,AUTO_RECOVERY_EXCLUDED=[];
 function loadAll(){
  let raw=null;try{raw=(window.__aureliaStorage||localStorage).getItem(SK)}catch(e){LOCAL_STATE_STATUS='invalid';return}
  if(!raw){LOCAL_STATE_STATUS='missing';return}
@@ -1673,7 +1677,7 @@ DK.push('restaurant','tableGuests','tableRooms');
 /* start */
 loadAll();
 // New installs use a clean PMS dataset. The former v2 dataset remains untouched under LEGACY_SK; no automatic migration or financial-data merge is performed.
-if(LOCAL_STATE_STATUS!=='valid'){demoGo(true);persist();}
+if(LOCAL_STATE_STATUS==='missing'){demoGo(true);persist();}
 if(S.set&&/hari\s*om/i.test(String(S.set.name||''))){S.set.name='Aurelia PMS';S.set.addr=String(S.set.addr||'').replace(/hari\s*om(?:\s+retreat)?/ig,'Aurelia PMS');persist()}if(S.restaurant&&/hari\s*om/i.test(String(S.restaurant.name||''))){S.restaurant.name='Aurelia PMS';S.restaurant.addr=String(S.restaurant.addr||'').replace(/hari\s*om(?:\s+retreat)?/ig,'Aurelia PMS');persist()}RECOVERY_CHECK_PENDING=!!window.AureliaNative&&LOCAL_STATE_STATUS!=='valid';if(!window.AureliaNative)S.bk.folder=false;S.restaurant=Object.assign({name:'The Dining Room',phone:'',addr:'',tax:'',upi:'',cur:S.set.cur||'K',gst:0,qr:'',logo:''},S.restaurant||{});if(!S.restaurant.cur)S.restaurant.cur=S.set.cur||'K';S.tableGuests=S.tableGuests||{};S.tableRooms=S.tableRooms||{};cleanTableOrders();useMenu(S.menu);syncT();
 const _r3=render;render=function(){try{if(!S||typeof S!=='object')throw new Error('Saved app state is unavailable');['rooms','b','g','t','exp','inv','aud','cancelled','financialLedger'].forEach(k=>{if(!Array.isArray(S[k]))S[k]=[]});if(!S.set||typeof S.set!=='object')S.set={name:'Aurelia',tag:'Peace, comfort and mindful hospitality.',cur:'K'};if(!S.au||typeof S.au!=='object')S.au={};if(!S.bk||typeof S.bk!=='object')S.bk={folder:false,label:'',last:null,hash:'',hist:[]};if(!Array.isArray(types))throw new Error('Room type data is unavailable');syncT();_r3();brand();persist()}catch(err){console.error('Aurelia startup/render wrapper failed',err);const v=$('#v');if(v)v.innerHTML='<div class="card" style="margin:24px;padding:20px"><h2>Recovery needed</h2><p class="lab">A saved setting or room record prevented the screen from loading. Your existing records have not been intentionally deleted. Use Backup/Restore before clearing app data.</p><button class="btn" onclick="location.reload()">Reload app</button><button class="btn ghost" onclick="S.tab=\'more\';S.sub=\'backup\';location.reload()">Open backup after reload</button></div>'}};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)auto()});setInterval(auto,60000);
