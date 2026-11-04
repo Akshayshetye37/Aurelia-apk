@@ -3679,7 +3679,7 @@ function cancellationJournal(reference,lines,meta){
  if(!result.ok)throw Error(result.code||'Cancellation journal validation failed');
  if(!meta||typeof meta!=='object'||Array.isArray(meta))throw Error('Journal metadata is invalid');
  if(!window.crypto||typeof window.crypto.randomUUID!=='function')throw Error('Secure journal ID generation is unavailable');
- S.financialLedger.push({id:'JE-'+window.crypto.randomUUID(),reference,at:new Date().toISOString(),...meta,lines});
+ S.financialLedger.push({...meta,id:'JE-'+window.crypto.randomUUID(),reference,at:new Date().toISOString(),lines});
 }
 window.setCancellationRefund=function(i){
  const b=(S.cancelled||[])[Number(i)];if(!b){toast('Cancelled booking not found');return}
