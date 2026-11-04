@@ -92,8 +92,8 @@ test("detects duplicate payment idempotency keys within a booking", () => {
 
 test("detects a payment reference reused across two bookings", () => {
   const result = diagnoseAccountingConsistency({ b: [
-    { id: 21, p: 10, pays: [{ a: 10, r: "UTR-123" }] },
-    { id: 22, p: 10, pays: [{ a: 10, r: "utr-123" }] }
+    { id: 21, p: 10, pays: [{ a: 10, m: "UPI", r: "UTR-123" }] },
+    { id: 22, p: 10, pays: [{ a: 10, m: "UPI", r: "utr-123" }] }
   ] });
   assert.equal(result.duplicatePaymentCount, 1);
   assert.equal(result.duplicates[0].reason, "payment_reference_reused_across_bookings");
@@ -161,8 +161,8 @@ test("detects negative and excessive-precision payment rows", () => {
 
 test("checks idempotency keys and bank references independently", () => {
   const result = diagnoseAccountingConsistency({ b: [
-    { id: 31, p: 10, pays: [{ a: 10, r: "UTR-SHARED", idempotencyKey: "intent-one" }] },
-    { id: 32, p: 10, pays: [{ a: 10, r: "utr-shared", idempotencyKey: "intent-two" }] }
+    { id: 31, p: 10, pays: [{ a: 10, m: "UPI", r: "UTR-SHARED", idempotencyKey: "intent-one" }] },
+    { id: 32, p: 10, pays: [{ a: 10, m: "UPI", r: "utr-shared", idempotencyKey: "intent-two" }] }
   ] });
   assert.equal(result.duplicatePaymentCount, 1);
   assert.equal(result.duplicates[0].reason, "payment_reference_reused_across_bookings");
@@ -205,4 +205,31 @@ test("continues scanning after a malformed row without inferring an incomplete b
   assert.equal(result.malformedBookingCount, 1);
   assert.equal(result.duplicatePaymentCount, 1);
   assert.equal(result.affectedBookingCount, 0);
+});
+
+
+test("rejects payment rows whose major-unit and paise values disagree", () => {
+  const result = diagnoseAccountingConsistency({ b: [{
+    id: 37, p: 10, pays: [{ a: 10, amountPaise: 1100, m: "UPI", r: "UTR-37" }]
+  }] });
+  assert.equal(result.malformedBookingCount, 1);
+  assert.equal(result.affectedBookingCount, 0);
+});
+
+test("does not case-fold cash references like bank UTRs", () => {
+  const result = diagnoseAccountingConsistency({ b: [
+    { id: 38, p: 10, pays: [{ a: 10, m: "Cash", r: "Till-A" }] },
+    { id: 39, p: 10, pays: [{ a: 10, m: "Cash", r: "till-a" }] }
+  ] });
+  assert.equal(result.duplicatePaymentCount, 0);
+});
+
+test("does not infer refund ceiling from incomplete malformed payment rows", () => {
+  const result = diagnoseAccountingConsistency({ cancelled: [{
+    id: 40, p: 100, pays: [{ a: "invalid" }], refund_amount: 200
+  }] });
+  assert.equal(result.refundOverpaymentCount, 0);
+  assert.ok(result.malformed.some(row =>
+    row.reason === "refund_original_amount_unverifiable_due_to_invalid_payment_rows"
+  ));
 });
