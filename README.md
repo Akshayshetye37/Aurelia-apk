@@ -69,6 +69,7 @@ The application catalogue is descriptive. Adapter class presence, credential fie
 - Raw-body webhook ingress and provider status verification logic.
 - Bounded reconciliation worker prototype; the exposed reconciliation endpoint remains blocked because it writes to a separate Firestore payment-folio model, not the current PMS local folio ledger.
 - Local settlement service, IndexedDB command journal and accounting consistency diagnostic.
+- Cancellation/refund workflow now blocks a refund from being marked paid without an explicit settlement confirmation and an external bank/provider transaction reference; pending refunds remain separately represented as refund-payable liabilities. This is an operator control, not an automated bank reconciliation or proof-of-payment integration.
 - Payment API client foundation at `src/services/payment-api.mjs`; full Firebase session and application UI wiring is not yet established.
 - Native/Pay Bridge templates, device identity and attestation work exist, but the trusted production settlement issuer/projector and complete end-to-end acceptance remain outstanding.
 
