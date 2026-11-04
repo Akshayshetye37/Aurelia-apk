@@ -84,3 +84,20 @@ Test duplicate webhook, forged callback, replay, provider timeout, ambiguous ord
 - The same provider transaction/intent can produce at most one local folio credit.
 - Backend status becomes device-posted only after durable local write/read-back acknowledgement.
 - Unknown outcomes remain recoverable and are never treated as success or failure by guesswork.
+
+
+## Immediate release freeze — global kill switch active
+
+Until an authorized PMS backup has been diagnosed and reviewed with the owner, the application and backend are in accounting read-only mode. No code path may mutate folio paid totals or payment rows. This freeze intentionally includes manual payment posting; ordinary booking, stay and non-payment operations remain available. Existing recorded balances are preserved.
+
+The four independent release controls are locked:
+1. `blockAllBalanceMutations`: rejects every call to the local `settlePayment()` mutation boundary.
+2. `automaticSettlement`: remains disabled independently of provider state.
+3. `liveCollection`: remains disabled; payment intent/order creation is locked.
+4. `nativeSettlementBridge`: journaled apply and recovery are rejected.
+
+Cloud webhooks may record provider verification evidence, but must leave the capture pending with `PAYMENT_SAFETY_KILL_SWITCH`; they must never invoke a folio writer. The cloud reconciliation endpoint must also remain unavailable while this freeze is active.
+
+### Unlock prerequisites
+
+Do not remove the interlock until all of the following are evidenced: authorized real-data diagnostic report; owner-approved classification of discrepancies; tested and reversible reconciliation policy (if needed); local persistence/read-back qualification; payment intent and webhook state-machine tests; provider sandbox/refund/reconciliation acceptance; and, for the native bridge, a native trust-boundary/security review. Any unlock is a separate, explicit release decision—not an automatic consequence of tests passing.
