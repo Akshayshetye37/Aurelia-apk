@@ -364,3 +364,23 @@ test("pending refund liability must equal the booking refund amount", () => {
   assert.equal(result.cancellationFlagMismatchCount, 1);
   assert.equal(result.cancellationFlagMismatches[0].reason, "pending_refund_amount_does_not_match_liability");
 });
+
+test("paid refund cash journal must equal the booking refund amount", () => {
+  const result = diagnoseAccountingConsistency({
+    b: [],
+    cancelled: [{
+      id: 52, refund_amount: 400, cancelledStatus: "refunded",
+      refund_settlement_confirmed: true, refund_transaction_reference: "BANK-UTR-52"
+    }],
+    financialLedger: [{
+      id: "JE-52", reference: "CANCEL-52", kind: "cancellation_settlement", bookingId: 52,
+      lines: [
+        { account: "Guest Advances Liability", debit: 500, credit: 0 },
+        { account: "Cash & Bank", debit: 0, credit: 450 },
+        { account: "Cancellation Revenue", debit: 0, credit: 50 }
+      ]
+    }]
+  });
+  assert.equal(result.cancellationFlagMismatchCount, 1);
+  assert.equal(result.cancellationFlagMismatches[0].reason, "paid_refund_amount_does_not_match_journal");
+});
