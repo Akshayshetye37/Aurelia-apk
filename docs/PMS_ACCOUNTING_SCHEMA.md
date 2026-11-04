@@ -228,7 +228,11 @@ The report includes:
 - number of scanned, affected and malformed bookings;
 - total absolute discrepancy in paise;
 - signed per-booking delta, declared paid total, canonical row sum, booking ID, room, status and active/cancelled collection;
-- legacy-history presence, canonical payment-row count and a largest-discrepancy shortlist.
+- legacy-history presence, canonical payment-row count and a largest-discrepancy shortlist;
+- malformed cancellation journal identities and lines, unbalanced debit/credit totals, duplicate journal IDs and repeated pending/completed cancellation postings;
+- cancellation/refund status flags that lack matching journal entries, payable liabilities or independent refund settlement evidence.
+
+Strict CLI mode returns exit code 2 for any booking or cancellation-journal integrity finding. The diagnostic treats a null or malformed financial ledger as an integrity issue; it never repairs or posts financial data.
 
 Malformed records are reported separately. Invalid values are not coerced to zero, and the function does not mutate state, call persistence, append audit events or repair financial history.
 
