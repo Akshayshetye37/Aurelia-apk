@@ -41,7 +41,7 @@ Each update creates a durable record in `paymentControlAudit/{autoId}`. A record
   - `PATCH /v1/admin/payment-controls` — changes plus mandatory reason.
 - Authentication uses verified Firebase identity, active tenant membership, verified email, recent MFA and owner/admin role. Tenant ID is derived from membership, never from request input.
 - Financial routes read the current tenant control document for each request; no allow-decision cache is used. Missing, malformed, stale-schema or unreadable control state fails closed.
-- Test intents, test order creation and test provider activation require `test_collection`. Live routes require `live_collection` and retain a separate unconditional production-readiness rejection. Reconciliation is gated by `automatic_settlement`.
+- Test intents, test order creation and test provider activation require `test_collection`. Live routes require `live_collection` and retain a separate unconditional production-readiness rejection. The reconciliation endpoint checks `automatic_settlement` and `native_settlement_bridge` but remains unconditionally blocked because the current worker writes a separate Firestore folio journal that is not proven to be the authoritative local PMS ledger.
 - A capability cannot be enabled merely by changing its boolean. A separate owner release approval document must exist at `paymentControlApprovals/{tenantId}/controls/{control}`, be current, identify an independent approver, and contain the required evidence codes. The live control additionally requires explicit production-readiness and separate-owner-approval fields. The API cannot turn `emergency_stop` OFF; engaging it remains immediately available.
 - Webhooks can store signature/provider-status evidence. They never issue accounting authorization. Their pending record identifies whether collection, settlement controls or the still-missing trusted bridge is blocking posting.
 - `payment-backend/test/payment-controls.test.mjs` and `payment-backend/test/security-contract.test.mjs` cover control defaults, precedence, read failure, audit contract, authenticated routes and enforcement wiring. These tests have been added but have not yet been executed in this environment.
@@ -57,7 +57,7 @@ Each update creates a durable record in `paymentControlAudit/{autoId}`. A record
 
 1. Complete signed, expiring native policy lease delivery, device binding, expiry, version/rollback protection and offline fail-closed behaviour.
 2. Add native enforcement for manual posting, verified settlement, refunds and recovery before any local balance mutation.
-3. Add Firestore emulator/integration tests for owner/admin auth, unauthorized staff, audit write failure, missing/malformed state, simultaneous updates and each route's 423/503 behaviour.
+3. Add Firestore emulator/integration tests for owner/admin auth, unauthorized staff, audit write failure, missing/malformed state, simultaneous updates and each route's 423/503 behaviour. The current unit/contract tests do not replace this integration suite.
 4. Complete a full write-path audit of direct booking paid-total writes, payment row writes, import/restore, reservation advances, refunds and reversals.
 5. Build the owner-only control panel with emergency-stop confirmation and audit history.
 6. Run the complete root and backend test suites; perform sandbox and physical Android acceptance. No deployment or unlock is implied by code commits.
