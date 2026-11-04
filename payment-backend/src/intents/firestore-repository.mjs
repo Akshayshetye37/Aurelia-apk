@@ -69,6 +69,76 @@ export class FirestorePaymentRepository {
     };
   }
 
+  async recoverUnknownIntent({ tenantId, payload, intentId, providerReference }) {
+    // A timed-out create-order request is never repeated. Recovery is a read-only
+    // lookup by the deterministic merchant reference, followed by strict binding
+    // validation and a conditional state transition.
+    try {
+      const credentials = await this.secretManager.getProviderSecrets(
+        tenantId, payload.provider, payload.environment
+      );
+      const adapter = this.providerFactory(payload.provider, {
+        credentials, environment: payload.environment
+      });
+      if (typeof adapter.findOrderByReference !== 'function') return null;
+      const remote = await adapter.findOrderByReference({ reference: providerReference });
+      if (!remote?.found || typeof remote.orderId !== 'string' ||
+          remote.amountMinor !== payload.amountMinor || remote.currency !== payload.currency) return null;
+      if (payload.provider === 'razorpay' && remote.receipt !== providerReference) return null;
+      if (payload.provider === 'cashfree' &&
+          (remote.orderId !== providerReference || typeof remote.paymentSessionId !== 'string' || !remote.paymentSessionId)) return null;
+
+      const checkoutData = payload.provider === 'razorpay'
+        ? { keyId: credentials.keyId }
+        : { paymentSessionId: remote.paymentSessionId, checkoutUrl: remote.checkoutUrl || null };
+      if (payload.provider === 'razorpay' && typeof checkoutData.keyId !== 'string') return null;
+
+      const intentRef = this.db.collection('paymentIntents').doc(intentId);
+      const idemRef = this.db.collection('paymentIntentIdempotency').doc(
+        digest(tenantId + ':' + payload.provider + ':' + payload.environment + ':' + payload.idempotencyKey)
+      );
+      const lockRef = this.db.collection('paymentFolioLocks').doc(digest(tenantId + ':' + payload.folioId));
+      const orderRef = this.db.collection('paymentProviderOrders').doc(
+        digest(tenantId + ':' + payload.provider + ':' + payload.environment + ':' + remote.orderId)
+      );
+      const recoveredAt = this.clock().toISOString();
+      const committed = await this.db.runTransaction(async tx => {
+        const [intentSnap, idemSnap, lockSnap] = await Promise.all([
+          tx.get(intentRef), tx.get(idemRef), tx.get(lockRef)
+        ]);
+        if (!intentSnap.exists || !idemSnap.exists || !lockSnap.exists ||
+            intentSnap.data().tenantId !== tenantId ||
+            intentSnap.data().state !== 'UNKNOWN' ||
+            intentSnap.data().providerReference !== providerReference ||
+            idemSnap.data().intentId !== intentId || lockSnap.data().intentId !== intentId) return false;
+        const next = transitionIntent('UNKNOWN', {
+          type: 'provider_order_created', bindingVerified: true, providerOrderId: remote.orderId
+        });
+        tx.update(intentRef, {
+          state: next, providerOrderId: remote.orderId, checkoutData,
+          updatedAt: recoveredAt, version: (intentSnap.data().version || 1) + 1,
+          recoveryVerifiedAt: recoveredAt
+        });
+        tx.update(idemRef, { state: next, updatedAt: recoveredAt });
+        tx.update(lockRef, { state: next, providerOrderId: remote.orderId, updatedAt: recoveredAt });
+        tx.set(orderRef, {
+          tenantId, folioId: payload.folioId, intentId, provider: payload.provider,
+          environment: payload.environment, providerOrderId: remote.orderId,
+          amountMinor: payload.amountMinor, currency: payload.currency, createdAt: recoveredAt
+        });
+        return true;
+      });
+      if (!committed) return null;
+      return { intentId, status: 'CREATED', provider: payload.provider,
+        environment: payload.environment, providerOrderId: remote.orderId,
+        checkoutData, isDuplicate: true, recovered: true };
+    } catch {
+      // A failed or inconclusive lookup is not proof that no provider order
+      // exists. Preserve UNKNOWN and its active folio lock for later recovery.
+      return null;
+    }
+  }
+
   async initializePaymentIntent(authUid, rawPayload) {
     if (typeof authUid !== 'string' || !authUid) throw new TypeError('authenticated_uid_required');
     const payload = validatePayload(rawPayload);
@@ -103,6 +173,9 @@ export class FirestorePaymentRepository {
     const idemRef = this.db.collection('paymentIntentIdempotency').doc(keyHash);
     const lockRef = this.db.collection('paymentFolioLocks').doc(folioHash);
     const folioRef = this.db.collection('paymentFolios').doc(paymentFolioDocumentId(tenantId, payload.folioId));
+    const providerReference = payload.provider === 'razorpay'
+      ? 'aur_' + intentId.replace(/-/g, '').slice(0, 24)
+      : 'aur_' + intentId.replace(/-/g, '').slice(0, 32);
     const now = this.clock().toISOString();
 
     const reservation = await this.db.runTransaction(async tx => {
@@ -132,7 +205,7 @@ export class FirestorePaymentRepository {
         bookingId: authoritativeFolio.bookingId || null, folioRevision: authoritativeFolio.revision ?? null,
         provider: payload.provider, environment: payload.environment,
         amountMinor: payload.amountMinor, currency: payload.currency,
-        idempotencyKey: payload.idempotencyKey, fingerprint,
+        idempotencyKey: payload.idempotencyKey, fingerprint, providerReference,
         state: 'DISPATCHING', providerOrderId: null, providerPaymentId: null,
         createdAt: now, updatedAt: now, version: 1
       };
@@ -158,6 +231,13 @@ export class FirestorePaymentRepository {
       const error = new Error('folio_payment_already_in_progress'); error.statusCode = 409; throw error;
     }
     if (reservation.kind === 'DUPLICATE') {
+      if (reservation.state === 'UNKNOWN') {
+        const recovered = await this.recoverUnknownIntent({
+          tenantId, payload, intentId: reservation.intentId,
+          providerReference: (await this.db.collection('paymentIntents').doc(reservation.intentId).get()).data()?.providerReference
+        });
+        if (recovered) return recovered;
+      }
       return { intentId: reservation.intentId, status: reservation.state, provider: payload.provider, environment: payload.environment, providerOrderId: reservation.providerOrderId, checkoutData: reservation.checkoutData, isDuplicate: true };
     }
 
@@ -240,11 +320,11 @@ export class FirestorePaymentRepository {
     const providerInput = payload.provider === 'razorpay'
       ? {
           amountMinor: payload.amountMinor, currency: payload.currency,
-          receipt: 'aur_' + intentId.replace(/-/g, '').slice(0, 24),
+          receipt: providerReference,
           notes: { aurelia_intent_id: intentId, aurelia_folio_id: payload.folioId }
         }
       : {
-          orderId: 'aur_' + intentId.replace(/-/g, '').slice(0, 32),
+          orderId: providerReference,
           amountMinor: payload.amountMinor, currency: payload.currency,
           customer: payload.customer, returnUrl: payload.returnUrl,
           idempotencyKey: 'aur_' + digest(intentId).slice(0, 32)
