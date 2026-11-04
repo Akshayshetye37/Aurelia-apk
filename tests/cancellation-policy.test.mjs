@@ -1,0 +1,39 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { validateCancellationRefund } from "../src/bookings/cancellation-policy.mjs";
+
+test("pending refund is accepted as a liability without pretending cash was paid", () => {
+  assert.deepEqual(
+    validateCancellationRefund({ paid: 1000, refund: 500, action: "pending" }),
+    { ok: true, originalPaid: 1000, refundAmount: 500, retainedAmount: 500, reference: "" }
+  );
+});
+
+test("full refund requires explicit settlement confirmation and external reference", () => {
+  const missing = validateCancellationRefund({ paid: 1000, refund: 1000, action: "full" });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.code, "REFUND_SETTLEMENT_EVIDENCE_REQUIRED");
+
+  const accepted = validateCancellationRefund({
+    paid: 1000, refund: 1000, action: "full",
+    confirmed: true, reference: "BANK-UTR-123456"
+  });
+  assert.equal(accepted.ok, true);
+  assert.equal(accepted.retainedAmount, 0);
+  assert.equal(accepted.reference, "BANK-UTR-123456");
+});
+
+test("partial refund must be strictly between zero and original paid amount", () => {
+  assert.equal(validateCancellationRefund({ paid: 100, refund: 0, action: "partial", confirmed: true, reference: "REF-1234" }).code, "PARTIAL_REFUND_OUT_OF_RANGE");
+  assert.equal(validateCancellationRefund({ paid: 100, refund: 100, action: "partial", confirmed: true, reference: "REF-1234" }).code, "PARTIAL_REFUND_OUT_OF_RANGE");
+});
+
+test("no-refund and over-refund invariants are enforced", () => {
+  assert.equal(validateCancellationRefund({ paid: 100, refund: 1, action: "no_refund" }).code, "NO_REFUND_AMOUNT_MUST_BE_ZERO");
+  assert.equal(validateCancellationRefund({ paid: 100, refund: 101, action: "pending" }).code, "REFUND_EXCEEDS_CAPTURED");
+});
+
+test("refund evidence rejects control characters and malformed amounts", () => {
+  assert.equal(validateCancellationRefund({ paid: 100, refund: 50, action: "partial", confirmed: true, reference: "AB\nCD" }).code, "REFUND_SETTLEMENT_EVIDENCE_REQUIRED");
+  assert.equal(validateCancellationRefund({ paid: 100, refund: 1.001, action: "pending" }).code, "INVALID_REFUND_PRECISION");
+});
