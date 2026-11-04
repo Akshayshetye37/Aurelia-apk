@@ -36,12 +36,12 @@ export const PROVIDERS = Object.freeze({
       { key: 'salt', label: 'Salt', type: 'password', secret: true, required: true },
       { key: 'saltIndex', label: 'Salt Index (if assigned)', type: 'text', secret: false, required: false }
     ],
-    capabilities: ['hosted_checkout', 'payment_verification', 'refunds'],
-    adapterStatus: 'not_implemented'
+    capabilities: ['hosted_checkout', 'payment_verification'],
+    adapterStatus: 'prototype_incomplete_refunds_disabled'
   },
   phonepe: {
     label: 'PhonePe Payment Gateway',
-    environments: ['uat', 'production'],
+    environments: ['test', 'live'],
     credentials: [
       { key: 'clientId', label: 'Client ID', type: 'text', secret: false, required: true },
       { key: 'clientSecret', label: 'Client Secret', type: 'password', secret: true, required: true },
@@ -49,7 +49,7 @@ export const PROVIDERS = Object.freeze({
       { key: 'merchantId', label: 'Merchant ID', type: 'text', secret: false, required: true }
     ],
     capabilities: ['checkout', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'not_implemented'
+    adapterStatus: 'prototype_unqualified_disabled'
   },
   paytm: {
     label: 'Paytm Payment Gateway',
