@@ -35,12 +35,20 @@ test("Firestore read errors fail closed", async () => {
 
 test("updates atomically write previous/new values and actor/reason audit evidence", async () => {
   let stored = null, audit = null;
+  const controlRef = {
+    path: "paymentControls/tenant_123",
+    collection: name => ({
+      doc: () => ({ path: "paymentControls/tenant_123/" + name + "/audit-1" })
+    })
+  };
   const db = {
-    doc: () => ({ get: async () => ({ exists: !!stored, data: () => stored }) }),
-    collection: () => ({ doc: () => ({ id: "audit-1" }) }),
+    doc: () => controlRef,
     runTransaction: async fn => fn({
       get: async () => ({ exists: !!stored, data: () => stored }),
-      set: (ref, value) => { if (ref.id === "audit-1") audit = value; else stored = value; }
+      set: (ref, value) => {
+        if (ref.path.includes("/audit/")) audit = value;
+        else stored = value;
+      }
     })
   };
   const result = await updatePaymentControls({
@@ -54,6 +62,8 @@ test("updates atomically write previous/new values and actor/reason audit eviden
   assert.equal(audit.entries[0].to, true);
   assert.equal(audit.entries[0].actorEmail, "owner@example.test");
   assert.equal(audit.entries[0].reason, "Reviewed in test");
+  assert.equal(stored.emergency_stop, true);
+  assert.equal(stored.manual_posting, true);
 });
 
 test("updates reject invalid flags, missing reason and invalid actor", async () => {
