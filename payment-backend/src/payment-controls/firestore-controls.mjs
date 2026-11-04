@@ -30,8 +30,14 @@ const TENANT_ID = /^[A-Za-z0-9_-]{6,64}$/;
 const MAX_REASON = 500;
 
 export function normalizePaymentControls(data) {
+  const updatedAt = data?.updatedAt instanceof Date
+    ? data.updatedAt
+    : data?.updatedAt?.toDate?.();
+  const metadataValid = updatedAt instanceof Date &&
+    Number.isFinite(updatedAt.getTime()) &&
+    typeof data?.updatedBy === "string" && data.updatedBy.length > 0;
   if (!data || typeof data !== "object" || Array.isArray(data) ||
-      data.schemaVersion !== 1 ||
+      data.schemaVersion !== 1 || !metadataValid ||
       PAYMENT_CONTROL_IDS.some(key => typeof data[key] !== "boolean")) {
     return { ...PAYMENT_CONTROL_DEFAULTS, controlState: "INVALID_FAIL_CLOSED" };
   }
