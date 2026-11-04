@@ -193,3 +193,20 @@ test('provider-neutral checkout contract rejects amount or provider response bin
     checkout: { keyId: 'rzp_test_key' }, providerStatus: 'created'
   });
 });
+
+
+test('Cashfree order reference lookup returns the payment session required to resume checkout', async () => {
+  const mock = mockFetch(async () => ({ status: 200, body: {
+    order_id: 'aur_order_123', order_amount: 125, order_currency: 'INR',
+    order_status: 'ACTIVE', payment_session_id: 'session_recovered'
+  }}));
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  const result = await adapter.findOrderByReference({ reference: 'aur_order_123' });
+  assert.equal(result.found, true);
+  assert.equal(result.paymentSessionId, 'session_recovered');
+  assert.equal(result.amountMinor, 12500);
+  assert.equal(result.currency, 'INR');
+});
