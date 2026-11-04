@@ -87,3 +87,10 @@ test("a malformed prior refund liability cannot be treated as settled", () => {
   });
   assert.equal(result.code, "CANCELLATION_JOURNAL_ALREADY_EXISTS");
 });
+
+test("pending refund requires a positive payable amount", () => {
+  assert.equal(validateCancellationRefund({ paid: 100, refund: 0, action: "pending" }).code,
+    "PENDING_REFUND_MUST_BE_POSITIVE");
+  assert.equal(validateCancellationRefund({ paid: 0, refund: 0, action: "full", confirmed: true, reference: "BANK-1234" }).code,
+    "FULL_REFUND_MUST_MATCH_CAPTURE");
+});
