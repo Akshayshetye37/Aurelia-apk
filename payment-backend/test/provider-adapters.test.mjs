@@ -210,3 +210,40 @@ test('Cashfree order reference lookup returns the payment session required to re
   assert.equal(result.amountMinor, 12500);
   assert.equal(result.currency, 'INR');
 });
+
+test('Cashfree reports the exact captured payment amount rather than the order total', async () => {
+  const mock = mockFetch(async url => url.endsWith('/payments')
+    ? { status: 200, body: [{
+        cf_payment_id: 'cf_partial_123', payment_status: 'SUCCESS',
+        payment_amount: 75, payment_currency: 'INR'
+      }] }
+    : { status: 200, body: {
+        order_id: 'order_123', order_status: 'PAID',
+        order_amount: 125, order_currency: 'INR'
+      } });
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  const status = await adapter.getPaymentStatus({ orderId: 'order_123', paymentId: 'cf_partial_123' });
+  assert.equal(status.amountMinor, 7500);
+  assert.equal(status.currency, 'INR');
+  assert.equal(status.captured, true);
+});
+
+test('Cashfree never marks a payment captured when payment-level amount evidence is missing', async () => {
+  const mock = mockFetch(async url => url.endsWith('/payments')
+    ? { status: 200, body: [{ cf_payment_id: 'cf_missing_amount', payment_status: 'SUCCESS' }] }
+    : { status: 200, body: {
+        order_id: 'order_123', order_status: 'PAID',
+        order_amount: 125, order_currency: 'INR'
+      } });
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  const status = await adapter.getPaymentStatus({ orderId: 'order_123', paymentId: 'cf_missing_amount' });
+  assert.equal(status.amountMinor, null);
+  assert.equal(status.currency, null);
+  assert.equal(status.captured, false);
+});
