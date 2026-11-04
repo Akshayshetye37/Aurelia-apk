@@ -309,32 +309,8 @@ resource "google_compute_global_forwarding_rule" "payment_backend_https" {
   load_balancing_scheme = "EXTERNAL_MANAGED"
 }
 
-resource "google_compute_url_map" "http_redirect" {
-  project = var.project_id
-  name    = "${var.service_name}-http-redirect"
-
-  default_url_redirect {
-    https_redirect         = true
-    strip_query            = false
-    redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
-  }
-}
-
-resource "google_compute_target_http_proxy" "payment_backend" {
-  project = var.project_id
-  name    = "${var.service_name}-http-proxy"
-  url_map = google_compute_url_map.http_redirect.id
-}
-
-resource "google_compute_global_forwarding_rule" "payment_backend_http" {
-  project               = var.project_id
-  name                  = "${var.service_name}-http"
-  target                = google_compute_target_http_proxy.payment_backend.id
-  ip_address            = google_compute_global_address.payment_backend.address
-  port_range            = "80"
-  ip_protocol           = "TCP"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-}
+# No port-80 listener, HTTP proxy, or redirect is provisioned. The public
+# load balancer accepts client traffic only on the HTTPS forwarding rule above.
 
 output "load_balancer_ip" {
   value       = google_compute_global_address.payment_backend.address
