@@ -278,11 +278,14 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
   for (const [reference, entries] of cancellationReferences) {
     const pending = entries.filter(entry => entry.kind === "refund_pending");
     const completed = entries.filter(entry => entry.kind !== "refund_pending");
-    if (pending.length > 1 || completed.length > 1) {
+    const bookingKeys = new Set(entries.map(entry =>
+      entry.bookingId == null ? "null" : keyPart(entry.bookingId)));
+    if (bookingKeys.size > 1 || pending.length > 1 || completed.length > 1) {
       duplicateCancellationPostings.push({
         reference, pendingEntryCount: pending.length, completedEntryCount: completed.length,
-        entryIndexes: entries.map(entry => entry.entryIndex),
-        reason: pending.length > 1 ? "duplicate_refund_payable_posting" : "duplicate_cancellation_settlement"
+        bookingIds: [...bookingKeys], entryIndexes: entries.map(entry => entry.entryIndex),
+        reason: bookingKeys.size > 1 ? "cancellation_reference_reused_across_bookings"
+          : pending.length > 1 ? "duplicate_refund_payable_posting" : "duplicate_cancellation_settlement"
       });
     }
   }
