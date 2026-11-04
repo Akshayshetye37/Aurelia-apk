@@ -961,8 +961,8 @@ function setImg(el,k){shrink(el.files[0],u=>{S.set[k]=u;render()})}
 function sv(){$$('[data-s]').forEach(e=>S.set[e.dataset.s]=e.value);S.set.name=S.set.name.trim()||'Hotel';aud('Settings','Hotel identity saved');render();toast('Identity saved everywhere')}
 function demoRm(){ask('Remove demo data','Deletes the sample rooms, guests, bookings, stock, dishes, expenses and takings. Anything you added yourself stays.','Remove demo data','demoGo()')}
 function demoGo(silent=false){S.b=S.b.filter(x=>!x.demo);S.g=S.g.filter(x=>!x.demo);S.rooms=S.rooms.filter(x=>!x.demo);S.exp=S.exp.filter(x=>!x.demo);S.inv=S.inv.filter(x=>!x.demo);Object.keys(MENU).forEach(c=>{MENU[c]=MENU[c].filter(m=>!m[3]);if(!MENU[c].length)delete MENU[c]});S.t.forEach(t=>{if(t.demo){t.o=[];t.demo=0}});S.hist=[0,0,0,0,0,0];S.today=0;S.aud=[];if(!silent){aud('Demo data removed','');persist();render();toast('Demo data removed')}}
-function confirmResetAll(){if(!confirm('Erase the active PMS dataset on this device? A verified backup is required first. The separate legacy archive will be retained.'))return;if(!S.bk?.verified||S.bk.hash!==curHash()){S.tab='more';S.sub='backup';render();toast('Reset blocked. Save and verify a backup first, then repeat Reset All.');try{if(typeof runBackup==='function')runBackup(false)}catch(e){console.error('Pre-reset backup could not start',e)}return}resetAll()}
-function resetAll(){try{(window.__aureliaStorage||localStorage).removeItem(SK)}catch(e){}location.reload()}
+function confirmResetAll(){if(!confirm('Erase the active PMS dataset on this device? A verified backup is required first. The separate legacy archive will be retained.'))return;if(LOCAL_STATE_STATUS==='invalid'||RECOVERY_CHECK_PENDING){S.tab='more';S.sub='backup';render();toast('Reset blocked: recover the quarantined dataset before attempting a reset.');return}if(!S.bk?.verified||S.bk.hash!==curHash()){S.tab='more';S.sub='backup';render();toast('Reset blocked. Save and verify a backup first, then repeat Reset All.');try{if(typeof runBackup==='function')runBackup(false)}catch(e){console.error('Pre-reset backup could not start',e)}return}resetAll()}
+function resetAll(){if(LOCAL_STATE_STATUS==='invalid'||RECOVERY_CHECK_PENDING||!S.bk?.verified||S.bk.hash!==curHash()){toast('Reset blocked: restore the dataset and verify a current backup before erasing it.');return}try{(window.__aureliaStorage||localStorage).removeItem(SK)}catch(e){toast('Reset failed: '+(e.message||'storage error'));return}location.reload()}
 /* backup engine */
 const DK=['rooms','b','t','today','hist','g','exp','inv','led','aud','fe','set','terms','sig','sales','au','inN','menu','day','cancelled','tableGuests','tableRooms','restaurant','financialLedger'],LEGACY_SK='aurelia_lodge_v2',SK='aurelia_pms_v3',hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=(h*33^s.charCodeAt(i))>>>0;return h.toString(36)};let BKB=null;
 const curHash=()=>hashS(JSON.stringify(DK.map(k=>S[k])));
@@ -1173,6 +1173,7 @@ async function pruneBrowserBackups(directoryHandle,protectedHandle,maximum=3){
  if(failures.length)throw new Error('Could not remove obsolete backup file(s): '+failures.join(', '));
 }
 async function runBackup(auto){
+ if(LOCAL_STATE_STATUS==='invalid'||RECOVERY_CHECK_PENDING){if(!auto)toast('Backup blocked: the saved dataset is quarantined or recovery is still pending. Restore and verify the original dataset first.');return}
  if(BKB)return;
  if(S.bk.verified&&S.bk.hash===curHash()){if(!auto)toast('Everything is already backed up');return}
  try{
@@ -1204,7 +1205,7 @@ async function runBackup(auto){
   if(S.sub==='backup'&&!$('#sh').classList.contains('show'))render();
  }catch(e){console.error('Backup snapshot failed',e);BKB=null;toast('Backup cancelled: '+(e&&e.message?e.message:'snapshot could not be verified'))}
 }
-function bkDone(ok,err){if(ok&&BKB){S.bk.verified=true;S.bk.hash=BKB.h;S.bk.last=new Date().toISOString();S.bk.hist.unshift({n:BKB.nm,at:S.bk.last});S.bk.hist.length=Math.min(S.bk.hist.length,8);const warning=String(err||'');S.bk.serverRetry=warning.includes('Server/cloud copy failed');S.bk.driveRetry=warning.includes('Google Drive / selected SAF copy failed');S.bk.sharedRetry=warning.includes('Shared-folder export copy failed');toast(err&&String(err).startsWith('WARN:')?String(err).slice(5):'Backup saved')}else if(!ok)toast('Backup failed. '+(err||'Check the folder.'));BKB=null;persist();if(S.sub==='backup'&&!$('#sh').classList.contains('show'))render()}
+function bkDone(ok,err){if(ok&&BKB&&LOCAL_STATE_STATUS!=='invalid'&&!RECOVERY_CHECK_PENDING&&BKB.h===curHash()){S.bk.verified=true;S.bk.hash=BKB.h;S.bk.last=new Date().toISOString();S.bk.hist.unshift({n:BKB.nm,at:S.bk.last});S.bk.hist.length=Math.min(S.bk.hist.length,8);const warning=String(err||'');S.bk.serverRetry=warning.includes('Server/cloud copy failed');S.bk.driveRetry=warning.includes('Google Drive / selected SAF copy failed');S.bk.sharedRetry=warning.includes('Shared-folder export copy failed');toast(err&&String(err).startsWith('WARN:')?String(err).slice(5):'Backup saved')}else if(!ok)toast('Backup failed. '+(err||'Check the folder.'));BKB=null;persist();if(S.sub==='backup'&&!$('#sh').classList.contains('show'))render()}
 function toggleLocalAutoBackup(){S.au.backup=S.au.backup===false;persist();if(S.au.backup)autoBackup();render();toast('Automatic local backup '+(S.au.backup?'enabled':'disabled'))}
 function clearBackupFolder(purpose='drive'){if(!confirm('Disconnect this optional SAF folder? Private local backups will continue.'))return;nat({type:'clearBackupFolder',requestId:'bcf'+Date.now(),purpose});if(purpose==='shared'){S.bk.sharedFolder=false;S.bk.sharedRetry=false}else{S.bk.folder=false;S.bk.driveRetry=false}S.bk.label='';persist();render()}
 function saveBackupServer(){const endpoint=$('#backup-server-url')?.value?.trim()||'',token=$('#backup-server-token')?.value||'';if(!/^https:\/\//i.test(endpoint)||!token){toast('Enter an HTTPS endpoint and server-issued bearer token');return}if(!nat({type:'saveBackupServerConfig',requestId:'bsc'+Date.now(),endpoint,token})){toast('Secure Android backup storage is unavailable');return}$('#backup-server-token').value='';toast('Saving encrypted server credentials…')}
@@ -1214,7 +1215,7 @@ function testBackupServer(){if(!nat({type:'testBackupServer',requestId:'bst'+Dat
 function clearBackupServer(){if(!confirm('Remove the saved server destination and encrypted token? Local backups remain.'))return;nat({type:'clearBackupServerConfig',requestId:'bsd'+Date.now()});S.bk.serverConfigured=false;S.bk.serverUrl='';S.bk.serverRetry=false;persist();render()}
 window.aureliaNativeBackupServerResult=(id,ok,message)=>{toast(message||(ok?'Server backup settings updated':'Server backup operation failed'));if(ok&&id.startsWith('bsc')){S.bk.serverConfigured=true;S.bk.serverUrl=$('#backup-server-url')?.value||'';S.bk.verified=false;persist();autoBackup();render()}};
 window.aureliaNativeBackupServerStatusResult=(id,configured,url)=>{S.bk.serverConfigured=!!configured;S.bk.serverUrl=url||'';persist()};
-async function autoBackup(){if(LOCAL_STATE_STATUS==='invalid'||S.au.backup===false||BKB)return;if(!(await hasBackupVault()))return;if(curHash()!==S.bk.hash||S.bk.serverRetry===true||S.bk.driveRetry===true||S.bk.sharedRetry===true)runBackup(true)}
+async function autoBackup(){if(LOCAL_STATE_STATUS==='invalid'||RECOVERY_CHECK_PENDING||S.au.backup===false||BKB)return;if(!(await hasBackupVault()))return;if(curHash()!==S.bk.hash||S.bk.serverRetry===true||S.bk.driveRetry===true||S.bk.sharedRetry===true)runBackup(true)}
 async function pickDir(purpose='drive'){
  const requestId='bf'+Date.now();
  pendingBackupFolderRequestId=requestId;pendingBackupFolderPurpose=purpose;
@@ -1268,7 +1269,7 @@ window.aureliaNativeRecoveryBackupResult=async(id,ok,payload,fileName)=>{
  AUTO_RECOVERY_REQUEST_ID=null;
  if(!ok){
   RECOVERY_CHECK_PENDING=false;persist();
-  toast('No readable local backup was found. A new private backup will be created from the current PMS state.');
+  toast('No readable local backup was found. The existing dataset remains quarantined; no blank replacement or backup will be created. Use Restore from a verified backup file.');
   autoBackup();
   return;
  }
