@@ -188,20 +188,21 @@ The authoritative implementation order, detailed technical tasks, acceptance evi
 
 ## Verified checkpoint — 2026-11-04
 
-Active source branch: `feature/multi-provider-payment-backend`. Latest inspected commit: `65ddac54a20abfff2b2293900b210a9272fc4a84`.
+Active source branch: `feature/multi-provider-payment-backend`. Latest inspected commit: `3506e84c44ccbd25a0bd5dfbc274a716873d84d9`.
 
 The latest source changes include:
-- Cancellation journal posting now requires a stable booking ID and refuses to reuse a cancellation reference already assigned to another booking.
-- Pending refund accounting recognizes retained cancellation revenue at the initial payable posting. Subsequent settlement clears the refund payable against cash without recognizing retained revenue twice.
-- Refund settlement requires one matching pending-liability journal and exact amount agreement between the recorded liability and requested settlement.
-- The durable read-back check includes the pending-refund liability flag.
-- Cancellation amounts are constrained to safe integer paise values, with regression coverage for oversized monetary values.
-- The accounting diagnostic checks refund payable balances, retained cancellation revenue, paid refund cash postings, and cancellation reference collisions.
+- Cancellation journal posting requires a stable booking ID and refuses cancellation reference reuse across bookings.
+- Pending refund accounting recognizes retained cancellation revenue at the initial payable posting. Subsequent settlement clears the payable against cash without recognizing retained revenue a second time.
+- Refund settlement requires one matching pending-liability journal and exact agreement between the recorded liability and settlement amount.
+- The cancellation journal uses a shared validator that enforces valid cancellation references, named accounts, one-sided debit/credit lines, exact integer-paise precision, safe aggregate totals, and balanced entries. Journal IDs use cryptographically secure UUIDs.
+- Cancellation amounts are constrained to safe integer paise values. Regression tests cover invalid transitions, precision, oversized amounts, malformed journals, imbalance and aggregate overflow.
+- The accounting diagnostic checks refund payable balances, retained cancellation revenue, paid refund cash postings, duplicate journal IDs and cancellation reference collisions.
+- Payment API startup now validates exact HTTPS origins using URL parsing, rejects wildcard origins and local development origins in production, and emits additional browser security headers.
 - Razorpay refund responses are checked against requested payment identity, amount and INR currency. Cashfree refund handling validates provider response binding and idempotency.
 
-**Verification is pending for this latest source state.** GitHub Actions has accepted the source test and web-packaging workflow runs, but the observed jobs remain queued and have not returned test/build results. Earlier successful CI runs apply only to earlier commits.
+**Verification is pending for this latest source state.** GitHub Actions accepted the PMS source test/web packaging run `41864237011` and payment backend CI run `41864237023`, but both are still queued. They have not produced test or container-build results. Earlier successful CI applies only to earlier commits.
 
-No APK artifact, signed production release, production Cloud Run deployment, live merchant payment, or installed-device payment round trip is claimed. Production readiness remains blocked until the complete test/build pipeline passes and the cloud, merchant, signing, and device release checks are actually completed.
+No APK artifact, signed production release, production Cloud Run deployment, live merchant payment, or installed-device payment round trip is claimed. Live collection and settlement remain fail-closed until the integrated PMS accounting pipeline and production acceptance evidence are complete.
 
 ### Newly verified payment recovery behavior
 
