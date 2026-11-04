@@ -13,6 +13,7 @@
  */
 
 import { applyJournaledSettlement } from "./settlement-journal.mjs";
+import { assertNativeBridgeAllowed } from "./payment-safety-gate.mjs";
 
 const AUTHORIZATION_HEADER = "x-aurelia-settlement-authorization";
 
@@ -126,6 +127,7 @@ export async function applyVerifiedSettlementCommand({
   project,
   authorize
 } = {}) {
+  assertNativeBridgeAllowed();
   if (typeof project !== "function") {
     throw new TypeError("Settlement projection callback is required");
   }
@@ -147,6 +149,7 @@ export async function recoverPendingSettlements({
   project,
   authorize
 } = {}) {
+  assertNativeBridgeAllowed();
   if (!journal || typeof journal.listPending !== "function" ||
       typeof project !== "function") {
     throw new TypeError("Settlement journal and projection callback are required");
