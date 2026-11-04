@@ -2899,7 +2899,7 @@ function pmsFinanceControlHtml(){
  // Show committed double-entry journals plus cancellation activity that still needs accounting review.
  const journalBookingIds=new Set(ledger.filter(e=>e.bookingId!=null&&String(e.reference||'').startsWith('CANCEL-')).map(e=>String(e.bookingId)));
  const postedRows=ledger.slice().reverse().map(e=>'<tr><td>'+esc(String(e.at||'').slice(0,10))+'</td><td>'+esc(e.reference||e.id||'—')+'</td><td>'+esc(String(e.kind||'Journal').replace(/_/g,' '))+'</td><td class="num">'+pmsFinanceMoney((e.lines||[]).reduce((s,l)=>s+(Number(l.debit)||0),0))+'</td><td class="num">'+pmsFinanceMoney((e.lines||[]).reduce((s,l)=>s+(Number(l.credit)||0),0))+'</td></tr>').join('');
- const cancellationRows=(Array.isArray(S.cancelled)?S.cancelled:[]).map(b=>{const statusRaw=String(b.refundStatus||'').toLowerCase(),status=(b.cancelledStatus==='refunded'||statusRaw.includes('marked as completed')||statusRaw==='refunded')?'Refunded':((statusRaw.includes('pending')||b.cancelledStatus==='refund_pending')?'Refund pending':'Non-refunded'),paid=cancellationPaidAmount(b),refund=Math.max(0,Number(b.refund_amount)||0),retained=Math.max(0,paid-refund);return '<tr><td>'+esc(String(b.cancelledAt||'').slice(0,10)||'—')+'</td><td>'+esc('CANCEL-'+String(b.id||'—'))+'</td><td>'+esc('Cancelled booking · '+(b.g||'Guest')+' · Room '+(b.room||'—')+' · '+status)+'</td><td class="num">'+pmsFinanceMoney(refund)+'</td><td class="num">'+pmsFinanceMoney(retained)+'</td></tr>'}).join('');
+ const cancellationRows=(Array.isArray(S.cancelled)?S.cancelled:[]).map(b=>{const statusRaw=String(b.refundStatus||'').toLowerCase(),status=(b.cancelledStatus==='refunded'||statusRaw.includes('marked as completed')||statusRaw==='refunded')?'Refunded':((statusRaw.includes('pending')||b.cancelledStatus==='refund_pending')?'Refund pending':'Non-refunded'),paid=cancellationPaidAmount(b),refund=Math.max(0,Number(b.refund_amount)||0),retained=paid===null?null:Math.max(0,paid-refund);return '<tr><td>'+esc(String(b.cancelledAt||'').slice(0,10)||'—')+'</td><td>'+esc('CANCEL-'+String(b.id||'—'))+'</td><td>'+esc('Cancelled booking · '+(b.g||'Guest')+' · Room '+(b.room||'—')+' · '+status)+'</td><td class="num">'+(paid===null?'Needs reconciliation':pmsFinanceMoney(refund))+'</td><td class="num">'+(retained===null?'Needs reconciliation':pmsFinanceMoney(retained))+'</td></tr>'}).join('');
  const journalRows=cancellationRows+postedRows;
  return '<div class="card pms-finance-control" style="margin-top:14px"><h2>Financial control</h2><p class="lab">Calculated from recorded Aurelia PMS bookings, dining sales, expenses, inventory and committed cancellation journal entries. These are operational management figures, not audited accounts.</p><div class="chips" style="margin-top:12px"><button class="chip on" data-fin-tab="pl" onclick="showPmsFinanceTab(\'pl\')">Profit &amp; Loss</button><button class="chip" data-fin-tab="bs" onclick="showPmsFinanceTab(\'bs\')">Balance Sheet</button><button class="chip" data-fin-tab="audit" onclick="showPmsFinanceTab(\'audit\')">Cancellation Journal</button></div>'+
  '<div id="pms-fin-pl" class="pms-fin-panel"><div class="statement-container"><table class="acc-table"><thead><tr><th>Particulars</th><th class="num">Amount ('+esc(S.set.cur||'INR')+')</th></tr></thead><tbody>'+
@@ -3656,9 +3656,9 @@ window.confirmCancelBooking=function(id,refundStatus){
  const i=(S.b||[]).findIndex(function(x){return Number(x.id)===Number(id)});
  if(i===-1){toast('Booking not found');return}
  const b=S.b[i];
- const paidSnapshot=typeof cancellationPaidAmount==='function'?cancellationPaidAmount(b):Math.max(0,Number(b.p)||0);
+ const paidSnapshot=cancellationPaidAmount(b);
  S.cancelled=S.cancelled||[];
- S.cancelled.unshift({...b,original_amount_paid:paidSnapshot,paymentSnapshot:Array.isArray(b.payments)?b.payments.map(p=>({...p})):Array.isArray(b.pays)?b.pays.map(p=>({...p})):[],cancelledAt:new Date().toISOString(),cancelledStatus:refundStatus==='refund_pending'?'refund_pending':'no_refund',refundStatus:refundStatus==='refund_pending'?'Pending manual admin review':'No refund',cancelledFromStatus:b.st});
+ S.cancelled.unshift({...b,original_amount_paid:paidSnapshot,paymentSnapshot:Array.isArray(b.pays)?b.pays.map(p=>({...p})):Array.isArray(b.payments)?b.payments.map(p=>({...p})):[],cancelledAt:new Date().toISOString(),cancelledStatus:refundStatus==='refund_pending'?'refund_pending':'no_refund',refundStatus:refundStatus==='refund_pending'?'Pending manual admin review':'No refund',cancelledFromStatus:b.st});
  S.b.splice(i,1);
  if(typeof aud==='function')aud('Booking cancelled',String(b.g||'Guest')+' · Room '+String(b.room||'')+' · '+(refundStatus==='refund_pending'?'Refund pending manual admin review':'No refund'));
  if(typeof persist==='function')persist();
@@ -3668,51 +3668,66 @@ window.confirmCancelBooking=function(id,refundStatus){
 };
 SUB.cancelbookings=()=>hd('Cancelled bookings')+'<div class="card"><div class="lab">Cancelled reservations are archived here. Refunds are not automatic. Admin must manually review and update the refund status.</div><div class="list">'+((Array.isArray(S.cancelled)?S.cancelled:[]).map(function(b,i){const status=b.refundStatus||((b.cancelledStatus==='refund_pending')?'Pending manual admin review':'No refund');return '<div class="cancel-record"><div class="cancel-record-main"><b>'+esc(b.g||'Guest')+' · Room '+esc(b.room)+'</b><small>'+fd(b.in)+' – '+fd(b.out)+' · Cancelled '+esc(String(b.cancelledAt||'').slice(0,10)||'Date not recorded')+'</small><small class="refund-status">'+esc(status)+'</small></div>'+'<button class="btn sm" onclick="setCancellationRefund('+i+')">Manage refund / accounting</button>'+'</div>'}).join('')||'<div class="empty">No cancelled bookings yet.</div>')+'</div></div><button class="btn ghost" style="margin-top:12px" onclick="S.sub=null;render()">← Back to More</button>';
 S.financialLedger=Array.isArray(S.financialLedger)?S.financialLedger:[];
-function cancellationPaidAmount(b){
- const sources=[b&&b.paymentSnapshot,b&&b.payments,b&&b.pays];
- let recorded=0;
- sources.forEach(list=>{if(Array.isArray(list)){const total=list.reduce((sum,p)=>sum+Math.max(0,Number(p&& (p.a??p.amount??p.value))||0),0);if(total>recorded)recorded=total}});
- const stored=Number(b&&b.original_amount_paid),legacy=Number(b&&b.p);
- const amount=Number.isFinite(stored)&&stored>0?stored:Math.max(recorded,Number.isFinite(legacy)?legacy:0);
- return Math.max(0,Math.round(amount*100)/100);
+function cancellationPaidAmount(b){return typeof window.AureliaCancellationPaidAmount==='function'?window.AureliaCancellationPaidAmount(b):null}
+function cancellationJournal(reference,lines,meta){
+ const debit=lines.reduce((sum,line)=>sum+line.debitPaise,0),credit=lines.reduce((sum,line)=>sum+line.creditPaise,0);
+ if(!Number.isSafeInteger(debit)||!Number.isSafeInteger(credit)||debit!==credit)throw Error('Cancellation journal is not balanced in integer paise');
+ const postedLines=lines.map(line=>({...line,debit:line.debitPaise/100,credit:line.creditPaise/100}));
+ S.financialLedger.push({id:'JE-'+Date.now(),reference,at:new Date().toISOString(),...meta,lines:postedLines});
 }
-function cancellationJournal(reference,lines,meta){const dr=lines.reduce((s,x)=>s+Number(x.debit||0),0),cr=lines.reduce((s,x)=>s+Number(x.credit||0),0);if(Math.abs(dr-cr)>.009)throw Error('Journal entry is not balanced');S.financialLedger.push({id:'JE-'+Date.now(),reference,at:new Date().toISOString(),...meta,lines})}
 window.setCancellationRefund=function(i){
  const b=(S.cancelled||[])[Number(i)];if(!b){toast('Cancelled booking not found');return}
- const paid=cancellationPaidAmount(b),rf=Number(b.refund_amount)||0;
- openS('<h2 class="foil">Process financial cancellation</h2><p class="lab">'+esc(b.g||'Guest')+' · Room '+esc(b.room||'')+'</p><div class="grid g2"><div class="card"><small class="lab">Original paid</small><h3>'+esc(rk(paid))+'</h3></div><div class="card"><small class="lab">Account</small><h3>Guest advance</h3></div></div>'+
+ const paid=cancellationPaidAmount(b);if(paid===null){toast('Refund blocked: booking paid totals, payment rows and payment history do not agree. Reconcile the source records first.');return}
+ const rf=Number(b.refund_amount)||0;
+ openS('<h2 class="foil">Process financial cancellation</h2><p class="lab">'+esc(b.g||'Guest')+' · Room '+esc(b.room||'')+'</p><div class="grid g2"><div class="card"><small class="lab">Verified original paid</small><h3>'+esc(rk(paid))+'</h3></div><div class="card"><small class="lab">Account</small><h3>Guest advance</h3></div></div>'+
  '<label class="fld"><span>Refund action status</span><select id="refund-action"><option value="no_refund" '+(b.cancelledStatus==='no_refund'?'selected':'')+'>No refund / full retention</option><option value="pending" '+(b.cancelledStatus==='refund_pending'?'selected':'')+'>Pending refund</option><option value="partial" '+(b.cancelledStatus==='partially_refunded'?'selected':'')+'>Partially refunded</option><option value="full" '+(b.cancelledStatus==='refunded'?'selected':'')+'>Fully refunded</option></select></label>'+
  '<label class="fld"><span>Refund amount ('+esc(restCur())+')</span><input id="refund-value" type="number" min="0" max="'+paid+'" step=".01" value="'+rf+'" oninput="updateCancellationRetention('+paid+')"></label>'+
  '<label class="fld"><span>Retention amount</span><input id="refund-retention" readonly value="'+(paid-rf).toFixed(2)+'"></label>'+
- '<div class="grid g2"><label class="fld"><span>Refund date</span><input id="refund-date" type="date" value="'+esc(b.refund_date||new Date().toISOString().slice(0,10))+'"></label><label class="fld"><span>Payment method</span><select id="refund-method"><option value="bank">Bank transfer</option><option value="gpay">Google Pay / UPI</option><option value="pos">POS terminal</option><option value="cash">Cash</option><option value="other">Other</option></select></label></div><p class="lab">Pending refunds create a refund-payable liability, not a cash payment. Confirm actual bank/payment records before marking a refund as paid.</p><div class="row"><button class="btn ghost" onclick="closeS()">Discard</button><button class="btn" onclick="commitCancellationRefund('+Number(i)+')">Commit journal</button></div>');
+ '<div class="grid g2"><label class="fld"><span>Refund date</span><input id="refund-date" type="date" value="'+esc(b.refund_date||new Date().toISOString().slice(0,10))+'"></label><label class="fld"><span>Payment method</span><select id="refund-method"><option value="bank">Bank transfer</option><option value="gpay">Google Pay / UPI</option><option value="pos">POS terminal</option><option value="cash">Cash</option><option value="other">Other</option></select></label></div><label class="fld"><span>Actual refund transaction reference (required for paid refunds)</span><input id="refund-reference" maxlength="128" value="'+esc(b.refund_reference||'')+'" placeholder="Bank UTR / transaction reference"></label><p class="lab">A pending refund records a liability. A paid refund requires its actual bank/payment reference. If a pending refund exists, settle its full liability in one verified payment event; instalments are not enabled.</p><div class="row"><button class="btn ghost" onclick="closeS()">Discard</button><button class="btn" onclick="commitCancellationRefund('+Number(i)+')">Commit journal</button></div>');
 };
 window.updateCancellationRetention=function(paid){const v=Math.max(0,Number($('#refund-value')?.value)||0),el=$('#refund-retention');if(el)el.value=Math.max(0,paid-v).toFixed(2)};
 window.commitCancellationRefund=function(i){
  const b=(S.cancelled||[])[Number(i)];if(!b){toast('Cancelled booking not found');return}
- const paid=cancellationPaidAmount(b),action=$('#refund-action')?.value||'pending',refund=Math.round((Number($('#refund-value')?.value)||0)*100)/100,date=$('#refund-date')?.value||new Date().toISOString().slice(0,10),method=$('#refund-method')?.value||'bank';
- if(refund<0||refund>paid){toast('Refund must be between zero and original paid amount');return}
- if(action==='no_refund'&&refund!==0){toast('Set refund to zero for No refund');return}
- if(action==='full'&&Math.abs(refund-paid)>.009){toast('Full refund must equal original amount paid');return}
- if(action==='partial'&&(refund<=0||refund>=paid)){toast('Partial refund must be between zero and full amount');return}
+ const paid=cancellationPaidAmount(b);if(paid===null){toast('Refund blocked: paid representations do not agree. No journal was written.');return}
+ const action=$('#refund-action')?.value||'pending',rawRefund=String($('#refund-value')?.value??'0').trim(),refundNumber=Number(rawRefund),date=$('#refund-date')?.value||new Date().toISOString().slice(0,10),method=$('#refund-method')?.value||'bank',refundReference=String($('#refund-reference')?.value||'').trim();
+ if(!/^\\d+(?:\\.\\d{1,2})?$/.test(rawRefund)||!Number.isFinite(refundNumber)){toast('Refund amount must use valid currency precision (maximum two decimal places).');return}
+ const refundPaise=Math.round(refundNumber*100),paidPaise=Math.round(paid*100);
+ if(!Number.isSafeInteger(refundPaise)||Math.abs(refundNumber*100-refundPaise)>1e-7){toast('Refund amount must be a safe integer number of paise.');return}
+ if((action==='partial'||action==='full')&&!refundReference){toast('Enter the actual bank/payment transaction reference before marking a refund as paid.');return}
  const ref='CANCEL-'+String(b.id||('GUEST-'+String(b.g||'').replace(/[^a-z0-9]/gi,'').slice(0,18)+'-'+String(b.cancelledAt||i).replace(/[^0-9]/g,'').slice(0,14)));
- const priorEntries=(S.financialLedger||[]).filter(e=>e.reference===ref&&e.bookingId=== (b.id||null));
- if(b.cancellationAccountingCommitted&&priorEntries.length){toast('This cancellation already has journal entries. Use the existing journal instead of posting it twice.');return}
- // Repair stale legacy flags: earlier versions could save the committed flag without saving a journal entry.
- if(b.cancellationAccountingCommitted&&!priorEntries.length){b.cancellationAccountingCommitted=false;b.refundPayableJournalRecorded=false;b.retentionJournalRecorded=false}
- if(paid<=0&&(refund>0||action==='partial'||action==='full')){toast('No payment is recorded for this booking. Verify the original receipt and payment records before posting a refund.');return}
- const retained=Math.round((paid-refund)*100)/100,lines=[];
- if(action==='pending'&&refund>0){
-  lines.push({account:'Guest Advances Liability',debit:refund,credit:0},{account:'Refunds Payable Liability',debit:0,credit:refund});
- }else{
-  if(refund>0){
-   if(b.refundPayableJournalRecorded)lines.push({account:'Refunds Payable Liability',debit:refund,credit:0},{account:'Cash & Bank',debit:0,credit:refund});
-   else lines.push({account:'Guest Advances Liability',debit:refund,credit:0},{account:'Cash & Bank',debit:0,credit:refund});
-  }
-  if(retained>0)lines.push({account:'Guest Advances Liability',debit:retained,credit:0},{account:'Cancellation Revenue',debit:0,credit:retained});
- }
- if(lines.length)cancellationJournal(ref,lines,{kind:action==='pending'?'refund_pending':b.refundPayableJournalRecorded?'refund_paid_and_retention':'cancellation_settlement',bookingId:b.id||null,guest:b.g||'',originalAmountPaid:paid,refundAmount:refund,retentionAmount:retained,refundDate:date,paymentMethod:method});
- if(action==='pending'&&refund>0)b.refundPayableJournalRecorded=true;
- b.original_amount_paid=paid;b.refund_amount=refund;b.retention_fee_retained=retained;b.refund_date=date;b.payment_method=method;b.cancelledStatus=action==='no_refund'?'no_refund':action==='pending'?'refund_pending':action==='partial'?'partially_refunded':'refunded';b.refundStatus=action==='no_refund'?'No refund':action==='pending'?'Pending refund approval/payment':action==='partial'?'Partially refunded':'Refund marked as completed';b.cancellationAccountingCommitted=action!=='pending';b.refundRecordedAt=(action==='partial'||action==='full')?new Date().toISOString():null;
+ const priorEntries=(S.financialLedger||[]).filter(e=>e.reference===ref&&e.bookingId===(b.id||null));
+ if(b.cancellationAccountingCommitted&&priorEntries.length){toast('This cancellation already has committed journal entries. Do not post it twice.');return}
+ const pendingLiabilityPaise=priorEntries.reduce((total,entry)=>
+  total+(entry.lines||[]).filter(line=>line.account==='Refunds Payable Liability')
+   .reduce((sum,line)=>sum+Math.round(((Number(line.credit)||0)-(Number(line.debit)||0))*100),0),0);
+ if(b.refundPayableJournalRecorded&&pendingLiabilityPaise<=0){toast('Pending refund flag has no matching payable journal. Manual accounting review is required.');return}
+ if(refundReference&&((S.financialLedger||[]).some(entry=>String(entry.refundReference||'').trim().toUpperCase()===refundReference.toUpperCase()))){toast('This refund transaction reference is already recorded.');return}
+ let decision;
+ try{
+  decision=window.AureliaBuildCancellationJournal({
+   action,paidPaise,refundPaise,pendingLiabilityPaise
+  });
+ }catch(error){toast(error.message||'Cancellation journal validation failed. No journal was written.');return}
+ const refund=refundPaise/100,retained=decision.retainedPaise/100;
+ if(decision.pendingRecorded&&priorEntries.length){toast('A cancellation journal already exists. A second pending refund cannot be posted.');return}
+ if(decision.committed&&pendingLiabilityPaise>0&&refundReference.length<4){toast('Enter a valid refund reference of at least four characters.');return}
+ if(decision.committed&&refundPaise>0&&refundReference.length<4){toast('Enter a valid refund reference of at least four characters.');return}
+ cancellationJournal(ref,decision.lines,{
+  kind:decision.kind,bookingId:b.id||null,guest:b.g||'',originalAmountPaid:paid,
+  refundAmount:refund,retentionAmount:retained,refundDate:date,paymentMethod:method,
+  refundReference:decision.committed&&refundPaise>0?refundReference:null
+ });
+ b.original_amount_paid=paid;b.refund_amount=refund;b.retention_fee_retained=retained;
+ b.refund_date=date;b.payment_method=method;
+ b.refund_reference=decision.committed&&refundPaise>0?refundReference:null;
+ b.refund_pending_amount=decision.pendingRecorded?refund:0;
+ b.refund_paid_amount=decision.committed?refund:0;
+ b.refundPayableJournalRecorded=decision.pendingRecorded;
+ b.retentionJournalRecorded=decision.committed&&decision.retainedPaise>0;
+ b.cancelledStatus=action==='no_refund'?'no_refund':action==='pending'?'refund_pending':action==='partial'?'partially_refunded':'refunded';
+ b.refundStatus=action==='no_refund'?'No refund':action==='pending'?'Pending refund approval/payment':action==='partial'?'Partially refunded':'Refund marked as completed';
+ b.cancellationAccountingCommitted=decision.committed;
+ b.refundRecordedAt=decision.committed&&refundPaise>0?new Date().toISOString():null;
  if(typeof aud==='function')aud('Cancellation accounting committed',String(b.g||'Guest')+' · Paid '+rk(paid)+' · Refund '+rk(refund)+' · Retained '+rk(retained));
  persist();closeS();render();toast('Cancellation journal committed');
 };
@@ -4534,6 +4549,9 @@ window.aureliaSettlePayment=function(input){
 </script>
 <script type="module" id="aurelia-local-settlement-adapter">
 import { settlePayment as settleLocalPayment } from './src/payments/settlement-service.mjs';
+import { cancellationPaidAmount as resolveCancellationPaidAmount, buildCancellationJournal } from './src/payments/cancellation-accounting.mjs';
+window.AureliaCancellationPaidAmount = resolveCancellationPaidAmount;
+window.AureliaBuildCancellationJournal = buildCancellationJournal;
 window.aureliaSettlePayment = function(input) {
   // This adapter is the local/manual PMS ledger path only. A WebView caller
   // cannot turn a provider callback into an accounting approval by supplying
