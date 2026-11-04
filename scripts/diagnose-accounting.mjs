@@ -22,7 +22,10 @@ if (!input || input.startsWith("-")) {
       report.malformedBookingCount ||
       report.duplicatePaymentCount ||
       report.orphanAdvanceCount ||
-      report.refundOverpaymentCount ||\n      report.historyMismatchCount ||\n      report.missingBookingIdCount ||\n      report.duplicateBookingIdCount;
+      report.refundOverpaymentCount ||
+      report.historyMismatchCount ||
+      report.missingBookingIdCount ||
+      report.duplicateBookingIdCount;
     if (process.argv.includes("--strict") && hasFindings) process.exitCode = 2;
   } catch (error) {
     console.error("Accounting diagnostic failed:", error.message);
