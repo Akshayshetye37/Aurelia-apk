@@ -18,6 +18,17 @@ npm test
 
 Required environment: `GOOGLE_CLOUD_PROJECT`, `AURELIA_OWNER_ORIGINS`, `AURELIA_HTTPS_TERMINATION=trusted-proxy`, and `AURELIA_TRUST_PROXY_HOPS=1`. Configure the ingress to overwrite forwarded-protocol headers and make the service unreachable except through that ingress.
 
+## Runtime reliability and infrastructure controls
+
+- Express 4 route handlers and promise-returning middleware are wrapped so rejected asynchronous work reaches the final error handler. Parser failures receive bounded 4xx responses; unexpected application or infrastructure failures receive a generic 500 response without exposing internal exception details.
+- Cloud Run shutdown handles `SIGTERM` and `SIGINT`, stops accepting new connections, drains in-flight requests for a bounded period, then closes Firestore and Secret Manager clients.
+- The production Cloud Run image runs as the unprivileged `node` user.
+- Terraform configures startup and liveness probes against `/healthz`, and a readiness probe against `/readyz` for Firestore and Secret Manager reachability. The two probe paths are non-sensitive and are the only routes exempted from forwarded-HTTPS enforcement.
+- Provider credential removal disables the latest secret versions while retaining the Secret Manager resources for safe re-provisioning. The runtime IAM role does not receive project-wide secret deletion permission.
+- Payment backend CI runs the backend tests, builds the Cloud Run image, verifies the image's non-root user, and validates Terraform formatting and configuration.
+
+These controls improve runtime reliability and deployment safety; they do not complete the native settlement bridge, canonical PMS ledger integration, provider merchant certification or live-payment release gates.
+
 ## Implemented provider coverage
 
 The current cloud repository and provider factory allow only Razorpay and Cashfree. The other providers (PayU, PhonePe, Paytm, JioPay and CCAvenue) are not implemented in the cloud runtime. Do not mark them configured, validated, active or live-capable until their adapters, API contract tests, merchant sandbox/UAT and webhook/refund/reconciliation flows are complete.
