@@ -4,8 +4,8 @@
 
 | Path | Read / derived / mutation | Notes and required follow-up |
 |---|---|---|
-| `index.html` — `tt(b)`, `dueB(b)` | Derived | Main due uses stored `b.p`; must compare with payment-row sum. |
-| `index.html` — `paid(b)` | Derived | Sums `b.pays[].a`; differs from `dueB`'s paid source when drift exists. |
+| `index.html:530` — `tt(b)`, `dueB(b)` | Derived | Main due uses stored `b.p`; must compare with payment-row sum. |
+| `index.html:668` — `paid(b)` | Derived | Sums `b.pays[].a`; differs from `dueB`'s paid source when drift exists. |
 | `index.html` — invoice, folio, reports, finance exports | Read / derived | Consumers use a mix of `p`, `paid(b)`, `pays`, cancellation journals and financial ledger. Inventory each consumer in the next pass. |
 | `index.html:820–864` — `dsave()` | Workflow mutation | Creates booking; reservation advance delegates to `settlePayment` with deterministic booking-advance key; snapshots and rollback/read-back must be tested. |
 | `index.html` — manual payment handlers (around lines 650–690, 1010–1020, 3430+, 3770+) | Workflow mutation | Several UI handlers call the same settlement adapter; enumerate every handler and ensure none bypasses it. |
