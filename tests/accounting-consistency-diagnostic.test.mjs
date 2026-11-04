@@ -339,3 +339,13 @@ test("zero-value cancellations without journal lines are not falsely marked comm
   assert.equal(result.cancellationFlagMismatchCount, 0);
   assert.equal(result.malformedJournalCount, 0);
 });
+
+test("detects a cancellation reference reused across different booking identities", () => {
+  const entry = bookingId => ({
+    id: "JE-" + bookingId, reference: "CANCEL-SHARED", kind: "cancellation_settlement", bookingId,
+    lines: [{ account: "Guest Advances", debit: 10, credit: 0 }, { account: "Cancellation Revenue", debit: 0, credit: 10 }]
+  });
+  const result = diagnoseAccountingConsistency({ b: [], cancelled: [], financialLedger: [entry(49), entry(50)] });
+  assert.equal(result.duplicateCancellationPostingCount, 1);
+  assert.equal(result.duplicateCancellationPostings[0].reason, "cancellation_reference_reused_across_bookings");
+});
