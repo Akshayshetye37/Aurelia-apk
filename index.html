@@ -3690,18 +3690,18 @@ window.commitCancellationRefund=function(i){
  const b=(S.cancelled||[])[Number(i)];if(!b){toast('Cancelled booking not found');return}
  const paid=cancellationPaidAmount(b);if(paid===null){toast('Refund blocked: paid representations do not agree. No journal was written.');return}
  const action=$('#refund-action')?.value||'pending',rawRefund=String($('#refund-value')?.value??'0').trim(),refundNumber=Number(rawRefund),date=$('#refund-date')?.value||new Date().toISOString().slice(0,10),method=$('#refund-method')?.value||'bank',refundReference=String($('#refund-reference')?.value||'').trim();
- if(!/^\\d+(?:\\.\\d{1,2})?$/.test(rawRefund)||!Number.isFinite(refundNumber)){toast('Refund amount must use valid currency precision (maximum two decimal places).');return}
+ if(!/^\d+(?:\.\d{1,2})?$/.test(rawRefund)||!Number.isFinite(refundNumber)){toast('Refund amount must use valid currency precision (maximum two decimal places).');return}
  const refundPaise=Math.round(refundNumber*100),paidPaise=Math.round(paid*100);
  if(!Number.isSafeInteger(refundPaise)||Math.abs(refundNumber*100-refundPaise)>1e-7){toast('Refund amount must be a safe integer number of paise.');return}
  if((action==='partial'||action==='full')&&!refundReference){toast('Enter the actual bank/payment transaction reference before marking a refund as paid.');return}
  const ref='CANCEL-'+String(b.id||('GUEST-'+String(b.g||'').replace(/[^a-z0-9]/gi,'').slice(0,18)+'-'+String(b.cancelledAt||i).replace(/[^0-9]/g,'').slice(0,14)));
- const priorEntries=(S.financialLedger||[]).filter(e=>e.reference===ref&&e.bookingId===(b.id||null));
- if(b.cancellationAccountingCommitted&&priorEntries.length){toast('This cancellation already has committed journal entries. Do not post it twice.');return}
+ const priorEntries=(S.financialLedger||[]).filter(e=>e.reference===ref&&String(e.bookingId??'')===String(b.id??''));
+ if(b.cancellationAccountingCommitted){toast(priorEntries.length?'This cancellation already has committed journal entries. Do not post it twice.':'This cancellation is marked committed but has no journal. Manual accounting review is required.');return}
  const pendingLiabilityPaise=priorEntries.reduce((total,entry)=>
   total+(entry.lines||[]).filter(line=>line.account==='Refunds Payable Liability')
-   .reduce((sum,line)=>sum+Math.round(((Number(line.credit)||0)-(Number(line.debit)||0))*100),0),0);
+   .reduce((sum,line)=>sum+(Number.isSafeInteger(line.creditPaise)?line.creditPaise:Math.round((Number(line.credit)||0)*100))-(Number.isSafeInteger(line.debitPaise)?line.debitPaise:Math.round((Number(line.debit)||0)*100)),0),0);
  if(b.refundPayableJournalRecorded&&pendingLiabilityPaise<=0){toast('Pending refund flag has no matching payable journal. Manual accounting review is required.');return}
- if(refundReference&&((S.financialLedger||[]).some(entry=>String(entry.refundReference||'').trim().toUpperCase()===refundReference.toUpperCase()))){toast('This refund transaction reference is already recorded.');return}
+ if((action==='partial'||action==='full')&&refundReference&&((S.financialLedger||[]).some(entry=>String(entry.refundReference||'').trim().toUpperCase()===refundReference.toUpperCase()))){toast('This refund transaction reference is already recorded.');return}
  let decision;
  try{
   decision=window.AureliaBuildCancellationJournal({
