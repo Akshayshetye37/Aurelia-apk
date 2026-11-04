@@ -167,3 +167,37 @@ test('Cashfree rejects invalid refund ID and note lengths before network dispatc
   }), /invalid_cashfree_refund/);
   assert.equal(mock.calls.length, 0);
 });
+
+test('Cashfree create refund safely normalizes a single-item response array', async () => {
+  const refund = {
+    refund_id: 'merchant_ref_456', cf_refund_id: '1553444', cf_payment_id: '918812',
+    order_id: 'order_123', refund_amount: 4.25, refund_currency: 'INR', refund_status: 'PENDING'
+  };
+  const mock = mockFetch(async () => ({ status: 200, body: [refund] }));
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  const result = await adapter.createRefund({
+    orderId: 'order_123', refundId: 'merchant_ref_456', amountMinor: 4250,
+    paymentId: '918812'
+  });
+  assert.equal(result.refundId, 'merchant_ref_456');
+  assert.equal(result.providerRefundId, '1553444');
+  assert.equal(result.amountMinor, 4250);
+});
+
+test('Cashfree create refund rejects ambiguous multi-item response arrays', async () => {
+  const refund = {
+    refund_id: 'merchant_ref_456', cf_refund_id: '1553444', cf_payment_id: '918812',
+    order_id: 'order_123', refund_amount: 4.25, refund_currency: 'INR', refund_status: 'PENDING'
+  };
+  const mock = mockFetch(async () => ({ status: 200, body: [refund, refund] }));
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  await assert.rejects(adapter.createRefund({
+    orderId: 'order_123', refundId: 'merchant_ref_456', amountMinor: 4250
+  }), /cashfree_refund_response_invalid/);
+});
