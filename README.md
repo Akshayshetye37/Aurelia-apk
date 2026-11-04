@@ -73,6 +73,12 @@ The application catalogue is descriptive. Adapter class presence, credential fie
 - Payment API client foundation at `src/services/payment-api.mjs`; full Firebase session and application UI wiring is not yet established.
 - Native/Pay Bridge templates, device identity and attestation work exist, but the trusted production settlement issuer/projector and complete end-to-end acceptance remain outstanding.
 
+- Payment backend runtime hardening: Express 4 asynchronous route and middleware failures are forwarded to controlled error handling; parser errors are classified separately from internal 5xx failures without exposing exception details.
+- Cloud Run lifecycle hardening: the image runs as non-root, SIGTERM/SIGINT drain in-flight HTTP requests and close Firestore/Secret Manager clients, and Terraform defines startup, liveness and dependency-aware readiness probes.
+- Payment-intent recovery now refuses to overwrite an existing provider-order binding with a different tenant, folio, intent, provider, environment, amount or currency. Conflicting recovery evidence leaves the intent and folio lock in UNKNOWN for investigation.
+- Provider credential removal disables latest Secret Manager versions instead of deleting secret resources; the runtime IAM role no longer needs project-wide secret deletion permission.
+- Payment backend CI now checks the non-root image configuration and validates Terraform formatting and configuration in addition to backend tests and container build. Latest workflow runs for the current branch are queued; these newest changes are not yet CI-verified.
+
 ## Critical accounting boundary
 
 The current in-app PMS folio is represented by local booking objects in `S.b[]`. The checked-in source audit identifies:
