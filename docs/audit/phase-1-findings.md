@@ -46,4 +46,4 @@
 
 ## Phase 1 gate
 
-**Not complete.** Complete the remaining path inventory, add failing tests for duplicate rows / negative and non-integer amounts / orphan advances / refunds exceeding recorded payments, implement the read-only CLI, run the tests and build, and then analyze the supplied backup. Stop before Phase 2 until reviewed.
+**Not complete.** Complete the remaining repository-wide path inventory, add coverage for negative/non-integer row amounts and legacy export variants, run the expanded test suite and build, then analyze the supplied backup. Stop before Phase 2 until reviewed.
