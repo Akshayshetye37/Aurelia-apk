@@ -43,7 +43,7 @@ For production, use the Terraform deployment in `infra/terraform/` as the canoni
 
 The cloud image runs as the unprivileged `node` user. The process handles `SIGTERM`/`SIGINT` by stopping new HTTP connections, draining in-flight requests for a bounded interval, then closing Firestore and Secret Manager clients. Terraform configures separate startup, liveness and readiness probes: `/healthz` checks process responsiveness, while `/readyz` checks Firestore and Secret Manager reachability. These probe paths are intentionally non-sensitive and are the only paths exempted from the application HTTPS-forwarding check because Cloud Run probes call the container directly.
 
-Provider credential removal first disables provider use, then disables the latest Secret Manager versions. Secret resources are retained so credentials can be safely re-provisioned; the runtime IAM role therefore does not need project-wide secret deletion permission.
+Provider credential removal first disables provider use, then disables every enabled Secret Manager version. Secret resources are retained so credentials can be safely re-provisioned; the runtime IAM role therefore does not need project-wide secret deletion permission.
 
 ## Required environment
 
