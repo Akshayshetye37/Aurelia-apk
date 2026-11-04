@@ -1,122 +1,184 @@
 # Aurelia PMS
 
-Aurelia is an offline-first property-management system with a hybrid production payment architecture.
+Aurelia is an offline-first property-management system (PMS) for reservations, guests, rooms, folios and operations, with an optional hybrid payment backend.
 
-> **Payment release status: NOT READY FOR LIVE PAYMENT COLLECTION.** Live collection remains OFF until all provider, security, reconciliation, refund, accounting and operational release gates pass.
+> **Payment release status: NOT APPROVED FOR LIVE COLLECTION.** The source contains explicit fail-closed interlocks. Do not enable gateway collection, automatic settlement or local folio writes until the release gates below are completed and approved.
 
 ## Project location
 
-- **Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
-- **Working branch:** `feature/multi-provider-payment-backend`
-- **Project root:** `/`
-- **Primary application:** `index.html`
+- **Repository:** https://github.com/Akshayshetye37/Aurelia-apk
+- **Active working branch:** `feature/multi-provider-payment-backend`
+- **Project root:** repository root (`/`)
+- **Primary application entry:** `index.html`
+- **Android host:** `android/` (Capacitor)
+- **Cloud payment backend:** `payment-backend/`
+- **Application code:** `src/`
+- **Tests:** `tests/` and `payment-backend/test/`
 
-## Architecture decision
+The GitHub repository and selected branch are the source of truth. The repository is not a local filesystem path on the user's device.
 
-**Selected: Architecture A — Hybrid Production Architecture.**
+## Product architecture
 
-The Android/Capacitor app remains the offline-first PMS client. A trusted, publicly reachable HTTPS backend owns merchant credentials, provider API calls, webhook ingress, authoritative payment verification, refund processing, reconciliation and payment orchestration. Provider secrets belong in Google Secret Manager (or an equivalent managed secret store) and never in the APK or frontend.
+**Selected architecture: local-first PMS + trusted cloud payment authority.**
 
-The selected backend foundation is `payment-backend/src/server.mjs` (Firebase Admin + Firestore + Google Secret Manager). It must run behind a public HTTPS ingress so provider webhooks can reach it. The separate `payment-backend/src/local-server.mjs` SQLite/LAN runtime is development/administration only; it is not the production payment authority or public webhook receiver.
+The PMS remains usable offline for hotel operations. Its existing local booking/folio structure remains the live application's accounting model. The cloud backend is an optional, separate payment authority. It owns provider credentials, provider API calls, webhook ingress, provider-side status verification and payment-intent evidence. A trusted native bridge is required before verified cloud capture can mutate a local folio.
 
-Architecture and implementation truth are defined in:
-- [Hybrid payment architecture](docs/HYBRID_PAYMENT_ARCHITECTURE.md)
-- [Payment implementation plan](docs/PAYMENT_IMPLEMENTATION_PLAN.md)
-- [Seven-provider integration status](docs/PROVIDER_INTEGRATION_STATUS.md)
-- [Payment engine / release specification](docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md)
+```text
+Android / Capacitor PMS
+  ├─ Offline application and local booking/folio data
+  ├─ Existing guarded settlement service
+  └─ IndexedDB pending-command journal
+          │ authenticated HTTPS (not yet fully wired into UI/session)
+          ▼
+Cloud payment backend
+  ├─ Firebase identity + tenant membership checks
+  ├─ Firestore payment intent / control-plane records
+  ├─ Google Secret Manager for merchant credentials
+  ├─ Provider adapters + raw webhook verification
+  └─ Provider status evidence and reconciliation controls
+          │
+          ▼
+Trusted native authorization + local folio projector
+  NOT INSTALLED / NOT RELEASED
+```
 
-## Seven-provider scope
+The `payment-backend/src/server.mjs` Firebase Admin + Firestore + Secret Manager service is the selected cloud foundation. It requires trusted public HTTPS ingress, workload identity, exact HTTPS origins, Firestore and Secret Manager permissions. The `payment-backend/src/local-server.mjs` SQLite/LAN server is a separate development/administration runtime; it is not the public cloud payment authority and must not be used as a provider webhook ingress substitute.
 
-Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue share one Aurelia-facing API and independent provider adapters. The current backend repository contains Razorpay and Cashfree adapters only; the other five are not implemented. A provider catalogue entry or documentation link is not a functioning integration. See the integration status matrix.
+## Payment release status
 
-## Required financial lifecycle
+### Seven requested providers
+
+| Provider | Repository state | Release status |
+|---|---|---|
+| Razorpay | Adapter present and registered | Partial integration; sandbox/test checkout path only; not production-ready |
+| Cashfree | Adapter present and registered | Partial integration; sandbox/test checkout path only; not production-ready |
+| PayU | Prototype source exists, excluded from production factory | Not enabled; merchant API/refund/webhook acceptance incomplete |
+| PhonePe | Prototype source exists, excluded from production factory | Not enabled; merchant product/API/refund acceptance incomplete |
+| Paytm | Scaffold/catalogue only | Not implemented as an operational adapter |
+| JioPay | Scaffold/catalogue only | Not implemented as an operational adapter |
+| CCAvenue | Scaffold/catalogue only | Not implemented as an operational adapter |
+
+A provider's catalogue entry, documentation URL, credential form or class file is not proof of a working integration. No provider is approved for live collection.
+
+### Implemented foundations (source inspection)
+
+- Cloud backend with Firebase ID-token verification, tenant membership and role checks.
+- Owner/admin payment-control API with fail-closed defaults, transactional control audit and evidence-gated capability changes.
+- Google Secret Manager integration for provider credentials.
+- Razorpay and Cashfree adapter/factory foundations and webhook verification/status lookup paths.
+- Payment-intent persistence and server-side capability reporting.
+- Raw-body webhook ingress and provider status verification logic.
+- Bounded reconciliation worker prototype; the exposed reconciliation endpoint remains blocked because it writes to a separate Firestore payment-folio model, not the current PMS local folio ledger.
+- Local settlement service, IndexedDB command journal and accounting consistency diagnostic.
+- Payment API client foundation at `src/services/payment-api.mjs`; full Firebase session and application UI wiring is not yet established.
+- Native/Pay Bridge templates, device identity and attestation work exist, but the trusted production settlement issuer/projector and complete end-to-end acceptance remain outstanding.
+
+## Critical accounting boundary
+
+The current in-app PMS folio is represented by local booking objects in `S.b[]`. The checked-in source audit identifies:
+
+- `booking.p`: paid total used by the main due calculation.
+- `booking.pays[]`: payment detail rows used by invoice/payment display.
+- `booking.payments[]`: legacy/history mirror.
+- `state.today`: daily takings aggregate.
+
+The repository audit found inconsistencies can exist between `booking.p` and the sum of `booking.pays[]`. The cloud prototype's `paymentFolios/{hash}` and `journalEntries/{intentId}` collections are separate and are not proven to be the local PMS ledger. Do not migrate folios or post gateway captures into that model by assumption. Run the read-only accounting consistency diagnostic against an authorized, redacted production backup and have an owner review each discrepancy before proposing any financial repair.
+
+**Important current interlock:** `src/payments/payment-safety-gate.mjs` locks all local balance mutations. Therefore manual payment posting, reservation advances that post payments, automatic settlement and the native settlement bridge fail closed at this source checkpoint. This deliberate accounting read-only freeze must not be bypassed. Existing balances are preserved. The cloud payment-control plane does not override the local/native locks.
+
+## Payment lifecycle contract
 
 ```text
 CREATED -> ORDER_CREATED -> AWAITING_PROVIDER
   -> CAPTURED_UNPOSTED -> POSTED_TO_FOLIO
 
-Unknown result / timeout -> RECONCILIATION_REQUIRED
+Ambiguous result / timeout -> RECONCILIATION_REQUIRED
 Verified terminal decline -> FAILED
-Immutable evidence mismatch -> CONFLICT
+Identity / amount / currency mismatch -> CONFLICT
 ```
 
-A client callback or redirect is never payment proof. Provider status must be verified server-side. Capture is not folio settlement. Refunds are separately journaled and reconciled. All financial operations use integer minor units, stable idempotency keys and durable receipts.
+A redirect, browser callback, SDK callback or client-side flag is never proof of capture. The backend must fetch authoritative provider status and match provider, environment, merchant account, order/payment identifiers, amount and currency. Amounts use integer minor units. Ambiguous order creation or refund submission must be reconciled using the original identity before retry. A capture is not a PMS folio posting. The trusted native command must bind tenant, booking, device, intent, amount, currency, expiry and one-time identity; local durable write/read-back must complete before the backend receives acknowledgement. Refunds are separate financial events and require provider-confirmed status before any PMS reversal.
 
-## Repository layout
+## Security and operational requirements
 
-| Path | Responsibility |
-|---|---|
-| `index.html` | PMS WebView application |
-| `android/` | Capacitor Android host and native integration |
-| `src/payments/` | Frontend payment client and offline PMS behavior |
-| `src/services/payment-api.mjs` | Authenticated HTTPS client for the cloud payment API |
-| `payment-backend/src/server.mjs` | Selected hybrid backend runtime |
-| `payment-backend/src/providers/` | Provider adapters |
-| `payment-backend/src/intents/` | Payment intent and state persistence |
-| `payment-backend/src/local-server.mjs` | Separate LAN/dev runtime; not production webhook authority |
-| `docs/` | Architecture, provider status and release specifications |
-| `tests/` | Automated application and payment tests |
-
-## Payment reconciliation recovery
-
-The cloud backend exposes an authenticated, tenant-admin-only recovery sweep:
-
-```http
-POST /v1/admin/payments/reconcile
-Authorization: Bearer <recent-MFA Firebase ID token>
-Content-Type: application/json
-
-{"limit":50}
-```
-
-The request is tenant-scoped from the verified Firebase membership, accepts a maximum batch size of 50, and independently polls the configured Razorpay/Cashfree adapter before retrying idempotent settlement. It processes only intents already recorded as provider-verified captures with accounting still pending or requiring reconciliation. It never treats a browser redirect as payment proof.
-
-This worker currently targets the backend's existing `paymentFolios/{tenant+folio hash}` and `journalEntries/{intentId}` model. The repository does not yet establish that this is the deployed PMS reservation/folio schema. Do not migrate production folio records or enable live collection until the canonical PMS folio path, currency model, journal contract and optimistic-concurrency field are confirmed against the production data model.
+- Merchant API keys, salts, webhook secrets and signing material stay in managed backend secret storage. Never embed them in `index.html`, JavaScript, WebView storage, Android assets or APKs.
+- Use workload identity / Application Default Credentials; do not commit service-account key files.
+- Require HTTPS ingress, exact allowed HTTPS origins, strict request validation, least-privilege IAM, tenant/property authorization and redacted audit logs.
+- Verify webhook signatures over exact raw bytes with environment-specific secrets; deduplicate provider event identities and detect event-ID/payload conflicts.
+- Do not treat a client callback or webhook alone as authoritative payment proof.
+- Keep payment state durable and idempotent. A network timeout is an unknown outcome, not a failure.
+- Keep live collection, automated folio settlement, refund posting and native projection disabled until independently accepted.
 
 ## Build and test
 
-Root app:
+Root PMS application (Node.js 22):
+
 ```bash
 npm install
 npm test
 npm run build
 ```
 
-Selected cloud backend (after dependency installation and Google Cloud configuration):
+Cloud payment backend (Node.js 22):
+
 ```bash
 cd payment-backend
 npm install
-npm run start:cloud
 npm test
+npm run start:cloud
 ```
 
-The cloud runtime requires a Google Cloud project, Firestore, Secret Manager, workload identity / Application Default Credentials, public HTTPS ingress and exact allowed HTTPS origins. Do not create or deploy cloud infrastructure without explicit owner configuration and approval. Do not commit credentials or service-account keys.
+The cloud server refuses startup without its required project, trusted-proxy/HTTPS and exact HTTPS-origin configuration. Configure Google Cloud project, Firestore, Secret Manager, workload identity and ingress separately. Do not provision or deploy infrastructure without explicit owner configuration and approval.
 
-The local development runtime remains separate:
+Local LAN/development backend (not production payment authority):
+
 ```bash
 cd payment-backend
 npm start
 ```
 
-A passing unit test is not merchant sandbox certification, Android physical-device acceptance or approval for live payment collection.
+A successful CI workflow proves only the checks executed by that workflow on the referenced commit. It does not prove cloud deployment, merchant account approval, provider sandbox certification, production webhook reachability, device storage durability or physical Android acceptance.
 
+## Repository map
 
-## Central payment control plane — ACTIVE, FAIL-CLOSED
+| Path | Purpose |
+|---|---|
+| `index.html` | Main PMS WebView application |
+| `android/` | Capacitor Android project and native integration |
+| `src/` | PMS application modules |
+| `src/payments/settlement-service.mjs` | Guarded local folio settlement boundary |
+| `src/payments/payment-safety-gate.mjs` | Global local payment/accounting interlocks |
+| `src/payments/settlement-journal.mjs` | IndexedDB pending settlement journal |
+| `src/services/payment-api.mjs` | Authenticated cloud payment API client foundation |
+| `payment-backend/src/server.mjs` | Selected cloud payment backend |
+| `payment-backend/src/providers/` | Provider adapters, registry and scaffolds |
+| `payment-backend/src/workers/` | Reconciliation worker prototype |
+| `payment-backend/firestore.rules` | Payment backend Firestore access rules (deployment/merge must be reviewed) |
+| `payment-backend/infra/terraform/` | Infrastructure definitions; not deployed by this documentation |
+| `docs/PMS_ACCOUNTING_SCHEMA.md` | Source-based local accounting schema audit |
+| `docs/IMPLEMENTATION_STRATEGY.md` | Dependency-ordered delivery strategy and release freeze |
+| `docs/HYBRID_PAYMENT_ARCHITECTURE.md` | Architecture decision and security boundaries |
+| `docs/PAYMENT_IMPLEMENTATION_PLAN.md` | Workstream status and next actions |
+| `docs/PROVIDER_INTEGRATION_STATUS.md` | Seven-provider integration matrix |
+| `docs/PAYMENT-READINESS-CHECKLIST.md` | Native/payment release checklist |
+| `docs/CENTRAL_PAYMENT_CONTROL_PLANE.md` | Cloud control plane and outstanding native boundary |
+| `tests/` | PMS automated tests |
+| `payment-backend/test/` | Backend automated tests |
 
-The cloud backend now has a tenant-scoped Firestore control plane. Defaults are `emergency_stop=true`; all six capability flags are false. The old duplicate hard-coded cloud kill switch has been removed and backend financial routes now read the tenant control document on each request.
+## Remaining work — ordered blockers
 
-Owner/admin API (verified email, recent MFA and active tenant membership required):
+1. **Accounting diagnostics and release decision:** run `diagnoseAccountingConsistency(state)` against an authorized production backup; review every discrepancy and approve a safe, reversible policy. Do not alter historic values based only on arithmetic.
+2. **Restore intended PMS operations:** the present global local accounting freeze blocks manual folio posting and reservation advance payments. Remove or narrow it only after the real-data review and a separate owner-approved release decision; retain independent automatic/live/native locks.
+3. **Canonical settlement bridge:** implement and security-review a trusted native authorization issuer, verifier, projector and acknowledgement/recovery flow that updates the existing local PMS ledger exactly once.
+4. **Cloud intent/accounting convergence:** replace or isolate the unrelated `paymentFolios` prototype; implement a durable inbox/outbox and reconciliation contract that converges on the approved local-ledger command model.
+5. **Reference provider completion:** complete Razorpay and Cashfree order/status/webhook/refund/refund-status lifecycle and pass merchant sandbox/UAT with duplicate, replay, timeout and recovery tests.
+6. **Mobile integration:** wire the API client to the actual Firebase authentication/session lifecycle, owner configuration and capability-driven payment UI; test process death and offline recovery.
+7. **Provider expansion:** implement PayU, PhonePe, Paytm, JioPay and CCAvenue independently against the exact merchant product/API version and official contract. Do not expose a provider as working until its full lifecycle passes.
+8. **Security and operations:** validate merged Firestore rules in the Firebase emulator, least-privilege IAM, HTTPS/webhook ingress, backup/restore, monitoring, alerting, audit retention and incident/revocation runbooks.
+9. **Production acceptance:** complete Android physical-device tests (including native key/attestation path), provider certification, security review and signed release approvals per provider/environment.
 
-- `GET /v1/admin/payment-controls` — flags and latest audit records.
-- `PATCH /v1/admin/payment-controls` — explicit boolean changes and mandatory reason.
+## Verified checkpoint — 2026-11-04
 
-Every change writes the control document and its audit record in one Firestore transaction. Missing, malformed or unreadable state blocks financial operations. A capability cannot be enabled without a separate, current owner release-approval record with the required evidence. The API can always engage the emergency stop, but cannot disengage it.
+The branch's latest inspected commit was `d15fe5c174308e443358ea373066fefcaa4d4dc6`. GitHub Actions showed successful runs for that commit for PMS quality checks, payment architecture CI, Android debug build validation and APK build/verification. This is CI evidence only; no cloud deployment, production payment activation or physical merchant transaction is claimed.
 
-Test collection requires its dedicated flag. Live collection has a separate unconditional production-readiness block and remains unavailable. Provider webhooks may record signed and provider-fetched capture evidence but never issue accounting authorization or post to the PMS ledger. The reconciliation endpoint is also hard-blocked: its existing worker targets a separate Firestore folio journal that is not proven to be the authoritative local PMS ledger.
-
-**Local PMS settlement remains hard-locked.** The cloud control plane is not trusted by the WebView and does not unlock offline manual posting. A signed, short-lived policy lease and trusted native enforcement are still required. There is no owner control-panel UI yet; the authenticated cloud API is the backend control surface. The separate LAN appliance is not yet wired to consume a signed cloud policy lease, so its owner/device-command API must not be treated as governed by the cloud flags.
-
-See [Central Payment Control Plane](docs/CENTRAL_PAYMENT_CONTROL_PLANE.md) for schema, audit model, release approvals and remaining work. No payment capability has been enabled, deployed or approved for live collection.
-
-
-Native recovery support is planned/incomplete and is not production-ready; no recovery code or remote key-release path is enabled.
+**Release decision: keep payment/accounting interlocks closed. No live collection or gateway-to-folio posting is authorized.**
