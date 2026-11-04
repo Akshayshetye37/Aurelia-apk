@@ -20,6 +20,8 @@ test("first-run bootstrap removes demo records and persists without migrating le
 test("fresh in-memory state contains no seeded guest bookings or historical takings", () => {
   assert.match(html, /b:\[\],t:\[\],g:\[\]/);
   assert.match(html, /today:0,hist:\[0,0,0,0,0,0\]/);
+  assert.match(html, /exp:\[\],inv:\[\]/);
+  assert.doesNotMatch(html, /Mosi lager|Seared Kafue bream|Fresh produce|Generator diesel/);
   assert.doesNotMatch(html, /B\('Mwila Chanda'/);
   assert.doesNotMatch(html, /B\('Amara Okafor'/);
   assert.doesNotMatch(html, /S\.b\[1\]\.pays/);
