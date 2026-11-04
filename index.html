@@ -1471,16 +1471,26 @@ async function restoreGo(){
   DK.forEach(k=>{if(restored[k]!==undefined)S[k]=restored[k]});
   ['rooms','b','g','t','exp','inv','aud'].forEach(k=>{if(!Array.isArray(S[k]))throw new Error('Restored '+k+' data is invalid')});
   id=Math.max(id,0,...S.b.map(b=>+b.id||0));
-  persist();
+  persistStrict();
   const saved=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
   if(!saved||DK.some(k=>JSON.stringify(saved[k])!==JSON.stringify(S[k])))throw new Error('Saved application state did not pass read-back verification.');
   S.rst=null;S.rstMode=null;location.reload();return true;
  }catch(e){
   console.error('Transactional restore failed',e);
-  try{if(oldPhotos)await photoRestore(oldPhotos)}catch(photoRollbackError){console.error('Photo rollback failed',photoRollbackError)}
+  const rollbackFailures=[];
+  try{if(oldPhotos)await photoRestore(oldPhotos);else throw new Error('Original photo archive was not available')}catch(photoRollbackError){console.error('Photo rollback failed',photoRollbackError);rollbackFailures.push('photo archive')}
   DK.forEach(k=>{if(liveBefore[k]!==undefined)S[k]=liveBefore[k]});id=oldId;
-  try{persist()}catch(rollbackError){console.error('State rollback failed',rollbackError)}
-  toast('Restore failed and rollback was attempted. Do not clear app data; check the backup and device storage.');return false;
+  try{
+   persistStrict();
+   const rollbackSaved=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
+   if(!rollbackSaved||DK.some(k=>JSON.stringify(rollbackSaved[k])!==JSON.stringify(S[k])))throw new Error('State rollback read-back verification failed');
+  }catch(rollbackError){console.error('State rollback failed',rollbackError);rollbackFailures.push('application data')}
+  if(rollbackFailures.length){
+   toast('CRITICAL: Restore failed and rollback could not be verified for '+rollbackFailures.join(' and ')+'. Stop editing. Do not clear app data; preserve the device and recover from a known-good backup.');
+  }else{
+   toast('Restore cancelled. Original application data and photos were restored and verified.');
+  }
+  return false;
  }
 }
 const useMenu=m=>{Object.keys(MENU).forEach(k=>delete MENU[k]);Object.assign(MENU,m);S.menu=MENU};
