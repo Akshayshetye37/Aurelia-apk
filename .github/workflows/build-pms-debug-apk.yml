@@ -28,6 +28,7 @@ concurrency:
 
 jobs:
   build-android:
+    if: ${{ false }} # Release blocked until full end-to-end acceptance.
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     steps:
