@@ -63,3 +63,10 @@ test("quarantined dataset displays a recovery action and warns that writes are b
   assert.match(html, /New changes are not being saved/);
   assert.match(html, /S\.tab='more';S\.sub='backup';render\(\)/);
 });
+
+
+test("reset cannot erase the active dataset before a current backup is verified", () => {
+  assert.match(html, /if\(!S\.bk\?\.verified\|\|S\.bk\.hash!==curHash\(\)\)\{/);
+  assert.match(html, /Reset blocked\. Save and verify a backup first/);
+  assert.match(html, /function resetAll\(\)\{try\{\(window\.__aureliaStorage\|\|localStorage\)\.removeItem\(SK\)\}/);
+});
