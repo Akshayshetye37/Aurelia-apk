@@ -241,3 +241,18 @@ Malformed records are reported separately. Invalid values are not coerced to zer
 5. Only after staff approval and evidence review may a separate, reversible reconciliation plan be drafted. This diagnostic itself never changes balances.
 
 **Evidence status:** The implementation and fixture tests are present, but no real PMS backup or physical-device export was available during this repository change. Accordingly, no real-data affected count or discrepancy total is claimed. The diagnostic must be run against an authorized export before any accounting migration or settlement bridge work proceeds.
+
+
+## 8. Read-only diagnostic hardening — 2026-11-04
+
+The accounting consistency diagnostic was extended without changing or repairing stored balances:
+
+- Payment identity checks now evaluate idempotency keys and normalized payment references independently. A row carrying an idempotency key no longer hides a duplicate UTR/reference.
+- Malformed payment rows are reported individually and do not cause the diagnostic to infer a paid-total discrepancy from an incomplete row sum. Scanning continues so later rows can still be checked.
+- Reused booking identifiers across active and cancelled collections, and bookings with missing identifiers, are reported explicitly.
+- The compatibility `booking.payments` history mirror is compared against canonical `booking.pays` rows by amount, method, reference, source, booking ID and idempotency key. Missing and extra history rows are reported; neither representation is auto-selected or rewritten.
+- CLI `--strict` now exits non-zero for all integrity finding classes, including history drift and booking identity problems.
+
+**Verification:** The full PMS source test workflow and payment-backend architecture CI both passed at commit `135874e2eaf5d8342e926cba2fcf50ccf032a7c2`. These are source-level automated checks only. No real PMS backup was available for a production-data diagnostic, and no financial mutation or migration was run.
+
+**Release safety correction:** Four Android/APK workflow jobs now have an explicit false job condition. They cannot build even when an `aurelia-approved-*` tag is pushed until the release workflow is deliberately changed after end-to-end approval. Source-test workflows remain separate and do not generate APKs.
