@@ -46,7 +46,7 @@ resource "google_project_iam_custom_role" "payment_secret_runtime" {
   project     = var.project_id
   role_id     = "aureliaPaymentSecretRuntime"
   title       = "Aurelia payment secret runtime"
-  description = "Create, write and read payment-provider secrets used by Aurelia."
+  description = "Create, read, rotate and disable payment-provider secret versions used by Aurelia."
   permissions = [
     "secretmanager.secrets.create",
     "secretmanager.secrets.get",
