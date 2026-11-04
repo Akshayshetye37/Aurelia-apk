@@ -68,7 +68,7 @@ The application catalogue is descriptive. Adapter class presence, credential fie
 - Payment-intent persistence and server-side capability reporting.
 - Raw-body webhook ingress and provider status verification logic. Webhook inbox replay keys are additionally bound to the exact signed request-body SHA-256 fingerprint and tenant/provider/environment/order/payment identity; changed payloads reusing an event ID are rejected.
 - Bounded reconciliation worker prototype; the exposed reconciliation endpoint remains blocked because it writes to a separate Firestore payment-folio model, not the current PMS local folio ledger.
-- Local settlement service, IndexedDB command journal and accounting consistency diagnostic.
+- Local settlement service, IndexedDB command journal and read-only accounting diagnostic covering paid-total drift, duplicate payment identities, compatibility-history mismatches, malformed or unbalanced cancellation journals, duplicate journal IDs, repeated cancellation postings and cancellation/refund status flags without matching journal evidence.
 - Cancellation/refund workflow blocks a refund from being marked paid without explicit settlement confirmation and an external bank/provider transaction reference. Pending refunds remain refund-payable liabilities. Journal idempotency now prevents duplicate cancellation postings and allows a pending liability to be settled only once for the exact originally recorded amount. This is an operator control, not automated bank reconciliation or proof-of-payment integration. Cancellation journal commits now also require durable local-storage read-back of the exact cancelled-booking fields, financial ledger and audit history before the UI reports success; failed verification restores the in-memory snapshot and attempts rollback persistence.
 - Payment API client foundation at `src/services/payment-api.mjs`; full Firebase session and application UI wiring is not yet established.
 - Native/Pay Bridge templates, device identity and attestation work exist, but the trusted production settlement issuer/projector and complete end-to-end acceptance remain outstanding.
@@ -116,6 +116,9 @@ Root PMS application (Node.js 22):
 ```bash
 npm install
 npm test
+
+# Read-only audit of an authorized PMS backup; --strict exits non-zero on any integrity finding.
+npm run diagnose:accounting -- /secure/path/redacted-pms-backup.json --strict
 
 # Do not run Android/APK build workflows until all ten release gates pass.
 ```
