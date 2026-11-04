@@ -99,3 +99,19 @@ npm start
 ```
 
 A passing unit test is not merchant sandbox certification, Android physical-device acceptance or approval for live payment collection.
+
+
+## Global payment safety kill switch — ACTIVE
+
+The current release is intentionally in **accounting read-only mode**. The following controls are hard-locked in the application and cloud backend:
+
+| Control | State | Effect |
+|---|---|---|
+| All folio balance mutations | BLOCKED | Manual and automated payment postings are rejected. |
+| Automatic settlement | BLOCKED | Verified provider captures cannot post to a folio. |
+| Live payment collection | BLOCKED | Live provider activation remains rejected; payment-intent creation is locked. |
+| Native settlement bridge | BLOCKED | Journaled projection/recovery cannot run through the bridge boundary. |
+
+Provider webhooks may still be accepted to preserve verification evidence, but verified captures remain pending and are **not** posted to a folio. Existing balances are not rewritten. This is an operational freeze, not a repair or migration.
+
+The client interlock is defined in `src/payments/payment-safety-gate.mjs`; the cloud interlock is defined in `payment-backend/src/server.mjs`. These are deliberately not environment-variable bypasses. Re-enabling any control requires a reviewed code change, passing tests, real-data accounting report, provider sandbox qualification, native security review (for bridge use), and explicit owner release approval. Do not weaken these controls to make a test pass.
