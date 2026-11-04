@@ -1,10 +1,8 @@
 name: Validate Aurelia PMS Debug Build (not for Pay Bridge pairing)
 
-# Debug build validation runs on every integration-branch update. This artifact is for installation and QA only; it is not a signed production release.
+# Manual QA-only workflow. Do not run until the documented PMS release gates authorize device-build validation.
+# The resulting debug APK is not a signed production release and is not compatible with the Pay Bridge pairing.
 on:
-  push:
-    branches:
-      - feature/multi-provider-payment-backend
   workflow_dispatch:
 
 permissions:
