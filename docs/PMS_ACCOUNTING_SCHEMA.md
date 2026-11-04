@@ -243,15 +243,37 @@ Malformed records are reported separately. Invalid values are not coerced to zer
 **Evidence status:** The implementation and fixture tests are present, but no real PMS backup or physical-device export was available during this repository change. Accordingly, no real-data affected count or discrepancy total is claimed. The diagnostic must be run against an authorized export before any accounting migration or settlement bridge work proceeds.
 
 
-## 8. Fresh operational dataset boundary — 2026-11-04
+## 11. Fresh operational dataset boundary — 2026-11-04
 
 The application bootstrap now separates new operational data from the former local dataset:
 
 - Active application state is stored under `aurelia_pms_v3`.
 - The former `aurelia_lodge_v2` value is retained as a separate legacy archive key.
 - The bootstrap does not import, merge, normalize, repair or delete legacy bookings, guests, payment rows, folio balances or dues.
-- New application source no longer seeds demo bookings, rooms, guests, inventory, menu entries or sample takings. When no valid v3 state exists, the first-run path initializes and persists the clean dataset without importing legacy records.
+- New application source no longer seeds demo bookings, rooms, guests, inventory, menu entries or sample takings. When the v3 key is missing, the first-run path initializes and persists the clean dataset without importing legacy records. An invalid v3 value is quarantined and is not overwritten.
 - If a legacy v2 value is present, the Home screen offers an export of its original JSON bytes. Export does not mutate the stored legacy value.
-- The Reset All action targets only the active v3 key; it does not remove the legacy v2 key.
+- The Reset All action requires a current verified backup and targets only the active v3 key; it does not remove the legacy v2 key.
 
 **Important limitation:** the new namespace still uses a single local JSON value and synchronous local-storage writes. It is not an ACID database, does not provide cross-device concurrency control, and is not a substitute for a tested off-device backup. No physical-device bootstrap, export, restore or uninstall-retention test has been run in this pass. This change establishes the no-migration boundary; it does not qualify the storage layer as production-grade.
+## 11. Fresh operational dataset and invalid-state protection — 2026-11-04
+
+The active local state key is `aurelia_pms_v3`. The previous `aurelia_lodge_v2` key remains a separate legacy archive and is not imported, merged, repaired or deleted by first-run bootstrap.
+
+- A missing v3 key creates a clean operational dataset.
+- An invalid v3 value is quarantined. It is not treated as a first-run install and is not overwritten by bootstrap or ordinary persistence.
+- Persistence remains blocked for an invalid dataset until a complete snapshot restore has passed write/read-back verification.
+- Record-only import into a quarantined dataset is blocked.
+- Reset All requires a verified backup whose stored hash matches the current dataset. Reset removes only the active v3 key.
+
+The storage layer remains device-local JSON and is not a transactional or multi-device database. Physical-device backup, restore, uninstall-retention and crash-recovery tests remain outstanding.
+
+## 12. Cancellation refund and settlement integrity — 2026-11-04
+
+`src/payments/cancellation-accounting.mjs` provides two pure accounting controls:
+
+- `cancellationPaidAmount(booking)` returns an original paid amount only when all available representations (`p`, `pays`, `payments`, `paymentSnapshot`, and `original_amount_paid`) agree in integer paise. It returns `null` for malformed rows, missing evidence, precision errors or conflicting totals. It never selects the maximum or repairs history.
+- `buildCancellationJournal()` creates balanced integer-paise journal lines for no-refund, pending-refund, immediate partial/full refund, and one-event settlement of an existing pending liability. Duplicate pending journals and multi-instalment settlement are rejected.
+
+Paid refund actions require a transaction reference and replay protection. The reference is operator-entered; it is not independently verified against a bank or provider. Therefore the manual refund workflow is not equivalent to production provider refund verification.
+
+Before a new folio payment, `assertBookingAccountingConsistent()` in `settlement-service.mjs` verifies that `booking.p` equals canonical payment rows and that the compatibility history mirror matches when present. A mismatch blocks the new mutation; no automatic repair is performed.
