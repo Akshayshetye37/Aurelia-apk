@@ -272,7 +272,8 @@ resource "google_compute_url_map" "payment_backend" {
   name            = "${var.service_name}-url-map"
   default_service = google_compute_backend_service.payment_backend.id
 
-  # Persist HTTPS-only behavior in browsers after the first successful HTTPS visit.
+  # Add HSTS at the edge, including responses generated before application middleware.
+  # Browsers retain the HTTPS-only policy for the configured max-age.
   header_action {
     response_headers_to_add {
       header_name  = "Strict-Transport-Security"
