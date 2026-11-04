@@ -112,7 +112,7 @@ Owner/admin API (verified email, recent MFA and active tenant membership require
 
 Every change writes the control document and its audit record in one Firestore transaction. Missing, malformed or unreadable state blocks financial operations. A capability cannot be enabled without a separate, current owner release-approval record with the required evidence. The API can always engage the emergency stop, but cannot disengage it.
 
-Test collection requires its dedicated flag. Live collection has a separate unconditional production-readiness block and remains unavailable. Provider webhooks may record signed and provider-fetched capture evidence but never issue accounting authorization or post to the PMS ledger.
+Test collection requires its dedicated flag. Live collection has a separate unconditional production-readiness block and remains unavailable. Provider webhooks may record signed and provider-fetched capture evidence but never issue accounting authorization or post to the PMS ledger. The reconciliation endpoint is also hard-blocked: its existing worker targets a separate Firestore folio journal that is not proven to be the authoritative local PMS ledger.
 
 **Local PMS settlement remains hard-locked.** The cloud control plane is not trusted by the WebView and does not unlock offline manual posting. A signed, short-lived policy lease and trusted native enforcement are still required. There is no owner control-panel UI yet; the authenticated API is the backend control surface.
 
