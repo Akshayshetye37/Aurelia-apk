@@ -12,7 +12,7 @@ function normalizedKey(value) {
 function paymentFingerprint(row) {
   const key = normalizedKey(row.idempotencyKey);
   if (key) return "key:" + key;
-  const reference = normalizedKey(row.r ?? row.reference).replace(/\\s+/g, "").toUpperCase();
+  const reference = normalizedKey(row.r ?? row.reference).replace(/\s+/g, "").toUpperCase();
   if (reference) return "ref:" + reference;
   return null;
 }
