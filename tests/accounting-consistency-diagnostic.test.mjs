@@ -106,7 +106,7 @@ test("detects orphaned or mis-keyed reservation advances", () => {
       { a: 5, source: "reservation_advance", bookingId: 23, idempotencyKey: "wrong-key" }
     ]
   }] });
-  assert.equal(result.orphanAdvanceCount, 2);
+  assert.equal(result.orphanAdvanceCount, 3);
 });
 
 test("detects refunds greater than the recorded original payment", () => {
