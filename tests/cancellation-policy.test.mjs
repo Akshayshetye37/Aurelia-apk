@@ -94,3 +94,16 @@ test("pending refund requires a positive payable amount", () => {
   assert.equal(validateCancellationRefund({ paid: 0, refund: 0, action: "full", confirmed: true, reference: "BANK-1234" }).code,
     "FULL_REFUND_MUST_MATCH_CAPTURE");
 });
+
+test("only a matching refund_pending journal can transition to paid", () => {
+  const base = { priorPendingRefund: 400, action: "full", refund: 400 };
+  assert.equal(validateCancellationJournalTransition({
+    ...base, priorEntries: [{ kind: "cancellation_settlement", refundAmount: 400 }]
+  }).code, "CANCELLATION_JOURNAL_ALREADY_EXISTS");
+  assert.equal(validateCancellationJournalTransition({
+    ...base, priorEntries: [{ kind: "refund_pending", refundAmount: 350 }]
+  }).code, "CANCELLATION_JOURNAL_ALREADY_EXISTS");
+  assert.equal(validateCancellationJournalTransition({
+    ...base, priorEntries: [{ kind: "refund_pending", refundAmount: 400 }]
+  }).transition, "settle_pending_liability");
+});
