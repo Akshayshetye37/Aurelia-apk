@@ -3,7 +3,13 @@
 **Branch:** `feature/multi-provider-payment-backend`  
 **Architecture:** Hybrid — Android is an offline-first client; the cloud backend is the payment authority.  
 **Release posture:** Live collection stays disabled. No provider is production-ready until its complete acceptance evidence exists.  
-**Detailed engineering sequence:** [Implementation strategy](./IMPLEMENTATION_STRATEGY.md).
+**Authoritative ten-workstream plan:** [End-to-end remediation plan](./END_TO_END_REMEDIATION_PLAN.md).  
+**Architecture and safety gates:** [Implementation strategy](./IMPLEMENTATION_STRATEGY.md).  
+**Build policy:** No Android/APK build, signing, publishing or production deployment until all ten workstreams pass their acceptance criteria.
+
+## Mandatory ten-workstream execution
+
+The older phase table below is a high-level status snapshot only. The detailed plan in `END_TO_END_REMEDIATION_PLAN.md` is authoritative and defines dependencies, implementation tasks, acceptance evidence and stop conditions for all ten workstreams. A phase marked partial or complete in this historical table does not satisfy the new release gate by itself.
 
 ## Dependency-ordered phases
 
@@ -39,6 +45,12 @@
 - No cloud deployment, provider sandbox/UAT, Android build or physical-device acceptance is claimed.
 
 ## Immediate next actions
+
+1. Obtain the separate `com.aurelia.paybridge` source repository and inspect its actual Android service implementation; do not invent the companion app source.
+2. Obtain an authorized, redacted real PMS backup and complete the canonical accounting diagnostic and owner review.
+3. Execute the ten workstreams in the authoritative remediation plan in dependency order. Do not run APK build/sign/release or production deployment workflows while any workstream remains open.
+
+### Historical phase actions (subordinate to the ten-gate plan)
 
 1. Inspect the actual PMS reservation/folio/journal model and freeze its canonical contract.
 2. Add concurrency/duplicate webhook and reconciliation tests; execute the full backend test suite and fix observed failures.
