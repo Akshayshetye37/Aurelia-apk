@@ -103,3 +103,10 @@ export function assertWebhookReplayIntegrity(prior, current) {
   }
   return true;
 }
+
+export function webhookPayloadHash(rawBody) {
+  if (!Buffer.isBuffer(rawBody) || rawBody.length === 0) {
+    throw new TypeError('webhook_raw_body_required');
+  }
+  return crypto.createHash('sha256').update(rawBody).digest('hex');
+}
