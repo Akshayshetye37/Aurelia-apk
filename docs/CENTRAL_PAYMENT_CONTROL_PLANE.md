@@ -29,7 +29,7 @@ A missing document resolves to the safe defaults. An unreadable document resolve
 
 ## Audit record
 
-Each update creates a durable record in `paymentControls/{tenantId}/audit/{auditId}`. A record contains tenant ID, one or more per-control entries, actor UID and verified email, reason, and server timestamp. Each entry records `control`, `from`, `to`, and ISO timestamp. The control document update and audit append occur in one Firestore transaction. Audit collection write/delete permissions must be denied to clients by Firestore Security Rules; only the backend service identity may write it.
+Each update creates a durable record in `paymentControls/{tenantId}/audit/{auditId}`. A record contains tenant ID, one or more per-control entries, actor UID and verified email, reason, and server timestamp. Each entry records `control`, `from`, `to`, and ISO timestamp. The control document update and audit append occur in one Firestore transaction. Client SDK access to the control document, nested audit records and release approvals is denied in `payment-backend/firestore.rules`. The cloud backend uses Firebase Admin SDK and is governed by server authentication and IAM. This rules file has **not been deployed**. Before deployment, merge it with any existing application Firestore rules (unmentioned paths are denied by default) and verify the complete ruleset in the Firebase emulator.
 
 ## Implemented backend control plane
 
@@ -57,7 +57,7 @@ Each update creates a durable record in `paymentControls/{tenantId}/audit/{audit
 
 1. Complete signed, expiring native policy lease delivery, device binding, expiry, version/rollback protection and offline fail-closed behaviour.
 2. Add native enforcement for manual posting, verified settlement, refunds and recovery before any local balance mutation.
-3. Add Firestore emulator/integration tests for owner/admin auth, unauthorized staff, audit write failure, missing/malformed state, simultaneous updates and each route's 423/503 behaviour. The current unit/contract tests do not replace this integration suite.
+3. Deploy the payment-control Firestore rules only after merging with the project's complete ruleset; validate in the emulator first. Add Firestore emulator/integration tests for owner/admin auth, unauthorized staff, audit write failure, missing/malformed state, simultaneous updates and each route's 423/503 behaviour. The current unit/contract tests do not replace this integration suite.
 4. Complete a full write-path audit of direct booking paid-total writes, payment row writes, import/restore, reservation advances, refunds and reversals.
 5. Build the owner-only control panel with emergency-stop confirmation and audit history.
 6. Run the complete root and backend test suites; perform sandbox and physical Android acceptance. No deployment or unlock is implied by code commits.
