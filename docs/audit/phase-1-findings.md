@@ -47,3 +47,17 @@
 ## Phase 1 gate
 
 **Not complete.** Complete the remaining repository-wide path inventory, extend coverage for legacy export variants and cross-record edge cases, resolve CI findings, then analyze the supplied backup. Stop before Phase 2 until reviewed.
+
+## Additional Phase 1 findings — 2026-11-04
+
+The next source pass found and corrected further unsafe paths:
+
+- The prior cancellation paid-total resolver selected the maximum of `booking.p`, payment-row totals and saved snapshots. That could overstate the amount eligible for refund. It is now replaced by `src/payments/cancellation-accounting.mjs`, which returns an amount only when every available representation agrees exactly in integer paise. A mismatch returns `null` and blocks cancellation refund posting.
+- Cancellation journal construction is now a pure integer-paise state machine. It balances guest advances, refund payable, cash/bank and cancellation revenue. A pending refund can be settled in one verified event only; instalment settlement is explicitly rejected until cumulative refund events are implemented.
+- Paid refund actions require a transaction reference. Duplicate references, duplicate pending journals, mixed journal history, repeated commits, and paid-total mismatches are blocked. A manually entered reference is not a bank/provider verification; live refund verification remains unavailable.
+- New local folio settlement now checks that `booking.p` equals canonical payment-row totals and, when present, that `booking.payments` matches `booking.pays`. It no longer advances a mismatched paid total by taking the maximum of conflicting values.
+- Legacy direct checkout and restaurant settlement handlers that incremented daily takings without the current confirmation workflow are fail-closed. Current restaurant settlement remains separate from hotel folio settlement.
+- Invalid active v3 storage is quarantined and persistence is blocked until a complete backup restore succeeds. Import-only merge is blocked for quarantined state. Reset All now requires a current verified backup.
+
+**Automated verification:** PMS source tests and payment architecture CI passed at commit `1b6dcbac2f936dda6fe0cfc3e803d09188ca271042` (the commit hash is recorded exactly in GitHub CI). Later guard-only changes are being rechecked. These are source-level tests, not physical-device, real-data, provider or production qualification.
+
