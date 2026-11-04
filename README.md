@@ -35,7 +35,7 @@ Implemented in `index.html`:
 
 - The active application storage key is now `aurelia_pms_v3`.
 - The former `aurelia_lodge_v2` key is retained separately and is not overwritten, deleted or migrated.
-- A first-run bootstrap removes the built-in sample bookings, rooms, guest records, inventory, menu entries, sample takings and demo expenses before persisting the new dataset.
+- The application source no longer seeds demo bookings, rooms, guests, inventory, menu entries or sample takings into a new installation. The first-run bootstrap creates and persists a clean operational dataset.
 - The Home screen offers an export of the untouched legacy JSON archive when one exists.
 - Resetting the new operational dataset removes only `aurelia_pms_v3`; it does not remove the legacy archive.
 
