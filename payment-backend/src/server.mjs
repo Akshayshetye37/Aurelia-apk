@@ -5,6 +5,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
+import { assertWebhookReplayIntegrity } from './webhooks/event-integrity.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
   paymentControlAllows, updatePaymentControls
@@ -620,6 +621,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
       : req.get('x-webhook-id') || crypto.createHash('sha256').update(req.body).digest('hex');
     if (typeof eventId !== 'string' || !webhookEventIdPattern.test(eventId)) return fail(res, 400, 'invalid_event_id');
     const inboxId = crypto.createHash('sha256').update(tenantId + ':' + provider + ':' + environment + ':' + eventId).digest('hex');
+    const payloadHash = crypto.createHash('sha256').update(req.body).digest('hex');
     const inbox = db.doc('paymentWebhookInbox/' + inboxId);
     const orderData = orderSnap.data();
     const intentRef = orderData.intentId
@@ -636,11 +638,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
       }
       if (seen.exists) {
         const prior = seen.data();
-        if (prior.tenantId !== tenantId || prior.provider !== provider ||
-            prior.environment !== environment || prior.providerOrderId !== providerOrderId ||
-            prior.paymentId !== paymentId) {
-          throw new Error('webhook_event_identity_conflict');
-        }
+        assertWebhookReplayIntegrity(prior, { tenantId, provider, environment, providerOrderId, paymentId, payloadHash });
         // Only a completed folio post is terminal. Verified captures that have
         // not posted must re-enter the settlement path on duplicate delivery.
         if (prior.accountingStatus === 'POSTED' ||
@@ -660,7 +658,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
       // if a retry races a transient provider-status response.
       const captureVerified = verified || (seen.exists && seen.data().providerFetchVerified === true);
       const evidence = {
-        eventId, tenantId, provider, environment, paymentId, providerOrderId,
+        eventId, tenantId, provider, environment, paymentId, providerOrderId, payloadHash,
         signatureVerified: true, providerFetchVerified: captureVerified,
         processingStatus: captureVerified ? 'CAPTURED_VERIFIED_PENDING_ACCOUNTING' : 'UNVERIFIED_RETRYABLE',
         accountingStatus: seen.exists ? (seen.data().accountingStatus || 'PENDING') : 'PENDING',
