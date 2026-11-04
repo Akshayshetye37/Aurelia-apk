@@ -46,20 +46,19 @@ The `payment-backend/src/server.mjs` Firebase Admin + Firestore + Secret Manager
 
 ## Payment release status
 
-### Seven requested providers
+### Seven-provider status (verified source registry)
 
-| Provider | Repository state | Release status |
-|---|---|---|
-| Razorpay | Adapter present and registered | Partial integration; sandbox/test checkout path only; not production-ready |
-| Cashfree | Adapter present and registered | Partial integration; sandbox/test checkout path only; not production-ready |
-| PayU | Prototype source exists, excluded from production factory | Not enabled; merchant API/refund/webhook acceptance incomplete |
-| PhonePe | Prototype source exists, excluded from production factory | Not enabled; merchant product/API/refund acceptance incomplete |
-| Paytm | Scaffold/catalogue only | Not implemented as an operational adapter |
-| JioPay | Scaffold/catalogue only | Not implemented as an operational adapter |
-| CCAvenue | Scaffold/catalogue only | Not implemented as an operational adapter |
+| Provider | Code status | Executable through production backend | Live collection |
+|---|---|---:|---:|
+| Razorpay | Adapter wired with order, lookup, payment status, raw webhook verification, refund and refund-status methods | Test flow only; merchant UAT pending | Disabled |
+| Cashfree | Adapter wired with order, lookup, payment status, raw webhook verification, refund and refund-status methods | Test flow only; merchant UAT pending | Disabled |
+| PayU | Prototype only; refund and refund-status methods deliberately fail closed; not in factory | No | Disabled |
+| PhonePe | Prototype only; merchant webhook/refund contract and server routing not accepted; not in factory | No | Disabled |
+| Paytm | Catalogue entry only; no operational adapter | No | Disabled |
+| JioPay | Documentation/scaffold only; no operational adapter | No | Disabled |
+| CCAvenue | Catalogue entry/scaffold only; no operational adapter | No | Disabled |
 
-A provider's catalogue entry, documentation URL, credential form or class file is not proof of a working integration. No provider is approved for live collection.
-
+The application catalogue is descriptive. Adapter class presence, credential fields or a checkout redirect do not qualify a provider as usable. The factory currently exposes only Razorpay and Cashfree. Both remain test-only and require merchant UAT, canonical local folio posting, Android acceptance, security review and owner approval before release.
 ### Implemented foundations (source inspection)
 
 - Cloud backend with Firebase ID-token verification, tenant membership and role checks.
