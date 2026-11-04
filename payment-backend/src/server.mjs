@@ -587,6 +587,14 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
           idempotencyKey: 'aur_' + idemId.slice(0, 32)
         };
     const order = await adapter.createOrder(input);
+    if (!order || typeof order.orderId !== 'string' ||
+        !/^[A-Za-z0-9_-]{1,64}$/.test(order.orderId) ||
+        order.amountMinor !== amountMinor || order.currency !== 'INR' ||
+        (provider === 'razorpay' && typeof order.keyId !== 'string') ||
+        (provider === 'cashfree' &&
+          (typeof order.paymentSessionId !== 'string' || !order.paymentSessionId))) {
+      throw new Error('provider_test_order_response_binding_invalid');
+    }
     const response = { provider, environment: 'test', orderId: order.orderId, amountMinor: order.amountMinor,
       currency: order.currency, checkoutData: provider === 'razorpay' ? { keyId: order.keyId } :
         { paymentSessionId: order.paymentSessionId }, status: 'created' };
