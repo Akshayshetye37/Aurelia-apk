@@ -13,7 +13,7 @@ const MAX_METHOD_LENGTH = 40;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
 const MONEY_TOLERANCE = 1e-7;
 
-function moneyToPaise(value, label, { allowZero = false } = {}) {
+export function moneyToPaise(value, label, { allowZero = false } = {}) {
   const validType = typeof value === "number" ||
     (typeof value === "string" && /^\d+(?:\.\d{1,2})?$/.test(value.trim()));
   const amount = validType ? Number(value) : Number.NaN;
