@@ -188,13 +188,13 @@ The authoritative implementation order, detailed technical tasks, acceptance evi
 
 ## Verified checkpoint — 2026-11-04
 
-Active source branch: `feature/multi-provider-payment-backend`. Latest inspected commit: `161ab2b6a92e1052f2d184f6127182b63f41a277`.
+Active source branch: `feature/multi-provider-payment-backend`. Latest inspected commit: `60d89bc04f43d515122d7ab05ed3493927942f6c`.
 
-GitHub Actions PMS source tests run [41859056329](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41859056329) and Aurelia payment architecture CI run [41859056217](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41859056217) both completed successfully for this exact commit. These are source-only validation runs; they do not build or sign an APK.
+GitHub Actions PMS source tests run [41859365577](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41859365577) and Aurelia payment architecture CI run [41859366248](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41859366248) both completed successfully for this exact commit. These are source-only validation runs; they do not build or sign an APK.
 
 The Android QA/debug workflow is manual-dispatch only and remains prohibited until the documented PMS release gates authorize device-build validation. No APK artifact or production deployment is claimed by this checkpoint.
 
-The latest changes also add exact signed webhook-body fingerprints to event-inbox replay checks, repair the accounting diagnostic CLI strict-mode syntax and test it end to end, and require durable local-storage read-back before a cancellation/refund journal is reported as committed.
+The latest changes also add exact signed webhook-body fingerprints to event-inbox replay checks, repair and test the accounting diagnostic CLI, extend the read-only audit to balanced/duplicate/malformed cancellation journals and inconsistent cancellation flags, and require durable local-storage read-back before a cancellation/refund journal is reported as committed.
 
 These results prove that the checked-in automated tests and CI checks passed. They do **not** prove that a merchant sandbox transaction has completed, that a production cloud backend is deployed, that a physical device can settle a verified capture into the authoritative PMS folio, or that provider refunds/reconciliation work end to end.
 
