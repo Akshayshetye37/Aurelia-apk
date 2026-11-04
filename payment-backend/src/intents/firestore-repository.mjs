@@ -190,7 +190,7 @@ export class FirestorePaymentRepository {
         const priorIntentSnap = await tx.get(this.db.collection('paymentIntents').doc(idem.intentId));
         if (!priorIntentSnap.exists || priorIntentSnap.data().tenantId !== tenantId) return { kind: 'IDEMPOTENCY_RECORD_INCONSISTENT' };
         const priorIntent = priorIntentSnap.data();
-        return { kind: 'DUPLICATE', intentId: idem.intentId, state: idem.state, checkoutData: priorIntent.checkoutData || null, providerOrderId: priorIntent.providerOrderId || null };
+        return { kind: 'DUPLICATE', intentId: idem.intentId, state: priorIntent.state, checkoutData: priorIntent.checkoutData || null, providerOrderId: priorIntent.providerOrderId || null, providerReference: priorIntent.providerReference || null };
       }
       if (!folioSnap.exists) return { kind: 'FOLIO_NOT_PROVISIONED' };
       const authoritativeFolio = folioSnap.data();
@@ -234,7 +234,7 @@ export class FirestorePaymentRepository {
       if (reservation.state === 'UNKNOWN') {
         const recovered = await this.recoverUnknownIntent({
           tenantId, payload, intentId: reservation.intentId,
-          providerReference: (await this.db.collection('paymentIntents').doc(reservation.intentId).get()).data()?.providerReference
+          providerReference: reservation.providerReference
         });
         if (recovered) return recovered;
       }
