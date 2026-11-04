@@ -298,3 +298,53 @@ test('same Cashfree idempotency key with changed guest or return URL is rejected
   })), /idempotency_key_payload_conflict/);
   assert.equal(s.dispatches, 1);
 });
+
+
+test('UNKNOWN dispatch recovers an existing provider order by deterministic reference without redispatch', async () => {
+  const s = setup({ createOrder: async input => {
+    // Simulate the provider creating the order but the response being lost.
+    throw new Error('response_lost_after_provider_create');
+  }});
+  const first = await s.repo.initializePaymentIntent('user_123', payload());
+  assert.equal(first.status, 'UNKNOWN');
+  const intent = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentIntents/'))?.[1];
+  assert.match(intent.providerReference, /^aur_[a-f0-9]{24}$/);
+  const recoveredRepo = new FirestorePaymentRepository({
+    db: s.db,
+    secretManager: { getProviderSecrets: async () => ({ keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' }) },
+    providerFactory: () => ({
+      findOrderByReference: async ({ reference }) => ({
+        found: true, orderId: 'order_recovered', receipt: reference,
+        amountMinor: 450000, currency: 'INR'
+      }),
+      createOrder: async () => { throw new Error('must_not_redispatch'); }
+    })
+  });
+  const recovered = await recoveredRepo.initializePaymentIntent('user_123', payload());
+  assert.equal(recovered.status, 'CREATED');
+  assert.equal(recovered.recovered, true);
+  assert.equal(recovered.providerOrderId, 'order_recovered');
+  assert.equal(s.dispatches, 1);
+  const stored = await s.db.get('paymentIntents/' + first.intentId);
+  assert.equal(stored.state, 'CREATED');
+  assert.equal(stored.providerOrderId, 'order_recovered');
+  const lock = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentFolioLocks/'))?.[1];
+  assert.equal(lock.active, true);
+  assert.equal(lock.state, 'CREATED');
+});
+
+test('UNKNOWN dispatch remains locked when provider lookup is inconclusive', async () => {
+  const s = setup({ createOrder: async () => { throw new Error('timeout'); } });
+  const first = await s.repo.initializePaymentIntent('user_123', payload());
+  const recoveryRepo = new FirestorePaymentRepository({
+    db: s.db,
+    secretManager: { getProviderSecrets: async () => ({ keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' }) },
+    providerFactory: () => ({ findOrderByReference: async () => ({ found: false }) })
+  });
+  const duplicate = await recoveryRepo.initializePaymentIntent('user_123', payload());
+  assert.equal(duplicate.status, 'UNKNOWN');
+  assert.equal(duplicate.intentId, first.intentId);
+  const lock = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentFolioLocks/'))?.[1];
+  assert.equal(lock.active, true);
+  assert.equal(s.dispatches, 1);
+});
