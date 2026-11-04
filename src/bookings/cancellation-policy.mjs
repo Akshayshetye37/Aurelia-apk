@@ -112,3 +112,41 @@ export function validateCancellationJournalTransition({
     message: "A cancellation journal already exists. A pending refund can only be settled for its original recorded amount; do not post a second cancellation."
   };
 }
+
+
+/** Validate a cancellation journal in integer paise before it enters the ledger. */
+export function validateCancellationJournal({ reference, lines } = {}) {
+  if (typeof reference !== "string" || !/^CANCEL-[A-Za-z0-9_-]{1,64}$/.test(reference) ||
+      !Array.isArray(lines) || lines.length === 0) {
+    return { ok: false, code: "INVALID_CANCELLATION_JOURNAL_IDENTITY" };
+  }
+  let debitPaise = 0;
+  let creditPaise = 0;
+  for (const line of lines) {
+    if (!line || typeof line !== "object" || Array.isArray(line) ||
+        typeof line.account !== "string" || !line.account.trim() || line.account.length > 120) {
+      return { ok: false, code: "INVALID_CANCELLATION_JOURNAL_ACCOUNT" };
+    }
+    const debit = Number(line.debit ?? 0);
+    const credit = Number(line.credit ?? 0);
+    const debitScaled = debit * 100;
+    const creditScaled = credit * 100;
+    if (!Number.isFinite(debit) || !Number.isFinite(credit) || debit < 0 || credit < 0 ||
+        (debit > 0 && credit > 0) ||
+        !Number.isSafeInteger(Math.round(debitScaled)) ||
+        !Number.isSafeInteger(Math.round(creditScaled)) ||
+        Math.abs(debitScaled - Math.round(debitScaled)) > 1e-7 ||
+        Math.abs(creditScaled - Math.round(creditScaled)) > 1e-7) {
+      return { ok: false, code: "INVALID_CANCELLATION_JOURNAL_AMOUNT" };
+    }
+    debitPaise += Math.round(debitScaled);
+    creditPaise += Math.round(creditScaled);
+    if (!Number.isSafeInteger(debitPaise) || !Number.isSafeInteger(creditPaise)) {
+      return { ok: false, code: "CANCELLATION_JOURNAL_TOTAL_OUT_OF_RANGE" };
+    }
+  }
+  if (debitPaise !== creditPaise) {
+    return { ok: false, code: "UNBALANCED_CANCELLATION_JOURNAL", debitPaise, creditPaise };
+  }
+  return { ok: true, debitPaise, creditPaise };
+}
