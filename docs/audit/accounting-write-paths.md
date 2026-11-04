@@ -26,3 +26,29 @@
 - Direct restaurant-to-room charge, discount, cancellation and journal mutation paths to confirm they cannot alter payment balances.
 - All native/LAN acknowledgement and cloud worker paths that can create or replay settlement commands.
 - Exact source line references for all paths after the inventory is complete.
+
+## Updated write-path inventory — 2026-11-04
+
+The targeted source scan confirmed these active mutation boundaries:
+
+| Data | Active writer / path | Safety state |
+|---|---|---|
+| `booking.pays[]`, `booking.p`, `booking.payments[]`, `state.today` | `src/payments/settlement-service.mjs::settlePayment()` | Global accounting safety gate remains fail-closed. New postings also require exact paid-total and compatibility-history agreement. |
+| Reservation advance | Reservation creation delegates to `settlePayment()` with deterministic booking-advance idempotency | Same global gate and accounting precondition apply. |
+| Cancellation snapshot | Cancellation workflow copies canonical `pays` rows into `paymentSnapshot` and archives the booking | No paid amount is guessed when representations conflict. |
+| Cancellation refund / retention journal | `buildCancellationJournal()` plus `cancellationJournal()` in `index.html` | Integer-paise balanced lines; paid refunds require a unique reference; duplicate/replay paths fail closed. Pending refund liability can be settled in one event only. |
+| `S.financialLedger` | `cancellationJournal()` only in the inspected PMS UI source | Journal entry is balanced before persistence; no generic direct push path was found. |
+| Restaurant sale and daily takings | `recordRestPay()` | Separate restaurant sale; UPI requires explicit receipt confirmation. It does not settle a hotel folio. |
+| Daily rollover | `auto()` | Moves daily aggregate to history; not a payment source of truth. |
+| Legacy checkout / restaurant takings handlers | `out()`, old `settleGo()`, old direct `settle()` | Replaced with fail-closed notices; they no longer increment daily takings. |
+| Cloud `paymentFolios` and worker journal | Payment backend Firestore prototype | Separate cloud ledger; not mapped to local PMS folios and not authoritative for booking balances. |
+
+The cancellation amount resolver is in `src/payments/cancellation-accounting.mjs`. It refuses to return a refund ceiling if `p`, `pays`, `payments`, or `paymentSnapshot` disagree. The settlement service's `assertBookingAccountingConsistent()` performs the equivalent guard before any new payment mutation.
+
+## Still not qualified
+
+- Backup payload variants, all import/restore formats, rollback after storage quota failure, and physical-device backup retention have not completed an exhaustive test pass.
+- Local storage is still a single JSON value; no transactional database, cross-device locking or crash-consistent journal is implemented.
+- A manually entered refund reference is not independently verified against a bank or provider.
+- The Pay Bridge companion service source is still absent from this repository, so native trusted IPC and final local settlement projection are incomplete.
+- No real PMS backup has been supplied; historical data has not been reconciled.
