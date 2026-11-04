@@ -30,6 +30,7 @@ permissions:
 
 jobs:
   build-debug-apk:
+    if: ${{ false }} # Release blocked until full end-to-end acceptance.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
