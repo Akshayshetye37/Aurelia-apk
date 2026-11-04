@@ -161,7 +161,15 @@ export async function updatePaymentControls({
       reason: reason.trim(),
       at: timestamp
     });
-    return { controls: { ...next, controlState: "CONFIGURED" }, audit };
+    return {
+      controls: {
+        ...next,
+        updatedAt: timestamp,
+        updatedBy: actor.uid,
+        controlState: "CONFIGURED"
+      },
+      audit
+    };
   });
 }
 
