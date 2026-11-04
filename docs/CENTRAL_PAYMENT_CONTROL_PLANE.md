@@ -2,7 +2,7 @@
 
 ## Status
 
-The control-plane foundation is committed, but it is **not yet wired into payment routes or the PMS local settlement path**. All existing hard-coded locks remain in force. No financial capability has been enabled. Do not deploy this as a completed control system.
+The **cloud backend control plane is implemented and wired to the cloud payment routes** on `feature/multi-provider-payment-backend`. The local PMS settlement gate and native apply/recovery gate remain independently hard-locked. The cloud control document does not authorize local WebView or offline settlement. No capability has been enabled and no deployment has been performed. The control plane is not a completed production payment system.
 
 ## Canonical control document
 
@@ -29,7 +29,7 @@ A missing document resolves to the safe defaults. An unreadable document resolve
 
 ## Audit record
 
-Each update creates a durable record in `paymentControlAudit/{autoId}`. A record contains tenant ID, one or more per-control entries, actor UID and verified email, reason, and server timestamp. Each entry records `control`, `from`, `to`, and ISO timestamp. The control document update and audit append occur in one Firestore transaction. Audit collection write/delete permissions must be denied to clients by Firestore Security Rules; only the backend service identity may write it.
+Each update creates a durable record in `paymentControls/{tenantId}/audit/{auditId}`. A record contains tenant ID, one or more per-control entries, actor UID and verified email, reason, and server timestamp. Each entry records `control`, `from`, `to`, and ISO timestamp. The control document update and audit append occur in one Firestore transaction. Audit collection write/delete permissions must be denied to clients by Firestore Security Rules; only the backend service identity may write it.
 
 ## Implemented backend control plane
 
@@ -41,17 +41,17 @@ Each update creates a durable record in `paymentControlAudit/{autoId}`. A record
   - `PATCH /v1/admin/payment-controls` — changes plus mandatory reason.
 - Authentication uses verified Firebase identity, active tenant membership, verified email, recent MFA and owner/admin role. Tenant ID is derived from membership, never from request input.
 - Financial routes read the current tenant control document for each request; no allow-decision cache is used. Missing, malformed, stale-schema or unreadable control state fails closed.
-- Test intents, test order creation and test provider activation require `test_collection`. Live routes require `live_collection` and retain a separate unconditional production-readiness rejection. The reconciliation endpoint checks `automatic_settlement` and `native_settlement_bridge` but remains unconditionally blocked because the current worker writes a separate Firestore folio journal that is not proven to be the authoritative local PMS ledger.
+- Test intents, test order creation and test provider activation require `test_collection`. Live intents and provider activation require `live_collection` and retain a separate unconditional production-readiness rejection. The reconciliation endpoint checks `automatic_settlement` and `native_settlement_bridge` but remains unconditionally blocked because the current worker writes a separate Firestore folio journal that is not proven to be the authoritative local PMS ledger.
 - A capability cannot be enabled merely by changing its boolean. A separate owner release approval document must exist at `paymentControlApprovals/{tenantId}/controls/{control}`, be current, identify an independent approver, and contain the required evidence codes. The live control additionally requires explicit production-readiness and separate-owner-approval fields. The API cannot turn `emergency_stop` OFF; engaging it remains immediately available.
 - Webhooks can store signature/provider-status evidence. They never issue accounting authorization. Their pending record identifies whether collection, settlement controls or the still-missing trusted bridge is blocking posting.
-- `payment-backend/test/payment-controls.test.mjs` and `payment-backend/test/security-contract.test.mjs` cover control defaults, precedence, read failure, audit contract, authenticated routes and enforcement wiring. These tests have been added but have not yet been executed in this environment.
+- `payment-backend/test/payment-controls.test.mjs` and `payment-backend/test/security-contract.test.mjs` cover control defaults, precedence, read failure, audit contract, release approval checks and enforcement wiring. The GitHub Actions checks on commit `52f763b` completed successfully before the additional core emergency-stop guard and its test were added. The newest commit must pass CI before this change set is considered verified.
 
 ## Local PMS enforcement boundary
 
-- The local `settlePayment()` function and native journal apply/recovery paths remain hard-locked. The cloud control document is **not** trusted by the WebView and cannot authorize offline local posting.
+- The local `settlePayment()` function and native journal apply/recovery paths remain hard-locked by `src/payments/payment-safety-gate.mjs`. The cloud control document is **not** trusted by the WebView and cannot authorize offline local posting.
 - No mutable JavaScript/localStorage control value is accepted. A signed, short-lived policy lease must be delivered and verified through the trusted native device boundary before local manual posting or bridge settlement can be considered.
 - The local gate intentionally remains closed until that mechanism exists. Do not interpret the cloud control API as enabling local manual posting.
-- There is not yet an owner control-panel UI. The authenticated API is the backend control surface; a UI must remain advisory and use these endpoints.
+- There is not yet an owner control-panel UI. The authenticated cloud API is the backend control surface; a UI must remain advisory and use these endpoints. The separate LAN appliance has its own owner authentication and device-command API; it is not yet wired to consume a signed cloud payment-control policy lease. Do not assume the cloud flags directly gate LAN appliance operations.
 
 ## Remaining integration and release work
 
