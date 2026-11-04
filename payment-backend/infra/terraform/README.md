@@ -11,6 +11,7 @@ This Terraform configuration creates the Cloud Run service and its restricted ru
 - Firestore access uses `roles/datastore.user`.
 - Secret Manager access uses a custom role limited to secret create/get, version add/access/list and version disable; the runtime cannot delete secret resources or destroy credential history.
 - HTTPS is the only public load-balancer listener (TCP/443); no TCP/80 listener, HTTP proxy or redirect is provisioned. The managed certificate and `MODERN` SSL policy enforce TLS 1.2 or newer at the public edge.
+- The URL map adds `Strict-Transport-Security: max-age=31536000` to responses so browsers that have visited the HTTPS origin retain an HTTPS-only policy for one year.
 - The backend service is configured with `protocol = "HTTPS"` as requested. Google ignores this field for Cloud Run serverless NEG backends, so it is not the mechanism that enables backend TLS. Cloud Run documentation states that HTTPS load-balancer traffic is forwarded to Cloud Run and the container through a Google-managed encrypted channel. The application container does not need to terminate TLS itself.
 - Cloud Run ingress is restricted to internal and Cloud Load Balancing traffic, and its default `run.app` URL is disabled, preventing direct public ingress from bypassing the load balancer.
 - HTTPS proxy contract is configured explicitly: `AURELIA_HTTPS_TERMINATION=trusted-proxy` and `AURELIA_TRUST_PROXY_HOPS=1`.
