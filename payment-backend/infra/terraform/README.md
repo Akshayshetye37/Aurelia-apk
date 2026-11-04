@@ -10,6 +10,7 @@ This Terraform configuration creates the Cloud Run service and its restricted ru
 - Runtime identity is a dedicated service account, not the project default service account.
 - Firestore access uses `roles/datastore.user`.
 - Secret Manager access uses a custom role limited to secret create/get, version add/access/list and version disable; the runtime cannot delete secret resources or destroy credential history.
+- HTTPS is the only public load-balancer listener (TCP/443); no HTTP listener or redirect is provisioned. The backend service's `protocol = "HTTP"` is a required/ignored field for this Cloud Run serverless NEG integration; it does not create a public HTTP endpoint.
 - HTTPS proxy contract is configured explicitly: `AURELIA_HTTPS_TERMINATION=trusted-proxy` and `AURELIA_TRUST_PROXY_HOPS=1`.
 - Container image must be pinned by sha256 digest; mutable `latest` tags are rejected.
 
@@ -19,7 +20,7 @@ This Terraform configuration creates the Cloud Run service and its restricted ru
 2. Terraform 1.6+ and Google provider 6.x.
 3. An Artifact Registry repository and immutable container image already pushed to it.
 4. Firestore Native mode initialized in the selected project and region.
-5. A registered production domain and control of its DNS zone. This module creates a global external Application Load Balancer, serverless NEG, managed certificate, HTTPS frontend, HTTP-to-HTTPS redirect and Cloud Armor rate-limit policy. DNS must point the domain to the `load_balancer_ip` output; certificate provisioning waits for DNS to resolve correctly.
+5. A registered production domain and control of its DNS zone. This module creates a global external Application Load Balancer, serverless NEG, managed certificate, HTTPS-only frontend on TCP/443 and Cloud Armor rate-limit policy. No TCP/80 forwarding rule, HTTP proxy or redirect listener is created. DNS must point the domain to the `load_balancer_ip` output; certificate provisioning waits for DNS to resolve correctly.
 6. A review of the exact owner origins and IAM requirements for the deployed app.
 
 This module creates the external load balancer, managed certificate and serverless NEG, but does not create or change DNS records because DNS-zone ownership was not supplied. Do not expose the Cloud Run service through an alternate public endpoint.
@@ -44,12 +45,12 @@ terraform plan
 terraform apply
 ```
 
-Terraform creates the external HTTPS load balancer and serverless NEG. After apply, create the DNS A record for the domain using the `load_balancer_ip` output and wait for the managed certificate to become ACTIVE. Cloud Run IAM grants invocation to the load-balancer path; application-level admin endpoints still require Firebase ID token, verified email, MFA and active tenant-admin membership.
+Terraform creates the external HTTPS-only load balancer and serverless NEG. The public load balancer has no TCP/80 listener; clients must connect using `https://`. After apply, create the DNS A record for the domain using the `load_balancer_ip` output and wait for the managed certificate to become ACTIVE. Cloud Run IAM grants invocation to the load-balancer path; application-level admin endpoints still require Firebase ID token, verified email, MFA and active tenant-admin membership.
 
 ## Important operational caveats
 
 - Do not run `terraform apply` until the project, immutable image, hostname, load balancer and certificate are ready.
-- The first Terraform apply creates the service but does not create a usable public HTTPS endpoint by itself.
+- The first Terraform apply creates the HTTPS frontend, but it is not usable until DNS resolves to the load-balancer IP and the managed certificate becomes ACTIVE.
 - Cloud Run ingress restriction is a control-plane setting; validate it after apply and perform an external bypass probe against the default service URL and any known service IPs.
 - Terraform state contains infrastructure metadata. Store it in a protected remote backend with locking and encryption; do not commit state or tfvars.
 - Review the custom Secret Manager role against any future backend code changes. If code starts using additional Secret Manager APIs, update IAM deliberately rather than granting project Owner/Editor.
