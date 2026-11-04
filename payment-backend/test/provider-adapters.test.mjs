@@ -147,7 +147,7 @@ test('Cashfree authenticated malformed JSON is rejected without throwing', async
 });
 
 test('Razorpay refund reference is stored as a note, not an unsupported refund field', async () => {
-  const mock = mockFetch(async () => ({ status: 200, body: { id: 'rfnd_123', status: 'processed', amount: 500, currency: 'INR' } }));
+  const mock = mockFetch(async () => ({ status: 200, body: { id: 'rfnd_123', payment_id: 'pay_123', status: 'processed', amount: 500, currency: 'INR' } }));
   const adapter = new RazorpayAdapter({ credentials: { keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' }, environment: 'test', fetchImpl: mock.fetchImpl });
   await adapter.createRefund({ paymentId: 'pay_123', amountMinor: 500, receipt: 'refund_123' });
   const body = JSON.parse(mock.calls[0].options.body);
