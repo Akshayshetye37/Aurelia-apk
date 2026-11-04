@@ -188,15 +188,15 @@ The authoritative implementation order, detailed technical tasks, acceptance evi
 
 ## Verified checkpoint — 2026-11-04
 
-Active source branch: `feature/multi-provider-payment-backend`. Latest inspected commit: `60d89bc04f43d515122d7ab05ed3493927942f6c`.
+Active source branch: `feature/multi-provider-payment-backend`. Latest inspected commit: `8bb5cac5efa3afe5ad3e55089259f4e71526352a`.
 
-GitHub Actions PMS source tests run [41859365577](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41859365577) and Aurelia payment architecture CI run [41859366248](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41859366248) both completed successfully for this exact commit. These are source-only validation runs; they do not build or sign an APK.
+GitHub Actions PMS source tests and web packaging run [41861293919](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41861293919) and Aurelia payment architecture CI run [41861293817](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41861293817) both completed successfully for this exact commit. The PMS quality run executed the complete PMS test suite and `npm run build`; the architecture run passed both PMS web and payment-backend test jobs.
 
-The Android QA/debug workflow is manual-dispatch only and remains prohibited until the documented PMS release gates authorize device-build validation. No APK artifact or production deployment is claimed by this checkpoint.
+Android QA/debug builds remain manual-dispatch only and are not authorized until the documented PMS release gates pass. No APK artifact, signed production release or production cloud deployment is claimed by this checkpoint.
 
-The latest changes also add exact signed webhook-body fingerprints to event-inbox replay checks, repair and test the accounting diagnostic CLI, extend the read-only audit to balanced/duplicate/malformed cancellation journals and inconsistent cancellation flags, and require durable local-storage read-back before a cancellation/refund journal is reported as committed.
+The latest changes include strict cancellation journal read-back and accounting diagnostics; signed webhook payload replay fingerprints; Cashfree's current documented API version, merchant/provider refund ID separation, UUID idempotency, payment-level capture amount checks and strict rupee-to-paise precision validation.
 
-These results prove that the checked-in automated tests and CI checks passed. They do **not** prove that a merchant sandbox transaction has completed, that a production cloud backend is deployed, that a physical device can settle a verified capture into the authoritative PMS folio, or that provider refunds/reconciliation work end to end.
+These automated results prove the checked-in tests and web packaging pass. They do **not** prove a merchant sandbox transaction has completed, that a production cloud backend is deployed, that a physical device can post a verified capture to the authoritative PMS folio, or that provider refunds/reconciliation operate end to end.
 
 ### Newly verified payment recovery behavior
 
