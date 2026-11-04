@@ -769,9 +769,12 @@ app.post('/v1/admin/providers/:provider/activate', requireTenantAdmin, express.j
   await ref.set({ active: true, activatedAt: FieldValue.serverTimestamp(), activatedBy: req.actor.uid }, { merge: true });
   return res.json({ active: true, provider, environment });
 });
-app.use((err, _req, res, _next) => {
+app.use((err, _req, res, next) => {
   // Deliberately do not log request bodies, tokens, provider responses or secrets.
+  // Delegate if headers were already sent; writing a second response would
+  // create another unhandled error during provider/webhook failure recovery.
+  if (res.headersSent) return next(err);
   const status = err?.type === 'entity.too.large' ? 413 : 400;
-  res.status(status).json({ error: status === 413 ? 'request_too_large' : 'invalid_request' });
+  return res.status(status).json({ error: status === 413 ? 'request_too_large' : 'invalid_request' });
 });
 app.listen(Number(process.env.PORT || 8080), '0.0.0.0');
