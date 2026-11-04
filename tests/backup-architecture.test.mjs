@@ -33,7 +33,7 @@ test("owner server credentials use Android Keystore and HTTPS only", () => {
 });
 
 test("device-local payment UI fails closed and folio auto-settlement stays disabled", () => {
-  assert.match(html, /Device-local credential vault/);
+  assert.match(html, /Device-local Gateway Credential Vault/);
   assert.match(html, /window\.AndroidPaymentEngine/);
   assert.match(html, /secure native Android payment engine is not installed/);
   assert.doesNotMatch(html, /\+localGatewayAdminHtml\(\)\+/);
