@@ -78,3 +78,13 @@ test("quarantined data cannot be replaced by a blank backup or reset", () => {
   assert.match(html, /function resetAll\(\)\{if\(LOCAL_STATE_STATUS==='invalid'\|\|RECOVERY_CHECK_PENDING\|\|!S\.bk\?\.verified/);
   assert.match(html, /existing dataset remains quarantined; no blank replacement or backup will be created/);
 });
+
+
+test("persisted backup flags alone cannot authorize reset after an app restart", () => {
+  assert.match(html, /let BKB=null,BACKUP_VERIFIED_THIS_SESSION=false/);
+  assert.match(html, /if\(BACKUP_VERIFIED_THIS_SESSION&&S\.bk\.verified&&S\.bk\.hash===curHash\(\)\)/);
+  assert.match(html, /BACKUP_VERIFIED_THIS_SESSION=true;S\.bk\.verified=true/);
+  assert.match(html, /backupExists&&typeof backupHash==='string'&&backupHash===curHash\(\)/);
+  assert.match(html, /!BACKUP_VERIFIED_THIS_SESSION\|\|!S\.bk\?\.verified\|\|S\.bk\.hash!==curHash\(\)/);
+  assert.match(html, /if\(!BACKUP_VERIFIED_THIS_SESSION\|\|curHash\(\)!==S\.bk\.hash/);
+});
