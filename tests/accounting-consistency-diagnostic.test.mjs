@@ -138,3 +138,22 @@ test("does not double count the intentional payments history mirror", () => {
   assert.equal(result.duplicatePaymentCount, 0);
   assert.equal(result.affectedBookingCount, 0);
 });
+
+
+test("detects reservation advances with a missing idempotency key", () => {
+  const result = diagnoseAccountingConsistency({ b: [{
+    id: 28, p: 10, pays: [
+      { a: 10, source: "reservation_advance" }
+    ]
+  }] });
+  assert.equal(result.orphanAdvanceCount, 1);
+});
+
+test("detects negative and excessive-precision payment rows", () => {
+  const result = diagnoseAccountingConsistency({ b: [
+    { id: 29, p: 0, pays: [{ a: -1 }] },
+    { id: 30, p: 0, pays: [{ a: 1.001 }] }
+  ] });
+  assert.equal(result.malformedBookingCount, 2);
+  assert.equal(result.affectedBookingCount, 0);
+});
