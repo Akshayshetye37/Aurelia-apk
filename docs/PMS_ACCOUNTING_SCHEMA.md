@@ -24,7 +24,7 @@ Primary files inspected:
 
 **Authoritative in-app collection:** `S.b`, an array in the application state object declared in `index.html`.
 
-The legacy demo booking constructor creates objects with these fields:
+A booking object in the current runtime uses these fields:
 
 | Field | Observed type | Meaning |
 |---|---|---|
@@ -250,7 +250,7 @@ The application bootstrap now separates new operational data from the former loc
 - Active application state is stored under `aurelia_pms_v3`.
 - The former `aurelia_lodge_v2` value is retained as a separate legacy archive key.
 - The bootstrap does not import, merge, normalize, repair or delete legacy bookings, guests, payment rows, folio balances or dues.
-- When no valid v3 state exists, the first-run path removes built-in demo records from the in-memory seed, resets demo takings/history, and persists a clean dataset.
+- New application source no longer seeds demo bookings, rooms, guests, inventory, menu entries or sample takings. When no valid v3 state exists, the first-run path initializes and persists the clean dataset without importing legacy records.
 - If a legacy v2 value is present, the Home screen offers an export of its original JSON bytes. Export does not mutate the stored legacy value.
 - The Reset All action targets only the active v3 key; it does not remove the legacy v2 key.
 
