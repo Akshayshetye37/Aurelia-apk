@@ -593,7 +593,8 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
     await db.runTransaction(async tx => {
       tx.set(idemRef, { state: 'created', response, providerOrderId: order.orderId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       tx.create(db.doc('paymentOrders/' + req.tenant.id + '_' + provider + '_' + order.orderId), {
-        tenantId: req.tenant.id, provider, environment: 'test', amountMinor, currency: 'INR',
+        tenantId: req.tenant.id, provider, environment: 'test',
+        providerOrderId: order.orderId, amountMinor, currency: 'INR',
         state: 'created', createdAt: FieldValue.serverTimestamp()
       });
     });
