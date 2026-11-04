@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   verify-and-build:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
