@@ -11,6 +11,21 @@ test("missing, malformed and incomplete control state fails closed", () => {
   assert.equal(paymentControlAllows(PAYMENT_CONTROL_DEFAULTS, "test_collection"), false);
 });
 
+test("explicit non-configured status cannot be overridden by otherwise permissive booleans", () => {
+  const failed = {
+    schemaVersion: 1,
+    emergency_stop: false,
+    manual_posting: true,
+    test_collection: true,
+    live_collection: true,
+    automatic_settlement: true,
+    native_settlement_bridge: true,
+    refund_processing: true,
+    controlState: "READ_FAILED"
+  };
+  assert.equal(paymentControlAllows(failed, "manual_posting"), false);
+});
+
 test("emergency stop dominates every capability", () => {
   const controls = { ...PAYMENT_CONTROL_DEFAULTS, emergency_stop: true, manual_posting: true };
   assert.equal(paymentControlAllows(controls, "manual_posting"), false);
