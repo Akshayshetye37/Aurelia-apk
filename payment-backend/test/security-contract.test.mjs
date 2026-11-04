@@ -93,7 +93,7 @@ test('HTTP runtime rejects requests without trusted HTTPS transport and emits HS
   assert.match(source, /process\.env\.AURELIA_TRUST_PROXY_HOPS !== '1'/);
   assert.match(source, /app\.set\('trust proxy', 1\)/);
   assert.match(source, /must overwrite X-Forwarded-Proto/);
-  assert.match(source, /if \(!req\.secure\)/);
+  assert.match(source, /if \(!req\.secure && !platformProbe\)/);
   assert.match(source, /insecure_connection_rejected/);
   assert.match(source, /Strict-Transport-Security/);
   assert.equal(source.includes("req.headers['x-forwarded-proto'] === 'https'"), false);
@@ -144,10 +144,14 @@ test('readiness endpoint checks Firestore and Secret Manager separately from liv
 test('credential rotation and deletion disable provider state before secret mutations', () => {
   const rotation = source.indexOf('configured: false, credentialsValidated: false, sandboxTestPassed: false');
   const firstSecretWrite = source.indexOf("storeSecret(providerSecretId(req.tenant.id, provider, environment, 'api')");
-  const deletion = source.indexOf('await stateRef.set({\n      configured: false, credentialsValidated: false, sandboxTestPassed: false');
-  const firstSecretDelete = source.indexOf('await sm.deleteSecret({ name: secretName(id) })');
+  const deletionRoute = source.indexOf("app.delete('/v1/admin/providers/:provider/credentials'");
+  const deletion = source.indexOf('await stateRef.set({\n      configured: false, credentialsValidated: false, sandboxTestPassed: false', deletionRoute);
+  const disableVersions = source.indexOf('await disableAllEnabledSecretVersions(sm, secretName(id))', deletion);
+  const stateDelete = source.indexOf('await stateRef.delete()', disableVersions);
   assert.ok(rotation >= 0 && firstSecretWrite > rotation);
-  assert.ok(deletion >= 0 && firstSecretDelete > deletion);
+  assert.ok(deletionRoute >= 0 && deletion > deletionRoute);
+  assert.ok(disableVersions > deletion && stateDelete > disableVersions);
+  assert.equal(source.includes('sm.deleteSecret('), false);
 });
 
 
