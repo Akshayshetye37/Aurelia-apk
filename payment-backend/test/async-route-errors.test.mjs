@@ -7,9 +7,11 @@ import {
 
 function mockApp() {
   const routes = new Map();
+  const settings = new Map([["trust proxy", 1]]);
   const app = {};
   for (const method of ["get", "post", "put", "patch", "delete"]) {
     app[method] = (path, ...handlers) => {
+      if (method === "get" && handlers.length === 0) return settings.get(path);
       routes.set(method + " " + path, handlers);
       return app;
     };
@@ -73,4 +75,10 @@ test("rejects a non-function route handler", () => {
   assert.throws(() => wrapAsyncRouteHandler(null), {
     message: "route_handler_must_be_function"
   });
+});
+
+test("preserves Express app.get settings getter semantics", () => {
+  const { app } = mockApp();
+  installAsyncRouteErrorHandling(app);
+  assert.equal(app.get("trust proxy"), 1);
 });
