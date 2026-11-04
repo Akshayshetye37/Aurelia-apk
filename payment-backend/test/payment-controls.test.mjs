@@ -21,7 +21,9 @@ test("explicit non-configured status cannot be overridden by otherwise permissiv
     automatic_settlement: true,
     native_settlement_bridge: true,
     refund_processing: true,
-    controlState: "READ_FAILED"
+    controlState: "READ_FAILED",
+    updatedAt: new Date("2026-11-04T12:00:00.000Z"),
+    updatedBy: "owner-1"
   };
   assert.equal(paymentControlAllows(failed, "manual_posting"), false);
 });
@@ -33,7 +35,10 @@ test("emergency stop dominates every capability", () => {
 });
 
 test("a capability is allowed only when emergency stop is off and its own flag is on", () => {
-  const controls = { ...PAYMENT_CONTROL_DEFAULTS, emergency_stop: false, manual_posting: true };
+  const controls = {
+    ...PAYMENT_CONTROL_DEFAULTS, emergency_stop: false, manual_posting: true,
+    updatedAt: new Date("2026-11-04T12:00:00.000Z"), updatedBy: "owner-1"
+  };
   assert.equal(paymentControlAllows(controls, "manual_posting"), true);
   assert.equal(paymentControlAllows(controls, "test_collection"), false);
 });
