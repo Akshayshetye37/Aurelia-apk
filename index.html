@@ -3672,7 +3672,22 @@ function cancellationPaidAmount(b){
  const amount=Number.isFinite(stored)&&stored>0?stored:Math.max(recorded,Number.isFinite(legacy)?legacy:0);
  return Math.max(0,Math.round(amount*100)/100);
 }
-function cancellationJournal(reference,lines,meta){const dr=lines.reduce((s,x)=>s+Number(x.debit||0),0),cr=lines.reduce((s,x)=>s+Number(x.credit||0),0);if(Math.abs(dr-cr)>.009)throw Error('Journal entry is not balanced');S.financialLedger.push({id:'JE-'+Date.now(),reference,at:new Date().toISOString(),...meta,lines})}
+function cancellationJournal(reference,lines,meta){
+ if(typeof reference!=='string'||!/^CANCEL-[A-Za-z0-9_-]{1,64}$/.test(reference)||!Array.isArray(lines)||!lines.length||!meta||typeof meta!=='object'||Array.isArray(meta))throw Error('Journal identity or lines are invalid');
+ let debitPaise=0,creditPaise=0;
+ for(const line of lines){
+  if(!line||typeof line.account!=='string'||!line.account.trim()||line.account.length>120)throw Error('Journal account is invalid');
+  const debit=Number(line.debit??0),credit=Number(line.credit??0),debitScaled=debit*100,creditScaled=credit*100;
+  if(!Number.isFinite(debit)||!Number.isFinite(credit)||debit<0||credit<0||(debit>0&&credit>0)||
+     !Number.isSafeInteger(Math.round(debitScaled))||!Number.isSafeInteger(Math.round(creditScaled))||
+     Math.abs(debitScaled-Math.round(debitScaled))>1e-7||Math.abs(creditScaled-Math.round(creditScaled))>1e-7)throw Error('Journal amount is invalid');
+  debitPaise+=Math.round(debitScaled);creditPaise+=Math.round(creditScaled);
+  if(!Number.isSafeInteger(debitPaise)||!Number.isSafeInteger(creditPaise))throw Error('Journal total exceeds safe monetary range');
+ }
+ if(debitPaise!==creditPaise)throw Error('Journal entry is not balanced');
+ if(!window.crypto||typeof window.crypto.randomUUID!=='function')throw Error('Secure journal ID generation is unavailable');
+ S.financialLedger.push({id:'JE-'+window.crypto.randomUUID(),reference,at:new Date().toISOString(),...meta,lines});
+}
 window.setCancellationRefund=function(i){
  const b=(S.cancelled||[])[Number(i)];if(!b){toast('Cancelled booking not found');return}
  const paid=cancellationPaidAmount(b),rf=Number(b.refund_amount)||0;
