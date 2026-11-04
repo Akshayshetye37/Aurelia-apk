@@ -207,6 +207,102 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
     }
   }
 
+  const journalMalformed = [];
+  const unbalancedJournals = [];
+  const duplicateJournalIds = [];
+  const duplicateCancellationPostings = [];
+  const cancellationFlagMismatches = [];
+  const ledger = state?.financialLedger == null ? [] : state.financialLedger;
+  const journalIds = new Map();
+  const cancellationReferences = new Map();
+  if (!Array.isArray(ledger)) {
+    journalMalformed.push({ reason: "financial_ledger_not_array" });
+  } else {
+    for (let index = 0; index < ledger.length; index += 1) {
+      const entry = ledger[index];
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        journalMalformed.push({ entryIndex: index, reason: "journal_entry_not_object" });
+        continue;
+      }
+      const id = keyPart(entry.id);
+      const reference = keyPart(entry.reference);
+      if (!id || !reference || !Array.isArray(entry.lines) || entry.lines.length === 0) {
+        journalMalformed.push({ entryIndex: index, journalId: id || null, reference: reference || null, reason: "journal_identity_or_lines_missing" });
+        continue;
+      }
+      const priorIds = journalIds.get(id) || [];
+      priorIds.push(index);
+      journalIds.set(id, priorIds);
+      if (String(entry.kind || "").startsWith("refund_") || entry.kind === "cancellation_settlement") {
+        const refs = cancellationReferences.get(reference) || [];
+        refs.push({ entryIndex: index, journalId: id, kind: entry.kind || "unknown", bookingId: entry.bookingId ?? null });
+        cancellationReferences.set(reference, refs);
+      }
+      let debitPaise = 0;
+      let creditPaise = 0;
+      let valid = true;
+      for (let lineIndex = 0; lineIndex < entry.lines.length; lineIndex += 1) {
+        const line = entry.lines[lineIndex];
+        if (!line || typeof line !== "object" || Array.isArray(line) ||
+            typeof line.account !== "string" || !line.account.trim() || line.account.length > 120) {
+          journalMalformed.push({ entryIndex: index, journalId: id, lineIndex, reason: "journal_line_invalid" });
+          valid = false;
+          continue;
+        }
+        try {
+          const debit = toPaise(line.debit ?? 0, "Journal debit");
+          const credit = toPaise(line.credit ?? 0, "Journal credit");
+          if (debit > 0 && credit > 0) throw new RangeError("Journal line cannot contain both debit and credit");
+          debitPaise += debit;
+          creditPaise += credit;
+          if (!Number.isSafeInteger(debitPaise) || !Number.isSafeInteger(creditPaise)) {
+            throw new RangeError("Journal total exceeds safe integer range");
+          }
+        } catch (error) {
+          journalMalformed.push({ entryIndex: index, journalId: id, lineIndex, reason: "invalid_journal_amount: " + error.message });
+          valid = false;
+        }
+      }
+      if (valid && debitPaise !== creditPaise) {
+        unbalancedJournals.push({ entryIndex: index, journalId: id, reference, debitPaise, creditPaise, deltaPaise: debitPaise - creditPaise });
+      }
+    }
+  }
+  for (const [id, indexes] of journalIds) {
+    if (indexes.length > 1) duplicateJournalIds.push({ journalId: id, entryIndexes: indexes, reason: "journal_id_reused" });
+  }
+  for (const [reference, entries] of cancellationReferences) {
+    const pending = entries.filter(entry => entry.kind === "refund_pending");
+    const completed = entries.filter(entry => entry.kind !== "refund_pending");
+    if (pending.length > 1 || completed.length > 1) {
+      duplicateCancellationPostings.push({
+        reference, pendingEntryCount: pending.length, completedEntryCount: completed.length,
+        entryIndexes: entries.map(entry => entry.entryIndex),
+        reason: pending.length > 1 ? "duplicate_refund_payable_posting" : "duplicate_cancellation_settlement"
+      });
+    }
+  }
+  for (const booking of cancelled) {
+    if (!booking || typeof booking !== "object" || Array.isArray(booking)) continue;
+    const bookingId = booking.id ?? null;
+    const related = Array.isArray(ledger)
+      ? ledger.filter(entry => entry && typeof entry === "object" &&
+          (bookingId == null ? entry.bookingId == null : keyPart(entry.bookingId) === keyPart(bookingId)))
+      : [];
+    if (booking.cancellationAccountingCommitted === true && related.length === 0) {
+      cancellationFlagMismatches.push({ bookingId, reason: "committed_cancellation_without_journal" });
+    }
+    if (booking.refundPayableJournalRecorded === true &&
+        !related.some(entry => entry.kind === "refund_pending")) {
+      cancellationFlagMismatches.push({ bookingId, reason: "refund_payable_flag_without_pending_journal" });
+    }
+    const refundAmount = Number(booking.refund_amount ?? 0);
+    if (refundAmount > 0 && ["refunded", "partially_refunded"].includes(booking.cancelledStatus) &&
+        !related.some(entry => entry.kind === "refund_paid_and_retention" || entry.kind === "cancellation_settlement")) {
+      cancellationFlagMismatches.push({ bookingId, reason: "paid_refund_status_without_settlement_journal" });
+    }
+  }
+
   const totalAbsoluteDiscrepancyPaise = findings.reduce((sum, item) => sum + Math.abs(item.deltaPaise), 0);
   const worst = findings.slice().sort((a, b) => Math.abs(b.deltaPaise) - Math.abs(a.deltaPaise))
     .slice(0, Math.max(0, Math.floor(worstLimit)));
@@ -221,8 +317,15 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
     historyMismatchCount: historyMismatches.length,
     missingBookingIdCount: missingBookingIds.length,
     duplicateBookingIdCount: duplicateBookingIds.length,
+    malformedJournalCount: journalMalformed.length,
+    unbalancedJournalCount: unbalancedJournals.length,
+    duplicateJournalIdCount: duplicateJournalIds.length,
+    duplicateCancellationPostingCount: duplicateCancellationPostings.length,
+    cancellationFlagMismatchCount: cancellationFlagMismatches.length,
     totalAbsoluteDiscrepancyPaise,
     findings, worst, malformed, duplicates, orphanAdvances, refundOverpayments,
-    historyMismatches, missingBookingIds, duplicateBookingIds
+    historyMismatches, missingBookingIds, duplicateBookingIds,
+    journalMalformed, unbalancedJournals, duplicateJournalIds,
+    duplicateCancellationPostings, cancellationFlagMismatches
   };
 }
