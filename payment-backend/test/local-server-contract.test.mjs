@@ -225,3 +225,26 @@ test('Docker publishes only the TLS reverse proxy and retains SQLite in a named 
   assert.doesNotMatch(compose, /8085:8085/);
   assert.match(compose, /TRUST_PROXY_HOPS: "1"/);
 });
+
+import { assertWebhookReplayIntegrity } from '../src/webhooks/provider-webhook-router.mjs';
+
+test('webhook event replay requires identical signed payload fingerprint and bindings', () => {
+  const prior = {
+    tenantId: 'tenant01', provider: 'razorpay', environment: 'test',
+    providerOrderId: 'order_123', paymentId: 'pay_123', payloadHash: 'a'.repeat(64)
+  };
+  assert.equal(assertWebhookReplayIntegrity(prior, { ...prior }), true);
+  assert.throws(() => assertWebhookReplayIntegrity(prior, { ...prior, payloadHash: 'b'.repeat(64) }),
+    error => error.code === 'WEBHOOK_EVENT_PAYLOAD_CONFLICT');
+  assert.throws(() => assertWebhookReplayIntegrity(prior, { ...prior, paymentId: 'pay_other' }),
+    error => error.code === 'WEBHOOK_EVENT_IDENTITY_CONFLICT');
+});
+
+test('webhook replay fails closed for historical inbox rows without a payload fingerprint', () => {
+  const prior = {
+    tenantId: 'tenant01', provider: 'cashfree', environment: 'test',
+    providerOrderId: 'order_123', paymentId: 'pay_123'
+  };
+  assert.throws(() => assertWebhookReplayIntegrity(prior, { ...prior, payloadHash: 'a'.repeat(64) }),
+    error => error.code === 'WEBHOOK_PRIOR_FINGERPRINT_MISSING');
+});
