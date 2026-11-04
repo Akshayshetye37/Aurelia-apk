@@ -10,7 +10,7 @@ const normalizedReference = row => {
   const reference = keyPart(row.r ?? row.reference);
   const method = String(row.m ?? row.method ?? "");
   return /upi|bank|neft|rtgs|imps|card|wallet/i.test(method)
-    ? reference.replace(/\\s+/g, "").toUpperCase()
+    ? reference.replace(/\s+/g, "").toUpperCase()
     : reference;
 };
 
