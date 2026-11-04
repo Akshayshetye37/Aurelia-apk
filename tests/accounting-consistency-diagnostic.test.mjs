@@ -223,3 +223,76 @@ test("accounting diagnostic CLI parses and strict mode reports ledger findings",
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("valid balanced cancellation journals pass the financial-ledger audit", () => {
+  const result = diagnoseAccountingConsistency({
+    b: [],
+    cancelled: [{ id: 40, refundPayableJournalRecorded: true, cancelledStatus: "refund_pending", refund_amount: 400 }],
+    financialLedger: [{
+      id: "JE-40", reference: "CANCEL-40", kind: "refund_pending", bookingId: 40,
+      lines: [
+        { account: "Guest Advances Liability", debit: 400, credit: 0 },
+        { account: "Refunds Payable Liability", debit: 0, credit: 400 }
+      ]
+    }]
+  });
+  assert.equal(result.malformedJournalCount, 0);
+  assert.equal(result.unbalancedJournalCount, 0);
+  assert.equal(result.cancellationFlagMismatchCount, 0);
+});
+
+test("detects unbalanced and malformed cancellation journal lines", () => {
+  const result = diagnoseAccountingConsistency({
+    financialLedger: [
+      { id: "JE-41", reference: "CANCEL-41", kind: "cancellation_settlement", bookingId: 41,
+        lines: [{ account: "Cash", debit: 100, credit: 0 }, { account: "Revenue", debit: 0, credit: 90 }] },
+      { id: "JE-42", reference: "CANCEL-42", kind: "refund_pending", bookingId: 42,
+        lines: [{ account: "", debit: -1, credit: 0 }] }
+    ]
+  });
+  assert.equal(result.unbalancedJournalCount, 1);
+  assert.equal(result.malformedJournalCount, 1);
+});
+
+test("detects duplicate journal identities and duplicate cancellation postings", () => {
+  const result = diagnoseAccountingConsistency({
+    financialLedger: [
+      { id: "JE-DUP", reference: "CANCEL-43", kind: "refund_pending", bookingId: 43,
+        lines: [{ account: "Guest Advances", debit: 10, credit: 0 }, { account: "Refund Payable", debit: 0, credit: 10 }] },
+      { id: "JE-DUP", reference: "CANCEL-43", kind: "refund_pending", bookingId: 43,
+        lines: [{ account: "Guest Advances", debit: 10, credit: 0 }, { account: "Refund Payable", debit: 0, credit: 10 }] }
+    ]
+  });
+  assert.equal(result.duplicateJournalIdCount, 1);
+  assert.equal(result.duplicateCancellationPostingCount, 1);
+});
+
+test("detects cancellation status flags without matching journal evidence", () => {
+  const result = diagnoseAccountingConsistency({
+    cancelled: [{
+      id: 44, cancellationAccountingCommitted: true, refundPayableJournalRecorded: true,
+      cancelledStatus: "refunded", refund_amount: 50
+    }],
+    financialLedger: []
+  });
+  assert.equal(result.cancellationFlagMismatchCount, 3);
+});
+
+test("strict diagnostic CLI exits non-zero for cancellation journal integrity findings", () => {
+  const dir = mkdtempSync(join(tmpdir(), "aurelia-accounting-journal-"));
+  try {
+    const path = join(dir, "journal-drift.json");
+    writeFileSync(path, JSON.stringify({
+      b: [], cancelled: [],
+      financialLedger: [{
+        id: "JE-45", reference: "CANCEL-45", kind: "cancellation_settlement", bookingId: 45,
+        lines: [{ account: "Cash", debit: 10, credit: 0 }]
+      }]
+    }));
+    const result = spawnSync(process.execPath, ["scripts/diagnose-accounting.mjs", path, "--strict"], { encoding: "utf8" });
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stdout, /"unbalancedJournalCount": 1/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
