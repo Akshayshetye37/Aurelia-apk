@@ -51,3 +51,29 @@ test("uses integer paise and rejects invalid precision", () => {
   assert.equal(result.affectedBookingCount, 0);
   assert.equal(result.malformedBookingCount, 1);
 });
+
+
+test("does not mutate active or cancelled booking state", () => {
+  const state = {
+    b: [{ id: 12, p: 9, pays: [{ a: 4 }], payments: [{ amount: 4 }] }],
+    cancelled: [{ id: 13, p: 0, pays: [{ a: 1 }] }]
+  };
+  const before = structuredClone(state);
+  diagnoseAccountingConsistency(state);
+  assert.deepEqual(state, before);
+});
+
+test("treats missing paid total and missing payment rows as zero", () => {
+  const result = diagnoseAccountingConsistency({ b: [{ id: 14 }] });
+  assert.equal(result.affectedBookingCount, 0);
+  assert.equal(result.malformedBookingCount, 0);
+});
+
+test("ranks the largest absolute discrepancies first", () => {
+  const result = diagnoseAccountingConsistency({ b: [
+    { id: 15, p: 1, pays: [] },
+    { id: 16, p: 100, pays: [] },
+    { id: 17, p: 5, pays: [] }
+  ] }, { worstLimit: 2 });
+  assert.deepEqual(result.worst.map(row => row.bookingId), [16, 17]);
+});
