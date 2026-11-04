@@ -7,6 +7,7 @@ import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
 import { assertWebhookReplayIntegrity } from './webhooks/provider-webhook-router.mjs';
 import { installAsyncRouteErrorHandling } from './http/async-route-errors.mjs';
+import { createGracefulShutdown } from './http/graceful-shutdown.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
   paymentControlAllows, updatePaymentControls
@@ -777,4 +778,21 @@ app.use((err, _req, res, next) => {
   const status = err?.type === 'entity.too.large' ? 413 : 400;
   return res.status(status).json({ error: status === 413 ? 'request_too_large' : 'invalid_request' });
 });
-app.listen(Number(process.env.PORT || 8080), '0.0.0.0');
+const httpServer = app.listen(Number(process.env.PORT || 8080), '0.0.0.0');
+const shutdown = createGracefulShutdown({
+  server: httpServer,
+  timeoutMs: 7000,
+  dependencies: [
+    async () => db.terminate(),
+    async () => sm.close()
+  ]
+});
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.once(signal, () => {
+    shutdown().catch(() => {
+      // Do not print dependency errors: provider/infra exceptions may carry
+      // sensitive metadata. A non-zero exit lets the platform replace the task.
+      process.exitCode = 1;
+    });
+  });
+}
