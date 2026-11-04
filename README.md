@@ -117,3 +117,6 @@ Test collection requires its dedicated flag. Live collection has a separate unco
 **Local PMS settlement remains hard-locked.** The cloud control plane is not trusted by the WebView and does not unlock offline manual posting. A signed, short-lived policy lease and trusted native enforcement are still required. There is no owner control-panel UI yet; the authenticated API is the backend control surface.
 
 See [Central Payment Control Plane](docs/CENTRAL_PAYMENT_CONTROL_PLANE.md) for schema, audit model, release approvals and remaining work. No payment capability has been enabled, deployed or approved for live collection.
+
+
+Native recovery support is planned/incomplete and is not production-ready; no recovery code or remote key-release path is enabled.
