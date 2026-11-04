@@ -656,16 +656,29 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     });
 
     let accounting = outcome.accountingPosted ? 'posted' : 'not_verified';
-    // Capture verification is evidence only. The kill switch forbids all
-    // folio writes; leave verified captures pending for a future approved bridge.
+    // Webhooks may persist signed/provider-fetched evidence, never accounting
+    // authorization. Even if switches are later enabled, the trusted native
+    // issuer/projector is a separate release gate and is not implemented here.
     if (outcome.verified && !outcome.accountingPosted) {
+      const controls = await readPaymentControls({ db, tenantId });
+      const environmentControl = environment === 'live' ? 'live_collection' : 'test_collection';
+      const controlsAllowCapture = paymentControlAllows(controls, environmentControl);
+      const controlsAllowSettlement = paymentControlAllows(controls, 'automatic_settlement') &&
+        paymentControlAllows(controls, 'native_settlement_bridge');
+      const blockReason = controls.emergency_stop !== false
+        ? 'PAYMENT_EMERGENCY_STOP'
+        : !controlsAllowCapture
+          ? 'COLLECTION_CONTROL_DISABLED'
+          : !controlsAllowSettlement
+            ? 'SETTLEMENT_CONTROL_DISABLED'
+            : 'TRUSTED_SETTLEMENT_BRIDGE_NOT_IMPLEMENTED';
       await inbox.set({
-        accountingStatus: 'PENDING_KILL_SWITCH',
+        accountingStatus: 'PENDING_CONTROL_OR_BRIDGE',
         processingStatus: 'CAPTURED_VERIFIED_PENDING_ACCOUNTING',
-        accountingBlockReason: 'PAYMENT_SAFETY_KILL_SWITCH',
+        accountingBlockReason: blockReason,
         lastAttemptAt: FieldValue.serverTimestamp()
       }, { merge: true }).catch(() => {});
-      accounting = 'blocked_by_safety_kill_switch';
+      accounting = 'verified_pending_accounting';
     } else if (outcome.verified && outcome.accountingPosted) {
       accounting = 'previously_posted';
     }
