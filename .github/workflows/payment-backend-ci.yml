@@ -41,3 +41,15 @@ jobs:
         run: npm test
       - name: Build production Cloud Run container image
         run: docker build --pull --file Dockerfile.cloud --tag aurelia-payment-backend:ci .
+      - name: Verify production image runs as non-root
+        run: test "$(docker image inspect aurelia-payment-backend:ci --format '{{.Config.User}}')" = "node"
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive infra/terraform
+      - name: Initialize Terraform providers
+        run: terraform -chdir=infra/terraform init -backend=false -input=false
+      - name: Validate Cloud Run infrastructure
+        run: terraform -chdir=infra/terraform validate
