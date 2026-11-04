@@ -276,7 +276,7 @@ resource "google_compute_url_map" "payment_backend" {
   header_action {
     response_headers_to_add {
       header_name  = "Strict-Transport-Security"
-      header_value = "max-age=31536000"
+      header_value = "max-age=63072000; includeSubDomains; preload"
       replace      = true
     }
   }
