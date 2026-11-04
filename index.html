@@ -3704,6 +3704,10 @@ window.commitCancellationRefund=function(i){
  // Repair stale legacy flags only when there is no corresponding journal history.
  if(!priorEntries.length&&b.cancellationAccountingCommitted){b.cancellationAccountingCommitted=false;b.refundPayableJournalRecorded=false;b.retentionJournalRecorded=false}
  if(paid<=0&&(refund>0||action==='partial'||action==='full')){toast('No payment is recorded for this booking. Verify the original receipt and payment records before posting a refund.');return}
+ const priorLedger=(S.financialLedger||[]).slice();
+ const priorBooking=JSON.parse(JSON.stringify(b));
+ const priorAudit=Array.isArray(S.aud)?S.aud.slice():null;
+ try {
  const retained=Math.round((paid-refund)*100)/100,lines=[];
  if(action==='pending'&&refund>0){
   lines.push({account:'Guest Advances Liability',debit:refund,credit:0},{account:'Refunds Payable Liability',debit:0,credit:refund});
@@ -3718,7 +3722,25 @@ window.commitCancellationRefund=function(i){
  if(action==='pending'&&refund>0)b.refundPayableJournalRecorded=true;
  b.original_amount_paid=paid;b.refund_amount=refund;b.refund_transaction_reference=validation.reference||b.refund_transaction_reference||'';b.refund_settlement_confirmed=(action==='partial'||action==='full');b.retention_fee_retained=retained;b.refund_date=date;b.payment_method=method;b.cancelledStatus=action==='no_refund'?'no_refund':action==='pending'?'refund_pending':action==='partial'?'partially_refunded':'refunded';b.refundStatus=action==='no_refund'?'No refund':action==='pending'?'Pending refund approval/payment':action==='partial'?'Partially refunded':'Refund marked as completed';b.cancellationAccountingCommitted=action!=='pending';b.refundRecordedAt=(action==='partial'||action==='full')?new Date().toISOString():null;
  if(typeof aud==='function')aud('Cancellation accounting committed',String(b.g||'Guest')+' · Paid '+rk(paid)+' · Refund '+rk(refund)+' · Retained '+rk(retained));
- persist();closeS();render();toast('Cancellation journal committed');
+ persist();
+ const savedRaw=(window.__aureliaStorage||localStorage).getItem(SK);
+ const saved=savedRaw?JSON.parse(savedRaw):null;
+ const savedBooking=saved&&Array.isArray(saved.cancelled)?saved.cancelled.find(x=>String(x.id??'')===String(b.id??'')):null;
+ const committedFields=['original_amount_paid','refund_amount','refund_transaction_reference','refund_settlement_confirmed','retention_fee_retained','refund_date','payment_method','cancelledStatus','refundStatus','cancellationAccountingCommitted','refundRecordedAt'];
+ if(!saved||!savedBooking||JSON.stringify(saved.financialLedger||[])!==JSON.stringify(S.financialLedger)||committedFields.some(key=>JSON.stringify(savedBooking[key]??null)!==JSON.stringify(b[key]??null))||JSON.stringify(saved.aud||[])!==JSON.stringify(S.aud||[])) {
+  throw new Error('Cancellation journal failed durable read-back verification');
+ }
+ closeS();render();toast('Cancellation journal saved and verified');
+ } catch(error) {
+  S.financialLedger=priorLedger;
+  Object.keys(b).forEach(key=>delete b[key]);
+  Object.assign(b,priorBooking);
+  if(priorAudit)S.aud.splice(0,S.aud.length,...priorAudit);
+  try{persist()}catch(rollbackError){console.error('Cancellation rollback persistence failed',rollbackError)}
+  console.error('Cancellation journal commit failed',error);
+  toast('Refund journal could not be verified in device storage. No completion was reported; check storage and backup before retrying.');
+  return;
+ }
 };
 
 
