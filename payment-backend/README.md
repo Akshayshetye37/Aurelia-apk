@@ -33,3 +33,18 @@ See [Hybrid Payment Architecture](../docs/HYBRID_PAYMENT_ARCHITECTURE.md) and [P
 - Capture and folio settlement are separate states. Use a durable outbox/saga if the payment database and PMS accounting database differ.
 - Refunds are separate operations and require provider-confirmed status before PMS reversal posting.
 - Keep live collection OFF until every release gate has an auditable pass.
+
+## Tenant payment control plane
+
+The cloud runtime exposes authenticated owner/admin endpoints:
+
+- `GET /v1/admin/payment-controls`
+- `PATCH /v1/admin/payment-controls` with `{ "changes": { "test_collection": false }, "reason": "..." }`
+
+The tenant is derived from the verified Firebase membership. Updates require verified email, recent MFA, owner/admin membership and a non-empty reason. Each update is committed with an audit record in the tenant-scoped `paymentControls/{tenantId}/audit` subcollection.
+
+Every financial route reads current control state from Firestore. A missing document, invalid schema or Firestore failure is a deny. Test collection/order/activation requires `test_collection`; live routes require `live_collection` and are additionally rejected by a separate production-readiness gate. The reconciliation worker is gated by `automatic_settlement`.
+
+Turning a capability ON also requires a current independent owner approval at `paymentControlApprovals/{tenantId}/controls/{control}`, with the control-specific evidence list documented in `../docs/CENTRAL_PAYMENT_CONTROL_PLANE.md`. The control API cannot turn `emergency_stop` OFF. Do not manually create approval records to bypass evidence review.
+
+Webhook processing may persist provider verification evidence only. It does not create a settlement authorization or post a folio. Local PMS posting remains separately hard-locked until a signed, short-lived policy lease is enforced by the trusted native boundary.
