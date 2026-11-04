@@ -247,7 +247,7 @@ resource "google_compute_security_policy" "payment_backend" {
 resource "google_compute_backend_service" "payment_backend" {
   project               = var.project_id
   name                  = "${var.service_name}-backend"
-  protocol              = "HTTP"
+  protocol              = "HTTPS"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   timeout_sec           = 30
   security_policy       = google_compute_security_policy.payment_backend.id
