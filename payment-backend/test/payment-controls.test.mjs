@@ -93,7 +93,10 @@ test("updates reject invalid flags, missing reason and invalid actor", async () 
 });
 
 test("capability cannot be enabled without an approval read in the same transaction", async () => {
-  const controlRef = { path: "paymentControls/tenant_123" };
+  const controlRef = {
+    path: "paymentControls/tenant_123",
+    collection: name => ({ doc: () => ({ path: "paymentControls/tenant_123/" + name + "/audit-2" }) })
+  };
   const db = {
     doc: () => controlRef,
     runTransaction: async fn => fn({
