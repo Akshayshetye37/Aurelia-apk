@@ -33,7 +33,7 @@
 ## Decisions deliberately not made
 
 - Do **not** yet declare `booking.pays[]` the historical source of truth. The code's runtime writer treats it as payment detail rows, but due calculations and legacy records rely on `booking.p`. A real backup and source-receipt review are required before choosing a canonical representation.
-- Do **not** infer that `refundStatus === 'refunded'` proves an actual refund was paid. The cancellation UI permits an admin to mark completion; provider evidence is not required in this local workflow.
+- Do **not** infer that `refundStatus === 'refunded'` proves an actual refund was paid. Paid manual refund actions now require a unique operator-entered transaction reference and replay protection, but the reference is not independently verified against a bank or provider.
 - Do **not** infer that the cloud `paymentFolios` collection is mapped to a real PMS folio.
 - Do **not** auto-repair any discrepancy.
 
@@ -46,7 +46,7 @@
 
 ## Phase 1 gate
 
-**Not complete.** Complete the remaining repository-wide path inventory, extend coverage for legacy export variants and cross-record edge cases, resolve CI findings, then analyze the supplied backup. Stop before Phase 2 until reviewed.
+**Not complete.** The targeted booking/payment/cancellation write-path audit has been extended and source tests are passing at the last verified checkpoint. Complete the backup/export/import/restore audit, physical-device recovery tests, real-backup analysis and accounting-owner review before Phase 1 can pass. Do not proceed to live settlement or Phase 2 until those gates are evidenced.
 
 ## Additional Phase 1 findings — 2026-11-04
 
