@@ -1304,7 +1304,10 @@ window.aureliaNativeRecoveryBackupResult=async(id,ok,payload,fileName)=>{
 };
 function restoreF(el){
  const f=el.files&&el.files[0];if(!f)return;
+ const MAX_BACKUP_BYTES=50*1024*1024;
+ if(Number.isFinite(f.size)&&f.size>MAX_BACKUP_BYTES){toast('Backup exceeds the 50 MiB import safety limit. No records were changed.');el.value='';return}
  f.text().then(async t=>{
+  if(new TextEncoder().encode(t).byteLength>MAX_BACKUP_BYTES)throw new Error('Backup exceeds the 50 MiB import safety limit.');
   const decrypted=await decryptBackupPayload(t,f.name);
   const raw=JSON.parse(decrypted);
   if(raw&&raw.integrity){const meta=raw.integrity,copy={...raw};delete copy.integrity;if(meta.algorithm!=='SHA-256'||typeof meta.digest!=='string'||await sha256Hex(JSON.stringify(copy))!==meta.digest)throw new Error('Backup checksum does not match its contents.')}
@@ -1320,6 +1323,15 @@ function restoreF(el){
   let selected=null,shape=null;
   for(const x of candidates){const a=arrays(x);if(Array.isArray(a.rooms)||Array.isArray(a.bookings)||Array.isArray(a.guests)){selected=x;shape=a;break}}
   if(!selected)throw new Error('No rooms, guests or bookings arrays were found in this JSON file.');
+  const importLimits={rooms:5000,bookings:100000,guests:100000,expenses:100000,inventory:20000};
+  for(const [key,limit] of Object.entries(importLimits)){
+   const rows=shape[key];
+   if(rows!==undefined&&rows!==null&&!Array.isArray(rows))throw new Error('Backup '+key+' data must be an array.');
+   if(Array.isArray(rows)&&rows.length>limit)throw new Error('Backup '+key+' record count exceeds the safety limit of '+limit+'.');
+  }
+  const totalRows=Object.values(shape).reduce((sum,rows)=>sum+(Array.isArray(rows)?rows.length:0),0);
+  if(totalRows>200000)throw new Error('Backup contains too many records to import safely.');
+
   const hasFullState=['set','menu','hist','au','today','day','terms','sig','sales','led','fe','inN','t'].some(k=>selected[k]!==undefined)||raw.v===2;
   const isSnapshot=Array.isArray(selected.rooms||selected.roomList||selected.room_list||selected.roomRecords) &&
    Array.isArray(selected.b||selected.bookings||selected.stays||selected.reservations||selected.bookingRecords) && hasFullState;
