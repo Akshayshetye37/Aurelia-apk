@@ -233,3 +233,31 @@ test("does not infer refund ceiling from incomplete malformed payment rows", () 
     row.reason === "refund_original_amount_unverifiable_due_to_invalid_payment_rows"
   ));
 });
+
+
+test("detects payment identity reuse across distinct bookings even when booking IDs are missing", () => {
+  const result = diagnoseAccountingConsistency({ b: [
+    { p: 10, pays: [{ a: 10, m: "UPI", r: "UTR-MISSING-ID" }] },
+    { p: 10, pays: [{ a: 10, m: "UPI", r: "utr-missing-id" }] }
+  ] });
+  assert.equal(result.duplicatePaymentCount, 1);
+  assert.deepEqual(result.duplicates[0].bookingOrdinals, [0, 1]);
+});
+
+test("does not infer a refund ceiling from conflicting paid representations", () => {
+  const result = diagnoseAccountingConsistency({ cancelled: [{
+    id: 41, p: 200, pays: [{ a: 100 }], refund_amount: 150
+  }] });
+  assert.equal(result.refundOverpaymentCount, 0);
+  assert.ok(result.malformed.some(row =>
+    row.reason === "refund_original_amount_unverifiable_due_to_accounting_mismatch"
+  ));
+});
+
+test("uses an explicit original paid amount when available despite paid-total drift", () => {
+  const result = diagnoseAccountingConsistency({ cancelled: [{
+    id: 42, p: 200, pays: [{ a: 100 }], original_amount_paid: 100, refund_amount: 150
+  }] });
+  assert.equal(result.refundOverpaymentCount, 1);
+  assert.equal(result.refundOverpayments[0].originalPaidPaise, 10000);
+});
