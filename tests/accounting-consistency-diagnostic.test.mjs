@@ -157,3 +157,47 @@ test("detects negative and excessive-precision payment rows", () => {
   assert.equal(result.malformedBookingCount, 2);
   assert.equal(result.affectedBookingCount, 0);
 });
+
+
+test("detects canonical payment identity reused through a different reference", () => {
+  const result = diagnoseAccountingConsistency({ b: [{
+    id: 31, p: 20, pays: [
+      { a: 10, r: "UTR-A", idempotencyKey: "intent-1" },
+      { a: 10, r: "UTR-B", idempotencyKey: "intent-1" }
+    ]
+  }] });
+  assert.equal(result.duplicatePaymentCount, 1);
+  assert.equal(result.duplicates[0].fingerprint, "idempotency:intent-1");
+});
+
+test("detects booking id reuse and missing booking identifiers", () => {
+  const result = diagnoseAccountingConsistency({
+    b: [{ id: "same", p: 0, pays: [] }, { p: 0, pays: [] }],
+    cancelled: [{ id: "same", p: 0, pays: [] }]
+  });
+  assert.equal(result.duplicateBookingIdCount, 1);
+  assert.equal(result.missingBookingIdCount, 1);
+});
+
+test("detects compatibility history rows that do not mirror canonical payment rows", () => {
+  const result = diagnoseAccountingConsistency({ b: [{
+    id: 32, p: 10,
+    pays: [{ a: 10, amountPaise: 1000, m: "UPI", r: "UTR-32", source: "manual", bookingId: 32 }],
+    payments: [{ amount: 9, amountPaise: 900, method: "UPI", reference: "UTR-32", source: "manual", bookingId: 32 }]
+  }] });
+  assert.equal(result.historyMismatchCount, 1);
+  assert.equal(result.historyMismatches[0].missingFromHistoryCount, 1);
+  assert.equal(result.historyMismatches[0].extraInHistoryCount, 1);
+});
+
+test("continues scanning later payment rows after a malformed row", () => {
+  const result = diagnoseAccountingConsistency({ b: [{
+    id: 33, p: 20, pays: [
+      { a: "bad" },
+      { a: 10, r: "DUP" },
+      { a: 10, r: "DUP" }
+    ]
+  }] });
+  assert.equal(result.malformedBookingCount, 1);
+  assert.equal(result.duplicatePaymentCount, 1);
+});
