@@ -9,8 +9,8 @@ const compose = await readFile(new URL('../compose.yaml', import.meta.url), 'utf
 test('LAN runtime is the Docker entry point and is independent of cloud SDKs', () => {
   assert.equal(packageJson.scripts.start, 'node src/local-server.mjs');
   assert.ok(packageJson.dependencies['better-sqlite3']);
-  assert.doesNotMatch(source, /from ['"]firebase-admin\\//);
-  assert.doesNotMatch(source, /@google-cloud\\//);
+  assert.doesNotMatch(source, /from ['"]firebase-admin\/);
+  assert.doesNotMatch(source, /@google-cloud\/);
 });
 
 test('required independent secrets are validated before startup', () => {
