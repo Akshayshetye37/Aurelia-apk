@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { FirestorePaymentRepository, paymentFolioDocumentId } from '../src/intents/firestore-repository.mjs';
 
 class FakeFirestore {
@@ -331,6 +332,41 @@ test('UNKNOWN dispatch recovers an existing provider order by deterministic refe
   const lock = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentFolioLocks/'))?.[1];
   assert.equal(lock.active, true);
   assert.equal(lock.state, 'CREATED');
+});
+
+test('UNKNOWN recovery never overwrites a provider order already bound to another intent', async () => {
+  const s = setup({ createOrder: async () => { throw new Error('response_lost_after_provider_create'); } });
+  const first = await s.repo.initializePaymentIntent('user_123', payload());
+  assert.equal(first.status, 'UNKNOWN');
+  const orderId = 'order_recovered';
+  const orderHash = createHash('sha256')
+    .update('hotel_123:razorpay:test:' + orderId).digest('hex');
+  const priorBinding = {
+    tenantId: 'hotel_123', folioId: 'another_folio', intentId: 'another_intent',
+    provider: 'razorpay', environment: 'test', providerOrderId: orderId,
+    amountMinor: 12345, currency: 'INR'
+  };
+  s.db.seed('paymentProviderOrders/' + orderHash, priorBinding);
+
+  const recoveryRepo = new FirestorePaymentRepository({
+    db: s.db,
+    secretManager: { getProviderSecrets: async () => ({ keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' }) },
+    providerFactory: () => ({
+      findOrderByReference: async ({ reference }) => ({
+        found: true, orderId, receipt: reference, amountMinor: 450000, currency: 'INR'
+      }),
+      createOrder: async () => { throw new Error('must_not_redispatch'); }
+    })
+  });
+  const recovered = await recoveryRepo.initializePaymentIntent('user_123', payload());
+  assert.equal(recovered.status, 'UNKNOWN');
+  assert.equal(recovered.intentId, first.intentId);
+  assert.deepEqual(await s.db.get('paymentProviderOrders/' + orderHash), priorBinding);
+  const storedIntent = await s.db.get('paymentIntents/' + first.intentId);
+  assert.equal(storedIntent.state, 'UNKNOWN');
+  const lock = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentFolioLocks/'))?.[1];
+  assert.equal(lock.active, true);
+  assert.equal(s.dispatches, 1);
 });
 
 test('UNKNOWN dispatch remains locked when provider lookup is inconclusive', async () => {
