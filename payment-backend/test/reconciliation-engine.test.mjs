@@ -82,7 +82,7 @@ test('provider identity mismatch is quarantined for reconciliation', async () =>
 
 test('worker enforces a hard batch maximum', async () => {
   await assert.rejects(() => runDurableReconciliationWorker({
-    db: fakeDb([]), tenantId: 'tenant1', adapterResolver: async () => ({}), limit: 51
+    db: fakeDb([]), tenantId: 'tenant1', adapterResolver: async () => ({}),\n    settle: async () => ({}), limit: 51
   }), /batch_limit/);
 });
 
