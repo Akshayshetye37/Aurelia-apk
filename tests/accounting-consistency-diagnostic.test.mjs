@@ -296,3 +296,15 @@ test("strict diagnostic CLI exits non-zero for cancellation journal integrity fi
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("reports non-positive integer-paise values in compatibility history rows", () => {
+  const result = diagnoseAccountingConsistency({
+    b: [{
+      id: 46, p: 0, pays: [],
+      payments: [{ amountPaise: 0, amount: 0, method: "UPI" }]
+    }]
+  });
+  assert.equal(result.malformedBookingCount, 1);
+  assert.equal(result.historyMismatchCount, 0);
+  assert.equal(result.malformed[0].reason.startsWith("invalid_history_payment_row:"), true);
+});
