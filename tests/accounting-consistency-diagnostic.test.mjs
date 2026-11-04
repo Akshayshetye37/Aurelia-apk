@@ -106,7 +106,7 @@ test("detects orphaned or mis-keyed reservation advances", () => {
       { a: 5, source: "reservation_advance", bookingId: 23, idempotencyKey: "wrong-key" }
     ]
   }] });
-  assert.equal(result.orphanAdvanceCount, 2);
+  assert.equal(result.orphanAdvanceCount, 3);
 });
 
 test("detects refunds greater than the recorded original payment", () => {
@@ -155,5 +155,54 @@ test("detects negative and excessive-precision payment rows", () => {
     { id: 30, p: 0, pays: [{ a: 1.001 }] }
   ] });
   assert.equal(result.malformedBookingCount, 2);
+  assert.equal(result.affectedBookingCount, 0);
+});
+
+
+test("checks idempotency keys and bank references independently", () => {
+  const result = diagnoseAccountingConsistency({ b: [
+    { id: 31, p: 10, pays: [{ a: 10, r: "UTR-SHARED", idempotencyKey: "intent-one" }] },
+    { id: 32, p: 10, pays: [{ a: 10, r: "utr-shared", idempotencyKey: "intent-two" }] }
+  ] });
+  assert.equal(result.duplicatePaymentCount, 1);
+  assert.equal(result.duplicates[0].reason, "payment_reference_reused_across_bookings");
+});
+
+test("reports missing and reused booking identifiers", () => {
+  const result = diagnoseAccountingConsistency({
+    b: [{ id: "booking-33", p: 0, pays: [] }, { p: 0, pays: [] }],
+    cancelled: [{ id: "booking-33", p: 0, pays: [] }]
+  });
+  assert.equal(result.missingBookingIdCount, 1);
+  assert.equal(result.duplicateBookingIdCount, 1);
+});
+
+test("compares compatibility payment history without double-counting matching rows", () => {
+  const matching = diagnoseAccountingConsistency({ b: [{
+    id: 34, p: 10,
+    pays: [{ a: 10, m: "UPI", r: "UTR-34", source: "manual", bookingId: 34 }],
+    payments: [{ amount: 10, method: "UPI", reference: "UTR-34", source: "manual", bookingId: 34 }]
+  }] });
+  assert.equal(matching.historyMismatchCount, 0);
+  const drifted = diagnoseAccountingConsistency({ b: [{
+    id: 35, p: 10,
+    pays: [{ a: 10, m: "UPI", r: "UTR-35", source: "manual", bookingId: 35 }],
+    payments: [{ amount: 9, method: "UPI", reference: "UTR-35", source: "manual", bookingId: 35 }]
+  }] });
+  assert.equal(drifted.historyMismatchCount, 1);
+  assert.equal(drifted.historyMismatches[0].missingFromHistoryCount, 1);
+  assert.equal(drifted.historyMismatches[0].extraInHistoryCount, 1);
+});
+
+test("continues scanning after a malformed row without inferring an incomplete balance", () => {
+  const result = diagnoseAccountingConsistency({ b: [{
+    id: 36, p: 20, pays: [
+      { a: "invalid" },
+      { a: 10, r: "UTR-DUP" },
+      { a: 10, r: "UTR-DUP" }
+    ]
+  }] });
+  assert.equal(result.malformedBookingCount, 1);
+  assert.equal(result.duplicatePaymentCount, 1);
   assert.equal(result.affectedBookingCount, 0);
 });
