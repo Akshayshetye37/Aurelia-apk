@@ -10,13 +10,13 @@
 |---|---|---:|---:|---|
 | Razorpay | Adapter exists; lifecycle partial | Yes | Yes, restricted test checkout | Contract tests, refund lifecycle, atomic PMS ledger integration, reconciliation, Android and sandbox UAT |
 | Cashfree | Adapter exists; lifecycle partial | Yes | Yes, restricted test checkout | Contract tests, refund lifecycle, atomic PMS ledger integration, reconciliation, Android and sandbox UAT |
-| PayU | Prototype exists; refund methods fail closed | Yes, explicitly marked prototype | No | Confirm merchant API version; complete refund/status contract, server routes, tests and sandbox UAT |
-| PhonePe | Prototype exists; merchant contract not fully qualified | Yes, explicitly marked prototype | No | Confirm merchant product, verify callback/refund contracts, server routes, tests and sandbox UAT |
+| PayU | Prototype source exists; refund methods fail closed | Yes, explicitly marked prototype | No | Confirm exact merchant v2 contract, complete refund/status, correct callback verification, route wiring, tests and sandbox UAT |
+| PhonePe | PG V2 prototype source exists; not qualified | Yes, explicitly marked prototype | No | Confirm merchant PG V2 account/API version, token lifecycle, callback authentication, refund identity/status, route wiring, tests and sandbox UAT |
 | Paytm | Not implemented | Yes, marked not implemented | No | Obtain current merchant PG documentation and sandbox; implement and qualify complete lifecycle |
-| JioPay | Hosted-checkout adapter added from official docs; not yet wired or UAT-qualified | Yes, marked specification required | No | Integrate server credential/checkout/webhook routes, confirm response/status semantics with JPSL, add adapter contract tests and pass merchant UAT |
+| JioPay | Hosted-checkout module added from public docs; not yet wired or merchant-UAT-qualified | Yes, marked prototype | No | Confirm merchant-specific field/hash rules and command response signatures with JPSL; add complete contract/route tests and pass sandbox UAT |
 | CCAvenue | Not implemented; merchant integration kit unavailable | Yes, marked integration kit required | No | Obtain merchant integration kit, confirm API version/crypto test vectors and sandbox |
 
-The backend catalogue lists all seven providers for visibility. This is deliberately separate from the executable provider factory and credential/checkout allowlists, which remain restricted to Razorpay and Cashfree. JioPay has a new adapter module on the provider implementation branch, but it is not registered or reachable from server routes. It must not be described as an available checkout provider until route wiring, test evidence and merchant UAT are complete. The other four providers cannot be configured, activated or used for checkout through the backend yet.
+The backend catalogue lists all seven providers for visibility. This is deliberately separate from the executable provider factory and credential/checkout allowlists, which remain restricted to Razorpay and Cashfree. PayU and PhonePe prototypes are also not registered. JioPay's module is not registered or reachable from server routes. Paytm and CCAvenue have no adapter source. No non-reference provider can be configured, activated or used for checkout through the cloud backend.
 ## Dependency-ordered delivery sequence
 
 1. **Freeze the financial domain contract.** Inspect the real PMS reservation, folio, currency, balance, journal and version/concurrency model. Map it explicitly to payment intents. Do not create a parallel authoritative ledger or migrate records by assumption.
@@ -41,7 +41,7 @@ The backend catalogue lists all seven providers for visibility. This is delibera
 
 ## Current evidence and limitations
 
-- The backend currently enables only Razorpay and Cashfree routes. PayU and PhonePe source files are prototypes, not end-to-end integrations.
+- The backend currently enables only Razorpay and Cashfree routes. PayU and PhonePe source files are prototypes, and JioPay is an unregistered module; none is an end-to-end integration.
 - The reconciliation endpoint is authenticated and batch-bounded, but currently invokes a manual sweep; it is not a scheduled service.
 - The worker and settlement helper still target `paymentFolios/{tenant+folio hash}` and `journalEntries/{intentId}`. The repository has not established that this matches the canonical deployed PMS schema.
 - Firestore indexes must be deployed with the backend. Concurrency, lease recovery and production query load remain to be verified.
