@@ -122,3 +122,18 @@ test("capability cannot be enabled without an approval read in the same transact
     error => error.code === "PAYMENT_CONTROL_RELEASE_APPROVAL_REQUIRED"
   );
 });
+
+test("the control core never allows the emergency stop to be disabled", async () => {
+  let transactions = 0;
+  await assert.rejects(
+    updatePaymentControls({
+      db: { doc: () => ({}), runTransaction: async () => { transactions += 1; } },
+      tenantId: "tenant_123",
+      actor: { uid: "owner-1", email: "owner@example.test" },
+      changes: { emergency_stop: false },
+      reason: "attempt to disable"
+    }),
+    error => error.code === "PAYMENT_EMERGENCY_STOP_RELEASE_FORBIDDEN"
+  );
+  assert.equal(transactions, 0);
+});
