@@ -101,8 +101,12 @@ test('Cashfree create refund preserves merchant refund_id separately from Cashfr
   });
   assert.match(mock.calls[0].options.headers['x-idempotency-key'],
     /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  await adapter.createRefund({
+    orderId: 'order_123', refundId: 'merchant_ref_123', amountMinor: 1250,
+    paymentId: '918812', idempotencyKey: 'refund-idem-123456'
+  });
   assert.equal(mock.calls[0].options.headers['x-idempotency-key'],
-    mock.calls[0].options.headers['x-idempotency-key']);
+    mock.calls[1].options.headers['x-idempotency-key']);
 });
 
 test('Cashfree create refund rejects provider response identity or amount drift', async () => {
