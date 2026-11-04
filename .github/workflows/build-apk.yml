@@ -1,40 +1,10 @@
 name: Build and verify Aurelia PMS APK
 
+# Release builds are deliberately gated; do not build until all ten acceptance gates are signed off.
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - fix/firebase-phone-identity-engine
-      - feature/multi-provider-payment-backend
-    paths:
-      - 'index.html'
-      - 'README.md'
-      - 'docs/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'capacitor.config.json'
-      - 'assets/**'
-      - 'scripts/**'
-      - 'android/templates/**'
-      - 'src/**'
-      - 'payment-backend/**'
-      - 'tests/**'
-      - '.github/workflows/build-apk.yml'
-  pull_request:
-    paths:
-      - 'README.md'
-      - 'docs/**'
-      - 'android/templates/**'
-      - 'index.html'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'capacitor.config.json'
-      - 'assets/**'
-      - 'scripts/**'
-      - 'src/**'
-      - 'payment-backend/**'
-      - 'tests/**'
-      - '.github/workflows/build-apk.yml'
+    tags:
+      - 'aurelia-approved-*'
 
 # Serialize builds on this branch so concurrent runs do not compete for runners
 # or publish ambiguous release artifacts.
