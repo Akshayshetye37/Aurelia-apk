@@ -275,7 +275,7 @@ test("detects cancellation status flags without matching journal evidence", () =
     }],
     financialLedger: []
   });
-  assert.equal(result.cancellationFlagMismatchCount, 3);
+  assert.equal(result.cancellationFlagMismatchCount, 4);
 });
 
 test("strict diagnostic CLI exits non-zero for cancellation journal integrity findings", () => {
@@ -307,4 +307,25 @@ test("reports non-positive integer-paise values in compatibility history rows", 
   assert.equal(result.malformedBookingCount, 1);
   assert.equal(result.historyMismatchCount, 0);
   assert.equal(result.malformed[0].reason.startsWith("invalid_history_payment_row:"), true);
+});
+
+test("treats a null financial ledger as malformed rather than as an empty ledger", () => {
+  const result = diagnoseAccountingConsistency({ b: [], cancelled: [], financialLedger: null });
+  assert.equal(result.malformedJournalCount, 1);
+  assert.equal(result.journalMalformed[0].reason, "financial_ledger_not_array");
+});
+
+test("detects paid refund flags without independent settlement evidence", () => {
+  const result = diagnoseAccountingConsistency({
+    cancelled: [{
+      id: 47, refund_amount: 25, cancelledStatus: "partially_refunded",
+      refund_settlement_confirmed: false, refund_transaction_reference: ""
+    }],
+    financialLedger: [{
+      id: "JE-47", reference: "CANCEL-47", kind: "cancellation_settlement", bookingId: 47,
+      lines: [{ account: "Guest Advances", debit: 25, credit: 0 }, { account: "Cash", debit: 0, credit: 25 }]
+    }]
+  });
+  assert.equal(result.cancellationFlagMismatchCount, 1);
+  assert.equal(result.cancellationFlagMismatches[0].reason, "paid_refund_missing_settlement_evidence");
 });
