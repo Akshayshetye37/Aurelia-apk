@@ -4,6 +4,9 @@
  * This file describes provider-specific merchant configuration only.
  * It does not claim an adapter is implemented or that a provider is enabled.
  * Secret fields are write-only and must be persisted only in Secret Manager.
+ * Security note: incomplete recovery/authentication paths and unqualified
+ * provider contracts are not production-ready; do not infer capability from
+ * catalogue presence or credential configuration.
  */
 export const PROVIDERS = Object.freeze({
   razorpay: {
