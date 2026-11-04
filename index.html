@@ -3776,7 +3776,8 @@ function caReportRows(){
  const operatingProfit=totalRevenue-expenseTotal;
  const roomReceivables=allBookings.filter(b=>b.st!=='done').reduce((a,b)=>a+Math.max(0,Number(dueB(b))||0),0);
  const inventory=(S.inv||[]).reduce((a,x)=>a+Math.max(0,Number(x.q)||0)*Math.max(0,Number(x.u)||0),0);
- const grossCollections=allBookings.reduce((a,b)=>a+(b.pays||[]).reduce((z,p)=>z+(Number(p.a)||0),0),0)+(S.sales||[]).reduce((a,s)=>a+(Number(s.a)||0),0);
+ const collectionBookings=[...allBookings,...(Array.isArray(S.cancelled)?S.cancelled:[])];
+ const grossCollections=collectionBookings.reduce((a,b)=>a+(b.pays||[]).reduce((z,p)=>z+(Number(p.a)||0),0),0)+(S.sales||[]).reduce((a,s)=>a+(Number(s.a)||0),0);
  const refundsPaid=(S.financialLedger||[]).reduce((sum,e)=>sum+(e.lines||[]).filter(l=>l.account==='Cash & Bank').reduce((v,l)=>v+(Number(l.credit)||0)-(Number(l.debit)||0),0),0);
  const cashReceived=grossCollections-refundsPaid;
  const cancelledDeposits=refundsPayable;
