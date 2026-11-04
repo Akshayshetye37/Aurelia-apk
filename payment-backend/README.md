@@ -20,7 +20,7 @@ Required environment: `GOOGLE_CLOUD_PROJECT`, `AURELIA_OWNER_ORIGINS`, `AURELIA_
 
 ## Implemented provider coverage
 
-The current cloud repository and provider factory allow only Razorpay and Cashfree. The other providers (PayU, PhonePe, Paytm, JioPay and CCAvenue) are not implemented in the cloud runtime. Do not mark them configured, validated, active or live-capable until their adapters, API contract tests, merchant sandbox/UAT and webhook/refund/reconciliation flows are complete.
+The cloud credential, validation, activation and checkout routes currently allow only Razorpay and Cashfree, and `src/providers/factory.mjs` registers only those two adapters. PayU and PhonePe source modules are incomplete prototypes (PayU refund operations deliberately fail closed); JioPay has an unqualified module but is not registered or routed; Paytm and CCAvenue are not implemented. None of the seven providers is production-ready. Do not expand the allowlist merely because a source file exists. Each provider must pass the shared adapter contract, server-route tests, raw-body webhook verification, refund lifecycle, authoritative status/reconciliation, merchant sandbox/UAT and operational acceptance.
 
 See [Hybrid Payment Architecture](../docs/HYBRID_PAYMENT_ARCHITECTURE.md) and [Provider Integration Status](../docs/PROVIDER_INTEGRATION_STATUS.md).
 
@@ -48,3 +48,15 @@ Every financial route reads current control state from Firestore. A missing docu
 Turning a capability ON also requires a current independent owner approval at `paymentControlApprovals/{tenantId}/controls/{control}`, with the control-specific evidence list documented in `../docs/CENTRAL_PAYMENT_CONTROL_PLANE.md`. The control API cannot turn `emergency_stop` OFF. Do not manually create approval records to bypass evidence review.
 
 Webhook processing may persist provider verification evidence only. It does not create a settlement authorization or post a folio. Local PMS posting remains separately hard-locked until a signed, short-lived policy lease is enforced by the trusted native boundary.
+
+
+## Provider implementation files and current boundary
+
+- `src/providers/adapter-contract.mjs` — common provider interface and capability assertion.
+- `src/providers/factory.mjs` — executable registry; currently Razorpay and Cashfree only.
+- `src/providers/razorpay.mjs`, `src/providers/cashfree.mjs` — registered adapters; still not complete PMS financial pipelines.
+- `src/providers/payu-adapter.mjs`, `src/providers/phonepe-adapter.mjs` — prototypes, not enabled.
+- `src/providers/jiopay.mjs` — newly added module, not factory-registered or route-enabled; its contract still requires merchant sandbox confirmation.
+- Paytm and CCAvenue adapter modules are not present.
+
+The Android project package and actual Capacitor `MainActivity` path must be inspected from the Gradle source tree before adding a native payment plugin. Do not copy example package names or register a plugin against an unverified path. A generic Android URL intent is not equivalent to a production payment bridge.
