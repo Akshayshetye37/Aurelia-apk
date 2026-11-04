@@ -100,3 +100,12 @@ test("reservation advance form retains amount validation and rollback checks", a
   assert.match(handler, /Guest or reservation could not be verified in device storage/);
   assert.match(handler, /S\.b=priorBookings/);
 });
+
+
+test("legacy direct checkout and restaurant settlement mutators are fail-closed", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /function out\(i,T\)\{toast\('Direct check-out settlement is disabled/);
+  assert.equal((html.match(/function settleGo\(\)\{toast\('Legacy restaurant settlement is disabled/g)||[]).length, 2);
+  assert.match(html, /function settle\(\)\{toast\('Legacy table settlement is disabled/);
+  assert.match(html, /function recordRestPay\(\)/);
+});
