@@ -9,6 +9,7 @@ import { assertWebhookReplayIntegrity } from './webhooks/provider-webhook-router
 import { installAsyncRouteErrorHandling } from './http/async-route-errors.mjs';
 import { createGracefulShutdown } from './http/graceful-shutdown.mjs';
 import { publicHttpError } from './http/public-http-error.mjs';
+import { disableLatestSecretVersion } from './secrets/secret-version-management.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
   paymentControlAllows, updatePaymentControls
@@ -500,8 +501,9 @@ app.delete('/v1/admin/providers/:provider/credentials', requireTenantAdmin, asyn
     const stateRef = providerTenantDoc(req.tenant.id, provider, environment);
     const state = await stateRef.get();
     if (!state.exists) return res.json({ removed: true, provider, environment, alreadyAbsent: true });
-    // Disable provider use before deleting either secret. A partial deletion
-    // must never leave a configured or active provider with missing material.
+    // Disable provider use before disabling either secret version. Retaining
+    // the secret resources allows safe re-provisioning and avoids project-wide
+    // secret deletion permission in the runtime service account.
     await stateRef.set({
       configured: false, credentialsValidated: false, sandboxTestPassed: false,
       webhookVerified: false, active: false, updatedAt: FieldValue.serverTimestamp()
@@ -511,8 +513,7 @@ app.delete('/v1/admin/providers/:provider/credentials', requireTenantAdmin, asyn
       providerSecretId(req.tenant.id, provider, environment, 'webhook')
     ];
     for (const id of ids) {
-      try { await sm.deleteSecret({ name: secretName(id) }); }
-      catch (error) { if (error.code !== 5) throw error; }
+      await disableLatestSecretVersion(sm, secretName(id));
     }
     await stateRef.delete();
     return res.json({ removed: true, provider, environment, active: false });
