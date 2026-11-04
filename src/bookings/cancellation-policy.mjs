@@ -23,9 +23,12 @@ export function validateCancellationRefund({
       !Number.isFinite(refundAmount) || refundAmount < 0) {
     return { ok: false, code: "INVALID_REFUND_AMOUNT", message: "Refund and original payment must be valid non-negative amounts." };
   }
-  if (Math.abs(Math.round(originalPaid * 100) - originalPaid * 100) > 1e-7 ||
-      Math.abs(Math.round(refundAmount * 100) - refundAmount * 100) > 1e-7) {
-    return { ok: false, code: "INVALID_REFUND_PRECISION", message: "Amounts may contain no more than two decimal places." };
+  const originalPaidPaise = Math.round(originalPaid * 100);
+  const refundPaise = Math.round(refundAmount * 100);
+  if (!Number.isSafeInteger(originalPaidPaise) || !Number.isSafeInteger(refundPaise) ||
+      Math.abs(originalPaidPaise - originalPaid * 100) > 1e-7 ||
+      Math.abs(refundPaise - refundAmount * 100) > 1e-7) {
+    return { ok: false, code: "INVALID_REFUND_PRECISION", message: "Amounts must have at most two decimal places and remain within the safe monetary range." };
   }
   if (!CANCELLATION_REFUND_ACTIONS.includes(action)) {
     return { ok: false, code: "INVALID_REFUND_ACTION", message: "Select a valid refund action." };
