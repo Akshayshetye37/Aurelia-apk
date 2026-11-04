@@ -59,13 +59,19 @@ app.set('trust proxy', 1);
 
 // Reject cleartext requests; never redirect payment POSTs or forward credentials.
 app.use((req, res, next) => {
-  if (!req.secure) {
+  // Cloud Run health probes originate inside the platform and use the
+  // container port directly. Keep these two non-sensitive probe paths usable
+  // without forwarded TLS metadata; every business route still requires HTTPS.
+  const platformProbe = req.path === '/healthz' || req.path === '/readyz';
+  if (!req.secure && !platformProbe) {
     return res.status(403).json({
       error: 'insecure_connection_rejected',
       message: 'HTTPS is required.'
     });
   }
-  res.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  if (req.secure) {
+    res.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  }
   res.set('X-Content-Type-Options', 'nosniff');
   res.set('X-Frame-Options', 'DENY');
   res.set('Referrer-Policy', 'no-referrer');
