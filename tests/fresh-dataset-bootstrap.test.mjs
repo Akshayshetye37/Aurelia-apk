@@ -35,7 +35,7 @@ test("legacy export reads and downloads the original JSON without mutating the a
 });
 
 test("reset targets only the new operational namespace", () => {
-  assert.match(html, /function resetAll\(\)\{try\{\(window\.__aureliaStorage\|\|localStorage\)\.removeItem\(SK\)\}catch\(e\)\{\}location\.reload\(\)\}/);
+  assert.match(html, /function resetAll\(\)\{if\(LOCAL_STATE_STATUS==='invalid'\|\|RECOVERY_CHECK_PENDING\|\|!BACKUP_VERIFIED_THIS_SESSION\|\|!S\.bk\?\.verified\|\|S\.bk\.hash!==curHash\(\)\)\{/);
   assert.doesNotMatch(html, /removeItem\(LEGACY_SK\)/);
 });
 
@@ -66,9 +66,9 @@ test("quarantined dataset displays a recovery action and warns that writes are b
 
 
 test("reset cannot erase the active dataset before a current backup is verified", () => {
-  assert.match(html, /if\(!S\.bk\?\.verified\|\|S\.bk\.hash!==curHash\(\)\)\{/);
+  assert.match(html, /if\(!BACKUP_VERIFIED_THIS_SESSION\|\|!S\.bk\?\.verified\|\|S\.bk\.hash!==curHash\(\)\)\{/);
   assert.match(html, /Reset blocked\. Save and verify a backup first/);
-  assert.match(html, /function resetAll\(\)\{try\{\(window\.__aureliaStorage\|\|localStorage\)\.removeItem\(SK\)\}/);
+  assert.match(html, /function resetAll\(\)\{if\(LOCAL_STATE_STATUS==='invalid'\|\|RECOVERY_CHECK_PENDING\|\|!BACKUP_VERIFIED_THIS_SESSION/);
 });
 
 
