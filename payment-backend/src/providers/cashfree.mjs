@@ -7,7 +7,7 @@ const id = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(va
 const minor = value => Number.isSafeInteger(value) && value > 0;
 const majorToMinor = value => {
   if (typeof value !== 'number' && typeof value !== 'string') return null;
-  if (typeof value === 'string' && !/^\\d+(?:\\.\\d{1,2})?$/.test(value.trim())) return null;
+  if (typeof value === 'string' && !/^[0-9]+(?:\.[0-9]{1,2})?$/.test(value.trim())) return null;
   const major = Number(value);
   const scaled = major * 100;
   if (!Number.isFinite(major) || major <= 0 || !Number.isSafeInteger(Math.round(scaled)) ||
