@@ -9,7 +9,7 @@ This Terraform configuration creates the Cloud Run service and its restricted ru
 - The service accepts traffic through the Google Cloud load-balancer path, not direct public Cloud Run ingress.
 - Runtime identity is a dedicated service account, not the project default service account.
 - Firestore access uses `roles/datastore.user`.
-- Secret Manager access uses a custom role containing only the create/get/add-version/access-version permissions currently used by the backend.
+- Secret Manager access uses a custom role limited to secret create/get, version add/access/list and version disable; the runtime cannot delete secret resources or destroy credential history.
 - HTTPS proxy contract is configured explicitly: `AURELIA_HTTPS_TERMINATION=trusted-proxy` and `AURELIA_TRUST_PROXY_HOPS=1`.
 - Container image must be pinned by sha256 digest; mutable `latest` tags are rejected.
 
@@ -17,12 +17,12 @@ This Terraform configuration creates the Cloud Run service and its restricted ru
 
 1. A Google Cloud project with billing enabled.
 2. Terraform 1.6+ and Google provider 6.x.
-3. An immutable image already pushed to Artifact Registry.
+3. An Artifact Registry repository and immutable container image already pushed to it.
 4. Firestore Native mode initialized in the selected project and region.
-5. A Google Cloud external Application Load Balancer, serverless NEG, HTTPS frontend, certificate and DNS record configured to target this Cloud Run service.
+5. A registered production domain and control of its DNS zone. This module creates a global external Application Load Balancer, serverless NEG, managed certificate, HTTPS frontend, HTTP-to-HTTPS redirect and Cloud Armor rate-limit policy. DNS must point the domain to the `load_balancer_ip` output; certificate provisioning waits for DNS to resolve correctly.
 6. A review of the exact owner origins and IAM requirements for the deployed app.
 
-This module intentionally does not create the external load balancer, DNS zone, certificate or serverless NEG: the production hostname and certificate ownership were not supplied. Do not expose the Cloud Run service through an alternate public endpoint.
+This module creates the external load balancer, managed certificate and serverless NEG, but does not create or change DNS records because DNS-zone ownership was not supplied. Do not expose the Cloud Run service through an alternate public endpoint.
 
 ## Apply
 
@@ -44,7 +44,7 @@ terraform plan
 terraform apply
 ```
 
-The external HTTPS load balancer must be configured to use a serverless NEG referencing this Cloud Run service and must be the only public ingress route. Cloud Run IAM grants invocation to the load-balancer path; application-level admin endpoints still require Firebase ID token, verified email, MFA and active tenant-admin membership.
+Terraform creates the external HTTPS load balancer and serverless NEG. After apply, create the DNS A record for the domain using the `load_balancer_ip` output and wait for the managed certificate to become ACTIVE. Cloud Run IAM grants invocation to the load-balancer path; application-level admin endpoints still require Firebase ID token, verified email, MFA and active tenant-admin membership.
 
 ## Important operational caveats
 
