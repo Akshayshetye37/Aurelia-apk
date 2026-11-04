@@ -178,7 +178,7 @@ test('server does not retain a second hard-coded backend kill-switch shadowing t
 
 test('capability enablement requires independent, current owner release evidence', () => {
   assert.match(source, /CONTROL_RELEASE_EVIDENCE/);
-  assert.match(source, /paymentControlApprovals\\/\' \+ tenantId \+ \'\\/controls\\/\' \+ control/);
+  assert.ok(source.includes("db.doc('paymentControlApprovals/' + tenantId + '/controls/' + control)"));
   assert.match(source, /approval\.status === 'APPROVED'/);
   assert.match(source, /approval\.approvedByOwner === true/);
   assert.match(source, /approval\.approvedBy !== actor\.uid/);
