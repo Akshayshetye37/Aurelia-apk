@@ -185,11 +185,15 @@ The authoritative implementation order, detailed technical tasks, acceptance evi
 
 ## Verified checkpoint — 2026-11-04
 
-Active source branch: `feature/multi-provider-payment-backend` in this repository. The latest source-code checkpoint with completed verification is `51160031a30caee0e7b7f42d34694786629f8be6`. GitHub Actions PMS source tests run `41857068196` and Aurelia payment architecture CI run `41857067917` both completed successfully for that commit. The subsequent workflow-only commit `96087b23b89895355cf59c956029eced6c4ae06c` changes the Android QA workflow to manual dispatch only; source validation for that workflow-only change is running.
+Active source branch: `feature/multi-provider-payment-backend`. Latest inspected commit: `161ab2b6a92e1052f2d184f6127182b63f41a277`.
 
-Android QA/debug build is deliberately manual and must not be run until the documented PMS release gates authorize device-build validation. No APK artifact is claimed by this checkpoint.
+GitHub Actions PMS source tests run [41859056329](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41859056329) and Aurelia payment architecture CI run [41859056217](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41859056217) both completed successfully for this exact commit. These are source-only validation runs; they do not build or sign an APK.
 
-These results prove that the checked-in automated tests and CI build steps passed. They do **not** prove that a merchant sandbox transaction has completed, that a production cloud backend is deployed, that a physical device can settle a verified capture into the authoritative PMS folio, or that provider refunds/reconciliation work end to end.
+The Android QA/debug workflow is manual-dispatch only and remains prohibited until the documented PMS release gates authorize device-build validation. No APK artifact or production deployment is claimed by this checkpoint.
+
+The latest changes also add exact signed webhook-body fingerprints to event-inbox replay checks, repair the accounting diagnostic CLI strict-mode syntax and test it end to end, and require durable local-storage read-back before a cancellation/refund journal is reported as committed.
+
+These results prove that the checked-in automated tests and CI checks passed. They do **not** prove that a merchant sandbox transaction has completed, that a production cloud backend is deployed, that a physical device can settle a verified capture into the authoritative PMS folio, or that provider refunds/reconciliation work end to end.
 
 ### Newly verified payment recovery behavior
 
