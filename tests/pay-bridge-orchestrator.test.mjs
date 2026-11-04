@@ -319,7 +319,7 @@ test("refund is disabled even for a captured payment until a durable refund life
 });
 
 
-test("ambiguous Pay Bridge timeout is reconciled by backend before one confirmed folio posting", async () => {
+test("backend verification does not bypass the local accounting safety interlock", async () => {
   const records = new Map();
   const store = {
     async put(record) { records.set(record.requestId, structuredClone(record)); },
@@ -368,15 +368,16 @@ test("ambiguous Pay Bridge timeout is reconciled by backend before one confirmed
     reference: "txn-orchestrated-001", source: "staff_review",
     idempotencyKey: binding.requestId, balanceDue: 500,
     verificationConfirmed: verified.settlementAuthorized,
-    persist: () => {}, audit: (action, detail) => state.aud.push({ action, detail })
+    persist: () => { throw new Error("must not persist"); },
+    audit: () => { throw new Error("must not audit"); }
   };
-  const first = settlePayment(posting);
-  const retry = settlePayment(posting);
-  assert.equal(first.duplicate, false);
-  assert.equal(retry.duplicate, true);
-  assert.equal(booking.p, 125);
-  assert.equal(booking.pays.length, 1);
-  assert.equal(booking.payments.length, 1);
-  assert.equal(state.today, 125);
-  assert.equal(state.aud.length, 1);
+  assert.throws(
+    () => settlePayment(posting),
+    error => error.code === "ACCOUNTING_READ_ONLY_KILL_SWITCH"
+  );
+  assert.equal(booking.p, 0);
+  assert.equal(booking.pays.length, 0);
+  assert.equal(booking.payments.length, 0);
+  assert.equal(state.today, 0);
+  assert.equal(state.aud.length, 0);
 });
