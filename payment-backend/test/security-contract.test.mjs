@@ -174,3 +174,23 @@ test('server does not retain a second hard-coded backend kill-switch shadowing t
   assert.equal(source.includes('PAYMENT_KILL_SWITCH'), false);
   assert.equal(source.includes('paymentOperationsLocked'), false);
 });
+
+
+test('capability enablement requires independent, current owner release evidence', () => {
+  assert.match(source, /CONTROL_RELEASE_EVIDENCE/);
+  assert.match(source, /paymentControlApprovals\\/\' \+ tenantId \+ \'\\/controls\\/\' \+ control/);
+  assert.match(source, /approval\.status === 'APPROVED'/);
+  assert.match(source, /approval\.approvedByOwner === true/);
+  assert.match(source, /approval\.approvedBy !== actor\.uid/);
+  assert.match(source, /expiresAt\.getTime\(\) > Date\.now\(\)/);
+  assert.match(source, /emergency_stop_release_approval_required/);
+  assert.match(source, /payment_control_release_evidence_required/);
+  assert.match(source, /approval\.separateOwnerApproval === true/);
+});
+
+test('webhook capture evidence cannot become accounting authorization', () => {
+  assert.match(source, /TRUSTED_SETTLEMENT_BRIDGE_NOT_IMPLEMENTED/);
+  assert.match(source, /SETTLEMENT_CONTROL_DISABLED/);
+  assert.match(source, /PENDING_CONTROL_OR_BRIDGE/);
+  assert.match(source, /CAPTURED_VERIFIED_PENDING_ACCOUNTING/);
+});
