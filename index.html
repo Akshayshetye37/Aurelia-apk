@@ -296,7 +296,13 @@ function guestContactActions(name,phone){
       return mem[k] != null ? mem[k] : null;
     },
     setItem: function(k,v){
-      try{ if(ok){ localStorage.setItem(k,v); return; } }catch(e){}
+      if(ok){
+        try{ localStorage.setItem(k,String(v)); return; }
+        catch(e){
+          /* Never disguise a quota/security failure as a durable write. */
+          throw new Error('Device storage write failed: '+(e&&e.name||'StorageError'));
+        }
+      }
       mem[k]=String(v);
     },
     removeItem: function(k){
@@ -305,7 +311,7 @@ function guestContactActions(name,phone){
     },
     memoryOnly: !ok
   };
-  /* localStorage fallback is silent */
+  /* Memory fallback is explicit; failed durable writes are never silently downgraded. */
 })();
 </script>
 
