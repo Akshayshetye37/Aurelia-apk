@@ -42,7 +42,7 @@ test('hybrid architecture documents HTTPS-only LAN and server-authoritative paym
   assert.match(docs, /publicly reachable HTTPS backend/i);
   assert.match(paymentServer, /AURELIA_HTTPS_TERMINATION !== 'trusted-proxy'/);
   assert.match(docs, /offline gateway intent is not a payment/i);
-  assert.match(docs, /Exactly-once network delivery is not claimed/);
+  assert.match(docs, /Uncertain in-flight operations remain pending reconciliation/);
 });
 
 test('offline intent UI validates paise and clearly avoids claiming collection', () => {
