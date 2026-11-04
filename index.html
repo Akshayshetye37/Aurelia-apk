@@ -3685,11 +3685,12 @@ window.setCancellationRefund=function(i){
 window.updateCancellationRetention=function(paid){const v=Math.max(0,Number($('#refund-value')?.value)||0),el=$('#refund-retention');if(el)el.value=Math.max(0,paid-v).toFixed(2)};
 window.commitCancellationRefund=function(i){
  const b=(S.cancelled||[])[Number(i)];if(!b){toast('Cancelled booking not found');return}
- const paid=cancellationPaidAmount(b),action=$('#refund-action')?.value||'pending',refund=Math.round((Number($('#refund-value')?.value)||0)*100)/100,date=$('#refund-date')?.value||new Date().toISOString().slice(0,10),method=$('#refund-method')?.value||'bank';
+ const paid=cancellationPaidAmount(b),action=$('#refund-action')?.value||'pending',rawRefund=Number($('#refund-value')?.value??0),date=$('#refund-date')?.value||new Date().toISOString().slice(0,10),method=$('#refund-method')?.value||'bank';
  const policy=window.AureliaCancellationPolicy;
  if(!policy||typeof policy.validateCancellationRefund!=='function'){toast('Cancellation policy module is unavailable. No journal was posted.');return}
- const validation=policy.validateCancellationRefund({paid,refund,action,confirmed:$('#refund-confirmed')?.checked===true,reference:$('#refund-reference')?.value||''});
+ const validation=policy.validateCancellationRefund({paid,refund:rawRefund,action,confirmed:$('#refund-confirmed')?.checked===true,reference:$('#refund-reference')?.value||''});
  if(!validation.ok){toast(validation.message);return}
+ const refund=validation.refundAmount;
  const ref='CANCEL-'+String(b.id||('GUEST-'+String(b.g||'').replace(/[^a-z0-9]/gi,'').slice(0,18)+'-'+String(b.cancelledAt||i).replace(/[^0-9]/g,'').slice(0,14)));
  const priorEntries=(S.financialLedger||[]).filter(e=>e.reference===ref&&e.bookingId=== (b.id||null));
  const priorPendingEntry=priorEntries.find(e=>e.kind==='refund_pending');
