@@ -8,8 +8,8 @@
 |---|---|---:|---|
 | Razorpay | Adapter implemented; partial lifecycle | Yes, test checkout only | Verify provider contract tests, webhook replay/concurrency, refund idempotency/status, canonical folio posting, Android integration and sandbox UAT |
 | Cashfree | Adapter implemented; partial lifecycle | Yes, test checkout only | Verify current API/webhook/refund contracts, provider contract tests, replay/concurrency, canonical folio posting, Android integration and sandbox UAT |
-| PayU | Adapter prototype exists; refund methods intentionally fail closed | No | Verify exact merchant API version, webhook reverse hash, refund/status API, server request mapping, adapter tests and sandbox UAT |
-| PhonePe | Adapter prototype exists; not fully verified against merchant product | No | Verify OAuth, status/callback/refund contracts, webhook authentication, server request mapping, adapter tests and sandbox UAT |
+| PayU | Incomplete prototype; refund/status lifecycle disabled | No | Confirm exact PayU product/API contract, credential semantics, reverse-hash contract, refund APIs, server routing, adapter tests and sandbox UAT |
+| PhonePe | Incomplete prototype; not registered; webhook/refund semantics unqualified | No | Confirm exact PhonePe merchant product/version, OAuth, order/status/refund idempotency, callback authentication, server routing, adapter tests and sandbox UAT |
 | Paytm | Not implemented | No | Confirm merchant PG product, obtain current API contract, implement and test complete lifecycle |
 | JioPay | Documentation/scaffold only | No | Obtain merchant API pack, implement and test complete lifecycle |
 | CCAvenue | Not implemented | No | Obtain merchant integration kit/API version, implement and test complete lifecycle |
@@ -38,7 +38,7 @@
 
 ## Current evidence and limitations
 
-- The backend currently enables only Razorpay and Cashfree routes. PayU and PhonePe source files are prototypes, not end-to-end integrations.
+- The backend enables only Razorpay and Cashfree adapters. PayU and PhonePe prototypes are deliberately excluded: PayU's refund lifecycle is explicitly disabled and PhonePe's callback/refund contracts are not accepted as complete. Paytm, JioPay and CCAvenue remain catalogue-only.
 - The reconciliation endpoint is authenticated and batch-bounded, but currently invokes a manual sweep; it is not a scheduled service.
 - The worker and settlement helper still target `paymentFolios/{tenant+folio hash}` and `journalEntries/{intentId}`. The repository has not established that this matches the canonical deployed PMS schema.
 - Firestore indexes must be deployed with the backend. Concurrency, lease recovery and production query load remain to be verified.
