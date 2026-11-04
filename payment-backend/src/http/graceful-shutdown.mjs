@@ -45,11 +45,20 @@ export function createGracefulShutdown({ server, dependencies = [], timeoutMs = 
   return function shutdown() {
     if (shutdownPromise) return shutdownPromise;
     shutdownPromise = (async () => {
-      await closeHttpServer(server, { timeoutMs });
+      const failures = [];
+      try {
+        await closeHttpServer(server, { timeoutMs });
+      } catch (error) {
+        failures.push(error);
+      }
+      // Attempt every dependency even if HTTP draining reports an error; the
+      // process must not retain open gRPC/Firestore handles during replacement.
       const results = await Promise.allSettled(dependencies.map(close => close()));
-      const failures = results.filter(result => result.status === "rejected");
+      failures.push(...results
+        .filter(result => result.status === "rejected")
+        .map(result => result.reason));
       if (failures.length) {
-        throw new AggregateError(failures.map(result => result.reason), "dependency_shutdown_failed");
+        throw new AggregateError(failures, "graceful_shutdown_failed");
       }
     })();
     return shutdownPromise;
