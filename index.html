@@ -3711,12 +3711,13 @@ window.commitCancellationRefund=function(i){
  const retained=Math.round((paid-refund)*100)/100,lines=[];
  if(action==='pending'&&refund>0){
   lines.push({account:'Guest Advances Liability',debit:refund,credit:0},{account:'Refunds Payable Liability',debit:0,credit:refund});
+  if(retained>0)lines.push({account:'Guest Advances Liability',debit:retained,credit:0},{account:'Cancellation Revenue',debit:0,credit:retained});
  }else{
   if(refund>0){
    if(b.refundPayableJournalRecorded)lines.push({account:'Refunds Payable Liability',debit:refund,credit:0},{account:'Cash & Bank',debit:0,credit:refund});
    else lines.push({account:'Guest Advances Liability',debit:refund,credit:0},{account:'Cash & Bank',debit:0,credit:refund});
   }
-  if(retained>0)lines.push({account:'Guest Advances Liability',debit:retained,credit:0},{account:'Cancellation Revenue',debit:0,credit:retained});
+  if(retained>0&&!b.refundPayableJournalRecorded)lines.push({account:'Guest Advances Liability',debit:retained,credit:0},{account:'Cancellation Revenue',debit:0,credit:retained});
  }
  if(lines.length)cancellationJournal(ref,lines,{kind:action==='pending'?'refund_pending':b.refundPayableJournalRecorded?'refund_paid_and_retention':'cancellation_settlement',bookingId:b.id||null,guest:b.g||'',originalAmountPaid:paid,refundAmount:refund,retentionAmount:retained,refundDate:date,paymentMethod:method});
  if(action==='pending'&&refund>0)b.refundPayableJournalRecorded=true;
