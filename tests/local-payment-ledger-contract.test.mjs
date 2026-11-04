@@ -39,7 +39,7 @@ test('web runtime exposes the native journal without storing credentials in brow
 });
 
 test('hybrid architecture documents HTTPS-only LAN and server-authoritative payment status', () => {
-  assert.match(docs, /public HTTPS backend/i);
+  assert.match(docs, /publicly reachable HTTPS backend/i);
   assert.match(paymentServer, /AURELIA_HTTPS_TERMINATION !== 'trusted-proxy'/);
   assert.match(docs, /offline gateway intent is not a payment/i);
   assert.match(docs, /Exactly-once network delivery is not claimed/);
@@ -57,11 +57,10 @@ test('hotel folio checkout requires a ready native engine and never falls back t
   assert.match(html, /window\.AndroidPaymentEngine/);
   assert.match(html, /engineStatus\.ready!==true/);
   assert.match(html, /No payment request was sent/);
-  assert.match(html, /No payment request was sent/);
-  assert.doesNotMatch(checkout, /settlePayment\(/);
   const start = html.indexOf('window.startAureliaGatewayCheckout=async function');
   const end = html.indexOf('window.reconcileAureliaGatewayPayment=', start);
   const checkout = html.slice(start, end);
+  assert.doesNotMatch(checkout, /settlePayment\(/);
   assert.doesNotMatch(checkout, /localGatewayApi\s*\(|checkout\.razorpay\.com|sdk\.cashfree\.com/);
 });
 
