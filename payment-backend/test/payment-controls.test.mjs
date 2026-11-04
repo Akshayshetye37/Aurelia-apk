@@ -69,6 +69,8 @@ test("updates atomically write previous/new values and actor/reason audit eviden
   const result = await updatePaymentControls({
     db, tenantId: "tenant_123", actor: { uid: "owner-1", email: "owner@example.test" },
     changes: { manual_posting: true }, reason: "Reviewed in test",
+    releaseApprovalRefs: { manual_posting: { path: "paymentControlApprovals/tenant_123/controls/manual_posting" } },
+    validateReleaseApproval: () => true,
     now: () => new Date("2026-11-04T12:00:00.000Z")
   });
   assert.equal(result.controls.emergency_stop, true);
@@ -86,4 +88,27 @@ test("updates reject invalid flags, missing reason and invalid actor", async () 
   await assert.rejects(updatePaymentControls({ db, tenantId: "tenant_123", actor: { uid: "x", email: "x@y.z" }, changes: { live_collection: "true" }, reason: "x" }));
   await assert.rejects(updatePaymentControls({ db, tenantId: "tenant_123", actor: { uid: "x", email: "x@y.z" }, changes: { live_collection: true }, reason: "" }));
   await assert.rejects(updatePaymentControls({ db, tenantId: "tenant_123", actor: { uid: "x" }, changes: { live_collection: true }, reason: "x" }));
+});
+
+test("capability cannot be enabled without an approval read in the same transaction", async () => {
+  const controlRef = { path: "paymentControls/tenant_123" };
+  const db = {
+    doc: () => controlRef,
+    runTransaction: async fn => fn({
+      get: async ref => ref.path === controlRef.path
+        ? { exists: false, data: () => null }
+        : { exists: false, data: () => null },
+      set: () => { throw new Error("writes must not happen without approval"); }
+    })
+  };
+  await assert.rejects(
+    updatePaymentControls({
+      db, tenantId: "tenant_123",
+      actor: { uid: "owner-1", email: "owner@example.test" },
+      changes: { test_collection: true }, reason: "attempt",
+      releaseApprovalRefs: { test_collection: { path: "approval" } },
+      validateReleaseApproval: () => true
+    }),
+    error => error.code === "PAYMENT_CONTROL_RELEASE_APPROVAL_REQUIRED"
+  );
 });
