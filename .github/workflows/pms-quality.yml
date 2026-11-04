@@ -1,4 +1,4 @@
-name: PMS source tests (no build)
+name: PMS source tests and web packaging
 
 on:
   push:
@@ -31,3 +31,5 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Run complete PMS test suite
         run: npm test
+      - name: Build production web bundle
+        run: npm run build
