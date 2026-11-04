@@ -81,7 +81,7 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
         }
         if (row.source === "reservation_advance") {
           const expectedKey = bookingId == null ? null : "booking-advance:" + bookingId;
-          if (!expectedKey || (row.idempotencyKey && row.idempotencyKey !== expectedKey)) {
+          if (!expectedKey || row.idempotencyKey !== expectedKey) {
             orphanAdvances.push({
               bookingId, collection, rowIndex: index,
               idempotencyKey: row.idempotencyKey ?? null,
