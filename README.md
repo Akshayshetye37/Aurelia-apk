@@ -64,7 +64,7 @@ The application catalogue is descriptive. Adapter class presence, credential fie
 - Cloud backend with Firebase ID-token verification, tenant membership and role checks.
 - Owner/admin payment-control API with fail-closed defaults, transactional control audit and evidence-gated capability changes.
 - Google Secret Manager integration for provider credentials.
-- Razorpay and Cashfree adapter/factory foundations and webhook verification/status lookup paths.
+- Razorpay and Cashfree adapter/factory foundations and webhook verification/status lookup paths. Cashfree refund creation and lookup preserve the merchant-supplied `refund_id` as the API lookup key and store `cf_refund_id` separately; responses are bound to the requested order, payment and INR amount.
 - Payment-intent persistence and server-side capability reporting.
 - Raw-body webhook ingress and provider status verification logic. Webhook inbox replay keys are additionally bound to the exact signed request-body SHA-256 fingerprint and tenant/provider/environment/order/payment identity; changed payloads reusing an event ID are rejected.
 - Bounded reconciliation worker prototype; the exposed reconciliation endpoint remains blocked because it writes to a separate Firestore payment-folio model, not the current PMS local folio ledger.
