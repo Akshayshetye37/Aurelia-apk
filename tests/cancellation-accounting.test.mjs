@@ -120,3 +120,24 @@ test("rejects payment row amounts with more than two decimal places", () => {
     p: 12.345, pays: [{ a: 12.345 }], payments: [{ amount: 12.345 }]
   }), null);
 });
+
+
+test("PMS cancellation workflow uses the strict paid resolver and integer-paise journal builder", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /import \{ cancellationPaidAmount as resolveCancellationPaidAmount, buildCancellationJournal \}/);
+  assert.match(html, /function cancellationPaidAmount\(b\)\{return typeof window\.AureliaCancellationPaidAmount==='function'\?window\.AureliaCancellationPaidAmount\(b\):null\}/);
+  assert.match(html, /if\(paid===null\)\{toast\('Refund blocked:/);
+  assert.match(html, /Actual refund transaction reference \(required for paid refunds\)/);
+  assert.match(html, /refund_reference:decision\.committed&&refundPaise>0\?refundReference:null/);
+  assert.match(html, /cancellationJournal\(ref,decision\.lines/);
+  assert.match(html, /Refund blocked: paid representations do not agree/);
+});
+
+test("cancelled booking snapshots prefer canonical pays rows over the compatibility history mirror", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /paymentSnapshot:Array\.isArray\(b\.pays\)\?b\.pays\.map/);
+  assert.match(html, /if\(b\.cancellationAccountingCommitted\)\{/);
+  assert.match(html, /pendingLiabilityPaise=priorEntries\.reduce/);
+});
