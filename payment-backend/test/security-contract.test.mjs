@@ -147,3 +147,30 @@ test('credential rotation and deletion disable provider state before secret muta
   assert.ok(rotation >= 0 && firstSecretWrite > rotation);
   assert.ok(deletion >= 0 && firstSecretDelete > deletion);
 });
+
+
+test('central payment control administration is tenant-scoped and owner/admin protected', () => {
+  assert.match(source, /app\.get\('\/v1\/admin\/payment-controls', requireTenantAdmin/);
+  assert.match(source, /app\.patch\('\/v1\/admin\/payment-controls', requireTenantAdmin/);
+  assert.match(source, /actor: \{ uid: req\.actor\.uid, email: req\.actor\.email \}/);
+  assert.match(source, /changes: body\.changes, reason: body\.reason/);
+  assert.match(source, /paymentControls\/\' \+ req\.tenant\.id/);
+});
+
+test('financial backend routes read tenant controls on each request and remain fail-closed', () => {
+  assert.match(source, /async function enforcePaymentControl\(req, res, control\)/);
+  assert.match(source, /readPaymentControls\(\{ db, tenantId: req\.tenant\.id \}\)/);
+  assert.match(source, /paymentControlAllows\(controls, control\)/);
+  assert.match(source, /payment_controls_unavailable/);
+  assert.match(source, /payment_emergency_stop/);
+  assert.match(source, /payment_control_disabled/);
+  assert.match(source, /enforcePaymentControl\(req, res, intentControl\)/);
+  assert.match(source, /enforcePaymentControl\(req, res, 'test_collection'\)/);
+  assert.match(source, /environment === 'live' \? 'live_collection' : 'test_collection'/);
+  assert.match(source, /live_payments_blocked_accounting_pipeline_incomplete/);
+});
+
+test('server does not retain a second hard-coded backend kill-switch shadowing tenant controls', () => {
+  assert.equal(source.includes('PAYMENT_KILL_SWITCH'), false);
+  assert.equal(source.includes('paymentOperationsLocked'), false);
+});
