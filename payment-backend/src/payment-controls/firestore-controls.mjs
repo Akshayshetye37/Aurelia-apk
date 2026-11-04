@@ -95,16 +95,15 @@ export async function updatePaymentControls({
     control !== "emergency_stop" && changes[control] === true
   );
   return db.runTransaction(async tx => {
-    const [snap, ...approvalSnaps] = await Promise.all([
-      tx.get(controlRef),
-      ...controlsRequiringApproval.map(control => {
-        const ref = releaseApprovalRefs[control];
-        if (!ref) throw Object.assign(new Error("Release approval reference is required"), {
-          code: "PAYMENT_CONTROL_RELEASE_APPROVAL_REQUIRED"
-        });
-        return tx.get(ref);
-      })
-    ]);
+    const snap = await tx.get(controlRef);
+    const approvalSnaps = [];
+    for (const control of controlsRequiringApproval) {
+      const ref = releaseApprovalRefs[control];
+      if (!ref) throw Object.assign(new Error("Release approval reference is required"), {
+        code: "PAYMENT_CONTROL_RELEASE_APPROVAL_REQUIRED"
+      });
+      approvalSnaps.push(await tx.get(ref));
+    }
     for (let index = 0; index < controlsRequiringApproval.length; index += 1) {
       const control = controlsRequiringApproval[index];
       const approvalSnap = approvalSnaps[index];
