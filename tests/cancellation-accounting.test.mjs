@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cancellationPaidAmount } from "../src/payments/cancellation-accounting.mjs";
+import { cancellationPaidAmount, buildCancellationJournal } from "../src/payments/cancellation-accounting.mjs";
 
 test("returns the paid amount when all persisted representations agree", () => {
   const booking = {
@@ -53,4 +53,63 @@ test("zero-paid booking is safe only when all declared values are zero", () => {
 test("rejects an unverified positive paid total when no payment rows exist", () => {
   assert.equal(cancellationPaidAmount({ p: 25, pays: [], payments: [] }), null);
   assert.equal(cancellationPaidAmount({ original_amount_paid: 25 }), null);
+});
+
+
+test("no-refund cancellation clears the guest advance into retained revenue", () => {
+  const result = buildCancellationJournal({ action: "no_refund", paidPaise: 20000, refundPaise: 0 });
+  assert.deepEqual(result.lines, [
+    { account: "Guest Advances Liability", debitPaise: 20000, creditPaise: 0 },
+    { account: "Cancellation Revenue", debitPaise: 0, creditPaise: 20000 }
+  ]);
+  assert.equal(result.committed, true);
+});
+
+test("pending refund creates a payable liability and does not recognize retention early", () => {
+  const result = buildCancellationJournal({ action: "pending", paidPaise: 20000, refundPaise: 10000 });
+  assert.deepEqual(result.lines, [
+    { account: "Guest Advances Liability", debitPaise: 10000, creditPaise: 0 },
+    { account: "Refunds Payable Liability", debitPaise: 0, creditPaise: 10000 }
+  ]);
+  assert.equal(result.retainedPaise, 10000);
+  assert.equal(result.pendingRecorded, true);
+  assert.equal(result.committed, false);
+});
+
+test("settling a pending partial refund clears payable and recognizes only retained value", () => {
+  const result = buildCancellationJournal({
+    action: "partial", paidPaise: 20000, refundPaise: 10000, pendingLiabilityPaise: 10000
+  });
+  assert.deepEqual(result.lines, [
+    { account: "Refunds Payable Liability", debitPaise: 10000, creditPaise: 0 },
+    { account: "Cash & Bank", debitPaise: 0, creditPaise: 10000 },
+    { account: "Guest Advances Liability", debitPaise: 10000, creditPaise: 0 },
+    { account: "Cancellation Revenue", debitPaise: 0, creditPaise: 10000 }
+  ]);
+  assert.equal(result.committed, true);
+  assert.equal(result.pendingRecorded, false);
+});
+
+test("rejects duplicate pending liabilities, pending no-refund and partial instalments", () => {
+  assert.throws(() => buildCancellationJournal({
+    action: "pending", paidPaise: 20000, refundPaise: 10000, pendingLiabilityPaise: 10000
+  }), error => error.code === "PENDING_REFUND_ALREADY_EXISTS");
+  assert.throws(() => buildCancellationJournal({
+    action: "no_refund", paidPaise: 20000, refundPaise: 0, pendingLiabilityPaise: 10000
+  }), error => error.code === "PENDING_REFUND_MUST_BE_SETTLED");
+  assert.throws(() => buildCancellationJournal({
+    action: "partial", paidPaise: 20000, refundPaise: 5000, pendingLiabilityPaise: 10000
+  }), error => error.code === "PENDING_REFUND_SETTLEMENT_MISMATCH");
+});
+
+test("requires full and partial refund amounts to match their declared semantics", () => {
+  assert.throws(() => buildCancellationJournal({
+    action: "full", paidPaise: 20000, refundPaise: 10000
+  }), error => error.code === "FULL_REFUND_MISMATCH");
+  assert.throws(() => buildCancellationJournal({
+    action: "partial", paidPaise: 20000, refundPaise: 20000
+  }), error => error.code === "PARTIAL_REFUND_MISMATCH");
+  assert.throws(() => buildCancellationJournal({
+    action: "partial", paidPaise: 20000, refundPaise: 0
+  }), error => error.code === "REFUND_MUST_BE_POSITIVE");
 });
