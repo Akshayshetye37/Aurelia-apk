@@ -323,7 +323,7 @@ test("detects paid refund flags without independent settlement evidence", () => 
     }],
     financialLedger: [{
       id: "JE-47", reference: "CANCEL-47", kind: "cancellation_settlement", bookingId: 47,
-      lines: [{ account: "Guest Advances", debit: 25, credit: 0 }, { account: "Cash", debit: 0, credit: 25 }]
+      lines: [{ account: "Guest Advances", debit: 25, credit: 0 }, { account: "Cash & Bank", debit: 0, credit: 25 }]
     }]
   });
   assert.equal(result.cancellationFlagMismatchCount, 1);
