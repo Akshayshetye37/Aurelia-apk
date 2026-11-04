@@ -279,3 +279,22 @@ test('failed dispatch-marker cleanup preserves the lock and never calls provider
   assert.equal(lock?.active, true);
   assert.equal(lock?.state, 'DISPATCHING');
 });
+
+
+test('same Cashfree idempotency key with changed guest or return URL is rejected', async () => {
+  const s = setup({
+    createOrder: async input => ({
+      orderId: 'cf_order_123', amountMinor: input.amountMinor,
+      currency: input.currency, paymentSessionId: 'cf_session_123'
+    })
+  });
+  const original = payload({ provider: 'cashfree', customer: { id: 'guest_123', phone: '9999999999' }, returnUrl: 'https://pms.example/payment-return' });
+  await s.repo.initializePaymentIntent('user_123', original);
+  await assert.rejects(s.repo.initializePaymentIntent('user_123', payload({
+    ...original, customer: { id: 'guest_456', phone: '9999999999' }
+  })), /idempotency_key_payload_conflict/);
+  await assert.rejects(s.repo.initializePaymentIntent('user_123', payload({
+    ...original, returnUrl: 'https://pms.example/another-return'
+  })), /idempotency_key_payload_conflict/);
+  assert.equal(s.dispatches, 1);
+});
