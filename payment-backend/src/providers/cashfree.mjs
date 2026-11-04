@@ -131,10 +131,13 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
         /[\u0000-\u001f\u007f]/.test(note)) {
       throw new TypeError('invalid_cashfree_refund');
     }
-    const data = await this.request('POST', '/orders/' + encodeURIComponent(input.orderId) + '/refunds', {
+    const response = await this.request('POST', '/orders/' + encodeURIComponent(input.orderId) + '/refunds', {
       refund_id: input.refundId, refund_amount: input.amountMinor / 100,
       refund_note: note
     }, crypto.randomUUID(), uuidFrom(input.idempotencyKey || input.refundId));
+    const data = Array.isArray(response) && response.length === 1 ? response[0]
+      : (!Array.isArray(response) ? response : null);
+    if (!data || typeof data !== 'object') throw new Error('cashfree_refund_response_invalid');
     const amountMinor = majorToMinor(data.refund_amount);
     if (data.order_id !== input.orderId || data.refund_id !== input.refundId ||
         !Number.isSafeInteger(amountMinor) || amountMinor !== input.amountMinor ||
