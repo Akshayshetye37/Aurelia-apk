@@ -129,7 +129,7 @@ test("PMS cancellation workflow uses the strict paid resolver and integer-paise 
   assert.match(html, /function cancellationPaidAmount\(b\)\{return typeof window\.AureliaCancellationPaidAmount==='function'\?window\.AureliaCancellationPaidAmount\(b\):null\}/);
   assert.match(html, /if\(paid===null\)\{toast\('Refund blocked:/);
   assert.match(html, /Actual refund transaction reference \(required for paid refunds\)/);
-  assert.match(html, /refund_reference:decision\.committed&&refundPaise>0\?refundReference:null/);
+  assert.match(html, /refundReference:decision\.committed&&refundPaise>0\?refundReference:null/);
   assert.match(html, /cancellationJournal\(ref,decision\.lines/);
   assert.match(html, /Refund blocked: paid representations do not agree/);
 });
