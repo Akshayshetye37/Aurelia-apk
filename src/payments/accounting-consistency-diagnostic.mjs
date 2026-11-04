@@ -5,37 +5,64 @@ function toPaise(value, label, { allowZero = true } = {}) {
   return moneyToPaise(value, label, { allowZero });
 }
 
-function normalizedKey(value) {
-  return String(value ?? "").trim();
+const keyPart = value => String(value ?? "").trim();
+const normalizedReference = row => keyPart(row.r ?? row.reference)
+  .replace(/\\s+/g, "").toUpperCase();
+
+function paymentFingerprints(row) {
+  const result = [];
+  const key = keyPart(row.idempotencyKey);
+  const reference = normalizedReference(row);
+  if (key) result.push("key:" + key);
+  if (reference) result.push("ref:" + reference);
+  return result;
 }
 
-function paymentFingerprint(row) {
-  const key = normalizedKey(row.idempotencyKey);
-  if (key) return "key:" + key;
-  const reference = normalizedKey(row.r ?? row.reference).replace(/\s+/g, "").toUpperCase();
-  if (reference) return "ref:" + reference;
-  return null;
+function rowAmountPaise(row, label) {
+  const amount = Number.isSafeInteger(row.amountPaise)
+    ? row.amountPaise
+    : toPaise(row.a ?? row.amount, label, { allowZero: false });
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw new RangeError(label + " must be a positive safe integer in paise");
+  }
+  return amount;
+}
+
+function rowSignature(row) {
+  return JSON.stringify([
+    rowAmountPaise(row, "History payment amount"),
+    keyPart(row.m ?? row.method).toLowerCase(),
+    normalizedReference(row),
+    keyPart(row.source),
+    keyPart(row.bookingId),
+    keyPart(row.idempotencyKey)
+  ]);
 }
 
 /**
  * Read-only diagnostic for local PMS accounting.
  *
- * It intentionally does not decide which historical representation is
- * authoritative and never repairs or persists application state.
+ * booking.pays is treated as the current canonical payment-row representation
+ * for comparison purposes; booking.p and booking.payments are independently
+ * checked compatibility representations. The diagnostic never chooses a
+ * historical winner, mutates state, or attempts a repair.
  */
 export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
   const active = Array.isArray(state?.b) ? state.b : [];
   const cancelled = Array.isArray(state?.cancelled) ? state.cancelled : [];
+  const bookings = [
+    ...active.map(booking => ({ booking, collection: "active" })),
+    ...cancelled.map(booking => ({ booking, collection: "cancelled" }))
+  ];
   const findings = [];
   const malformed = [];
   const duplicates = [];
   const orphanAdvances = [];
   const refundOverpayments = [];
+  const historyMismatches = [];
+  const missingBookingIds = [];
+  const bookingIds = new Map();
   const paymentIndex = new Map();
-  const bookings = [
-    ...active.map((booking) => ({ booking, collection: "active" })),
-    ...cancelled.map((booking) => ({ booking, collection: "cancelled" }))
-  ];
 
   for (const { booking, collection } of bookings) {
     if (!booking || typeof booking !== "object" || Array.isArray(booking)) {
@@ -44,35 +71,44 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
     }
 
     const bookingId = booking.id ?? null;
-    const rows = booking.pays == null ? [] : booking.pays;
-    if (!Array.isArray(rows)) {
+    if (bookingId == null || keyPart(bookingId) === "") {
+      missingBookingIds.push({ collection, room: booking.room ?? null, reason: "booking_id_missing" });
+    } else {
+      const id = keyPart(bookingId);
+      const rows = bookingIds.get(id) || [];
+      rows.push(collection);
+      bookingIds.set(id, rows);
+    }
+
+    const canonicalRows = booking.pays == null ? [] : booking.pays;
+    if (!Array.isArray(canonicalRows)) {
       malformed.push({ bookingId, collection, reason: "pays_not_array" });
       continue;
     }
 
     let rowSumPaise = 0;
-    let invalidReason = null;
+    let hasInvalidCanonicalRow = false;
+    const canonicalSignatures = [];
     const localFingerprints = new Map();
-    for (let index = 0; index < rows.length; index += 1) {
-      const row = rows[index];
+
+    for (let index = 0; index < canonicalRows.length; index += 1) {
+      const row = canonicalRows[index];
       if (!row || typeof row !== "object" || Array.isArray(row)) {
-        invalidReason = "payment_row_not_object";
-        break;
+        hasInvalidCanonicalRow = true;
+        malformed.push({ bookingId, collection, rowIndex: index, reason: "payment_row_not_object" });
+        continue;
       }
+
       try {
-        const amountPaise = Number.isSafeInteger(row.amountPaise)
-          ? row.amountPaise
-          : toPaise(row.a ?? row.amount, "Payment row amount", { allowZero: false });
-        if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) {
-          throw new RangeError("Payment row amount must be a positive safe integer in paise");
-        }
+        const amountPaise = rowAmountPaise(row, "Payment row amount");
         rowSumPaise += amountPaise;
         if (!Number.isSafeInteger(rowSumPaise)) {
           throw new RangeError("Payment row total exceeds safe integer range");
         }
+        canonicalSignatures.push(rowSignature(row));
 
         if (row.bookingId != null && bookingId != null &&
-            String(row.bookingId) !== String(bookingId)) {
+            keyPart(row.bookingId) !== keyPart(bookingId)) {
           orphanAdvances.push({
             bookingId, collection, rowIndex: index,
             paymentBookingId: row.bookingId,
@@ -90,8 +126,7 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
           }
         }
 
-        const fingerprint = paymentFingerprint(row);
-        if (fingerprint) {
+        for (const fingerprint of paymentFingerprints(row)) {
           const previous = localFingerprints.get(fingerprint);
           if (previous !== undefined) {
             duplicates.push({
@@ -102,13 +137,16 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
           } else {
             localFingerprints.set(fingerprint, index);
           }
-          const globalRows = paymentIndex.get(fingerprint) || [];
-          globalRows.push({ bookingId, collection, rowIndex: index });
-          paymentIndex.set(fingerprint, globalRows);
+          const indexed = paymentIndex.get(fingerprint) || [];
+          indexed.push({ bookingId, collection, rowIndex: index });
+          paymentIndex.set(fingerprint, indexed);
         }
       } catch (error) {
-        invalidReason = "invalid_payment_row_" + index + ": " + error.message;
-        break;
+        hasInvalidCanonicalRow = true;
+        malformed.push({
+          bookingId, collection, rowIndex: index,
+          reason: "invalid_payment_row: " + error.message
+        });
       }
     }
 
@@ -120,24 +158,56 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
       continue;
     }
 
-    if (invalidReason) {
-      malformed.push({ bookingId, collection, reason: invalidReason });
-      continue;
+    // Never compare an incomplete row sum with the declared paid total.
+    if (!hasInvalidCanonicalRow && rowSumPaise !== declaredPaidPaise) {
+      findings.push({
+        bookingId, room: booking.room ?? null, status: booking.st ?? null, collection,
+        declaredPaidPaise, rowSumPaise, deltaPaise: declaredPaidPaise - rowSumPaise,
+        hasLegacyPayments: Array.isArray(booking.payments) && booking.payments.length > 0,
+        paymentRowCount: canonicalRows.length
+      });
     }
 
-    const deltaPaise = declaredPaidPaise - rowSumPaise;
-    if (deltaPaise !== 0) {
-      findings.push({
-        bookingId,
-        room: booking.room ?? null,
-        status: booking.st ?? null,
-        collection,
-        declaredPaidPaise,
-        rowSumPaise,
-        deltaPaise,
-        hasLegacyPayments: Array.isArray(booking.payments) && booking.payments.length > 0,
-        paymentRowCount: rows.length
-      });
+    if (booking.payments != null && !Array.isArray(booking.payments)) {
+      malformed.push({ bookingId, collection, reason: "payments_not_array" });
+    } else if (Array.isArray(booking.payments)) {
+      const historyCounts = new Map();
+      for (let index = 0; index < booking.payments.length; index += 1) {
+        const row = booking.payments[index];
+        if (!row || typeof row !== "object" || Array.isArray(row)) {
+          malformed.push({ bookingId, collection, rowIndex: index, reason: "history_payment_row_not_object" });
+          continue;
+        }
+        try {
+          const signature = rowSignature(row);
+          historyCounts.set(signature, (historyCounts.get(signature) || 0) + 1);
+        } catch (error) {
+          malformed.push({
+            bookingId, collection, rowIndex: index,
+            reason: "invalid_history_payment_row: " + error.message
+          });
+        }
+      }
+      const canonicalCounts = new Map();
+      for (const signature of canonicalSignatures) {
+        canonicalCounts.set(signature, (canonicalCounts.get(signature) || 0) + 1);
+      }
+      let missingFromHistoryCount = 0;
+      let extraInHistoryCount = 0;
+      for (const [signature, count] of canonicalCounts) {
+        missingFromHistoryCount += Math.max(0, count - (historyCounts.get(signature) || 0));
+      }
+      for (const [signature, count] of historyCounts) {
+        extraInHistoryCount += Math.max(0, count - (canonicalCounts.get(signature) || 0));
+      }
+      if (missingFromHistoryCount || extraInHistoryCount) {
+        historyMismatches.push({
+          bookingId, collection,
+          canonicalPaymentCount: canonicalSignatures.length,
+          historyPaymentCount: booking.payments.length,
+          missingFromHistoryCount, extraInHistoryCount
+        });
+      }
     }
 
     const refundValue = booking.refund_amount ?? booking.refundAmount;
@@ -161,12 +231,26 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
     }
   }
 
+  const duplicateBookingIds = [];
+  for (const [bookingId, collections] of bookingIds) {
+    if (collections.length > 1) {
+      duplicateBookingIds.push({
+        bookingId, occurrenceCount: collections.length, collections,
+        reason: "booking_id_reused"
+      });
+    }
+  }
+
   for (const [fingerprint, rows] of paymentIndex) {
-    const distinctBookings = new Set(rows.map(row => String(row.bookingId)));
+    const distinctBookings = new Set(rows.map(row =>
+      row.bookingId == null ? "<missing>" : keyPart(row.bookingId)
+    ));
     if (distinctBookings.size > 1) {
       duplicates.push({
-        fingerprint, bookingIds: [...distinctBookings],
-        rows, reason: "payment_reference_reused_across_bookings"
+        fingerprint, bookingIds: [...distinctBookings], rows,
+        reason: fingerprint.startsWith("ref:")
+          ? "payment_reference_reused_across_bookings"
+          : "payment_idempotency_key_reused_across_bookings"
       });
     }
   }
@@ -174,8 +258,7 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
   const totalAbsoluteDiscrepancyPaise = findings.reduce(
     (sum, item) => sum + Math.abs(item.deltaPaise), 0
   );
-  const worst = findings
-    .slice()
+  const worst = findings.slice()
     .sort((a, b) => Math.abs(b.deltaPaise) - Math.abs(a.deltaPaise))
     .slice(0, Math.max(0, Math.floor(worstLimit)));
 
@@ -186,12 +269,11 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
     duplicatePaymentCount: duplicates.length,
     orphanAdvanceCount: orphanAdvances.length,
     refundOverpaymentCount: refundOverpayments.length,
+    historyMismatchCount: historyMismatches.length,
+    missingBookingIdCount: missingBookingIds.length,
+    duplicateBookingIdCount: duplicateBookingIds.length,
     totalAbsoluteDiscrepancyPaise,
-    findings,
-    worst,
-    malformed,
-    duplicates,
-    orphanAdvances,
-    refundOverpayments
+    findings, worst, malformed, duplicates, orphanAdvances, refundOverpayments,
+    historyMismatches, missingBookingIds, duplicateBookingIds
   };
 }
