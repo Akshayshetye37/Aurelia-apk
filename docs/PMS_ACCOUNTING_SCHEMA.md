@@ -255,18 +255,6 @@ The application bootstrap now separates new operational data from the former loc
 - The Reset All action requires a current verified backup and targets only the active v3 key; it does not remove the legacy v2 key.
 
 **Important limitation:** the new namespace still uses a single local JSON value and synchronous local-storage writes. It is not an ACID database, does not provide cross-device concurrency control, and is not a substitute for a tested off-device backup. No physical-device bootstrap, export, restore or uninstall-retention test has been run in this pass. This change establishes the no-migration boundary; it does not qualify the storage layer as production-grade.
-## 11. Fresh operational dataset and invalid-state protection — 2026-11-04
-
-The active local state key is `aurelia_pms_v3`. The previous `aurelia_lodge_v2` key remains a separate legacy archive and is not imported, merged, repaired or deleted by first-run bootstrap.
-
-- A missing v3 key creates a clean operational dataset.
-- An invalid v3 value is quarantined. It is not treated as a first-run install and is not overwritten by bootstrap or ordinary persistence.
-- Persistence remains blocked for an invalid dataset until a complete snapshot restore has passed write/read-back verification.
-- Record-only import into a quarantined dataset is blocked.
-- Reset All requires a verified backup whose stored hash matches the current dataset. Reset removes only the active v3 key.
-
-The storage layer remains device-local JSON and is not a transactional or multi-device database. Physical-device backup, restore, uninstall-retention and crash-recovery tests remain outstanding.
-
 ## 12. Cancellation refund and settlement integrity — 2026-11-04
 
 `src/payments/cancellation-accounting.mjs` provides two pure accounting controls:
