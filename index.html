@@ -4469,6 +4469,7 @@ window.printGuestPreview=function(){
 <script id="aurelia-preview-settlement-fallback">
 /* Standalone HTML preview fallback. Native/served builds replace this with settlement-service.mjs. */
 window.aureliaSettlePayment=function(input){
+ const blocked=new Error('Accounting is in read-only safety mode. No payment balance changes are permitted.');blocked.code='ACCOUNTING_READ_ONLY_KILL_SWITCH';throw blocked;
  const state=input&&input.state,booking=input&&input.booking;
  const fail=(message,code)=>{const e=new Error(message);e.code=code||'SETTLEMENT_REJECTED';throw e};
  if(input.source==='auto')fail('Automatic gateway settlement is disabled.','AUTO_SETTLEMENT_DISABLED');
@@ -4570,7 +4571,10 @@ window.AureliaSettlementStatus = Object.freeze({
   trustedAuthorizationIssuerInstalled: false,
   nativeProjectorInstalled: false,
   commandAcknowledgementEnabled: false,
-  localManualPaymentsEnabled: true
+  localManualPaymentsEnabled: false,
+  allBalanceMutationsBlocked: true,
+  liveCollectionEnabled: false,
+  nativeSettlementBridgeEnabled: false
 });
 
 // loadAll() runs in the preceding application script. Recover before the
