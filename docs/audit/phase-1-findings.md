@@ -12,7 +12,7 @@
 4. **Legacy cancellation history has multiple payment sources.** `cancellationPaidAmount` considers `paymentSnapshot`, `payments`, `pays`, `original_amount_paid` and `p` (lines 3659–3662). It chooses the maximum total among arrays rather than summing them, apparently to avoid counting mirrored rows twice. That is a heuristic; real records are needed to establish which source is reliable.
 5. **Reservation advances are posted as payment rows.** `dsave()` validates an advance and invokes `settlePayment` with source `reservation_advance` and key `booking-advance:<bookingId>` (lines 820–864). Reservation creation and the advance are intended to be one local operation. Orphan detection must validate these rows against their booking and audit/backup history.
 6. **The imported booking normalizer can map legacy `payments[]` into `pays[]` while separately setting `p`.** The normalizer around line 1860 (confirm exact current line before citing in a final audit) accepts aliases and coerces `p` using `Number(...)||0`. This can hide malformed source values and preserve paid-total drift.
-7. **The current diagnostic is not yet sufficient for the runbook's acceptance criteria.** `src/payments/accounting-consistency-diagnostic.mjs` compares `p` to payment-row totals and flags malformed rows, but does not yet identify duplicate payment rows, orphan advances, or refunds exceeding recorded payments. Existing tests cover basic drift and malformed data, not all requested cases.
+7. **The diagnostic has been expanded, but is not yet fully verified.** It compares `p` with `pays[]`, detects repeated idempotency keys/references, reservation-advance booking/key mismatches, invalid payment/refund amounts and refunds above the recorded original-paid figure. Regression tests cover these cases, and `scripts/diagnose-accounting.mjs` provides a read-only JSON backup CLI. CI has been triggered through draft PR #9; results are pending. Real-backup analysis and the complete repository-wide mutation inventory remain outstanding.
 
 ## Source paths inspected
 
@@ -46,4 +46,4 @@
 
 ## Phase 1 gate
 
-**Not complete.** Complete the remaining repository-wide path inventory, add coverage for negative/non-integer row amounts and legacy export variants, run the expanded test suite and build, then analyze the supplied backup. Stop before Phase 2 until reviewed.
+**Not complete.** Complete the remaining repository-wide path inventory, extend coverage for legacy export variants and cross-record edge cases, resolve CI findings, then analyze the supplied backup. Stop before Phase 2 until reviewed.
