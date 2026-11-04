@@ -12,6 +12,7 @@ import { configureHttpServerTimeouts } from './http/server-timeouts.mjs';
 import { publicHttpError } from './http/public-http-error.mjs';
 import { paymentRouteError } from './http/payment-route-errors.mjs';
 import { disableAllEnabledSecretVersions } from './secrets/secret-version-management.mjs';
+import { verifiedWebhookProviderPatch } from './webhooks/provider-webhook-state.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
   paymentControlAllows, updatePaymentControls
@@ -707,10 +708,9 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
             accountingBlockReason: FieldValue.delete()
           }, { merge: true });
         }
-        tx.set(providerTenantDoc(tenantId, provider, environment), {
-          ...(environment === 'test' ? { sandboxTestPassed: true } : {}),
-          webhookVerified: true, active: false, lastVerifiedWebhookAt: FieldValue.serverTimestamp()
-        }, { merge: true });
+        tx.set(providerTenantDoc(tenantId, provider, environment),
+          verifiedWebhookProviderPatch(environment, FieldValue.serverTimestamp),
+          { merge: true });
       }
       return { duplicate: false, verified: captureVerified };
     });
