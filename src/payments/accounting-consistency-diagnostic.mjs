@@ -78,7 +78,8 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
   const bookingIds = new Map();
   const paymentIndex = new Map();
 
-  for (const { booking, collection } of bookings) {
+  for (let bookingOrdinal = 0; bookingOrdinal < bookings.length; bookingOrdinal += 1) {
+    const { booking, collection } = bookings[bookingOrdinal];
     if (!booking || typeof booking !== "object" || Array.isArray(booking)) {
       malformed.push({ bookingId: null, collection, reason: "booking_not_object" });
       continue;
@@ -152,7 +153,7 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
             localFingerprints.set(fingerprint, index);
           }
           const indexed = paymentIndex.get(fingerprint) || [];
-          indexed.push({ bookingId, collection, rowIndex: index });
+          indexed.push({ bookingId, collection, bookingOrdinal, rowIndex: index });
           paymentIndex.set(fingerprint, indexed);
         }
       } catch (error) {
@@ -227,16 +228,21 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
     const refundValue = booking.refund_amount ?? booking.refundAmount;
     if (refundValue != null && refundValue !== "") {
       const originalValue = booking.original_amount_paid ?? booking.originalAmountPaid;
-      if (hasInvalidCanonicalRow && (originalValue == null || originalValue === "")) {
+      if ((originalValue == null || originalValue === "") && hasInvalidCanonicalRow) {
         malformed.push({
           bookingId, collection,
           reason: "refund_original_amount_unverifiable_due_to_invalid_payment_rows"
+        });
+      } else if ((originalValue == null || originalValue === "") && rowSumPaise !== declaredPaidPaise) {
+        malformed.push({
+          bookingId, collection, declaredPaidPaise, rowSumPaise,
+          reason: "refund_original_amount_unverifiable_due_to_accounting_mismatch"
         });
       } else {
         try {
           const refundPaise = toPaise(refundValue, "Refund amount");
           const originalPaidPaise = originalValue == null || originalValue === ""
-            ? Math.max(declaredPaidPaise, rowSumPaise)
+            ? rowSumPaise
             : toPaise(originalValue, "Original amount paid");
           if (refundPaise > originalPaidPaise) {
             refundOverpayments.push({
@@ -263,12 +269,13 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
   }
 
   for (const [fingerprint, rows] of paymentIndex) {
-    const distinctBookings = new Set(rows.map(row =>
-      row.bookingId == null ? "<missing>" : keyPart(row.bookingId)
-    ));
+    const distinctBookings = new Set(rows.map(row => row.bookingOrdinal));
     if (distinctBookings.size > 1) {
       duplicates.push({
-        fingerprint, bookingIds: [...distinctBookings], rows,
+        fingerprint,
+        bookingIds: [...new Set(rows.map(row => row.bookingId == null ? "<missing>" : keyPart(row.bookingId)))],
+        bookingOrdinals: [...distinctBookings],
+        rows,
         reason: fingerprint.startsWith("ref:")
           ? "payment_reference_reused_across_bookings"
           : "payment_idempotency_key_reused_across_bookings"
