@@ -247,3 +247,38 @@ test('Cashfree never marks a payment captured when payment-level amount evidence
   assert.equal(status.currency, null);
   assert.equal(status.captured, false);
 });
+
+test('Cashfree rejects a checkout response whose order amount has more than two decimals', async () => {
+  const mock = mockFetch(async () => ({ status: 200, body: {
+    order_id: 'order_123', payment_session_id: 'session_123',
+    order_amount: 125.001, order_currency: 'INR', order_status: 'ACTIVE'
+  } }));
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  await assert.rejects(adapter.createOrder({
+    orderId: 'order_123', amountMinor: 12500, currency: 'INR',
+    customer: { id: 'guest_123', phone: '9999999999' },
+    returnUrl: 'https://pms.example/return', idempotencyKey: 'request-123456'
+  }), /cashfree_checkout_response_binding_mismatch/);
+});
+
+test('Cashfree does not round an invalid-precision payment amount into a captured amount', async () => {
+  const mock = mockFetch(async url => url.endsWith('/payments')
+    ? { status: 200, body: [{
+        cf_payment_id: 'cf_bad_precision', payment_status: 'SUCCESS',
+        payment_amount: 75.001, payment_currency: 'INR'
+      }] }
+    : { status: 200, body: {
+        order_id: 'order_123', order_status: 'PAID',
+        order_amount: 125, order_currency: 'INR'
+      } });
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  const status = await adapter.getPaymentStatus({ orderId: 'order_123', paymentId: 'cf_bad_precision' });
+  assert.equal(status.amountMinor, null);
+  assert.equal(status.captured, false);
+});
