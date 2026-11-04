@@ -11,7 +11,7 @@ test("JSON imports capture a full rollback snapshot before mutating live state",
   const branch = html.slice(start, end);
   assert.match(branch, /const importBefore=cloneLiveSnapshot\(\),importOldId=id/);
   assert.match(branch, /try\s*\{/);
-  assert.ok(branch.includes("persist();") && branch.includes("const stored=JSON.parse"), "import must persist and read back the merged state");
+  assert.ok(branch.includes("persistStrict();") && branch.includes("const stored=JSON.parse"), "import must strictly persist and read back the merged state");
   assert.match(branch, /durable storage read-back verification/);
   assert.match(branch, /DK\.forEach\(k=>\{if\(importBefore\[k\]!==undefined\)S\[k\]=importBefore\[k\]\}\)/);
   assert.match(branch, /id=importOldId/);
