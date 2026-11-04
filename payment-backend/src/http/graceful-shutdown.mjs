@@ -24,7 +24,7 @@ export function closeHttpServer(server, { timeoutMs = 7000 } = {}) {
       // WebSocket connections; this service does not expose WebSocket routes.
       server.closeAllConnections?.();
     }, timeoutMs);
-    forceCloseTimer.unref?.();
+    // Keep the process alive through the bounded drain deadline when sockets remain.
 
     try {
       server.close(finish);
