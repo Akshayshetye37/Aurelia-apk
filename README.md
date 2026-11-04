@@ -188,15 +188,15 @@ The authoritative implementation order, detailed technical tasks, acceptance evi
 
 ## Verified checkpoint — 2026-11-04
 
-Active source branch: `feature/multi-provider-payment-backend`. Latest inspected commit: `8bb5cac5efa3afe5ad3e55089259f4e71526352a`.
+Active source branch: `feature/multi-provider-payment-backend`. Latest inspected commit: `28230b9edfa94f82935a1df9d923c201e18cf567`.
 
-GitHub Actions PMS source tests and web packaging run [41861293919](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41861293919) and Aurelia payment architecture CI run [41861293817](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41861293817) both completed successfully for this exact commit. The PMS quality run executed the complete PMS test suite and `npm run build`; the architecture run passed both PMS web and payment-backend test jobs.
+The latest code changes are committed. GitHub Actions has accepted the PMS source test and web packaging run [41863128444](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/41863128444), but its status is still queued; the GitHub Actions runner has not yet returned a test result for this checkpoint. Previous successful verification applies to the earlier commit listed in the repository history and must not be treated as verification of this newer change set.
 
-Android QA/debug builds remain manual-dispatch only and are not authorized until the documented PMS release gates pass. No APK artifact, signed production release or production cloud deployment is claimed by this checkpoint.
+Cancellation accounting was tightened: a pending refund journal now recognizes the retained cancellation amount as revenue at the initial cancellation posting; subsequent settlement debits the refund payable and credits cash without posting retained revenue a second time. The accounting diagnostic now compares pending refund liabilities and retained revenue to the cancelled booking values. A pending refund can transition to paid only when exactly one matching `refund_pending` journal exists and both recorded refund amounts match.
 
-The latest changes include strict cancellation journal read-back and accounting diagnostics; signed webhook payload replay fingerprints; Cashfree's current documented API version, merchant/provider refund ID separation, UUID idempotency, payment-level capture amount checks and strict rupee-to-paise precision validation.
+Razorpay refund responses are bound to the requested payment, INR amount and refund identity. Cashfree uses API version `2026-01-01`, separates merchant refund IDs from provider refund IDs, uses deterministic UUID idempotency keys, and rejects amount precision or response-binding mismatches.
 
-These automated results prove the checked-in tests and web packaging pass. They do **not** prove a merchant sandbox transaction has completed, that a production cloud backend is deployed, that a physical device can post a verified capture to the authoritative PMS folio, or that provider refunds/reconciliation operate end to end.
+No APK artifact, signed production release, production Cloud Run deployment, live merchant payment, or installed-device payment round trip is claimed. Those outcomes require successful build/test evidence and real infrastructure/merchant/device verification; no credentials or production account access are fabricated.
 
 ### Newly verified payment recovery behavior
 
