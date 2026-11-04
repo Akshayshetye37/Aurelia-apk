@@ -69,7 +69,8 @@ export async function readPaymentControls({ db, tenantId }) {
  * Authorization is deliberately supplied by the already-authenticated route.
  */
 export async function updatePaymentControls({
-  db, tenantId, actor, changes, reason, now = () => new Date()
+  db, tenantId, actor, changes, reason, now = () => new Date(),
+  releaseApprovalRefs = {}, validateReleaseApproval = () => false
 }) {
   if (!db || !TENANT_ID.test(tenantId || "")) throw new TypeError("Invalid tenant context");
   if (!actor || typeof actor.uid !== "string" || !actor.uid ||
@@ -90,8 +91,31 @@ export async function updatePaymentControls({
 
   const controlRef = db.doc("paymentControls/" + tenantId);
   const auditRef = controlRef.collection("audit").doc();
+  const controlsRequiringApproval = keys.filter(control =>
+    control !== "emergency_stop" && changes[control] === true
+  );
   return db.runTransaction(async tx => {
-    const snap = await tx.get(controlRef);
+    const [snap, ...approvalSnaps] = await Promise.all([
+      tx.get(controlRef),
+      ...controlsRequiringApproval.map(control => {
+        const ref = releaseApprovalRefs[control];
+        if (!ref) throw Object.assign(new Error("Release approval reference is required"), {
+          code: "PAYMENT_CONTROL_RELEASE_APPROVAL_REQUIRED"
+        });
+        return tx.get(ref);
+      })
+    ]);
+    for (let index = 0; index < controlsRequiringApproval.length; index += 1) {
+      const control = controlsRequiringApproval[index];
+      const approvalSnap = approvalSnaps[index];
+      if (!approvalSnap.exists ||
+          typeof validateReleaseApproval !== "function" ||
+          validateReleaseApproval(approvalSnap.data(), control) !== true) {
+        throw Object.assign(new Error("Payment control release evidence is missing or invalid"), {
+          code: "PAYMENT_CONTROL_RELEASE_APPROVAL_REQUIRED"
+        });
+      }
+    }
     const current = snap.exists
       ? normalizePaymentControls(snap.data())
       : { ...PAYMENT_CONTROL_DEFAULTS, controlState: "UNCONFIGURED" };
