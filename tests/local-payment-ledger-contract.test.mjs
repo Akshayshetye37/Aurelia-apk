@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 const ledger = readFileSync(new URL('../android/templates/LocalPaymentLedger.java', import.meta.url), 'utf8');
 const patch = readFileSync(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const docs = readFileSync(new URL('../docs/LOCAL_FIRST_HYBRID_PAYMENT_ARCHITECTURE.md', import.meta.url), 'utf8');
+const docs = readFileSync(new URL('../docs/HYBRID_PAYMENT_ARCHITECTURE.md', import.meta.url), 'utf8');
 const paymentServer = readFileSync(new URL('../payment-backend/src/local-server.mjs', import.meta.url), 'utf8');
 
 test('native payment journal is durable and idempotent', () => {
@@ -39,7 +39,8 @@ test('web runtime exposes the native journal without storing credentials in brow
 });
 
 test('hybrid architecture documents HTTPS-only LAN and server-authoritative payment status', () => {
-  assert.match(docs, /usesCleartextTraffic=false/);
+  assert.match(docs, /public HTTPS backend/i);
+  assert.match(paymentServer, /AURELIA_HTTPS_TERMINATION !== 'trusted-proxy'/);
   assert.match(docs, /offline gateway intent is not a payment/i);
   assert.match(docs, /Exactly-once network delivery is not claimed/);
 });
@@ -56,7 +57,8 @@ test('hotel folio checkout requires a ready native engine and never falls back t
   assert.match(html, /window\.AndroidPaymentEngine/);
   assert.match(html, /engineStatus\.ready!==true/);
   assert.match(html, /No payment request was sent/);
-  assert.match(html, /checkout success screen alone never posts a PMS receipt/);
+  assert.match(html, /No payment request was sent/);
+  assert.doesNotMatch(checkout, /settlePayment\(/);
   const start = html.indexOf('window.startAureliaGatewayCheckout=async function');
   const end = html.indexOf('window.reconcileAureliaGatewayPayment=', start);
   const checkout = html.slice(start, end);
