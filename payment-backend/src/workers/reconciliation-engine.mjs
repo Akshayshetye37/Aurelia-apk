@@ -19,7 +19,7 @@ function hasDurableLedgerReceipt(result, expected) {
     typeof receiptId === 'string' &&
     receiptId.trim().length > 0 &&
     receiptId.length <= 256 &&
-    !/[\\u0000-\\u001f\\u007f]/.test(receiptId) &&
+    !/[\u0000-\u001f\u007f]/.test(receiptId) &&
     result.tenantId === expected.tenantId &&
     result.folioId === expected.folioId &&
     result.intentId === expected.intentId &&
