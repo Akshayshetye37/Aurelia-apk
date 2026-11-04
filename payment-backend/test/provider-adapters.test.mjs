@@ -108,7 +108,7 @@ test('Cashfree webhook signature uses timestamp concatenated with raw body', asy
 test('Cashfree verified payment status includes an explicit capture flag', async () => {
   const mock = mockFetch(async (url) => {
     if (url.endsWith('/payments')) {
-      return { status: 200, body: [{ cf_payment_id: 'cf_pay_123', payment_status: 'SUCCESS' }] };
+      return { status: 200, body: [{ cf_payment_id: 'cf_pay_123', payment_status: 'SUCCESS', payment_amount: 125, payment_currency: 'INR' }] };
     }
     return { status: 200, body: { order_id: 'order_123', order_status: 'PAID', order_amount: 125, order_currency: 'INR' } };
   });
