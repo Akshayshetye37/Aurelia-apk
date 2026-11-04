@@ -113,3 +113,10 @@ test("requires full and partial refund amounts to match their declared semantics
     action: "partial", paidPaise: 20000, refundPaise: 0
   }), error => error.code === "REFUND_MUST_BE_POSITIVE");
 });
+
+
+test("rejects payment row amounts with more than two decimal places", () => {
+  assert.equal(cancellationPaidAmount({
+    p: 12.345, pays: [{ a: 12.345 }], payments: [{ amount: 12.345 }]
+  }), null);
+});
