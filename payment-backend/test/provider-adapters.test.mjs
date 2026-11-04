@@ -153,6 +153,7 @@ test('Razorpay refund reference is stored as a note, not an unsupported refund f
   const body = JSON.parse(mock.calls[0].options.body);
   assert.equal(body.receipt, undefined);
   assert.equal(body.notes.aurelia_refund_reference, 'refund_123');
+  assert.deepEqual(JSON.parse(mock.calls[0].options.body), { amount: 500, notes: { aurelia_refund_reference: 'refund_123' } });
 });
 
 
@@ -281,4 +282,29 @@ test('Cashfree does not round an invalid-precision payment amount into a capture
   const status = await adapter.getPaymentStatus({ orderId: 'order_123', paymentId: 'cf_bad_precision' });
   assert.equal(status.amountMinor, null);
   assert.equal(status.captured, false);
+});
+
+test('Razorpay rejects a refund response bound to another payment or amount', async () => {
+  const mock = mockFetch(async () => ({ status: 200, body: {
+    id: 'rfnd_124', payment_id: 'pay_other', status: 'processed', amount: 400, currency: 'INR'
+  } }));
+  const adapter = new RazorpayAdapter({
+    credentials: { keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  await assert.rejects(adapter.createRefund({
+    paymentId: 'pay_123', amountMinor: 500, receipt: 'refund_124'
+  }), /razorpay_refund_response_binding_mismatch/);
+});
+
+test('Razorpay refund status rejects non-INR provider responses', async () => {
+  const mock = mockFetch(async () => ({ status: 200, body: {
+    id: 'rfnd_125', payment_id: 'pay_123', amount: 500, currency: 'USD', status: 'processed'
+  } }));
+  const adapter = new RazorpayAdapter({
+    credentials: { keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  await assert.rejects(adapter.getRefundStatus({ refundId: 'rfnd_125' }),
+    /razorpay_refund_amount_or_currency_invalid/);
 });
