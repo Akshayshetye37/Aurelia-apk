@@ -1,19 +1,21 @@
 # Aurelia PMS — Seven-provider integration status
 
 **Architecture:** Hybrid production backend. Android remains the offline-first PMS client; the cloud backend owns provider credentials, payment verification and accounting orchestration.  
-**Working branch:** `feature/multi-provider-payment-backend`  
+**Active working branch:** `fix/phase-1-accounting-audit`  
+**Development/base branch:** `feature/multi-provider-payment-backend`  
 **Release status:** Live payment collection is OFF. No provider is production-ready.
 
-| Provider | Code state | Exposed by production factory/API | Remaining gates |
-|---|---|---:|---|
-| Razorpay | Adapter implemented; partial lifecycle | Yes, test checkout only | Verify provider contract tests, webhook replay/concurrency, refund idempotency/status, canonical folio posting, Android integration and sandbox UAT |
-| Cashfree | Adapter implemented; partial lifecycle | Yes, test checkout only | Verify current API/webhook/refund contracts, provider contract tests, replay/concurrency, canonical folio posting, Android integration and sandbox UAT |
-| PayU | Adapter prototype exists; refund methods intentionally fail closed | No | Verify exact merchant API version, webhook reverse hash, refund/status API, server request mapping, adapter tests and sandbox UAT |
-| PhonePe | Adapter prototype exists; not fully verified against merchant product | No | Verify OAuth, status/callback/refund contracts, webhook authentication, server request mapping, adapter tests and sandbox UAT |
-| Paytm | Not implemented | No | Confirm merchant PG product, obtain current API contract, implement and test complete lifecycle |
-| JioPay | Documentation/scaffold only | No | Obtain merchant API pack, implement and test complete lifecycle |
-| CCAvenue | Not implemented | No | Obtain merchant integration kit/API version, implement and test complete lifecycle |
+| Provider | Code state | Catalogue/API visibility | Executable factory / checkout | Remaining gates |
+|---|---|---:|---:|---|
+| Razorpay | Adapter exists; lifecycle partial | Yes | Yes, restricted test checkout | Contract tests, refund lifecycle, atomic PMS ledger integration, reconciliation, Android and sandbox UAT |
+| Cashfree | Adapter exists; lifecycle partial | Yes | Yes, restricted test checkout | Contract tests, refund lifecycle, atomic PMS ledger integration, reconciliation, Android and sandbox UAT |
+| PayU | Prototype exists; refund methods fail closed | Yes, explicitly marked prototype | No | Confirm merchant API version; complete refund/status contract, server routes, tests and sandbox UAT |
+| PhonePe | Prototype exists; merchant contract not fully qualified | Yes, explicitly marked prototype | No | Confirm merchant product, verify callback/refund contracts, server routes, tests and sandbox UAT |
+| Paytm | Not implemented | Yes, marked not implemented | No | Obtain current merchant PG documentation and sandbox; implement and qualify complete lifecycle |
+| JioPay | Not implemented; merchant specification unavailable | Yes, marked specification required | No | Obtain actual merchant API pack, endpoint/authentication/encryption specification and sandbox |
+| CCAvenue | Not implemented; merchant integration kit unavailable | Yes, marked integration kit required | No | Obtain merchant integration kit, confirm API version/crypto test vectors and sandbox |
 
+The backend catalogue now lists all seven providers for visibility. This is deliberately separate from the executable provider factory and credential/checkout allowlists, which remain restricted to Razorpay and Cashfree. The five other providers cannot be configured, activated or used for checkout through the backend yet.
 ## Dependency-ordered delivery sequence
 
 1. **Freeze the financial domain contract.** Inspect the real PMS reservation, folio, currency, balance, journal and version/concurrency model. Map it explicitly to payment intents. Do not create a parallel authoritative ledger or migrate records by assumption.
