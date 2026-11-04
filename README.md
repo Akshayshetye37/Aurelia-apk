@@ -7,7 +7,8 @@ Aurelia is an offline-first property-management system with a hybrid production 
 ## Project location
 
 - **Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
-- **Active Phase 1 working branch:** `fix/phase-1-accounting-audit`
+- **Current provider implementation branch:** `feature/payment-provider-production-adapters`
+- **Phase 1 accounting review branch:** `fix/phase-1-accounting-audit`
 - **Development/base branch:** `feature/multi-provider-payment-backend`
 - **Draft review:** [PR #9 — Phase 1 accounting audit](https://github.com/Akshayshetye37/Aurelia-apk/pull/9) (open, not merged)
 - **Repository project root:** `/` (repository root; not a local device filesystem path)
@@ -44,7 +45,7 @@ This is an approved architecture direction, **not evidence that a new database h
 
 ## Seven-provider scope
 
-Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue share one Aurelia-facing API and independent provider adapters. The current backend repository contains Razorpay and Cashfree adapters only; the other five are not implemented. A provider catalogue entry or documentation link is not a functioning integration. See the integration status matrix.
+Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue share one Aurelia-facing API and independent provider adapters. Current implementation is mixed: Razorpay and Cashfree are registered in the executable factory; PayU and PhonePe have incomplete prototype adapters; JioPay has a newly added, unqualified adapter module; Paytm and CCAvenue have no adapter. The five non-reference providers are not enabled by the cloud routes. No provider is production-ready. A provider catalogue entry, source file or documentation link is not a functioning end-to-end integration. See [the integration status matrix](docs/PROVIDER_INTEGRATION_STATUS.md).
 
 ## Required financial lifecycle
 
@@ -68,7 +69,7 @@ A client callback or redirect is never payment proof. Provider status must be ve
 | `src/payments/` | Frontend payment client and offline PMS behavior |
 | `src/services/payment-api.mjs` | Authenticated HTTPS client for the cloud payment API |
 | `payment-backend/src/server.mjs` | Selected hybrid backend runtime |
-| `payment-backend/src/providers/` | Provider adapters |
+| `payment-backend/src/providers/` | Provider adapters and the explicit capability-gated factory |
 | `payment-backend/src/intents/` | Payment intent and state persistence |
 | `payment-backend/src/local-server.mjs` | Separate LAN/dev runtime; not production webhook authority |
 | `docs/` | Architecture, provider status and release specifications |
@@ -137,3 +138,14 @@ See [Central Payment Control Plane](docs/CENTRAL_PAYMENT_CONTROL_PLANE.md) for s
 
 
 Native recovery support is planned/incomplete and is not production-ready; no recovery code or remote key-release path is enabled.
+
+## Current implementation boundary (2026-11-04)
+
+- The seven-provider catalogue is descriptive only. Cloud credential storage, validation, activation and checkout routes currently accept **Razorpay and Cashfree only**.
+- The adapter factory registers only Razorpay and Cashfree. PayU and PhonePe are incomplete prototypes; JioPay is an unqualified adapter module and is not registered; Paytm and CCAvenue are not implemented.
+- The cloud API currently has no complete, qualified all-seven lifecycle. Refund, reconciliation and canonical PMS folio posting are not release-ready.
+- A complete Android custom payment bridge has not been verified in this repository. Do not add a guessed Java package or pretend a generic `ACTION_VIEW` URL handoff is a secure payment bridge.
+- The fresh operational database is an approved direction, not yet provisioned or connected. Historical data remains untouched and separate.
+- No tests, provider sandbox transactions, merchant UAT, Android device acceptance, deployment or live collection are claimed by this README update.
+
+**Next engineering sequence:** (1) align one adapter contract and server route contract; (2) finish and test Razorpay/Cashfree end-to-end; (3) complete each additional provider separately against its official versioned API and merchant sandbox; (4) implement Android integration only after confirming the actual Gradle application ID, MainActivity package and Capacitor plugin registration; (5) connect payment capture/refund evidence to the canonical fresh PMS folio model; (6) run CI, sandbox and physical-device acceptance. Keep all financial controls locked until owner-reviewed release evidence exists.
