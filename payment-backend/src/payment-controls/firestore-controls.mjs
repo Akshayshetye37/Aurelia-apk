@@ -44,6 +44,7 @@ export function normalizePaymentControls(data) {
 
 export function paymentControlAllows(controls, control) {
   if (!CONTROL_SET.has(control)) throw new TypeError("Unknown payment control");
+  if (controls?.controlState && controls.controlState !== "CONFIGURED") return false;
   const state = normalizePaymentControls(controls);
   return state.controlState === "CONFIGURED" &&
     state.emergency_stop === false &&
