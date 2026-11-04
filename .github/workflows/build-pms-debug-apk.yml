@@ -1,23 +1,10 @@
 name: Validate Aurelia PMS Debug Build (not for Pay Bridge pairing)
 
+# Release builds are deliberately gated; do not build until all ten acceptance gates are signed off.
 on:
   push:
-    branches:
-      - feature/multi-provider-payment-backend
-    paths:
-      - 'index.html'
-      - 'README.md'
-      - 'docs/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'capacitor.config.json'
-      - 'assets/**'
-      - 'scripts/**'
-      - 'android/templates/**'
-      - 'src/**'
-      - 'tests/**'
-      - '.github/workflows/build-pms-debug-apk.yml'
-  workflow_dispatch:
+    tags:
+      - 'aurelia-approved-*'
 
 permissions:
   contents: read
