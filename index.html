@@ -1361,6 +1361,10 @@ function normaliseImportedBooking(b){
 async function restoreGo(){
  const d=S.rst;if(!d){toast('No JSON records are ready to import');return}
  if(S.rstMode==='export'){
+  // JSON imports are staged against a rollback snapshot. A storage quota/error must
+  // never leave half of the selected records merged into the live PMS state.
+  const importBefore=cloneLiveSnapshot(),importOldId=id;
+  try{
   let roomsAdded=0,ga=0,ba=0,sk=0,expensesAdded=0,inventoryAdded=0,guestFromBooking=0,roomsCreatedForBooking=0;
   const roomKey=v=>String(v??'').trim().toLowerCase();
   const knownRooms=new Set(S.rooms.map(r=>roomKey(r.n??r.room??r.roomNo)));
@@ -1405,9 +1409,29 @@ async function restoreGo(){
    if(at<0){S.inv.push({...x,n});inventoryAdded++}else S.inv[at]={...S.inv[at],...x,n};
   });
   (Array.isArray(d.aud)?d.aud:[]).forEach(x=>{if(x&&typeof x==='object'&&!S.aud.some(y=>JSON.stringify(y)===JSON.stringify(x)))S.aud.push(x)});
-  S.rst=null;S.rstMode=null;persist();render();closeS();
+  // Persist once after all collections have been prepared, then verify durable read-back.
+  persist();
+  const stored=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
+  if(!stored||DK.some(k=>JSON.stringify(stored[k])!==JSON.stringify(S[k])))throw new Error('Imported records did not pass durable storage read-back verification.');
+  S.rst=null;S.rstMode=null;render();closeS();
   toast('JSON import: '+roomsAdded+' rooms, '+ga+' guests, '+ba+' bookings, '+expensesAdded+' expenses, '+inventoryAdded+' stock items; '+sk+' invalid/duplicate rows skipped.'+(roomsCreatedForBooking?' Created '+roomsCreatedForBooking+' placeholder room(s); review their room type and rate.':''));
   return;
+  }catch(importError){
+   console.error('Transactional JSON import failed',importError);
+   DK.forEach(k=>{if(importBefore[k]!==undefined)S[k]=importBefore[k]});
+   id=importOldId;
+   try{
+    persist();
+    const rollback=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
+    if(!rollback||DK.some(k=>JSON.stringify(rollback[k])!==JSON.stringify(S[k])))throw new Error('Rollback read-back verification failed.');
+   }catch(rollbackError){
+    console.error('JSON import rollback failed',rollbackError);
+    toast('CRITICAL: JSON import failed and rollback could not be verified. Stop editing and export/recover from a known-good backup.');
+    return;
+   }
+   toast('JSON import cancelled. Existing PMS records were restored and verified; no partial import was kept.');
+   return;
+  }
  }
  // Full Aurelia backup: validate completely, retain rollback data, then commit.
  if(!Array.isArray(d.rooms)||!Array.isArray(d.b)||!d.set||typeof d.set!=='object'){
