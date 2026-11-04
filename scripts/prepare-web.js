@@ -22,6 +22,11 @@ for(const name of ['reconciliation-panel.js']){
  if(!fs.existsSync(source))throw new Error('Reconciliation UI not found: '+source);
  fs.copyFileSync(source,path.join(featuresDest,name));
 }
+const bookingPolicySource=path.join(root,'src','bookings','cancellation-policy.mjs');
+if(!fs.existsSync(bookingPolicySource))throw new Error('Booking cancellation policy module not found: '+bookingPolicySource);
+const bookingPolicyDest=path.join(dest,'src','bookings');
+fs.mkdirSync(bookingPolicyDest,{recursive:true});
+fs.copyFileSync(bookingPolicySource,path.join(bookingPolicyDest,'cancellation-policy.mjs'));
 console.log('Prepared web app, settlement modules, backend routing policy, and UPI reconciliation bridge for Capacitor');
 const platformSrc=path.join(root,'src','payments','provider-platform.mjs');
 if(!fs.existsSync(platformSrc))throw new Error('Payment platform module not found: '+platformSrc);
