@@ -88,6 +88,7 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
     }
 
     let rowSumPaise = 0;
+    let invalidPaymentRows = false;
     const localFingerprints = new Map();
     const canonicalSignatures = [];
     for (let index = 0; index < rows.length; index += 1) {
@@ -124,6 +125,7 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
           paymentIndex.set(fingerprint, globalRows);
         }
       } catch (error) {
+        invalidPaymentRows = true;
         malformed.push({ bookingId, collection, rowIndex: index, reason: "invalid_payment_row: " + error.message });
       }
     }
@@ -136,7 +138,7 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
       continue;
     }
 
-    if (rowSumPaise !== declaredPaidPaise) {
+    if (!invalidPaymentRows && rowSumPaise !== declaredPaidPaise) {
       findings.push({
         bookingId, room: booking.room ?? null, status: booking.st ?? null, collection,
         declaredPaidPaise, rowSumPaise, deltaPaise: declaredPaidPaise - rowSumPaise,
