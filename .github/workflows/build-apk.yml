@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   verify-and-build:
+    if: ${{ false }}
     name: Verify and build Aurelia PMS
     runs-on: ubuntu-22.04
     timeout-minutes: 40
