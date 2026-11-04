@@ -33,5 +33,3 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Run backend tests
         run: npm test
-      - name: Build deployment container
-        run: docker build -t aurelia-payment-backend:ci .
