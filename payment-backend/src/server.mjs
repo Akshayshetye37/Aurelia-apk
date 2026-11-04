@@ -282,15 +282,29 @@ const paymentRepository = new FirestorePaymentRepository({
 });
 // Capability truth is deliberately stricter than adapter method availability.
 // A provider API adapter is not an end-to-end PMS payment implementation.
+const PROVIDER_ENVIRONMENTS = Object.freeze(['test', 'live']);
 const providerCatalogue = [
-  { id: 'razorpay', label: 'Razorpay', environments: ['test', 'live'],
-    capabilities: { testCheckout: true, liveCollection: false, verifiedWebhook: true,
-      providerStatusLookup: true, folioSettlement: false, refunds: false, reconciliation: false },
-    productionReady: false },
-  { id: 'cashfree', label: 'Cashfree Payments', environments: ['test', 'live'],
-    capabilities: { testCheckout: true, liveCollection: false, verifiedWebhook: true,
-      providerStatusLookup: true, folioSettlement: false, refunds: false, reconciliation: false },
-    productionReady: false }
+  { id: 'razorpay', label: 'Razorpay', environments: PROVIDER_ENVIRONMENTS,
+    implementation: 'adapter_partial', capabilities: { testCheckout: true, liveCollection: false, verifiedWebhook: true,
+      providerStatusLookup: true, folioSettlement: false, refunds: false, reconciliation: false }, productionReady: false },
+  { id: 'cashfree', label: 'Cashfree Payments', environments: PROVIDER_ENVIRONMENTS,
+    implementation: 'adapter_partial', capabilities: { testCheckout: true, liveCollection: false, verifiedWebhook: true,
+      providerStatusLookup: true, folioSettlement: false, refunds: false, reconciliation: false }, productionReady: false },
+  { id: 'payu', label: 'PayU', environments: PROVIDER_ENVIRONMENTS,
+    implementation: 'prototype_not_enabled', capabilities: { testCheckout: false, liveCollection: false, verifiedWebhook: false,
+      providerStatusLookup: false, folioSettlement: false, refunds: false, reconciliation: false }, productionReady: false },
+  { id: 'phonepe', label: 'PhonePe Payment Gateway', environments: PROVIDER_ENVIRONMENTS,
+    implementation: 'prototype_not_enabled', capabilities: { testCheckout: false, liveCollection: false, verifiedWebhook: false,
+      providerStatusLookup: false, folioSettlement: false, refunds: false, reconciliation: false }, productionReady: false },
+  { id: 'paytm', label: 'Paytm', environments: PROVIDER_ENVIRONMENTS,
+    implementation: 'not_implemented', capabilities: { testCheckout: false, liveCollection: false, verifiedWebhook: false,
+      providerStatusLookup: false, folioSettlement: false, refunds: false, reconciliation: false }, productionReady: false },
+  { id: 'jiopay', label: 'JioPay', environments: PROVIDER_ENVIRONMENTS,
+    implementation: 'merchant_specification_required', capabilities: { testCheckout: false, liveCollection: false, verifiedWebhook: false,
+      providerStatusLookup: false, folioSettlement: false, refunds: false, reconciliation: false }, productionReady: false },
+  { id: 'ccavenue', label: 'CCAvenue', environments: PROVIDER_ENVIRONMENTS,
+    implementation: 'merchant_integration_kit_required', capabilities: { testCheckout: false, liveCollection: false, verifiedWebhook: false,
+      providerStatusLookup: false, folioSettlement: false, refunds: false, reconciliation: false }, productionReady: false }
 ];
 function providerTenantDoc(tenantId, provider, environment) {
   return db.doc('paymentTenants/' + tenantId + '/providers/' + provider + '_' + environment);
