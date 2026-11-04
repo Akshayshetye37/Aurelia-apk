@@ -2,9 +2,8 @@ import { RazorpayAdapter } from './razorpay.mjs';
 import { CashfreeAdapter } from './cashfree.mjs';
 import { assertAdapterCapabilities } from './adapter-contract.mjs';
 
-// Only adapters with a complete, non-stub lifecycle belong in this registry.
-// PayU and PhonePe prototypes remain isolated until their refund contracts,
-// callback schemas and end-to-end backend paths are implemented and tested.
+// Provider capability means every operation below is implemented. It does not
+// mean the merchant account has passed UAT or that live collection is approved.
 const REQUIRED_OPERATIONS = Object.freeze([
   'validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus',
   'verifyWebhook', 'createRefund', 'getRefundStatus'
@@ -28,4 +27,10 @@ export function implementedProviderAdapters() {
 
 export function providerCapabilities(providerId) {
   return FACTORIES[providerId] ? [...REQUIRED_OPERATIONS] : null;
+}
+
+export function providerQualificationStatus(providerId) {
+  if (!FACTORIES[providerId]) return { implemented: false, testCheckout: false, liveCollection: false };
+  return { implemented: true, testCheckout: true, liveCollection: false, merchantUatRequired: true,
+    canonicalFolioPostingRequired: true, physicalDeviceAcceptanceRequired: true };
 }
