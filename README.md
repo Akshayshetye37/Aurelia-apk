@@ -116,7 +116,8 @@ Root PMS application (Node.js 22):
 ```bash
 npm install
 npm test
-npm run build
+
+# Do not run Android/APK build workflows until all ten release gates pass.
 ```
 
 Cloud payment backend (Node.js 22):
@@ -157,6 +158,7 @@ A successful CI workflow proves only the checks executed by that workflow on the
 | `payment-backend/infra/terraform/` | Infrastructure definitions; not deployed by this documentation |
 | `docs/PMS_ACCOUNTING_SCHEMA.md` | Source-based local accounting schema audit |
 | `docs/IMPLEMENTATION_STRATEGY.md` | Dependency-ordered delivery strategy and release freeze |
+| `docs/END_TO_END_REMEDIATION_PLAN.md` | Authoritative ten-workstream implementation plan, dependencies, acceptance evidence and build prohibition |
 | `docs/HYBRID_PAYMENT_ARCHITECTURE.md` | Architecture decision and security boundaries |
 | `docs/PAYMENT_IMPLEMENTATION_PLAN.md` | Workstream status and next actions |
 | `docs/PROVIDER_INTEGRATION_STATUS.md` | Seven-provider integration matrix |
@@ -165,7 +167,11 @@ A successful CI workflow proves only the checks executed by that workflow on the
 | `tests/` | PMS automated tests |
 | `payment-backend/test/` | Backend automated tests |
 
-## Remaining work — ordered blockers
+## Remaining work — ten mandatory release gates
+
+The authoritative implementation order, detailed technical tasks, acceptance evidence and stop conditions are in [docs/END_TO_END_REMEDIATION_PLAN.md](./docs/END_TO_END_REMEDIATION_PLAN.md). All ten workstreams are mandatory; none may be waived by a passing CI run. Do not invoke Android/APK build, signing, publishing or production deployment workflows until every workstream has passed and the owner/security/accounting approvals are recorded.
+
+
 
 1. **Accounting diagnostics and release decision:** run `diagnoseAccountingConsistency(state)` against an authorized production backup; review every discrepancy and approve a safe, reversible policy. Do not alter historic values based only on arithmetic.
 2. **Restore intended PMS operations:** the present global local accounting freeze blocks manual folio posting and reservation advance payments. Remove or narrow it only after the real-data review and a separate owner-approved release decision; retain independent automatic/live/native locks.
@@ -181,7 +187,7 @@ A successful CI workflow proves only the checks executed by that workflow on the
 
 Latest inspected branch head: `02a95e5caf474d8f697281721f4291dff8b09030` on `feature/multi-provider-payment-backend`.
 
-GitHub Actions run `41830280498` completed successfully for this exact commit. The run passed PMS regression tests, payment backend syntax/security checks, LAN backend contract tests, production privacy-boundary checks, Capacitor/Android project generation, Android manifest and release-signing validation, debug APK build, signed release APK build and artifact upload. The PMS quality workflow also completed successfully for this commit.
+GitHub Actions run `41830280498` completed successfully for this exact commit. The run passed PMS regression tests, payment backend syntax/security checks, LAN backend contract tests, production privacy-boundary checks, Capacitor/Android project generation, Android manifest and release-signing validation, debug APK build, signed release APK build and artifact upload. The PMS quality workflow also completed successfully for that earlier checkpoint. **This was a historical CI run, before the current no-build policy was established. It is not permission to run another APK build.**
 
 These results prove that the checked-in automated tests and CI build steps passed. They do **not** prove that a merchant sandbox transaction has completed, that a production cloud backend is deployed, that a physical device can settle a verified capture into the authoritative PMS folio, or that provider refunds/reconciliation work end to end.
 
