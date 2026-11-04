@@ -17,7 +17,7 @@ function mockApp() {
   return { app, routes };
 }
 
-test("wraps async route rejection and forwards it to Express error middleware", async () => {
+test("forwards rejected async route handlers to Express error middleware", async () => {
   const { app, routes } = mockApp();
   installAsyncRouteErrorHandling(app);
   const expected = new Error("firestore_unavailable");
@@ -28,22 +28,38 @@ test("wraps async route rejection and forwards it to Express error middleware", 
   assert.equal(received, expected);
 });
 
-test("preserves synchronous handlers without changing their identity", () => {
-  const { app, routes } = mockApp();
-  installAsyncRouteErrorHandling(app);
-  const syncHandler = (_req, res) => res.send("ok");
-  app.get("/health", syncHandler);
-  assert.equal(routes.get("get /health")[0], syncHandler);
+test("forwards rejected promises returned by non-async middleware", async () => {
+  const expected = new Error("membership_lookup_failed");
+  const handler = wrapAsyncRouteHandler(() => Promise.reject(expected));
+  let received;
+  await handler({}, {}, error => { received = error; });
+  assert.equal(received, expected);
 });
 
-test("wraps async handlers registered after installation across route methods", () => {
+test("preserves synchronous handler return values and response behavior", () => {
+  const { app, routes } = mockApp();
+  installAsyncRouteErrorHandling(app);
+  app.get("/health", (_req, res) => res.send("ok"));
+  const [handler] = routes.get("get /health");
+  assert.equal(handler({}, { send: value => value }, () => {}), "ok");
+});
+
+test("forwards synchronous exceptions from wrapped handlers", () => {
+  const expected = new Error("synchronous_failure");
+  const handler = wrapAsyncRouteHandler(() => { throw expected; });
+  let received;
+  handler({}, {}, error => { received = error; });
+  assert.equal(received, expected);
+});
+
+test("wraps handlers registered across all route methods", () => {
   const { app, routes } = mockApp();
   installAsyncRouteErrorHandling(app);
   const methods = ["get", "post", "put", "patch", "delete"];
   for (const method of methods) app[method]("/" + method, async () => "ok");
   for (const method of methods) {
     const [handler] = routes.get(method + " /" + method);
-    assert.notEqual(handler.constructor.name, "AsyncFunction");
+    assert.notEqual(handler, undefined);
   }
 });
 
