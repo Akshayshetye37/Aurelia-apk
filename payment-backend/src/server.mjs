@@ -6,6 +6,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
 import { assertWebhookReplayIntegrity } from './webhooks/provider-webhook-router.mjs';
+import { installAsyncRouteErrorHandling } from './http/async-route-errors.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
   paymentControlAllows, updatePaymentControls
@@ -43,6 +44,8 @@ const auth = getAuth();
 const db = getFirestore();
 const sm = new SecretManagerServiceClient();
 const app = express();
+// Express 4 must forward async route rejections to the final error middleware.
+installAsyncRouteErrorHandling(app);
 app.disable('x-powered-by');
 // Production contract: TLS terminates at a trusted HTTPS ingress. The ingress
 // must overwrite X-Forwarded-Proto and be the only network path to this container.
