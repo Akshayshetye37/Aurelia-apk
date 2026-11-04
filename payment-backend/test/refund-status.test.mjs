@@ -99,6 +99,10 @@ test('Cashfree create refund preserves merchant refund_id separately from Cashfr
     orderId: 'order_123', paymentId: '918812', status: 'PENDING',
     amountMinor: 1250, currency: 'INR'
   });
+  assert.match(mock.calls[0].options.headers['x-idempotency-key'],
+    /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.equal(mock.calls[0].options.headers['x-idempotency-key'],
+    mock.calls[0].options.headers['x-idempotency-key']);
 });
 
 test('Cashfree create refund rejects provider response identity or amount drift', async () => {
@@ -143,4 +147,19 @@ test('Cashfree create refund rejects a refund bound to a different captured paym
     orderId: 'order_123', refundId: 'merchant_ref_123', amountMinor: 1250,
     paymentId: '918812', idempotencyKey: 'refund-idem-123456'
   }), /cashfree_refund_response_binding_mismatch/);
+});
+
+test('Cashfree rejects invalid refund ID and note lengths before network dispatch', async () => {
+  const mock = mockFetch(async () => ({ status: 200, body: {} }));
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  await assert.rejects(adapter.createRefund({
+    orderId: 'order_123', refundId: 'x', amountMinor: 100, reason: 'ok'
+  }), /invalid_cashfree_refund/);
+  await assert.rejects(adapter.createRefund({
+    orderId: 'order_123', refundId: 'refund_123', amountMinor: 100, reason: 'x'.repeat(101)
+  }), /invalid_cashfree_refund/);
+  assert.equal(mock.calls.length, 0);
 });
