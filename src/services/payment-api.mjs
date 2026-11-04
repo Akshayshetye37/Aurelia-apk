@@ -1,5 +1,8 @@
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{12,100}$/;
 const INTENT_ID = /^[0-9a-f-]{36}$/i;
+// Keep the client contract aligned with the server's qualified adapter registry.
+// Catalogue-only providers must not be offered as dispatchable payment methods.
+const DISPATCHABLE_PROVIDERS = new Set(['razorpay', 'cashfree']);
 
 export class PaymentApiError extends Error {
   constructor(message, { status = 0, code = 'payment_api_error', retryable = false } = {}) {
@@ -81,7 +84,7 @@ export class PaymentApiClient {
         !/^[A-Za-z0-9_-]{6,64}$/.test(input.folioId || '') ||
         !Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0 ||
         input.currency !== 'INR' ||
-        !['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay', 'ccavenue'].includes(input.provider) ||
+        !DISPATCHABLE_PROVIDERS.has(input.provider) ||
         !['test', 'live'].includes(input.environment) ||
         !IDEMPOTENCY_KEY.test(idempotencyKey || '')) {
       throw new TypeError('invalid_payment_intent_request');
