@@ -91,22 +91,22 @@ The request is tenant-scoped from the verified Firebase membership, accepts a ma
 
 This worker currently targets the backend's existing `paymentFolios/{tenant+folio hash}` and `journalEntries/{intentId}` model. The repository does not yet establish that this is the deployed PMS reservation/folio schema. Do not migrate production folio records or enable live collection until the canonical PMS folio path, currency model, journal contract and optimistic-concurrency field are confirmed against the production data model.
 
-## Build and test
+## Source tests — no artifact generation
 
-Root app:
+Root PMS source tests:
 ```bash
 npm install
 npm test
-npm run build
 ```
 
-Selected cloud backend (after dependency installation and Google Cloud configuration):
+Payment backend source tests:
 ```bash
 cd payment-backend
 npm install
-npm run start:cloud
 npm test
 ```
+
+The APK, web production bundle, Docker image and deployment workflows are deliberately blocked until the complete end-to-end acceptance gates pass. Do not run `npm run build`, Gradle assemble tasks, Docker builds or production deployment as a substitute for those gates.
 
 The cloud runtime requires a Google Cloud project, Firestore, Secret Manager, workload identity / Application Default Credentials, public HTTPS ingress and exact allowed HTTPS origins. Do not create or deploy cloud infrastructure without explicit owner configuration and approval. Do not commit credentials or service-account keys.
 
