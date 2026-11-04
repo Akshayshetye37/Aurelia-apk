@@ -1422,7 +1422,7 @@ async function restoreGo(){
   });
   (Array.isArray(d.aud)?d.aud:[]).forEach(x=>{if(x&&typeof x==='object'&&!S.aud.some(y=>JSON.stringify(y)===JSON.stringify(x)))S.aud.push(x)});
   // Persist once after all collections have been prepared, then verify durable read-back.
-  persist();
+  persistStrict();
   const stored=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
   if(!stored||DK.some(k=>JSON.stringify(stored[k])!==JSON.stringify(S[k])))throw new Error('Imported records did not pass durable storage read-back verification.');
   S.rst=null;S.rstMode=null;render();closeS();
@@ -1433,7 +1433,7 @@ async function restoreGo(){
    DK.forEach(k=>{if(importBefore[k]!==undefined)S[k]=importBefore[k]});
    id=importOldId;
    try{
-    persist();
+    persistStrict();
     const rollback=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
     if(!rollback||DK.some(k=>JSON.stringify(rollback[k])!==JSON.stringify(S[k])))throw new Error('Rollback read-back verification failed.');
    }catch(rollbackError){
@@ -1486,6 +1486,16 @@ async function restoreGo(){
 const useMenu=m=>{Object.keys(MENU).forEach(k=>delete MENU[k]);Object.assign(MENU,m);S.menu=MENU};
 let LOCAL_STORAGE_WARNING_SHOWN=false;
 function persist(){if(RECOVERY_CHECK_PENDING)return;try{const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);(window.__aureliaStorage||localStorage).setItem(SK,JSON.stringify(o));if(window.__aureliaStorage&&window.__aureliaStorage.memoryOnly&&!LOCAL_STORAGE_WARNING_SHOWN){LOCAL_STORAGE_WARNING_SHOWN=true;toast('WARNING: Device persistence is unavailable. Data is session-only; export a backup before closing the app.')}}catch(e){if(!S.qw){S.qw=1;toast('Device storage is unavailable or full. Changes may not be saved. Export a backup before closing the app.')}}}
+function persistStrict(){
+ if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
+ const store=window.__aureliaStorage||localStorage;
+ if(store.memoryOnly)throw new Error('Persistent device storage is unavailable; refusing to confirm this operation.');
+ const state={tab:S.tab,bk:S.bk};DK.forEach(k=>state[k]=S[k]);
+ const serialized=JSON.stringify(state);
+ store.setItem(SK,serialized);
+ if(store.getItem(SK)!==serialized)throw new Error('Persistent storage read-back did not exactly match the committed state.');
+ return true;
+}
 let LOCAL_STATE_STATUS='missing',RECOVERY_CHECK_PENDING=false,AUTO_RECOVERY_REQUEST_ID=null,AUTO_RECOVERY_EXCLUDED=[];
 function loadAll(){
  let raw=null;try{raw=(window.__aureliaStorage||localStorage).getItem(SK)}catch(e){LOCAL_STATE_STATUS='invalid';return}
