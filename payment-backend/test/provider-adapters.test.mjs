@@ -77,7 +77,7 @@ test('Cashfree creates hosted checkout session and sends required API version he
   const result = await adapter.createOrder({ orderId: 'order_123', amountMinor: 12500, currency: 'INR', customer: { id: 'guest_123', phone: '9999999999' }, returnUrl: 'https://pms.example/return', idempotencyKey: 'request-123456' });
   assert.equal(result.paymentSessionId, 'session_123');
   assert.equal(JSON.parse(mock.calls[0].options.body).order_amount, 125);
-  assert.equal(mock.calls[0].options.headers['x-api-version'], '2023-08-01');
+  assert.equal(mock.calls[0].options.headers['x-api-version'], '2026-01-01');
 });
 
 test('Cashfree status lookup prefers the payment ID associated with the webhook', async () => {
