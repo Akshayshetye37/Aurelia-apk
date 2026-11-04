@@ -70,10 +70,10 @@ test("the global freeze is evaluated before input validation and before any writ
 test("addSig is evidence-only and keeps suggested matches in review", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const start = html.indexOf("function addSig(o)");
-  const end = html.indexOf("\\nwindow.aureliaNativePaymentSignal", start);
+  const end = html.indexOf("\nwindow.aureliaNativePaymentSignal", start);
   assert.ok(start >= 0 && end > start, "addSig handler must exist");
   const handler = html.slice(start, end);
-  assert.doesNotMatch(handler, /addPay\\s*\\(|settlePayment\\s*\\(/);
+  assert.doesNotMatch(handler, /addPay\s*\(|settlePayment\s*\(/);
   assert.match(handler, /pending_review/);
   assert.match(handler, /suggestedBookingId/);
 });
@@ -81,9 +81,9 @@ test("addSig is evidence-only and keeps suggested matches in review", async () =
 test("manual UI and staff apply use the single guarded settlement boundary", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const staffStart = html.indexOf("function sigA(");
-  const staffEnd = html.indexOf("\\n/* money flow */", staffStart);
+  const staffEnd = html.indexOf("\n/* money flow */", staffStart);
   assert.ok(staffStart >= 0 && staffEnd > staffStart);
-  assert.match(html.slice(staffStart, staffEnd), /settlePayment\\(/);
+  assert.match(html.slice(staffStart, staffEnd), /settlePayment\(/);
   assert.match(html, /source:'manual'/);
   assert.match(html, /source:'staff_review'/);
 });
@@ -91,12 +91,12 @@ test("manual UI and staff apply use the single guarded settlement boundary", asy
 test("reservation advance form retains amount validation and rollback checks", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const start = html.indexOf("function dsave(){");
-  const end = html.indexOf("\\nfunction cin(i)", start);
+  const end = html.indexOf("\nfunction cin(i)", start);
   assert.ok(start >= 0 && end > start);
   const handler = html.slice(start, end);
   assert.match(handler, /Advance cannot exceed the room charges/);
   assert.match(handler, /no more than two decimal places/);
   assert.match(handler, /priorBookings/);
   assert.match(handler, /Guest or reservation could not be verified in device storage/);
-  assert.match(handler, /S\\.b=priorBookings/);
+  assert.match(handler, /S\.b=priorBookings/);
 });
