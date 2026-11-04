@@ -8,6 +8,7 @@ import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
 import { assertWebhookReplayIntegrity } from './webhooks/provider-webhook-router.mjs';
 import { installAsyncRouteErrorHandling } from './http/async-route-errors.mjs';
 import { createGracefulShutdown } from './http/graceful-shutdown.mjs';
+import { publicHttpError } from './http/public-http-error.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
   paymentControlAllows, updatePaymentControls
@@ -775,8 +776,8 @@ app.use((err, _req, res, next) => {
   // Delegate if headers were already sent; writing a second response would
   // create another unhandled error during provider/webhook failure recovery.
   if (res.headersSent) return next(err);
-  const status = err?.type === 'entity.too.large' ? 413 : 400;
-  return res.status(status).json({ error: status === 413 ? 'request_too_large' : 'invalid_request' });
+  const response = publicHttpError(err);
+  return res.status(response.status).json({ error: response.error });
 });
 const httpServer = app.listen(Number(process.env.PORT || 8080), '0.0.0.0');
 const shutdown = createGracefulShutdown({
