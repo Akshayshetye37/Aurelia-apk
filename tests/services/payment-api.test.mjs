@@ -61,3 +61,20 @@ test('preserves ambiguous network failure as reconciliation-required error', asy
   await assert.rejects(client.getCapabilities(), error =>
     error instanceof PaymentApiError && error.code === 'network_error' && error.retryable);
 });
+
+
+test('rejects catalogue-only providers before network dispatch', async () => {
+  let called = false;
+  const client = new PaymentApiClient({
+    baseUrl: 'https://payments.example.com',
+    tokenProvider: async () => token,
+    fetchImpl: async () => { called = true; return response(201, {}); }
+  });
+  for (const provider of ['payu', 'phonepe', 'paytm', 'jiopay', 'ccavenue']) {
+    assert.throws(() => client.createIntent({
+      folioId: 'folio_123', amountMinor: 1000, currency: 'INR',
+      provider, environment: 'test'
+    }, { idempotencyKey: 'aurelia-test-key-123' }), /invalid_payment_intent_request/);
+  }
+  assert.equal(called, false);
+});
