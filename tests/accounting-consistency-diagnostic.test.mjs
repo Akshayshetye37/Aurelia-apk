@@ -384,3 +384,41 @@ test("paid refund cash journal must equal the booking refund amount", () => {
   assert.equal(result.cancellationFlagMismatchCount, 1);
   assert.equal(result.cancellationFlagMismatches[0].reason, "paid_refund_amount_does_not_match_journal");
 });
+
+test("pending refund journal recognizes retained cancellation revenue exactly once", () => {
+  const result = diagnoseAccountingConsistency({
+    b: [],
+    cancelled: [{
+      id: 53, original_amount_paid: 1000, refund_amount: 400,
+      retention_fee_retained: 600, cancelledStatus: "refund_pending",
+      refundPayableJournalRecorded: true
+    }],
+    financialLedger: [{
+      id: "JE-53", reference: "CANCEL-53", kind: "refund_pending", bookingId: 53,
+      lines: [
+        { account: "Guest Advances Liability", debit: 1000, credit: 0 },
+        { account: "Refunds Payable Liability", debit: 0, credit: 400 },
+        { account: "Cancellation Revenue", debit: 0, credit: 600 }
+      ]
+    }]
+  });
+  assert.equal(result.cancellationFlagMismatchCount, 0);
+  const missingRetention = diagnoseAccountingConsistency({
+    b: [],
+    cancelled: [{
+      id: 54, original_amount_paid: 1000, refund_amount: 400,
+      retention_fee_retained: 600, cancelledStatus: "refund_pending",
+      refundPayableJournalRecorded: true
+    }],
+    financialLedger: [{
+      id: "JE-54", reference: "CANCEL-54", kind: "refund_pending", bookingId: 54,
+      lines: [
+        { account: "Guest Advances Liability", debit: 400, credit: 0 },
+        { account: "Refunds Payable Liability", debit: 0, credit: 400 }
+      ]
+    }]
+  });
+  assert.equal(missingRetention.cancellationFlagMismatchCount, 1);
+  assert.equal(missingRetention.cancellationFlagMismatches[0].reason,
+    "pending_refund_retention_does_not_match_journal");
+});
