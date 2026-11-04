@@ -38,7 +38,6 @@ test("refund evidence rejects control characters and malformed amounts", () => {
   assert.equal(validateCancellationRefund({ paid: 100, refund: 1.001, action: "pending" }).code, "INVALID_REFUND_PRECISION");
 });
 
-import { validateCancellationJournalTransition, validateCancellationJournal } from "../src/bookings/cancellation-policy.mjs";
 
 test("a pending refund journal can be settled once for the exact recorded amount", () => {
   const result = validateCancellationJournalTransition({
