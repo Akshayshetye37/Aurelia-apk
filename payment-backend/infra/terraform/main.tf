@@ -89,6 +89,42 @@ resource "google_cloud_run_v2_service" "payment_backend" {
         container_port = 8080
       }
 
+      startup_probe {
+        initial_delay_seconds = 0
+        timeout_seconds       = 2
+        period_seconds        = 5
+        failure_threshold    = 12
+
+        http_get {
+          path = "/healthz"
+          port = 8080
+        }
+      }
+
+      liveness_probe {
+        initial_delay_seconds = 0
+        timeout_seconds       = 2
+        period_seconds        = 30
+        failure_threshold    = 3
+
+        http_get {
+          path = "/healthz"
+          port = 8080
+        }
+      }
+
+      readiness_probe {
+        timeout_seconds   = 3
+        period_seconds    = 10
+        failure_threshold = 2
+        success_threshold = 1
+
+        http_get {
+          path = "/readyz"
+          port = 8080
+        }
+      }
+
       resources {
         limits = {
           cpu    = "1"
