@@ -1,8 +1,8 @@
 /**
- * Express 4 does not forward rejected promises from async route handlers to
- * its error middleware. Wrap async handlers at registration so provider,
- * Firestore and Secret Manager failures become controlled HTTP errors instead
- * of unhandled rejections that can terminate a Cloud Run instance.
+ * Express 4 does not forward rejected promises returned by route handlers or
+ * middleware. Wrap every registered handler so both declared async functions
+ * and ordinary middleware that returns a promise reach the final error
+ * middleware instead of becoming unhandled rejections.
  */
 const ROUTE_METHODS = Object.freeze(["get", "post", "put", "patch", "delete"]);
 
@@ -10,11 +10,13 @@ export function wrapAsyncRouteHandler(handler) {
   if (typeof handler !== "function") {
     throw new TypeError("route_handler_must_be_function");
   }
-  if (handler.constructor?.name !== "AsyncFunction") return handler;
-
-  return function asyncRouteErrorBoundary(req, res, next) {
+  return function routeErrorBoundary(req, res, next) {
     try {
-      return Promise.resolve(handler.call(this, req, res, next)).catch(next);
+      const result = handler.call(this, req, res, next);
+      if (result && typeof result.then === "function") {
+        return result.catch(next);
+      }
+      return result;
     } catch (error) {
       return next(error);
     }
