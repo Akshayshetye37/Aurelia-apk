@@ -77,3 +77,83 @@ test("ranks the largest absolute discrepancies first", () => {
   ] }, { worstLimit: 2 });
   assert.deepEqual(result.worst.map(row => row.bookingId), [16, 17]);
 });
+
+
+test("detects duplicate payment idempotency keys within a booking", () => {
+  const result = diagnoseAccountingConsistency({ b: [{
+    id: 20, p: 20, pays: [
+      { a: 10, idempotencyKey: "gateway:event-1" },
+      { a: 10, idempotencyKey: "gateway:event-1" }
+    ]
+  }] });
+  assert.equal(result.duplicatePaymentCount, 1);
+  assert.equal(result.duplicates[0].reason, "duplicate_payment_within_booking");
+});
+
+test("detects a payment reference reused across two bookings", () => {
+  const result = diagnoseAccountingConsistency({ b: [
+    { id: 21, p: 10, pays: [{ a: 10, r: "UTR-123" }] },
+    { id: 22, p: 10, pays: [{ a: 10, r: "utr-123" }] }
+  ] });
+  assert.equal(result.duplicatePaymentCount, 1);
+  assert.equal(result.duplicates[0].reason, "payment_reference_reused_across_bookings");
+});
+
+test("detects orphaned or mis-keyed reservation advances", () => {
+  const result = diagnoseAccountingConsistency({ b: [{
+    id: 23, p: 10, pays: [
+      { a: 5, source: "reservation_advance", bookingId: 999, idempotencyKey: "booking-advance:999" },
+      { a: 5, source: "reservation_advance", bookingId: 23, idempotencyKey: "wrong-key" }
+    ]
+  }] });
+  assert.equal(result.orphanAdvanceCount, 2);
+});
+
+test("detects refunds greater than the recorded original payment", () => {
+  const result = diagnoseAccountingConsistency({ cancelled: [{
+    id: 24, p: 25, pays: [{ a: 25 }], original_amount_paid: 25, refund_amount: 30
+  }] });
+  assert.equal(result.refundOverpaymentCount, 1);
+  assert.equal(result.refundOverpayments[0].excessPaise, 500);
+});
+
+test("reports negative and malformed refund amounts without modifying state", () => {
+  const state = { cancelled: [
+    { id: 25, p: 10, pays: [{ a: 10 }], refund_amount: -1 },
+    { id: 26, p: 10, pays: [{ a: 10 }], refund_amount: "not-money" }
+  ] };
+  const before = structuredClone(state);
+  const result = diagnoseAccountingConsistency(state);
+  assert.equal(result.refundOverpaymentCount, 0);
+  assert.equal(result.malformedBookingCount, 2);
+  assert.deepEqual(state, before);
+});
+
+test("does not double count the intentional payments history mirror", () => {
+  const result = diagnoseAccountingConsistency({ b: [{
+    id: 27, p: 15,
+    pays: [{ a: 15, r: "UTR-27" }],
+    payments: [{ amount: 15, reference: "UTR-27" }]
+  }] });
+  assert.equal(result.duplicatePaymentCount, 0);
+  assert.equal(result.affectedBookingCount, 0);
+});
+
+
+test("detects reservation advances with a missing idempotency key", () => {
+  const result = diagnoseAccountingConsistency({ b: [{
+    id: 28, p: 10, pays: [
+      { a: 10, source: "reservation_advance" }
+    ]
+  }] });
+  assert.equal(result.orphanAdvanceCount, 1);
+});
+
+test("detects negative and excessive-precision payment rows", () => {
+  const result = diagnoseAccountingConsistency({ b: [
+    { id: 29, p: 0, pays: [{ a: -1 }] },
+    { id: 30, p: 0, pays: [{ a: 1.001 }] }
+  ] });
+  assert.equal(result.malformedBookingCount, 2);
+  assert.equal(result.affectedBookingCount, 0);
+});
