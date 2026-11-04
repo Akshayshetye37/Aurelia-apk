@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertWebhookReplayIntegrity, webhookPayloadHash } from '../src/webhooks/event-integrity.mjs';
+import { assertWebhookReplayIntegrity, webhookPayloadHash } from '../src/webhooks/provider-webhook-router.mjs';
 
 const identity = rawBody => ({
   tenantId: 'tenant01', provider: 'razorpay', environment: 'test',
