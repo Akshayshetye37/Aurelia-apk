@@ -37,3 +37,38 @@ test("refund evidence rejects control characters and malformed amounts", () => {
   assert.equal(validateCancellationRefund({ paid: 100, refund: 50, action: "partial", confirmed: true, reference: "AB\nCD" }).code, "REFUND_SETTLEMENT_EVIDENCE_REQUIRED");
   assert.equal(validateCancellationRefund({ paid: 100, refund: 1.001, action: "pending" }).code, "INVALID_REFUND_PRECISION");
 });
+
+import { validateCancellationJournalTransition } from "../src/bookings/cancellation-policy.mjs";
+
+test("a pending refund journal can be settled once for the exact recorded amount", () => {
+  const result = validateCancellationJournalTransition({
+    priorEntries: [{ kind: "refund_pending", refundAmount: 400 }],
+    priorPendingRefund: 400,
+    action: "partial",
+    refund: 400
+  });
+  assert.deepEqual(result, { ok: true, transition: "settle_pending_liability" });
+});
+
+test("a pending refund cannot be duplicated or settled for a changed amount", () => {
+  assert.equal(validateCancellationJournalTransition({
+    priorEntries: [{ kind: "refund_pending", refundAmount: 400 }],
+    priorPendingRefund: 400,
+    action: "pending",
+    refund: 400
+  }).code, "CANCELLATION_JOURNAL_ALREADY_EXISTS");
+  assert.equal(validateCancellationJournalTransition({
+    priorEntries: [{ kind: "refund_pending", refundAmount: 400 }],
+    priorPendingRefund: 400,
+    action: "partial",
+    refund: 350
+  }).code, "CANCELLATION_JOURNAL_ALREADY_EXISTS");
+});
+
+test("a completed cancellation journal cannot be posted a second time", () => {
+  assert.equal(validateCancellationJournalTransition({
+    priorEntries: [{ kind: "cancellation_settlement", refundAmount: 0 }],
+    action: "no_refund",
+    refund: 0
+  }).code, "CANCELLATION_JOURNAL_ALREADY_EXISTS");
+});
