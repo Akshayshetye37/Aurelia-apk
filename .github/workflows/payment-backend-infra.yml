@@ -26,6 +26,7 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.8"
+      # Run formatting before provider initialization so HCL style failures are isolated.
       - name: Check Terraform formatting
         run: terraform fmt -check -recursive
       - name: Initialize without remote backend
