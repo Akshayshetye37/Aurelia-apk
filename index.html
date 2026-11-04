@@ -3692,9 +3692,16 @@ window.commitCancellationRefund=function(i){
  if(!validation.ok){toast(validation.message);return}
  const ref='CANCEL-'+String(b.id||('GUEST-'+String(b.g||'').replace(/[^a-z0-9]/gi,'').slice(0,18)+'-'+String(b.cancelledAt||i).replace(/[^0-9]/g,'').slice(0,14)));
  const priorEntries=(S.financialLedger||[]).filter(e=>e.reference===ref&&e.bookingId=== (b.id||null));
- if(b.cancellationAccountingCommitted&&priorEntries.length){toast('This cancellation already has journal entries. Use the existing journal instead of posting it twice.');return}
- // Repair stale legacy flags: earlier versions could save the committed flag without saving a journal entry.
- if(b.cancellationAccountingCommitted&&!priorEntries.length){b.cancellationAccountingCommitted=false;b.refundPayableJournalRecorded=false;b.retentionJournalRecorded=false}
+ const priorPendingEntry=priorEntries.find(e=>e.kind==='refund_pending');
+ const transition=policy.validateCancellationJournalTransition({
+  priorEntries,
+  action,
+  refund,
+  priorPendingRefund:priorPendingEntry?priorPendingEntry.refundAmount:null
+ });
+ if(!transition.ok){toast(transition.message||'Cancellation journal history is inconsistent. No entry was posted.');return}
+ // Repair stale legacy flags only when there is no corresponding journal history.
+ if(!priorEntries.length&&b.cancellationAccountingCommitted){b.cancellationAccountingCommitted=false;b.refundPayableJournalRecorded=false;b.retentionJournalRecorded=false}
  if(paid<=0&&(refund>0||action==='partial'||action==='full')){toast('No payment is recorded for this booking. Verify the original receipt and payment records before posting a refund.');return}
  const retained=Math.round((paid-refund)*100)/100,lines=[];
  if(action==='pending'&&refund>0){
