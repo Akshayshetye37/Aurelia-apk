@@ -23,8 +23,8 @@ export function validateCancellationRefund({
       !Number.isFinite(refundAmount) || refundAmount < 0) {
     return { ok: false, code: "INVALID_REFUND_AMOUNT", message: "Refund and original payment must be valid non-negative amounts." };
   }
-  if (Math.round(originalPaid * 100) !== originalPaid * 100 ||
-      Math.round(refundAmount * 100) !== refundAmount * 100) {
+  if (Math.abs(Math.round(originalPaid * 100) - originalPaid * 100) > 1e-7 ||
+      Math.abs(Math.round(refundAmount * 100) - refundAmount * 100) > 1e-7) {
     return { ok: false, code: "INVALID_REFUND_PRECISION", message: "Amounts may contain no more than two decimal places." };
   }
   if (!CANCELLATION_REFUND_ACTIONS.includes(action)) {
