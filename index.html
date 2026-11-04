@@ -434,15 +434,8 @@ const K=n=>(S.set&&S.set.cur||'K')+(Number.isFinite(Number(n))?Math.round(Number
 const D=n=>{const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()+n);return d},fd=n=>D(n).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
 const IC={home:'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',stays:'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',rooms:'M3 19V6M3 14h18v5M21 14v-2a3 3 0 0 0-3-3h-7v5M7 11h.01',dining:'M7 3v7M5 3v4a2 2 0 0 0 4 0V3M7 10v11M17 21V3c-2 1-3 4-3 7s1 4 3 4'};
 const TABS=[['home','Home'],['stays','Stays'],['rooms','Rooms'],['dining','Dining']];
-const types=[['Standard',850],['Deluxe',1200],['Executive Suite',1800],['Family Chalet',2200]],rn=[['101','102','103','104'],['201','202','203','204'],['301','302'],['401','402']];
-let id=0;const S={tab:'home',f:'all',tb:3,rooms:[],b:[],t:[],g:[],exp:[],inv:[],aud:[],cancelled:[],financialLedger:[],sig:[],sales:[],menu:{},today:23650,hist:[41200,38600,52400,47900,61300,56800],set:{name:'Aurelia PMS',tag:'Peace, comfort and mindful hospitality.',cur:'₹',upi:'',phone:'',addr:''},au:{},bk:{}};
+let id=0;const S={tab:'home',f:'all',tb:3,rooms:[],b:[],t:[],g:[],exp:[],inv:[],aud:[],cancelled:[],financialLedger:[],sig:[],sales:[],menu:{},today:0,hist:[0,0,0,0,0,0],set:{name:'Aurelia PMS',tag:'Peace, comfort and mindful hospitality.',cur:'₹',upi:'',phone:'',addr:''},au:{},bk:{}};
 window.aureliaGetAppState = () => S;
-types.forEach((t,i)=>rn[i].forEach(n=>S.rooms.push({n,t:t[0],r:t[1],s:'ready'})));
-const B=(g,room,i,o,st,ch=[])=>S.b.push({id:++id,g,room,in:i,out:o,st,ch,rate:S.rooms.find(r=>r.n===room)?.r||0});
-B('Mwila Chanda','102',-2,0,'in');B('Natasha Banda','201',-1,2,'in',[['Dinner · Seared Kafue bream',260]]);B('James Whitfield','301',-3,1,'in',[['Breakfast for two',180]]);B('Sofia Marchetti','302',-1,4,'in');B('Chileshe Mulenga','401',-2,1,'in');B('Peter Zulu','103',-1,2,'in');B('Grace Tembo','202',-2,3,'in');
-B('Amara Okafor','402',0,3,'res');B('Thandiwe Phiri','203',0,2,'res');B('Lubinda Mwiinga','104',1,3,'res');
-S.rooms.forEach(r=>{if(S.b.some(b=>b.room===r.n&&b.st==='in'))r.s='occ'});S.rooms[0].s='clean';S.rooms.find(r=>r.n==='204').s='out';
-S.t=[2,2,4,4,2,6,4,8].map((s,i)=>({n:i+1,s,o:[]}));S.t[2].o=[['Seared Kafue bream',260],['Mosi lager',45]];
 const MENU={Starters:[['Kapenta croquettes',95,'with lemon aioli'],['Smoked bream pâté',120,'toasted sourdough']],Mains:[['Seared Kafue bream',260,'saffron nshima, greens'],['Braised oxtail',240,'peanut jus, nshima'],['Grilled game fillet',340,'red wine, root vegetables']],Desserts:[['Baobab panna cotta',90,'honey, toasted seeds']],Drinks:[['Mosi lager',45,'chilled'],['Sunset cocktail',110,'passion fruit, gin']]};
 let cat='Mains';
 const inh=()=>S.b.filter(b=>b.st==='in'),nts=b=>Math.max(1,b.out-b.in),rm=n=>S.rooms.find(r=>r.n===n);
