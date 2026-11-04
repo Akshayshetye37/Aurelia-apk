@@ -139,13 +139,64 @@ See [Central Payment Control Plane](docs/CENTRAL_PAYMENT_CONTROL_PLANE.md) for s
 
 Native recovery support is planned/incomplete and is not production-ready; no recovery code or remote key-release path is enabled.
 
-## Current implementation boundary (2026-11-04)
+## Project status and delivery checklist (verified 2026-11-04)
 
-- The seven-provider catalogue is descriptive only. Cloud credential storage, validation, activation and checkout routes currently accept **Razorpay and Cashfree only**.
-- The adapter factory registers only Razorpay and Cashfree. PayU and PhonePe are incomplete prototypes; JioPay is an unqualified adapter module and is not registered; Paytm and CCAvenue are not implemented.
-- The cloud API currently has no complete, qualified all-seven lifecycle. Refund, reconciliation and canonical PMS folio posting are not release-ready.
-- A complete Android custom payment bridge has not been verified in this repository. Do not add a guessed Java package or pretend a generic `ACTION_VIEW` URL handoff is a secure payment bridge.
-- The fresh operational database is an approved direction, not yet provisioned or connected. Historical data remains untouched and separate.
-- No tests, provider sandbox transactions, merchant UAT, Android device acceptance, deployment or live collection are claimed by this README update.
+### Where the project lives
 
-**Next engineering sequence:** (1) align one adapter contract and server route contract; (2) finish and test Razorpay/Cashfree end-to-end; (3) complete each additional provider separately against its official versioned API and merchant sandbox; (4) implement Android integration only after confirming the actual Gradle application ID, MainActivity package and Capacitor plugin registration; (5) connect payment capture/refund evidence to the canonical fresh PMS folio model; (6) run CI, sandbox and physical-device acceptance. Keep all financial controls locked until owner-reviewed release evidence exists.
+- **GitHub repository:** https://github.com/Akshayshetye37/Aurelia-apk
+- **Active working branch:** `feature/payment-provider-production-adapters`
+- **Branch URL:** https://github.com/Akshayshetye37/Aurelia-apk/tree/feature/payment-provider-production-adapters
+- **Repository root:** `/`
+- **Main PMS application file:** `/index.html`
+- **Cloud payment backend:** `/payment-backend/`
+- **Project documentation:** `/docs/`
+
+The GitHub repository and branch above are the project location that can be verified here. A local computer/Android filesystem path is not available from this repository view. The active branch is not the default branch and has not been merged or deployed.
+
+### What is implemented or documented
+
+**PMS application**
+- `index.html` is the primary WebView application entry.
+- The repository contains the Android/Capacitor host, frontend payment modules and application tests.
+- The application is intended to remain offline-first; this does not mean every Android lifecycle, offline recovery or native integration path has passed device acceptance.
+
+**Payment architecture**
+- Architecture A (hybrid): Android remains the offline-first PMS client; the cloud backend is intended to own provider credentials, provider API calls, webhook ingress and server-side payment verification.
+- The selected cloud runtime is `payment-backend/src/server.mjs` using Firebase Admin, Firestore and Google Secret Manager.
+- `payment-backend/src/local-server.mjs` is a separate LAN/development runtime, not the public production webhook authority.
+- Merchant secrets must remain in backend-managed secret storage, never in the APK, HTML, JavaScript, WebView storage or backups.
+
+**Provider work**
+- The catalogue describes seven providers: Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue.
+- Razorpay and Cashfree are the only adapters registered in the executable factory and the only providers currently accepted by cloud credential/checkout routes. Their end-to-end PMS lifecycle is still incomplete.
+- PayU and PhonePe have prototype source modules, but are not registered or enabled.
+- JioPay has a hosted-checkout prototype module, but it is not registered, route-enabled or merchant-UAT-qualified.
+- Paytm and CCAvenue have no adapter implementation. CCAvenue requires the merchant-specific integration kit before its protocol and cryptography can be implemented safely.
+- The provider status matrix is maintained in [docs/PROVIDER_INTEGRATION_STATUS.md](docs/PROVIDER_INTEGRATION_STATUS.md).
+
+**Financial safety controls**
+- The tenant-scoped Firestore payment control-plane code and authenticated admin API are implemented in the cloud backend, with transactional audit records and fail-closed reads.
+- The emergency stop cannot be disengaged through the implemented API. Enabling a capability requires separate owner approval evidence.
+- This control-plane code is not evidence of deployment, and it does not authorize local PMS settlement.
+- Local balance mutation, manual posting, live collection, automatic settlement and the native settlement bridge remain locked. Webhooks may record verification evidence but do not authorize PMS ledger posting.
+- No live payment collection, automatic settlement, native settlement bridge, refund processing or production provider activation is approved.
+
+**Accounting and recovery**
+- Phase 1 accounting audit work and a read-only consistency diagnostic are present on the related accounting workstream.
+- A cloud reconciliation/recovery endpoint exists, but its worker targets a separate Firestore `paymentFolios/{tenant+folio hash}` / `journalEntries/{intentId}` model. The repository has not established that this is the canonical PMS reservation/folio ledger. It therefore remains blocked from settlement use.
+- The approved clean-start direction is a fresh operational database. It has **not** yet been provisioned or connected. Existing data must remain untouched in a separate read-only historical archive; no import, reset, cleanup or automatic repair is authorized.
+
+### What remains — required work, in dependency order
+
+1. **Confirm the target data model.** Provision and document the fresh operational database/namespace, then define canonical reservation, folio, currency, payment, refund, journal and concurrency/version fields. Preserve the old database and backups unchanged.
+2. **Freeze the payment contract.** Align the shared adapter interface, intent state machine, server routes, webhook inbox, idempotency keys, immutable provider evidence and outbox/retry behavior. Add duplicate, timeout, race and restart-recovery tests.
+3. **Qualify Razorpay and Cashfree.** Complete the common adapter contract, authoritative status lookup, raw-body webhook verification, refund initiation/status, error mapping and merchant sandbox/UAT. These are reference adapters, not yet complete PMS payment pipelines.
+4. **Finish the remaining providers individually.** Select and confirm the exact PayU API version; confirm PhonePe PG V2 merchant configuration and UAT; implement Paytm from current merchant documentation; validate JioPay hash/command/status/refund semantics with merchant sandbox evidence; obtain the CCAvenue merchant integration kit and cryptographic test vectors. Do not enable a provider merely because its catalogue entry or module exists.
+5. **Connect accounting safely.** Map verified captures and completed refunds to the canonical fresh PMS folio ledger. Implement atomic/idempotent journal posting, concurrency control, bounded reconciliation, leases/claims, retry recovery and auditable operator actions. Do not use the current unverified parallel Firestore folio model as authority.
+6. **Complete Android integration.** Inspect the real Gradle application ID, MainActivity package and Capacitor plugin registration before implementing any native payment bridge. Wire authenticated cloud sessions, capability-driven UI, pending/unknown states and offline/process-restart recovery. Validate on physical devices.
+7. **Complete operational security.** Configure public HTTPS ingress, workload identity, least-privilege IAM, Firestore indexes/rules, secret rotation, monitoring, alerting, backup/restore and incident/refund/reconciliation runbooks.
+8. **Pass release evidence.** Run repository CI and tests; complete provider sandbox/UAT, webhook replay/tamper tests, refund and reconciliation drills, Android device acceptance, security review and owner sign-off. Only then consider a separately approved release decision.
+
+### Release boundary
+
+All seven provider names being visible does not mean seven operational integrations. No provider is currently certified end-to-end for Aurelia PMS. No test pass, merchant sandbox transaction, physical-device acceptance, cloud deployment or live collection is claimed by this status update. Keep every financial control at its safe default. Do not merge this branch, deploy infrastructure or enable a financial capability without explicit owner authorization and the required evidence.
