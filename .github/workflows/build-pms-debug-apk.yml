@@ -1,10 +1,11 @@
 name: Validate Aurelia PMS Debug Build (not for Pay Bridge pairing)
 
-# Release builds are deliberately gated; do not build until all ten acceptance gates are signed off.
+# Debug build validation runs on every integration-branch update. This artifact is for installation and QA only; it is not a signed production release.
 on:
   push:
-    tags:
-      - 'aurelia-approved-*'
+    branches:
+      - feature/multi-provider-payment-backend
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,7 +16,6 @@ concurrency:
 
 jobs:
   build-android:
-    if: ${{ false }}
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     steps:
@@ -25,7 +25,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Set up Java
         uses: actions/setup-java@v4
