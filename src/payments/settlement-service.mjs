@@ -44,6 +44,89 @@ function normalizedPaymentReference(value, method) {
     : reference;
 }
 
+function paymentRowPaise(row, label) {
+  if (!row || typeof row !== "object" || Array.isArray(row)) {
+    throw new TypeError(label + " must be an object");
+  }
+  const hasMinor = row.amountPaise !== undefined && row.amountPaise !== null;
+  const hasMajor = row.a !== undefined && row.a !== null ||
+    row.amount !== undefined && row.amount !== null;
+  const minor = hasMinor && Number.isSafeInteger(row.amountPaise) && row.amountPaise > 0
+    ? row.amountPaise : null;
+  if (hasMinor && minor === null) throw new RangeError(label + " has invalid paise precision");
+  const major = hasMajor ? moneyToPaise(row.a ?? row.amount, label) : null;
+  if (hasMajor && major === null) throw new RangeError(label + " has invalid major-unit amount");
+  if (minor !== null && major !== null && minor !== major) {
+    throw new RangeError(label + " major-unit and paise values disagree");
+  }
+  const amount = minor ?? major;
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw new RangeError(label + " must be a positive safe integer in paise");
+  }
+  return amount;
+}
+
+function paymentRowSignature(row, label) {
+  const amountPaise = paymentRowPaise(row, label);
+  const method = normalizedPaymentMethod(row.m ?? row.method);
+  const reference = normalizedPaymentReference(row.r ?? row.reference, method);
+  return JSON.stringify([
+    amountPaise, method, reference, String(row.source ?? ""),
+    String(row.bookingId ?? ""), String(row.idempotencyKey ?? "")
+  ]);
+}
+
+/**
+ * Rejects a new folio mutation when the existing paid total, canonical
+ * payment rows or compatibility history disagree. This is a guard only; it
+ * never chooses a winning representation or repairs historical data.
+ */
+export function assertBookingAccountingConsistent(booking) {
+  if (!booking || typeof booking !== "object" || Array.isArray(booking)) {
+    throw new TypeError("Booking is required for accounting integrity validation");
+  }
+  if (booking.pays != null && !Array.isArray(booking.pays)) {
+    throw new TypeError("Canonical payment rows are not an array");
+  }
+  if (booking.payments != null && !Array.isArray(booking.payments)) {
+    throw new TypeError("Compatibility payment history is not an array");
+  }
+  const pays = Array.isArray(booking.pays) ? booking.pays : [];
+  const rowSumPaise = pays.reduce((sum, row) => {
+    const amount = paymentRowPaise(row, "Existing payment amount");
+    const next = sum + amount;
+    if (!Number.isSafeInteger(next)) throw new RangeError("Existing payment total exceeds the safe INR limit");
+    return next;
+  }, 0);
+  const declaredPaidPaise = booking.p == null || booking.p === ""
+    ? 0 : moneyToPaise(booking.p, "Existing paid total", { allowZero: true });
+  if (rowSumPaise !== declaredPaidPaise) {
+    const error = new Error("Existing booking paid total does not match its canonical payment rows. Reconcile the source records before posting another payment.");
+    error.code = "BOOKING_PAID_TOTAL_MISMATCH";
+    throw error;
+  }
+
+  if (Array.isArray(booking.payments)) {
+    const counts = new Map();
+    for (const row of pays) {
+      const signature = paymentRowSignature(row, "Existing canonical payment");
+      counts.set(signature, (counts.get(signature) || 0) + 1);
+    }
+    const historyCounts = new Map();
+    for (const row of booking.payments) {
+      const signature = paymentRowSignature(row, "Existing payment history");
+      historyCounts.set(signature, (historyCounts.get(signature) || 0) + 1);
+    }
+    if (counts.size !== historyCounts.size ||
+        [...counts].some(([signature, count]) => historyCounts.get(signature) !== count)) {
+      const error = new Error("Canonical payment rows and compatibility payment history disagree. Reconcile the source records before posting another payment.");
+      error.code = "BOOKING_PAYMENT_HISTORY_MISMATCH";
+      throw error;
+    }
+  }
+  return { declaredPaidPaise, rowSumPaise, historyRowCount: Array.isArray(booking.payments) ? booking.payments.length : null };
+}
+
 function samePayment(payment, { booking, amountPaise, method, reference }) {
   const recordedPaise = Number.isSafeInteger(payment.amountPaise)
     ? payment.amountPaise
@@ -169,6 +252,8 @@ export function settlePayment({
     }
   }
 
+  // A new payment must not extend an already inconsistent paid balance or history mirror.
+  const accountingBefore = assertBookingAccountingConsistent(booking);
   // Validate the balance only for a new posting. An idempotent retry must
   // return the original result even though the original payment reduced due.
   const duePaise = moneyToPaise(balanceDue, "Balance due", { allowZero: true });
@@ -198,24 +283,8 @@ export function settlePayment({
     booking.pays = priorPays.slice();
     booking.pays.push(payment);
 
-    // Older installations may have a paid total without corresponding
-    // canonical payment rows. Preserve that recorded balance instead of
-    // silently reducing it when the first new payment is entered.
-    const recordedRowsPaise = priorPays.reduce((sum, row) => {
-      if (!row || typeof row !== "object" || Array.isArray(row)) {
-        throw new TypeError("Existing payment row is invalid");
-      }
-      const rowPaise = Number.isSafeInteger(row.amountPaise)
-        ? row.amountPaise
-        : moneyToPaise(row.a ?? row.amount, "Existing payment amount");
-      if (rowPaise <= 0) throw new RangeError("Existing payment amount must be greater than zero");
-      const total = sum + rowPaise;
-      if (!Number.isSafeInteger(total)) throw new RangeError("Existing payment total exceeds the safe INR limit");
-      return total;
-    }, 0);
-    const legacyPaidPaise = priorPaid == null || priorPaid === ""
-      ? 0 : moneyToPaise(priorPaid, "Existing paid total", { allowZero: true });
-    const nextPaidPaise = Math.max(recordedRowsPaise, legacyPaidPaise) + amountPaise;
+    const recordedRowsPaise = accountingBefore.rowSumPaise;
+    const nextPaidPaise = recordedRowsPaise + amountPaise;
     const nextTodayPaise = priorTodayPaise + amountPaise;
     if (!Number.isSafeInteger(nextPaidPaise) || !Number.isSafeInteger(nextTodayPaise)) {
       throw new RangeError("Payment total exceeds the safe INR limit");
