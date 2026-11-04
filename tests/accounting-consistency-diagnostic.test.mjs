@@ -329,3 +329,13 @@ test("detects paid refund flags without independent settlement evidence", () => 
   assert.equal(result.cancellationFlagMismatchCount, 1);
   assert.equal(result.cancellationFlagMismatches[0].reason, "paid_refund_missing_settlement_evidence");
 });
+
+test("zero-value cancellations without journal lines are not falsely marked committed", () => {
+  const result = diagnoseAccountingConsistency({
+    b: [],
+    cancelled: [{ id: 48, p: 0, pays: [], refund_amount: 0, cancelledStatus: "no_refund", cancellationAccountingCommitted: false }],
+    financialLedger: []
+  });
+  assert.equal(result.cancellationFlagMismatchCount, 0);
+  assert.equal(result.malformedJournalCount, 0);
+});
