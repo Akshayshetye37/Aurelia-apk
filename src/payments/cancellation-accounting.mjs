@@ -2,7 +2,7 @@ const MONEY_TOLERANCE = 1e-7;
 
 function amountToPaise(value) {
   const validType = typeof value === "number" ||
-    (typeof value === "string" && /^\\d+(?:\\.\\d{1,2})?$/.test(value.trim()));
+    (typeof value === "string" && /^\d+(?:\.\d{1,2})?$/.test(value.trim()));
   const amount = validType ? Number(value) : Number.NaN;
   if (!Number.isFinite(amount) || amount < 0) return null;
   const scaled = amount * 100;
