@@ -194,3 +194,10 @@ test('webhook capture evidence cannot become accounting authorization', () => {
   assert.match(source, /PENDING_CONTROL_OR_BRIDGE/);
   assert.match(source, /CAPTURED_VERIFIED_PENDING_ACCOUNTING/);
 });
+
+test('reconciliation cannot write the separate Firestore folio journal even after flags pass', () => {
+  assert.match(source, /enforcePaymentControl\(req, res, 'automatic_settlement'\)/);
+  assert.match(source, /enforcePaymentControl\(req, res, 'native_settlement_bridge'\)/);
+  assert.match(source, /authoritative_pms_ledger_mapping_not_implemented/);
+  assert.doesNotMatch(source, /runDurableReconciliationWorker\(/);
+});
