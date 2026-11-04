@@ -52,7 +52,7 @@ resource "google_project_iam_custom_role" "payment_secret_runtime" {
     "secretmanager.secrets.get",
     "secretmanager.versions.add",
     "secretmanager.versions.access",
-    "secretmanager.versions.get",
+    "secretmanager.versions.list",
     "secretmanager.versions.disable"
   ]
   stage = "GA"
