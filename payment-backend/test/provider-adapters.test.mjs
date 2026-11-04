@@ -308,3 +308,21 @@ test('Razorpay refund status rejects non-INR provider responses', async () => {
   await assert.rejects(adapter.getRefundStatus({ refundId: 'rfnd_125' }),
     /razorpay_refund_amount_or_currency_invalid/);
 });
+
+test('Razorpay status lookup does not invent an order binding when provider omits it', async () => {
+  const mock = mockFetch(async () => ({
+    status: 200,
+    body: {
+      id: 'pay_target', amount: 12500, currency: 'INR',
+      status: 'captured', captured: true
+    }
+  }));
+  const adapter = new RazorpayAdapter({
+    credentials: { keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  const status = await adapter.getPaymentStatus({ orderId: 'order_expected', paymentId: 'pay_target' });
+  assert.equal(status.paymentId, 'pay_target');
+  assert.equal(status.orderId, null);
+  assert.equal(status.captured, true);
+});
