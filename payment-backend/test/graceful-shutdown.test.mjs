@@ -65,3 +65,13 @@ test("reports dependency shutdown failures after attempting every dependency", a
   await assert.rejects(shutdown(), { name: "AggregateError" });
   assert.deepEqual(calls, ["first", "second"]);
 });
+
+test("closes dependencies even when HTTP server shutdown reports an error", async () => {
+  let dependencyClosed = false;
+  const shutdown = createGracefulShutdown({
+    server: { close(callback) { callback(new Error("http_close_failed")); } },
+    dependencies: [async () => { dependencyClosed = true; }]
+  });
+  await assert.rejects(shutdown(), { name: "AggregateError" });
+  assert.equal(dependencyClosed, true);
+});
