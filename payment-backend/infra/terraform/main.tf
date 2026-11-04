@@ -271,6 +271,15 @@ resource "google_compute_url_map" "payment_backend" {
   project         = var.project_id
   name            = "${var.service_name}-url-map"
   default_service = google_compute_backend_service.payment_backend.id
+
+  # Persist HTTPS-only behavior in browsers after the first successful HTTPS visit.
+  header_action {
+    response_headers_to_add {
+      header_name  = "Strict-Transport-Security"
+      header_value = "max-age=31536000"
+      replace      = true
+    }
+  }
 }
 
 resource "google_compute_managed_ssl_certificate" "payment_backend" {
