@@ -10,7 +10,9 @@ This Terraform configuration creates the Cloud Run service and its restricted ru
 - Runtime identity is a dedicated service account, not the project default service account.
 - Firestore access uses `roles/datastore.user`.
 - Secret Manager access uses a custom role limited to secret create/get, version add/access/list and version disable; the runtime cannot delete secret resources or destroy credential history.
-- HTTPS is the only public load-balancer listener (TCP/443); no HTTP listener or redirect is provisioned. The backend service's `protocol = "HTTP"` is a required/ignored field for this Cloud Run serverless NEG integration; it does not create a public HTTP endpoint.
+- HTTPS is the only public load-balancer listener (TCP/443); no TCP/80 listener, HTTP proxy or redirect is provisioned. The managed certificate and `MODERN` SSL policy enforce TLS 1.2 or newer at the public edge.
+- The backend service is configured with `protocol = "HTTPS"` as requested. Google ignores this field for Cloud Run serverless NEG backends, so it is not the mechanism that enables backend TLS. Cloud Run documentation states that HTTPS load-balancer traffic is forwarded to Cloud Run and the container through a Google-managed encrypted channel. The application container does not need to terminate TLS itself.
+- Cloud Run ingress is restricted to internal and Cloud Load Balancing traffic, and its default `run.app` URL is disabled, preventing direct public ingress from bypassing the load balancer.
 - HTTPS proxy contract is configured explicitly: `AURELIA_HTTPS_TERMINATION=trusted-proxy` and `AURELIA_TRUST_PROXY_HOPS=1`.
 - Container image must be pinned by sha256 digest; mutable `latest` tags are rejected.
 
@@ -45,12 +47,13 @@ terraform plan
 terraform apply
 ```
 
-Terraform creates the external HTTPS-only load balancer and serverless NEG. The public load balancer has no TCP/80 listener; clients must connect using `https://`. After apply, create the DNS A record for the domain using the `load_balancer_ip` output and wait for the managed certificate to become ACTIVE. Cloud Run IAM grants invocation to the load-balancer path; application-level admin endpoints still require Firebase ID token, verified email, MFA and active tenant-admin membership.
+Terraform creates the external HTTPS-only load balancer and serverless NEG. The public load balancer has no TCP/80 listener; clients must connect using `https://`. For this Cloud Run serverless NEG, Google ignores the backend `protocol` field; Cloud Run nevertheless documents that HTTPS load-balancer requests are forwarded to the container over a Google-managed encrypted channel. After apply, create the DNS A record for the domain using the `load_balancer_ip` output and wait for the managed certificate to become ACTIVE. Cloud Run IAM grants invocation to the load-balancer path; application-level admin endpoints still require Firebase ID token, verified email, MFA and active tenant-admin membership.
 
 ## Important operational caveats
 
 - Do not run `terraform apply` until the project, immutable image, hostname, load balancer and certificate are ready.
 - The first Terraform apply creates the HTTPS frontend, but it is not usable until DNS resolves to the load-balancer IP and the managed certificate becomes ACTIVE.
+- Do not interpret `protocol = "HTTPS"` on the serverless NEG backend as an independently configurable TLS handshake. Google ignores that field for serverless NEGs. Encryption between the Google load balancer and Cloud Run is provided by the Cloud Run platform for HTTPS requests.
 - Cloud Run ingress restriction is a control-plane setting; validate it after apply and perform an external bypass probe against the default service URL and any known service IPs.
 - Terraform state contains infrastructure metadata. Store it in a protected remote backend with locking and encryption; do not commit state or tfvars.
 - Review the custom Secret Manager role against any future backend code changes. If code starts using additional Secret Manager APIs, update IAM deliberately rather than granting project Owner/Editor.
