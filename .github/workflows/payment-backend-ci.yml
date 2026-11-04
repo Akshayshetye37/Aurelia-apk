@@ -35,9 +35,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: payment-backend/package-lock.json
       - name: Install backend dependencies
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
       - name: Run payment backend contract and security tests
         run: npm test
