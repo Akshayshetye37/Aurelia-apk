@@ -550,6 +550,11 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
       !Number.isSafeInteger(amountMinor) || amountMinor < 100 || amountMinor > 10000000 || !idem) {
     return fail(res, 400, 'invalid_test_order_request');
   }
+  const providerState = await providerTenantDoc(req.tenant.id, provider, 'test').get();
+  if (!providerState.exists || providerState.data().configured !== true ||
+      providerState.data().credentialsValidated !== true) {
+    return fail(res, 409, 'provider_credentials_not_validated');
+  }
   const idemId = crypto.createHash('sha256').update(req.tenant.id + ':' + provider + ':test:' + idem).digest('hex');
   const idemRef = db.doc('paymentIdempotency/' + idemId);
   try {
