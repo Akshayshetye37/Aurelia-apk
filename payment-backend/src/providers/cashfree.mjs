@@ -5,6 +5,15 @@ const API_VERSION = '2023-08-01';
 const BASE = Object.freeze({ test: 'https://sandbox.cashfree.com/pg', live: 'https://api.cashfree.com/pg' });
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
 const minor = value => Number.isSafeInteger(value) && value > 0;
+const majorToMinor = value => {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  if (typeof value === 'string' && !/^\\d+(?:\\.\\d{1,2})?$/.test(value.trim())) return null;
+  const major = Number(value);
+  const scaled = major * 100;
+  if (!Number.isFinite(major) || major <= 0 || !Number.isSafeInteger(Math.round(scaled)) ||
+      Math.abs(scaled - Math.round(scaled)) > 1e-7) return null;
+  return Math.round(scaled);
+};
 
 export class CashfreeAdapter extends PaymentProviderAdapter {
   constructor(options) {
@@ -56,9 +65,13 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
         ...(input.customer.email ? { customer_email: input.customer.email } : {}) },
       order_meta: { return_url: input.returnUrl }
     }, crypto.randomUUID(), idempotencyUuid);
-    if (!data.order_id || !data.payment_session_id) throw new Error('cashfree_checkout_session_missing');
+    const amountMinor = majorToMinor(data.order_amount);
+    if (!data.order_id || data.order_id !== input.orderId || !data.payment_session_id ||
+        amountMinor !== input.amountMinor || data.order_currency !== 'INR') {
+      throw new Error('cashfree_checkout_response_binding_mismatch');
+    }
     return { provider: 'cashfree', orderId: data.order_id, paymentSessionId: data.payment_session_id,
-      checkoutUrl: data.payment_link || null, amountMinor: Math.round(Number(data.order_amount) * 100),
+      checkoutUrl: data.payment_link || null, amountMinor,
       currency: data.order_currency, status: data.order_status };
   }
 
@@ -66,7 +79,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
     if (!id(input?.reference)) throw new TypeError('invalid_cashfree_order_id');
     const order = await this.request('GET', '/orders/' + encodeURIComponent(input.reference));
     return { found: order.order_id === input.reference, orderId: order.order_id,
-      amountMinor: Math.round(Number(order.order_amount) * 100), currency: order.order_currency,
+      amountMinor: majorToMinor(order.order_amount), currency: order.order_currency,
       status: order.order_status, paymentSessionId: order.payment_session_id || null,
       checkoutUrl: order.payment_link || null };
   }
@@ -81,7 +94,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
       ? (input.paymentId ? payments.find(p => String(p.cf_payment_id) === String(input.paymentId))
         : payments.find(p => p.payment_status === 'SUCCESS')) : null;
     const paymentAmount = matching?.payment_amount;
-    const amountMinor = paymentAmount == null ? null : Math.round(Number(paymentAmount) * 100);
+    const amountMinor = paymentAmount == null ? null : majorToMinor(paymentAmount);
     const currency = matching?.payment_currency || null;
     return { provider: 'cashfree', orderId: order.order_id, orderStatus: order.order_status,
       paymentId: matching?.cf_payment_id == null ? null : String(matching.cf_payment_id),
@@ -113,7 +126,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
       refund_id: input.refundId, refund_amount: input.amountMinor / 100,
       refund_note: input.reason || 'Customer refund'
     }, crypto.randomUUID(), input.idempotencyKey || input.refundId);
-    const amountMinor = Math.round(Number(data.refund_amount) * 100);
+    const amountMinor = majorToMinor(data.refund_amount);
     if (data.order_id !== input.orderId || data.refund_id !== input.refundId ||
         !Number.isSafeInteger(amountMinor) || amountMinor !== input.amountMinor ||
         (input.paymentId && String(data.cf_payment_id) !== String(input.paymentId)) ||
@@ -141,7 +154,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
         (input.paymentId && String(refund.cf_payment_id) !== String(input.paymentId))) {
       throw new Error('cashfree_refund_identity_mismatch');
     }
-    const amountMinor = Math.round(Number(refund.refund_amount) * 100);
+    const amountMinor = majorToMinor(refund.refund_amount);
     if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0 ||
         (refund.refund_currency && refund.refund_currency !== 'INR')) {
       throw new Error('cashfree_refund_amount_or_currency_invalid');
