@@ -170,6 +170,38 @@ app.get('/v1/admin/payment-controls', requireTenantAdmin, async (req, res) => {
   });
 });
 
+const CONTROL_RELEASE_EVIDENCE = Object.freeze({
+  manual_posting: ['real_data_diagnostic', 'owner_discrepancy_classification'],
+  test_collection: ['local_credential_vault', 'test_order_creation', 'staff_confirmation_acceptance'],
+  native_settlement_bridge: ['signed_authorization', 'signature_verification', 'ack_recovery'],
+  automatic_settlement: ['crash_duplicate_offline_restore_acceptance'],
+  live_collection: ['production_readiness_review', 'separate_owner_approval'],
+  refund_processing: ['refund_state_machine', 'cumulative_limits', 'reversal_tests']
+});
+
+async function validateControlReleaseApproval(tenantId, control, actor, role) {
+  if (role !== 'owner') return false;
+  const ref = db.doc('paymentControlApprovals/' + tenantId + '/controls/' + control);
+  const snap = await ref.get();
+  if (!snap.exists) return false;
+  const approval = snap.data();
+  const required = CONTROL_RELEASE_EVIDENCE[control] || [];
+  const approvedAt = approval.approvedAt?.toDate?.();
+  const expiresAt = approval.expiresAt?.toDate?.();
+  return approval.status === 'APPROVED' &&
+    approval.approvedByOwner === true &&
+    typeof approval.approvedBy === 'string' && approval.approvedBy.length > 0 &&
+    approval.approvedBy !== actor.uid &&
+    Array.isArray(approval.evidence) &&
+    required.every(item => approval.evidence.includes(item)) &&
+    approvedAt instanceof Date && Number.isFinite(approvedAt.getTime()) &&
+    expiresAt instanceof Date && Number.isFinite(expiresAt.getTime()) &&
+    approvedAt.getTime() <= Date.now() &&
+    expiresAt.getTime() > Date.now() &&
+    (control !== 'live_collection' ||
+      (approval.productionReadinessReview === true && approval.separateOwnerApproval === true));
+}
+
 app.patch('/v1/admin/payment-controls', requireTenantAdmin,
   express.json({ limit: '2kb', strict: true }), async (req, res) => {
     const body = req.body || {};
@@ -177,6 +209,23 @@ app.patch('/v1/admin/payment-controls', requireTenantAdmin,
         !body.changes || typeof body.changes !== 'object' || Array.isArray(body.changes) ||
         typeof body.reason !== 'string' || !body.reason.trim()) {
       return fail(res, 400, 'invalid_payment_control_update');
+    }
+    // Emergency stop may always be engaged. Disengaging it is a separately
+    // approved release action; capability flags require current owner evidence.
+    if (body.changes.emergency_stop === false) {
+      return fail(res, 423, 'emergency_stop_release_approval_required');
+    }
+    for (const [control, enabled] of Object.entries(body.changes)) {
+      if (enabled !== true || control === 'emergency_stop') continue;
+      let approved = false;
+      try {
+        approved = await validateControlReleaseApproval(
+          req.tenant.id, control, req.actor, req.tenant.role
+        );
+      } catch {
+        return fail(res, 503, 'payment_release_approval_unavailable');
+      }
+      if (!approved) return fail(res, 423, 'payment_control_release_evidence_required');
     }
     try {
       const result = await updatePaymentControls({
