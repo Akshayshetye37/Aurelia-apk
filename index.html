@@ -3700,6 +3700,8 @@ window.commitCancellationRefund=function(i){
  const pendingLiabilityPaise=priorEntries.reduce((total,entry)=>
   total+(entry.lines||[]).filter(line=>line.account==='Refunds Payable Liability')
    .reduce((sum,line)=>sum+(Number.isSafeInteger(line.creditPaise)?line.creditPaise:Math.round((Number(line.credit)||0)*100))-(Number.isSafeInteger(line.debitPaise)?line.debitPaise:Math.round((Number(line.debit)||0)*100)),0),0);
+ const pendingJournalCount=priorEntries.filter(entry=>entry.kind==='refund_pending').length;
+ if(pendingLiabilityPaise>0&&(pendingJournalCount!==1||priorEntries.length!==1)){toast('Multiple or mixed cancellation journals were found for this booking. Manual accounting review is required.');return}
  if(b.refundPayableJournalRecorded&&pendingLiabilityPaise<=0){toast('Pending refund flag has no matching payable journal. Manual accounting review is required.');return}
  if(priorEntries.length&&pendingLiabilityPaise<=0&&!b.refundPayableJournalRecorded){toast('A cancellation journal already exists but no refund payable remains. Manual accounting review is required; no duplicate journal was written.');return}
  if((action==='partial'||action==='full')&&refundReference&&((S.financialLedger||[]).some(entry=>String(entry.refundReference||'').trim().toUpperCase()===refundReference.toUpperCase()))){toast('This refund transaction reference is already recorded.');return}
