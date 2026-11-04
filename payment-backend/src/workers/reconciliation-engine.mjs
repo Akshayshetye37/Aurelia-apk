@@ -113,7 +113,12 @@ export async function runDurableReconciliationWorker({
         currency: intent.currency
       });
 
-      if (!hasDurableLedgerReceipt(settlement, {\n        tenantId, folioId: intent.folioId, intentId: doc.id, provider: intent.provider,\n        environment: intent.environment, providerOrderId: intent.providerOrderId,\n        providerPaymentId: intent.providerPaymentId, amountMinor: intent.amountMinor,\n        currency: intent.currency\n      })) {
+      if (!hasDurableLedgerReceipt(settlement, {
+        tenantId, folioId: intent.folioId, intentId: doc.id, provider: intent.provider,
+        environment: intent.environment, providerOrderId: intent.providerOrderId,
+        providerPaymentId: intent.providerPaymentId, amountMinor: intent.amountMinor,
+        currency: intent.currency
+      })) {
         throw new Error('canonical_ledger_posting_or_durable_readback_unproven');
       }
 
