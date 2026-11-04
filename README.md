@@ -7,9 +7,11 @@ Aurelia is an offline-first property-management system with a hybrid production 
 ## Project location
 
 - **Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
-- **Working branch:** `feature/multi-provider-payment-backend`
-- **Project root:** `/`
-- **Primary application:** `index.html`
+- **Active Phase 1 working branch:** `fix/phase-1-accounting-audit`
+- **Development/base branch:** `feature/multi-provider-payment-backend`
+- **Draft review:** [PR #9 — Phase 1 accounting audit](https://github.com/Akshayshetye37/Aurelia-apk/pull/9) (open, not merged)
+- **Repository project root:** `/` (repository root; not a local device filesystem path)
+- **Primary application entry:** `index.html`
 
 ## Architecture decision
 
@@ -24,6 +26,21 @@ Architecture and implementation truth are defined in:
 - [Payment implementation plan](docs/PAYMENT_IMPLEMENTATION_PLAN.md)
 - [Seven-provider integration status](docs/PROVIDER_INTEGRATION_STATUS.md)
 - [Payment engine / release specification](docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md)
+
+## Fresh operational start — approved direction, not yet implemented
+
+**Decision: Option A.** Aurelia will use a completely fresh operational PMS database. Existing operational records will not be migrated into the new database.
+
+- Preserve the old database and backups unchanged as a separate, read-only historical archive.
+- Do not import old bookings, guests, payment rows, folio balances or outstanding dues into the new operational database.
+- Establish a new operational data namespace, identifiers, backup and recovery procedures before accepting real records.
+- Build and validate the new booking, folio, payment, refund and ledger model with synthetic test data first.
+- Historical records remain available separately for accounting, tax, dispute and audit requirements.
+- Do not delete, clear, overwrite or automatically repair existing PMS data as part of this decision.
+
+This is an approved architecture direction, **not evidence that a new database has already been provisioned or that the application has been switched to it**. The current application code and Phase 1 audit work remain in place while the clean-start design is reviewed. No historical data migration is authorized.
+
+
 
 ## Seven-provider scope
 
