@@ -48,7 +48,8 @@ test('Cashfree fetches a specific refund for its order and returns normalized st
   const mock = mockFetch(async url => {
     assert.equal(url, 'https://sandbox.cashfree.com/pg/orders/order_123/refunds/refund_123');
     return { status: 200, body: {
-      refund_id: 'refund_123', order_id: 'order_123', refund_amount: 12.5,
+      refund_id: 'refund_123', cf_refund_id: '1553338', cf_payment_id: '918812',
+      order_id: 'order_123', refund_amount: 12.5,
       refund_currency: 'INR', refund_status: 'SUCCESS'
     } };
   });
@@ -56,11 +57,14 @@ test('Cashfree fetches a specific refund for its order and returns normalized st
     credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
     environment: 'test', fetchImpl: mock.fetchImpl
   });
-  const result = await adapter.getRefundStatus({ orderId: 'order_123', refundId: 'refund_123' });
+  const result = await adapter.getRefundStatus({ orderId: 'order_123', refundId: 'refund_123', paymentId: '918812' });
   assert.deepEqual(result, {
-    provider: 'cashfree', refundId: 'refund_123', orderId: 'order_123',
+    provider: 'cashfree', refundId: 'refund_123', providerRefundId: '1553338',
+    orderId: 'order_123', paymentId: '918812',
     status: 'SUCCESS', amountMinor: 1250, currency: 'INR'
   });
+  await assert.rejects(adapter.getRefundStatus({ orderId: 'order_123', refundId: 'refund_123', paymentId: 'different-payment' }),
+    /cashfree_refund_identity_mismatch/);
 });
 
 test('Cashfree refund lookup rejects malformed references before network dispatch', async () => {
@@ -72,4 +76,56 @@ test('Cashfree refund lookup rejects malformed references before network dispatc
   await assert.rejects(adapter.getRefundStatus({ orderId: 'order_123', refundId: '../x' }),
     /invalid_cashfree_refund_lookup/);
   assert.equal(mock.calls.length, 0);
+});
+
+test('Cashfree create refund preserves merchant refund_id separately from Cashfree cf_refund_id', async () => {
+  const mock = mockFetch(async url => {
+    assert.equal(url, 'https://sandbox.cashfree.com/pg/orders/order_123/refunds');
+    return { status: 200, body: {
+      refund_id: 'merchant_ref_123', cf_refund_id: '1553338', cf_payment_id: '918812',
+      order_id: 'order_123', refund_amount: 12.5, refund_currency: 'INR', refund_status: 'PENDING'
+    } };
+  });
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  const result = await adapter.createRefund({
+    orderId: 'order_123', refundId: 'merchant_ref_123', amountMinor: 1250,
+    paymentId: '918812', idempotencyKey: 'refund-idem-123456'
+  });
+  assert.deepEqual(result, {
+    provider: 'cashfree', refundId: 'merchant_ref_123', providerRefundId: '1553338',
+    orderId: 'order_123', paymentId: '918812', status: 'PENDING',
+    amountMinor: 1250, currency: 'INR'
+  });
+});
+
+test('Cashfree create refund rejects provider response identity or amount drift', async () => {
+  const mock = mockFetch(async () => ({ status: 200, body: {
+    refund_id: 'another_refund', cf_refund_id: '1553338', order_id: 'order_123',
+    refund_amount: 10, refund_currency: 'INR', refund_status: 'PENDING'
+  } }));
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  await assert.rejects(adapter.createRefund({
+    orderId: 'order_123', refundId: 'merchant_ref_123', amountMinor: 1250,
+    idempotencyKey: 'refund-idem-123456'
+  }), /cashfree_refund_response_binding_mismatch/);
+});
+
+test('Cashfree refund lookup rejects response order or merchant refund identity drift', async () => {
+  const mock = mockFetch(async () => ({ status: 200, body: {
+    refund_id: 'different_refund', cf_refund_id: '1553338', cf_payment_id: '918812',
+    order_id: 'another_order', refund_amount: 12.5, refund_currency: 'INR', refund_status: 'SUCCESS'
+  } }));
+  const adapter = new CashfreeAdapter({
+    credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  await assert.rejects(adapter.getRefundStatus({
+    orderId: 'order_123', refundId: 'merchant_ref_123', paymentId: '918812'
+  }), /cashfree_refund_identity_mismatch/);
 });
