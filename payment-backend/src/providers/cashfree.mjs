@@ -108,18 +108,46 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
       refund_id: input.refundId, refund_amount: input.amountMinor / 100,
       refund_note: input.reason || 'Customer refund'
     }, crypto.randomUUID(), input.idempotencyKey || input.refundId);
-    return { provider: 'cashfree', refundId: data.cf_refund_id || data.refund_id,
-      status: data.refund_status, amountMinor: Math.round(Number(data.refund_amount) * 100) };
+    const amountMinor = Math.round(Number(data.refund_amount) * 100);
+    if (data.order_id !== input.orderId || data.refund_id !== input.refundId ||
+        !Number.isSafeInteger(amountMinor) || amountMinor !== input.amountMinor ||
+        (data.refund_currency && data.refund_currency !== 'INR')) {
+      throw new Error('cashfree_refund_response_binding_mismatch');
+    }
+    return {
+      provider: 'cashfree',
+      refundId: data.refund_id,
+      providerRefundId: data.cf_refund_id == null ? null : String(data.cf_refund_id),
+      orderId: data.order_id,
+      paymentId: data.cf_payment_id == null ? null : String(data.cf_payment_id),
+      status: data.refund_status,
+      amountMinor,
+      currency: data.refund_currency || 'INR'
+    };
   }
 
   async getRefundStatus(input) {
     if (!id(input?.orderId) || !id(input?.refundId)) throw new TypeError('invalid_cashfree_refund_lookup');
     const refund = await this.request('GET', '/orders/' + encodeURIComponent(input.orderId) +
       '/refunds/' + encodeURIComponent(input.refundId));
-    const refundId = refund.cf_refund_id || refund.refund_id;
-    if (refundId !== input.refundId) throw new Error('cashfree_refund_identity_mismatch');
-    return { provider: 'cashfree', refundId, orderId: refund.order_id || input.orderId,
-      status: refund.refund_status, amountMinor: Math.round(Number(refund.refund_amount) * 100),
-      currency: refund.refund_currency || refund.order_currency || 'INR' };
+    if (refund.refund_id !== input.refundId || refund.order_id !== input.orderId ||
+        (input.paymentId && String(refund.cf_payment_id) !== String(input.paymentId))) {
+      throw new Error('cashfree_refund_identity_mismatch');
+    }
+    const amountMinor = Math.round(Number(refund.refund_amount) * 100);
+    if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0 ||
+        (refund.refund_currency && refund.refund_currency !== 'INR')) {
+      throw new Error('cashfree_refund_amount_or_currency_invalid');
+    }
+    return {
+      provider: 'cashfree',
+      refundId: refund.refund_id,
+      providerRefundId: refund.cf_refund_id == null ? null : String(refund.cf_refund_id),
+      orderId: refund.order_id,
+      paymentId: refund.cf_payment_id == null ? null : String(refund.cf_payment_id),
+      status: refund.refund_status,
+      amountMinor,
+      currency: refund.refund_currency || 'INR'
+    };
   }
 }
