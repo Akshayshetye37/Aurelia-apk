@@ -1,4 +1,5 @@
 import { AUTO_FOLIO_SETTLEMENT_ENABLED, assertAutoFolioSettlementEnabled } from "./settlement-gate.mjs";
+import { assertBalanceMutationAllowed } from "./payment-safety-gate.mjs";
 
 /**
  * Single local mutation boundary for hotel folio payments.
@@ -69,6 +70,9 @@ export function settlePayment({
   audit = () => {},
   now = () => new Date().toISOString()
 } = {}) {
+  // Global read-only interlock: this intentionally blocks manual and automated
+  // folio balance mutations until the accounting audit and release review pass.
+  assertBalanceMutationAllowed();
   // The automatic path must fail closed before validation or any mutation.
   if (source === "auto") assertAutoFolioSettlementEnabled({
     enabled: autoSettlementEnabled,
