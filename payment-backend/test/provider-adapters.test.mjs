@@ -326,3 +326,15 @@ test('Razorpay status lookup does not invent an order binding when provider omit
   assert.equal(status.orderId, null);
   assert.equal(status.captured, true);
 });
+
+test('Razorpay rejects a malformed payment ID even when an order ID is valid', async () => {
+  const mock = mockFetch(async () => ({ status: 200, body: {} }));
+  const adapter = new RazorpayAdapter({
+    credentials: { keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' },
+    environment: 'test', fetchImpl: mock.fetchImpl
+  });
+  await assert.rejects(adapter.getPaymentStatus({
+    orderId: 'order_123', paymentId: '../unexpected'
+  }), /invalid_razorpay_payment_lookup/);
+  assert.equal(mock.calls.length, 0);
+});
