@@ -207,7 +207,7 @@ async function providerAdapterForTenant(tenantId, provider, environment) {
   return { adapter: createProviderAdapter(provider, { credentials, environment }), state: state.data() };
 }
 
-app.post('/v1/admin/payments/reconcile', requireTenantAdmin,
+app.post('/v1/admin/payments/reconcile', (req,res,next) => paymentOperationsLocked ? fail(res, 423, 'payments_disabled_by_safety_kill_switch') : next(), requireTenantAdmin,
   express.json({ limit: '1kb', strict: true }), async (req, res) => {
     const limit = req.body?.limit === undefined ? 50 : req.body.limit;
     if (!Number.isInteger(limit) || limit < 1 || limit > 50 ||
