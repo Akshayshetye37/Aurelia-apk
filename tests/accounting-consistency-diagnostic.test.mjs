@@ -201,3 +201,25 @@ test("continues scanning later payment rows after a malformed row", () => {
   assert.equal(result.malformedBookingCount, 1);
   assert.equal(result.duplicatePaymentCount, 1);
 });
+
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+test("accounting diagnostic CLI parses and strict mode reports ledger findings", () => {
+  const dir = mkdtempSync(join(tmpdir(), "aurelia-accounting-"));
+  try {
+    const cleanPath = join(dir, "clean.json");
+    const driftPath = join(dir, "drift.json");
+    writeFileSync(cleanPath, JSON.stringify({ b: [{ id: "B-1", p: 0, pays: [], payments: [] }], cancelled: [] }));
+    writeFileSync(driftPath, JSON.stringify({ b: [{ id: "B-1", p: 10, pays: [], payments: [] }], cancelled: [] }));
+    const clean = spawnSync(process.execPath, ["scripts/diagnose-accounting.mjs", cleanPath, "--strict"], { encoding: "utf8" });
+    const drift = spawnSync(process.execPath, ["scripts/diagnose-accounting.mjs", driftPath, "--strict"], { encoding: "utf8" });
+    assert.equal(clean.status, 0, clean.stderr);
+    assert.equal(drift.status, 2, drift.stderr);
+    assert.match(drift.stdout, /"affectedBookingCount": 1/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
