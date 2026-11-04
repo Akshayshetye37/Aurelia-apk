@@ -72,7 +72,7 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
       : (input.paymentId ? (data.id === input.paymentId ? data : null) : data);
     if (!payment) return { provider: 'razorpay', orderId: input.orderId, paymentId: null,
       paymentStatus: 'pending', captured: false };
-    return { provider: 'razorpay', orderId: payment.order_id || input.orderId,
+    return { provider: 'razorpay', orderId: payment.order_id || null,
       paymentId: payment.id, paymentStatus: payment.status, amountMinor: payment.amount,
       currency: payment.currency, captured: payment.captured === true };
   }
