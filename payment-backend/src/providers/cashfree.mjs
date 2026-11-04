@@ -1,10 +1,19 @@
 import crypto from 'node:crypto';
 import { PaymentProviderAdapter } from './adapter-contract.mjs';
 
-const API_VERSION = '2023-08-01';
+const API_VERSION = '2026-01-01';
 const BASE = Object.freeze({ test: 'https://sandbox.cashfree.com/pg', live: 'https://api.cashfree.com/pg' });
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
 const minor = value => Number.isSafeInteger(value) && value > 0;
+const refundId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{3,40}$/.test(value);
+const uuidFrom = value => {
+  const bytes = crypto.createHash('sha256').update(String(value)).digest().subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' +
+    hex.slice(16, 20) + '-' + hex.slice(20);
+};
 const majorToMinor = value => {
   if (typeof value !== 'number' && typeof value !== 'string') return null;
   if (typeof value === 'string' && !/^[0-9]+(?:\.[0-9]{1,2})?$/.test(value.trim())) return null;
@@ -53,12 +62,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
         !id(input?.customer?.id) || typeof input?.customer?.phone !== 'string' ||
         typeof input?.returnUrl !== 'string' || !input.returnUrl.startsWith('https://') ||
         !id(input?.idempotencyKey)) throw new TypeError('invalid_cashfree_order');
-    const idempotencyUuid = (() => {
-      const bytes = crypto.createHash('sha256').update(input.idempotencyKey).digest().subarray(0, 16);
-      bytes[6] = (bytes[6] & 0x0f) | 0x50; bytes[8] = (bytes[8] & 0x3f) | 0x80;
-      const hex = bytes.toString('hex');
-      return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);
-    })();
+    const idempotencyUuid = uuidFrom(input.idempotencyKey);
     const data = await this.request('POST', '/orders', {
       order_id: input.orderId, order_amount: input.amountMinor / 100, order_currency: 'INR',
       customer_details: { customer_id: input.customer.id, customer_phone: input.customer.phone,
@@ -121,11 +125,16 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
   }
 
   async createRefund(input) {
-    if (!id(input?.orderId) || !id(input?.refundId) || !minor(input?.amountMinor)) throw new TypeError('invalid_cashfree_refund');
+    const note = input?.reason == null ? 'Customer refund' : input.reason;
+    if (!id(input?.orderId) || !refundId(input?.refundId) || !minor(input?.amountMinor) ||
+        typeof note !== 'string' || note.length < 3 || note.length > 100 ||
+        /[\\u0000-\\u001f\\u007f]/.test(note)) {
+      throw new TypeError('invalid_cashfree_refund');
+    }
     const data = await this.request('POST', '/orders/' + encodeURIComponent(input.orderId) + '/refunds', {
       refund_id: input.refundId, refund_amount: input.amountMinor / 100,
-      refund_note: input.reason || 'Customer refund'
-    }, crypto.randomUUID(), input.idempotencyKey || input.refundId);
+      refund_note: note
+    }, crypto.randomUUID(), uuidFrom(input.idempotencyKey || input.refundId));
     const amountMinor = majorToMinor(data.refund_amount);
     if (data.order_id !== input.orderId || data.refund_id !== input.refundId ||
         !Number.isSafeInteger(amountMinor) || amountMinor !== input.amountMinor ||
@@ -147,7 +156,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
   }
 
   async getRefundStatus(input) {
-    if (!id(input?.orderId) || !id(input?.refundId)) throw new TypeError('invalid_cashfree_refund_lookup');
+    if (!id(input?.orderId) || !refundId(input?.refundId)) throw new TypeError('invalid_cashfree_refund_lookup');
     const refund = await this.request('GET', '/orders/' + encodeURIComponent(input.orderId) +
       '/refunds/' + encodeURIComponent(input.refundId));
     if (refund.refund_id !== input.refundId || refund.order_id !== input.orderId ||
