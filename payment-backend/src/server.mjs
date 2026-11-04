@@ -8,6 +8,7 @@ import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
 import { assertWebhookReplayIntegrity } from './webhooks/provider-webhook-router.mjs';
 import { installAsyncRouteErrorHandling } from './http/async-route-errors.mjs';
 import { createGracefulShutdown } from './http/graceful-shutdown.mjs';
+import { configureHttpServerTimeouts } from './http/server-timeouts.mjs';
 import { publicHttpError } from './http/public-http-error.mjs';
 import { paymentRouteError } from './http/payment-route-errors.mjs';
 import { disableAllEnabledSecretVersions } from './secrets/secret-version-management.mjs';
@@ -785,7 +786,7 @@ app.use((err, _req, res, next) => {
   const response = publicHttpError(err);
   return res.status(response.status).json({ error: response.error });
 });
-const httpServer = app.listen(Number(process.env.PORT || 8080), '0.0.0.0');
+const httpServer = configureHttpServerTimeouts(app.listen(Number(process.env.PORT || 8080), '0.0.0.0'));
 const shutdown = createGracefulShutdown({
   server: httpServer,
   timeoutMs: 7000,
