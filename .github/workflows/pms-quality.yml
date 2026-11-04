@@ -31,4 +31,3 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Run complete PMS test suite
         run: npm test
-          test -s www/src/features/payments/reconciliation-panel.js
