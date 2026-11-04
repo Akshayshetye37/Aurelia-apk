@@ -66,3 +66,31 @@ export function validateCancellationRefund({
 if (typeof window !== "undefined") {
   window.AureliaCancellationPolicy = Object.freeze({ validateCancellationRefund, CANCELLATION_REFUND_ACTIONS });
 }
+
+/**
+ * Prevent duplicate cancellation journals and constrain pending-refund settlement.
+ * A pending liability can be settled once, for the exact amount originally recorded.
+ */
+export function validateCancellationJournalTransition({
+  priorEntries = [],
+  action,
+  refund,
+  priorPendingRefund = null
+} = {}) {
+  if (!Array.isArray(priorEntries)) {
+    return { ok: false, code: "INVALID_CANCELLATION_JOURNAL_HISTORY" };
+  }
+  if (priorEntries.length === 0) return { ok: true, transition: "new" };
+  const amount = Number(refund);
+  if (priorEntries.length === 1 && priorPendingRefund !== null &&
+      Number.isFinite(Number(priorPendingRefund)) &&
+      Math.round(Number(priorPendingRefund) * 100) === Math.round(amount * 100) &&
+      (action === "partial" || action === "full")) {
+    return { ok: true, transition: "settle_pending_liability" };
+  }
+  return {
+    ok: false,
+    code: "CANCELLATION_JOURNAL_ALREADY_EXISTS",
+    message: "A cancellation journal already exists. A pending refund can only be settled for its original recorded amount; do not post a second cancellation."
+  };
+}
