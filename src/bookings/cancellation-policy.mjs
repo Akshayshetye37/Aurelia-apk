@@ -90,9 +90,16 @@ export function validateCancellationJournalTransition({
   const priorAmountValid = Number.isFinite(priorAmount) && priorAmount > 0 &&
     Number.isSafeInteger(Math.round(priorScaled)) &&
     Math.abs(priorScaled - Math.round(priorScaled)) <= 1e-7;
-  if (priorEntries.length === 1 && priorPendingRefund !== null &&
-      priorAmountValid &&
+  const priorEntry = priorEntries.length === 1 ? priorEntries[0] : null;
+  const priorEntryAmount = Number(priorEntry?.refundAmount);
+  const priorEntryScaled = priorEntryAmount * 100;
+  const priorEntryAmountValid = Number.isFinite(priorEntryAmount) && priorEntryAmount > 0 &&
+    Number.isSafeInteger(Math.round(priorEntryScaled)) &&
+    Math.abs(priorEntryScaled - Math.round(priorEntryScaled)) <= 1e-7;
+  if (priorEntries.length === 1 && priorEntry?.kind === "refund_pending" &&
+      priorPendingRefund !== null && priorAmountValid && priorEntryAmountValid &&
       Math.round(priorScaled) === Math.round(amount * 100) &&
+      Math.round(priorEntryScaled) === Math.round(priorScaled) &&
       (action === "partial" || action === "full")) {
     return { ok: true, transition: "settle_pending_liability" };
   }
