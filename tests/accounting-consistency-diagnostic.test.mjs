@@ -349,3 +349,18 @@ test("detects a cancellation reference reused across different booking identitie
   assert.equal(result.duplicateCancellationPostingCount, 1);
   assert.equal(result.duplicateCancellationPostings[0].reason, "cancellation_reference_reused_across_bookings");
 });
+
+test("pending refund liability must equal the booking refund amount", () => {
+  const result = diagnoseAccountingConsistency({
+    b: [], cancelled: [{ id: 51, refund_amount: 400, cancelledStatus: "refund_pending", refundPayableJournalRecorded: true }],
+    financialLedger: [{
+      id: "JE-51", reference: "CANCEL-51", kind: "refund_pending", bookingId: 51,
+      lines: [
+        { account: "Guest Advances Liability", debit: 500, credit: 0 },
+        { account: "Refunds Payable Liability", debit: 0, credit: 500 }
+      ]
+    }]
+  });
+  assert.equal(result.cancellationFlagMismatchCount, 1);
+  assert.equal(result.cancellationFlagMismatches[0].reason, "pending_refund_amount_does_not_match_liability");
+});
