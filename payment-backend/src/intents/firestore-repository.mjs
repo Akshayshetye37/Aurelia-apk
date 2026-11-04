@@ -103,14 +103,26 @@ export class FirestorePaymentRepository {
       );
       const recoveredAt = this.clock().toISOString();
       const committed = await this.db.runTransaction(async tx => {
-        const [intentSnap, idemSnap, lockSnap] = await Promise.all([
-          tx.get(intentRef), tx.get(idemRef), tx.get(lockRef)
+        const [intentSnap, idemSnap, lockSnap, orderSnap] = await Promise.all([
+          tx.get(intentRef), tx.get(idemRef), tx.get(lockRef), tx.get(orderRef)
         ]);
         if (!intentSnap.exists || !idemSnap.exists || !lockSnap.exists ||
             intentSnap.data().tenantId !== tenantId ||
             intentSnap.data().state !== 'UNKNOWN' ||
             intentSnap.data().providerReference !== providerReference ||
             idemSnap.data().intentId !== intentId || lockSnap.data().intentId !== intentId) return false;
+        // Never replace an existing provider-order binding during recovery.
+        // A remote reference collision or stale binding must remain locked for
+        // manual investigation rather than redirecting a webhook to another folio.
+        if (orderSnap.exists) {
+          const priorOrder = orderSnap.data();
+          if (priorOrder.tenantId !== tenantId || priorOrder.folioId !== payload.folioId ||
+              priorOrder.intentId !== intentId || priorOrder.provider !== payload.provider ||
+              priorOrder.environment !== payload.environment ||
+              priorOrder.providerOrderId !== remote.orderId ||
+              priorOrder.amountMinor !== payload.amountMinor ||
+              priorOrder.currency !== payload.currency) return false;
+        }
         const next = transitionIntent('UNKNOWN', {
           type: 'provider_order_created', bindingVerified: true, providerOrderId: remote.orderId
         });
@@ -121,11 +133,13 @@ export class FirestorePaymentRepository {
         });
         tx.update(idemRef, { state: next, updatedAt: recoveredAt });
         tx.update(lockRef, { state: next, providerOrderId: remote.orderId, updatedAt: recoveredAt });
-        tx.set(orderRef, {
-          tenantId, folioId: payload.folioId, intentId, provider: payload.provider,
-          environment: payload.environment, providerOrderId: remote.orderId,
-          amountMinor: payload.amountMinor, currency: payload.currency, createdAt: recoveredAt
-        });
+        if (!orderSnap.exists) {
+          tx.create(orderRef, {
+            tenantId, folioId: payload.folioId, intentId, provider: payload.provider,
+            environment: payload.environment, providerOrderId: remote.orderId,
+            amountMinor: payload.amountMinor, currency: payload.currency, createdAt: recoveredAt
+          });
+        }
         return true;
       });
       if (!committed) return null;
