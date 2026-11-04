@@ -38,3 +38,12 @@ variable "max_instance_count" {
   type        = number
   default     = 5
 }
+
+variable "domain_name" {
+  description = "DNS name for the public payment API HTTPS load balancer; DNS must point to the Terraform output IP."
+  type        = string
+  validation {
+    condition     = can(regex("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$", var.domain_name))
+    error_message = "domain_name must be a valid fully qualified DNS name without a scheme or path."
+  }
+}
