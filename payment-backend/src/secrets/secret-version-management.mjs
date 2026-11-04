@@ -1,36 +1,35 @@
 /**
- * Disable a tenant provider secret's latest version without deleting the
- * Secret Manager resource. Keeping the resource permits safe credential
- * replacement while removing project-wide secret deletion authority.
+ * Disable every enabled version of a tenant provider secret without deleting
+ * the Secret Manager resource. Retaining the resource permits safe credential
+ * replacement while revoking all previously stored provider credentials.
  */
-export async function disableLatestSecretVersion(client, secretResourceName) {
-  if (!client || typeof client.getSecretVersion !== "function" ||
+export async function disableAllEnabledSecretVersions(client, secretResourceName) {
+  if (!client || typeof client.listSecretVersionsAsync !== "function" ||
       typeof client.disableSecretVersion !== "function" ||
       typeof secretResourceName !== "string" ||
       !/^projects\/[A-Za-z0-9-]+\/secrets\/[A-Za-z0-9_-]{1,255}$/.test(secretResourceName)) {
     throw new TypeError("secret_version_management_dependencies_required");
   }
 
-  let version;
+  let disabledCount = 0;
   try {
-    [version] = await client.getSecretVersion({
-      name: secretResourceName + "/versions/latest"
-    });
+    for await (const version of client.listSecretVersionsAsync({
+      parent: secretResourceName,
+      filter: "state:ENABLED"
+    })) {
+      if (!version || typeof version.name !== "string" ||
+          !(version.state === "ENABLED" || version.state === 1)) {
+        throw new Error("secret_version_metadata_invalid");
+      }
+      await client.disableSecretVersion({ name: version.name });
+      disabledCount++;
+    }
   } catch (error) {
-    if (error?.code === 5) return { alreadyAbsent: true, disabled: false };
+    if (error?.code === 5 && disabledCount === 0) {
+      return { alreadyAbsent: true, disabledCount: 0 };
+    }
     throw error;
   }
 
-  if (!version || typeof version.name !== "string") {
-    throw new Error("secret_version_metadata_invalid");
-  }
-  if (version.state === "DISABLED" || version.state === "DESTROYED") {
-    return { alreadyAbsent: false, disabled: false, alreadyDisabled: true };
-  }
-  if (version.state !== "ENABLED") {
-    throw new Error("secret_version_state_unrecognized");
-  }
-
-  await client.disableSecretVersion({ name: version.name });
-  return { alreadyAbsent: false, disabled: true };
+  return { alreadyAbsent: false, disabledCount };
 }
