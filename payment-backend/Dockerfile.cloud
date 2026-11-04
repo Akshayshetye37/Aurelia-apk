@@ -3,6 +3,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
-COPY src ./src
+COPY --chown=node:node src ./src
 EXPOSE 8080
+# Cloud Run must not execute the payment API as root.
+USER node
 CMD ["npm", "run", "start:cloud"]
