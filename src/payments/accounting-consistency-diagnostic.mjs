@@ -201,7 +201,7 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
   for (const [fingerprint, rows] of paymentIndex) {
     const distinctBookings = new Set(rows.map(row => row.bookingId == null ? "<missing>" : keyPart(row.bookingId)));
     if (distinctBookings.size > 1) {
-      duplicates.push({ fingerprint, bookingIds: [...distinctBookings], rows, reason: "payment_identity_reused_across_bookings" });
+      duplicates.push({ fingerprint, bookingIds: [...distinctBookings], rows, reason: fingerprint.startsWith("reference:") ? "payment_reference_reused_across_bookings" : "payment_idempotency_key_reused_across_bookings" });
     }
   }
 
