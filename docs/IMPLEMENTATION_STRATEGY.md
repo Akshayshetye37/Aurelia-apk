@@ -41,10 +41,14 @@ Cloud payment API
           Device acknowledgement → backend marks posted
 ```
 
+## Authoritative ten-workstream remediation plan
+
+The complete dependency graph, implementation details, acceptance evidence and hard stop conditions are maintained in [END_TO_END_REMEDIATION_PLAN.md](./END_TO_END_REMEDIATION_PLAN.md). That document supersedes any shorter checklist below where details differ. The ten workstreams are: (1) canonical booking/folio accounting, (2) intent/idempotency, (3) provider checkout/capture/webhooks, (4) durable reconciliation/recovery, (5) trusted Pay Bridge IPC, (6) canonical local settlement/receipts, (7) refunds/reversals, (8) authenticated Android API/session UX, (9) security/infrastructure/operations, and (10) end-to-end qualification/release control.
+
 ## Execution sequence (strict dependencies)
 
 ### Gate 0 — Keep the existing local ledger intact
-Manual cash/card/UPI staff-entered payments continue through the existing local settlement boundary. Do not replace `booking.p`, `booking.pays[]` or the existing booking data format with a new Firestore folio schema during this integration.
+Preserve the existing local booking/folio data model; do not replace `booking.p`, `booking.pays[]` or the existing booking data format with a new Firestore folio schema during this integration. **At the current source checkpoint, the global accounting kill switch blocks manual as well as automated balance mutations. Manual payment posting is therefore NOT currently operational.** Restore it only after the authorized real-data audit and an owner-approved, narrowly scoped policy change; do not claim it remains available.
 
 ### Gate 1 — Resolve local ledger consistency
 The audit found that main due calculation reads `booking.p`, while the invoice paid helper sums `booking.pays[].a`. Legacy/imported records may differ. Build a read-only diagnostic and report mismatches; do not auto-correct historical financial data. Decide an explicit reconciliation policy and test it against backup/restore fixtures.
@@ -76,7 +80,7 @@ Test duplicate webhook, forged callback, replay, provider timeout, ambiguous ord
 
 - Live payment collection remains OFF.
 - Automatic folio settlement remains OFF.
-- Existing manual payments continue to work unchanged.
+- Current manual folio payment posting is blocked by the global accounting kill switch; restore only after the real-data accounting review and explicit owner approval.
 - Local PMS remains fully usable when the cloud backend is unavailable.
 - Merchant secrets never enter HTML, JavaScript, WebView storage, backups or APK assets.
 - Only authoritative provider verification can produce an accounting authorization.
@@ -86,7 +90,11 @@ Test duplicate webhook, forged callback, replay, provider timeout, ambiguous ord
 - Unknown outcomes remain recoverable and are never treated as success or failure by guesswork.
 
 
-## Immediate release freeze — global kill switch active
+## Build prohibition and immediate release freeze — global kill switch active
+
+Do not run Android debug/release APK workflows, signing, publishing or production deployment until all ten workstreams in [END_TO_END_REMEDIATION_PLAN.md](./END_TO_END_REMEDIATION_PLAN.md) pass their acceptance evidence. Source-only checks and non-build tests may be used where they do not trigger a build/deployment workflow. The historical successful APK workflow is not authorization for another build.
+
+
 
 Until an authorized PMS backup has been diagnosed and reviewed with the owner, the application and backend are in accounting read-only mode. No code path may mutate folio paid totals or payment rows. This freeze intentionally includes manual payment posting; ordinary booking, stay and non-payment operations remain available. Existing recorded balances are preserved.
 
