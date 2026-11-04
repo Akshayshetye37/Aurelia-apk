@@ -111,6 +111,8 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
     const amountMinor = Math.round(Number(data.refund_amount) * 100);
     if (data.order_id !== input.orderId || data.refund_id !== input.refundId ||
         !Number.isSafeInteger(amountMinor) || amountMinor !== input.amountMinor ||
+        (input.paymentId && String(data.cf_payment_id) !== String(input.paymentId)) ||
+        typeof data.refund_status !== 'string' || !data.refund_status ||
         (data.refund_currency && data.refund_currency !== 'INR')) {
       throw new Error('cashfree_refund_response_binding_mismatch');
     }
