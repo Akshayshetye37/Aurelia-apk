@@ -56,3 +56,10 @@ test("a complete backup restore is the only path allowed to replace quarantined 
   assert.match(html, /RESTORE_WRITE_ALLOWED=true;\s*persist\(\);[\s\S]*?LOCAL_STATE_STATUS='valid';RESTORE_WRITE_ALLOWED=false/);
   assert.match(html, /RESTORE_WRITE_ALLOWED=false;LOCAL_STATE_STATUS=priorLocalStatus/);
 });
+
+
+test("quarantined dataset displays a recovery action and warns that writes are blocked", () => {
+  assert.match(html, /Saved PMS data is quarantined after a validation failure/);
+  assert.match(html, /New changes are not being saved/);
+  assert.match(html, /S\.tab='more';S\.sub='backup';render\(\)/);
+});
