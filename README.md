@@ -114,7 +114,7 @@ Every change writes the control document and its audit record in one Firestore t
 
 Test collection requires its dedicated flag. Live collection has a separate unconditional production-readiness block and remains unavailable. Provider webhooks may record signed and provider-fetched capture evidence but never issue accounting authorization or post to the PMS ledger. The reconciliation endpoint is also hard-blocked: its existing worker targets a separate Firestore folio journal that is not proven to be the authoritative local PMS ledger.
 
-**Local PMS settlement remains hard-locked.** The cloud control plane is not trusted by the WebView and does not unlock offline manual posting. A signed, short-lived policy lease and trusted native enforcement are still required. There is no owner control-panel UI yet; the authenticated API is the backend control surface.
+**Local PMS settlement remains hard-locked.** The cloud control plane is not trusted by the WebView and does not unlock offline manual posting. A signed, short-lived policy lease and trusted native enforcement are still required. There is no owner control-panel UI yet; the authenticated cloud API is the backend control surface. The separate LAN appliance is not yet wired to consume a signed cloud policy lease, so its owner/device-command API must not be treated as governed by the cloud flags.
 
 See [Central Payment Control Plane](docs/CENTRAL_PAYMENT_CONTROL_PLANE.md) for schema, audit model, release approvals and remaining work. No payment capability has been enabled, deployed or approved for live collection.
 
