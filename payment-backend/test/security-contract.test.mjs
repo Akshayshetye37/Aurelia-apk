@@ -36,7 +36,7 @@ test('provider-neutral webhook route verifies raw body with provider adapter bef
   assert.match(source, /express\.raw\(\{ type: 'application\/json'/);
   assert.match(source, /adapter\.verifyWebhook\(req\.body, req\.headers\)/);
   assert.match(source, /adapter\.getPaymentStatus\(\{ orderId: providerOrderId, paymentId \}\)/);
-  assert.match(source, /providerFetchVerified: verified/);
+  assert.match(source, /providerFetchVerified: captureVerified/);
   assert.match(source, /timingSafeEqual/);
 });
 
@@ -104,12 +104,12 @@ test('verified webhook evidence is explicitly pending PMS accounting and cannot 
   assert.match(source, /CAPTURED_VERIFIED_PENDING_ACCOUNTING/);
   assert.match(source, /accountingStatus: 'PENDING'/);
   assert.match(source, /authoritative_pms_ledger_mapping_not_implemented/);
-  assert.match(source, /accounting: outcome\.verified \? 'pending' : 'not_verified'/);
+  assert.match(source, /PENDING_CONTROL_OR_BRIDGE/);
 });
 
 test('unverified webhook inbox records remain retryable while verified duplicates are idempotent', () => {
   assert.match(source, /UNVERIFIED_RETRYABLE/);
-  assert.match(source, /prior\.providerFetchVerified === true/);
+  assert.match(source, /seen\.data\(\)\.providerFetchVerified === true/);
   assert.match(source, /lastAttemptAt: FieldValue\.serverTimestamp\(\)/);
   assert.match(source, /webhook_event_identity_conflict/);
 });
@@ -178,7 +178,7 @@ test('server does not retain a second hard-coded backend kill-switch shadowing t
 
 test('capability enablement requires independent, current owner release evidence', () => {
   assert.match(source, /CONTROL_RELEASE_EVIDENCE/);
-  assert.ok(source.includes("db.doc('paymentControlApprovals/' + tenantId + '/controls/' + control)"));
+  assert.ok(source.includes("db.doc('paymentControlApprovals/' + req.tenant.id + '/controls/' + control)"));
   assert.match(source, /approval\.status === 'APPROVED'/);
   assert.match(source, /approval\.approvedByOwner === true/);
   assert.match(source, /approval\.approvedBy !== actor\.uid/);
