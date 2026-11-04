@@ -319,6 +319,15 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
           if (payablePaise !== toPaise(refundAmount, "Booking pending refund")) {
             cancellationFlagMismatches.push({ bookingId, reason: "pending_refund_amount_does_not_match_liability" });
           }
+          const retainedAmount = Number(booking.retention_fee_retained ??
+            Math.max(0, Number(booking.original_amount_paid ?? 0) - refundAmount));
+          const retainedPaise = pendingEntries.reduce((sum, entry) => sum +
+            entry.lines.filter(line => line.account === "Cancellation Revenue")
+              .reduce((value, line) => value + toPaise(line.credit ?? 0, "Cancellation revenue credit") -
+                toPaise(line.debit ?? 0, "Cancellation revenue debit"), 0), 0);
+          if (retainedPaise !== toPaise(retainedAmount, "Booking retained cancellation amount")) {
+            cancellationFlagMismatches.push({ bookingId, reason: "pending_refund_retention_does_not_match_journal" });
+          }
         } catch {
           cancellationFlagMismatches.push({ bookingId, reason: "pending_refund_liability_amount_invalid" });
         }
