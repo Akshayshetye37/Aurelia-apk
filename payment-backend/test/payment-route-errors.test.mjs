@@ -6,8 +6,11 @@ test("maps known membership and validation failures", () => {
   assert.deepEqual(paymentRouteError(new Error("active_tenant_membership_required")), {
     status: 403, error: "active_tenant_membership_required"
   });
-  assert.deepEqual(paymentRouteError(new TypeError("secret manager internal details")), {
+  assert.deepEqual(paymentRouteError(new TypeError("invalid_payment_intent_request")), {
     status: 400, error: "invalid_payment_request"
+  });
+  assert.deepEqual(paymentRouteError(new TypeError("secret manager internal details")), {
+    status: 503, error: "payment_service_unavailable"
   });
 });
 
