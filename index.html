@@ -4,8 +4,13 @@
      Project root: /
      Primary application entry: /index.html
      Architecture: offline-first PMS with optional trusted cloud payment backend.
+     Fresh-install posture: no fabricated rooms, guests, bookings, tables or revenue.
+     Storage posture: durable write failures must surface; strict imports/restores
+     require exact persistent read-back and rollback verification.
      Payment release posture: live collection OFF; local accounting mutations are
      fail-closed by src/payments/payment-safety-gate.mjs until separately approved.
+     Android CI: PMS tests, web build, privacy checks and Capacitor sync passed at
+     7b746f5; APK build was cancelled, so no APK validation is claimed yet.
      This repository and branch are the source of truth. The UI bundle must never
      contain merchant secrets, webhook secrets, salts, signing keys or credentials.
      See README.md and docs/PMS_ACCOUNTING_SCHEMA.md for implementation status.
