@@ -80,10 +80,15 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
     const matching = Array.isArray(payments)
       ? (input.paymentId ? payments.find(p => String(p.cf_payment_id) === String(input.paymentId))
         : payments.find(p => p.payment_status === 'SUCCESS')) : null;
+    const paymentAmount = matching?.payment_amount;
+    const amountMinor = paymentAmount == null ? null : Math.round(Number(paymentAmount) * 100);
+    const currency = matching?.payment_currency || null;
     return { provider: 'cashfree', orderId: order.order_id, orderStatus: order.order_status,
       paymentId: matching?.cf_payment_id == null ? null : String(matching.cf_payment_id),
-      paymentStatus: matching?.payment_status || order.order_status, captured: matching?.payment_status === 'SUCCESS',
-      amountMinor: Math.round(Number(order.order_amount) * 100), currency: order.order_currency };
+      paymentStatus: matching?.payment_status || order.order_status,
+      captured: matching?.payment_status === 'SUCCESS' && Number.isSafeInteger(amountMinor) && amountMinor > 0 && currency === 'INR',
+      amountMinor: Number.isSafeInteger(amountMinor) && amountMinor > 0 ? amountMinor : null,
+      currency };
   }
 
   async verifyWebhook(rawBody, headers) {
