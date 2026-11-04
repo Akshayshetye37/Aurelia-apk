@@ -179,12 +179,12 @@ test('Cashfree create refund safely normalizes a single-item response array', as
     environment: 'test', fetchImpl: mock.fetchImpl
   });
   const result = await adapter.createRefund({
-    orderId: 'order_123', refundId: 'merchant_ref_456', amountMinor: 4250,
+    orderId: 'order_123', refundId: 'merchant_ref_456', amountMinor: 425,
     paymentId: '918812'
   });
   assert.equal(result.refundId, 'merchant_ref_456');
   assert.equal(result.providerRefundId, '1553444');
-  assert.equal(result.amountMinor, 4250);
+  assert.equal(result.amountMinor, 425);
 });
 
 test('Cashfree create refund rejects ambiguous multi-item response arrays', async () => {
