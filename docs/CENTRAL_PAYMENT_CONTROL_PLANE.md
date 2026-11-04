@@ -31,23 +31,36 @@ A missing document resolves to the safe defaults. An unreadable document resolve
 
 Each update creates a durable record in `paymentControlAudit/{autoId}`. A record contains tenant ID, one or more per-control entries, actor UID and verified email, reason, and server timestamp. Each entry records `control`, `from`, `to`, and ISO timestamp. The control document update and audit append occur in one Firestore transaction. Audit collection write/delete permissions must be denied to clients by Firestore Security Rules; only the backend service identity may write it.
 
-## Current implementation
+## Implemented backend control plane
 
-- `payment-backend/src/payment-controls/firestore-controls.mjs` defines defaults, validation, fail-closed reads, authorization predicates and transactional updates with audit records.
-- `payment-backend/test/payment-controls.test.mjs` covers default-deny, emergency-stop precedence, explicit capability checks, read failure, audit fields and invalid updates.
-- The cloud server does not yet expose authenticated control administration routes or apply the reader to every intent, provider activation, reconciliation, webhook authorization, refund and settlement path.
-- The client-side settlement function is synchronous and can operate offline. It cannot safely consume a mutable cloud flag directly. A future local reader must accept only a signed, short-lived policy lease delivered through the trusted native boundary, enforce expiry/version/replay protection, and fail closed when missing or stale. A JavaScript/localStorage boolean is never authority.
-- The existing local hard lock and backend hard lock remain active until complete route coverage and local trust-boundary enforcement are implemented and tested.
+- `payment-backend/src/payment-controls/firestore-controls.mjs` defines the canonical flags, strict schema validation, fail-closed reads, authorization predicates and transactional updates.
+- Canonical tenant document: `paymentControls/{tenantId}`.
+- Immutable append-only audit subcollection: `paymentControls/{tenantId}/audit/{auditId}`. Each update writes the control document and audit entry in one Firestore transaction.
+- Owner/admin authenticated endpoints:
+  - `GET /v1/admin/payment-controls` — current tenant flags and latest 50 audit entries.
+  - `PATCH /v1/admin/payment-controls` — changes plus mandatory reason.
+- Authentication uses verified Firebase identity, active tenant membership, verified email, recent MFA and owner/admin role. Tenant ID is derived from membership, never from request input.
+- Financial routes read the current tenant control document for each request; no allow-decision cache is used. Missing, malformed, stale-schema or unreadable control state fails closed.
+- Test intents, test order creation and test provider activation require `test_collection`. Live routes require `live_collection` and retain a separate unconditional production-readiness rejection. Reconciliation is gated by `automatic_settlement`.
+- A capability cannot be enabled merely by changing its boolean. A separate owner release approval document must exist at `paymentControlApprovals/{tenantId}/controls/{control}`, be current, identify an independent approver, and contain the required evidence codes. The live control additionally requires explicit production-readiness and separate-owner-approval fields. The API cannot turn `emergency_stop` OFF; engaging it remains immediately available.
+- Webhooks can store signature/provider-status evidence. They never issue accounting authorization. Their pending record identifies whether collection, settlement controls or the still-missing trusted bridge is blocking posting.
+- `payment-backend/test/payment-controls.test.mjs` and `payment-backend/test/security-contract.test.mjs` cover control defaults, precedence, read failure, audit contract, authenticated routes and enforcement wiring. These tests have been added but have not yet been executed in this environment.
 
-## Required enforcement sequence
+## Local PMS enforcement boundary
 
-1. Add owner/admin authenticated GET and PATCH endpoints. PATCH must validate tenant membership, recent MFA, explicit boolean changes and mandatory reason. Use the transactional writer above.
-2. Add server middleware that reads the tenant control document for every financial operation. Do not cache allow decisions. Firestore errors, malformed data and missing state reject the operation.
-3. Keep provider webhook signature/status verification available as evidence collection only. Never issue accounting authorization while emergency stop is on or native settlement is disabled.
-4. Integrate signed, expiring control leases with the native device boundary. The local settlement path must validate the lease and relevant control before its first mutation. Offline/stale state means reject.
-5. Add an owner-only control panel with confirmation for emergency-stop changes and a read-only recent audit feed. The UI is advisory; server/native enforcement is authoritative.
-6. Add route-level integration tests for each financial endpoint, including Firestore unavailable, missing document, malformed document, emergency stop, capability OFF/ON, unauthorized actor, audit failure and concurrent updates.
-7. Audit every local balance mutation, restore/import path and refund/reversal path. Tests must prove the relevant gate runs before any mutation.
+- The local `settlePayment()` function and native journal apply/recovery paths remain hard-locked. The cloud control document is **not** trusted by the WebView and cannot authorize offline local posting.
+- No mutable JavaScript/localStorage control value is accepted. A signed, short-lived policy lease must be delivered and verified through the trusted native device boundary before local manual posting or bridge settlement can be considered.
+- The local gate intentionally remains closed until that mechanism exists. Do not interpret the cloud control API as enabling local manual posting.
+- There is not yet an owner control-panel UI. The authenticated API is the backend control surface; a UI must remain advisory and use these endpoints.
+
+## Remaining integration and release work
+
+1. Complete signed, expiring native policy lease delivery, device binding, expiry, version/rollback protection and offline fail-closed behaviour.
+2. Add native enforcement for manual posting, verified settlement, refunds and recovery before any local balance mutation.
+3. Add Firestore emulator/integration tests for owner/admin auth, unauthorized staff, audit write failure, missing/malformed state, simultaneous updates and each route's 423/503 behaviour.
+4. Complete a full write-path audit of direct booking paid-total writes, payment row writes, import/restore, reservation advances, refunds and reversals.
+5. Build the owner-only control panel with emergency-stop confirmation and audit history.
+6. Run the complete root and backend test suites; perform sandbox and physical Android acceptance. No deployment or unlock is implied by code commits.
 
 ## Unlock evidence gates
 
