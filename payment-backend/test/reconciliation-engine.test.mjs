@@ -38,12 +38,15 @@ test('reconciliation re-verifies provider binding then posts once via settlement
           currency: 'INR', captured: true, paymentStatus: 'captured' };
       }
     }),
-    settle: async input => calls.push(input)
+    settle: async input => { calls.push(input); return { posted: true, durableReadBack: true, ledgerReceiptId: 'ledger-receipt-123' }; }
   });
   assert.equal(result.posted, 1);
   assert.equal(result.failed, 0);
   assert.equal(calls.length, 2);
   assert.equal(calls[1].eventId, 'reconciliation:intent-123');
+  assert.equal(calls[1].tenantId, 'tenant1');
+  assert.equal(calls[1].amountMinor, 25000);
+  assert.equal(result.items[0].ledgerReceiptId, 'ledger-receipt-123');
   assert.ok(db.updates.some(update => update.name === 'paymentWebhookInbox' &&
     update.data.processingStatus === 'POSTED_TO_FOLIO'));
 });
@@ -81,4 +84,30 @@ test('worker enforces a hard batch maximum', async () => {
   await assert.rejects(() => runDurableReconciliationWorker({
     db: fakeDb([]), tenantId: 'tenant1', adapterResolver: async () => ({}), limit: 51
   }), /batch_limit/);
+});
+
+
+test('capture is not marked posted without durable canonical ledger read-back proof', async () => {
+  const db = fakeDb([valid()]);
+  const result = await runDurableReconciliationWorker({
+    db, tenantId: 'tenant1',
+    adapterResolver: async () => ({ async getPaymentStatus() {
+      return { orderId: 'order_123', paymentId: 'pay_123', amountMinor: 25000,
+        currency: 'INR', captured: true, paymentStatus: 'captured' };
+    }}),
+    settle: async () => ({ posted: true, durableReadBack: false, ledgerReceiptId: 'unverified' })
+  });
+  assert.equal(result.posted, 0);
+  assert.equal(result.failed, 1);
+  assert.equal(result.items[0].result, 'RECONCILIATION_REQUIRED');
+  assert.ok(db.updates.some(update => update.name === 'paymentIntents' &&
+    update.data.accountingStatus === 'RECONCILIATION_REQUIRED'));
+  assert.ok(!db.updates.some(update => update.name === 'paymentWebhookInbox' &&
+    update.data.processingStatus === 'POSTED_TO_FOLIO'));
+});
+
+test('worker refuses to use an implicit settlement implementation', async () => {
+  await assert.rejects(() => runDurableReconciliationWorker({
+    db: fakeDb([]), tenantId: 'tenant1', adapterResolver: async () => ({})
+  }), /dependencies_required/);
 });
