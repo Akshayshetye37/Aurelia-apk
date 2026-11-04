@@ -29,8 +29,12 @@ export function installAsyncRouteErrorHandling(app) {
   }
   for (const method of ROUTE_METHODS) {
     const register = app[method].bind(app);
-    app[method] = (path, ...handlers) =>
-      register(path, ...handlers.map(wrapAsyncRouteHandler));
+    app[method] = (path, ...handlers) => {
+      // Express app.get(name) is also the settings getter; do not reinterpret
+      // that one-argument form as a route registration.
+      if (method === "get" && handlers.length === 0) return register(path);
+      return register(path, ...handlers.map(wrapAsyncRouteHandler));
+    };
   }
   return app;
 }
