@@ -27,18 +27,19 @@ Architecture and implementation truth are defined in:
 - [Seven-provider integration status](docs/PROVIDER_INTEGRATION_STATUS.md)
 - [Payment engine / release specification](docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md)
 
-## Fresh operational start — approved direction, not yet implemented
+## Fresh operational dataset — storage namespace implemented; database qualification pending
 
-**Decision: Option A.** Aurelia will use a completely fresh operational PMS database. Existing operational records will not be migrated into the new database.
+**Decision: Option A.** New installations now start with a clean operational dataset. No legacy bookings, guests, payment rows, folio balances or outstanding dues are imported.
 
-- Preserve the old database and backups unchanged as a separate, read-only historical archive.
-- Do not import old bookings, guests, payment rows, folio balances or outstanding dues into the new operational database.
-- Establish a new operational data namespace, identifiers, backup and recovery procedures before accepting real records.
-- Build and validate the new booking, folio, payment, refund and ledger model with synthetic test data first.
-- Historical records remain available separately for accounting, tax, dispute and audit requirements.
-- Do not delete, clear, overwrite or automatically repair existing PMS data as part of this decision.
+Implemented in `index.html`:
 
-This is an approved architecture direction, **not evidence that a new database has already been provisioned or that the application has been switched to it**. The current application code and Phase 1 audit work remain in place while the clean-start design is reviewed. No historical data migration is authorized.
+- The active application storage key is now `aurelia_pms_v3`.
+- The former `aurelia_lodge_v2` key is retained separately and is not overwritten, deleted or migrated.
+- A first-run bootstrap removes the built-in sample bookings, rooms, guest records, inventory, menu entries, sample takings and demo expenses before persisting the new dataset.
+- The Home screen offers an export of the untouched legacy JSON archive when one exists.
+- Resetting the new operational dataset removes only `aurelia_pms_v3`; it does not remove the legacy archive.
+
+**Qualification boundary:** this is a clean application data namespace using the current local JSON persistence mechanism. It is not yet a transactional, multi-device database and it has not been validated on a physical Android installation. Legacy data remains on the device until separately exported; clearing Android app data or uninstalling the app can still remove device-local records. No migration or automatic historical repair is performed.
 
 
 
