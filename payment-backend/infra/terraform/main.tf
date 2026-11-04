@@ -106,7 +106,7 @@ resource "google_cloud_run_v2_service" "payment_backend" {
         initial_delay_seconds = 0
         timeout_seconds       = 2
         period_seconds        = 30
-        failure_threshold    = 3
+        failure_threshold     = 3
 
         http_get {
           path = "/healthz"
