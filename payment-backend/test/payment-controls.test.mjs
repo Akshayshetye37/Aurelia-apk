@@ -59,7 +59,9 @@ test("updates atomically write previous/new values and actor/reason audit eviden
   const db = {
     doc: () => controlRef,
     runTransaction: async fn => fn({
-      get: async () => ({ exists: !!stored, data: () => stored }),
+      get: async ref => ref.path?.includes("paymentControlApprovals/")
+        ? { exists: true, data: () => ({ status: "APPROVED" }) }
+        : { exists: !!stored, data: () => stored },
       set: (ref, value) => {
         if (ref.path.includes("/audit/")) audit = value;
         else stored = value;
