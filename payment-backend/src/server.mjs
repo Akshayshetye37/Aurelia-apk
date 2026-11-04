@@ -9,7 +9,7 @@ import { assertWebhookReplayIntegrity } from './webhooks/provider-webhook-router
 import { installAsyncRouteErrorHandling } from './http/async-route-errors.mjs';
 import { createGracefulShutdown } from './http/graceful-shutdown.mjs';
 import { publicHttpError } from './http/public-http-error.mjs';
-import { disableLatestSecretVersion } from './secrets/secret-version-management.mjs';
+import { disableAllEnabledSecretVersions } from './secrets/secret-version-management.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
   paymentControlAllows, updatePaymentControls
