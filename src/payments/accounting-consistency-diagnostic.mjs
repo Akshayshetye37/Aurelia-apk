@@ -6,8 +6,13 @@ function toPaise(value, label, { allowZero = true } = {}) {
 }
 
 const keyPart = value => String(value ?? "").trim();
-const normalizedReference = row => keyPart(row.r ?? row.reference)
-  .replace(/\\s+/g, "").toUpperCase();
+const normalizedReference = row => {
+  const reference = keyPart(row.r ?? row.reference);
+  const method = String(row.m ?? row.method ?? "");
+  return /upi|bank|neft|rtgs|imps|card|wallet/i.test(method)
+    ? reference.replace(/\\s+/g, "").toUpperCase()
+    : reference;
+};
 
 function paymentFingerprints(row) {
   const result = [];
@@ -19,9 +24,18 @@ function paymentFingerprints(row) {
 }
 
 function rowAmountPaise(row, label) {
-  const amount = Number.isSafeInteger(row.amountPaise)
-    ? row.amountPaise
-    : toPaise(row.a ?? row.amount, label, { allowZero: false });
+  const hasMinor = Number.isSafeInteger(row.amountPaise);
+  const hasMajor = row.a != null || row.amount != null;
+  const majorPaise = hasMajor
+    ? toPaise(row.a ?? row.amount, label, { allowZero: false })
+    : null;
+  if (hasMinor && row.amountPaise <= 0) {
+    throw new RangeError(label + " must be a positive safe integer in paise");
+  }
+  if (hasMinor && hasMajor && row.amountPaise !== majorPaise) {
+    throw new RangeError(label + " major-unit and paise values disagree");
+  }
+  const amount = hasMinor ? row.amountPaise : majorPaise;
   if (!Number.isSafeInteger(amount) || amount <= 0) {
     throw new RangeError(label + " must be a positive safe integer in paise");
   }
@@ -212,21 +226,28 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
 
     const refundValue = booking.refund_amount ?? booking.refundAmount;
     if (refundValue != null && refundValue !== "") {
-      try {
-        const refundPaise = toPaise(refundValue, "Refund amount");
-        const originalValue = booking.original_amount_paid ?? booking.originalAmountPaid;
-        const originalPaidPaise = originalValue == null || originalValue === ""
-          ? Math.max(declaredPaidPaise, rowSumPaise)
-          : toPaise(originalValue, "Original amount paid");
-        if (refundPaise > originalPaidPaise) {
-          refundOverpayments.push({
-            bookingId, collection, refundPaise, originalPaidPaise,
-            excessPaise: refundPaise - originalPaidPaise,
-            reason: "refund_exceeds_recorded_payment"
-          });
+      const originalValue = booking.original_amount_paid ?? booking.originalAmountPaid;
+      if (hasInvalidCanonicalRow && (originalValue == null || originalValue === "")) {
+        malformed.push({
+          bookingId, collection,
+          reason: "refund_original_amount_unverifiable_due_to_invalid_payment_rows"
+        });
+      } else {
+        try {
+          const refundPaise = toPaise(refundValue, "Refund amount");
+          const originalPaidPaise = originalValue == null || originalValue === ""
+            ? Math.max(declaredPaidPaise, rowSumPaise)
+            : toPaise(originalValue, "Original amount paid");
+          if (refundPaise > originalPaidPaise) {
+            refundOverpayments.push({
+              bookingId, collection, refundPaise, originalPaidPaise,
+              excessPaise: refundPaise - originalPaidPaise,
+              reason: "refund_exceeds_recorded_payment"
+            });
+          }
+        } catch (error) {
+          malformed.push({ bookingId, collection, reason: "invalid_refund_amount: " + error.message });
         }
-      } catch (error) {
-        malformed.push({ bookingId, collection, reason: "invalid_refund_amount: " + error.message });
       }
     }
   }
