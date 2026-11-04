@@ -126,7 +126,10 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
 
   async createRefund(input) {
     const note = input?.reason == null ? 'Customer refund' : input.reason;
+    const requestKey = input?.idempotencyKey == null ? input?.refundId : input.idempotencyKey;
     if (!id(input?.orderId) || !refundId(input?.refundId) || !minor(input?.amountMinor) ||
+        typeof requestKey !== 'string' || requestKey.length < 1 || requestKey.length > 256 ||
+        /[\u0000-\u001f\u007f]/.test(requestKey) ||
         typeof note !== 'string' || note.length < 3 || note.length > 100 ||
         /[\u0000-\u001f\u007f]/.test(note)) {
       throw new TypeError('invalid_cashfree_refund');
@@ -134,7 +137,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
     const response = await this.request('POST', '/orders/' + encodeURIComponent(input.orderId) + '/refunds', {
       refund_id: input.refundId, refund_amount: input.amountMinor / 100,
       refund_note: note
-    }, crypto.randomUUID(), uuidFrom(input.idempotencyKey || input.refundId));
+    }, crypto.randomUUID(), uuidFrom(requestKey));
     const data = Array.isArray(response) && response.length === 1 ? response[0]
       : (!Array.isArray(response) ? response : null);
     if (!data || typeof data !== 'object') throw new Error('cashfree_refund_response_invalid');
@@ -159,7 +162,8 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
   }
 
   async getRefundStatus(input) {
-    if (!id(input?.orderId) || !refundId(input?.refundId)) throw new TypeError('invalid_cashfree_refund_lookup');
+    if (!id(input?.orderId) || !refundId(input?.refundId) ||
+        (input.paymentId != null && !id(input.paymentId))) throw new TypeError('invalid_cashfree_refund_lookup');
     const refund = await this.request('GET', '/orders/' + encodeURIComponent(input.orderId) +
       '/refunds/' + encodeURIComponent(input.refundId));
     if (refund.refund_id !== input.refundId || refund.order_id !== input.orderId ||
