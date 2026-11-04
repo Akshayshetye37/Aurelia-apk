@@ -69,7 +69,7 @@ The application catalogue is descriptive. Adapter class presence, credential fie
 - Raw-body webhook ingress and provider status verification logic.
 - Bounded reconciliation worker prototype; the exposed reconciliation endpoint remains blocked because it writes to a separate Firestore payment-folio model, not the current PMS local folio ledger.
 - Local settlement service, IndexedDB command journal and accounting consistency diagnostic.
-- Cancellation/refund workflow now blocks a refund from being marked paid without an explicit settlement confirmation and an external bank/provider transaction reference; pending refunds remain separately represented as refund-payable liabilities. This is an operator control, not an automated bank reconciliation or proof-of-payment integration.
+- Cancellation/refund workflow blocks a refund from being marked paid without explicit settlement confirmation and an external bank/provider transaction reference. Pending refunds remain refund-payable liabilities. Journal idempotency now prevents duplicate cancellation postings and allows a pending liability to be settled only once for the exact originally recorded amount. This is an operator control, not automated bank reconciliation or proof-of-payment integration.
 - Payment API client foundation at `src/services/payment-api.mjs`; full Firebase session and application UI wiring is not yet established.
 - Native/Pay Bridge templates, device identity and attestation work exist, but the trusted production settlement issuer/projector and complete end-to-end acceptance remain outstanding.
 
@@ -185,9 +185,9 @@ The authoritative implementation order, detailed technical tasks, acceptance evi
 
 ## Verified checkpoint — 2026-11-04
 
-Latest inspected branch head: `02a95e5caf474d8f697281721f4291dff8b09030` on `feature/multi-provider-payment-backend`.
+Active source branch: `feature/multi-provider-payment-backend` in this repository. The latest source-code checkpoint with completed verification is `51160031a30caee0e7b7f42d34694786629f8be6`. GitHub Actions PMS source tests run `41857068196` and Aurelia payment architecture CI run `41857067917` both completed successfully for that commit. The subsequent workflow-only commit `96087b23b89895355cf59c956029eced6c4ae06c` changes the Android QA workflow to manual dispatch only; source validation for that workflow-only change is running.
 
-GitHub Actions run `41830280498` completed successfully for this exact commit. The run passed PMS regression tests, payment backend syntax/security checks, LAN backend contract tests, production privacy-boundary checks, Capacitor/Android project generation, Android manifest and release-signing validation, debug APK build, signed release APK build and artifact upload. The PMS quality workflow also completed successfully for that earlier checkpoint. **This was a historical CI run, before the current no-build policy was established. It is not permission to run another APK build.**
+Android QA/debug build is deliberately manual and must not be run until the documented PMS release gates authorize device-build validation. No APK artifact is claimed by this checkpoint.
 
 These results prove that the checked-in automated tests and CI build steps passed. They do **not** prove that a merchant sandbox transaction has completed, that a production cloud backend is deployed, that a physical device can settle a verified capture into the authoritative PMS folio, or that provider refunds/reconciliation work end to end.
 
