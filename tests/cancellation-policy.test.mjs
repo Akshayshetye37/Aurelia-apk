@@ -107,3 +107,11 @@ test("only a matching refund_pending journal can transition to paid", () => {
     ...base, priorEntries: [{ kind: "refund_pending", refundAmount: 400 }]
   }).transition, "settle_pending_liability");
 });
+
+test("cancellation amounts outside safe integer paise range are rejected", () => {
+  assert.equal(validateCancellationRefund({
+    paid: Number.MAX_SAFE_INTEGER / 100 + 100,
+    refund: 1,
+    action: "pending"
+  }).code, "INVALID_REFUND_PRECISION");
+});
