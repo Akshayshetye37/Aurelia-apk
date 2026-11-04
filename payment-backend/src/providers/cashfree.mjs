@@ -128,7 +128,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
     const note = input?.reason == null ? 'Customer refund' : input.reason;
     if (!id(input?.orderId) || !refundId(input?.refundId) || !minor(input?.amountMinor) ||
         typeof note !== 'string' || note.length < 3 || note.length > 100 ||
-        /[\\u0000-\\u001f\\u007f]/.test(note)) {
+        /[\u0000-\u001f\u007f]/.test(note)) {
       throw new TypeError('invalid_cashfree_refund');
     }
     const data = await this.request('POST', '/orders/' + encodeURIComponent(input.orderId) + '/refunds', {
