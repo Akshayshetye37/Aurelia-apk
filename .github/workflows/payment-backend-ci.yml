@@ -39,3 +39,5 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Run payment backend contract and security tests
         run: npm test
+      - name: Build production Cloud Run container image
+        run: docker build --pull --file Dockerfile.cloud --tag aurelia-payment-backend:ci .
