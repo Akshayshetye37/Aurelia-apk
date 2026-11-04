@@ -3725,7 +3725,7 @@ window.commitCancellationRefund=function(i){
  persist();
  const savedRaw=(window.__aureliaStorage||localStorage).getItem(SK);
  const saved=savedRaw?JSON.parse(savedRaw):null;
- const savedBooking=saved&&Array.isArray(saved.cancelled)?saved.cancelled.find(x=>String(x.id??'')===String(b.id??'')):null;
+ const savedBooking=saved&&Array.isArray(saved.cancelled)?saved.cancelled[Number(i)]:null;
  const committedFields=['original_amount_paid','refund_amount','refund_transaction_reference','refund_settlement_confirmed','retention_fee_retained','refund_date','payment_method','cancelledStatus','refundStatus','cancellationAccountingCommitted','refundRecordedAt'];
  if(!saved||!savedBooking||JSON.stringify(saved.financialLedger||[])!==JSON.stringify(S.financialLedger)||committedFields.some(key=>JSON.stringify(savedBooking[key]??null)!==JSON.stringify(b[key]??null))||JSON.stringify(saved.aud||[])!==JSON.stringify(S.aud||[])) {
   throw new Error('Cancellation journal failed durable read-back verification');
