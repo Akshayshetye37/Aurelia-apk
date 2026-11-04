@@ -1366,9 +1366,11 @@ function normaliseImportedBooking(b){
  };
  const inn=offset(b.in??b.checkIn??b.checkin??b.check_in??b.checkInDate??b.checkinDate??b.check_in_date??b.arrival??b.arrivalDate??b.arrival_date??b.startDate??b.fromDate);
  const out=offset(b.out??b.checkOut??b.checkout??b.check_out??b.checkOutDate??b.checkoutDate??b.check_out_date??b.departure??b.departureDate??b.departure_date??b.endDate??b.toDate);
- if(!g||!room||inn===null||out===null||out<=inn)return null;
+ const money=v=>{if(v===undefined||v===null||v==='')return 0;const n=Number(v),paise=Math.round(n*100);return Number.isFinite(n)&&n>=0&&Number.isSafeInteger(paise)&&Math.abs(n*100-paise)<1e-6?n:null};
+ const paid=money(b.p??b.paid??0),rawRate=b.rate??b.nightlyRate??b.roomRate,rate=rawRate===undefined||rawRate===null||rawRate===''?undefined:money(rawRate);
+ if(!g||!room||inn===null||out===null||out<=inn||Math.abs(inn)>36500||Math.abs(out)>36500||out-inn>3650||paid===null||(rate===null&&rawRate!==undefined&&rawRate!==null&&rawRate!==''))return null;
  const status=String(b.st??b.status??b.bookingStatus??b.booking_status??'').toLowerCase().replace(/[ _]/g,'-');
- return {...b,id:Number.isFinite(+b.id)&&+b.id>0?+b.id:++id,g,room,in:inn,out,st:['in','checkedin','checked-in','checked_in'].includes(status)?'in':status==='done'||status==='checked-out'?'done':'res',ch:Array.isArray(b.ch)?b.ch:(Array.isArray(b.charges)?b.charges:[]),p:Number(b.p??b.paid)||0,pays:Array.isArray(b.pays)?b.pays:(Array.isArray(b.payments)?b.payments:[]),oc:Array.isArray(b.oc)?b.oc:(Array.isArray(b.occupants)?b.occupants:[]),veh:Array.isArray(b.veh)?b.veh:(Array.isArray(b.vehicles)?b.vehicles:[]),checkInTime:b.checkInTime||b.check_in_time||'14:00',checkOutTime:b.checkOutTime||b.check_out_time||'11:00'};
+ return {...b,id:Number.isFinite(+b.id)&&+b.id>0?+b.id:++id,g,room,in:inn,out,st:['in','checkedin','checked-in','checked_in'].includes(status)?'in':status==='done'||status==='checked-out'?'done':'res',ch:Array.isArray(b.ch)?b.ch:(Array.isArray(b.charges)?b.charges:[]),p:paid,...(rate===undefined?{}:{rate}),pays:Array.isArray(b.pays)?b.pays:(Array.isArray(b.payments)?b.payments:[]),oc:Array.isArray(b.oc)?b.oc:(Array.isArray(b.occupants)?b.occupants:[]),veh:Array.isArray(b.veh)?b.veh:(Array.isArray(b.vehicles)?b.vehicles:[]),checkInTime:b.checkInTime||b.check_in_time||'14:00',checkOutTime:b.checkOutTime||b.check_out_time||'11:00'};
 }
 async function restoreGo(){
  const d=S.rst;if(!d){toast('No JSON records are ready to import');return}
