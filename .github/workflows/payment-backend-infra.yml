@@ -28,7 +28,7 @@ jobs:
           terraform_version: "1.9.8"
       # Run formatting before provider initialization so HCL style failures are isolated.
       - name: Check Terraform formatting
-        run: terraform fmt -check -recursive
+        run: terraform fmt -check -diff -recursive
       - name: Initialize without remote backend
         run: terraform init -backend=false
       - name: Validate infrastructure configuration
