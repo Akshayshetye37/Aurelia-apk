@@ -244,6 +244,11 @@ resource "google_compute_security_policy" "payment_backend" {
   }
 }
 
+# Cloud Run serverless NEG note: Google ignores the backend protocol field for this
+# endpoint type. Keep HTTPS here to express the requested secure intent, but do not
+# treat this field as the TLS control. For HTTPS load-balancer traffic, Cloud Run
+# terminates frontend TLS and forwards requests to the container over an encrypted
+# Google-managed channel (see Cloud Run security design documentation).
 resource "google_compute_backend_service" "payment_backend" {
   project               = var.project_id
   name                  = "${var.service_name}-backend"
