@@ -1,64 +1,86 @@
 # Aurelia PMS — Engineering strategy and implementation order
 
+## Selected architecture: Option A — local-first ledger with cloud payment authority
+
+The checked-in PMS source audit is documented in [PMS_ACCOUNTING_SCHEMA.md](./PMS_ACCOUNTING_SCHEMA.md). It confirms that the current UI owns its folios inside local booking objects (`S.b[]`), using `booking.p` for the main due calculation and `booking.pays[]` for payment detail. The separate Firestore `paymentFolios` prototype is not wired to that local ledger.
+
+Do not migrate the current product to a new server-side folio schema as part of payment integration. Preserve the local PMS accounting path and bridge verified cloud payment evidence into it through a narrowly authorized, idempotent command. This avoids a premature accounting migration and preserves local operation when the backend is unavailable.
+
 ## Target structure
 
 ```text
 Android / Capacitor PMS
-  ├─ Firebase authentication session
-  ├─ Payment UI + capability-driven provider picker
-  └─ HTTPS PaymentApiClient (no merchant secrets)
+  ├─ Local booking/folio ledger: S.b[].p + S.b[].pays[]
+  ├─ Existing settlePayment() mutation boundary
+  ├─ IndexedDB pending-command journal
+  └─ Trusted native authorization + projection bridge (NOT INSTALLED)
           │
           ▼
 Cloud payment API
-  ├─ Authentication / tenant authorization / rate limits
-  ├─ Payment orchestration + idempotency
-  ├─ Provider registry (only qualified adapters)
+  ├─ Authentication / tenant authorization
+  ├─ Payment intent + stable idempotency
+  ├─ Provider registry (qualified adapters only)
   ├─ Webhook ingress + durable inbox
-  ├─ Provider status verification
+  ├─ Authoritative provider status verification
   ├─ Refund orchestration
-  ├─ Reconciliation worker + operator endpoint
-  └─ Accounting application service
+  └─ Reconciliation worker
           │
           ├─ Secret Manager: provider credentials
-          ├─ Firestore: intents, idempotency, inbox/outbox, worker claims
-          └─ Canonical PMS folio/journal repository
+          └─ Firestore: intents, inbox/outbox, verification evidence
                     │
                     ▼
-             Reservation / Folio / Journal
+          Short-lived, one-time accounting authorization
+                    │
+                    ▼
+          Trusted native bridge validates binding
+                    │
+                    ▼
+          Local settlePayment() → durable state write/read-back
+                    │
+                    ▼
+          Device acknowledgement → backend marks posted
 ```
 
 ## Execution sequence (strict dependencies)
 
-### Gate 1 — Establish the real PMS accounting contract
-Inspect the application data model and actual read/write paths for reservations, folios, balances, currencies, journal entries, folio closure and concurrency/version fields. Record the canonical document paths and field mapping. Add contract tests against that model. **Do not switch settlement paths until this evidence exists.**
+### Gate 0 — Keep the existing local ledger intact
+Manual cash/card/UPI staff-entered payments continue through the existing local settlement boundary. Do not replace `booking.p`, `booking.pays[]` or the existing booking data format with a new Firestore folio schema during this integration.
 
-### Gate 2 — Stabilize payment intent lifecycle
-Use one explicit state machine for dispatch, pending, capture, failure, conflict and accounting. Persist provider order/payment identifiers and immutable verification evidence. Keep idempotency and folio reservation locks transactional. Unknown provider outcomes stay locked and are reconciled, never blindly retried.
+### Gate 1 — Resolve local ledger consistency
+The audit found that main due calculation reads `booking.p`, while the invoice paid helper sums `booking.pays[].a`. Legacy/imported records may differ. Build a read-only diagnostic and report mismatches; do not auto-correct historical financial data. Decide an explicit reconciliation policy and test it against backup/restore fixtures.
 
-### Gate 3 — Make webhook and polling converge
-Verify raw webhook signatures, fetch authoritative provider status, validate tenant/order/payment/amount/currency bindings, then persist the event in a durable inbox. Duplicate deliveries must resume incomplete work and short-circuit only after terminal accounting. Add concurrency tests for webhook-versus-worker races.
+### Gate 2 — Stabilize payment intent and idempotency
+Define the server-side state machine for created, pending, captured, authorization-issued, device-posted, unknown, failed and refunded states. Bind every intent to tenant, booking ID, device identity, amount minor units, ISO currency, provider order/payment IDs and one stable idempotency key. Ambiguous create-order outcomes must be reconciled before retry.
 
-### Gate 4 — Canonical accounting and refunds
-Implement a single accounting application service over a repository for the confirmed PMS schema. In one database transaction, create a deterministic journal entry, update the folio balance/version, and mark the intent posted. Refunds use separate deterministic journal entries and provider refund-status reconciliation. No UI or provider adapter writes directly to a folio.
+### Gate 3 — Harden webhook and provider verification
+Verify raw webhook signatures, persist provider/environment-scoped events, fetch authoritative provider status and validate order/payment/amount/currency/tenant bindings. Webhooks and polling must converge on the same verified capture record. A callback or UI boolean must never authorize a local credit.
 
-### Gate 5 — Durable worker operations
-Add atomic worker claims/leases, bounded batches, retry backoff, stale-lease recovery, per-item outcomes, metrics and alerts. Manual admin invocation remains an operator tool, not a substitute for scheduled recovery. Deploy required Firestore indexes and prove query behavior under realistic volume.
+### Gate 4 — Build the trusted accounting bridge
+The cloud service issues a short-lived, one-time authorization bound to intent ID, provider transaction ID, booking ID, amount minor units, currency, device identity, expiry and nonce. A trusted Capacitor/native component—not arbitrary WebView JavaScript—validates it and invokes the existing local settlement boundary with a deterministic key. The device acknowledges only after local persistence and read-back verification. The backend must retain a recoverable UNKNOWN state if the device or network fails between local commit and acknowledgement.
 
-### Gate 6 — Provider capability qualification
-The registry exposes only providers whose complete required operations are implemented. For each provider, run adapter contract tests, webhook fixtures, status/refund identity tests and sandbox acceptance. Keep prototypes out of the production registry. Implement providers one at a time.
+The existing IndexedDB settlement journal is a useful local pending-command foundation, but the current issuer, authorization callback and projection function are intentionally absent. Do not enable this gate until all three are implemented and tested.
 
-### Gate 7 — App integration and release qualification
-Connect PaymentApiClient to the actual Firebase session lifecycle. Render providers from backend capability responses. Test process death, offline/online recovery, duplicate taps, ambiguous network failures, redirects, refunds and reconciliation. Deploy with least-privilege IAM, public HTTPS ingress and monitored webhook endpoints. Live collection requires signed release approval.
+### Gate 5 — Refunds and reconciliation
+Model refunds as separate provider events and local folio debits/adjustments; never rewrite the original payment credit. Add partial-refund support, deterministic refund identity, provider refund-status lookup, device delivery/acknowledgement and crash recovery. Worker claims must be atomic and bounded. Reconciliation must handle backend capture with device offline, device post with acknowledgement lost, and duplicate delivery.
+
+### Gate 6 — Android authenticated API and local credential UX
+Connect PaymentApiClient to the actual Firebase/native session. Keep merchant secrets in backend Secret Manager. Test credentials can be entered only into an authenticated owner flow and submitted directly to the backend over HTTPS; never persist secret values in the WebView, APK or backup. Local PMS operations must remain fully usable offline.
+
+### Gate 7 — Provider expansion
+Complete Razorpay and Cashfree end-to-end first. Keep PayU and PhonePe prototypes outside the production registry until their exact merchant API/refund/callback contracts are tested. Add Paytm, JioPay and CCAvenue one at a time. UI capability comes from backend qualification evidence, not provider labels.
+
+### Gate 8 — Release qualification
+Test duplicate webhook, forged callback, replay, provider timeout, ambiguous order creation, device process death, IndexedDB failure, local persistence failure, backup restore, device offline/online recovery, partial refund, and two-device duplicate attempts. Complete security review, provider sandbox/UAT, monitoring and runbooks. Live collection and automatic settlement remain disabled until explicit release approval.
 
 ## Non-negotiable invariants
 
-- Backend-only merchant secrets.
-- Server-derived tenant identity and authorization.
-- Integer minor-unit amounts and explicit currency.
-- No client callback is authoritative.
-- Stable idempotency across retries.
-- No double posting under concurrent webhook/worker execution.
-- Capture and folio settlement are distinct states.
-- Refund completion is independently verified.
-- Fail closed on identity, amount, currency or schema mismatch.
-- Live collection remains disabled until every release gate has evidence.
+- Live payment collection remains OFF.
+- Automatic folio settlement remains OFF.
+- Existing manual payments continue to work unchanged.
+- Local PMS remains fully usable when the cloud backend is unavailable.
+- Merchant secrets never enter HTML, JavaScript, WebView storage, backups or APK assets.
+- Only authoritative provider verification can produce an accounting authorization.
+- A WebView callback or `verificationConfirmed` boolean is not cryptographic proof.
+- The same provider transaction/intent can produce at most one local folio credit.
+- Backend status becomes device-posted only after durable local write/read-back acknowledgement.
+- Unknown outcomes remain recoverable and are never treated as success or failure by guesswork.
