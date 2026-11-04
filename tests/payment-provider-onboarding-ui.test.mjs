@@ -7,7 +7,7 @@ const vault = await readFile(new URL('../android/templates/LocalGatewayVault.jav
 const patch = await readFile(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
 
 test('PMS presents the device-local vault and does not render the retired LAN owner console', () => {
-  assert.ok(html.includes('Device-local credential vault'));
+  assert.ok(html.includes('Device-local Gateway Credential Vault'));
   assert.ok(html.includes('Device-local Gateway Credential Vault'));
   assert.ok(!html.includes(">'+localGatewayAdminHtml()+'"));
   assert.ok(html.includes('No LAN or Docker payment appliance is used.'));
