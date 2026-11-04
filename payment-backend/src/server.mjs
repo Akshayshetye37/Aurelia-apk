@@ -9,6 +9,7 @@ import { assertWebhookReplayIntegrity } from './webhooks/provider-webhook-router
 import { installAsyncRouteErrorHandling } from './http/async-route-errors.mjs';
 import { createGracefulShutdown } from './http/graceful-shutdown.mjs';
 import { publicHttpError } from './http/public-http-error.mjs';
+import { paymentRouteError } from './http/payment-route-errors.mjs';
 import { disableAllEnabledSecretVersions } from './secrets/secret-version-management.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
@@ -403,9 +404,8 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
     const result = await paymentRepository.initializePaymentIntent(req.actor.uid, { ...body, idempotencyKey });
     return res.status(result.isDuplicate ? 200 : result.status === 'CREATED' ? 201 : result.status === 'FAILED_TO_INITIATE' ? 503 : 202).json(result);
   } catch (error) {
-    const status = Number.isInteger(error.statusCode) ? error.statusCode :
-      error.message === 'active_tenant_membership_required' ? 403 : 400;
-    return fail(res, status, String(error.message || 'payment_intent_creation_failed').slice(0, 100));
+    const response = paymentRouteError(error);
+    return fail(res, response.status, response.error);
   }
 });
 
@@ -426,9 +426,8 @@ app.get('/v1/payments/intents/:intentId', requireTenantPaymentActor, async (req,
   try {
     return res.json(await paymentRepository.getPaymentIntent(req.actor.uid, req.params.intentId));
   } catch (error) {
-    const status = Number.isInteger(error.statusCode) ? error.statusCode :
-      error.message === 'active_tenant_membership_required' ? 403 : 400;
-    return fail(res, status, String(error.message || 'payment_intent_lookup_failed').slice(0, 100));
+    const response = paymentRouteError(error);
+    return fail(res, response.status, response.error);
   }
 });
 
