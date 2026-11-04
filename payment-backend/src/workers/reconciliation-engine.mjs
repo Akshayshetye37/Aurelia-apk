@@ -12,11 +12,23 @@ function isCaptured(provider, result) {
     CAPTURED_STATUS[provider]?.has(String(result.paymentStatus || '')) === true;
 }
 
-function hasDurableLedgerReceipt(result) {
+function hasDurableLedgerReceipt(result, expected) {
+  const receiptId = result?.ledgerReceiptId;
   return result?.posted === true &&
     result?.durableReadBack === true &&
-    typeof result?.ledgerReceiptId === 'string' &&
-    result.ledgerReceiptId.trim().length > 0;
+    typeof receiptId === 'string' &&
+    receiptId.trim().length > 0 &&
+    receiptId.length <= 256 &&
+    !/[\\u0000-\\u001f\\u007f]/.test(receiptId) &&
+    result.tenantId === expected.tenantId &&
+    result.folioId === expected.folioId &&
+    result.intentId === expected.intentId &&
+    result.provider === expected.provider &&
+    result.environment === expected.environment &&
+    result.providerOrderId === expected.providerOrderId &&
+    result.providerPaymentId === expected.providerPaymentId &&
+    result.amountMinor === expected.amountMinor &&
+    result.currency === expected.currency;
 }
 
 /**
@@ -101,7 +113,7 @@ export async function runDurableReconciliationWorker({
         currency: intent.currency
       });
 
-      if (!hasDurableLedgerReceipt(settlement)) {
+      if (!hasDurableLedgerReceipt(settlement, {\n        tenantId, folioId: intent.folioId, intentId: doc.id, provider: intent.provider,\n        environment: intent.environment, providerOrderId: intent.providerOrderId,\n        providerPaymentId: intent.providerPaymentId, amountMinor: intent.amountMinor,\n        currency: intent.currency\n      })) {
         throw new Error('canonical_ledger_posting_or_durable_readback_unproven');
       }
 
