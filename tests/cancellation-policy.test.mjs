@@ -38,7 +38,7 @@ test("refund evidence rejects control characters and malformed amounts", () => {
   assert.equal(validateCancellationRefund({ paid: 100, refund: 1.001, action: "pending" }).code, "INVALID_REFUND_PRECISION");
 });
 
-import { validateCancellationJournalTransition } from "../src/bookings/cancellation-policy.mjs";
+import { validateCancellationJournalTransition, validateCancellationJournal } from "../src/bookings/cancellation-policy.mjs";
 
 test("a pending refund journal can be settled once for the exact recorded amount", () => {
   const result = validateCancellationJournalTransition({
@@ -114,4 +114,44 @@ test("cancellation amounts outside safe integer paise range are rejected", () =>
     refund: 1,
     action: "pending"
   }).code, "INVALID_REFUND_PRECISION");
+});
+
+test("cancellation journal validator accepts balanced exact-paise entries", () => {
+  const result = validateCancellationJournal({
+    reference: "CANCEL-BOOKING_123",
+    lines: [
+      { account: "Guest Advances Liability", debit: 100.29, credit: 0 },
+      { account: "Cash & Bank", debit: 0, credit: 40.29 },
+      { account: "Cancellation Revenue", debit: 0, credit: 60 }
+    ]
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.debitPaise, 10029);
+  assert.equal(result.creditPaise, 10029);
+});
+
+test("cancellation journal validator rejects imbalance, fractional paise and dual-sided lines", () => {
+  assert.equal(validateCancellationJournal({
+    reference: "CANCEL-123",
+    lines: [{ account: "Cash", debit: 10, credit: 9.99 }]
+  }).code, "INVALID_CANCELLATION_JOURNAL_AMOUNT");
+  assert.equal(validateCancellationJournal({
+    reference: "CANCEL-123",
+    lines: [{ account: "Cash", debit: 10, credit: 0 }, { account: "Revenue", debit: 0, credit: 9.99 }]
+  }).code, "UNBALANCED_CANCELLATION_JOURNAL");
+  assert.equal(validateCancellationJournal({
+    reference: "CANCEL-123",
+    lines: [{ account: "Cash", debit: 10.001, credit: 0 }, { account: "Revenue", debit: 0, credit: 10.001 }]
+  }).code, "INVALID_CANCELLATION_JOURNAL_AMOUNT");
+});
+
+test("cancellation journal validator rejects unsafe totals and invalid references", () => {
+  assert.equal(validateCancellationJournal({
+    reference: "CANCEL-123",
+    lines: [{ account: "Cash", debit: Number.MAX_SAFE_INTEGER / 100, credit: 0 }]
+  }).code, "CANCELLATION_JOURNAL_TOTAL_OUT_OF_RANGE");
+  assert.equal(validateCancellationJournal({
+    reference: "CANCEL-123/other",
+    lines: [{ account: "Cash", debit: 1, credit: 1 }]
+  }).code, "INVALID_CANCELLATION_JOURNAL_IDENTITY");
 });
