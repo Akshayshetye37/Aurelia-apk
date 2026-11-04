@@ -423,6 +423,7 @@ const TABS=[['home','Home'],['stays','Stays'],['rooms','Rooms'],['dining','Dinin
 const types=[['Standard',850],['Deluxe',1200],['Executive Suite',1800],['Family Chalet',2200]];
 let id=0;const S={tab:'home',f:'all',tb:1,rooms:[],b:[],t:[],g:[],exp:[],inv:[],aud:[],cancelled:[],financialLedger:[],sig:[],sales:[],menu:{},today:0,hist:[0,0,0,0,0,0],set:{name:'Aurelia PMS',tag:'Peace, comfort and mindful hospitality.',cur:'₹',upi:'',phone:'',addr:''},au:{},bk:{}};
 window.aureliaGetAppState = () => S;
+const B=(g,room,i,o,st,ch=[])=>S.b.push({id:++id,g,room,in:i,out:o,st,ch,rate:S.rooms.find(r=>r.n===room)?.r||0});
 
 
 S.t=[2,2,4,4,2,6,4,8].map((s,i)=>({n:i+1,s,o:[]}));
