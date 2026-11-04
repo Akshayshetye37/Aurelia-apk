@@ -306,13 +306,41 @@ export function diagnoseAccountingConsistency(state, { worstLimit = 10 } = {}) {
       cancellationFlagMismatches.push({ bookingId, reason: "refund_payable_flag_without_pending_journal" });
     }
     const refundAmount = Number(booking.refund_amount ?? 0);
-    if (refundAmount > 0 && booking.cancelledStatus === "refund_pending" &&
-        !cancellationEntries.some(entry => entry.kind === "refund_pending")) {
-      cancellationFlagMismatches.push({ bookingId, reason: "pending_refund_status_without_payable_journal" });
+    if (refundAmount > 0 && booking.cancelledStatus === "refund_pending") {
+      const pendingEntries = cancellationEntries.filter(entry => entry.kind === "refund_pending");
+      if (pendingEntries.length === 0) {
+        cancellationFlagMismatches.push({ bookingId, reason: "pending_refund_status_without_payable_journal" });
+      } else {
+        try {
+          const payablePaise = pendingEntries.reduce((sum, entry) => sum +
+            entry.lines.filter(line => line.account === "Refunds Payable Liability")
+              .reduce((value, line) => value + toPaise(line.credit ?? 0, "Refund payable credit") -
+                toPaise(line.debit ?? 0, "Refund payable debit"), 0), 0);
+          if (payablePaise !== toPaise(refundAmount, "Booking pending refund")) {
+            cancellationFlagMismatches.push({ bookingId, reason: "pending_refund_amount_does_not_match_liability" });
+          }
+        } catch {
+          cancellationFlagMismatches.push({ bookingId, reason: "pending_refund_liability_amount_invalid" });
+        }
+      }
     }
     if (refundAmount > 0 && ["refunded", "partially_refunded"].includes(booking.cancelledStatus)) {
-      if (!cancellationEntries.some(entry => entry.kind === "refund_paid_and_retention" || entry.kind === "cancellation_settlement")) {
+      const paidEntries = cancellationEntries.filter(entry =>
+        entry.kind === "refund_paid_and_retention" || entry.kind === "cancellation_settlement");
+      if (paidEntries.length === 0) {
         cancellationFlagMismatches.push({ bookingId, reason: "paid_refund_status_without_settlement_journal" });
+      } else {
+        try {
+          const paidRefundPaise = paidEntries.reduce((sum, entry) => sum +
+            entry.lines.filter(line => line.account === "Cash & Bank")
+              .reduce((value, line) => value + toPaise(line.credit ?? 0, "Refund cash credit") -
+                toPaise(line.debit ?? 0, "Refund cash debit"), 0), 0);
+          if (paidRefundPaise !== toPaise(refundAmount, "Booking paid refund")) {
+            cancellationFlagMismatches.push({ bookingId, reason: "paid_refund_amount_does_not_match_journal" });
+          }
+        } catch {
+          cancellationFlagMismatches.push({ bookingId, reason: "paid_refund_journal_amount_invalid" });
+        }
       }
       if (booking.refund_settlement_confirmed !== true || !keyPart(booking.refund_transaction_reference)) {
         cancellationFlagMismatches.push({ bookingId, reason: "paid_refund_missing_settlement_evidence" });
