@@ -94,6 +94,13 @@ export async function updatePaymentControls({
   if (typeof reason !== "string" || !reason.trim() || reason.trim().length > MAX_REASON) {
     throw new TypeError("A reason of 1 to 500 characters is required");
   }
+  // The emergency stop is a permanent operator kill switch. This API can
+  // engage it, but no generic flag update can disengage it.
+  if (changes.emergency_stop === false) {
+    throw Object.assign(new Error("Emergency stop release is not available through this API"), {
+      code: "PAYMENT_EMERGENCY_STOP_RELEASE_FORBIDDEN"
+    });
+  }
 
   const controlRef = db.doc("paymentControls/" + tenantId);
   const auditRef = controlRef.collection("audit").doc();
