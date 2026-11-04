@@ -111,7 +111,9 @@ test('unverified webhook inbox records remain retryable while verified duplicate
   assert.match(source, /UNVERIFIED_RETRYABLE/);
   assert.match(source, /seen\.data\(\)\.providerFetchVerified === true/);
   assert.match(source, /lastAttemptAt: FieldValue\.serverTimestamp\(\)/);
-  assert.match(source, /webhook_event_identity_conflict/);
+  assert.match(source, /assertWebhookReplayIntegrity\(prior/);
+  assert.match(source, /const payloadHash = crypto\.createHash\('sha256'\)\.update\(req\.body\)\.digest\('hex'\)/);
+  assert.match(source, /eventId, tenantId, provider, environment, paymentId, providerOrderId, payloadHash/);
 });
 
 
