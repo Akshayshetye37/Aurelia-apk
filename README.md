@@ -101,17 +101,19 @@ npm start
 A passing unit test is not merchant sandbox certification, Android physical-device acceptance or approval for live payment collection.
 
 
-## Global payment safety kill switch — ACTIVE
+## Central payment control plane — ACTIVE, FAIL-CLOSED
 
-The current release is intentionally in **accounting read-only mode**. The following controls are hard-locked in the application and cloud backend:
+The cloud backend now has a tenant-scoped Firestore control plane. Defaults are `emergency_stop=true`; all six capability flags are false. The old duplicate hard-coded cloud kill switch has been removed and backend financial routes now read the tenant control document on each request.
 
-| Control | State | Effect |
-|---|---|---|
-| All folio balance mutations | BLOCKED | Manual and automated payment postings are rejected. |
-| Automatic settlement | BLOCKED | Verified provider captures cannot post to a folio. |
-| Live payment collection | BLOCKED | Live provider activation remains rejected; payment-intent creation is locked. |
-| Native settlement bridge | BLOCKED | Journaled projection/recovery cannot run through the bridge boundary. |
+Owner/admin API (verified email, recent MFA and active tenant membership required):
 
-Provider webhooks may still be accepted to preserve verification evidence, but verified captures remain pending and are **not** posted to a folio. Existing balances are not rewritten. This is an operational freeze, not a repair or migration.
+- `GET /v1/admin/payment-controls` — flags and latest audit records.
+- `PATCH /v1/admin/payment-controls` — explicit boolean changes and mandatory reason.
 
-The client interlock is defined in `src/payments/payment-safety-gate.mjs`; the cloud interlock is defined in `payment-backend/src/server.mjs`. These are deliberately not environment-variable bypasses. Re-enabling any control requires a reviewed code change, passing tests, real-data accounting report, provider sandbox qualification, native security review (for bridge use), and explicit owner release approval. Do not weaken these controls to make a test pass.
+Every change writes the control document and its audit record in one Firestore transaction. Missing, malformed or unreadable state blocks financial operations. A capability cannot be enabled without a separate, current owner release-approval record with the required evidence. The API can always engage the emergency stop, but cannot disengage it.
+
+Test collection requires its dedicated flag. Live collection has a separate unconditional production-readiness block and remains unavailable. Provider webhooks may record signed and provider-fetched capture evidence but never issue accounting authorization or post to the PMS ledger.
+
+**Local PMS settlement remains hard-locked.** The cloud control plane is not trusted by the WebView and does not unlock offline manual posting. A signed, short-lived policy lease and trusted native enforcement are still required. There is no owner control-panel UI yet; the authenticated API is the backend control surface.
+
+See [Central Payment Control Plane](docs/CENTRAL_PAYMENT_CONTROL_PLANE.md) for schema, audit model, release approvals and remaining work. No payment capability has been enabled, deployed or approved for live collection.
