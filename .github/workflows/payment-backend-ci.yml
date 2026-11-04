@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/multi-provider-payment-backend
+      - fix/phase-1-accounting-audit
   pull_request:
     branches:
       - feature/multi-provider-payment-backend
