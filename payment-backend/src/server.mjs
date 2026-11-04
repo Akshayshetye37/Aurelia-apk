@@ -5,16 +5,12 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
-// Intentionally do not import or invoke a folio settlement writer while the
-// accounting safety interlock is active.
-const PAYMENT_KILL_SWITCH = Object.freeze({
-  blockBalanceMutations: true,
-  blockCollection: true,
-  blockLiveCollection: true,
-  blockAutomaticSettlement: true,
-  blockNativeBridge: true
-});
-const paymentOperationsLocked = PAYMENT_KILL_SWITCH.blockCollection || PAYMENT_KILL_SWITCH.blockBalanceMutations;
+import {
+  PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
+  paymentControlAllows, updatePaymentControls
+} from './payment-controls/firestore-controls.mjs';
+// No folio settlement writer is imported: this service records provider evidence
+// only until a trusted local accounting bridge passes its separate release gates.
 
 const projectId = process.env.GOOGLE_CLOUD_PROJECT;
 const origins = new Set((process.env.AURELIA_OWNER_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean));
@@ -137,6 +133,69 @@ function requireTenantPaymentActor(req, res, next) {
   return authenticateTenantMembership(req, res, next, ['owner', 'admin', 'staff'], 'active_tenant_payment_membership_required');
 }
 
+async function enforcePaymentControl(req, res, control) {
+  let controls;
+  try {
+    controls = await readPaymentControls({ db, tenantId: req.tenant.id });
+  } catch {
+    return fail(res, 503, 'payment_controls_unavailable');
+  }
+  if (!paymentControlAllows(controls, control)) {
+    const unavailable = ['READ_FAILED', 'INVALID_CONTEXT', 'INVALID_FAIL_CLOSED'].includes(controls.controlState);
+    return fail(res, unavailable ? 503 : 423,
+      unavailable ? 'payment_controls_unavailable' :
+        controls.emergency_stop !== false ? 'payment_emergency_stop' : 'payment_control_disabled');
+  }
+  req.paymentControls = controls;
+  return null;
+}
+
+// Owner/admin control plane. Authentication middleware enforces verified email,
+// recent MFA, active tenant membership and owner/admin role.
+app.get('/v1/admin/payment-controls', requireTenantAdmin, async (req, res) => {
+  const controls = await readPaymentControls({ db, tenantId: req.tenant.id });
+  const auditSnap = await db.doc('paymentControls/' + req.tenant.id)
+    .collection('audit').orderBy('at', 'desc').limit(50).get().catch(() => null);
+  return res.json({
+    controls: controls.controlState === 'CONFIGURED'
+      ? Object.fromEntries(PAYMENT_CONTROL_IDS.map(key => [key, controls[key]]))
+      : { ...PAYMENT_CONTROL_DEFAULTS },
+    controlState: controls.controlState,
+    auditAvailable: !!auditSnap,
+    audit: auditSnap ? auditSnap.docs.map(doc => ({
+      id: doc.id,
+      ...(doc.data()),
+      at: doc.data().at?.toDate?.().toISOString() || null
+    })) : []
+  });
+});
+
+app.patch('/v1/admin/payment-controls', requireTenantAdmin,
+  express.json({ limit: '2kb', strict: true }), async (req, res) => {
+    const body = req.body || {};
+    if (Object.keys(body).some(key => !['changes', 'reason'].includes(key)) ||
+        !body.changes || typeof body.changes !== 'object' || Array.isArray(body.changes) ||
+        typeof body.reason !== 'string' || !body.reason.trim()) {
+      return fail(res, 400, 'invalid_payment_control_update');
+    }
+    try {
+      const result = await updatePaymentControls({
+        db, tenantId: req.tenant.id,
+        actor: { uid: req.actor.uid, email: req.actor.email },
+        changes: body.changes, reason: body.reason
+      });
+      return res.json({
+        updated: true,
+        controls: result.controls,
+        audit: result.audit
+      });
+    } catch (error) {
+      if (error.code === 'PAYMENT_CONTROLS_INVALID') return fail(res, 409, 'stored_payment_controls_invalid');
+      if (error instanceof TypeError) return fail(res, 400, 'invalid_payment_control_update');
+      return fail(res, 503, 'payment_control_update_unavailable');
+    }
+  });
+
 const envOf = req => {
   const value = req.body?.environment || req.query?.environment;
   return value === 'test' || value === 'live' ? value : null;
@@ -207,8 +266,10 @@ async function providerAdapterForTenant(tenantId, provider, environment) {
   return { adapter: createProviderAdapter(provider, { credentials, environment }), state: state.data() };
 }
 
-app.post('/v1/admin/payments/reconcile', (req,res,next) => paymentOperationsLocked ? fail(res, 423, 'payments_disabled_by_safety_kill_switch') : next(), requireTenantAdmin,
+app.post('/v1/admin/payments/reconcile', requireTenantAdmin,
   express.json({ limit: '1kb', strict: true }), async (req, res) => {
+    const blocked = await enforcePaymentControl(req, res, 'automatic_settlement');
+    if (blocked) return blocked;
     const limit = req.body?.limit === undefined ? 50 : req.body.limit;
     if (!Number.isInteger(limit) || limit < 1 || limit > 50 ||
         Object.keys(req.body || {}).some(key => key !== 'limit')) {
@@ -230,7 +291,7 @@ app.post('/v1/admin/payments/reconcile', (req,res,next) => paymentOperationsLock
       return fail(res, 503, 'payment_reconciliation_unavailable');
     }
   });
-app.post('/v1/payments/intents', (req,res,next) => paymentOperationsLocked ? fail(res, 423, 'payments_disabled_by_safety_kill_switch') : next(), requireTenantPaymentActor, express.json({ limit: '8kb', strict: true }), async (req, res) => {
+app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit: '8kb', strict: true }), async (req, res) => {
   const body = req.body || {};
   const allowed = ['folioId', 'amountMinor', 'currency', 'provider', 'environment', 'idempotencyKey', 'customer', 'returnUrl'];
   if (Object.keys(body).some(k => !allowed.includes(k)) ||
@@ -257,6 +318,9 @@ app.post('/v1/payments/intents', (req,res,next) => paymentOperationsLocked ? fai
   if (!['razorpay', 'cashfree'].includes(body.provider) || !['test', 'live'].includes(body.environment)) {
     return fail(res, 409, 'provider_environment_not_enabled_for_checkout');
   }
+  const intentControl = body.environment === 'live' ? 'live_collection' : 'test_collection';
+  const blocked = await enforcePaymentControl(req, res, intentControl);
+  if (blocked) return blocked;
   // Hard release gate: provider checkout alone cannot be called live until
   // atomic PMS folio posting, refund lifecycle and durable reconciliation exist.
   if (body.environment === 'live') {
@@ -414,7 +478,9 @@ app.post('/v1/admin/providers/:provider/validate', requireTenantAdmin, express.j
   }
 });
 
-app.post('/v1/admin/providers/:provider/test-orders', (req,res,next) => paymentOperationsLocked ? fail(res, 423, 'payments_disabled_by_safety_kill_switch') : next(), requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
+app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
+  const blocked = await enforcePaymentControl(req, res, 'test_collection');
+  if (blocked) return blocked;
   const { provider } = req.params, environment = envOf(req), amountMinor = req.body?.amountMinor, idem = idempotencyOf(req);
   if (!['razorpay', 'cashfree'].includes(provider) || environment !== 'test' ||
       !Number.isSafeInteger(amountMinor) || amountMinor < 100 || amountMinor > 10000000 || !idem) {
@@ -616,7 +682,10 @@ app.post('/v1/admin/providers/:provider/activate', requireTenantAdmin, express.j
   if (!['razorpay', 'cashfree'].includes(provider) || !environment || req.body?.confirm !== true) {
     return fail(res, 400, 'explicit_activation_confirmation_required');
   }
-  // Never activate live collection while the PMS accounting lifecycle is incomplete.
+  const blocked = await enforcePaymentControl(req, res,
+    environment === 'live' ? 'live_collection' : 'test_collection');
+  if (blocked) return blocked;
+  // Independent production release gate: the control flag cannot override this.
   if (environment === 'live') {
     return fail(res, 409, 'live_payments_blocked_accounting_pipeline_incomplete');
   }
