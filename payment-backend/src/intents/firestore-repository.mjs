@@ -89,7 +89,15 @@ export class FirestorePaymentRepository {
     const fingerprint = digest(JSON.stringify({
       folioId: payload.folioId, amountMinor: payload.amountMinor,
       currency: payload.currency, provider: payload.provider,
-      environment: payload.environment
+      environment: payload.environment,
+      // Customer and redirect metadata are part of the checkout identity.
+      // Reusing an idempotency key with changed guest details must conflict.
+      customer: payload.customer ? {
+        id: payload.customer.id,
+        phone: payload.customer.phone,
+        email: payload.customer.email || null
+      } : null,
+      returnUrl: payload.returnUrl || null
     }));
     const intentRef = this.db.collection('paymentIntents').doc(intentId);
     const idemRef = this.db.collection('paymentIntentIdempotency').doc(keyHash);
