@@ -15,7 +15,18 @@ import {
 
 const projectId = process.env.GOOGLE_CLOUD_PROJECT;
 const origins = new Set((process.env.AURELIA_OWNER_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean));
-if (!projectId || origins.size === 0 || [...origins].some(v => !/^https:\/\/[^/]+$/.test(v))) {
+function isExactHttpsOrigin(value) {
+  if (typeof value !== 'string' || !value || value.includes('*')) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' && parsed.origin === value &&
+      !parsed.username && !parsed.password && parsed.pathname === '/' &&
+      !parsed.search && !parsed.hash;
+  } catch {
+    return false;
+  }
+}
+if (!projectId || origins.size === 0 || [...origins].some(value => !isExactHttpsOrigin(value))) {
   throw new Error('Set GOOGLE_CLOUD_PROJECT and exact HTTPS AURELIA_OWNER_ORIGINS before startup.');
 }
 if (process.env.NODE_ENV === 'production') {
@@ -23,7 +34,7 @@ if (process.env.NODE_ENV === 'production') {
   if (!/^[0-9]{1,5}$/.test(port || '') || Number(port) < 1 || Number(port) > 65535) {
     throw new Error('PRODUCTION_CONFIG_INVALID: explicit valid PORT is required.');
   }
-  if ([...origins].some(value => /localhost|127\\.0\\.0\\.1|\\[::1\\]|\\.local(?::|$)/i.test(value))) {
+  if ([...origins].some(value => /localhost|127\.0\.0\.1|\[::1\]|\.local(?::|$)/i.test(value))) {
     throw new Error('PRODUCTION_CONFIG_INVALID: local development origins are forbidden.');
   }
 }
@@ -50,6 +61,10 @@ app.use((req, res, next) => {
     });
   }
   res.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   next();
 });
 
