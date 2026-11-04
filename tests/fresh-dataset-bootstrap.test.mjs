@@ -17,6 +17,14 @@ test("first-run bootstrap removes demo records and persists without migrating le
   assert.match(html, /S\.hist=\[0,0,0,0,0,0\]/);
 });
 
+test("fresh in-memory state contains no seeded guest bookings or historical takings", () => {
+  assert.match(html, /b:\[\],t:\[\],g:\[\]/);
+  assert.match(html, /today:0,hist:\[0,0,0,0,0,0\]/);
+  assert.doesNotMatch(html, /B\('Mwila Chanda'/);
+  assert.doesNotMatch(html, /B\('Amara Okafor'/);
+  assert.doesNotMatch(html, /S\.b\[1\]\.pays/);
+});
+
 test("legacy export reads and downloads the original JSON without mutating the archive", () => {
   assert.match(html, /function exportLegacyPmsArchive\(\)/);
   assert.match(html, /const raw=\(window\.__aureliaStorage\|\|localStorage\)\.getItem\(LEGACY_SK\)/);
