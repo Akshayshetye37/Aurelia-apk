@@ -61,7 +61,11 @@ export class RazorpayAdapter extends PaymentProviderAdapter {
   }
 
   async getPaymentStatus(input) {
-    if (!id(input?.paymentId) && !id(input?.orderId)) throw new TypeError('payment_or_order_id_required');
+    if ((input?.paymentId != null && !id(input.paymentId)) ||
+        (input?.orderId != null && !id(input.orderId)) ||
+        (!id(input?.paymentId) && !id(input?.orderId))) {
+      throw new TypeError('invalid_razorpay_payment_lookup');
+    }
     const path = input.paymentId ? '/payments/' + encodeURIComponent(input.paymentId)
       : '/orders/' + encodeURIComponent(input.orderId) + '/payments';
     const data = await this.request('GET', path);
