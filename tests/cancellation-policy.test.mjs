@@ -72,3 +72,8 @@ test("a completed cancellation journal cannot be posted a second time", () => {
     refund: 0
   }).code, "CANCELLATION_JOURNAL_ALREADY_EXISTS");
 });
+
+test("valid two-decimal monetary values survive floating-point representation", () => {
+  assert.equal(validateCancellationRefund({ paid: 10.29, refund: 5.29, action: "pending" }).ok, true);
+  assert.equal(validateCancellationRefund({ paid: 10.29, refund: 5.291, action: "pending" }).code, "INVALID_REFUND_PRECISION");
+});
