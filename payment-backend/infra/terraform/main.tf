@@ -114,18 +114,6 @@ resource "google_cloud_run_v2_service" "payment_backend" {
         }
       }
 
-      readiness_probe {
-        timeout_seconds   = 3
-        period_seconds    = 10
-        failure_threshold = 2
-        success_threshold = 1
-
-        http_get {
-          path = "/readyz"
-          port = 8080
-        }
-      }
-
       resources {
         limits = {
           cpu    = "1"
