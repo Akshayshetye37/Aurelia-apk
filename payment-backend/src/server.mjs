@@ -5,7 +5,16 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
-import { settleVerifiedPaymentIntent } from './intents/folio-settlement.mjs';
+// Intentionally do not import or invoke a folio settlement writer while the
+// accounting safety interlock is active.
+const PAYMENT_KILL_SWITCH = Object.freeze({
+  blockBalanceMutations: true,
+  blockCollection: true,
+  blockLiveCollection: true,
+  blockAutomaticSettlement: true,
+  blockNativeBridge: true
+});
+const paymentOperationsLocked = PAYMENT_KILL_SWITCH.blockCollection || PAYMENT_KILL_SWITCH.blockBalanceMutations;
 
 const projectId = process.env.GOOGLE_CLOUD_PROJECT;
 const origins = new Set((process.env.AURELIA_OWNER_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean));
@@ -221,7 +230,7 @@ app.post('/v1/admin/payments/reconcile', requireTenantAdmin,
       return fail(res, 503, 'payment_reconciliation_unavailable');
     }
   });
-app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit: '8kb', strict: true }), async (req, res) => {
+app.post('/v1/payments/intents', (req,res,next) => paymentOperationsLocked ? fail(res, 423, 'payments_disabled_by_safety_kill_switch') : next(), requireTenantPaymentActor, express.json({ limit: '8kb', strict: true }), async (req, res) => {
   const body = req.body || {};
   const allowed = ['folioId', 'amountMinor', 'currency', 'provider', 'environment', 'idempotencyKey', 'customer', 'returnUrl'];
   if (Object.keys(body).some(k => !allowed.includes(k)) ||
@@ -405,7 +414,7 @@ app.post('/v1/admin/providers/:provider/validate', requireTenantAdmin, express.j
   }
 });
 
-app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
+app.post('/v1/admin/providers/:provider/test-orders', (req,res,next) => paymentOperationsLocked ? fail(res, 423, 'payments_disabled_by_safety_kill_switch') : next(), requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
   const { provider } = req.params, environment = envOf(req), amountMinor = req.body?.amountMinor, idem = idempotencyOf(req);
   if (!['razorpay', 'cashfree'].includes(provider) || environment !== 'test' ||
       !Number.isSafeInteger(amountMinor) || amountMinor < 100 || amountMinor > 10000000 || !idem) {
@@ -581,27 +590,18 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     });
 
     let accounting = outcome.accountingPosted ? 'posted' : 'not_verified';
-    if (outcome.verified && orderData.intentId && !outcome.accountingPosted) {
-      try {
-        await settleVerifiedPaymentIntent({ db, intentId: orderData.intentId, eventId, providerPaymentId: paymentId });
-        await inbox.set({
-          accountingStatus: 'POSTED',
-          processingStatus: 'POSTED_TO_FOLIO',
-          accountingPostedAt: FieldValue.serverTimestamp(),
-          lastAttemptAt: FieldValue.serverTimestamp()
-        }, { merge: true });
-        accounting = 'posted';
-      } catch (accountingError) {
-        await inbox.set({
-          accountingStatus: 'RECONCILIATION_REQUIRED',
-          processingStatus: 'CAPTURED_VERIFIED_PENDING_ACCOUNTING',
-          lastAccountingError: String(accountingError?.message || 'settlement_failed').slice(0, 160),
-          lastAttemptAt: FieldValue.serverTimestamp()
-        }, { merge: true }).catch(() => {});
-        accounting = 'pending';
-      }
-    } else if (outcome.verified && !outcome.accountingPosted) {
-      accounting = 'pending_legacy_order_requires_migration';
+    // Capture verification is evidence only. The kill switch forbids all
+    // folio writes; leave verified captures pending for a future approved bridge.
+    if (outcome.verified && !outcome.accountingPosted) {
+      await inbox.set({
+        accountingStatus: 'PENDING_KILL_SWITCH',
+        processingStatus: 'CAPTURED_VERIFIED_PENDING_ACCOUNTING',
+        accountingBlockReason: 'PAYMENT_SAFETY_KILL_SWITCH',
+        lastAttemptAt: FieldValue.serverTimestamp()
+      }, { merge: true }).catch(() => {});
+      accounting = 'blocked_by_safety_kill_switch';
+    } else if (outcome.verified && outcome.accountingPosted) {
+      accounting = 'previously_posted';
     }
     return res.status(200).json({
       received: true, verified: outcome.verified, duplicate: outcome.duplicate === true,
