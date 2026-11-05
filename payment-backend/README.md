@@ -47,6 +47,7 @@ See [Hybrid Payment Architecture](../docs/HYBRID_PAYMENT_ARCHITECTURE.md) and [P
 - Persist idempotency identities and immutable provider references before dispatch.
 - Treat network timeouts as ambiguous and reconcile before retrying.
 - Capture and folio settlement are separate states. Use a durable outbox/saga if the payment database and PMS accounting database differ.
+- The LAN SQLite command journal now has database-enforced binding and immutability guards. A device command must exactly match its captured transaction identity, device, folio, amount and currency. A transaction cannot transition to `SETTLED` unless the matching command is processed with a durable receipt, receipt signature and advanced device cursor. These triggers protect the LAN server's transaction boundary only; they do not prove that the Android PMS IndexedDB folio and LAN SQLite share one atomic transaction.
 - Refunds are separate operations and require provider-confirmed status before PMS reversal posting.
 - Keep live collection OFF until every release gate has an auditable pass.
 
