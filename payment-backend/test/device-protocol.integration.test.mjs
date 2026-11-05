@@ -176,9 +176,20 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   db.prepare(`INSERT INTO settlement_outbox(id,transaction_id,event_type,payload,status,created_at)
     VALUES(?,?,'PAYMENT_CAPTURED',?,'PENDING',?)`)
     .run(crypto.randomUUID(), transactionId, JSON.stringify({ transactionId, amountMinor: 12500, currency: 'INR', provider: 'razorpay' }), commandStamp);
+  const insertCommand = db.prepare(`INSERT INTO settlement_commands(command_id,device_id,sequence_id,transaction_id,idempotency_key,folio_id,
+    amount_minor,currency,payload_hash,payload,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`);
+  assert.throws(() => insertCommand.run(
+    crypto.randomUUID(), deviceId, 99, transactionId, 'idem_mismatch_001', 'folio_0001',
+    12501, 'INR', payloadHash, payloadText, commandStamp
+  ), /settlement_command_transaction_binding_mismatch/);
   db.prepare(`INSERT INTO settlement_commands(command_id,device_id,sequence_id,transaction_id,idempotency_key,folio_id,
     amount_minor,currency,payload_hash,payload,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
     .run(commandId, deviceId, 1, transactionId, 'idem_test_001', 'folio_0001', 12500, 'INR', payloadHash, payloadText, commandStamp);
+  assert.throws(() => db.prepare('UPDATE settlement_commands SET amount_minor=1 WHERE command_id=?').run(commandId),
+    /settlement_command_is_immutable/);
+  assert.throws(() => db.prepare("UPDATE transactions SET status='SETTLED' WHERE id=?").run(transactionId),
+    /settled_transaction_requires_durable_device_receipt/);
+  assert.equal(db.prepare('SELECT status FROM transactions WHERE id=?').get(transactionId).status, 'CAPTURED_PENDING_ACCOUNTING');
   db.prepare('INSERT INTO device_command_state(command_id,status,next_attempt_at) VALUES(?,?,?)')
     .run(commandId, 'PENDING', commandStamp);
   db.prepare('UPDATE device_sequence_counters SET last_sequence=1 WHERE device_id=?').run(deviceId);
