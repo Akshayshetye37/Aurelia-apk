@@ -9,8 +9,9 @@
      require exact persistent read-back and rollback verification.
      Payment release posture: live collection OFF; local accounting mutations are
      fail-closed by src/payments/payment-safety-gate.mjs until separately approved.
-     Android CI: PMS tests, web build, privacy checks and Capacitor sync passed at
-     7b746f5; APK build was cancelled, so no APK validation is claimed yet.
+     Android CI: full PMS tests, web build, privacy checks, Capacitor sync,
+     debug APK build, APK identity/signature and manifest checks passed at
+     9e0ed6b; CI artifact is a debug validation APK, not a production release.
      This repository and branch are the source of truth. The UI bundle must never
      contain merchant secrets, webhook secrets, salts, signing keys or credentials.
      See README.md and docs/PMS_ACCOUNTING_SCHEMA.md for implementation status.
