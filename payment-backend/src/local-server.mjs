@@ -150,6 +150,50 @@ CREATE TABLE IF NOT EXISTS device_command_state (
 CREATE INDEX IF NOT EXISTS commands_device_sequence ON settlement_commands(device_id,sequence_id);
 CREATE INDEX IF NOT EXISTS command_delivery_retry ON device_command_state(status,next_attempt_at);
 CREATE INDEX IF NOT EXISTS command_delivery_lease ON device_command_state(status,lease_expires_at);
+
+-- Database-level invariants: a queued command is an immutable projection of
+-- one captured transaction, and SETTLED is impossible without its durable
+-- device receipt and an advanced sequence cursor.
+CREATE TRIGGER IF NOT EXISTS settlement_command_binding_guard
+BEFORE INSERT ON settlement_commands
+BEGIN
+ SELECT CASE WHEN NOT EXISTS (
+   SELECT 1 FROM transactions t
+   WHERE t.id=NEW.transaction_id
+     AND t.device_id=NEW.device_id
+     AND t.folio_id=NEW.folio_id
+     AND t.amount_minor=NEW.amount_minor
+     AND t.currency=NEW.currency
+     AND t.status='CAPTURED_PENDING_ACCOUNTING'
+ ) THEN RAISE(ABORT,'settlement_command_transaction_binding_mismatch') END;
+END;
+CREATE TRIGGER IF NOT EXISTS settlement_command_immutable_guard
+BEFORE UPDATE ON settlement_commands
+BEGIN
+ SELECT RAISE(ABORT,'settlement_command_is_immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS transaction_settled_receipt_guard
+BEFORE UPDATE OF status ON transactions
+WHEN NEW.status='SETTLED' AND OLD.status<>'SETTLED'
+BEGIN
+ SELECT CASE WHEN NOT EXISTS (
+   SELECT 1
+   FROM settlement_commands c
+   JOIN device_command_state s ON s.command_id=c.command_id
+   JOIN device_cursors d ON d.device_id=c.device_id
+   WHERE c.transaction_id=NEW.id
+     AND c.device_id=NEW.device_id
+     AND c.folio_id=NEW.folio_id
+     AND c.amount_minor=NEW.amount_minor
+     AND c.currency=NEW.currency
+     AND s.status='PROCESSED'
+     AND s.ledger_ack_id IS NOT NULL AND length(trim(s.ledger_ack_id))>0
+     AND s.receipt_payload IS NOT NULL
+     AND s.receipt_signature IS NOT NULL
+     AND s.acknowledged_at IS NOT NULL
+     AND d.last_applied_sequence>=c.sequence_id
+ ) THEN RAISE(ABORT,'settled_transaction_requires_durable_device_receipt') END;
+END;
 CREATE TABLE IF NOT EXISTS webhook_inbox (
  event_key TEXT PRIMARY KEY, provider TEXT NOT NULL, environment TEXT NOT NULL,
  received_at TEXT NOT NULL, signature_verified INTEGER NOT NULL,
