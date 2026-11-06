@@ -15,7 +15,7 @@ function time(value, label) {
 }
 function safeText(value, label, max = 256) {
   if (typeof value !== "string" || !value.trim() || value !== value.trim() ||
-      value.length > max || /[\\u0000-\\u001f\\u007f]/.test(value)) {
+      value.length > max || /[\u0000-\u001f\u007f]/.test(value)) {
     fail("SETTLEMENT_AUTH_INVALID", "Invalid " + label);
   }
   return value;
