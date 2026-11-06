@@ -3482,13 +3482,13 @@ function loadAureliaCheckoutScript(provider){
  AURELIA_SCRIPT_PROMISES.set(provider,task);task.catch(()=>AURELIA_SCRIPT_PROMISES.delete(provider));return task;
 }
 window.aureliaGatewayFolioHtml=function(i){
- const a=window.AureliaLocalGatewayAdmin||{},providers=(a.providers||[]).filter(x=>x.environment==='test'&&x.active);
+ const a=window.AureliaPaymentProviderState||{},providers=(a.providers||[]).filter(x=>x.environment==='test'&&x.active);
  const supported=providers.filter(x=>['razorpay','cashfree'].includes(x.provider)&&x.capabilities?.testCheckout===true&&x.capabilities?.liveCollection===false&&x.productionReady===false);
  const booking=bk(i),pending=(booking?.gatewayPayments||[]).filter(x=>x.status!=='POSTED_TO_FOLIO');
  const pendingHtml=pending.length?'<div class="card" style="margin:10px 0"><b>Unresolved online transactions</b>'+pending.map(x=>'<div class="ln"><span>'+esc(x.provider)+' · '+esc(x.status)+'<br><small>'+esc(x.transactionId)+'</small></span><button class="btn sm ghost" onclick="reconcileAureliaGatewayPayment('+Number(i)+',\''+esc(x.transactionId)+'\')">Reconcile</button></div>').join('')+'</div>':'';
  const setup='<button class="btn sm ghost" onclick="go(\'more\');setTimeout(()=>openAureliaGatewayAdmin(),100)">Open payment setup</button>';
- if(!S.set.backendConnection?.reachable||!a.authenticated)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">Online checkout is temporarily unavailable while the device-only Android payment engine is being integrated. No server or LAN appliance is required by the target architecture. Bookings, folios and cash/manual payments continue to work offline.</p>'+setup;
- if(!supported.length)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">No device-local sandbox provider is active. Gateway credentials and provider execution must be integrated through the Android native engine before checkout can be enabled.</p>'+setup;
+ if(!S.set.backendConnection?.reachable||!a.authenticated)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">Online checkout is unavailable until this device is enrolled with the optional trusted HTTPS payment backend. Bookings, folios and cash/manual payments continue to work offline.</p>'+setup;
+ if(!supported.length)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">No backend-configured sandbox provider is active. Configure and validate a provider through the authenticated backend; merchant credentials remain in Google Secret Manager.</p>'+setup;
  const options=supported.map(x=>'<option value="'+esc(x.provider)+'">'+(x.provider==='razorpay'?'Razorpay':'Cashfree')+' · Sandbox</option>').join('');
  return '<h3>Online payment · Sandbox</h3>'+pendingHtml+'<p class="lab">Only providers explicitly advertised by the authenticated backend as sandbox-checkout capable are selectable. Live collection remains disabled; provider success alone never posts a PMS receipt. Folio posting and reconciliation remain server-controlled.</p><label class="fld"><span>Payment provider</span><select id="aurelia-online-provider">'+options+'</select></label><label class="fld"><span>Amount (INR)</span><input id="aurelia-online-amount" type="number" min="0.01" step="0.01" value="'+Math.max(0,Number(dueB(booking))||0).toFixed(2)+'"></label><div id="aurelia-cashfree-details" hidden><label class="fld"><span>Guest mobile number (Cashfree)</span><input id="aurelia-cashfree-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number"></label><label class="fld"><span>Public HTTPS return URL (Cashfree)</span><input id="aurelia-cashfree-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><button class="btn" style="width:100%" onclick="startAureliaGatewayCheckout('+Number(i)+')">Create secure checkout</button><div id="aurelia-gateway-checkout-status" class="lab" role="status" style="margin-top:8px"></div>';
 };
@@ -3520,7 +3520,7 @@ window.startAureliaGatewayCheckout=async function(i){
     amountMinor<=0||Math.abs(amount*100-amountMinor)>1e-7||amountMinor>due){
   return stop('Enter a valid payment amount up to the current folio balance.');
  }
- const providerState=(window.AureliaLocalGatewayAdmin?.providers||[])
+ const providerState=(window.AureliaPaymentProviderState?.providers||[])
   .find(x=>x.provider===provider&&x.environment==='test');
  if(!providerState?.active)return stop('This sandbox provider is not configured and validated on this device.');
  const transactionId=globalThis.crypto?.randomUUID?.();
