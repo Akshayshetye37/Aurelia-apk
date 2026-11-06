@@ -64,7 +64,7 @@ const payload = (overrides = {}) => ({
   provider: 'razorpay', environment: 'test', idempotencyKey: 'checkout-key-12345',
   ...overrides
 });
-const setup = ({ createOrder, getPaymentStatus } = {}) => {
+const setup = ({ createOrder, getPaymentStatus, findOrderByReference } = {}) => {
   const db = membershipDb(new FakeFirestore());
   db.seed('paymentMemberships/user_123', { tenantId: 'hotel_123', role: 'owner', status: 'active' });
   db.seed('paymentFolios/' + paymentFolioDocumentId('hotel_123', 'folio_123'), { tenantId: 'hotel_123', folioId: 'folio_123', bookingId: 'booking_123', status: 'open', currency: 'INR', balanceMinor: 1000000, revision: 7 });
@@ -82,7 +82,8 @@ const setup = ({ createOrder, getPaymentStatus } = {}) => {
       },
       getPaymentStatus: async input => getPaymentStatus ? getPaymentStatus(input) : {
         orderId: input.orderId, paymentId: null, paymentStatus: 'created', captured: false
-      }
+      },
+      ...(findOrderByReference ? { findOrderByReference } : {})
     })
   });
   return { db, repo, get dispatches() { return dispatches; } };
@@ -436,4 +437,21 @@ test('late provider-verified capture supersedes a prior failure but never posts 
   const late = await s.repo.reconcilePaymentIntent('user_123', created.intentId);
   assert.equal(late.status, 'CAPTURED');
   assert.equal(late.accountingStatus, 'PENDING');
+});
+
+
+test('explicit reconciliation recovers a lost provider-order response without redispatch', async () => {
+  const s = setup({
+    createOrder: async () => { throw new Error('response_lost_after_provider_create'); },
+    findOrderByReference: async ({ reference }) => ({
+      found: true, orderId: 'order_recovered_by_reconcile', receipt: reference,
+      amountMinor: 450000, currency: 'INR'
+    })
+  });
+  const created = await s.repo.initializePaymentIntent('user_123', payload());
+  assert.equal(created.status, 'UNKNOWN');
+  const reconciled = await s.repo.reconcilePaymentIntent('user_123', created.intentId);
+  assert.equal(reconciled.status, 'CREATED');
+  assert.equal(reconciled.providerOrderId, 'order_recovered_by_reconcile');
+  assert.equal(s.dispatches, 1);
 });
