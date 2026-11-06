@@ -851,6 +851,8 @@ app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express
   }
   try {
     const stateRef = providerTenantDoc(req.tenant.id, provider, environment);
+    await deactivateSingleProvider({ db, tenantId: req.tenant.id, provider,
+      environment: publicEnvironment, actorUid: req.actor.uid });
     await stateRef.set({ configured: false, credentialsValidated: false, sandboxTestPassed: false,
       webhookVerified: false, active: false, updatedAt: FieldValue.serverTimestamp(), updatedBy: req.actor.uid }, { merge: true });
     const apiFields = [def.publicKey, ...(def.secretKeys || []), ...(def.extra || [])]
@@ -927,6 +929,8 @@ app.post('/v1/admin/providers/:provider/validate', requireTenantAdmin, express.j
     if (liveBlock) return fail(res, liveBlock === 'payment_controls_unavailable' ? 503 : 403, liveBlock);
   }
   try {
+    await deactivateSingleProvider({ db, tenantId: req.tenant.id, provider,
+      environment: publicEnvironment, actorUid: req.actor.uid });
     const credentials = await paymentRepository.secretManager.getProviderSecrets(req.tenant.id, provider, environment);
     const { createProviderAdapter } = await import('./providers/factory.mjs');
     const adapter = createProviderAdapter(provider, { credentials, environment });
