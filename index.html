@@ -3504,18 +3504,40 @@ window.startAureliaGatewayCheckout=async function(i){
  }
  try{
   const intent=await engine.createPaymentIntent(payload);
-  if(!intent||intent.transactionId!==transactionId)
-   return stop('Native engine rejected the payment intent. No checkout was opened.');
-  const result=await engine.startCheckout({transactionId});
-  if(!result||!['PENDING','AWAITING_PROVIDER','RECONCILIATION_REQUIRED'].includes(result.status))
-   return stop('Checkout did not return a recognized pending state. Check the local payment ledger.');
-  const record={...payload,intentId:intent.intentId,status:result.status,providerOrderId:result.providerOrderId||null,
+  if(!intent||intent.transactionId!==transactionId||!intent.intentId)
+   return stop('Cloud payment authority did not create a durable payment intent.');
+  const record={...payload,intentId:intent.intentId,status:intent.status,
+   providerOrderId:intent.providerOrderId||null,
    createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   b.gatewayPayments=Array.isArray(b.gatewayPayments)?b.gatewayPayments:[];
-  if(!b.gatewayPayments.some(x=>x.transactionId===transactionId))b.gatewayPayments.push(record);
+  const existing=b.gatewayPayments.find(x=>x.transactionId===transactionId);
+  if(existing)Object.assign(existing,record);
+  else b.gatewayPayments.push(record);
   persist();
-  if(status)status.textContent='Payment request submitted. The PMS will not record payment until the native engine independently verifies provider capture and the folio ledger commits.';
-  return true;
+  if(intent.status==='FAILED'){
+   if(status)status.textContent='The payment request was rejected before checkout. The folio remains unpaid.';
+   return false;
+  }
+  if(intent.status==='RECONCILIATION_REQUIRED'){
+   if(status)status.textContent='The cloud payment intent has an unknown dispatch outcome. It is saved for reconciliation; do not create another order.';
+   return false;
+  }
+  if(intent.status!=='ORDER_CREATED'){
+   if(status)status.textContent='The cloud payment intent is saved but is not ready for checkout. Reconcile before retrying.';
+   return false;
+  }
+  try{
+   const result=await engine.startCheckout({transactionId});
+   if(!result||!['PENDING','AWAITING_PROVIDER','RECONCILIATION_REQUIRED'].includes(result.status))
+    throw new Error('Native checkout did not return a recognized pending state.');
+   record.status=result.status;record.updatedAt=new Date().toISOString();persist();
+   if(status)status.textContent='Payment request submitted. Provider capture must be independently verified by the cloud authority; the PMS will not record payment from an SDK callback.';
+   return true;
+  }catch(checkoutError){
+   record.status='ORDER_CREATED';record.checkoutLaunchError=String(checkoutError?.message||'checkout_launch_unknown').slice(0,120);
+   record.updatedAt=new Date().toISOString();persist();
+   return stop('The provider order is saved but checkout launch is unresolved. Reconcile this intent before retrying. '+record.checkoutLaunchError);
+  }
  }catch(error){
   return stop('Payment outcome requires reconciliation. Do not create another payment attempt. '+String(error?.message||'').slice(0,120));
  }
@@ -4734,7 +4756,7 @@ function mapCloudPaymentStatus(intent) {
  if(intent.accountingStatus === 'POSTED_TO_LOCAL_FOLIO') return 'POSTED_TO_FOLIO';
  if(intent.status === 'CAPTURED_PENDING_ACCOUNTING') return 'CAPTURED_UNPOSTED';
  if(intent.status === 'FAILED_TO_INITIATE' || intent.status === 'FAILED') return 'FAILED';
- if(intent.status === 'RECONCILIATION_REQUIRED') return 'RECONCILIATION_REQUIRED';
+ if(['UNKNOWN','DISPATCHING','RECONCILIATION_REQUIRED'].includes(intent.status)) return 'RECONCILIATION_REQUIRED';
  if(intent.status === 'CREATED') return 'ORDER_CREATED';
  return 'AWAITING_PROVIDER';
 }
@@ -4764,17 +4786,22 @@ window.AndroidPaymentEngine = Object.freeze({
   const { transactionId, idempotencyKey, ...intentInput } = payload;
   intentInput.deviceId = window.AureliaPaymentDeviceId;
   const result = await cloudPaymentApi().createIntent(intentInput, { idempotencyKey });
-  if(!result?.intentId || !result?.providerOrderId || !result?.checkoutData) {
-   throw new Error('Cloud payment authority returned an incomplete checkout intent.');
+  if(!result?.intentId) throw new Error('Cloud payment authority did not return a durable intent ID.');
+  const mappedStatus = mapCloudPaymentStatus(result);
+  if(mappedStatus === 'ORDER_CREATED' && (!result.providerOrderId || !result.checkoutData)) {
+   throw new Error('Cloud payment authority returned an incomplete provider checkout binding.');
   }
   pendingCloudIntents.set(transactionId, { ...result, transactionId, payload });
-  return { transactionId, intentId:result.intentId, status:mapCloudPaymentStatus(result),
-   providerOrderId:result.providerOrderId, checkoutData:result.checkoutData };
+  return { transactionId, intentId:result.intentId, status:mappedStatus,
+   providerOrderId:result.providerOrderId || null, checkoutData:result.checkoutData || null };
  },
  async startCheckout({ transactionId } = {}) {
   const intent = pendingCloudIntents.get(transactionId);
   if(!intent) throw new Error('The verified cloud checkout intent is not available.');
   if(intent.payload.environment !== 'test') throw new Error('Live checkout is disabled in this release.');
+  if(intent.status !== 'CREATED' || !intent.providerOrderId || !intent.checkoutData) {
+   throw new Error('The cloud intent is not in a safe provider-checkout-ready state. Reconcile it before retrying.');
+  }
   const result = await startNativeProviderCheckout({
    transactionId, provider:intent.payload.provider, environment:intent.payload.environment,
    providerOrderId:intent.providerOrderId, checkoutData:intent.checkoutData,
