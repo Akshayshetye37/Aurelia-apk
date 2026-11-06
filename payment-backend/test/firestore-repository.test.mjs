@@ -321,7 +321,7 @@ test('UNKNOWN dispatch recovers an existing provider order by deterministic refe
   const first = await s.repo.initializePaymentIntent('user_123', payload());
   assert.equal(first.status, 'UNKNOWN');
   const intent = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentIntents/'))?.[1];
-  assert.match(intent.providerReference, /^aur_[a-f0-9]{24}$/);
+  assert.match(intent.providerReference, /^aur_[a-f0-9]{16}$/);
   const recoveredRepo = new FirestorePaymentRepository({
     db: s.db,
     secretManager: { getProviderSecrets: async () => ({ keyId: 'test', keySecret: 'secret', webhookSecret: 'hook' }) },
