@@ -7,7 +7,7 @@
      Fresh-install posture: no fabricated rooms, guests, bookings, tables or revenue.
      Storage posture: durable write failures must surface; strict imports/restores
      require exact persistent read-back and rollback verification.
-     Payment release posture: live collection OFF; offline cash/manual folio posting
+     Payment release posture: live collection OFF; one tenant-scoped active provider is enforced by the cloud backend; offline cash/manual folio posting
      remains available after explicit staff confirmation. Gateway auto-settlement and
      live collection remain fail-closed. Settlement authorization v2 verifier/journal/
      projector foundations exist; the complete cloud issuer-to-Android projection path
@@ -3486,14 +3486,15 @@ function loadAureliaCheckoutScript(provider){
 }
 window.aureliaGatewayFolioHtml=function(i){
  const a=window.AureliaPaymentProviderState||{},providers=(a.providers||[]).filter(x=>x.environment==='test'&&x.active);
- const supported=providers.filter(x=>['razorpay','cashfree'].includes(x.provider)&&x.capabilities?.testCheckout===true&&x.capabilities?.liveCollection===false&&x.productionReady===false);
+ const activeProviderId=a.activeProviderId||null;
+  const supported=providers.filter(x=>x.provider===activeProviderId&&['razorpay','cashfree'].includes(x.provider)&&x.capabilities?.testCheckout===true&&x.capabilities?.liveCollection===false&&x.productionReady===false);
  const booking=bk(i),pending=(booking?.gatewayPayments||[]).filter(x=>x.status!=='POSTED_TO_FOLIO');
  const pendingHtml=pending.length?'<div class="card" style="margin:10px 0"><b>Unresolved online transactions</b>'+pending.map(x=>'<div class="ln"><span>'+esc(x.provider)+' · '+esc(x.status)+'<br><small>'+esc(x.transactionId)+'</small></span><button class="btn sm ghost" onclick="reconcileAureliaGatewayPayment('+Number(i)+',\''+esc(x.transactionId)+'\')">Reconcile</button></div>').join('')+'</div>':'';
  const setup='<button class="btn sm ghost" onclick="S.tab=&quot;more&quot;;S.sub=&quot;set&quot;;render()">Open Payment Gateway settings</button>';
  if(!S.set.backendConnection?.reachable||!a.authenticated)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">Online checkout is unavailable until this device is enrolled with the optional trusted HTTPS payment backend. Bookings, folios and cash/manual payments continue to work offline.</p>'+setup;
- if(!supported.length)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">No backend-configured sandbox provider is active. Configure and validate a provider through the authenticated backend; merchant credentials remain in Google Secret Manager.</p>'+setup;
+ if(!supported.length)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">No qualified, supported sandbox provider is selected as this tenant\'s active provider. Select one qualified provider in the trusted backend; merchant credentials remain in Google Secret Manager. PayU, PhonePe, Paytm and JioPay are not yet available in the Android checkout handoff.</p>'+setup;
  const options=supported.map(x=>'<option value="'+esc(x.provider)+'">'+(x.provider==='razorpay'?'Razorpay':'Cashfree')+' · Sandbox</option>').join('');
- return '<h3>Online payment · Sandbox</h3>'+pendingHtml+'<p class="lab">Only providers explicitly advertised by the authenticated backend as sandbox-checkout capable are selectable. Live collection remains disabled; provider success alone never posts a PMS receipt. Folio posting and reconciliation remain server-controlled.</p><label class="fld"><span>Payment provider</span><select id="aurelia-online-provider">'+options+'</select></label><label class="fld"><span>Amount (INR)</span><input id="aurelia-online-amount" type="number" min="0.01" step="0.01" value="'+Math.max(0,Number(dueB(booking))||0).toFixed(2)+'"></label><div id="aurelia-cashfree-details" hidden><label class="fld"><span>Guest mobile number (Cashfree)</span><input id="aurelia-cashfree-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number"></label><label class="fld"><span>Public HTTPS return URL (Cashfree)</span><input id="aurelia-cashfree-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><button class="btn" style="width:100%" onclick="startAureliaGatewayCheckout('+Number(i)+')">Create secure checkout</button><div id="aurelia-gateway-checkout-status" class="lab" role="status" style="margin-top:8px"></div>';
+ return '<h3>Online payment · Sandbox</h3>'+pendingHtml+'<p class="lab">The backend has selected '+esc(supported[0].provider)+' as this tenant\'s single active provider. Only that backend-selected provider is selectable. Live collection remains disabled; provider success alone never posts a PMS receipt. Folio posting and reconciliation remain server-controlled.</p><label class="fld"><span>Payment provider</span><select id="aurelia-online-provider">'+options+'</select></label><label class="fld"><span>Amount (INR)</span><input id="aurelia-online-amount" type="number" min="0.01" step="0.01" value="'+Math.max(0,Number(dueB(booking))||0).toFixed(2)+'"></label><div id="aurelia-cashfree-details" hidden><label class="fld"><span>Guest mobile number (Cashfree)</span><input id="aurelia-cashfree-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number"></label><label class="fld"><span>Public HTTPS return URL (Cashfree)</span><input id="aurelia-cashfree-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><button class="btn" style="width:100%" onclick="startAureliaGatewayCheckout('+Number(i)+')">Create secure checkout</button><div id="aurelia-gateway-checkout-status" class="lab" role="status" style="margin-top:8px"></div>';
 };
 document.addEventListener('change',e=>{if(e.target?.id==='aurelia-online-provider'){const box=document.getElementById('aurelia-cashfree-details');if(box)box.hidden=e.target.value!=='cashfree';}});
 window.startAureliaGatewayCheckout=async function(i){
@@ -3519,13 +3520,13 @@ window.startAureliaGatewayCheckout=async function(i){
  const amount=Number(document.getElementById('aurelia-online-amount')?.value);
  const amountMinor=Math.round(amount*100);
  const due=Math.round(Math.max(0,Number(dueB(b))||0)*100);
- if(!['razorpay','cashfree'].includes(provider)||!Number.isSafeInteger(amountMinor)||
+ if(!['razorpay','cashfree'].includes(provider)||provider!==(window.AureliaPaymentProviderState?.activeProviderId||'')||!Number.isSafeInteger(amountMinor)||
     amountMinor<=0||Math.abs(amount*100-amountMinor)>1e-7||amountMinor>due){
   return stop('Enter a valid payment amount up to the current folio balance.');
  }
  const providerState=(window.AureliaPaymentProviderState?.providers||[])
   .find(x=>x.provider===provider&&x.environment==='test');
- if(!providerState?.active)return stop('This sandbox provider is not configured and validated on this device.');
+ if(!providerState?.active||providerState.provider!==(window.AureliaPaymentProviderState?.activeProviderId||''))return stop('This provider is not the backend-selected active provider for this tenant.');
  const transactionId=globalThis.crypto?.randomUUID?.();
  if(!transactionId)return stop('Secure transaction ID generation is unavailable on this device.');
  const payload={transactionId,idempotencyKey:'aurelia-'+transactionId,provider,
@@ -4719,9 +4720,10 @@ window.AndroidPaymentEngine = Object.freeze({
    return { ready:false, livePaymentsEnabled:false, deviceId:native?.deviceId || null };
   }
   const capabilities = await cloudPaymentApi().getCapabilities();
-  window.AureliaPaymentProviderState = { authenticated:true, providers:capabilities.providers || [] };
+  window.AureliaPaymentProviderState = { authenticated:true, providers:capabilities.providers || [], activeProviderId:capabilities.activeProviderId || null, activeProviderEnvironment:capabilities.activeProviderEnvironment || null };
   return { ready:true, livePaymentsEnabled:false, deviceId:native.deviceId,
-   providers:capabilities.providers || [], folioSettlementEnabled:false };
+   providers:capabilities.providers || [], activeProviderId:capabilities.activeProviderId || null,
+    activeProviderEnvironment:capabilities.activeProviderEnvironment || null, folioSettlementEnabled:false };
  },
  async createPaymentIntent(payload) {
   if(!payload || !/^[0-9a-f-]{36}$/i.test(payload.transactionId || '') ||
