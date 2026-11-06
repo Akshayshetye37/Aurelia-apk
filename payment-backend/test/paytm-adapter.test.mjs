@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import PaytmChecksum from 'paytmchecksum';
 import { PaytmAdapter } from '../src/providers/paytm-adapter.mjs';
 
-const key='merchant-secret';
+const key='merchant-secret1';
 const checksumImpl=PaytmChecksum;
 const signed=async body=>({body,head:{signature:await PaytmChecksum.generateSignature(JSON.stringify(body),key)}});
 function mockFetch(handler){
