@@ -145,19 +145,21 @@ test('captured command enqueue and per-device sequence allocation are transactio
 test('captured commands retain exact provider and PMS folio settlement bindings', () => {
   assert.match(source, /provider_payment_id TEXT/);
   assert.match(source, /ALTER TABLE transactions ADD COLUMN provider_payment_id TEXT/);
-  assert.match(source, /providerPaymentId: current\.provider_payment_id/);
+  assert.match(source, /providerPaymentId: verifiedPaymentId/);
   assert.match(source, /bookingId: current\.folio_id/);
   assert.match(source, /amount: current\.amount_minor \/ 100/);
   assert.match(source, /method: current\.provider/);
-  assert.match(source, /providerAccountId: current\\.provider_account_id/);\n  assert.match(source, /reference: verifiedPaymentId/);
-  assert.match(source, /idempotencyKey: 'settlement:' \+ current\.provider \+ ':command:' \+ commandId/);
+  assert.match(source, /providerAccountId: current\.provider_account_id/);
+  assert.match(source, /reference: verifiedPaymentId/);
+  assert.match(source, /idempotencyKey: current\.idempotency_key/);
   assert.match(source, /providerOrderId, remote\.paymentId \|\| null/);
 });
 
 test('native device command hashes use canonical JSON for independent client verification', () => {
   assert.match(source, /const payloadHash = crypto\.createHash\('sha256'\)\.update\(canonicalJson\(command\)\)\.digest\('hex'\)/);
   assert.match(source, /payloadHash: command\.payload_hash/);
-  assert.match(source, /payloadCanonical: canonicalJson\(JSON\.parse\(command\.payload\)\)/);
+  assert.match(source, /const payload = JSON\.parse\(command\.payload\)/);
+  assert.match(source, /payloadCanonical: canonicalJson\(payload\)/);
 });
 
 test('device delivery uses signed requests, ordered leases, durable receipts and cursor compare-and-set', () => {
