@@ -523,6 +523,9 @@ fs.copyFileSync(localGatewayVaultTemplate, path.join(javaDir, 'LocalGatewayVault
 const localPaymentLedgerTemplate = path.join(androidDir, 'templates', 'LocalPaymentLedger.java');
 if (!fs.existsSync(localPaymentLedgerTemplate)) throw new Error('LocalPaymentLedger.java template is missing.');
 fs.copyFileSync(localPaymentLedgerTemplate, path.join(javaDir, 'LocalPaymentLedger.java'));
+const localPmsRepositoryTemplate = path.join(androidDir, 'templates', 'LocalPmsRepository.java');
+if (!fs.existsSync(localPmsRepositoryTemplate)) throw new Error('LocalPmsRepository.java template is missing.');
+fs.copyFileSync(localPmsRepositoryTemplate, path.join(javaDir, 'LocalPmsRepository.java'));
 
 const javaPath = path.join(javaDir, 'MainActivity.java');
 const java = String.raw`
