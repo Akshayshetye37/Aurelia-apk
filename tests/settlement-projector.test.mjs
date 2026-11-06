@@ -56,18 +56,18 @@ test("signed authorization binds tenant, device, merchant account and environmen
 
 test("IndexedDB journal serializes duplicate appends and rejects payload conflicts", async () => {
   const j = journal("journal-concurrency");
-  const input = { ...scope, providerTransactionId: "pay_same", commandId: "cmd_same", payload: { command: { ...command, providerTransactionId: "pay_same" } } };
+  const input = { ...scope, providerTransactionId: "pay_same", commandId: "cmd_same", payload: { command: { ...command, commandId: "cmd_same", providerTransactionId: "pay_same" } } };
   const results = await Promise.all([j.append(input), j.append(input)]);
   assert.equal(results.filter(r => !r.duplicate).length, 1);
   assert.equal(results.filter(r => r.duplicate).length, 1);
   await assert.rejects(j.append({ ...input, payload: { changed: true } }), { code: "SETTLEMENT_IDEMPOTENCY_CONFLICT" });
-  const otherTenant = await j.append({ ...input, tenantId: "tenant_02" });
+  const otherTenant = await j.append({ ...input, tenantId: "tenant_02", payload: { command: { ...input.payload.command, tenantId: "tenant_02" } } });
   assert.notEqual(otherTenant.record.key, results[0].record.key);
 });
 
 test("journal transitions are one-way and persistent read-back is stable", async () => {
   const j = journal("journal-transitions");
-  const { record } = await j.append({ ...scope, providerTransactionId: "pay_02", commandId: "cmd_02", payload: { ok: true } });
+  const { record } = await j.append({ ...scope, providerTransactionId: "pay_02", commandId: "cmd_02", payload: { command: { ...scope, providerTransactionId: "pay_02", commandId: "cmd_02" } } });
   assert.equal((await j.markApplied(record.key, record.payloadHash)).status, "APPLIED");
   await assert.rejects(j.markRejected(record.key, record.payloadHash, "NO"), /Illegal/);
   assert.equal((await j.get(record.key)).status, "APPLIED");
