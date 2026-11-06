@@ -328,6 +328,7 @@ for (const file of [
   'AureliaEnvelopeStore.kt',
   'PaymentDeviceKeyStore.kt',
   'PaymentDeviceClient.kt',
+  'SettlementEnvelopeVerifier.kt',
   'LockGateActivity.kt'
 ]) {
   const source = path.join(securityTemplateDir, file);
@@ -509,6 +510,8 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 import android.webkit.JavascriptInterface;
 import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
+import com.aurelia.pms.security.PaymentDeviceKeyStore;
+import com.aurelia.pms.security.PaymentDeviceClient;
 import androidx.activity.OnBackPressedCallback;
 import java.io.OutputStream;
 import java.io.InputStream;
@@ -532,6 +535,9 @@ public class MainActivity extends BridgeActivity {
   private PayBridgeClient payBridgeClient;
   private LocalGatewayVault localGatewayVault;
   private LocalPaymentLedger localPaymentLedger;
+  private PaymentDeviceKeyStore paymentDeviceKeyStore;
+  private PaymentDeviceClient paymentDeviceClient;
+  private final java.util.concurrent.ConcurrentHashMap<String, PaymentDeviceClient.Lease> paymentDeviceLeases = new java.util.concurrent.ConcurrentHashMap<>();
   private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor();
 
   @Override public void onCreate(Bundle savedInstanceState) {
@@ -559,6 +565,8 @@ public class MainActivity extends BridgeActivity {
     prefs = getSharedPreferences("aurelia_storage", MODE_PRIVATE);
     localGatewayVault = new LocalGatewayVault(this);
     localPaymentLedger = new LocalPaymentLedger(this);
+    paymentDeviceKeyStore = new PaymentDeviceKeyStore();
+    initializePaymentDeviceClient();
     getWindow().setStatusBarColor(Color.rgb(5, 17, 13));
     getWindow().setNavigationBarColor(Color.rgb(5, 17, 13));
     getWindow().getDecorView().setSystemUiVisibility(0);
@@ -567,6 +575,17 @@ public class MainActivity extends BridgeActivity {
     payBridgeClient = new PayBridgeClient(this, status -> js("window.aureliaPayBridgeStatusChanged && window.aureliaPayBridgeStatusChanged(" + q(status) + ")"));
     bridge.getWebView().addJavascriptInterface(new AureliaBridge(), "AureliaNative");
     payBridgeClient.connect();
+  }
+
+  private void initializePaymentDeviceClient() {
+    paymentDeviceClient = null;
+    paymentDeviceLeases.clear();
+    if (prefs == null || paymentDeviceKeyStore == null || !paymentDeviceKeyStore.hasAttestedIdentity()) return;
+    String applianceUrl = prefs.getString("payment_device_appliance_url", "");
+    String deviceId = prefs.getString("payment_device_id", "");
+    if (applianceUrl.isEmpty() || deviceId.isEmpty()) return;
+    try { paymentDeviceClient = new PaymentDeviceClient(applianceUrl, deviceId, paymentDeviceKeyStore); }
+    catch (Exception ignored) { paymentDeviceClient = null; }
   }
 
   @Override public void onResume() {
@@ -1105,6 +1124,82 @@ public class MainActivity extends BridgeActivity {
           if (payBridgeClient != null) payBridgeClient.retryNow();
         } else if ("payBridgeDisconnect".equals(type)) {
           if (payBridgeClient != null) payBridgeClient.disconnect();
+        } else if ("paymentDeviceCreateAttestedIdentity".equals(type)) {
+          String challenge = obj.optString("challengeBase64", "");
+          if (challenge.isEmpty() || challenge.length() > 256) throw new IllegalArgumentException("Invalid attestation challenge.");
+          final String rid = requestId;
+          backupExecutor.execute(() -> {
+            try {
+              byte[] challengeBytes = android.util.Base64.decode(challenge,
+                  android.util.Base64.URL_SAFE | android.util.Base64.NO_WRAP | android.util.Base64.NO_PADDING);
+              PaymentDeviceKeyStore.AttestedIdentity identity = paymentDeviceKeyStore.createAttestedIdentity(challengeBytes);
+              JSONObject result = new JSONObject()
+                  .put("keyAlias", identity.getKeyAlias())
+                  .put("publicKeyPem", identity.getPublicKeyPem())
+                  .put("certificateChainBase64", new org.json.JSONArray(identity.getCertificateChainBase64()))
+                  .put("securityLevel", identity.getSecurityLevel());
+              js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",true," + q(result.toString()) + ")");
+            } catch (Exception error) {
+              JSONObject result = new JSONObject().put("error", "attested_key_creation_failed");
+              js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",false," + q(result.toString()) + ")");
+            }
+          });
+        } else if ("paymentDeviceConfigure".equals(type)) {
+          String applianceUrl = obj.optString("applianceBaseUrl", "");
+          String deviceId = obj.optString("deviceId", "");
+          if (!applianceUrl.startsWith("https://") || applianceUrl.length() > 512 ||
+              !deviceId.matches("[A-Za-z0-9_-]{8,64}") || !paymentDeviceKeyStore.hasAttestedIdentity()) {
+            throw new IllegalArgumentException("Trusted attested payment device configuration is invalid.");
+          }
+          prefs.edit().putString("payment_device_appliance_url", applianceUrl)
+              .putString("payment_device_id", deviceId).apply();
+          initializePaymentDeviceClient();
+          if (paymentDeviceClient == null) throw new IllegalStateException("Trusted payment device client could not be initialized.");
+          JSONObject result = new JSONObject().put("configured", true).put("deviceId", deviceId);
+          js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
+        } else if ("paymentDeviceLeaseNext".equals(type)) {
+          final String rid = requestId;
+          backupExecutor.execute(() -> {
+            try {
+              if (paymentDeviceClient == null) throw new IllegalStateException("Trusted payment device is not configured.");
+              PaymentDeviceClient.Lease lease = paymentDeviceClient.leaseNext();
+              if (lease == null) {
+                js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",true," + q("{\"available\":false}") + ")");
+                return;
+              }
+              String commandId = lease.getCommand().getString("commandId");
+              paymentDeviceLeases.put(commandId, lease);
+              JSONObject result = new JSONObject()
+                  .put("available", true).put("command", lease.getCommand())
+                  .put("settlement", lease.getSettlement()).put("policyLease", lease.getPolicyLease())
+                  .put("authorization", lease.getAuthorization() == null ? JSONObject.NULL : lease.getAuthorization())
+                  .put("settlementAuthorized", lease.getSettlementAuthorized())
+                  .put("leaseToken", lease.getLeaseToken()).put("cursor", lease.getCursor())
+                  .put("leaseExpiresAt", lease.getLeaseExpiresAt());
+              js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",true," + q(result.toString()) + ")");
+            } catch (Exception error) {
+              JSONObject result = new JSONObject().put("error", "payment_device_lease_failed");
+              js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",false," + q(result.toString()) + ")");
+            }
+          });
+        } else if ("paymentDeviceAcknowledge".equals(type)) {
+          final String rid = requestId;
+          final String commandId = obj.optString("commandId", "");
+          final String ledgerAckId = obj.optString("ledgerAckId", "");
+          backupExecutor.execute(() -> {
+            try {
+              PaymentDeviceClient.Lease lease = paymentDeviceLeases.get(commandId);
+              if (paymentDeviceClient == null || lease == null || !lease.isSettlementAuthorized()) {
+                throw new IllegalStateException("No verified, unexpired settlement lease is available.");
+              }
+              JSONObject result = paymentDeviceClient.acknowledge(lease, ledgerAckId);
+              paymentDeviceLeases.remove(commandId);
+              js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",true," + q(result.toString()) + ")");
+            } catch (Exception error) {
+              JSONObject result = new JSONObject().put("error", "payment_device_acknowledgement_failed");
+              js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",false," + q(result.toString()) + ")");
+            }
+          });
         } else if ("paymentLedgerCreate".equals(type)) {
           JSONObject result = localPaymentLedger.create(obj.optJSONObject("entry"));
           js("window.aureliaNativeLedgerResult && window.aureliaNativeLedgerResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
