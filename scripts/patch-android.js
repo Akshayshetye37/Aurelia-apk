@@ -293,17 +293,30 @@ function ensureKotlinAndroidPlugin(contents, kotlinDsl) {
   return 'plugins {\n' + statement + '\n}\n\n' + contents;
 }
 
+function ensureJavaResourcePackaging(contents, kotlinDsl) {
+  // These are duplicate metadata files from transitive JAR dependencies. The
+  // runtime classes remain packaged; only the duplicate multi-release manifest
+  // metadata is excluded from the Android APK.
+  const block = kotlinDsl
+    ? '\nandroid {\n    packaging {\n        resources {\n            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"\n        }\n    }\n}\n'
+    : '\nandroid {\n    packaging {\n        resources {\n            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"\n        }\n    }\n}\n';
+  if (contents.includes("META-INF/versions/9/OSGI-INF/MANIFEST.MF")) return contents;
+  return contents + block;
+}
+
 if (fs.existsSync(appGradleGroovy)) {
   let gradle = ensureKotlinAndroidPlugin(fs.readFileSync(appGradleGroovy, 'utf8'), false);
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
   }
+  gradle = ensureJavaResourcePackaging(gradle, false);
   fs.writeFileSync(appGradleGroovy, gradle);
 } else if (fs.existsSync(appGradleKts)) {
   let gradle = ensureKotlinAndroidPlugin(fs.readFileSync(appGradleKts, 'utf8'), true);
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + '\n    implementation("com.google.mlkit:text-recognition:16.0.1")');
   }
+  gradle = ensureJavaResourcePackaging(gradle, true);
   fs.writeFileSync(appGradleKts, gradle);
 }
 
