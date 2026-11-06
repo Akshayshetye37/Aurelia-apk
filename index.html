@@ -4291,117 +4291,6 @@ window.refreshAureliaLocalPaymentJournal=async function(){
  }catch(error){window.AureliaLocalPaymentJournalState.error=error.message;host.innerHTML='<p class="lab">Could not read the local journal: '+esc(error.message)+'</p>';}
  finally{window.AureliaLocalPaymentJournalState.loading=false;}
 };
-window.AureliaLocalGatewayAdmin=window.AureliaLocalGatewayAdmin||{loading:false,setupRequired:null,authenticated:false,username:'',providers:[],error:null};
-function localGatewayAdminHtml(){
- const a=window.AureliaLocalGatewayAdmin,cfg=S.set.backendConnection||{},endpoint=cfg.endpoint||'';
- const field=(id,label,type='text',placeholder='')=>'<label class="fld"><span>'+label+'</span><input id="'+id+'" type="'+type+'" autocomplete="off" placeholder="'+placeholder+'"></label>';
- let body='';
- if(!endpoint){body='<div class="tag out">LAN backend not configured</div><p class="lab">Enter the HTTPS origin of the Docker appliance. Example: https://payments.local:8443</p>';}
- else if(cfg.reachable!==true){body='<div class="tag out">Backend not verified</div><p class="lab">Save the Docker appliance origin and run Test backend. Owner setup and sign-in appear only after the HTTPS readiness check succeeds.</p>';}
- else if(a.loading){body='<p class="lab">Checking owner session and provider configuration…</p>';}
- else if(a.authenticated){
-  const rows=Array.isArray(a.providers)?a.providers:[];
-  const names={razorpay:'Razorpay',cashfree:'Cashfree Payments'};
-  body='<div class="tag ready">Owner authenticated · '+esc(a.username)+'</div><div class="row" style="flex-wrap:wrap;margin-top:10px"><button class="btn sm ghost" onclick="refreshLocalGatewayOwner()">Refresh status</button><button class="btn sm ghost" onclick="logoutLocalGatewayOwner()">Sign out</button></div>';
-  body+=['razorpay','cashfree'].map(id=>{
-   const label=names[id],states=rows.filter(x=>x.provider===id&&x.environment==='test'),st=states[0]||{};
-   const status=st.active?'Active · Test':st.validated?'Validated · not active':st.configured?'Credentials saved · validation required':'Not configured';
-   const cls=st.active||st.validated?'ready':'out';
-   const inputs=id==='razorpay'
-    ? field('gw-razorpay-keyId','Razorpay Test Key ID','text','rzp_test_…')+field('gw-razorpay-keySecret','Razorpay Key Secret','password','Write-only')+field('gw-razorpay-webhookSecret','Razorpay Webhook Secret','password','Write-only')
-    : field('gw-cashfree-appId','Cashfree App ID','text','Sandbox App ID')+field('gw-cashfree-secretKey','Cashfree Secret Key','password','Write-only')+field('gw-cashfree-webhookSecret','Cashfree Webhook Secret','password','Write-only');
-   return '<details class="card" style="margin-top:12px"><summary><b>'+label+'</b> · <span class="tag '+cls+'">'+status+'</span></summary><p class="lab">Environment: Sandbox/Test only. Secrets are submitted directly to the Docker backend and encrypted at rest. They are never saved in PMS settings.</p>'+inputs+'<div class="row" style="flex-wrap:wrap;gap:6px"><button class="btn sm" onclick="saveLocalGatewayCredentials(\''+id+'\')">Save credentials</button><button class="btn sm ghost" onclick="validateLocalGateway(\''+id+'\')">Validate credentials</button>'+(st.validated&&!st.active?'<button class="btn sm" onclick="activateLocalGateway(\''+id+'\')">Activate test mode</button>':'')+(st.active?'<button class="btn sm ghost" onclick="deactivateLocalGateway(\''+id+'\')">Deactivate</button>':'')+(st.configured?'<button class="btn sm ghost" onclick="removeLocalGatewayCredentials(\''+id+'\')">Remove credentials</button>':'')+'</div><p class="lab">Webhook endpoint: <code>'+esc(endpoint+'/v1/webhooks/'+id+'/test')+'</code><br>Important: a private LAN URL is not reachable by public provider webhook servers. Do not claim webhook verification is complete until you deploy an explicitly secured public ingress or another supported delivery design.</p><p class="lab">Backend unresolved transactions: '+Number(st.unresolvedTransactions||0)+'.</p></details>';
-  }).join('');
-  body+='<p class="lab">Production activation and live collection are intentionally unavailable. The current LAN backend has no public webhook ingress, background reconciliation worker, refund lifecycle or transactional PMS folio posting.</p>';
- }else if(a.setupRequired===true){
-  body='<div class="tag out">First-time owner setup required</div><p class="lab">Use the one-time OWNER_SETUP_TOKEN generated on the Docker host. The setup token and password are sent over HTTPS and are not stored in PMS.</p>'+field('gw-owner-setup-token','One-time setup token','password','64 hexadecimal characters')+field('gw-owner-username','Owner username','text','3–48 characters')+field('gw-owner-password','Owner password','password','Minimum 14 characters')+'<button class="btn sm" onclick="setupLocalGatewayOwner()">Create owner account</button>';
- }else{
-  body='<div class="tag out">Owner sign-in required</div>'+field('gw-owner-login','Owner username','text','Owner username')+field('gw-owner-login-password','Owner password','password','Owner password')+'<button class="btn sm" onclick="loginLocalGatewayOwner()">Sign in</button>';
- }
- if(a.error)body+='<p class="lab" role="alert">'+esc(a.error)+'</p>';
- return '<section id="aurelia-gateway-admin" class="card" style="margin-top:12px"><h3>Secure Payment Engine · LAN</h3><p class="lab">Secure local administration for Razorpay and Cashfree. Configure the backend origin below, then authenticate with the owner account created during Docker setup.</p><label class="fld"><span>Docker appliance HTTPS origin</span><input data-aurelia-backend-url type="url" inputmode="url" autocomplete="url" placeholder="https://payments.local:8443" value="'+esc(endpoint)+'"></label><div class="row" style="flex-wrap:wrap;gap:6px"><button class="btn sm" onclick="saveAureliaBackendEndpoint()">Save backend</button><button class="btn sm ghost" onclick="testAureliaBackendConnection()">Test backend</button><button class="btn sm ghost" onclick="refreshLocalGatewayOwner()">Refresh owner status</button></div><p class="lab" data-aurelia-backend-status role="status">'+esc(cfg.healthMessage||'The backend must be reachable over trusted HTTPS. Health checks do not authenticate the owner.')+'</p>'+body+'</section>';
-}
-async function localGatewayApi(){
- // Retired by the device-only architecture decision. Never contact a LAN/Docker
- // payment appliance from the WebView. Native local vault administration will
- // be exposed only through the validated Android bridge when that module ships.
- throw new Error('The legacy LAN payment backend is disabled. Device-local native gateway administration is not yet integrated.');
-}
-window.refreshLocalGatewayOwner=async function(){
- const a=window.AureliaLocalGatewayAdmin;if(a.loading)return;
- if(!S.set.backendConnection?.endpoint||S.set.backendConnection?.reachable!==true){a.error=null;a.loading=false;return;}
- a.loading=true;a.error=null;render();
- try{
-  const setup=await localGatewayApi('/v1/auth/setup-status');
-  a.setupRequired=setup.setupRequired===true;
-  if(!a.setupRequired){
-   try{
-    const session=await localGatewayApi('/v1/auth/session');
-    a.authenticated=session.authenticated===true;a.username=session.username||'';
-    if(a.authenticated){const data=await localGatewayApi('/v1/admin/providers');a.providers=data.providers||[];}
-   }catch(error){if(/owner_session_required|owner_session_expired/i.test(error.message)){a.authenticated=false;a.username='';a.providers=[];}else throw error;}
-  }else{a.authenticated=false;a.providers=[];}
- }catch(error){a.error=error.message||'Could not read owner status.';}
- finally{a.loading=false;render();}
-};
-window.setupLocalGatewayOwner=async function(){
- const token=document.getElementById('gw-owner-setup-token')?.value||'';
- const username=document.getElementById('gw-owner-username')?.value||'';
- const password=document.getElementById('gw-owner-password')?.value||'';
- if(!/^[a-f0-9]{64}$/i.test(token)||password.length<14){toast('Enter the valid one-time setup token and a password of at least 14 characters');return;}
- try{await localGatewayApi('/v1/auth/setup','POST',{username,password},{'X-Aurelia-Setup-Token':token});}
- catch(error){toast(error.message);return;}
- const t=document.getElementById('gw-owner-setup-token');if(t)t.value='';
- const p=document.getElementById('gw-owner-password');if(p)p.value='';
- window.AureliaLocalGatewayAdmin.setupRequired=false;window.AureliaLocalGatewayAdmin.error='Owner created. Sign in with the new credentials.';render();
-};
-window.loginLocalGatewayOwner=async function(){
- const username=document.getElementById('gw-owner-login')?.value||'';
- const password=document.getElementById('gw-owner-login-password')?.value||'';
- try{await localGatewayApi('/v1/auth/login','POST',{username,password});}
- catch(error){toast(error.message);return;}
- const p=document.getElementById('gw-owner-login-password');if(p)p.value='';
- await window.refreshLocalGatewayOwner();toast('Owner signed in.');
-};
-window.logoutLocalGatewayOwner=async function(){
- try{await localGatewayApi('/v1/auth/logout','POST',{});}catch(error){toast(error.message);}
- const a=window.AureliaLocalGatewayAdmin;a.authenticated=false;a.providers=[];a.username='';render();
-};
-window.saveLocalGatewayCredentials=async function(provider){
- const fields=provider==='razorpay'?['keyId','keySecret','webhookSecret']:['appId','secretKey','webhookSecret'];
- const credentials={};for(const key of fields){credentials[key]=document.getElementById('gw-'+provider+'-'+key)?.value?.trim()||'';}
- if(fields.some(k=>!credentials[k])){toast('Complete every required credential field');return;}
- try{await localGatewayApi('/v1/admin/providers/'+provider+'/credentials?environment=test','PUT',{credentials});}
- catch(error){toast(error.message);return;}
- for(const key of fields){const el=document.getElementById('gw-'+provider+'-'+key);if(el)el.value='';}
- await window.refreshLocalGatewayOwner();toast('Sandbox credentials encrypted and saved. Validate them next.');
-};
-window.validateLocalGateway=async function(provider){
- try{const result=await localGatewayApi('/v1/admin/providers/'+provider+'/validate','POST',{environment:'test'});await window.refreshLocalGatewayOwner();toast(result.valid?'Provider credentials validated.':'Provider validation not confirmed.');}
- catch(error){toast(error.message);}
-};
-window.activateLocalGateway=async function(provider){
- if(!confirm('Activate '+provider+' for SANDBOX/TEST payments only? This does not enable live collection or PMS folio settlement.'))return;
- try{await localGatewayApi('/v1/admin/providers/'+provider+'/activate','POST',{environment:'test',confirm:true});await window.refreshLocalGatewayOwner();toast('Test provider activated.');}
- catch(error){toast(error.message);}
-};
-window.deactivateLocalGateway=async function(provider){
- try{await localGatewayApi('/v1/admin/providers/'+provider+'/deactivate','POST',{environment:'test'});await window.refreshLocalGatewayOwner();toast('Provider deactivated.');}
- catch(error){toast(error.message);}
-};
-window.removeLocalGatewayCredentials=async function(provider){
- if(!confirm('Remove the stored '+provider+' sandbox credentials?'))return;
- try{await localGatewayApi('/v1/admin/providers/'+provider+'/credentials?environment=test','DELETE');await window.refreshLocalGatewayOwner();toast('Provider credentials removed.');}
- catch(error){toast(error.message);}
-};
-window.openAureliaGatewayAdmin=function(provider){
- const details=document.getElementById('aurelia-gateway-admin')?.closest('details');
- const section=document.getElementById('aurelia-gateway-admin');
- if(details)details.open=true;
- if(section){section.scrollIntoView({behavior:'smooth',block:'start'});if(provider)toast('Configure '+(provider==='razorpay'?'Razorpay':'Cashfree')+' test credentials in the secure Owner Console.');}
-};
-window.addEventListener('aurelia-payment-platform-ready',()=>{setTimeout(()=>window.refreshLocalGatewayOwner&&window.refreshLocalGatewayOwner(),0);});
-
 window.saveAureliaBackendEndpoint=function(){
  const input=document.querySelector('[data-aurelia-backend-url]');
  const raw=(input?.value||'').trim();
@@ -4431,7 +4320,7 @@ window.testAureliaBackendConnection=async function(){
   const cloudReady=body?.checks?.firestore===true&&body?.checks?.secretManager===true;
   if(!body||body.ok!==true||(!localReady&&!cloudReady))throw new Error('Backend readiness checks did not pass');
   S.set.backendConnection={...(S.set.backendConnection||{}),endpoint:url.origin,reachable:true,checkedAt:new Date().toISOString(),healthMessage:'HTTPS /readyz passed: backend runtime dependencies are reachable. This is a readiness check only; owner authentication, device trust, merchant credentials, provider sandbox, webhook delivery, folio settlement and payment authorization remain unverified.'};
-  persist();render();window.refreshLocalGatewayOwner&&window.refreshLocalGatewayOwner();toast('Backend is reachable. Owner authentication is still required.');
+  persist();render();toast('Backend is reachable. Owner authentication is still required.');
  }catch(error){
   S.set.backendConnection={...(S.set.backendConnection||{}),endpoint:url.origin,reachable:false,checkedAt:null,healthMessage:'Readiness check failed: '+(error?.name==='AbortError'?'request timed out':(error?.message||'connection unavailable'))};
   persist();render();toast('Backend readiness check failed: '+(error?.name==='AbortError'?'request timed out':(error?.message||'connection unavailable')));
