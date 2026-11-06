@@ -46,12 +46,13 @@ export class PaytmAdapter extends PaymentProviderAdapter {
     return {valid:true,validation:'authenticated_status_api'};
   }
   async createOrder(input) {
+    const callbackUrl=input?.callbackUrl||input?.returnUrl;
     if(!id(input?.orderId)||!minor(input?.amountMinor)||input.currency!=='INR'||
-      typeof input.callbackUrl!=='string'||!input.callbackUrl.startsWith('https://')||
+      typeof callbackUrl!=='string'||!callbackUrl.startsWith('https://')||
       (input.customer?.id!=null&&!id(input.customer.id)))
       throw new TypeError('invalid_paytm_order');
     const body={requestType:'Payment',mid:this.credentials.mid,websiteName:this.credentials.websiteName,
-      orderId:input.orderId,callbackUrl:input.callbackUrl,
+      orderId:input.orderId,callbackUrl,
       txnAmount:{value:amount(input.amountMinor),currency:'INR'},
       userInfo:{custId:input.customer?.id||'AURELIA_GUEST'}};
     const data=await this.signedRequest(this.hosts.checkout+
