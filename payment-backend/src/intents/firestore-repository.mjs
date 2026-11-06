@@ -513,7 +513,7 @@ export class FirestorePaymentRepository {
         tx.update(idemRef, { state: 'CREATED', updatedAt: this.clock().toISOString() });
         tx.update(lockRef, { state: 'CREATED', providerOrderId: remote.orderId, updatedAt: this.clock().toISOString() });
         tx.create(this.db.collection('paymentProviderOrders').doc(
-          digest(tenantId + ':' + payload.provider + ':' + payload.environment + ':' + remote.orderId)
+          digest(tenantId + ':' + payload.provider + ':' + payload.environment + ':' + providerAccountId + ':' + remote.orderId)
         ), {
           tenantId, folioId: payload.folioId, intentId,
           provider: payload.provider, environment: payload.environment,
