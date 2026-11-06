@@ -19,20 +19,21 @@ test('checkout is fail-closed unless the native engine reports ready', () => {
   assert.doesNotMatch(checkout, /localGatewayApi\s*\(/);
 });
 
-test('device credential vault exposes only the six wired providers and excludes CCAvenue', () => {
+test('merchant credentials are not exposed through WebView or Android local vault UI', () => {
   const html = read('index.html');
-  const vaultStart = html.indexOf('function localNativeGatewayHtml()');
-  const vaultEnd = html.indexOf('window.saveAureliaNativeGateway=', vaultStart);
-  assert.ok(vaultStart >= 0 && vaultEnd > vaultStart, 'native vault renderer exists');
-  const vault = html.slice(vaultStart, vaultEnd);
-  for (const provider of ['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay']) {
-    assert.match(vault, new RegExp(provider));
-  }
-  assert.doesNotMatch(vault, /ccavenue/i);
-  assert.match(vault, /Android Keystore/);
-  assert.match(vault, /does not validate provider keys/);
-  assert.match(vault, /phonepe:\['uat','production'\]/);
-  assert.match(vault, /paytm:\['staging','production'\]/);
+  const vault = read('android/templates/LocalGatewayVault.java');
+  assert.doesNotMatch(html, /localNativeGatewayHtml|gatewayVaultSave|gatewayVaultRemove|Device-local Gateway Credential Vault/);
+  assert.match(html, /Google Secret Manager/);
+  assert.match(vault, /merchant_credentials_must_be_managed_by_trusted_backend/);
+  assert.match(vault, /purgeLegacyVault\(\)/);
+  assert.doesNotMatch(vault, /Cipher\.getInstance|FileOutputStream/);
+});
+
+test('Android checkout refuses providers without a completed hosted-checkout handoff before intent creation', () => {
+  const html = read('index.html');
+  assert.match(html, /Android hosted-checkout handoff is not yet integrated/);
+  assert.match(html, /No cloud payment intent was created/);
+  assert.match(html, /!\['razorpay','cashfree'\]\.includes\(payload\.provider\)/);
 });
 
 test('native payment journal cannot mark a payment posted by status-only mutation', () => {
