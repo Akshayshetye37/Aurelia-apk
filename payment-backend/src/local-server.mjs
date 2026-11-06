@@ -22,7 +22,7 @@ const PROVIDERS = new Set(['razorpay', 'cashfree']);
 const settlementAuthIssuerEnabled = process.env.SETTLEMENT_AUTH_ISSUER_ENABLED === 'true';
 const settlementAuthSettlementEnabled = process.env.SETTLEMENT_AUTH_SETTLEMENT_ENABLED === 'true';
 const settlementSigningKeyId = process.env.SETTLEMENT_AUTH_KEY_ID || 'aurelia-settlement-2026-01';
-const settlementSigningKeyBase64 = (process.env.SETTLEMENT_AUTH_PRIVATE_KEY_PEM_BASE64 || '').replace(/\\s/g, '');
+const settlementSigningKeyBase64 = (process.env.SETTLEMENT_AUTH_PRIVATE_KEY_PEM_BASE64 || '').replace(/\s/g, '');
 let settlementSigner = null;
 if (settlementAuthIssuerEnabled) {
   if (!settlementSigningKeyBase64 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(settlementSigningKeyBase64)) {
