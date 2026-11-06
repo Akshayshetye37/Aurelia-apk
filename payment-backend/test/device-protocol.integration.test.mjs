@@ -44,7 +44,7 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   const ownerPassword = 'TestOwnerPassword!2026';
   const { publicKey: settlementPublicKey, privateKey: settlementPrivateKey } =
     crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-  const settlementPrivateKeyBase64 = settlementPrivateKey.export({ type: 'pkcs8', format: 'pem' }).toString('base64');
+  const settlementPrivateKeyBase64 = Buffer.from(settlementPrivateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64');
   const child = spawn(process.execPath, ['src/local-server.mjs'], {
     cwd: packageRoot,
     env: {
