@@ -7,6 +7,16 @@ Aurelia is an offline-first property-management system (PMS) for reservations, g
 
 ## Latest implementation update (2026-11-07)
 
+### Optional merchant gateway setup UI (2026-11-07)
+
+- Added a protected owner/admin gateway configuration panel to Payment Settings. It loads provider credential field definitions from the authenticated `/v1/admin/providers` endpoint and supports Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay.
+- Credential submission is sent directly to the trusted backend over HTTPS and requires the existing tenant-admin authentication/MFA controls. The backend stores secrets in Google Secret Manager. The client does not write merchant credentials to local storage, PMS records or APK resources; password inputs are cleared after submission.
+- Gateway setup is optional. When no provider is selected, Aurelia's offline-first cash/manual payment, receipt and local folio workflows remain the default. Configuring credentials does not automatically activate a gateway.
+- The active gateway can be switched only after credential validation, sandbox acceptance and verified webhook evidence. The backend still enforces one tenant-scoped active provider for new online intents.
+- CCAvenue is shown as unavailable/not implemented and is excluded from credential entry because no CCAvenue adapter or end-to-end checkout, webhook, refund and recovery path exists.
+- The credential UI is for test/sandbox onboarding only. Live collection remains OFF. PayU, PhonePe, Paytm and JioPay still require Android checkout handoff implementation before device checkout can be offered for those providers.
+
+
 Working branch: `feature/multi-provider-payment-backend`.
 
 ### Tenant-scoped single active provider selection
