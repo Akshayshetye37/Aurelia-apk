@@ -82,7 +82,7 @@ export class CapacitorPmsStorageClient extends PmsRepository {
   async retryOutbox({deviceId,eventId,retryAt,errorCode}) {
     ident(deviceId,"device ID");ident(eventId,"event ID");ident(errorCode,"error code");
     if(typeof retryAt!=="string"||!Number.isFinite(Date.parse(retryAt)))throw new TypeError("Invalid retry timestamp");
-    await this.plugin.retryOutbox({deviceId,eventId,retryAt,errorCode});return true;
+    await this.plugin.retryOutbox({deviceId,eventId,retryAt:new Date(Date.parse(retryAt)).toISOString(),errorCode});return true;
   }
 
   async markOutboxConflict({deviceId,eventId,conflictCode}) {
