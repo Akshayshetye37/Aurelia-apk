@@ -650,13 +650,24 @@ app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express
       : (body.webhookSecret || '');
     await storeSecret(providerSecretId(req.tenant.id, provider, environment, 'api'), JSON.stringify(apiCredentials));
     await storeSecret(providerSecretId(req.tenant.id, provider, environment, 'webhook'), webhookValue);
-    const patch = { provider, environment, publicEnvironment, configured: true, credentialsValidated: false,
+    let credentialsValid = false;
+    try {
+      const savedCredentials = await paymentRepository.secretManager.getProviderSecrets(req.tenant.id, provider, environment);
+      const adapter = createProviderAdapter(provider, { credentials: savedCredentials, environment });
+      await adapter.validateCredentials();
+      credentialsValid = true;
+    } catch {
+      credentialsValid = false;
+    }
+    const patch = { provider, environment, publicEnvironment, configured: true, credentialsValidated: credentialsValid,
+      ...(credentialsValid ? { validatedAt: FieldValue.serverTimestamp() } : {}),
       sandboxTestPassed: false, webhookVerified: false, active: false,
       updatedAt: FieldValue.serverTimestamp(), updatedBy: req.actor.uid };
     patch[def.publicKey] = body[def.publicKey];
     await stateRef.set(patch, { merge: true });
-    return res.status(202).json({ accepted: true, provider, environment: publicEnvironment,
-      adapterEnvironment: environment, status: 'credentials_stored_validation_pending' });
+    if (!credentialsValid) return fail(res, 422, 'provider_credentials_validation_failed');
+    return res.status(200).json({ accepted: true, valid: true, provider, environment: publicEnvironment,
+      adapterEnvironment: environment, status: 'credentials_validated_test_only' });
   } catch {
     return fail(res, 503, 'credential_storage_unavailable');
   }
