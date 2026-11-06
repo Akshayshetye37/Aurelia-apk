@@ -657,11 +657,10 @@ app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express
 });
 
 app.delete('/v1/admin/providers/:provider/credentials', requireTenantAdmin, async (req, res) => {
-  const { provider } = req.params;
-  const environment = req.query?.environment;
-  if (!['razorpay', 'cashfree'].includes(provider) || !['test', 'live'].includes(environment)) {
-    return fail(res, 400, 'invalid_provider_environment');
-  }
+  const { provider } = req.params, publicEnvironment = req.query?.environment;
+  const environment = adapterEnvironmentOf(provider, publicEnvironment);
+  if (!environment) return fail(res, 400, 'invalid_provider_environment');
+  if (publicEnvironment === 'live' && providerQualificationStatus(provider).liveCollection !== true) return fail(res, 403, 'live_collection_not_enabled');
   try {
     const stateRef = providerTenantDoc(req.tenant.id, provider, environment);
     const state = await stateRef.get();
@@ -688,8 +687,9 @@ app.delete('/v1/admin/providers/:provider/credentials', requireTenantAdmin, asyn
 });
 
 app.post('/v1/admin/providers/:provider/validate', requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
-  const { provider } = req.params, environment = envOf(req);
-  if (!['razorpay', 'cashfree'].includes(provider) || !environment) return fail(res, 400, 'invalid_provider_environment');
+  const { provider } = req.params, publicEnvironment = envOf(req), environment = adapterEnvironmentOf(provider, publicEnvironment);
+  if (!environment) return fail(res, 400, 'invalid_provider_environment');
+  if (publicEnvironment === 'live' && providerQualificationStatus(provider).liveCollection !== true) return fail(res, 403, 'live_collection_not_enabled');
   try {
     const credentials = await paymentRepository.secretManager.getProviderSecrets(req.tenant.id, provider, environment);
     const { createProviderAdapter } = await import('./providers/factory.mjs');
@@ -709,12 +709,11 @@ app.post('/v1/admin/providers/:provider/validate', requireTenantAdmin, express.j
 app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
   const blocked = await enforcePaymentControl(req, res, 'test_collection');
   if (blocked) return blocked;
-  const { provider } = req.params, environment = envOf(req), amountMinor = req.body?.amountMinor, idem = idempotencyOf(req);
-  if (!['razorpay', 'cashfree'].includes(provider) || environment !== 'test' ||
-      !Number.isSafeInteger(amountMinor) || amountMinor < 100 || amountMinor > 10000000 || !idem) {
-    return fail(res, 400, 'invalid_test_order_request');
-  }
-  const providerState = await providerTenantDoc(req.tenant.id, provider, 'test').get();
+  const { provider } = req.params, publicEnvironment = envOf(req), environment = adapterEnvironmentOf(provider, publicEnvironment),
+    amountMinor = req.body?.amountMinor, idem = idempotencyOf(req);
+  if (!implementedProviderAdapters().includes(provider) || publicEnvironment !== 'test' || !environment ||
+      !Number.isSafeInteger(amountMinor) || amountMinor < 100 || amountMinor > 10000000 || !idem) return fail(res, 400, 'invalid_test_order_request');
+  const providerState = await providerTenantDoc(req.tenant.id, provider, environment).get();
   if (!providerState.exists || providerState.data().configured !== true ||
       providerState.data().credentialsValidated !== true) {
     return fail(res, 409, 'provider_credentials_not_validated');
@@ -722,9 +721,8 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
   const idemId = crypto.createHash('sha256').update(req.tenant.id + ':' + provider + ':test:' + idem).digest('hex');
   const idemRef = db.doc('paymentIdempotency/' + idemId);
   try {
-    const credentials = await paymentRepository.secretManager.getProviderSecrets(req.tenant.id, provider, 'test');
-    const { createProviderAdapter } = await import('./providers/factory.mjs');
-    const adapter = createProviderAdapter(provider, { credentials, environment: 'test' });
+    const credentials = await paymentRepository.secretManager.getProviderSecrets(req.tenant.id, provider, environment);
+    const adapter = createProviderAdapter(provider, { credentials, environment });
     const reservationResult = await db.runTransaction(async tx => {
       const prior = await tx.get(idemRef);
       if (prior.exists) return { record: prior.data(), newlyReserved: false };
@@ -739,33 +737,34 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
     }
     if (reservation.response) return res.status(200).json(reservation.response);
     if (!reservationResult.newlyReserved) return fail(res, 409, 'order_creation_unknown_reconcile_before_retry');
-    const input = provider === 'razorpay'
-      ? { amountMinor, currency: 'INR', receipt: 'aur_' + idemId.slice(0, 24) }
-      : {
-          orderId: 'aur_' + idemId.slice(0, 32), amountMinor, currency: 'INR',
-          customer: {
-            id: 'aurelia_owner_test',
-            phone: '9999999999'
-          },
-          returnUrl: [...origins][0] + '/payment-return',
-          idempotencyKey: 'aur_' + idemId.slice(0, 32)
-        };
+    const orderId = 'a_' + idemId.slice(0, 18);
+    const customer = { id: 'aurelia_owner_test', phone: '9999999999',
+      firstName: 'Aurelia', email: 'owner-sandbox@example.invalid' };
+    const returnUrl = [...origins][0] + '/payment-return';
+    const input = provider === 'razorpay' ? { amountMinor, currency: 'INR', receipt: orderId }
+      : provider === 'payu' ? { orderId, amountMinor, currency: 'INR', customer, returnUrl }
+      : { orderId, amountMinor, currency: 'INR', customer, returnUrl, callbackUrl: returnUrl, idempotencyKey: orderId };
     const order = await adapter.createOrder(input);
-    if (!order || typeof order.orderId !== 'string' ||
-        !/^[A-Za-z0-9_-]{1,64}$/.test(order.orderId) ||
-        order.amountMinor !== amountMinor || order.currency !== 'INR' ||
-        (provider === 'razorpay' && typeof order.keyId !== 'string') ||
-        (provider === 'cashfree' &&
-          (typeof order.paymentSessionId !== 'string' || !order.paymentSessionId))) {
-      throw new Error('provider_test_order_response_binding_invalid');
-    }
-    const response = { provider, environment: 'test', orderId: order.orderId, amountMinor: order.amountMinor,
-      currency: order.currency, checkoutData: provider === 'razorpay' ? { keyId: order.keyId } :
-        { paymentSessionId: order.paymentSessionId }, status: 'created' };
+    if (!order || typeof order.orderId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(order.orderId) ||
+        order.amountMinor !== amountMinor || order.currency !== 'INR') throw new Error('provider_test_order_response_binding_invalid');
+    const checkoutData = provider === 'razorpay' ? { keyId: order.keyId }
+      : provider === 'cashfree' ? { paymentSessionId: order.paymentSessionId, checkoutUrl: order.checkoutUrl || null }
+      : (provider === 'payu' || provider === 'paytm') ? { checkout: order.checkout }
+      : provider === 'phonepe' ? { checkoutUrl: order.checkoutUrl }
+      : { checkoutUrl: order.checkoutUrl, transactionContext: order.transactionContext };
+    const checkoutValid = provider === 'razorpay' ? typeof checkoutData.keyId === 'string'
+      : provider === 'cashfree' ? typeof checkoutData.paymentSessionId === 'string'
+      : provider === 'payu' ? typeof checkoutData.checkout?.action === 'string' && checkoutData.checkout.action.startsWith('https://')
+      : provider === 'paytm' ? typeof checkoutData.checkout?.txnToken === 'string'
+      : provider === 'phonepe' ? typeof checkoutData.checkoutUrl === 'string' && checkoutData.checkoutUrl.startsWith('https://')
+      : typeof checkoutData.checkoutUrl === 'string' && checkoutData.checkoutUrl.startsWith('https://') && typeof checkoutData.transactionContext === 'string';
+    if (!checkoutValid) throw new Error('provider_test_order_checkout_invalid');
+    const response = { provider, environment: publicEnvironment, adapterEnvironment: environment,
+      orderId: order.orderId, amountMinor: order.amountMinor, currency: 'INR', checkoutData, status: 'created' };
     await db.runTransaction(async tx => {
       tx.set(idemRef, { state: 'created', response, providerOrderId: order.orderId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       tx.create(db.doc('paymentOrders/' + req.tenant.id + '_' + provider + '_' + order.orderId), {
-        tenantId: req.tenant.id, provider, environment: 'test',
+        tenantId: req.tenant.id, provider, environment,
         providerOrderId: order.orderId, amountMinor, currency: 'INR',
         state: 'created', createdAt: FieldValue.serverTimestamp()
       });
