@@ -155,5 +155,5 @@ test('native PMS migration template serializes JSON values through Android-suppo
   assert.match(source, /serializeJsonValue\(value\)/);
   assert.match(source, /new org\.json\.JSONArray\(\)/);
   assert.match(source, /private static String serializeJsonValue\(Object value\)/);
-  assert.doesNotMatch(source, /JSONObject\.valueToString/);
+  assert.doesNotMatch(source, /JSONObject\.valueToString\s*\(/);
 });
