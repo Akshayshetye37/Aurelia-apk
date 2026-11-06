@@ -46,14 +46,15 @@ test("native settlement application remains blocked before authorization or jour
 
 test("pending journal recovery remains blocked before scanning or projection", async () => {
   const journal = makeJournal();
+  const scope = { tenantId: "tenant_01", deviceId: "device_01", provider: "razorpay",
+    providerAccountId: "merchant_01", environment: "test" };
   await journal.append({
-    provider: "razorpay",
+    ...scope,
     commandId: "backend-command-001",
-    payload: {
-      bookingId: "B-100", amount: 125, method: "razorpay", reference: "pay_001",
-      source: "staff_review", verificationConfirmed: true,
-      idempotencyKey: "settlement:razorpay:command:backend-command-001"
-    }
+    payload: { command: {
+      ...scope, commandId: "backend-command-001", bookingId: "B-100",
+      amountPaise: 12500, method: "razorpay", reference: "pay_001"
+    } }
   });
   let projected = 0, authorized = 0;
   await assert.rejects(
