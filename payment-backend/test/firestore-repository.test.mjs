@@ -323,7 +323,7 @@ test('UNKNOWN dispatch recovers an existing provider order by deterministic refe
   assert.match(intent.providerReference, /^aur_[a-f0-9]{24}$/);
   const recoveredRepo = new FirestorePaymentRepository({
     db: s.db,
-    secretManager: { getProviderSecrets: async () => ({ keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' }) },
+    secretManager: { getProviderSecrets: async () => ({ keyId: 'test', keySecret: 'secret', webhookSecret: 'hook' }) },
     providerFactory: () => ({
       findOrderByReference: async ({ reference }) => ({
         found: true, orderId: 'order_recovered', receipt: reference,
@@ -361,7 +361,7 @@ test('UNKNOWN recovery never overwrites a provider order already bound to anothe
 
   const recoveryRepo = new FirestorePaymentRepository({
     db: s.db,
-    secretManager: { getProviderSecrets: async () => ({ keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' }) },
+    secretManager: { getProviderSecrets: async () => ({ keyId: 'test', keySecret: 'secret', webhookSecret: 'hook' }) },
     providerFactory: () => ({
       findOrderByReference: async ({ reference }) => ({
         found: true, orderId, receipt: reference, amountMinor: 450000, currency: 'INR'
@@ -385,7 +385,7 @@ test('UNKNOWN dispatch remains locked when provider lookup is inconclusive', asy
   const first = await s.repo.initializePaymentIntent('user_123', payload());
   const recoveryRepo = new FirestorePaymentRepository({
     db: s.db,
-    secretManager: { getProviderSecrets: async () => ({ keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' }) },
+    secretManager: { getProviderSecrets: async () => ({ keyId: 'test', keySecret: 'secret', webhookSecret: 'hook' }) },
     providerFactory: () => ({ findOrderByReference: async () => ({ found: false }) })
   });
   const duplicate = await recoveryRepo.initializePaymentIntent('user_123', payload());
