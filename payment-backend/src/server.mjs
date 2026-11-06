@@ -27,6 +27,7 @@ import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
   paymentControlAllows, updatePaymentControls
 } from './payment-controls/firestore-controls.mjs';
+import { activateSingleProvider, deactivateSingleProvider, readActiveProvider } from './payment-controls/active-provider-selection.mjs';
 // No folio settlement writer is imported: this service records provider evidence
 // only until a trusted local accounting bridge passes its separate release gates.
 
