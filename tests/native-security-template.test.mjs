@@ -118,6 +118,7 @@ test('native payment device transport is HTTPS-only, path-safe, signed, and resp
   assert.match(source, /keyStore\.hasAttestedIdentity\(\)/);
   assert.match(source, /signRequest\(/);
   assert.match(source, /instanceFollowRedirects = false/);
+  assert.ok(source.includes('connection.setRequestProperty("Authorization", "Bearer " + idToken)'));
   assert.match(source, /Authorization", "Bearer " \\+ idToken/);
   assert.match(source, /MAX_RESPONSE_BYTES/);
   assert.match(source, /fun leaseNext\(\): Lease\?/);
