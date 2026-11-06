@@ -4,6 +4,7 @@ import Database from 'better-sqlite3';
 import { scrypt as scryptCallback, randomBytes, timingSafeEqual, createCipheriv, createDecipheriv, createHmac } from 'node:crypto';
 import { promisify } from 'node:util';
 import { createProviderAdapter } from './providers/factory.mjs';
+import { createSettlementSigner, SETTLEMENT_AUTH_TYPE, SETTLEMENT_LEASE_TYPE, SETTLEMENT_ISSUER, SETTLEMENT_AUDIENCE } from './settlement/authorization-signer.mjs';
 
 const scrypt = promisify(scryptCallback);
 const app = express();
@@ -18,6 +19,27 @@ if (!/^[A-Za-z0-9_-]{3,64}$/.test(PROPERTY_ID)) throw new Error('AURELIA_PROPERT
 const SESSION_TTL_SECONDS = 2 * 60 * 60;
 const SESSION_COOKIE = 'aurelia_owner_session';
 const PROVIDERS = new Set(['razorpay', 'cashfree']);
+const settlementAuthIssuerEnabled = process.env.SETTLEMENT_AUTH_ISSUER_ENABLED === 'true';
+const settlementAuthSettlementEnabled = process.env.SETTLEMENT_AUTH_SETTLEMENT_ENABLED === 'true';
+const settlementSigningKeyId = process.env.SETTLEMENT_AUTH_KEY_ID || 'aurelia-settlement-2026-01';
+const settlementSigningKeyBase64 = (process.env.SETTLEMENT_AUTH_PRIVATE_KEY_PEM_BASE64 || '').replace(/\\s/g, '');
+let settlementSigner = null;
+if (settlementAuthIssuerEnabled) {
+  if (!settlementSigningKeyBase64 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(settlementSigningKeyBase64)) {
+    throw new Error('SETTLEMENT_AUTH_PRIVATE_KEY_PEM_BASE64 must contain a valid base64 PEM private key.');
+  }
+  const pemBytes = Buffer.from(settlementSigningKeyBase64, 'base64');
+  if (pemBytes.length > 8192 || pemBytes.toString('base64') !== settlementSigningKeyBase64) {
+    throw new Error('SETTLEMENT_AUTH_PRIVATE_KEY_PEM_BASE64 is malformed or oversized.');
+  }
+  settlementSigner = createSettlementSigner({
+    privateKeyPem: pemBytes.toString('utf8'),
+    keyId: settlementSigningKeyId
+  });
+}
+if (settlementAuthSettlementEnabled && !settlementAuthIssuerEnabled) {
+  throw new Error('SETTLEMENT_AUTH_SETTLEMENT_ENABLED requires the signed authorization issuer.');
+}
 const UNRESOLVED = ['CREATED', 'PENDING', 'PROCESSING', 'DISPATCHING', 'UNKNOWN', 'AMBIGUOUS', 'CAPTURED_PENDING_ACCOUNTING', 'REFUND_PENDING', 'RECONCILIATION_REQUIRED'];
 
 function requiredHex(name, bytes) {
@@ -110,6 +132,7 @@ CREATE TABLE IF NOT EXISTS transactions (
  id TEXT PRIMARY KEY, provider TEXT NOT NULL, environment TEXT NOT NULL,
  provider_order_id TEXT, provider_payment_id TEXT, provider_checkout_session_id TEXT, amount_minor INTEGER NOT NULL, currency TEXT NOT NULL,
  status TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE,
+ provider_account_id TEXT,
  device_id TEXT REFERENCES device_registrations(device_id), folio_id TEXT,
  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
  CHECK ((device_id IS NULL AND folio_id IS NULL) OR (device_id IS NOT NULL AND folio_id IS NOT NULL))
@@ -236,6 +259,9 @@ if (!transactionColumns.has('provider_payment_id')) {
 }
 if (!transactionColumns.has('provider_checkout_session_id')) {
   db.exec('ALTER TABLE transactions ADD COLUMN provider_checkout_session_id TEXT');
+}
+if (!transactionColumns.has('provider_account_id')) {
+  db.exec('ALTER TABLE transactions ADD COLUMN provider_account_id TEXT');
 }
 
 // Existing registrations were previously marked ACTIVE without proof of
@@ -753,7 +779,7 @@ app.post('/v1/admin/devices/:deviceId/revoke', ownerAuth, requireBrowserMutation
   const deviceId = req.params.deviceId;
   if (!validOpaqueId(deviceId)) return fail(res, 400, 'invalid_device_id');
   const revoke = db.transaction(() => {
-    const device = db.prepare('SELECT status FROM device_registrations WHERE device_id=?').get(deviceId);
+    const device = db.prepare('SELECT status,owner_id,property_id,attestation_verified_at,attestation_security_level,attestation_verified_boot_state,attestation_device_locked FROM device_registrations WHERE device_id=?').get(deviceId);
     if (!device) return { missing: true };
     if (device.status === 'REVOKED') return { duplicate: true };
     db.prepare("UPDATE device_registrations SET status='REVOKED',revoked_at=?,last_seen_at=? WHERE device_id=?")
@@ -799,16 +825,52 @@ app.post('/v1/devices/:deviceId/commands/lease', deviceAuth, (req, res) => {
     db.prepare(`UPDATE device_command_state SET status='LEASED',lease_token=?,lease_expires_at=?,
       attempt_count=attempt_count+1,next_attempt_at=NULL,last_error=NULL WHERE command_id=?`)
       .run(leaseDigest, expiresAt, command.command_id);
+    const payload = JSON.parse(command.payload);
+    const settlement = payload.settlement;
+    let policyLease = null, authorization = null;
+    if (settlementSigner) {
+      const issuedAt = now();
+      const leaseId = crypto.randomUUID();
+      const attested = device.owner_id !== null && device.property_id === PROPERTY_ID &&
+        !!device.attestation_verified_at &&
+        ['TRUSTED_ENVIRONMENT','STRONG_BOX'].includes(device.attestation_security_level) &&
+        device.attestation_verified_boot_state === 'VERIFIED' &&
+        device.attestation_device_locked === 1;
+      const settlementEnabled = settlementAuthSettlementEnabled &&
+        settlement.environment === 'test' && attested &&
+        settlement.tenantId === PROPERTY_ID &&
+        settlement.deviceId === deviceId;
+      const policyPayload = {
+        tenantId: settlement.tenantId, deviceId, provider: settlement.provider,
+        providerAccountId: settlement.providerAccountId, environment: settlement.environment,
+        issuer: SETTLEMENT_ISSUER, audience: SETTLEMENT_AUDIENCE, leaseId,
+        issuedAt, expiresAt, settlementEnabled
+      };
+      policyLease = settlementSigner.sign(SETTLEMENT_LEASE_TYPE, policyPayload);
+      if (settlementEnabled) {
+        const authorizationPayload = {
+          tenantId: settlement.tenantId, deviceId, provider: settlement.provider,
+          providerAccountId: settlement.providerAccountId, environment: settlement.environment,
+          commandId: settlement.commandId, providerTransactionId: settlement.providerTransactionId,
+          bookingId: settlement.bookingId, amountPaise: settlement.amountPaise,
+          method: settlement.method, reference: settlement.reference,
+          issuer: SETTLEMENT_ISSUER, audience: SETTLEMENT_AUDIENCE,
+          authorizationId: crypto.randomUUID(), leaseId, issuedAt,
+          expiresAt: new Date(Math.min(Date.parse(expiresAt), Date.now() + 5 * 60_000)).toISOString()
+        };
+        authorization = settlementSigner.sign(SETTLEMENT_AUTH_TYPE, authorizationPayload);
+      }
+    }
     return {
       command: {
         commandId: command.command_id, deviceId, sequenceId: command.sequence_id,
         transactionId: command.transaction_id, idempotencyKey: command.idempotency_key,
         folioId: command.folio_id, amountMinor: command.amount_minor,
-        currency: command.currency, payload: JSON.parse(command.payload),
-        payloadCanonical: canonicalJson(JSON.parse(command.payload)),
-        payloadHash: command.payload_hash
+        currency: command.currency, payload,
+        payloadCanonical: canonicalJson(payload), payloadHash: command.payload_hash
       },
-      cursor: cursor.last_applied_sequence, leaseToken, leaseExpiresAt: expiresAt
+      cursor: cursor.last_applied_sequence, leaseToken, leaseExpiresAt: expiresAt,
+      policyLease, authorization
     };
   });
   try {
@@ -1132,11 +1194,14 @@ app.post('/v1/payments/dispatch', ownerAuth, requireBrowserMutationOrigin, async
   }
   const config = providerRow(provider, environment);
   if (!config?.configured || !config.validated || !config.active) return fail(res, 409, 'provider_not_active_and_validated');
+  const providerCredentials = decryptCredentials(config);
+  const providerAccountId = provider === 'razorpay' ? providerCredentials.keyId : providerCredentials.appId;
+  if (typeof providerAccountId !== 'string' || !providerAccountId.trim()) return fail(res, 409, 'provider_account_identity_missing');
   const existing = db.prepare('SELECT * FROM transactions WHERE idempotency_key=?').get(b.idempotencyKey);
   if (existing) {
     const same = existing.id === b.transactionId && existing.provider === provider &&
       existing.environment === environment && existing.amount_minor === b.amountMinor &&
-      existing.currency === b.currency && existing.device_id === (b.deviceId || null) &&
+      existing.currency === b.currency && existing.provider_account_id === providerAccountId && existing.device_id === (b.deviceId || null) &&
       existing.folio_id === (b.folioId || null);
     if (!same) return fail(res, 409, 'idempotency_key_payload_conflict');
     let checkout = null;
@@ -1172,7 +1237,7 @@ app.post('/v1/payments/dispatch', ownerAuth, requireBrowserMutationOrigin, async
     return fail(res, 409, 'idempotency_conflict');
   }
   try {
-    const adapter = createProviderAdapter(provider, { credentials: decryptCredentials(config), environment });
+    const adapter = createProviderAdapter(provider, { credentials: providerCredentials, environment });
     const orderInput = provider === 'razorpay'
       ? { amountMinor: b.amountMinor, currency: b.currency, receipt: providerReference(b.transactionId) }
       : { orderId: providerReference(b.transactionId), amountMinor: b.amountMinor, currency: b.currency,
