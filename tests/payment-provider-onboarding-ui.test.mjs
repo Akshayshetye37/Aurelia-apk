@@ -54,3 +54,22 @@ test('Payment Gateway messaging preserves offline-first operation and backend-on
   assert.ok(html.includes('Provider checkout callbacks are UI signals only'));
   assert.ok(html.includes('Live collection OFF · release gate enforced'));
 });
+
+
+test('tenant live-collection switch is server-backed, double-gated and MFA protected', () => {
+  assert.ok(html.includes('refreshAureliaLiveCollectionControl'));
+  assert.ok(html.includes('initializeAureliaPaymentControls'));
+  assert.ok(html.includes('live_collection_enabled'));
+  assert.ok(html.includes('recent MFA'));
+  assert.ok(html.includes('/v1/admin/payment-controls'));
+  assert.ok(html.includes('internal release gate'));
+});
+
+test('providers without Android hosted-checkout handoff fail before creating an intent', () => {
+  assert.ok(html.includes('Android hosted-checkout handoff is not yet integrated'));
+  assert.ok(html.includes('No cloud payment intent was created.'));
+  assert.ok(html.includes('PayU'));
+  assert.ok(html.includes('PhonePe'));
+  assert.ok(html.includes('Paytm'));
+  assert.ok(html.includes('JioPay'));
+});
