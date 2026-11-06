@@ -48,17 +48,17 @@ The `payment-backend/src/server.mjs` Firebase Admin + Firestore + Secret Manager
 
 ### Six-provider cloud integration status
 
-| Provider | Factory / cloud API | Credential onboarding | Test checkout / webhook / refund | Live collection |
+| Provider | Factory / cloud API | Credential onboarding | Test checkout / webhook / refund interfaces | Android checkout handoff | Live collection |
 |---|---|---|---|---|
-| Razorpay | Wired | Secret Manager + validation | Enabled | Blocked |
-| Cashfree | Wired | Secret Manager + validation | Enabled | Blocked |
-| PayU | Wired | Secret Manager + validation | Enabled | Blocked |
-| PhonePe | Wired | Secret Manager + webhook username/password validation | Enabled | Blocked |
-| Paytm | Wired | Secret Manager + websiteName validation | Enabled | Blocked |
-| JioPay | Wired | Secret Manager + UAT credential validation | Enabled | Blocked |
+| Razorpay | Wired | Secret Manager + validation | Implemented; sandbox acceptance pending | Native SDK wired; UAT pending | Blocked |
+| Cashfree | Wired | Secret Manager + validation | Implemented; sandbox acceptance pending | Native SDK wired; UAT pending | Blocked |
+| PayU | Wired | Secret Manager + validation | Implemented; sandbox acceptance pending | Hosted-checkout handoff pending | Blocked |
+| PhonePe | Wired | Secret Manager + webhook username/password validation | Implemented; sandbox acceptance pending | Hosted-checkout handoff pending | Blocked |
+| Paytm | Wired | Secret Manager + websiteName validation | Implemented; sandbox acceptance pending | Hosted-checkout handoff pending | Blocked |
+| JioPay | Wired | Secret Manager + UAT credential validation | Implemented; sandbox acceptance pending | Hosted-checkout handoff pending | Blocked |
 | CCAvenue | Not implemented; documentation only | Not available | Not available | Blocked |
 
-The canonical factory order is `razorpay, cashfree, payu, phonepe, paytm, jiopay`. Provider checkout and refunds are test-environment only. Provider credentials are written through Secret Manager; the save route validates them before marking onboarding complete. The webhook ingress dynamically selects the provider adapter and verifies the original raw request body before fetching provider status. Recovery uses provider-specific environment and status mappings, and ambiguous create/refund operations are never blindly redispatched.
+The canonical factory order is `razorpay, cashfree, payu, phonepe, paytm, jiopay`. All six server adapters expose test/UAT/staging order, status, webhook and refund interfaces. The Android native checkout UI currently dispatches only Razorpay and Cashfree; PayU, PhonePe, Paytm and JioPay must remain unavailable in the device checkout selector until their hosted-checkout handoffs are implemented and tested. The client rejects those four before creating a cloud intent, avoiding orphaned folio locks. Provider checkout and refunds are test-environment only. Provider credentials are written through Secret Manager; the save route validates them before marking onboarding complete. The webhook ingress dynamically selects the provider adapter and verifies the original raw request body before fetching provider status. Recovery uses provider-specific environment and status mappings, and ambiguous create/refund operations are never blindly redispatched.
 
 Refund initiation is exposed only for a captured test payment through `POST /v1/payments/intents/:intentId/refunds`; status recovery uses `GET /v1/payments/intents/:intentId/refunds/:refundId`. Refund reservations are idempotent and bounded by the captured amount. These routes record provider refund evidence only; they do not post a PMS folio or claim canonical accounting settlement.
 
