@@ -370,7 +370,7 @@ function addFirebaseDependencies(contents, kotlinDsl) {
   const auth = 'com.google.firebase:firebase-auth';
   const paymentDependencies = [
     'com.razorpay:checkout:1.6.41',
-    'com.cashfree.pg:api:2.6.1'
+    'com.cashfree.pg:api:2.2.9'
   ];
   if (!/dependencies\s*\{/.test(contents)) {
     throw new Error('App Gradle file has no dependencies block; refusing an incomplete native payment integration.');
