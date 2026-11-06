@@ -555,6 +555,186 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
   }
 });
 
+function refundState(provider, status) {
+  const value = String(status || '').toUpperCase();
+  if ((provider === 'razorpay' && value === 'PROCESSED') ||
+      (provider === 'cashfree' && value === 'SUCCESS') ||
+      (provider === 'payu' && value === 'SUCCESS') ||
+      (provider === 'phonepe' && value === 'COMPLETED') ||
+      (provider === 'paytm' && ['SUCCESS', 'TXN_SUCCESS', 'COMPLETED'].includes(value)) ||
+      (provider === 'jiopay' && ['SUCCESS', 'SUCCESSFUL', 'COMPLETED', 'CAPTURED', 'S0000', 'SUC'].includes(value))) return 'SUCCEEDED';
+  if ((provider === 'razorpay' && value === 'FAILED') ||
+      (provider === 'cashfree' && value === 'FAILED') ||
+      (provider === 'payu' && value === 'FAILED') ||
+      (provider === 'phonepe' && value === 'FAILED') ||
+      (provider === 'paytm' && ['FAILED', 'FAILURE', 'TXN_FAILURE', 'REJECTED'].includes(value)) ||
+      (provider === 'jiopay' && ['FAILED', 'FAILURE'].includes(value))) return 'FAILED';
+  return value === 'NOT_FOUND' ? 'UNKNOWN' : 'PENDING';
+}
+function refundCreateInput(record, reason) {
+  const common = { orderId: record.providerOrderId, paymentId: record.providerPaymentId,
+    refundId: record.refundId, amountMinor: record.amountMinor };
+  switch (record.provider) {
+    case 'razorpay': return { paymentId: record.providerPaymentId, amountMinor: record.amountMinor,
+      receipt: record.refundId, notes: { aurelia_intent_id: record.intentId } };
+    case 'cashfree': return { ...common, idempotencyKey: record.idempotencyKey, reason };
+    case 'payu': case 'paytm': return common;
+    case 'phonepe': case 'jiopay': return { orderId: record.providerOrderId,
+      refundId: record.refundId, amountMinor: record.amountMinor };
+    default: throw new TypeError('provider_not_supported');
+  }
+}
+function refundLookupInput(record) {
+  switch (record.provider) {
+    case 'razorpay': return { refundId: record.providerRefundId, paymentId: record.providerPaymentId };
+    case 'cashfree': return { orderId: record.providerOrderId, paymentId: record.providerPaymentId, refundId: record.refundId };
+    case 'payu': return { refundId: record.refundId, paymentId: record.providerPaymentId, requestId: record.providerRequestId || undefined };
+    case 'phonepe': case 'paytm': return { orderId: record.providerOrderId, refundId: record.refundId };
+    case 'jiopay': return { refundId: record.refundId };
+    default: throw new TypeError('provider_not_supported');
+  }
+}
+async function updateRefundEvidence(refundRef, intentRef, remote, record) {
+  if (!remote || (remote.refundId && record.provider !== 'razorpay' && remote.refundId !== record.refundId) ||
+      (remote.amountMinor != null && remote.amountMinor !== record.amountMinor) ||
+      (remote.currency != null && remote.currency !== 'INR') ||
+      (remote.paymentId != null && String(remote.paymentId) !== record.providerPaymentId) ||
+      (remote.orderId != null && remote.orderId !== record.providerOrderId)) {
+    throw new Error('provider_refund_binding_mismatch');
+  }
+  const next = refundState(record.provider, remote.status);
+  await db.runTransaction(async tx => {
+    const [refundSnap, intentSnap] = await Promise.all([tx.get(refundRef), tx.get(intentRef)]);
+    if (!refundSnap.exists || !intentSnap.exists ||
+        refundSnap.data().tenantId !== record.tenantId || intentSnap.data().tenantId !== record.tenantId) {
+      throw new Error('refund_binding_not_found');
+    }
+    const current = refundSnap.data(), intent = intentSnap.data();
+    if (current.state === 'FAILED' || current.state === 'SUCCEEDED') return;
+    const patch = { state: next, providerStatus: String(remote.status || 'UNKNOWN'),
+      providerRefundId: remote.refundId || current.providerRefundId || null,
+      providerRequestId: remote.providerRequestId || current.providerRequestId || null,
+      updatedAt: FieldValue.serverTimestamp() };
+    tx.update(refundRef, patch);
+    if (next === 'FAILED') {
+      tx.update(intentRef, { refundReservedMinor: Math.max(0, Number(intent.refundReservedMinor || 0) - record.amountMinor),
+        updatedAt: FieldValue.serverTimestamp() });
+    }
+  });
+  const latest = await refundRef.get();
+  return latest.exists ? latest.data() : null;
+}
+
+app.post('/v1/payments/intents/:intentId/refunds', requireTenantAdmin,
+  express.json({ limit: '2kb', strict: true }), async (req, res) => {
+    const { intentId } = req.params, amountMinor = req.body?.amountMinor;
+    const idempotencyKey = idempotencyOf(req) || req.body?.idempotencyKey;
+    const reason = req.body?.reason == null ? 'Customer refund' : req.body.reason;
+    if (!/^[0-9a-f-]{36}$/i.test(intentId || '') || !Number.isSafeInteger(amountMinor) || amountMinor < 100 ||
+        typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(idempotencyKey) ||
+        typeof reason !== 'string' || reason.length < 3 || reason.length > 100 ||
+        /[\\u0000-\\u001f\\u007f]/.test(reason) ||
+        Object.keys(req.body || {}).some(k => !['amountMinor', 'idempotencyKey', 'reason'].includes(k))) {
+      return fail(res, 400, 'invalid_refund_request');
+    }
+    const intentRef = db.collection('paymentIntents').doc(intentId);
+    try {
+      const intentSnap = await intentRef.get();
+      if (!intentSnap.exists || intentSnap.data().tenantId !== req.tenant.id) return fail(res, 404, 'payment_intent_not_found');
+      const intent = intentSnap.data(), environment = intent.environment;
+      if (!implementedProviderAdapters().includes(intent.provider)) return fail(res, 400, 'provider_not_supported');
+      if (environment !== adapterEnvironmentOf(intent.provider, 'test')) return fail(res, 403, 'live_refunds_not_enabled');
+      if (intent.state !== 'CAPTURED' || typeof intent.providerOrderId !== 'string' ||
+          typeof intent.providerPaymentId !== 'string' || !intent.providerPaymentId) return fail(res, 409, 'captured_payment_required');
+      const refundKey = crypto.createHash('sha256').update(req.tenant.id + ':' + intent.provider + ':' +
+        environment + ':' + intent.providerAccountId + ':' + intentId + ':' + idempotencyKey).digest('hex');
+      const refundId = 'rf_' + refundKey.slice(0, 17);
+      const refundRef = db.collection('paymentRefunds').doc(refundId);
+      const reservation = await db.runTransaction(async tx => {
+        const [currentIntentSnap, priorSnap] = await Promise.all([tx.get(intentRef), tx.get(refundRef)]);
+        if (!currentIntentSnap.exists || currentIntentSnap.data().tenantId !== req.tenant.id) throw new Error('payment_intent_not_found');
+        const currentIntent = currentIntentSnap.data();
+        if (priorSnap.exists) {
+          const prior = priorSnap.data();
+          if (prior.tenantId !== req.tenant.id || prior.intentId !== intentId ||
+              prior.amountMinor !== amountMinor || prior.idempotencyKey !== idempotencyKey) throw new Error('idempotency_key_payload_conflict');
+          return { record: prior, created: false };
+        }
+        if (currentIntent.state !== 'CAPTURED' || currentIntent.provider !== intent.provider ||
+            currentIntent.providerOrderId !== intent.providerOrderId || currentIntent.providerPaymentId !== intent.providerPaymentId) {
+          throw new Error('captured_payment_binding_changed');
+        }
+        const reserved = Number(currentIntent.refundReservedMinor || 0);
+        if (!Number.isSafeInteger(reserved) || reserved < 0 || amountMinor > currentIntent.amountMinor - reserved) {
+          throw new Error('refund_amount_exceeds_unrefunded_capture');
+        }
+        const record = { refundId, tenantId: req.tenant.id, intentId, provider: intent.provider,
+          environment, providerAccountId: intent.providerAccountId, providerOrderId: intent.providerOrderId,
+          providerPaymentId: intent.providerPaymentId, amountMinor, currency: 'INR',
+          idempotencyKey, reason, state: 'DISPATCHING', createdAt: FieldValue.serverTimestamp() };
+        tx.create(refundRef, record);
+        tx.update(intentRef, { refundReservedMinor: reserved + amountMinor, updatedAt: FieldValue.serverTimestamp() });
+        return { record, created: true };
+      });
+      let record = reservation.record;
+      const { adapter, state } = await providerAdapterForTenant(req.tenant.id, record.provider, record.environment);
+      const accountField = { razorpay: 'keyId', cashfree: 'appId', payu: 'merchantKey',
+        phonepe: 'clientId', paytm: 'mid', jiopay: 'merchantId' }[record.provider];
+      if (state[accountField] !== record.providerAccountId) return fail(res, 409, 'provider_account_binding_mismatch');
+      if (!reservation.created) {
+        if (['SUCCEEDED', 'FAILED'].includes(record.state)) return res.status(200).json(record);
+        // DISPATCHING/UNKNOWN is resolved only by provider status lookup; never dispatch a duplicate refund.
+        const lookupId = record.provider === 'razorpay' ? record.providerRefundId : record.refundId;
+        if (!lookupId) return res.status(202).json({ ...record, status: 'UNKNOWN' });
+        const remote = await adapter.getRefundStatus(refundLookupInput(record));
+        record = await updateRefundEvidence(refundRef, intentRef, remote, record);
+        return res.status(202).json(record);
+      }
+      try {
+        const remote = await adapter.createRefund(refundCreateInput(record, reason));
+        if (record.provider === 'razorpay') record.providerRefundId = remote.refundId;
+        record = await updateRefundEvidence(refundRef, intentRef, remote, record);
+        return res.status(202).json(record);
+      } catch {
+        await refundRef.set({ state: 'UNKNOWN', updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+        return res.status(202).json({ ...record, state: 'UNKNOWN' });
+      }
+    } catch (error) {
+      const response = paymentRouteError(error);
+      return fail(res, response.status || 409, response.error || 'refund_request_failed');
+    }
+  });
+
+app.get('/v1/payments/intents/:intentId/refunds/:refundId', requireTenantAdmin, async (req, res) => {
+  const { intentId, refundId } = req.params;
+  if (!/^[0-9a-f-]{36}$/i.test(intentId || '') || !/^rf_[a-f0-9]{17}$/.test(refundId || '')) {
+    return fail(res, 400, 'invalid_refund_lookup');
+  }
+  try {
+    const [intentSnap, refundSnap] = await Promise.all([
+      db.collection('paymentIntents').doc(intentId).get(),
+      db.collection('paymentRefunds').doc(refundId).get()
+    ]);
+    if (!intentSnap.exists || intentSnap.data().tenantId !== req.tenant.id ||
+        !refundSnap.exists || refundSnap.data().tenantId !== req.tenant.id ||
+        refundSnap.data().intentId !== intentId) return fail(res, 404, 'refund_not_found');
+    let record = refundSnap.data();
+    if (['SUCCEEDED', 'FAILED'].includes(record.state)) return res.json(record);
+    const { adapter, state } = await providerAdapterForTenant(req.tenant.id, record.provider, record.environment);
+    const accountField = { razorpay: 'keyId', cashfree: 'appId', payu: 'merchantKey',
+      phonepe: 'clientId', paytm: 'mid', jiopay: 'merchantId' }[record.provider];
+    if (state[accountField] !== record.providerAccountId) return fail(res, 409, 'provider_account_binding_mismatch');
+    const lookupId = record.provider === 'razorpay' ? record.providerRefundId : record.refundId;
+    if (!lookupId) return res.status(202).json({ ...record, status: 'UNKNOWN' });
+    const remote = await adapter.getRefundStatus(refundLookupInput(record));
+    record = await updateRefundEvidence(db.collection('paymentRefunds').doc(refundId),
+      db.collection('paymentIntents').doc(intentId), remote, record);
+    return res.status(200).json(record);
+  } catch {
+    return fail(res, 503, 'refund_status_unavailable');
+  }
+});
+
 app.get('/v1/payments/capabilities', requireTenantPaymentActor, async (req, res) => {
   const providers = await Promise.all(providerCatalogue.flatMap(provider =>
     provider.environments.map(async environment => {
