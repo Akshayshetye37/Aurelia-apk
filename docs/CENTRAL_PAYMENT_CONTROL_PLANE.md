@@ -51,7 +51,7 @@ Each update creates a durable record in `paymentControls/{tenantId}/audit/{audit
 - The local `settlePayment()` function and native journal apply/recovery paths remain hard-locked by `src/payments/payment-safety-gate.mjs`. The cloud control document is **not** trusted by the WebView and cannot authorize offline local posting.
 - No mutable JavaScript/localStorage control value is accepted. A signed, short-lived policy lease must be delivered and verified through the trusted native device boundary before local manual posting or bridge settlement can be considered.
 - The local gate intentionally remains closed until that mechanism exists. Do not interpret the cloud control API as enabling local manual posting.
-- There is not yet an owner control-panel UI. The authenticated cloud API is the backend control surface; a UI must remain advisory and use these endpoints. The separate LAN appliance has its own owner authentication and device-command API; it is not yet wired to consume a signed cloud payment-control policy lease. Do not assume the cloud flags directly gate LAN appliance operations.
+- The Settings → Payment Gateway screen now provides an advisory tenant live-collection switch backed by the authenticated cloud control endpoints. The server independently enforces verified email, active owner/admin membership, recent MFA, the internal release gate, provider qualification and the emergency stop. The UI cannot enable the internal gate. The retired device-local merchant credential vault is not an unlock prerequisite. Provider secrets remain backend-only in Secret Manager. Do not assume the cloud flags directly gate LAN appliance operations.
 
 ## Remaining integration and release work
 
@@ -67,7 +67,7 @@ Each update creates a durable record in `paymentControls/{tenantId}/audit/{audit
 | Control | Minimum evidence before enabling |
 |---|---|
 | `manual_posting` | Real PMS-data diagnostic plus owner classification of every discrepancy; local trusted policy enforcement |
-| `test_collection` | Local credential vault, order creation, provider status verification and staff confirmation acceptance |
+| `test_collection` | Secret Manager credential validation, provider sandbox order creation, verified webhook or independent status recovery, and staff confirmation acceptance |
 | `native_settlement_bridge` | Challenge-bound trusted authorization, signature verification, replay prevention, durable acknowledgement and recovery |
 | `automatic_settlement` | Full crash, duplicate, offline, restore, persistence-failure and two-device acceptance matrix |
 | `live_collection` | Explicit production readiness review and separate owner approval; all lifecycle and reconciliation gates complete |
