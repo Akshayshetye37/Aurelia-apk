@@ -36,11 +36,10 @@ export const PROVIDERS = Object.freeze({
     environments: ['test', 'live'],
     credentials: [
       { key: 'merchantKey', label: 'Merchant Key', type: 'text', secret: false, required: true },
-      { key: 'salt', label: 'Salt', type: 'password', secret: true, required: true },
-      { key: 'saltIndex', label: 'Salt Index (if assigned)', type: 'text', secret: false, required: false }
+      { key: 'salt', label: 'Salt', type: 'password', secret: true, required: true }
     ],
-    capabilities: ['hosted_checkout', 'payment_verification'],
-    adapterStatus: 'prototype_incomplete_refunds_disabled'
+    capabilities: ['hosted_checkout', 'payment_status', 'webhooks', 'refunds'],
+    adapterStatus: 'adapter_implemented_wired_not_uat_qualified'
   },
   phonepe: {
     label: 'PhonePe Payment Gateway',
