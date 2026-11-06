@@ -185,6 +185,22 @@ function requireTenantPaymentActor(req, res, next) {
   return authenticateTenantMembership(req, res, next, ['owner', 'admin', 'staff'], 'active_tenant_payment_membership_required');
 }
 
+async function requireRegisteredPaymentDevice(req, res, next) {
+  try {
+    req.device = await authenticatePaymentDeviceRequest({
+      db, tenantId: req.tenant.id, deviceId: req.params.deviceId,
+      method: req.method, originalUrl: req.originalUrl,
+      body: req.body || {}, headers: req.headers
+    });
+    return next();
+  } catch (error) {
+    const code = String(error?.message || 'device_request_rejected');
+    const status = code.includes('signature_required') || code.includes('timestamp_out_of_range') ? 401 :
+      code.includes('replay') ? 409 : 403;
+    return fail(res, status, code.slice(0, 96));
+  }
+}
+
 async function enforcePaymentControl(req, res, control) {
   let controls;
   try {
@@ -201,6 +217,99 @@ async function enforcePaymentControl(req, res, control) {
   req.paymentControls = controls;
   return null;
 }
+
+// Hardware-attested Android device lifecycle. The attestation verifier is a
+// private Cloud Run sidecar; if it is unavailable, enrollment fails closed.
+app.post('/v1/admin/devices/enrollment/challenge', requireTenantAdmin,
+  express.json({ limit: '2kb', strict: true }), async (req, res) => {
+    const deviceId = req.body?.deviceId;
+    if (Object.keys(req.body || {}).some(key => key !== 'deviceId') ||
+        typeof deviceId !== 'string' || !/^[A-Za-z0-9_-]{6,64}$/.test(deviceId)) {
+      return fail(res, 400, 'invalid_payment_device_enrollment_request');
+    }
+    try {
+      const challenge = await createDeviceEnrollmentChallenge({
+        db, tenantId: req.tenant.id, actorUid: req.actor.uid, deviceId
+      });
+      return res.status(201).json(challenge);
+    } catch (error) {
+      return fail(res, 409, String(error?.message || 'payment_device_challenge_failed').slice(0, 96));
+    }
+  });
+
+app.post('/v1/admin/devices/enroll', requireTenantAdmin,
+  express.json({ limit: '512kb', strict: true }), async (req, res) => {
+    const body = req.body || {};
+    if (Object.keys(body).some(key => !['deviceId','challengeId','publicKeyPem','certificateChainBase64'].includes(key)) ||
+        !['deviceId','challengeId','publicKeyPem','certificateChainBase64'].every(key => Object.hasOwn(body,key))) {
+      return fail(res, 400, 'invalid_payment_device_enrollment_request');
+    }
+    try {
+      const result = await verifyAndRegisterDevice({
+        db, tenantId: req.tenant.id, actorUid: req.actor.uid,
+        deviceId: body.deviceId, challengeId: body.challengeId,
+        publicKeyPem: body.publicKeyPem, certificateChainBase64: body.certificateChainBase64,
+        attestationVerifierUrl
+      });
+      return res.status(202).json(result);
+    } catch (error) {
+      return fail(res, 422, String(error?.message || 'android_key_attestation_rejected').slice(0, 96));
+    }
+  });
+
+app.post('/v1/admin/devices/:deviceId/activate', requireTenantAdmin, async (req, res) => {
+  if (req.tenant.role !== 'owner') return fail(res, 403, 'payment_device_owner_approval_required');
+  try {
+    return res.json(await activatePaymentDevice({
+      db, tenantId: req.tenant.id, actorUid: req.actor.uid, deviceId: req.params.deviceId
+    }));
+  } catch (error) {
+    return fail(res, 409, String(error?.message || 'payment_device_activation_failed').slice(0, 96));
+  }
+});
+
+app.post('/v1/admin/devices/:deviceId/revoke', requireTenantAdmin, async (req, res) => {
+  if (req.tenant.role !== 'owner') return fail(res, 403, 'payment_device_owner_approval_required');
+  try {
+    return res.json(await revokePaymentDevice({
+      db, tenantId: req.tenant.id, actorUid: req.actor.uid, deviceId: req.params.deviceId
+    }));
+  } catch (error) {
+    return fail(res, 409, String(error?.message || 'payment_device_revocation_failed').slice(0, 96));
+  }
+});
+
+app.post('/v1/devices/:deviceId/commands/lease', requireTenantPaymentActor,
+  express.json({ limit: '2kb', strict: true }), requireRegisteredPaymentDevice, async (req, res) => {
+    if (!settlementIssuerEnabled) return fail(res, 503, 'settlement_authority_not_configured');
+    const controls = await readPaymentControls({ db, tenantId: req.tenant.id });
+    const settlementAllowed = paymentControlAllows(controls, 'test_collection') &&
+      paymentControlAllows(controls, 'automatic_settlement') &&
+      paymentControlAllows(controls, 'native_settlement_bridge');
+    try {
+      const signer = await getSettlementSigner();
+      const lease = await leaseNextSettlementCommand({
+        db, tenantId: req.tenant.id, deviceId: req.device.deviceId,
+        signer, settlementAllowed
+      });
+      return res.json(lease || { command: null });
+    } catch (error) {
+      return fail(res, 409, String(error?.message || 'payment_device_command_lease_failed').slice(0, 96));
+    }
+  });
+
+app.post('/v1/devices/:deviceId/commands/:commandId/ack', requireTenantPaymentActor,
+  express.json({ limit: '2kb', strict: true }), requireRegisteredPaymentDevice, async (req, res) => {
+    try {
+      const result = await acknowledgeSettlementCommand({
+        db, tenantId: req.tenant.id, deviceId: req.device.deviceId,
+        commandId: req.params.commandId, body: req.body || {}
+      });
+      return res.json(result);
+    } catch (error) {
+      return fail(res, 409, String(error?.message || 'payment_device_acknowledgement_failed').slice(0, 96));
+    }
+  });
 
 // Owner/admin control plane. Authentication middleware enforces verified email,
 // recent MFA, active tenant membership and owner/admin role.
