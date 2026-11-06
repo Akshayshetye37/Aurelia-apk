@@ -5,7 +5,7 @@ import { PaytmAdapter } from '../src/providers/paytm-adapter.mjs';
 
 const key='merchant-secret';
 const checksumImpl={
-  async generateSignature(value,secret){return crypto.createHash('sha256').update(String(value)+secret).digest('hex');},
+  async generateSignature(value,secret){return crypto.createHash('sha256').update((typeof value==='string'?value:JSON.stringify(value))+secret).digest('hex');},
   async verifySignature(value,secret,signature){
     return signature===crypto.createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).update(secret).digest('hex');
   }
