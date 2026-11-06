@@ -41,9 +41,9 @@ export function providerQualificationStatus(providerId) {
   if (!FACTORIES[providerId]) return { implemented: false, testCheckout: false, liveCollection: false };
   return {
     implemented: true,
-    testCheckout: ['razorpay', 'cashfree'].includes(providerId),
+    testCheckout: true,
     liveCollection: false,
-    cloudCheckoutApiEnabled: ['razorpay', 'cashfree'].includes(providerId),
+    cloudCheckoutApiEnabled: true,
     merchantUatRequired: true,
     canonicalFolioPostingRequired: true,
     physicalDeviceAcceptanceRequired: true
