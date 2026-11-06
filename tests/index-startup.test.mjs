@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import test from 'node:test';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 test('classic inline application scripts parse without syntax errors', () => {
@@ -25,7 +23,7 @@ test('recovery guards are hoisted and status is initialized before startup recov
   assert.equal(html.indexOf('RECOVERY_CHECK_PENDING'), guard + 'var '.length,
     'first recovery-guard occurrence must be its declaration, not an early read');
   const strictPersist = html.indexOf('function persistStrict(){');
-  const status = html.indexOf("\\nlet LOCAL_STATE_STATUS='missing';", strictPersist);
+  const status = html.indexOf("\nlet LOCAL_STATE_STATUS='missing';", strictPersist);
   const load = html.indexOf('function loadAll()', strictPersist);
   assert.ok(strictPersist >= 0 && status > strictPersist && load > status,
     'local state status must be initialized before loadAll executes');
