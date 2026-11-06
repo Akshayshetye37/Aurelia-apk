@@ -147,7 +147,7 @@ test('captured commands retain exact provider and PMS folio settlement bindings'
   assert.match(source, /ALTER TABLE transactions ADD COLUMN provider_payment_id TEXT/);
   assert.match(source, /providerPaymentId: verifiedPaymentId/);
   assert.match(source, /bookingId: current\.folio_id/);
-  assert.match(source, /amount: current\.amount_minor \/ 100/);
+  assert.match(source, /amountPaise: currentOrder\\.data\\(\\)\\.amountMinor/);
   assert.match(source, /method: current\.provider/);
   assert.match(source, /providerAccountId: current\.provider_account_id/);
   assert.match(source, /reference: verifiedPaymentId/);
