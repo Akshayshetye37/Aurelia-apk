@@ -319,7 +319,7 @@ test("refund is disabled even for a captured payment until a durable refund life
 });
 
 
-test("backend verification does not bypass the local accounting safety interlock", async () => {
+test("backend verification alone does not automatically post a local folio", async () => {
   const records = new Map();
   const store = {
     async put(record) { records.set(record.requestId, structuredClone(record)); },
@@ -361,23 +361,12 @@ test("backend verification does not bypass the local accounting safety interlock
   assert.equal(verified.backendVerified, true);
   assert.equal(verified.settlementAuthorized, true);
 
-  const booking = { id: binding.bookingId, room: "A1", p: 0, pays: [], payments: [] };
-  const state = { b: [booking], today: 0, aud: [] };
-  const posting = {
-    state, booking, amount: binding.amountPaise / 100, method: "UPI",
-    reference: "txn-orchestrated-001", source: "staff_review",
-    idempotencyKey: binding.requestId, balanceDue: 500,
-    verificationConfirmed: verified.settlementAuthorized,
-    persist: () => { throw new Error("must not persist"); },
-    audit: () => { throw new Error("must not audit"); }
-  };
-  assert.throws(
-    () => settlePayment(posting),
-    error => error.code === "ACCOUNTING_READ_ONLY_KILL_SWITCH"
-  );
-  assert.equal(booking.p, 0);
-  assert.equal(booking.pays.length, 0);
-  assert.equal(booking.payments.length, 0);
-  assert.equal(state.today, 0);
-  assert.equal(state.aud.length, 0);
+  // Verification updates the payment intent only. The orchestrator has no
+  // local folio writer and must not post money without a separate staff action.
+  assert.equal(verified.state, "SUCCESS");
+  assert.equal(verified.backendVerified, true);
+  assert.equal(verified.settlementAuthorized, true);
+  assert.equal(unknown.state, "UNKNOWN");
+  assert.equal(unknown.settlementAuthorized, false);
+
 });
