@@ -2,7 +2,7 @@
 
 Aurelia is an offline-first property-management system (PMS) for reservations, guests, rooms, folios and operations, with an optional hybrid payment backend.
 
-> **Payment release status: LIVE GATEWAY COLLECTION OFF.** Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available on the device. Automatic gateway settlement, native gateway folio projection and live collection remain fail-closed until the release gates below are completed and approved.
+> **Payment release status: LIVE GATEWAY COLLECTION OFF.** Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available on the device. Cloud payment recovery, automatic gateway settlement, native gateway folio projection and live collection are not production-ready and remain fail-closed until the release gates below are completed and approved.
 
 ## Project location
 
