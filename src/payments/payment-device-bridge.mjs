@@ -19,6 +19,12 @@ function nativeRequest(type, payload = {}, timeoutMs = nativeTimeoutMs) {
   });
 }
 
+window.aureliaNativePaymentEvent = (transactionId, provider, status, providerPaymentId) => {
+  window.dispatchEvent(new CustomEvent("aurelia:native-payment-event", {
+    detail: { transactionId, provider, status, providerPaymentId: providerPaymentId || null }
+  }));
+};
+
 window.aureliaNativePaymentDeviceResult = (requestId, ok, raw) => {
   const item = pending.get(requestId);
   if (!item) return;
