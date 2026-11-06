@@ -63,8 +63,8 @@ test("bridge rejects asynchronous mutation callbacks before commit", async () =>
   assert.equal((await repository.claimOutboxBatch({ deviceId: "device-test" })).length, 0);
 });
 
-test("bridge requires a verified contract-compatible engine and tenant context", () => {
+test("bridge requires a verified contract-compatible engine and tenant context", async () => {
   const bridge = new PmsRepositoryBridge();
   assert.throws(() => bridge.bindActiveEngine({}), /repository contract/);
-  assert.throws(() => bridge.fetchEntity("booking", "x"), /not bound/);
+  await assert.rejects(bridge.fetchEntity("booking", "x"), /not bound/);
 });
