@@ -110,16 +110,16 @@ export class SmartCheckpoint {
     const identity = id(paymentId, "payment ID");
     return this.mutate(folioId, expectedVersion, folio => {
       const checkpoint = calculateFolioCheckpoint(folio);
-      if (checkpoint.state === "PENDING_REVIEW") throw fail("PAYMENT_REVIEW_REQUIRED", "Unverified payment evidence must be reviewed before adding another payment");
-      if (checkpoint.remainingDuePaise <= 0 || amount > checkpoint.remainingDuePaise) {
-        throw fail("PAYMENT_AMOUNT_MISMATCH", "Payment must be positive and cannot exceed the current outstanding balance");
-      }
       const prior = (folio.paymentEntries || []).find(row => row.paymentId === identity);
       if (prior) {
         if (prior.amountPaise !== amount || prior.method !== paymentMethod || prior.kind !== "PAYMENT") {
           throw fail("PAYMENT_IDEMPOTENCY_CONFLICT", "Payment ID was already used with different details");
         }
         return { duplicate: true, folio, checkpoint };
+      }
+      if (checkpoint.state === "PENDING_REVIEW") throw fail("PAYMENT_REVIEW_REQUIRED", "Unverified payment evidence must be reviewed before adding another payment");
+      if (checkpoint.remainingDuePaise <= 0 || amount > checkpoint.remainingDuePaise) {
+        throw fail("PAYMENT_AMOUNT_MISMATCH", "Payment must be positive and cannot exceed the current outstanding balance");
       }
       const entry = {
         paymentId: identity, kind: "PAYMENT", status: "POSTED", amountPaise: amount,
@@ -146,14 +146,14 @@ export class SmartCheckpoint {
     const identity = id(adjustmentId, "adjustment ID");
     return this.mutate(folioId, expectedVersion, folio => {
       const checkpoint = calculateFolioCheckpoint(folio);
-      if (checkpoint.state === "PENDING_REVIEW") throw fail("PAYMENT_REVIEW_REQUIRED", "Unverified payment evidence must be resolved first");
-      if (checkpoint.remainingDuePaise <= 0 || amount > checkpoint.remainingDuePaise) {
-        throw fail("WRITE_OFF_AMOUNT_MISMATCH", "Write-off cannot exceed the outstanding balance");
-      }
       const prior = (folio.adjustmentLines || []).find(row => row.adjustmentId === identity);
       if (prior) {
         if (prior.amountPaise !== amount || prior.kind !== "CREDIT") throw fail("ADJUSTMENT_IDEMPOTENCY_CONFLICT", "Adjustment ID was reused");
-        return { duplicate: true, folio };
+        return { duplicate: true, folio, checkpoint };
+      }
+      if (checkpoint.state === "PENDING_REVIEW") throw fail("PAYMENT_REVIEW_REQUIRED", "Unverified payment evidence must be resolved first");
+      if (checkpoint.remainingDuePaise <= 0 || amount > checkpoint.remainingDuePaise) {
+        throw fail("WRITE_OFF_AMOUNT_MISMATCH", "Write-off cannot exceed the outstanding balance");
       }
       folio.adjustmentLines = [...(folio.adjustmentLines || []), {
         adjustmentId: identity, kind: "CREDIT", amountPaise: amount,
