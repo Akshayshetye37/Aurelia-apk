@@ -33,7 +33,15 @@ window.aureliaNativePaymentDeviceResult = (requestId, ok, raw) => {
   }));
 };
 
-async function postJson(baseUrl, path, body, tokenProvider) {
+export async function getPaymentDeviceIdToken() {
+  const result = await nativeRequest("paymentDeviceGetIdToken");
+  if (typeof result?.idToken !== "string" || result.idToken.length < 20) {
+    throw new Error("A signed-in Firebase identity is required.");
+  }
+  return result.idToken;
+}
+
+async function postJson(baseUrl, path, body, tokenProvider = getPaymentDeviceIdToken) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
   try {
@@ -59,7 +67,7 @@ async function postJson(baseUrl, path, body, tokenProvider) {
   } finally { clearTimeout(timer); }
 }
 
-export async function enrollPaymentDevice({ applianceBaseUrl, deviceId = crypto.randomUUID(), tokenProvider } = {}) {
+export async function enrollPaymentDevice({ applianceBaseUrl, deviceId = crypto.randomUUID(), tokenProvider = getPaymentDeviceIdToken } = {}) {
   const base = new URL(applianceBaseUrl);
   if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash ||
       (base.pathname !== "/" && base.pathname !== "")) throw new TypeError("A trusted HTTPS appliance origin is required");
@@ -92,13 +100,13 @@ export async function enrollPaymentDevice({ applianceBaseUrl, deviceId = crypto.
   return { deviceId, status: "ACTIVE", securityLevel: identity.securityLevel, activation };
 }
 
-export async function leaseNextSettlementCommand({ tokenProvider } = {}) {
+export async function leaseNextSettlementCommand({ tokenProvider = getPaymentDeviceIdToken } = {}) {
   if (typeof tokenProvider !== "function") throw new TypeError("A Firebase ID-token provider is required for cloud device synchronization");
   const idToken = await tokenProvider();
   return nativeRequest("paymentDeviceLeaseNext", { idToken });
 }
 
-export async function acknowledgeSettlementCommand({ commandId, ledgerAckId, tokenProvider } = {}) {
+export async function acknowledgeSettlementCommand({ commandId, ledgerAckId, tokenProvider = getPaymentDeviceIdToken } = {}) {
   if (!/^[0-9a-f-]{36}$/i.test(String(commandId || ""))) throw new TypeError("Invalid settlement command ID");
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(String(ledgerAckId || ""))) throw new TypeError("Invalid durable ledger receipt ID");
   if (typeof tokenProvider !== "function") throw new TypeError("A Firebase ID-token provider is required for cloud device acknowledgement");
