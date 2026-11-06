@@ -4145,7 +4145,7 @@ if (typeof window.render === "function") window.render();
   const signedIn=!!authState.user;
   const authPanel=signedIn?'<p class="lab">Signed in as '+esc(authState.user.email||'authorised administrator')+'</p><button class="btn sm ghost" onclick="signOutAureliaPaymentAdmin()">Sign out</button>':'<label class="fld"><span>Administrator email</span><input id="aurelia-payment-admin-email" type="email" autocomplete="username"></label><label class="fld"><span>Password</span><input id="aurelia-payment-admin-password" type="password" autocomplete="current-password"></label><button class="btn sm" onclick="signInAureliaPaymentAdmin()">Sign in securely</button>';
   const status=state.loaded?(state.enabled?'ON':'OFF'):'Not loaded';
-  const gate=state.loaded?(state.internalAllowed?'Internal release gate approved':'Internal release gate OFF'):'Server state not loaded';
+  const gate=state.loaded?(state.emergencyStop?'Emergency stop engaged':state.internalAllowed?'Internal release gate approved':'Internal release gate OFF'):'Server state not loaded';
   const toggleDisabled=!signedIn||!state.loaded||state.busy||state.controlState!=='CONFIGURED'||(!state.enabled&&!state.internalAllowed);
   const initialize=state.controlState==='UNCONFIGURED'?'<button class="btn sm" onclick="initializeAureliaPaymentControls()" '+(!signedIn||state.busy?'disabled':'')+'>Initialize safe server defaults</button>':'';
   return '<section class="card" style="margin-top:14px"><div class="row"><h3>Live Collection</h3><span class="tag out">'+esc(status)+'</span></div><p class="lab">Tenant administrator control. The server remains authoritative and requires verified email, owner/admin membership, recent MFA and the independent internal release gate. This switch cannot approve the internal gate.</p>'+authPanel+'<p class="lab" role="status">'+esc(gate)+' · '+esc(state.controlState)+'</p>'+(state.error?'<p class="lab" role="alert">'+esc(state.error)+'</p>':'')+'<div class="row" style="flex-wrap:wrap"><button class="btn sm ghost" onclick="refreshAureliaLiveCollectionControl()" '+(!signedIn||state.busy?'disabled':'')+'>Refresh server status</button>'+initialize+'<button class="btn sm" onclick="setAureliaLiveCollectionEnabled('+(!state.enabled)+')" '+(toggleDisabled?'disabled':'')+'>'+(state.enabled?'Turn OFF':'Turn ON')+'</button></div><p class="lab">OFF by default. Turning OFF blocks new live orders; unresolved in-flight intents remain pending/reconciliation-required for server-side review. Enabling requires recent MFA and will be rejected unless internal release approval is already active.</p></section>';
@@ -4158,7 +4158,7 @@ if (typeof window.render === "function") window.render();
    await window.aureliaPaymentAdminRequest('/v1/admin/payment-controls','PATCH',{
     changes:{emergency_stop:true},reason:'Initialize payment controls with emergency stop engaged and all capabilities disabled.'
    });
-   state.controlState='CONFIGURED';state.loaded=true;state.enabled=false;state.internalAllowed=false;
+   state.controlState='CONFIGURED';state.loaded=true;state.enabled=false;state.emergencyStop=true;state.internalAllowed=false;
   }catch(error){state.error=error.message||'Could not initialize safe payment controls.';}
   finally{state.busy=false;window.render();}
  };
@@ -4171,6 +4171,7 @@ if (typeof window.render === "function") window.render();
    state.controlState=String(data.controlState||'UNKNOWN');
    state.loaded=state.controlState==='CONFIGURED';
    state.enabled=controls.live_collection_enabled===true;
+   state.emergencyStop=controls.emergency_stop!==false;
    state.internalAllowed=controls.live_collection===true&&controls.emergency_stop===false;
    if(!state.loaded)state.error='Payment controls are not configured or could not be verified. Live collection remains OFF.';
   }catch(error){state.loaded=false;state.enabled=false;state.internalAllowed=false;state.controlState='UNAVAILABLE';state.error=error.message||'Could not load server payment controls.';}
@@ -4189,6 +4190,7 @@ if (typeof window.render === "function") window.render();
    });
    const controls=result.controls||{};
    state.enabled=controls.live_collection_enabled===true;
+   state.emergencyStop=controls.emergency_stop!==false;
    state.internalAllowed=controls.live_collection===true&&controls.emergency_stop===false;
    state.controlState='CONFIGURED';state.loaded=true;
   }catch(error){state.error=error.message||'The server rejected the live-collection change.';}
