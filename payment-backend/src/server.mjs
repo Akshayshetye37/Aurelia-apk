@@ -505,9 +505,34 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
   }
   const idempotencyKey = idempotencyOf(req) || body.idempotencyKey;
   if (!idempotencyKey || !/^[A-Za-z0-9._:-]{12,100}$/.test(idempotencyKey)) return fail(res, 400, 'idempotency_key_required');
-  if (body.provider === 'cashfree') {
+  const adapterEnvironment = adapterEnvironmentOf(body.provider, body.environment);
+  if (!implementedProviderAdapters().includes(body.provider) || !adapterEnvironment) return fail(res, 400, 'provider_not_supported');
+  if (body.environment === 'live' && providerQualificationStatus(body.provider).liveCollection !== true) return fail(res, 403, 'live_collection_not_enabled');
+  if (body.environment !== 'test') return fail(res, 403, 'live_collection_not_enabled');
+  if (['cashfree', 'phonepe', 'paytm', 'jiopay', 'payu'].includes(body.provider)) {
     let returnUrl;
-    try { returnUrl = new URL(body.returnUrl); } catch { return fail(res, 400, 'invalid_cashfree_return_url'); }
+    try { returnUrl = new URL(body.returnUrl); } catch { return fail(res, 400, 'invalid_provider_return_url'); }
+    if (returnUrl.protocol !== 'https:' || returnUrl.username || returnUrl.password || !origins.has(returnUrl.origin)) {
+      return fail(res, 400, 'provider_return_url_origin_not_allowed');
+    }
+  }
+  if (body.provider === 'payu' && (!body.customer || typeof body.customer.firstName !== 'string' ||
+      !body.customer.firstName.trim() || typeof body.customer.email !== 'string' ||
+      !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.customer.email))) {
+    return fail(res, 400, 'invalid_payu_customer_schema');
+  }
+  if (['cashfree', 'phonepe', 'jiopay'].includes(body.provider) &&
+      (!body.customer || typeof body.customer.id !== 'string' ||
+       typeof body.customer.phone !== 'string' || !/^\\+?[0-9]{8,15}$/.test(body.customer.phone))) {
+    return fail(res, 400, 'invalid_provider_customer_schema');
+  }
+  if (body.provider === 'paytm' && (!body.customer || typeof body.customer.id !== 'string')) {
+    return fail(res, 400, 'invalid_paytm_customer_schema');
+  }
+  const intentControl = 'test_collection';
+  const blocked = await enforcePaymentControl(req, res, intentControl);
+  if (blocked) return blocked;
+  try { returnUrl = new URL(body.returnUrl); } catch { return fail(res, 400, 'invalid_cashfree_return_url'); }
     if (returnUrl.protocol !== 'https:' || returnUrl.username || returnUrl.password ||
         !origins.has(returnUrl.origin)) {
       return fail(res, 400, 'cashfree_return_url_origin_not_allowed');
@@ -532,7 +557,7 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
     return fail(res, 409, 'live_payments_blocked_accounting_pipeline_incomplete');
   }
   try {
-    const state = await providerTenantDoc(req.tenant.id, body.provider, body.environment).get();
+    const state = await providerTenantDoc(req.tenant.id, body.provider, adapterEnvironment).get();
     if (!state.exists || state.data().active !== true || state.data().credentialsValidated !== true) {
       return fail(res, 409, 'provider_not_active');
     }
@@ -542,7 +567,7 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
         return fail(res, 409, 'sandbox_acceptance_required');
       }
     }
-    const result = await paymentRepository.initializePaymentIntent(req.actor.uid, { ...body, idempotencyKey });
+    const result = await paymentRepository.initializePaymentIntent(req.actor.uid, { ...body, environment: adapterEnvironment, idempotencyKey });
     return res.status(result.isDuplicate ? 200 : result.status === 'CREATED' ? 201 : result.status === 'FAILED_TO_INITIATE' ? 503 : 202).json(result);
   } catch (error) {
     const response = paymentRouteError(error);
