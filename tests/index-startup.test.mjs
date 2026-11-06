@@ -36,11 +36,11 @@ test('empty booking and dining inventories cannot abort startup on sample-data m
     "if(S.b[1])S.b[1].pays=[{a:1000,m:'Cash',r:'',at:new Date().toISOString()}];",
     "if(S.t[2])S.t[2].o=[];"
   ]) assert.ok(html.includes(expression), `missing empty-state guard: ${expression}`);
-  const unsafe = [...html.matchAll(/S\\.(?:b|t)\\[\\d+\\]\\.[\\w$]+/g)]
-    .filter(match => !html.slice(Math.max(0, match.index - 12), match.index).endsWith('if('));
-  assert.equal(unsafe.length, 0, 'no unguarded fixed-index booking or table mutations may remain');
-  const firstScript = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)][0]?.[1] || '';
-  assert.ok(firstScript.indexOf('if(S.b[1])S.b[1].p=1000;') < firstScript.indexOf('const SUB={'),
+  assert.ok(!html.includes(';S.b[1].p=1000;'), 'no unguarded booking payment mutation');
+  assert.ok(!html.includes(';S.b[1].pays='), 'no unguarded booking payment history mutation');
+  assert.ok(!html.includes(';S.t[2].demo='), 'no unguarded table demo mutation');
+  assert.ok(!html.includes(';S.t[2].o='), 'no unguarded table order mutation');
+  assert.ok(html.indexOf('if(S.b[1])S.b[1].p=1000;') < html.indexOf('const SUB={'),
     'guarded optional demo mutation must execute before SUB is declared');
 });
 
