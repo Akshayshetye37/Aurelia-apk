@@ -492,3 +492,20 @@ The browser/PWA IndexedDB repository is implemented at `src/storage/indexeddb-pm
 - Added a regression test that checks the ordering and fail-closed bootstrap gate.
 
 **Compatibility boundary:** after successful storage verification, the existing interface is replayed in legacy compatibility mode. Its existing domain reads/writes still use the synchronous localStorage state. The bridge is bound but not yet used by the screens. This startup sequencing change is not a completed domain persistence cutover and does not authorize payment-to-folio integration.
+
+
+## Native SQLite repository parity update (2026-11-07)
+
+The Android SQLite repository and registered Capacitor plugin now expose the shared repository operations required by the local-first contract:
+
+- Entity listing by entity type, with stable identifier ordering.
+- Legacy snapshot import in one SQLite transaction, including all top-level legacy records, the exact raw snapshot and migration marker. Replays accept only the same migration ID, source key and exact raw payload.
+- Migration snapshot read-back, followed by JavaScript adapter verification of the raw snapshot, source key, entity count and every imported entity value.
+- Outbox batch leasing for pending/due-retry events and expired in-flight leases, with bounded batch/lease parameters and incremented attempt counts.
+- Lease-owner and sequence-checked acknowledgement, retry scheduling and conflict marking. Invalid/stale leases are rejected.
+- Entity optimistic-version checks and atomic entity-plus-outbox writes remain inside one native SQLite transaction. The plugin never exposes transaction handles to JavaScript.
+- SQLite schema version 2 adds durable acknowledgement timestamps and upgrades version 1 databases without discarding existing entities, outbox events or migration snapshots.
+
+New native adapter tests cover the JavaScript contract surface, stale-version rejection, migration replay/read-back, simulated interruption before migration commit, retry backoff, lease ownership, acknowledgement and conflict transitions. Static Android template checks require the complete plugin/repository method surface.
+
+**Verification boundary:** these are source-level implementation and adapter tests. GitHub Actions must pass the latest Android generation/compile workflow before claiming the Java templates compile. Simulated interruption tests do not replace instrumentation tests that kill the Android process during a real SQLite transaction or physical-device power-loss/restart testing. Native SQLite is still not selected by the bootstrap coordinator, and no PMS screen has been cut over to this adapter. Browser/PWA continues to use IndexedDB; Android UI continues in legacy compatibility mode until contract conformance, real-device recovery and complete UI migration are verified.
