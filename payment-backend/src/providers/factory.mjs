@@ -15,10 +15,10 @@ const REQUIRED_OPERATIONS = Object.freeze([
 const FACTORIES = Object.freeze({
   razorpay: options => new RazorpayAdapter(options),
   cashfree: options => new CashfreeAdapter(options),
-  jiopay: options => new JioPayAdapter(options),
-  paytm: options => new PaytmAdapter(options),
+  payu: options => new PayUAdapter(options),
   phonepe: options => new PhonePeAdapter(options),
-  payu: options => new PayUAdapter(options)
+  paytm: options => new PaytmAdapter(options),
+  jiopay: options => new JioPayAdapter(options)
 });
 
 export function createProviderAdapter(providerId, options) {
