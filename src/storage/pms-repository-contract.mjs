@@ -5,7 +5,7 @@
 export const PMS_REPOSITORY_CONTRACT_VERSION = 1;
 export const PMS_ENTITY_TYPES = Object.freeze(["booking","folio","guest","room","room_block","inventory","ledger","audit"]);
 export function assertPmsIdentity(value, label="identity") {
-  if (typeof value !== "string" || !value.trim() || value.length > 180 || /[\\u0000-\\u001f]/.test(value)) throw new TypeError("Invalid " + label);
+  if (typeof value !== "string" || !value.trim() || value.length > 180 || /[\u0000-\u001f]/.test(value)) throw new TypeError("Invalid " + label);
   return value;
 }
 export function assertPmsVersion(value, label="version") {
