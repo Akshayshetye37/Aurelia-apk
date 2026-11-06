@@ -60,7 +60,7 @@ test("IndexedDB journal serializes duplicate appends and rejects payload conflic
   const results = await Promise.all([j.append(input), j.append(input)]);
   assert.equal(results.filter(r => !r.duplicate).length, 1);
   assert.equal(results.filter(r => r.duplicate).length, 1);
-  await assert.rejects(j.append({ ...input, payload: { changed: true } }), { code: "SETTLEMENT_IDEMPOTENCY_CONFLICT" });
+  await assert.rejects(j.append({ ...input, payload: { command: { ...input.payload.command, amountPaise: 250000 } } }), { code: "SETTLEMENT_IDEMPOTENCY_CONFLICT" });
   const otherTenant = await j.append({ ...input, tenantId: "tenant_02", payload: { command: { ...input.payload.command, tenantId: "tenant_02" } } });
   assert.notEqual(otherTenant.record.key, results[0].record.key);
 });
