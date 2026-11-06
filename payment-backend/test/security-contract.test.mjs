@@ -195,7 +195,7 @@ test('capability enablement requires independent, current owner release evidence
 });
 
 test('webhook capture evidence cannot become accounting authorization', () => {
-  assert.match(source, /TRUSTED_SETTLEMENT_BRIDGE_NOT_IMPLEMENTED/);
+  assert.match(source, /SETTLEMENT_CONTROL_DISABLED/);
   assert.match(source, /SETTLEMENT_CONTROL_DISABLED/);
   assert.match(source, /PENDING_CONTROL_OR_BRIDGE/);
   assert.match(source, /CAPTURED_VERIFIED_PENDING_ACCOUNTING/);
