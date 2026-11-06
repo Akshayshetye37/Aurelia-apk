@@ -40,12 +40,12 @@ export function normalizePaymentControls(data) {
     typeof data?.updatedBy === "string" && data.updatedBy.length > 0;
   if (!data || typeof data !== "object" || Array.isArray(data) ||
       data.schemaVersion !== 1 || !metadataValid ||
-      PAYMENT_CONTROL_IDS.some(key => typeof data[key] !== "boolean")) {
+      PAYMENT_CONTROL_IDS.some(key => key !== "live_collection_enabled" && typeof data[key] !== "boolean") ||\n      (data.live_collection_enabled !== undefined && typeof data.live_collection_enabled !== "boolean")) {
     return { ...PAYMENT_CONTROL_DEFAULTS, controlState: "INVALID_FAIL_CLOSED" };
   }
   return {
     schemaVersion: 1,
-    ...Object.fromEntries(PAYMENT_CONTROL_IDS.map(key => [key, data[key]])),
+    ...Object.fromEntries(PAYMENT_CONTROL_IDS.map(key => [key, data[key] ?? PAYMENT_CONTROL_DEFAULTS[key]])),
     controlState: "CONFIGURED"
   };
 }
