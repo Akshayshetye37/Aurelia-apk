@@ -149,7 +149,7 @@ test('captured commands retain exact provider and PMS folio settlement bindings'
   assert.match(source, /bookingId: current\.folio_id/);
   assert.match(source, /amount: current\.amount_minor \/ 100/);
   assert.match(source, /method: current\.provider/);
-  assert.match(source, /verificationConfirmed: true/);
+  assert.match(source, /providerAccountId: current\\.provider_account_id/);\n  assert.match(source, /reference: verifiedPaymentId/);
   assert.match(source, /idempotencyKey: 'settlement:' \+ current\.provider \+ ':command:' \+ commandId/);
   assert.match(source, /providerOrderId, remote\.paymentId \|\| null/);
 });
