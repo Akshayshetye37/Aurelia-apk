@@ -20,7 +20,7 @@ test('Paytm initiates hosted JS checkout with signed body and returns txn token'
     const request=JSON.parse(options.body);
     assert.equal(request.body.txnAmount.value,'125.00');
     assert.equal(request.body.txnAmount.currency,'INR');
-    assert.equal(request.head.signature,await checksumImpl.generateSignature(JSON.stringify(request.body),key));
+    assert.equal(await checksumImpl.verifySignature(JSON.stringify(request.body),key,request.head.signature),true);
     return await signed({txnToken:'txn-token-123',resultInfo:{resultStatus:'S'}});
   });
   const adapter=new PaytmAdapter({credentials:creds,environment:'staging',fetchImpl:mock.fetchImpl,checksumImpl});
