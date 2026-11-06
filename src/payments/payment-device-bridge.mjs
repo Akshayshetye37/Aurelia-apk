@@ -97,6 +97,7 @@ export async function enrollPaymentDevice({ applianceBaseUrl, deviceId = crypto.
     throw new Error("Native payment-device transport could not be configured");
   }
   window.AureliaPaymentDeviceId = deviceId;
+  window.AureliaPaymentApiBaseUrl = base.origin;
   return { deviceId, status: "ACTIVE", securityLevel: identity.securityLevel, activation };
 }
 
