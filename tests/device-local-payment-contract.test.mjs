@@ -21,7 +21,7 @@ test('checkout is fail-closed unless the native engine reports ready', () => {
 
 test('every manual folio payment path requires explicit staff receipt confirmation', () => {
   const html = read('index.html');
-  const calls = [...html.matchAll(/settlePayment\\(\\{[^;]*source:'manual'[^;]*\\}\\)/g)];
+  const calls = [...html.matchAll(/settlePayment\(\{[^;]*source:'manual'[^;]*\}\)/g)];
   assert.ok(calls.length >= 3, 'manual folio payment entry points must be covered');
   for (const call of calls) {
     assert.match(call[0], /verificationConfirmed:true/);
