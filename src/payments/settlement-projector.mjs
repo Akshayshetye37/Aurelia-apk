@@ -84,7 +84,7 @@ export class SettlementProjector {
     const row = rows[0];
     const storedReference = row?.r ?? row?.reference;
     const normalizedReference = value => /upi|bank|neft|rtgs|imps|card|wallet/i.test(binding.method)
-      ? String(value ?? "").replace(/\\s+/g, "").toUpperCase() : String(value ?? "");
+      ? String(value ?? "").replace(/\s+/g, "").toUpperCase() : String(value ?? "");
     if (rows.length !== 1 || !row || row.bookingId !== binding.bookingId ||
         row.source !== "verified_gateway" || paise(row) !== binding.amountPaise ||
         String(row.m ?? row.method).toLowerCase() !== binding.method.toLowerCase() ||
