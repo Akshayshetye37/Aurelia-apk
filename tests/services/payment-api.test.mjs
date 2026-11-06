@@ -118,3 +118,62 @@ test('reconciliation is an authenticated explicit POST to the intent reconciliat
   assert.equal(call[1].headers.Authorization, 'Bearer ' + token);
   assert.equal(call[1].body, undefined);
 });
+
+
+test('refund creation is authenticated, idempotent and never silently retried', async () => {
+  let call;
+  const client = new PaymentApiClient({
+    baseUrl: 'https://payments.example.com',
+    tokenProvider: async () => token,
+    fetchImpl: async (...args) => { call = args; return response(202, { refundId: 'rf_0123456789abcdef0', state: 'PENDING' }); }
+  });
+  const result = await client.createRefund('123e4567-e89b-12d3-a456-426614174000', {
+    amountMinor: 12500, idempotencyKey: 'refund-request-123', reason: 'Guest cancellation'
+  });
+  assert.equal(result.state, 'PENDING');
+  assert.equal(call[0], 'https://payments.example.com/v1/payments/intents/123e4567-e89b-12d3-a456-426614174000/refunds');
+  assert.equal(call[1].method, 'POST');
+  assert.equal(call[1].headers.Authorization, 'Bearer ' + token);
+  assert.equal(call[1].headers['Idempotency-Key'], 'refund-request-123');
+  assert.deepEqual(JSON.parse(call[1].body), {
+    amountMinor: 12500, idempotencyKey: 'refund-request-123', reason: 'Guest cancellation'
+  });
+});
+
+test('refund API rejects invalid amounts, identities, reasons and refund references before network dispatch', async () => {
+  let calls = 0;
+  const client = new PaymentApiClient({
+    baseUrl: 'https://payments.example.com',
+    tokenProvider: async () => token,
+    fetchImpl: async () => { calls++; return response(200, {}); }
+  });
+  const intentId = '123e4567-e89b-12d3-a456-426614174000';
+  assert.throws(() => client.createRefund(intentId, {
+    amountMinor: 99, idempotencyKey: 'refund-request-123'
+  }), /invalid_payment_refund_request/);
+  assert.throws(() => client.createRefund(intentId, {
+    amountMinor: 100, idempotencyKey: 'short'
+  }), /invalid_payment_refund_request/);
+  assert.throws(() => client.createRefund(intentId, {
+    amountMinor: 100, idempotencyKey: 'refund-request-123', reason: 'x'
+  }), /invalid_payment_refund_request/);
+  assert.throws(() => client.getRefund(intentId, 'rf_invalid'), /invalid_payment_refund_lookup/);
+  assert.equal(calls, 0);
+});
+
+test('refund status lookup is authenticated and uses the exact intent and refund identity', async () => {
+  let call;
+  const client = new PaymentApiClient({
+    baseUrl: 'https://payments.example.com',
+    tokenProvider: async () => token,
+    fetchImpl: async (...args) => { call = args; return response(200, { state: 'SUCCEEDED' }); }
+  });
+  const result = await client.getRefund(
+    '123e4567-e89b-12d3-a456-426614174000',
+    'rf_0123456789abcdef0'
+  );
+  assert.equal(result.state, 'SUCCEEDED');
+  assert.equal(call[0], 'https://payments.example.com/v1/payments/intents/123e4567-e89b-12d3-a456-426614174000/refunds/rf_0123456789abcdef0');
+  assert.equal(call[1].method, 'GET');
+  assert.equal(call[1].headers.Authorization, 'Bearer ' + token);
+});
