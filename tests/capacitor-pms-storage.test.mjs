@@ -16,8 +16,9 @@ function fakePlugin() {
         error.code = "ENTITY_VERSION_CONFLICT";
         throw error;
       }
-      row = { version: args.expectedVersion + 1, data: args.data };
-      return { ...row, entityType: args.entityType, entityId: args.entityId };
+      const committed = { version: args.expectedVersion + 1, data: args.data };
+      rows.set(key, committed);
+      return { ...committed, entityType: args.entityType, entityId: args.entityId };
     }
   };
 }
