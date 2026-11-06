@@ -3494,6 +3494,14 @@ window.startAureliaGatewayCheckout=async function(i){
  if(!transactionId)return stop('Secure transaction ID generation is unavailable on this device.');
  const payload={transactionId,idempotencyKey:'aurelia-'+transactionId,provider,
   environment:'test',folioId:'booking-'+String(b.id),amountMinor,currency:'INR'};
+ if(provider==='cashfree'){
+  const phone=document.getElementById('aurelia-cashfree-phone')?.value?.trim()||'';
+  const returnUrl=document.getElementById('aurelia-cashfree-return')?.value?.trim()||'';
+  if(!/^\\+?[0-9]{10,15}$/.test(phone)||!/^https:\\/\\//i.test(returnUrl))
+   return stop('Enter a valid guest mobile number and an approved HTTPS return URL for Cashfree.');
+  payload.customer={id:'guest-'+String(b.id),phone};
+  payload.returnUrl=returnUrl;
+ }
  try{
   const intent=await engine.createPaymentIntent(payload);
   if(!intent||intent.transactionId!==transactionId)
@@ -3501,7 +3509,7 @@ window.startAureliaGatewayCheckout=async function(i){
   const result=await engine.startCheckout({transactionId});
   if(!result||!['PENDING','AWAITING_PROVIDER','RECONCILIATION_REQUIRED'].includes(result.status))
    return stop('Checkout did not return a recognized pending state. Check the local payment ledger.');
-  const record={...payload,status:result.status,providerOrderId:result.providerOrderId||null,
+  const record={...payload,intentId:intent.intentId,status:result.status,providerOrderId:result.providerOrderId||null,
    createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   b.gatewayPayments=Array.isArray(b.gatewayPayments)?b.gatewayPayments:[];
   if(!b.gatewayPayments.some(x=>x.transactionId===transactionId))b.gatewayPayments.push(record);
@@ -3523,7 +3531,8 @@ window.reconcileAureliaGatewayPayment=async function(i,transactionId,paymentId){
   toast('Native reconciliation engine unavailable.');return false;
  }
  try{
-  const result=await engine.getPaymentStatus({transactionId,paymentId:paymentId||record.providerPaymentId||null});
+  const result=await engine.getPaymentStatus({transactionId,intentId:record.intentId,
+   paymentId:paymentId||record.providerPaymentId||null});
   if(!result||result.transactionId!==transactionId||
      !['SAVED_ON_DEVICE','READY_FOR_ONLINE','ORDER_CREATED','AWAITING_PROVIDER',
        'CAPTURED_UNPOSTED','POSTED_TO_FOLIO','FAILED','RECONCILIATION_REQUIRED','CONFLICT'].includes(result.status)){
