@@ -4247,7 +4247,7 @@ if (typeof window.render === "function") window.render();
 function providerConfigPanelHtml(){
  return '<section class="provider-config-panel" style="margin:14px 0;padding:14px;border:1px solid var(--ln);border-radius:16px">'+
   '<h3 style="margin:0 0 8px">Connect a payment gateway (optional)</h3>'+
-  '<p class="lab">No gateway is required to use Aurelia. Cash, manual payments, receipts and local folio operations remain the default. Connect one online gateway only when your property has a merchant account.</p>'+
+  '<p class="lab">No gateway is required to use Aurelia. If the owner has not configured and activated an online provider, the app continues with its default cash/manual payment, receipt and local folio workflows; no online checkout is required. Connect one online gateway only when your property has a merchant account.</p>'+
   '<div id="aurelia-provider-config-content"><button class="btn sm" type="button" onclick="loadAureliaProviderConfiguration()">Load secure gateway setup</button><p class="lab">Sign in as the property owner or administrator with MFA to load the supported gateway credential fields.</p></div>'+
   '<p class="lab">Only one gateway can be active for new online payments at a time. Switching does not erase pending transactions from the previous gateway. Live collection remains disabled.</p></section>';
 }
@@ -4303,7 +4303,10 @@ window.saveAureliaProviderCredentials=async function(){
   toast('Credentials validated and stored securely. Complete sandbox and webhook acceptance before activation.');
   await window.loadAureliaProviderConfiguration();
  }catch(error){toast(error.message||'Credential save failed.');}
- finally{if(button){button.disabled=false;button.textContent='Save and validate credentials';}}
+ finally{
+  document.querySelectorAll('#aurelia-provider-credential-form input[type="password"]').forEach(input=>{input.value='';});
+  if(button){button.disabled=false;button.textContent='Save and validate credentials';}
+ }
 };
 window.activateAureliaPaymentProvider=async function(provider){
  try{
