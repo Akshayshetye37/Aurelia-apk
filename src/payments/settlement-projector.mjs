@@ -6,7 +6,7 @@ const PERMANENT_FAILURES = new Set([
   "BOOKING_NOT_FOUND", "BOOKING_NOT_SETTLEABLE", "IDEMPOTENCY_KEY_CONFLICT",
   "PAYMENT_REFERENCE_ALREADY_APPLIED", "PAYMENT_REFERENCE_CONFLICT",
   "PAYMENT_EXCEEDS_BALANCE", "AUTHORIZATION_BINDING_MISMATCH",
-  "SETTLEMENT_AUTH_EXPIRED", "SETTLEMENT_AUTH_MISMATCH",
+  "SETTLEMENT_AUTH_EXPIRED", "SETTLEMENT_AUTH_INVALID", "SETTLEMENT_AUTH_MISMATCH",
   "SETTLEMENT_LEASE_MISMATCH", "SETTLEMENT_LEASE_INVALID", "SETTLEMENT_LEASE_EXPIRED"
 ]);
 function fail(code, message) { const error = new Error(message); error.code = code; return error; }
@@ -82,11 +82,13 @@ export class SettlementProjector {
     const state = await this.readBack(); const booking = this.findBooking(state, binding.bookingId);
     const rows = (Array.isArray(booking?.pays) ? booking.pays : []).filter(row => row?.idempotencyKey === binding.idempotencyKey);
     const row = rows[0];
+    const storedReference = row?.r ?? row?.reference;
+    const normalizedReference = value => /upi|bank|neft|rtgs|imps|card|wallet/i.test(binding.method)
+      ? String(value ?? "").replace(/\\s+/g, "").toUpperCase() : String(value ?? "");
     if (rows.length !== 1 || !row || row.bookingId !== binding.bookingId ||
         row.source !== "verified_gateway" || paise(row) !== binding.amountPaise ||
         String(row.m ?? row.method).toLowerCase() !== binding.method.toLowerCase() ||
-        row.reference !== undefined && row.reference !== binding.reference ||
-        row.r !== undefined && row.r !== binding.reference ||
+        !storedReference || normalizedReference(storedReference) !== normalizedReference(binding.reference) ||
         row.authorizationId !== binding.authorizationId || row.leaseId !== binding.leaseId ||
         row.provider !== binding.provider || row.providerTransactionId !== binding.providerTransactionId ||
         row.tenantId !== binding.tenantId || row.deviceId !== binding.deviceId ||
