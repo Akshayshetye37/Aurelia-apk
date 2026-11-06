@@ -452,11 +452,10 @@ const IC={home:'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',stays:
 const TABS=[['home','Home'],['stays','Stays'],['rooms','Rooms'],['dining','Dining']];
 let id=0;const S={tab:'home',f:'all',tb:3,rooms:[],b:[],t:[],g:[],exp:[],inv:[],aud:[],cancelled:[],financialLedger:[],sig:[],sales:[],menu:{},today:0,hist:[0,0,0,0,0,0],set:{name:'Aurelia PMS',tag:'Peace, comfort and mindful hospitality.',cur:'₹',upi:'',phone:'',addr:''},au:{},bk:{}};
 window.aureliaGetAppState = () => S;
-// Initialize recovery and persistence guards before any function can read them.
-// These bindings must exist before startup recovery, payment and render callbacks run.
-let LOCAL_STATE_STATUS='missing',RECOVERY_CHECK_PENDING=false,AUTO_RECOVERY_REQUEST_ID=null,AUTO_RECOVERY_EXCLUDED=[];
-let LOCAL_STORAGE_WARNING_SHOWN=false;
-// Room types are derived from the actual inventory; never assume a seeded catalogue.
+// Recovery guard is var-hoisted because recovery callbacks are defined before loadAll().
+var RECOVERY_CHECK_PENDING=false,AUTO_RECOVERY_REQUEST_ID=null,AUTO_RECOVERY_EXCLUDED=[];
+const MENU={Starters:[['Kapenta croquettes',95,'with lemon aioli'],['Smoked bream pâté',120,'toasted sourdough']],Mains:[['Seared Kafue bream',260,'saffron nshima, greens'],['Braised oxtail',240,'peanut jus, nshima'],['Grilled game fillet',340,'red wine, root vegetables']],Desserts:[['Baobab panna cotta',90,'honey, toasted seeds']],Drinks:[['Mosi lager',45,'chilled'],['Sunset cocktail',110,'passion fruit, gin']]};
+// Derive room categories from real inventory; an empty fresh install has no fabricated catalogue.
 const types=[];
 function syncRoomTypes(){
   const byType=new Map();
@@ -469,7 +468,6 @@ function syncRoomTypes(){
   types.splice(0,types.length,...byType.values());
   return types;
 }
-const MENU={Starters:[['Kapenta croquettes',95,'with lemon aioli'],['Smoked bream pâté',120,'toasted sourdough']],Mains:[['Seared Kafue bream',260,'saffron nshima, greens'],['Braised oxtail',240,'peanut jus, nshima'],['Grilled game fillet',340,'red wine, root vegetables']],Desserts:[['Baobab panna cotta',90,'honey, toasted seeds']],Drinks:[['Mosi lager',45,'chilled'],['Sunset cocktail',110,'passion fruit, gin']]};
 let cat='Mains';
 const inh=()=>S.b.filter(b=>b.st==='in'),nts=b=>Math.max(1,b.out-b.in),rm=n=>S.rooms.find(r=>r.n===n);
 const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t.h);t.h=setTimeout(()=>t.classList.remove('show'),2400)};
@@ -1528,6 +1526,7 @@ async function restoreGo(){
  }
 }
 const useMenu=m=>{Object.keys(MENU).forEach(k=>delete MENU[k]);Object.assign(MENU,m);S.menu=MENU};
+let LOCAL_STORAGE_WARNING_SHOWN=false;
 function persist(){if(RECOVERY_CHECK_PENDING)return;try{const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);(window.__aureliaStorage||localStorage).setItem(SK,JSON.stringify(o));if(window.__aureliaStorage&&window.__aureliaStorage.memoryOnly&&!LOCAL_STORAGE_WARNING_SHOWN){LOCAL_STORAGE_WARNING_SHOWN=true;toast('WARNING: Device persistence is unavailable. Data is session-only; export a backup before closing the app.')}}catch(e){if(!S.qw){S.qw=1;toast('Device storage is unavailable or full. Changes may not be saved. Export a backup before closing the app.')}}}
 function persistStrict(){
  if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
@@ -1539,6 +1538,7 @@ function persistStrict(){
  if(store.getItem(SK)!==serialized)throw new Error('Persistent storage read-back did not exactly match the committed state.');
  return true;
 }
+let LOCAL_STATE_STATUS='missing';
 window.AureliaAccountingBoundary = Object.freeze({
  getState:()=>S,
  findBooking:(state,bookingReference)=>state.b.find(b=>(b.folioId||'booking-'+String(b.id))===String(bookingReference)),
