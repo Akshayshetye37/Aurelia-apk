@@ -107,6 +107,28 @@ export class PaymentApiClient {
     });
   }
 
+  createRefund(intentId, { amountMinor, idempotencyKey, reason = 'Customer refund', signal } = {}) {
+    if (!INTENT_ID.test(intentId || '') ||
+        !Number.isSafeInteger(amountMinor) || amountMinor < 100 ||
+        !IDEMPOTENCY_KEY.test(idempotencyKey || '') ||
+        typeof reason !== 'string' || reason.length < 3 || reason.length > 100 ||
+        /[\\u0000-\\u001f\\u007f]/.test(reason)) {
+      throw new TypeError('invalid_payment_refund_request');
+    }
+    return this.request('/v1/payments/intents/' + encodeURIComponent(intentId) + '/refunds', {
+      method: 'POST', body: { amountMinor, idempotencyKey, reason },
+      idempotencyKey, signal
+    });
+  }
+
+  getRefund(intentId, refundId, options = {}) {
+    if (!INTENT_ID.test(intentId || '') || !/^rf_[a-f0-9]{17}$/.test(refundId || '')) {
+      throw new TypeError('invalid_payment_refund_lookup');
+    }
+    return this.request('/v1/payments/intents/' + encodeURIComponent(intentId) +
+      '/refunds/' + encodeURIComponent(refundId), options);
+  }
+
   getCapabilities(options = {}) {
     return this.request('/v1/payments/capabilities', options);
   }
