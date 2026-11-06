@@ -121,16 +121,16 @@ test('native payment device transport is HTTPS-only, path-safe, signed, and resp
 
 test('native Razorpay and Cashfree checkout pass the host Activity and only emit reconciliation callbacks', () => {
   const patcher = read('scripts/patch-android.js');
-  assert.match(patcher, /checkout\\.open\\(MainActivity\\.this, options\\)/);
-  assert.match(patcher, /CFPaymentGatewayService\\.getInstance\\(\\)\\.doPayment\\(MainActivity\\.this, payment\\)/);
-  assert.match(patcher, /implements PaymentResultWithDataListener, CFCheckoutResponseCallback/);
-  assert.match(patcher, /onPaymentSuccess\\(String paymentId, PaymentData paymentData\\)/);
-  assert.match(patcher, /onPaymentVerify\\(String orderID\\)/);
-  assert.match(patcher, /emitNativePaymentEvent\\("RAZORPAY_CALLBACK"/);
-  assert.match(patcher, /emitNativePaymentEvent\\("CASHFREE_CALLBACK"/);
-  assert.match(patcher, /"test"\\.equals\\(environment\\)/);
-  assert.doesNotMatch(patcher, /checkout\\.open\\(this, options\\)/);
-  assert.doesNotMatch(patcher, /doPayment\\(this, payment\\)/);
+  assert.ok(patcher.includes('checkout.open(MainActivity.this, options)'));
+  assert.ok(patcher.includes('CFPaymentGatewayService.getInstance().doPayment(MainActivity.this, payment)'));
+  assert.ok(patcher.includes('implements PaymentResultWithDataListener, CFCheckoutResponseCallback'));
+  assert.ok(patcher.includes('onPaymentSuccess(String paymentId, PaymentData paymentData)'));
+  assert.ok(patcher.includes('onPaymentVerify(String orderID)'));
+  assert.ok(patcher.includes('emitNativePaymentEvent("RAZORPAY_CALLBACK"'));
+  assert.ok(patcher.includes('emitNativePaymentEvent("CASHFREE_CALLBACK"'));
+  assert.ok(patcher.includes('"test".equals(environment)'));
+  assert.ok(!patcher.includes('checkout.open(this, options)'));
+  assert.ok(!patcher.includes('doPayment(this, payment)'));
 });
 
 test('cloud device sync uses the existing MFA-aware Firebase web session', () => {
