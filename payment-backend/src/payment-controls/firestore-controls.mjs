@@ -109,7 +109,7 @@ export async function updatePaymentControls({
   const controlRef = db.doc("paymentControls/" + tenantId);
   const auditRef = controlRef.collection("audit").doc();
   const controlsRequiringApproval = keys.filter(control =>
-    control !== "emergency_stop" && changes[control] === true
+    control !== "emergency_stop" && control !== "live_collection_enabled" && changes[control] === true
   );
   return db.runTransaction(async tx => {
     const snap = await tx.get(controlRef);
