@@ -9,7 +9,7 @@ const REQUIRED = ['validateCredentials','createOrder','findOrderByReference','ge
   'verifyWebhook','createRefund','getRefundStatus'];
 
 test('only providers with all seven concrete operations are registered', () => {
-  assert.deepEqual(implementedProviderAdapters().sort(), ['cashfree','jiopay','paytm','payu','phonepe','razorpay']);
+  assert.deepEqual(implementedProviderAdapters(), ['razorpay','cashfree','payu','phonepe','paytm','jiopay']);
   for (const provider of ['ccavenue']) {
     assert.equal(providerCapabilities(provider), null);
     assert.deepEqual(providerQualificationStatus(provider), {
