@@ -109,7 +109,6 @@ final class LocalGatewayVault {
     if ("payu".equals(provider)) return new String[]{"merchantKey", "salt"};
     if ("phonepe".equals(provider)) return new String[]{"clientId", "clientSecret", "clientVersion", "merchantId"};
     if ("paytm".equals(provider)) return new String[]{"mid", "merchantKey", "websiteName"};
-    if ("ccavenue".equals(provider)) return new String[]{"merchantId", "accessCode", "workingKey"};
     if ("jiopay".equals(provider)) return new String[]{"merchantId", "merchantKey", "saltOrHashKey"};
     throw new IllegalArgumentException("provider_adapter_not_available_locally");
   }
@@ -119,7 +118,7 @@ final class LocalGatewayVault {
     if (!("test".equals(environment) || "live".equals(environment) ||
         "uat".equals(environment) || "production".equals(environment) ||
         "staging".equals(environment))) throw new IllegalArgumentException("invalid_environment");
-    if ("razorpay".equals(provider) || "cashfree".equals(provider) || "payu".equals(provider) || "ccavenue".equals(provider)) {
+    if ("razorpay".equals(provider) || "cashfree".equals(provider) || "payu".equals(provider)) {
       if (!("test".equals(environment) || "live".equals(environment))) throw new IllegalArgumentException("invalid_provider_environment");
     } else if ("phonepe".equals(provider) || "jiopay".equals(provider)) {
       if (!("uat".equals(environment) || "production".equals(environment))) throw new IllegalArgumentException("invalid_provider_environment");
