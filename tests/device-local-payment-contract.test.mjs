@@ -53,6 +53,7 @@ test('project documentation preserves the selected hybrid production architectur
   assert.ok(spec.includes('Hybrid Production Architecture (Architecture A)'));
   assert.match(read('docs/HYBRID_PAYMENT_ARCHITECTURE.md'), /publicly reachable HTTPS backend/i);
   assert.match(spec, /Timeout after dispatch is ambiguous/);
-  assert.match(readme, /NOT READY FOR LIVE PAYMENT COLLECTION/);
+  assert.match(readme, /LIVE GATEWAY COLLECTION OFF/);
+  assert.match(readme, /Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available/);
   assert.match(readme, /Razorpay[\s\S]*Cashfree[\s\S]*PayU[\s\S]*PhonePe[\s\S]*Paytm[\s\S]*JioPay[\s\S]*CCAvenue/);
 });
