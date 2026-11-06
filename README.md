@@ -333,3 +333,8 @@ The following are still release-blocking:
 - Added `tests/smart-checkpoint.test.mjs` covering balance math, unverified evidence, stale versions, idempotency, manager-only write-offs, settlement approval and invalid amounts.
 - **Integration boundary:** the new engine requires an atomic local `transactFolio` repository. Aurelia's canonical booking/folio state is not yet exposed through that contract, and the popup is not yet wired into the live folio screen. No false localStorage atomicity or cross-device locking is claimed. See `docs/SMART-CHECKPOINT.md`.
 - Gateway settlement and live collection remain fail-closed. The engine does not verify provider signatures or authorize settlement from a checkout callback.
+
+
+## Local-first data and optional cloud sync
+
+See [docs/LOCAL_FIRST_SYNC_ARCHITECTURE.md](./docs/LOCAL_FIRST_SYNC_ARCHITECTURE.md). The sync foundation is opt-in and local-only by default. It validates endpoint metadata and versioned event envelopes, rejects credential-like payload fields, and requires one repository transaction to commit a business mutation and its outbox event together. The current localStorage PMS record and separate payment journal do not meet that atomic contract. No sync transport, device enrollment, canonical database migration or conflict UI is enabled. Payment-provider checkout and verification remain separate. Do not enable sync until the canonical SQLite/IndexedDB repository and atomic outbox adapter are installed.
