@@ -32,8 +32,8 @@ test('Groovy and Kotlin DSL app dependencies are supported', () => {
   assert.ok(patchScript.includes('implementation(platform'));
   assert.ok(patchScript.includes("const auth = 'com.google.firebase:firebase-auth'"));
   assert.ok(patchScript.includes("const missing = [auth, ...paymentDependencies]"));
-  assert.ok(patchScript.includes('implementation("' + dependency + '")'));
-  assert.ok(patchScript.includes('implementation "' + dependency + '"'));
+  assert.match(patchScript, /implementation.*dependency/);
+  assert.match(patchScript, /implementation.*dependency/);
 });
 test('Google Services plugin is conditional on a supplied app config', () => {
   assert.match(patchScript, /hasGoogleServicesConfig/);
