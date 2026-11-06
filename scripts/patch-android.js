@@ -1209,7 +1209,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
           if (payBridgeClient != null) payBridgeClient.disconnect();
         } else if ("paymentEngineStatus".equals(type)) {
           boolean ready = paymentDeviceClient != null && paymentDeviceKeyStore != null &&
-              paymentDeviceKeyStore.hasAttestedIdentity() && FirebaseAuth.getInstance().getCurrentUser() != null;
+              paymentDeviceKeyStore.hasAttestedIdentity();
           JSONObject result = new JSONObject().put("ready", ready)
               .put("livePaymentsEnabled", false)
               .put("environment", "test")
