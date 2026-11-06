@@ -193,10 +193,20 @@ export class SmartCheckpoint {
     if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) throw new TypeError("Expected folio version is required");
     return this.repository.transactFolio(key, async current => {
       if (!current) throw fail("FOLIO_NOT_FOUND", "Folio was not found");
-      if (current.version !== expectedVersion) throw fail("FOLIO_VERSION_CONFLICT", "Folio changed while it was being reviewed; refresh before approving");
-      if (current.status === "SETTLED") throw fail("FOLIO_ALREADY_SETTLED", "Settled folios cannot be modified");
+      if (current.status === "SETTLED") {
+        // An exact idempotent replay is harmless even after the original write
+        // advanced the folio version. The operation callback only returns
+        // duplicate=true after matching the immutable payment/adjustment ID
+        // and payload; it performs no mutation in that branch.
+        const replay = operation(current) || {};
+        if (replay.duplicate) return { ...replay, checkpoint: calculateFolioCheckpoint(current), version: current.version };
+        throw fail("FOLIO_ALREADY_SETTLED", "Settled folios cannot be modified");
+      }
       const result = operation(current) || {};
       if (result.duplicate) return { ...result, checkpoint: calculateFolioCheckpoint(current), version: current.version };
+      // The transaction adapter must roll back the callback's working copy if
+      // this optimistic version check fails.
+      if (current.version !== expectedVersion) throw fail("FOLIO_VERSION_CONFLICT", "Folio changed while it was being reviewed; refresh before approving");
       current.version += 1;
       const checkpoint = calculateFolioCheckpoint(current);
       current.reconciliationState = checkpoint.state;
