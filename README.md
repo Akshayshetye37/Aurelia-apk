@@ -162,3 +162,62 @@ The latest branch head was verified as `be8c1867e98c185de40f5f01b9e8c9e9a4afb549
 - The latest change does not migrate existing preview-memory records into durable storage. Export a backup while the current preview session is still open if it contains data you need to retain.
 
 Latest storage-diagnostics commits: 7e6776c (runtime diagnostics and accurate warning) and fa70730 (regression test).
+
+
+## Latest implementation update (2026-11-06)
+
+Working branch: feature/multi-provider-payment-backend.
+
+### Tenant live-collection control separation
+
+The payment control plane now models two independent conditions:
+
+- live_collection: internal release authorisation. Enabling this capability remains subject to the existing owner-evidence approval mechanism.
+- live_collection_enabled: tenant operational switch. It defaults to false, is included in the payment-control audit record, and cannot be enabled unless internal live authorisation is already active.
+- The central emergency stop remains dominant. Missing or unreadable payment-control state fails closed.
+- Legacy payment-control documents that predate live_collection_enabled are read with the new switch defaulted to false.
+
+The backend live gate checks the tenant control state, emergency stop, internal authorisation, tenant switch and provider qualification. The live gate is applied to the relevant credential, checkout, refund, provider activation and webhook request paths. Provider qualification still reports live collection as disabled for all six providers. No client-facing control can grant internal authorisation.
+
+Webhook ingress now applies a provider-specific Content-Type allow-list before signature processing. Raw-body signature verification and trusted-order binding remain required.
+
+### Android build pipeline correction
+
+The Android generator now excludes the duplicate META-INF/versions/9/OSGI-INF/MANIFEST.MF resource that caused the Android Gradle mergeDebugJavaResource task to fail. The earlier Java JSON-string escaping correction is also retained. The latest Android workflow must complete successfully before this is considered verified.
+
+### Verification at the time of this update
+
+- Backend CI for commit 13ea2e8bc00011981ca4abb6aad1e76fcc360aae: **passed**.
+- PMS source tests, web packaging and Android validation for that commit: **still running** at the time of documentation.
+- The previous failed backend run exposed a regression-test fixture issue in the new approval separation; the fixture/approval path was corrected, and the subsequent backend CI passed.
+- This CI result is not provider sandbox UAT, physical-device acceptance, production deployment or proof of payment-to-folio settlement.
+
+### Current production-readiness status
+
+Implemented foundations include the six-provider adapter registry, test-environment checkout and webhook integration, Secret Manager credential storage, provider status recovery, replay-aware webhook processing, payment-control audit, local accounting safeguards, backend readiness checks and Android checkout integration foundations.
+
+The following are still release-blocking:
+
+1. Complete a canonical, server-authoritative payment-to-folio settlement path that is transactionally safe or uses a durable transactional outbox. It must bind tenant, folio, intent, provider, merchant account, environment, provider order/payment identity, exact amount and currency.
+2. Ensure all six providers' verified captures use the same idempotent settlement function. Client return URLs and SDK callbacks must remain UI signals only.
+3. Complete refund initiation, provider refund status verification, partial-refund accounting, folio credit/credit-note posting and settlement journal entries with idempotent recovery.
+4. Complete the trusted Android Pay Bridge, cloud authorization issuer, device trust and one-time signed settlement authorization integration. The standalone com.aurelia.paybridge application is not present in this repository.
+5. Connect the tenant-admin live switch to the authenticated cloud payment-control API and enforce recent MFA at the toggle action. The current PMS settings page is not yet wired to that API; do not represent a local UI preference as a live control.
+6. Complete webhook security review: provider-specific content-type and body-size policy, environment binding, event-ID uniqueness, source rate limiting and provider IP allow-lists where reliable published ranges exist, and uniform externally visible rejection behavior.
+7. Complete end-to-end sandbox acceptance for Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay, including credential onboarding, checkout, signed webhook, status recovery, duplicate delivery, amount mismatch, full/partial refunds and exact folio reconciliation.
+8. Complete Cloud Run and HTTPS load-balancer deployment with owner-controlled project, domain/DNS, TLS, workload identity, least-privilege Firestore/Secret Manager IAM, alerting, logs, monitoring, backups and incident-response runbooks.
+9. Complete web and installed Android physical-device acceptance, production signing/release verification, security review and owner sign-off.
+
+**Release decision:** keep live collection, automatic settlement and gateway-to-folio posting disabled. No production deployment, live merchant certification or live payment acceptance is claimed. A successful backend CI run does not establish production readiness.
+
+## Project location
+
+- GitHub repository: https://github.com/Akshayshetye37/Aurelia-apk
+- Active branch: feature/multi-provider-payment-backend
+- Root: / (repository root)
+- Main app: index.html
+- Cloud payment backend: payment-backend/
+- Android source templates: android/templates/
+- Root application modules: src/
+- Root tests: tests/
+- Payment backend tests: payment-backend/test/
