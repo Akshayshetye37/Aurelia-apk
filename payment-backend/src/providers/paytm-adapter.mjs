@@ -24,7 +24,7 @@ export class PaytmAdapter extends PaymentProviderAdapter {
   constructor(options) {
     super(options);
     if(!['staging','production'].includes(this.environment)||
-      !this.credentials.mid||!this.credentials.merchantKey||!this.credentials.websiteName)
+      !this.credentials.mid||!this.credentials.merchantKey||Buffer.byteLength(this.credentials.merchantKey,'utf8')!==16||!this.credentials.websiteName)
       throw new TypeError('paytm_credentials_incomplete');
     this.hosts=HOSTS[this.environment];
     this.checksum=options?.checksumImpl||PaytmChecksum;
