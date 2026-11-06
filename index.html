@@ -4743,7 +4743,13 @@ window.AndroidPaymentEngine = Object.freeze({
  async getEngineStatus() {
   if(!paymentDeviceNativeAvailable()) return { ready:false, livePaymentsEnabled:false };
   const native = await getNativePaymentEngineStatus();
-  if(native?.ready !== true || !window.AureliaPaymentApiBaseUrl) {
+  if(typeof native?.deviceId === 'string' && native.deviceId) {
+   window.AureliaPaymentDeviceId = native.deviceId;
+  }
+  if(typeof native?.applianceBaseUrl === 'string' && native.applianceBaseUrl) {
+   window.AureliaPaymentApiBaseUrl = native.applianceBaseUrl;
+  }
+  if(native?.ready !== true || !window.AureliaPaymentApiBaseUrl || !window.AureliaPaymentDeviceId) {
    return { ready:false, livePaymentsEnabled:false, deviceId:native?.deviceId || null };
   }
   const capabilities = await cloudPaymentApi().getCapabilities();
