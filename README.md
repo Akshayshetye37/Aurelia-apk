@@ -104,3 +104,16 @@ No APK artifact, signed production release, production Cloud Run deployment, liv
 - Full provider lifecycle acceptance (including refunds and refund-status verification), physical-device recovery tests, real-data accounting review, production infrastructure deployment and provider merchant certification remain outstanding.
 
 **Release decision: keep payment/accounting interlocks closed. No live collection or gateway-to-folio posting is authorized.**
+
+
+### Settlement authorization v2 foundation (integration incomplete)
+
+The active branch now contains a hardened local settlement foundation:
+- Strict canonical JSON encoding rejects circular references, non-finite numbers, unsupported values and undefined properties before hashing or signature verification.
+- ECDSA P-256 verification uses pinned public JWKs and v2 signed envelopes with issuer/audience, short authorization lifetime, bounded policy-lease lifetime, and exact tenant, device, provider merchant-account, environment, command, booking, amount and payment-reference binding.
+- Local idempotency identity is namespaced by tenant, provider, provider account, environment and provider transaction/command identity. Device identity remains a mandatory authorization binding, but is not part of the provider-transaction idempotency namespace.
+- IndexedDB journal schema v2 performs index migration for existing stores, uses serialized read-write transactions, records immutable payload hashes, and enforces PENDING-to-APPLIED/REJECTED terminal transitions.
+- The local projector requires an explicitly synchronous persistence adapter, re-verifies authorization and lease before posting, and checks the complete immutable settlement identity on durable read-back.
+- Root test suite now includes concurrency and cross-tenant idempotency coverage using the declared fake-indexeddb development dependency.
+
+**This is not an end-to-end payment release.** The cloud backend does not yet issue the matching v2 authorization and policy-lease envelopes, the standalone trusted Android bridge is still absent, and the current global accounting read-only kill switch blocks all folio balance mutations. Live collection, automatic settlement, and gateway-to-folio posting remain disabled. The new projector must not be wired into a production payment path until the backend issuer, device trust, durable persistence adapter, Android acceptance and release evidence are implemented and verified.
