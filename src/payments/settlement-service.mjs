@@ -209,6 +209,13 @@ export function settlePayment({
     assertBindingMatches(authorization, { booking, amountPaise, method: paymentMethod, reference: ref, key,
       nowMs: Date.parse(now()), tenantId, deviceId, providerAccountId, environment });
   }
+  // Last fail-closed checks immediately before any folio mutation.
+  assertBalanceMutationAllowed();
+  if (gateway) {
+    if (isEmergencyStopped() !== false) { const e = new Error("Settlement emergency stop is active"); e.code = "EMERGENCY_STOP_ACTIVE"; throw e; }
+    assertBindingMatches(authorization, { booking, amountPaise, method: paymentMethod, reference: ref, key,
+      nowMs: Date.parse(now()), tenantId, deviceId, providerAccountId, environment });
+  }
   const priorPays = Array.isArray(booking.pays) ? booking.pays : [];
   const priorHistory = Array.isArray(booking.payments) ? booking.payments : [];
   const priorPaid = booking.p;
