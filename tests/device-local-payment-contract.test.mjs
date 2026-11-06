@@ -19,6 +19,17 @@ test('checkout is fail-closed unless the native engine reports ready', () => {
   assert.doesNotMatch(checkout, /localGatewayApi\s*\(/);
 });
 
+test('every manual folio payment path requires explicit staff receipt confirmation', () => {
+  const html = read('index.html');
+  const calls = [...html.matchAll(/settlePayment\\(\\{[^;]*source:'manual'[^;]*\\}\\)/g)];
+  assert.ok(calls.length >= 3, 'manual folio payment entry points must be covered');
+  for (const call of calls) {
+    assert.match(call[0], /verificationConfirmed:true/);
+  }
+  assert.match(html, /Confirm that you received the money/);
+  assert.match(html, /Confirm that payment was actually received/);
+});
+
 test('merchant credentials are not exposed through WebView or Android local vault UI', () => {
   const html = read('index.html');
   const vault = read('android/templates/LocalGatewayVault.java');
