@@ -93,7 +93,7 @@ test('tenant live collection control updates are narrow, authenticated and reaso
   });
   assert.equal((await client.getPaymentControls()).updated, true);
   assert.equal(call[0], 'https://payments.example.com/v1/admin/payment-controls');
-  assert.equal(call[1].method, undefined);
+  assert.equal(call[1].method, 'GET');
   await client.updatePaymentControls({ live_collection_enabled: false }, 'Operator disabled collection');
   assert.equal(call[1].method, 'PATCH');
   assert.deepEqual(JSON.parse(call[1].body), {
