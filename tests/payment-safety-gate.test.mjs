@@ -8,17 +8,14 @@ import {
   assertNativeBridgeAllowed
 } from "../src/payments/payment-safety-gate.mjs";
 
-test("all payment safety controls default to locked", () => {
+test("offline manual folio mutations are available while gateway paths remain locked", () => {
   assert.deepEqual(PAYMENT_SAFETY_LOCKS, {
-    blockAllBalanceMutations: true,
+    blockAllBalanceMutations: false,
     automaticSettlement: true,
     liveCollection: true,
     nativeSettlementBridge: true
   });
-});
-
-test("global balance mutation kill switch rejects manual and automated posting", () => {
-  assert.throws(assertBalanceMutationAllowed, { code: "ACCOUNTING_READ_ONLY_KILL_SWITCH" });
+  assert.doesNotThrow(assertBalanceMutationAllowed);
 });
 
 test("automatic settlement remains blocked", () => {
