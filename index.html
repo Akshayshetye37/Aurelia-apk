@@ -4684,8 +4684,7 @@ window.AndroidPaymentEngine = Object.freeze({
    return { ready:false, livePaymentsEnabled:false, deviceId:native?.deviceId || null };
   }
   const capabilities = await cloudPaymentApi().getCapabilities();
-  window.AureliaLocalGatewayAdmin = window.AureliaLocalGatewayAdmin || {};
-  window.AureliaLocalGatewayAdmin.providers = capabilities.providers || [];
+  window.AureliaPaymentProviderState = { authenticated:true, providers:capabilities.providers || [] };
   return { ready:true, livePaymentsEnabled:false, deviceId:native.deviceId,
    providers:capabilities.providers || [], folioSettlementEnabled:false };
  },
