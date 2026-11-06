@@ -78,3 +78,19 @@ test('rejects catalogue-only providers before network dispatch', async () => {
   }
   assert.equal(called, false);
 });
+
+
+test('reconciliation is an authenticated explicit POST to the intent reconciliation route', async () => {
+  let call;
+  const client = new PaymentApiClient({
+    baseUrl: 'https://payments.example.com',
+    tokenProvider: async () => token,
+    fetchImpl: async (...args) => { call = args; return response(200, { status: 'CAPTURED' }); }
+  });
+  const result = await client.reconcileIntent('123e4567-e89b-12d3-a456-426614174000');
+  assert.equal(result.status, 'CAPTURED');
+  assert.equal(call[0], 'https://payments.example.com/v1/payments/intents/123e4567-e89b-12d3-a456-426614174000/reconcile');
+  assert.equal(call[1].method, 'POST');
+  assert.equal(call[1].headers.Authorization, 'Bearer ' + token);
+  assert.equal(call[1].body, undefined);
+});
