@@ -1,8 +1,6 @@
 package com.aurelia.pms;
 
 import android.content.Context;
-import android.security.keystore.KeyStoreException;
-import android.util.Base64;
 import org.json.JSONObject;
 import java.io.File;
 import java.security.KeyStore;
@@ -89,8 +87,11 @@ final class LocalGatewayVault {
           }
         }
       }
-      if (!dir.delete() && dir.exists() && dir.list().length == 0) {
-        throw new IllegalStateException("legacy_vault_directory_cleanup_failed");
+      if (!dir.delete() && dir.exists()) {
+        String[] remaining = dir.list();
+        if (remaining != null && remaining.length == 0) {
+          throw new IllegalStateException("legacy_vault_directory_cleanup_failed");
+        }
       }
     }
     try {
