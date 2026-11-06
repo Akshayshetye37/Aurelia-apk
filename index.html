@@ -4043,7 +4043,7 @@ export const PAYMENT_PROVIDERS = Object.freeze({
   pine_labs: { name: "Pine Labs", category: "Payment platform / acquiring", identityField: "merchantId", identityLabel: "Merchant ID", methods: ["upi", "cards", "netbanking", "pos"], integration: "merchant_product_api", docs: docs([["Pine Labs", "https://www.pinelabs.com/"], ["Pine Labs developer portal", "https://developer.pinelabs.com/"]]), verification: "Select the exact Pine Labs product (online gateway, QR or POS); verify status through that product's server-side API." }
 });
 
-export const PMS_PROVIDER_CATALOGUE = Object.freeze(["razorpay", "cashfree", "payu", "phonepe", "paytm", "jiopay", "ccavenue"]);
+export const PMS_PROVIDER_CATALOGUE = Object.freeze(["razorpay", "cashfree", "payu", "phonepe", "paytm", "jiopay"]);
 
 export const PROVIDER_INTEGRATION_GUIDES = Object.freeze(Object.fromEntries(
   Object.entries(PAYMENT_PROVIDERS).map(([id, provider]) => [id, Object.freeze({
@@ -4182,7 +4182,7 @@ if (typeof window.render === "function") window.render();
 
 const LOCAL_GATEWAY_PENDING=new Map();
 let LOCAL_GATEWAY_SEQUENCE=0;
-window.AureliaNativeGatewayState=window.AureliaNativeGatewayState||{razorpay:{},cashfree:{},payu:{},phonepe:{},paytm:{},ccavenue:{},jiopay:{}};
+window.AureliaNativeGatewayState=window.AureliaNativeGatewayState||{razorpay:{},cashfree:{},payu:{},phonepe:{},paytm:{},jiopay:{}};
 window.aureliaNativeGatewayResult=function(id,ok,payload){
  const pending=LOCAL_GATEWAY_PENDING.get(String(id));if(!pending)return;LOCAL_GATEWAY_PENDING.delete(String(id));
  if(ok){try{pending.resolve(typeof payload==='string'?JSON.parse(payload):payload)}catch(e){pending.reject(e)}}else pending.reject(new Error(String(payload||'Native gateway operation failed')));
@@ -4221,7 +4221,7 @@ window.AureliaLocalPaymentLedger=Object.freeze({
 window.AureliaLocalPaymentJournalState={pending:[],loading:false,error:null};
 window.updateAureliaLocalLedgerEnvironments=function(provider){
  const select=document.getElementById('local-ledger-environment');if(!select)return;
- const map={razorpay:[['test','Test / Sandbox'],['live','Live · journal only']],cashfree:[['test','Test / Sandbox'],['live','Live · journal only']],payu:[['test','Test / Sandbox'],['live','Live · journal only']],phonepe:[['uat','UAT'],['production','Production · journal only']],paytm:[['staging','Staging'],['production','Production · journal only']],ccavenue:[['test','Test / Sandbox'],['live','Live · journal only']],jiopay:[['uat','UAT'],['production','Production · journal only']]};
+ const map={razorpay:[['test','Test / Sandbox'],['live','Live · journal only']],cashfree:[['test','Test / Sandbox'],['live','Live · journal only']],payu:[['test','Test / Sandbox'],['live','Live · journal only']],phonepe:[['uat','UAT'],['production','Production · journal only']],paytm:[['staging','Staging'],['production','Production · journal only']],jiopay:[['uat','UAT'],['production','Production · journal only']]};
  select.innerHTML=(map[provider]||[]).map(([value,label])=>'<option value="'+value+'">'+label+'</option>').join('');
 };
 window.createAureliaLocalPaymentIntent=async function(){
@@ -4230,7 +4230,7 @@ window.createAureliaLocalPaymentIntent=async function(){
  const folioId=document.getElementById('local-ledger-folio')?.value?.trim()||'';
  const amount=Number(document.getElementById('local-ledger-amount')?.value);
  const amountMinor=Math.round(amount*100);
- const validEnvironments={razorpay:['test','live'],cashfree:['test','live'],payu:['test','live'],phonepe:['uat','production'],paytm:['staging','production'],ccavenue:['test','live'],jiopay:['uat','production']};
+ const validEnvironments={razorpay:['test','live'],cashfree:['test','live'],payu:['test','live'],phonepe:['uat','production'],paytm:['staging','production'],jiopay:['uat','production']};
   if(!validEnvironments[provider]?.includes(environment)||!/^[A-Za-z0-9._:-]{8,128}$/.test(folioId)||!Number.isFinite(amount)||amount<=0||!Number.isSafeInteger(amountMinor)||Math.abs(amount*100-amountMinor)>1e-7){toast('Enter a supported provider environment, valid folio reference and INR amount with up to 2 decimals.');return;}
  const transactionId=globalThis.crypto?.randomUUID?.();if(!transactionId){toast('Secure transaction ID generation is unavailable.');return;}
  try{
@@ -4253,7 +4253,7 @@ window.refreshAureliaLocalPaymentJournal=async function(){
 };
 window.refreshAureliaNativeGateway=async function(){
  if(!window.AureliaNative)return;
- for(const [provider,environments] of Object.entries({razorpay:['test','live'],cashfree:['test','live'],payu:['test','live'],phonepe:['uat','production'],paytm:['staging','production'],ccavenue:['test','live'],jiopay:['uat','production']})){
+ for(const [provider,environments] of Object.entries({razorpay:['test','live'],cashfree:['test','live'],payu:['test','live'],phonepe:['uat','production'],paytm:['staging','production'],jiopay:['uat','production']})){
   for(const environment of environments){
    try{window.AureliaNativeGatewayState[provider][environment]=await localGatewayNativeCall('gatewayVaultStatus',provider,environment);}
    catch(error){window.AureliaNativeGatewayState[provider][environment]={configured:false,active:false,error:error.message};}
@@ -4271,19 +4271,18 @@ window.openAureliaNativeGateway=function(provider){
  setTimeout(()=>target.scrollIntoView({behavior:"smooth",block:"start"}),180);
 };
 function localNativeGatewayHtml(){
- const names={razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',ccavenue:'CCAvenue',jiopay:'JioPay'};
+ const names={razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay'};
  const definitions={
   razorpay:[['keyId','Key ID','text','Test key ID'],['keySecret','Key Secret','password','Write-only'],['webhookSecret','Webhook Secret','password','Write-only']],
   cashfree:[['appId','App ID','text','Sandbox App ID'],['secretKey','Secret Key','password','Write-only'],['webhookSecret','Webhook Secret','password','Write-only']],
   payu:[['merchantKey','Merchant Key','text','Merchant key'],['salt','Salt','password','Write-only']],
   phonepe:[['clientId','Client ID','text','Client ID'],['clientSecret','Client Secret','password','Write-only'],['clientVersion','Client Version','text','Client version'],['merchantId','Merchant ID','text','Merchant ID']],
   paytm:[['mid','Merchant ID (MID)','text','MID'],['merchantKey','Merchant Key','password','Write-only'],['websiteName','Website / Industry Type','text','Website name']],
-  ccavenue:[['merchantId','Merchant ID','text','Merchant ID'],['accessCode','Access Code','password','Write-only'],['workingKey','Working Key','password','Write-only']],
   jiopay:[['merchantId','Merchant ID','text','Merchant ID'],['merchantKey','Merchant Key','password','Write-only'],['saltOrHashKey','API Hash Key','password','Write-only']]
  };
- const environments={razorpay:['test','live'],cashfree:['test','live'],payu:['test','live'],phonepe:['uat','production'],paytm:['staging','production'],ccavenue:['test','live'],jiopay:['uat','production']};
+ const environments={razorpay:['test','live'],cashfree:['test','live'],payu:['test','live'],phonepe:['uat','production'],paytm:['staging','production'],jiopay:['uat','production']};
  const native=!!window.AureliaNative;
- const journalUi='<div class="card" style="margin-top:14px"><h3>Offline payment intent journal</h3><p class="lab">Save a payment request on this device before dispatch. This does not create a provider order, open checkout, collect money or mark a folio paid. Use it to preserve the intended operation while the trusted payment engine is unavailable.</p><label class="fld"><span>Provider</span><select id="local-ledger-provider" onchange="updateAureliaLocalLedgerEnvironments(this.value)"><option value="razorpay">Razorpay</option><option value="cashfree">Cashfree Payments</option><option value="payu">PayU</option><option value="phonepe">PhonePe</option><option value="paytm">Paytm</option><option value="ccavenue">CCAvenue</option><option value="jiopay">JioPay</option></select></label><label class="fld"><span>Environment</span><select id="local-ledger-environment"><option value="test">Test / Sandbox</option><option value="uat">UAT</option><option value="staging">Staging</option><option value="live">Live (journal only; collection disabled)</option><option value="production">Production (journal only; collection disabled)</option></select></label><label class="fld"><span>PMS folio / booking reference</span><input id="local-ledger-folio" maxlength="128" placeholder="Booking or folio reference"></label><label class="fld"><span>Amount (INR)</span><input id="local-ledger-amount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><button class="btn sm" style="width:100%" onclick="createAureliaLocalPaymentIntent()">Save intent on this device</button><div class="row" style="margin-top:10px"><b>Pending device journal</b><button class="btn sm ghost" onclick="refreshAureliaLocalPaymentJournal()">Refresh</button></div><div id="aurelia-local-ledger-rows"><p class="lab">Refresh to load pending entries.</p></div></div>';
+ const journalUi='<div class="card" style="margin-top:14px"><h3>Offline payment intent journal</h3><p class="lab">Save a payment request on this device before dispatch. This does not create a provider order, open checkout, collect money or mark a folio paid. Use it to preserve the intended operation while the trusted payment engine is unavailable.</p><label class="fld"><span>Provider</span><select id="local-ledger-provider" onchange="updateAureliaLocalLedgerEnvironments(this.value)"><option value="razorpay">Razorpay</option><option value="cashfree">Cashfree Payments</option><option value="payu">PayU</option><option value="phonepe">PhonePe</option><option value="paytm">Paytm</option><option value="jiopay">JioPay</option></select></label><label class="fld"><span>Environment</span><select id="local-ledger-environment"><option value="test">Test / Sandbox</option><option value="uat">UAT</option><option value="staging">Staging</option><option value="live">Live (journal only; collection disabled)</option><option value="production">Production (journal only; collection disabled)</option></select></label><label class="fld"><span>PMS folio / booking reference</span><input id="local-ledger-folio" maxlength="128" placeholder="Booking or folio reference"></label><label class="fld"><span>Amount (INR)</span><input id="local-ledger-amount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><button class="btn sm" style="width:100%" onclick="createAureliaLocalPaymentIntent()">Save intent on this device</button><div class="row" style="margin-top:10px"><b>Pending device journal</b><button class="btn sm ghost" onclick="refreshAureliaLocalPaymentJournal()">Refresh</button></div><div id="aurelia-local-ledger-rows"><p class="lab">Refresh to load pending entries.</p></div></div>';
  const providers=Object.keys(names).map(provider=>{
   const envs=environments[provider].map(environment=>{
    const state=window.AureliaNativeGatewayState[provider]?.[environment]||{};
@@ -4298,7 +4297,7 @@ function localNativeGatewayHtml(){
  return '<section id="aurelia-local-payment-gateway" class="card" style="margin-top:12px"><h3>Device-local Gateway Credential Vault</h3><p class="lab">This Android Keystore-backed vault stores credentials encrypted at rest on this device only. It does not validate provider keys, create orders, open checkout or verify captures. Provider execution remains disabled until each native adapter passes its acceptance tests. No LAN or Docker payment appliance is used.</p>'+(native?providers:'<div class="tag out">Android app required</div><p class="lab">Install the Android APK to inspect native vault status. Browser preview cannot access the Android Keystore.</p>')+(native?journalUi:'')+'<p class="lab">Security boundary: Keystore encryption protects data at rest, but this is not equivalent to a trusted merchant server. A compromised/rooted device or runtime instrumentation can expose credentials while they are being used. Provider order creation, signature verification, webhook processing, refunds and folio settlement are not yet enabled by this credential vault. Do not use live credentials for real collections yet.</p><div class="row" style="margin-top:8px"><button class="btn sm ghost" onclick="refreshAureliaNativeGateway()">Refresh local gateway status</button></div></section>';
 }
 window.saveAureliaNativeGateway=async function(provider,environment){
- const keys={razorpay:['keyId','keySecret','webhookSecret'],cashfree:['appId','secretKey','webhookSecret'],payu:['merchantKey','salt'],phonepe:['clientId','clientSecret','clientVersion','merchantId'],paytm:['mid','merchantKey','websiteName'],ccavenue:['merchantId','accessCode','workingKey'],jiopay:['merchantId','merchantKey','saltOrHashKey']}[provider]||[];
+ const keys={razorpay:['keyId','keySecret','webhookSecret'],cashfree:['appId','secretKey','webhookSecret'],payu:['merchantKey','salt'],phonepe:['clientId','clientSecret','clientVersion','merchantId'],paytm:['mid','merchantKey','websiteName'],jiopay:['merchantId','merchantKey','saltOrHashKey']}[provider]||[];
  const credentials={};
  for(const key of keys)credentials[key]=document.getElementById('local-gw-'+provider+'-'+environment+'-'+key)?.value?.trim()||'';
  if(keys.some(key=>!credentials[key])){toast('Complete all required '+provider+' credential fields.');return;}
