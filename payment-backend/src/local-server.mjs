@@ -799,6 +799,7 @@ app.post('/v1/admin/devices/:deviceId/revoke', ownerAuth, requireBrowserMutation
 // A device can lease only its next contiguous sequence. Lease expiry permits
 // redelivery; it never advances the cursor.
 app.post('/v1/devices/:deviceId/commands/lease', deviceAuth, (req, res) => {
+  if (!settlementSigner) return fail(res, 503, 'settlement_authorization_issuer_unavailable');
   const deviceId = req.device.deviceId;
   const leaseSeconds = 60;
   const leaseToken = randomBytes(32).toString('base64url');
