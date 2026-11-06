@@ -801,11 +801,13 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
   }
 });
 
-app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'application/json', limit: '1mb' }), async (req, res) => {
-  const { provider, tenantId, environment } = req.params;
-  if (!['razorpay', 'cashfree'].includes(provider) || !tenantIdPattern.test(tenantId || '') ||
-      !['test', 'live'].includes(environment) || !Buffer.isBuffer(req.body)) {
-    return fail(res, 400, 'invalid_webhook_request');
+app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
+  const { provider, tenantId, environment: publicEnvironment } = req.params;
+  const environment = adapterEnvironmentOf(provider, publicEnvironment);
+  if (!implementedProviderAdapters().includes(provider) || !tenantIdPattern.test(tenantId || '') ||
+      !environment || !Buffer.isBuffer(req.body)) return fail(res, 400, 'invalid_webhook_request');
+  if (publicEnvironment === 'live' && providerQualificationStatus(provider).liveCollection !== true) {
+    return fail(res, 403, 'live_collection_not_enabled');
   }
   try {
     const hookState = await providerTenantDoc(tenantId, provider, environment).get();
@@ -818,11 +820,19 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     const checked = await adapter.verifyWebhook(req.body, req.headers);
     if (!checked.valid) return fail(res, 400, 'invalid_webhook_signature');
     const event = checked.event;
-    const paymentEntity = provider === 'razorpay'
-      ? event?.payload?.payment?.entity
-      : event?.data?.payment;
-    const providerOrderId = provider === 'razorpay' ? paymentEntity?.order_id : event?.data?.order?.order_id;
-    const paymentId = provider === 'razorpay' ? paymentEntity?.id : paymentEntity?.cf_payment_id;
+    const paymentEntity = provider === 'razorpay' ? event?.payload?.payment?.entity
+      : provider === 'cashfree' ? event?.data?.payment
+      : provider === 'phonepe' ? event?.payload : event;
+    const providerOrderId = provider === 'razorpay' ? paymentEntity?.order_id
+      : provider === 'cashfree' ? event?.data?.order?.order_id
+      : provider === 'payu' ? event?.txnid
+      : provider === 'phonepe' ? paymentEntity?.merchantOrderId
+      : provider === 'paytm' ? event?.ORDERID : event?.merchantTxnNo;
+    const paymentId = provider === 'razorpay' ? paymentEntity?.id
+      : provider === 'cashfree' ? paymentEntity?.cf_payment_id
+      : provider === 'payu' ? event?.mihpayid
+      : provider === 'phonepe' ? (paymentEntity?.transactionId || paymentEntity?.paymentDetails?.[0]?.transactionId)
+      : provider === 'paytm' ? event?.TXNID : event?.pgTransactionId;
     if (!providerOrderId || !paymentId) return res.status(200).json({ received: true, ignored: true });
     const providerOrderHash = crypto.createHash('sha256')
       .update(tenantId + ':' + provider + ':' + environment + ':' + providerOrderId).digest('hex');
@@ -842,13 +852,13 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     const samePayment = status.paymentId === paymentId;
     const sameCurrency = status.currency === orderSnap.data().currency;
     const sameAmount = status.amountMinor === orderSnap.data().amountMinor;
-    const verified = sameOrder && samePayment && sameCurrency && sameAmount && status.captured === true &&
-      (provider === 'razorpay'
-        ? status.paymentStatus === 'captured'
-        : status.paymentStatus === 'SUCCESS');
-    const eventId = provider === 'razorpay'
-      ? req.get('x-razorpay-event-id')
-      : req.get('x-webhook-id') || crypto.createHash('sha256').update(req.body).digest('hex');
+    const verified = sameOrder && samePayment && sameCurrency && sameAmount && status.captured === true;
+    const eventId = provider === 'razorpay' ? req.get('x-razorpay-event-id')
+      : provider === 'cashfree' ? (req.get('x-webhook-id') || crypto.createHash('sha256').update(req.body).digest('hex'))
+      : provider === 'phonepe' ? (event.eventId || event.id || crypto.createHash('sha256').update(req.body).digest('hex'))
+      : provider === 'payu' ? (event.mihpayid || event.txnid)
+      : provider === 'paytm' ? (event.ORDERID + ':' + (event.TXNID || 'event'))
+      : (event.merchantTxnNo + ':' + (event.pgTransactionId || 'event'));
     if (typeof eventId !== 'string' || !webhookEventIdPattern.test(eventId)) return fail(res, 400, 'invalid_event_id');
     const inboxId = crypto.createHash('sha256').update(tenantId + ':' + provider + ':' + environment + ':' + eventId).digest('hex');
     const payloadHash = crypto.createHash('sha256').update(req.body).digest('hex');
