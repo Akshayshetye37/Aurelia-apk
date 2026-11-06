@@ -379,8 +379,8 @@ function addFirebaseDependencies(contents, kotlinDsl) {
   const missing = [auth, ...paymentDependencies].filter(dependency => !updated.includes(dependency));
   if (missing.length) {
     const lines = kotlinDsl
-      ? '\\n' + missing.map(dependency => '    implementation("' + dependency + '")').join('\\n')
-      : '\\n' + missing.map(dependency => '    implementation "' + dependency + '"').join('\\n');
+      ? '\n' + missing.map(dependency => '    implementation("' + dependency + '")').join('\n')
+      : '\n' + missing.map(dependency => '    implementation "' + dependency + '"').join('\n');
     updated = updated.replace(/dependencies\s*\{/, match => match + lines);
   }
   if (!updated.includes(bom)) {
