@@ -12,6 +12,11 @@ for(const name of ['canonical.mjs','settlement-trust.mjs','settlement-authorizat
  if(!fs.existsSync(source))throw new Error('Payment module not found: '+source);
  fs.copyFileSync(source,path.join(settlementDest,name));
 }
+const servicesDest=path.join(dest,'src','services');
+fs.mkdirSync(servicesDest,{recursive:true});
+const paymentApiSource=path.join(root,'src','services','payment-api.mjs');
+if(!fs.existsSync(paymentApiSource))throw new Error('Cloud payment API client not found: '+paymentApiSource);
+fs.copyFileSync(paymentApiSource,path.join(servicesDest,'payment-api.mjs'));
 const reconciliationSrc=path.join(root,'src','features','payments','reconciliation-bridge.js');
 if(!fs.existsSync(reconciliationSrc))throw new Error('Reconciliation bridge not found: '+reconciliationSrc);
 const featuresDest=path.join(dest,'src','features','payments');
