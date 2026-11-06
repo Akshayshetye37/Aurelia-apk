@@ -44,6 +44,14 @@ test('empty booking and dining inventories cannot abort startup on sample-data m
     'guarded optional demo mutation must execute before SUB is declared');
 });
 
+test('sandboxed CodeShack preview is identified as session-only, never reported as durable storage', () => {
+  assert.match(html, /String\\(location\\.href\\)\\.startsWith\\('about:srcdoc'\\)/);
+  assert.match(html, /mode: ok \\? 'browser-local-storage' : 'session-memory-only'/);
+  assert.match(html, /embedded-preview-sandbox/);
+  assert.match(html, /PREVIEW ONLY: CodeShack embeds this app in a sandbox that blocks persistent storage/);
+  assert.match(html, /if\\(store\\.memoryOnly\\)throw new Error\\(window\\.AureliaStorageDiagnostics/);
+});
+
 test('room-type catalogue is derived from persisted inventory and refreshed before rendering', () => {
   assert.match(html, /const types=\[\];\s*function syncRoomTypes\(\)/);
   assert.match(html, /types\.splice\(0,types\.length,\.\.\.byType\.values\(\)\)/);
