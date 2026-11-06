@@ -9,8 +9,8 @@ const REQUIRED = ['validateCredentials','createOrder','findOrderByReference','ge
   'verifyWebhook','createRefund','getRefundStatus'];
 
 test('only providers with all seven concrete operations are registered', () => {
-  assert.deepEqual(implementedProviderAdapters().sort(), ['cashfree','jiopay','paytm','phonepe','razorpay']);
-  for (const provider of ['payu','ccavenue']) {
+  assert.deepEqual(implementedProviderAdapters().sort(), ['cashfree','jiopay','paytm','payu','phonepe','razorpay']);
+  for (const provider of ['ccavenue']) {
     assert.equal(providerCapabilities(provider), null);
     assert.deepEqual(providerQualificationStatus(provider), {
       implemented: false, testCheckout: false, liveCollection: false
@@ -25,7 +25,8 @@ test('all wired adapters expose every lifecycle operation but remain release-gat
     cashfree: [{appId:'app-id',secretKey:'secret-value',webhookSecret:'hook-secret'},'test'],
     jiopay: [{merchantId:'merchant-123',saltOrHashKey:'hash-secret'},'uat'],
     paytm: [{mid:'merchant123',merchantKey:'merchant-secret',websiteName:'WEBSTAGING'},'staging'],
-    phonepe: [{clientId:'client-id',clientSecret:'client-secret',clientVersion:'1',webhookUsername:'hook-user',webhookPassword:'hook-secret'},'test']
+    phonepe: [{clientId:'client-id',clientSecret:'client-secret',clientVersion:'1',webhookUsername:'hook-user',webhookPassword:'hook-secret'},'test'],
+    payu: [{merchantKey:'merchant-key',salt:'payu-salt-value'},'test']
   };
   for (const [provider,[value,environment]] of Object.entries(credentials)) {
     assert.deepEqual(providerCapabilities(provider), REQUIRED);
