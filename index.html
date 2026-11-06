@@ -8,6 +8,8 @@
      Storage posture: durable write failures must surface; strict imports/restores
      require exact persistent read-back and rollback verification.
      Payment release posture: live collection OFF; PMS accounting mutations remain
+     fail-closed. Settlement authorization v2 local verifier/journal/projector foundations
+     are present but backend issuer and trusted Android bridge are not integrated.
      fail-closed. LAN SQLite settlement commands have DB-enforced transaction binding,
      immutability and durable-receipt guards; this is not cross-database folio atomicity.
      Android CI: full PMS tests, web build, privacy checks, Capacitor sync,
