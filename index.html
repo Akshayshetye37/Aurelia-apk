@@ -2,7 +2,7 @@
 AURELIA PERSISTENCE / RELEASE STATUS — 2026-11-07
 Architecture: local-first PMS; Android SQLite + browser/PWA IndexedDB are the target canonical stores.
 Implemented foundations: shared repository contract, transactional IndexedDB adapter, native SQLite template, and local sync coordinator.
-Latest correction: root-level IndexedDB outbox test now respects future retryAt backoff; the previous CI failure was a stale test expectation, not a reason to weaken retry scheduling. See README.md for commit and CI status.
+Latest corrections: root-level outbox retry test now respects future retryAt backoff; scripts/prepare-web.js line breaks were repaired after CI exposed a malformed packaging block. The test suite passed 289/289 on the preceding commit; the corrected build is awaiting CI. See README.md for exact commit and workflow status.
 IMPORTANT: these repositories are NOT yet the active UI persistence path. The running PMS state still uses the legacy localStorage-backed runtime. Do not remove or rewrite that state until asynchronous bootstrap, full domain migration/read-back, domain command routing, recovery and rollback have been verified.
 All booking/room/guest/folio/payment business writes must ultimately pass through the platform repository; entity update + outbox event must commit atomically. Do not simulate atomicity with asynchronous localStorage mirroring.
 Sync is disabled by default. Payment provider execution is separate from PMS sync; client callbacks are not authoritative payment proof.
