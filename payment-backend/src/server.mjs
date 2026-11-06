@@ -661,7 +661,10 @@ app.post('/v1/payments/intents/:intentId/refunds', requireTenantAdmin,
       if (!intentSnap.exists || intentSnap.data().tenantId !== req.tenant.id) return fail(res, 404, 'payment_intent_not_found');
       const intent = intentSnap.data(), environment = intent.environment;
       if (!implementedProviderAdapters().includes(intent.provider)) return fail(res, 400, 'provider_not_supported');
-      if (environment !== adapterEnvironmentOf(intent.provider, 'test')) return fail(res, 403, 'live_refunds_not_enabled');
+      if (environment !== adapterEnvironmentOf(intent.provider, 'test')) {
+        const liveBlock = await liveCollectionBlockReason(req.tenant.id, intent.provider);
+        if (liveBlock) return fail(res, liveBlock === 'payment_controls_unavailable' ? 503 : 403, liveBlock);
+      }
       if (intent.state !== 'CAPTURED' || typeof intent.providerOrderId !== 'string' ||
           typeof intent.providerPaymentId !== 'string' || !intent.providerPaymentId) return fail(res, 409, 'captured_payment_required');
       const refundKey = crypto.createHash('sha256').update(req.tenant.id + ':' + intent.provider + ':' +
@@ -911,7 +914,10 @@ app.delete('/v1/admin/providers/:provider/credentials', requireTenantAdmin, asyn
 app.post('/v1/admin/providers/:provider/validate', requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
   const { provider } = req.params, publicEnvironment = envOf(req), environment = adapterEnvironmentOf(provider, publicEnvironment);
   if (!environment) return fail(res, 400, 'invalid_provider_environment');
-  if (publicEnvironment === 'live' && providerQualificationStatus(provider).liveCollection !== true) return fail(res, 403, 'live_collection_not_enabled');
+  if (publicEnvironment === 'live') {
+    const liveBlock = await liveCollectionBlockReason(req.tenant.id, provider);
+    if (liveBlock) return fail(res, liveBlock === 'payment_controls_unavailable' ? 503 : 403, liveBlock);
+  }
   try {
     const credentials = await paymentRepository.secretManager.getProviderSecrets(req.tenant.id, provider, environment);
     const { createProviderAdapter } = await import('./providers/factory.mjs');
