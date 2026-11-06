@@ -12,11 +12,12 @@ function makeJournal() {
     now: () => "2026-11-03T00:00:00.000Z"
   });
 }
-const input = (payload = { bookingId: "B-1", amountPaise: 12500 }) => ({
-  provider: "manual",
-  commandId: "cmd-1",
-  payload
-});
+const scope = { tenantId: "tenant_01", deviceId: "device_01", provider: "manual",
+  providerAccountId: "local_installation_01", environment: "local" };
+const input = (patch = {}) => {
+  const command = { ...scope, commandId: "cmd-1", bookingId: "B-1", amountPaise: 12500, ...patch };
+  return { ...scope, commandId: "cmd-1", payload: { command } };
+};
 
 test("journal append is durable and same-payload replay is idempotent", async () => {
   const journal = makeJournal();
@@ -43,7 +44,7 @@ test("crash after journal append is recoverable without losing the record", asyn
   await journal.append(input());
   const pending = await journal.listPending();
   assert.equal(pending.length, 1);
-  assert.deepEqual(pending[0].payload, { bookingId: "B-1", amountPaise: 12500 });
+  assert.deepEqual(pending[0].payload.command, { ...scope, commandId: "cmd-1", bookingId: "B-1", amountPaise: 12500 });
 });
 
 test("an appended record remains pending until the guarded projector marks it applied", async () => {
@@ -79,7 +80,7 @@ test("already-applied replay remains idempotent and cannot regress journal statu
 
 test("invalid identity and missing crypto fail closed", async () => {
   const journal = makeJournal();
-  await assert.rejects(journal.append({ provider: "manual", payload: {} }), /transaction ID or command ID/);
+  await assert.rejects(journal.append({ ...scope, payload: { command: { ...scope } } }), /command ID/);
   const noCrypto = new IndexedDbSettlementJournal({ indexedDBImpl: indexedDB, cryptoImpl: null, databaseName: "no-crypto" });
   await assert.rejects(noCrypto.append(input()), /Web Crypto is unavailable/);
 });
