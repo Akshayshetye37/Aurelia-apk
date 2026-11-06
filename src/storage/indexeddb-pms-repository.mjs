@@ -4,7 +4,8 @@ const clone=x=>typeof structuredClone==="function"?structuredClone(x):JSON.parse
 const req=r=>new Promise((ok,no)=>{r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error||new Error("IndexedDB request failed"));});
 const done=t=>new Promise((ok,no)=>{t.oncomplete=ok;t.onabort=t.onerror=()=>no(t.error||new Error("IndexedDB transaction failed"));});
 const obj=(x,n)=>{if(!x||typeof x!=="object"||Array.isArray(x))throw new TypeError(n+" must be object");return x;};
-const safeInt=(x,n,min=0)=>{assertPmsVersion(x,n);if(x<min)throw new TypeError("Invalid "+n);return x;};\nconst ident=(x,n)=>{if(typeof x!=="string"||!x||x.length>180||/[\u0000-\u001f]/.test(x))throw new TypeError("Invalid "+n);return x;};
+const safeInt=(x,n,min=0)=>{assertPmsVersion(x,n);if(x<min)throw new TypeError("Invalid "+n);return x;};
+const ident=(x,n)=>assertPmsIdentity(x,n);
 const ek=(t,i)=>t+":"+i;
 const required=["rooms","b","g","t","exp","inv","led","aud"];
 export function parseLegacyPmsSnapshot(raw){if(typeof raw!=="string"||!raw)throw new TypeError("Legacy snapshot is empty");let parsed;try{parsed=JSON.parse(raw)}catch{throw new Error("Legacy snapshot JSON is invalid");}obj(parsed,"Legacy snapshot");for(const k of required)if(!Array.isArray(parsed[k]))throw new Error("Legacy snapshot missing array "+k);for(const k of ["set","menu"])obj(parsed[k],"Legacy "+k);return Object.freeze({raw,parsed:clone(parsed),formatVersion:1});}
