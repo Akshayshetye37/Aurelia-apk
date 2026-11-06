@@ -19,12 +19,11 @@ test('only providers with all seven concrete operations are registered', () => {
   }
 });
 
-test('Razorpay, Cashfree and JioPay expose every lifecycle operation but remain release-gated', () => {
+test('all wired adapters expose every lifecycle operation but remain release-gated', () => {
   const credentials = {
     razorpay: [{keyId:'rzp_test_12345678',keySecret:'secret-value',webhookSecret:'hook-secret'},'test'],
     cashfree: [{appId:'app-id',secretKey:'secret-value',webhookSecret:'hook-secret'},'test'],
     jiopay: [{merchantId:'merchant-123',saltOrHashKey:'hash-secret'},'uat'],
-    paytm: [{mid:'merchant123',merchantKey:'merchant-secret',websiteName:'WEBSTAGING'},'staging'],
     paytm: [{mid:'merchant123',merchantKey:'merchant-secret',websiteName:'WEBSTAGING'},'staging']
   };
   for (const [provider,[value,environment]] of Object.entries(credentials)) {
@@ -50,7 +49,8 @@ test('enabled adapters do not inherit abstract lifecycle methods', () => {
   const configurations = {
     razorpay: [{keyId:'rzp_test_12345678',keySecret:'secret-value',webhookSecret:'hook-secret'},'test'],
     cashfree: [{appId:'app-id',secretKey:'secret-value',webhookSecret:'hook-secret'},'test'],
-    jiopay: [{merchantId:'merchant-123',saltOrHashKey:'hash-secret'},'uat']
+    jiopay: [{merchantId:'merchant-123',saltOrHashKey:'hash-secret'},'uat'],
+    paytm: [{mid:'merchant123',merchantKey:'merchant-secret',websiteName:'WEBSTAGING'},'staging']
   };
   for (const [provider,[credentials,environment]] of Object.entries(configurations)) {
     const adapter=createProviderAdapter(provider,{credentials,environment});
