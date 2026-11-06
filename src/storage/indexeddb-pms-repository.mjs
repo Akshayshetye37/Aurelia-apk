@@ -1,3 +1,4 @@
+import { PmsRepository, assertPmsIdentity, assertPmsVersion } from "./pms-repository-contract.mjs";
 const DB="aurelia-pms-canonical", V=1, S={meta:"meta",entities:"entities",outbox:"outbox",snapshots:"migration_snapshots"};
 const clone=x=>typeof structuredClone==="function"?structuredClone(x):JSON.parse(JSON.stringify(x));
 const req=r=>new Promise((ok,no)=>{r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error||new Error("IndexedDB request failed"));});
