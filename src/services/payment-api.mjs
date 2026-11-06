@@ -100,6 +100,13 @@ export class PaymentApiClient {
     return this.request('/v1/payments/intents/' + encodeURIComponent(intentId), options);
   }
 
+  reconcileIntent(intentId, options = {}) {
+    if (!INTENT_ID.test(intentId || '')) throw new TypeError('invalid_payment_intent_id');
+    return this.request('/v1/payments/intents/' + encodeURIComponent(intentId) + '/reconcile', {
+      ...options, method: 'POST'
+    });
+  }
+
   getCapabilities(options = {}) {
     return this.request('/v1/payments/capabilities', options);
   }
