@@ -206,7 +206,10 @@ export async function leaseNextSettlementCommand({
       lastLeasedAt: current
     });
     return { command, leaseToken, expiresAt: expiresAt.toISOString(),
-      cursor: Number.isSafeInteger(device.lastAckedSequence) ? device.lastAckedSequence : 0 };
+      cursor: Number.isSafeInteger(device.lastAckedSequence) ? device.lastAckedSequence : 0,
+      attestationSecurityLevel: device.attestationSecurityLevel,
+      attestationVerifiedBootState: device.attestationVerifiedBootState,
+      attestationDeviceLocked: device.attestationDeviceLocked };
   });
   if (!result) return null;
   const command = result.command;
@@ -215,7 +218,9 @@ export async function leaseNextSettlementCommand({
   const leaseId = command.leaseId;
   const settlementEnabled = settlementAllowed === true &&
     settlement.environment === "test" &&
-    command.attestationSecurityLevel !== "SOFTWARE";
+    ["TRUSTED_ENVIRONMENT", "STRONG_BOX"].includes(result.attestationSecurityLevel) &&
+    result.attestationVerifiedBootState === "VERIFIED" &&
+    result.attestationDeviceLocked === true;
   const policyLease = signer.sign(SETTLEMENT_LEASE_TYPE, {
     tenantId, deviceId, provider: settlement.provider,
     providerAccountId: settlement.providerAccountId, environment: settlement.environment,
@@ -263,6 +268,12 @@ export async function acknowledgeSettlementCommand({
       }
       return { acknowledged: true, duplicate: true, cursor: deviceSnap.data().lastAckedSequence };
     }
+    const intentRef = db.collection("paymentIntents").doc(command.transactionId);
+    const inboxRef = command.webhookInboxId
+      ? db.collection("paymentWebhookInbox").doc(command.webhookInboxId) : null;
+    const [intentSnap, inboxSnap] = await Promise.all([
+      tx.get(intentRef), inboxRef ? tx.get(inboxRef) : Promise.resolve(null)
+    ]);
     const current = now();
     const leaseExpires = command.leaseExpiresAt?.toDate?.()?.getTime?.() || 0;
     if (command.status !== "LEASED" || leaseExpires <= current.getTime() ||
@@ -276,8 +287,6 @@ export async function acknowledgeSettlementCommand({
       acknowledgedAt: current, leaseTokenHash: null, leaseExpiresAt: null
     });
     tx.update(ref, { lastAckedSequence: body.sequenceId, lastAcknowledgedAt: current });
-    const intentRef = db.collection("paymentIntents").doc(command.transactionId);
-    const intentSnap = await tx.get(intentRef);
     if (intentSnap.exists && intentSnap.data().tenantId === tenantId) {
       tx.update(intentRef, {
         accountingStatus: "POSTED_TO_LOCAL_FOLIO",
@@ -286,8 +295,8 @@ export async function acknowledgeSettlementCommand({
         accountingBlockReason: null
       });
     }
-    if (command.webhookInboxId) {
-      tx.set(db.collection("paymentWebhookInbox").doc(command.webhookInboxId), {
+    if (inboxRef && inboxSnap?.exists) {
+      tx.set(inboxRef, {
         accountingStatus: "POSTED_TO_LOCAL_FOLIO",
         processingStatus: "POSTED_TO_FOLIO",
         ledgerAckId: body.ledgerAckId,
