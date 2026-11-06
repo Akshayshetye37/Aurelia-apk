@@ -1010,10 +1010,9 @@ app.post('/v1/admin/providers/:provider/activate', requireTenantAdmin, express.j
   if (blocked) return blocked;
   const ref = providerTenantDoc(req.tenant.id, provider, environment);
   const snap = await ref.get(), state = snap.exists ? snap.data() : {};
-  if (state.credentialsValidated !== true ||
-      state.sandboxTestPassed !== true || state.webhookVerified !== true) {
-    return fail(res, 409, 'provider_onboarding_checks_incomplete');
-  }
+  if (state.credentialsValidated !== true) return fail(res, 409, 'provider_credentials_not_validated');
+  if (state.sandboxTestPassed !== true) return fail(res, 409, 'sandbox_acceptance_required');
+  if (state.webhookVerified !== true) return fail(res, 409, 'webhook_verification_required');
   await ref.set({ active: true, activatedAt: FieldValue.serverTimestamp(), activatedBy: req.actor.uid }, { merge: true });
   return res.json({ active: true, provider, environment: publicEnvironment, adapterEnvironment: environment });
 });
