@@ -557,6 +557,11 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
   const blocked = await enforcePaymentControl(req, res, intentControl);
   if (blocked) return blocked;
   try {
+    const selection = await readActiveProvider({ db, tenantId: req.tenant.id });
+    if (!selection.configured || selection.activeProviderId !== body.provider ||
+        selection.environment !== body.environment || selection.adapterEnvironment !== adapterEnvironment) {
+      return fail(res, 409, 'provider_not_active_for_tenant');
+    }
     const state = await providerTenantDoc(req.tenant.id, body.provider, adapterEnvironment).get();
     if (!state.exists || state.data().active !== true || state.data().credentialsValidated !== true) {
       return fail(res, 409, 'provider_not_active');
@@ -890,6 +895,8 @@ app.delete('/v1/admin/providers/:provider/credentials', requireTenantAdmin, asyn
     const stateRef = providerTenantDoc(req.tenant.id, provider, environment);
     const state = await stateRef.get();
     if (!state.exists) return res.json({ removed: true, provider, environment, alreadyAbsent: true });
+    await deactivateSingleProvider({ db, tenantId: req.tenant.id, provider,
+      environment: publicEnvironment, actorUid: req.actor.uid });
     // Disable provider use before disabling either secret version. Retaining
     // the secret resources allows safe re-provisioning and avoids project-wide
     // secret deletion permission in the runtime service account.
@@ -1237,13 +1244,15 @@ app.post('/v1/admin/providers/:provider/activate', requireTenantAdmin, express.j
   }
   const blocked = await enforcePaymentControl(req, res, 'test_collection');
   if (blocked) return blocked;
-  const ref = providerTenantDoc(req.tenant.id, provider, environment);
-  const snap = await ref.get(), state = snap.exists ? snap.data() : {};
-  if (state.credentialsValidated !== true) return fail(res, 409, 'provider_credentials_not_validated');
-  if (state.sandboxTestPassed !== true) return fail(res, 409, 'sandbox_acceptance_required');
-  if (state.webhookVerified !== true) return fail(res, 409, 'webhook_verification_required');
-  await ref.set({ active: true, activatedAt: FieldValue.serverTimestamp(), activatedBy: req.actor.uid }, { merge: true });
-  return res.json({ active: true, provider, environment: publicEnvironment, adapterEnvironment: environment });
+  try {
+    const result = await activateSingleProvider({ db, tenantId: req.tenant.id, provider,
+      environment: publicEnvironment, adapterEnvironment: environment, actorUid: req.actor.uid });
+    return res.json({ active: true, ...result });
+  } catch (error) {
+    if (error.code === 'PROVIDER_NOT_CONFIGURED') return fail(res, 409, 'provider_credentials_not_configured');
+    if (error.code === 'PROVIDER_QUALIFICATION_INCOMPLETE') return fail(res, 409, 'provider_sandbox_or_webhook_acceptance_required');
+    return fail(res, 503, 'provider_activation_unavailable');
+  }
 });
 app.use((err, _req, res, next) => {
   // Deliberately do not log request bodies, tokens, provider responses or secrets.
