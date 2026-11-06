@@ -4135,6 +4135,46 @@ if (typeof window.render === "function") window.render();
   const platform=window.AureliaPaymentPlatform;
   return !!(platform&&typeof platform.isPayBridgeAuthenticated==='function'&&platform.isPayBridgeAuthenticated(result));
  }
+ window.AureliaLiveCollectionControlState=window.AureliaLiveCollectionControlState||{loaded:false,enabled:false,internalAllowed:false,controlState:'NOT_LOADED',busy:false,error:null};
+ function liveCollectionControlHtml(){
+  const state=window.AureliaLiveCollectionControlState;
+  const status=state.loaded?(state.enabled?'ON':'OFF'):'Not loaded';
+  const gate=state.loaded?(state.internalAllowed?'Internal release gate approved':'Internal release gate OFF'):'Server state not loaded';
+  const toggleDisabled=!state.loaded||state.busy||state.controlState!=='CONFIGURED'||(!state.enabled&&!state.internalAllowed);
+  return '<section class="card" style="margin-top:14px"><div class="row"><h3>Live Collection</h3><span class="tag out">'+esc(status)+'</span></div><p class="lab">Tenant administrator control. The server remains authoritative and requires verified email, owner/admin membership, recent MFA and the independent internal release gate. This switch cannot approve the internal gate.</p><p class="lab" role="status">'+esc(gate)+' · '+esc(state.controlState)+'</p>'+(state.error?'<p class="lab" role="alert">'+esc(state.error)+'</p>':'')+'<div class="row" style="flex-wrap:wrap"><button class="btn sm ghost" onclick="refreshAureliaLiveCollectionControl()" '+(state.busy?'disabled':'')+'>Refresh server status</button><button class="btn sm" onclick="setAureliaLiveCollectionEnabled('+(!state.enabled)+')" '+(toggleDisabled?'disabled':'')+'>'+(state.enabled?'Turn OFF':'Turn ON')+'</button></div><p class="lab">OFF by default. Turning OFF blocks new live orders; unresolved in-flight intents remain pending/reconciliation-required for server-side review. Enabling requires recent MFA and will be rejected unless internal release approval is already active.</p></section>';
+ }
+ window.refreshAureliaLiveCollectionControl=async function(){
+  const state=window.AureliaLiveCollectionControlState;state.busy=true;state.error=null;
+  if(typeof window.render==='function')window.render();
+  try{
+   const data=await window.aureliaPaymentAdminRequest('/v1/admin/payment-controls','GET');
+   const controls=data&&data.controls||{};
+   state.controlState=String(data.controlState||'UNKNOWN');
+   state.loaded=state.controlState==='CONFIGURED';
+   state.enabled=controls.live_collection_enabled===true;
+   state.internalAllowed=controls.live_collection===true&&controls.emergency_stop===false;
+   if(!state.loaded)state.error='Payment controls are not configured or could not be verified. Live collection remains OFF.';
+  }catch(error){state.loaded=false;state.enabled=false;state.internalAllowed=false;state.controlState='UNAVAILABLE';state.error=error.message||'Could not load server payment controls.';}
+  finally{state.busy=false;if(typeof window.render==='function')window.render();}
+ };
+ window.setAureliaLiveCollectionEnabled=async function(enabled){
+  const state=window.AureliaLiveCollectionControlState;
+  if(typeof enabled!=='boolean'||!state.loaded||state.busy)return;
+  if(enabled&&!state.internalAllowed){state.error='The internal release gate is OFF. The tenant switch cannot override it.';window.render();return;}
+  if(!confirm(enabled?'Enable live collection for this tenant? Recent MFA is required, and the server will independently verify release approval.':'Turn off live collection? New live orders will be rejected; unresolved intents remain pending review.'))return;
+  state.busy=true;state.error=null;window.render();
+  try{
+   const result=await window.aureliaPaymentAdminRequest('/v1/admin/payment-controls','PATCH',{
+    changes:{live_collection_enabled:enabled},
+    reason:enabled?'Tenant administrator enabled live collection after recent MFA.':'Tenant administrator disabled live collection.'
+   });
+   const controls=result.controls||{};
+   state.enabled=controls.live_collection_enabled===true;
+   state.internalAllowed=controls.live_collection===true&&controls.emergency_stop===false;
+   state.controlState='CONFIGURED';state.loaded=true;
+  }catch(error){state.error=error.message||'The server rejected the live-collection change.';}
+  finally{state.busy=false;window.render();}
+ };
  function platformHtml(){
   const platform=window.AureliaPaymentPlatform;
   if(!platform){
@@ -4178,7 +4218,7 @@ if (typeof window.render === "function") window.render();
    return '<details><summary>'+esc(name)+' · Server adapter ready (test) · Live collection OFF</summary>'+guideHtml+availability+'</details>';
   }).join('');
   const providerBody=providers||'<p class="lab">No providers are available in the catalogue.</p>';
-  return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateway</h2><p class="lab">Aurelia remains an offline-first PMS. Cash, manual card-on-delivery, receipts and local folio operations continue from device memory without a network or payment backend. The optional hybrid backend is used only for gateway checkout and trusted payment verification. Merchant credentials and webhook secrets stay in Google Secret Manager on the backend; they must never be entered into or stored by the APK or WebView.</p><div class="tag out">Live collection OFF · release gate enforced</div><p class="lab">Hybrid backend is optional. Local cash and manual payments continue to work from device memory. Connect a backend only when you want real gateway checkout and live collection.</p><p class="lab">Provider checkout callbacks are UI signals only. Only verified provider webhooks or an authenticated recovery job that re-checks provider status can establish capture. Automatic folio posting remains blocked until the signed authorization, journal and native projector path is release-qualified.</p><details><summary>Pay Bridge Connection · optional device transport</summary>'+bridge+'<p class="lab">Pay Bridge currently provides an authenticated handshake only. It is not a payment executor and does not replace the trusted backend or provider webhook ingress.</p></details><details><summary>Provider Directory & Integration Status</summary>'+providerBody+'</details><p class="lab" role="status">Live collection requires both the internal release authorization and the tenant administrator switch. Both remain OFF until sandbox, recovery, refund and folio acceptance evidence is approved.</p></div>';
+  return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateway</h2><p class="lab">Aurelia remains an offline-first PMS. Cash, manual card-on-delivery, receipts and local folio operations continue from device memory without a network or payment backend. The optional hybrid backend is used only for gateway checkout and trusted payment verification. Merchant credentials and webhook secrets stay in Google Secret Manager on the backend; they must never be entered into or stored by the APK or WebView.</p><div class="tag out">Live collection OFF · release gate enforced</div><p class="lab">Hybrid backend is optional. Local cash and manual payments continue to work from device memory. Connect a backend only when you want real gateway checkout and live collection.</p><p class="lab">Provider checkout callbacks are UI signals only. Only verified provider webhooks or an authenticated recovery job that re-checks provider status can establish capture. Automatic folio posting remains blocked until the signed authorization, journal and native projector path is release-qualified.</p>'+liveCollectionControlHtml()+'<details><summary>Pay Bridge Connection · optional device transport</summary>'+bridge+'<p class="lab">Pay Bridge currently provides an authenticated handshake only. It is not a payment executor and does not replace the trusted backend or provider webhook ingress.</p></details><details><summary>Provider Directory & Integration Status</summary>'+providerBody+'</details><p class="lab" role="status">Live collection requires both the internal release authorization and the tenant administrator switch. Both remain OFF until sandbox, recovery, refund and folio acceptance evidence is approved.</p></div>';
  }
 
 const LOCAL_GATEWAY_PENDING=new Map();
