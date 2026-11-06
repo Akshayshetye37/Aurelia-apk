@@ -764,6 +764,7 @@ app.get('/v1/payments/intents/:intentId/refunds/:refundId', requireTenantAdmin, 
 });
 
 app.get('/v1/payments/capabilities', requireTenantPaymentActor, async (req, res) => {
+  const activeSelection = await readActiveProvider({ db, tenantId: req.tenant.id });
   const providers = await Promise.all(providerCatalogue.flatMap(provider =>
     provider.environments.map(async environment => {
       const adapterEnvironment = adapterEnvironmentOf(provider.id, environment);
@@ -781,6 +782,8 @@ app.get('/v1/payments/capabilities', requireTenantPaymentActor, async (req, res)
     })
   ));
   return res.json({
+    activeProviderId: activeSelection.configured ? activeSelection.activeProviderId : null,
+    activeProviderEnvironment: activeSelection.configured ? activeSelection.environment : null,
     liveCollection: false,
     folioSettlement: false,
     refunds: false,
