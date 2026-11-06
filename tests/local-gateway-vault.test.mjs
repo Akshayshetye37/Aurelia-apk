@@ -6,44 +6,40 @@ const vault = await readFile(new URL('../android/templates/LocalGatewayVault.jav
 const patch = await readFile(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
-test('native local vault uses Android Keystore AES-256-GCM and app-private no-backup storage', () => {
-  assert.match(vault, /AndroidKeyStore/);
-  assert.match(vault, /KeyProperties\.KEY_ALGORITHM_AES/);
-  assert.match(vault, /setKeySize\(256\)/);
-  assert.match(vault, /AES\/GCM\/NoPadding/);
+test('legacy device-local merchant credentials are purged during native migration', () => {
+  assert.match(vault, /purgeLegacyVault\(\)/);
   assert.match(vault, /getNoBackupFilesDir\(\)/);
-  assert.match(vault, /updateAAD/);
+  assert.match(vault, /gateway-vault/);
+  assert.match(vault, /store\.deleteEntry\(KEY_ALIAS\)/);
+  assert.match(vault, /aurelia\.local\.gateway\.v1/);
+  assert.doesNotMatch(vault, /Cipher\.getInstance/);
+  assert.doesNotMatch(vault, /KeyGenerator\.getInstance/);
+  assert.doesNotMatch(vault, /FileOutputStream/);
 });
 
-test('local vault accepts only implemented provider schemas and bounded credential values', () => {
-  assert.match(vault, /"razorpay"\.equals\(provider\)/);
-  assert.match(vault, /"cashfree"\.equals\(provider\)/);
-  assert.match(vault, /provider_adapter_not_available_locally/);
-  assert.match(vault, /value\.length\(\) > 4096/);
-  assert.match(vault, /file\.length\(\) > 65536/);
+test('native merchant credential writes and activation fail closed', () => {
+  assert.match(vault, /merchant_credentials_must_be_managed_by_trusted_backend/);
+  assert.match(vault, /storagePolicy", "GOOGLE_SECRET_MANAGER_BACKEND_ONLY/);
+  assert.match(vault, /"validation", "BACKEND_ONLY"/);
+  assert.doesNotMatch(vault, /AES\/GCM\/NoPadding/);
+  assert.doesNotMatch(vault, /writeFile/);
 });
 
-test('local vault never returns credential material and prevents premature live activation', () => {
-  assert.match(vault, /out\.put\("credentialFields"/);
-  assert.doesNotMatch(vault, /out\.put\("credentials"/);
-  assert.match(vault, /live_activation_blocked_until_production_lifecycle_is_certified/);
-  assert.match(vault, /provider_credentials_must_be_validated_before_activation/);
-});
-
-test('Android build patch installs and exposes the local vault through narrow bridge operations', () => {
+test('native bridge keeps only migration/status compatibility, not a merchant secret store', () => {
   assert.match(patch, /LocalGatewayVault\.java/);
   assert.match(patch, /new LocalGatewayVault\(this\)/);
   for (const operation of ['gatewayVaultStatus','gatewayVaultSave','gatewayVaultRemove','gatewayVaultActivate']) {
-    assert.ok(patch.includes(operation), 'missing native bridge operation: ' + operation);
+    assert.ok(patch.includes(operation), 'missing migration compatibility operation: ' + operation);
   }
+  assert.match(html, /Google Secret Manager/);
+  assert.doesNotMatch(html, /gatewayVaultSave/);
+  assert.doesNotMatch(html, /Device-local Gateway Credential Vault/);
 });
 
-test('PMS exposes the device-only credential vault without a LAN payment dependency', () => {
-  assert.match(html, /Device-local Gateway Credential Vault/);
-  assert.match(html, /encrypted at rest on this device only/);
-  assert.match(html, /does not validate provider keys, create orders, open checkout or verify captures/);
-  assert.match(html, /No LAN or Docker payment appliance is used/);
-  assert.match(html, /Pay Bridge currently provides an authenticated handshake only/);
-  assert.match(html, /refreshAureliaNativeGateway/);
-  assert.match(vault, /live_credential_storage_blocked_until_release_acceptance/);
+test('tenant live collection settings are connected to authenticated backend controls', () => {
+  assert.match(html, /refreshAureliaLiveCollectionControl/);
+  assert.match(html, /initializeAureliaPaymentControls/);
+  assert.match(html, /live_collection_enabled/);
+  assert.match(html, /recent MFA/);
+  assert.match(html, /\/v1\/admin\/payment-controls/);
 });
