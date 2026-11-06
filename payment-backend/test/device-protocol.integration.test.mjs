@@ -201,6 +201,8 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   assert.throws(() => db.prepare("UPDATE transactions SET status='SETTLED' WHERE id=?").run(transactionId),
     /settled_transaction_requires_durable_device_receipt/);
   assert.equal(db.prepare('SELECT status FROM transactions WHERE id=?').get(transactionId).status, 'CAPTURED_PENDING_ACCOUNTING');
+  db.prepare('INSERT INTO settlement_command_authority(command_id,authorization_id,lease_id,created_at) VALUES(?,?,?,?)')
+    .run(commandId, 'auth_test_0001', 'lease_test_0001', commandStamp);
   db.prepare('INSERT INTO device_command_state(command_id,status,next_attempt_at) VALUES(?,?,?)')
     .run(commandId, 'PENDING', commandStamp);
   db.prepare('UPDATE device_sequence_counters SET last_sequence=1 WHERE device_id=?').run(deviceId);
@@ -244,6 +246,8 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   assert.equal(lease.authorization.payload.providerTransactionId, 'pay_test_001');
   assert.equal(lease.authorization.payload.amountPaise, 12500);
   assert.equal(lease.authorization.payload.leaseId, lease.policyLease.payload.leaseId);
+  assert.equal(lease.authorization.payload.authorizationId, 'auth_test_0001');
+  assert.equal(lease.policyLease.payload.leaseId, 'lease_test_0001');
 
   const replayedLease = await fetch(baseUrl + leasePath, {
     method: 'POST', headers: { ...leaseHeaders, 'Content-Type': 'application/json', 'X-Forwarded-Proto': 'https' },
