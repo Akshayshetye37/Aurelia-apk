@@ -136,10 +136,10 @@ test('readiness endpoint checks Firestore and Secret Manager separately from liv
   assert.match(source, /app\.get\('\/readyz', async/);
   assert.match(source, /db\.doc\('aureliaSystem\/health'\)\.get\(\)/);
   assert.match(source, /aurelia-payment-backend-health/);
-  assert.match(source, /firestoreCheck: \(\) => db\.doc\('aureliaSystem\\/health'\)\.get\(\)/);
-  assert.match(source, /secretManagerCheck: async/);
-  assert.match(source, /const checks = \{ firestore: result\.firestore, secretManager: result\.secretManager \}/);
-  assert.match(source, /res\.status\(ready \? 200 : 503\)/);
+  assert.ok(source.includes("firestoreCheck: () => db.doc('aureliaSystem/health').get()"));
+  assert.ok(source.includes('secretManagerCheck: async'));
+  assert.ok(source.includes('const checks = { firestore: result.firestore, secretManager: result.secretManager }'));
+  assert.ok(source.includes('res.status(result.ready ? 200 : 503)'));
 });
 
 
