@@ -27,6 +27,17 @@
      9e0ed6b; CI artifact is a debug validation APK, not a production release.
      This repository and branch are the source of truth. The UI bundle must never
      contain merchant secrets, webhook secrets, salts, signing keys or credentials.
+     Latest payment configuration (2026-11-07): optional authenticated gateway
+     onboarding supports six registered server adapters; CCAvenue is directory-only
+     and explicitly disabled. Default offline cash/manual/receipt/local-folio flows
+     remain available without gateway configuration. Only one qualified provider
+     may be active per tenant for new intents. Android native checkout currently
+     supports Razorpay and Cashfree only; PayU, PhonePe, Paytm and JioPay handoffs
+     remain unimplemented. Merchant credentials are submitted to the trusted backend
+     and stored in Secret Manager, never persisted by this client. Live collection
+     and automatic gateway-to-folio posting remain OFF. CI run IDs 42278130693 and
+     42278130696 were in progress at the last documentation check; see README.md
+     for current verification status.
      See README.md and docs/PMS_ACCOUNTING_SCHEMA.md for implementation status.
 -->
 <title>Aurelia PMS</title>
