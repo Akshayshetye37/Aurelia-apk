@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { canonicalBytes } from "../../../src/payments/canonical.mjs";
+import { canonicalBytes } from "../shared/canonical.mjs";
 
 export const SETTLEMENT_AUTH_TYPE = "aurelia.settlement.authorization.v2";
 export const SETTLEMENT_LEASE_TYPE = "aurelia.settlement.lease.v2";
