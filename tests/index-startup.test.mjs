@@ -19,14 +19,16 @@ test('classic inline application scripts parse without syntax errors', () => {
   }
 });
 
-test('recovery state is initialized before any startup function can access it', () => {
-  const declaration = html.indexOf("let LOCAL_STATE_STATUS='missing',RECOVERY_CHECK_PENDING=false");
-  assert.notEqual(declaration, -1, 'recovery state declaration must exist');
-  const firstUse = html.indexOf('RECOVERY_CHECK_PENDING');
-  assert.equal(firstUse, declaration + "let LOCAL_STATE_STATUS='missing',".length,
-    'first recovery-state occurrence must be its declaration, not an early read');
-  assert.ok(declaration < html.indexOf('function persist()'));
-  assert.ok(declaration < html.indexOf('function loadAll()'));
+test('recovery guards are hoisted and status is initialized before startup recovery executes', () => {
+  const guard = html.indexOf('var RECOVERY_CHECK_PENDING=false');
+  assert.notEqual(guard, -1, 'recovery guard must be initialized before use');
+  assert.equal(html.indexOf('RECOVERY_CHECK_PENDING'), guard + 'var '.length,
+    'first recovery-guard occurrence must be its declaration, not an early read');
+  const strictPersist = html.indexOf('function persistStrict(){');
+  const status = html.indexOf("\\nlet LOCAL_STATE_STATUS='missing';", strictPersist);
+  const load = html.indexOf('function loadAll()', strictPersist);
+  assert.ok(strictPersist >= 0 && status > strictPersist && load > status,
+    'local state status must be initialized before loadAll executes');
 });
 
 test('room-type catalogue is derived from persisted inventory and refreshed before rendering', () => {
