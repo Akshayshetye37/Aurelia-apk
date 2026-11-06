@@ -77,6 +77,29 @@ test("IndexedDB journal serializes duplicate appends and rejects payload conflic
   assert.notEqual(otherTenant.record.key, results[0].record.key);
 });
 
+test("pending journal keeps immutable command identity while refreshing signed delivery evidence", async () => {
+  const j = journal("journal-evidence-refresh");
+  const commandForJournal = { ...command };
+  const first = await envelopes();
+  const second = await envelopes();
+  const input = {
+    ...scope, providerTransactionId: command.providerTransactionId,
+    commandId: command.commandId, payload: { command: commandForJournal },
+    authorization: first.authorization, policyLease: first.lease
+  };
+  const initial = await j.append(input);
+  const originalHash = initial.record.payloadHash;
+  const refreshed = await j.append({ ...input, authorization: second.authorization, policyLease: second.lease });
+  assert.equal(refreshed.duplicate, true);
+  assert.equal(refreshed.record.payloadHash, originalHash);
+  assert.deepEqual(refreshed.record.authorization, second.authorization);
+  assert.deepEqual(refreshed.record.policyLease, second.lease);
+  await j.markApplied(initial.record.key, originalHash);
+  const terminal = await j.append({ ...input, authorization: { ...first.authorization, signature: "changed" } });
+  assert.equal(terminal.record.status, "APPLIED");
+  assert.deepEqual(terminal.record.authorization, second.authorization);
+});
+
 test("journal transitions are one-way and persistent read-back is stable", async () => {
   const j = journal("journal-transitions");
   const { record } = await j.append({ ...scope, providerTransactionId: "pay_02", commandId: "cmd_02", payload: { command: { ...scope, providerTransactionId: "pay_02", commandId: "cmd_02" } } });
