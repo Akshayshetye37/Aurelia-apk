@@ -40,7 +40,7 @@ async function postJson(baseUrl, path, body, tokenProvider) {
     const headers = { "Content-Type": "application/json", "Accept": "application/json" };
     if (typeof tokenProvider === "function") {
       const token = await tokenProvider();
-      if (typeof token !== "string" || token.length < 20 || /\\s/.test(token)) {
+      if (typeof token !== "string" || token.length < 20 || /\s/.test(token)) {
         throw new Error("A fresh authenticated Firebase session is required for device enrollment.");
       }
       headers.Authorization = "Bearer " + token;
@@ -88,7 +88,8 @@ export async function enrollPaymentDevice({ applianceBaseUrl, deviceId = crypto.
   if (configured?.configured !== true || configured.deviceId !== deviceId) {
     throw new Error("Native payment-device transport could not be configured");
   }
-  window.AureliaPaymentDeviceId = deviceId;\n  return { deviceId, status: "ACTIVE", securityLevel: identity.securityLevel, activation };
+  window.AureliaPaymentDeviceId = deviceId;
+  return { deviceId, status: "ACTIVE", securityLevel: identity.securityLevel, activation };
 }
 
 export async function leaseNextSettlementCommand({ tokenProvider } = {}) {
