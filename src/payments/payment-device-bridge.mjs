@@ -83,7 +83,8 @@ export async function enrollPaymentDevice({ applianceBaseUrl, deviceId = crypto.
       (base.pathname !== "/" && base.pathname !== "")) throw new TypeError("A trusted HTTPS appliance origin is required");
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(deviceId)) throw new TypeError("Invalid payment device ID");
 
-  if (typeof tokenProvider !== "function") throw new TypeError("A Firebase ID-token provider is required for cloud device enrollment");\n  const challenge = await postJson(base.origin, "/v1/admin/devices/enrollment/challenge", { deviceId }, tokenProvider);
+  if (typeof tokenProvider !== "function") throw new TypeError("A Firebase ID-token provider is required for cloud device enrollment");
+  const challenge = await postJson(base.origin, "/v1/admin/devices/enrollment/challenge", { deviceId }, tokenProvider);
   if (!challenge?.challengeId || !challenge?.nonce) throw new Error("Appliance returned an invalid attestation challenge");
   const identity = await nativeRequest("paymentDeviceCreateAttestedIdentity", {
     challengeBase64: challenge.nonce
