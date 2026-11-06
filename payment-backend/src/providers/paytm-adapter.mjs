@@ -119,9 +119,10 @@ export class PaytmAdapter extends PaymentProviderAdapter {
       {mid:this.credentials.mid,orderId:input.orderId,refId:input.refundId});
     if(data.mid!==this.credentials.mid||data.orderId!==input.orderId||data.refId!==input.refundId)
       throw new Error('paytm_refund_status_identity_mismatch');
-    const refundProgress=String(data.userCreditInitiateStatus||data.acceptRefundStatus||'').toUpperCase();
+    const refundProgress=String(data.resultInfo?.resultStatus||data.userCreditInitiateStatus||data.acceptRefundStatus||'').toUpperCase();
     const finalStatus=['SUCCESS','TXN_SUCCESS','COMPLETED'].includes(refundProgress)?'SUCCESS':
-      ['FAILED','FAILURE','TXN_FAILURE','REJECTED'].includes(refundProgress)?'FAILED':'PENDING';
+      ['FAILED','FAILURE','TXN_FAILURE','REJECTED'].includes(refundProgress)?'FAILED':
+      refundProgress==='NO_RECORD_FOUND'?'NOT_FOUND':'PENDING';
     return {provider:'paytm',refundId:input.refundId,providerRefundId:data.refundId||null,
       paymentId:data.txnId==null?null:String(data.txnId),status:finalStatus,
       amountMinor:toMinor(data.refundAmount),currency:'INR'};
