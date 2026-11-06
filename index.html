@@ -4022,7 +4022,7 @@ document.addEventListener('click',function(event){
 window.AureliaPaymentPlatformLoadState = "loading";
 /**
  * Aurelia India payment-provider catalogue and integration policy.
- * This is a provider directory/configuration layer, not live payment adapters.
+ * This is a provider catalogue and secure configuration client. Adapter and checkout availability are independently gated by the trusted backend.
  * Merchant secrets and all payment authority remain on the trusted backend.
  */
 const docs = (items) => items.map(([label, url]) => ({ label, url }));
@@ -4243,7 +4243,77 @@ if (typeof window.render === "function") window.render();
    return '<details><summary>'+esc(name)+' · Server adapter ready (test) · Live collection OFF</summary>'+guideHtml+availability+'</details>';
   }).join('');
   const providerBody=providers||'<p class="lab">No providers are available in the catalogue.</p>';
-  return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateway</h2>'+backendPanel+'<p class="lab">Aurelia remains an offline-first PMS. Cash, manual card-on-delivery, receipts and local folio operations continue from device memory without a network or payment backend. The optional hybrid backend is used only for gateway checkout and trusted payment verification. Merchant credentials and webhook secrets stay in Google Secret Manager on the backend; they must never be entered into or stored by the APK or WebView.</p><div class="tag out">Live collection OFF · release gate enforced</div><p class="lab">Hybrid backend is optional. Local cash and manual payments continue to work from device memory. Connect a backend only when you want real gateway checkout. Live collection remains OFF until the safety gates pass and an authorised tenant administrator enables it in Settings.</p><p class="lab">Provider checkout callbacks are UI signals only. Only verified provider webhooks or an authenticated recovery job that re-checks provider status can establish capture. Automatic folio posting remains blocked until the signed authorization, journal and native projector path is release-qualified.</p>'+liveCollectionControlHtml()+'<details><summary>Pay Bridge Connection · optional device transport</summary>'+bridge+'<p class="lab">Pay Bridge currently provides an authenticated handshake only. It is not a payment executor and does not replace the trusted backend or provider webhook ingress.</p></details><details><summary>Provider Directory & Integration Status</summary>'+providerBody+'</details><p class="lab" role="status">Live collection requires both the internal release authorization and the tenant administrator switch. Both remain OFF until sandbox, recovery, refund and folio acceptance evidence is approved.</p></div>';
+
+function providerConfigPanelHtml(){
+ return '<section class="provider-config-panel" style="margin:14px 0;padding:14px;border:1px solid var(--ln);border-radius:16px">'+
+  '<h3 style="margin:0 0 8px">Connect a payment gateway (optional)</h3>'+
+  '<p class="lab">No gateway is required to use Aurelia. Cash, manual payments, receipts and local folio operations remain the default. Connect one online gateway only when your property has a merchant account.</p>'+
+  '<div id="aurelia-provider-config-content"><button class="btn sm" type="button" onclick="loadAureliaProviderConfiguration()">Load secure gateway setup</button><p class="lab">Sign in as the property owner or administrator with MFA to load the supported gateway credential fields.</p></div>'+
+  '<p class="lab">Only one gateway can be active for new online payments at a time. Switching does not erase pending transactions from the previous gateway. Live collection remains disabled.</p></section>';
+}
+let aureliaProviderAdminCatalogue=[];
+let aureliaProviderAdminActiveId=null;
+window.loadAureliaProviderConfiguration=async function(){
+ const host=document.getElementById('aurelia-provider-config-content');if(host)host.innerHTML='<p class="lab">Loading protected provider configuration…</p>';
+ try{
+  const result=await window.aureliaPaymentAdminRequest('/v1/admin/providers','GET');
+  aureliaProviderAdminCatalogue=Array.isArray(result.providers)?result.providers.filter(x=>x.environment==='test'):[];
+  aureliaProviderAdminActiveId=result.activeProviderId||null;
+  window.renderAureliaProviderCredentialForm();
+ }catch(error){if(host)host.innerHTML='<p class="lab" role="alert">'+esc(error.message||'Could not load provider configuration.')+'</p><button class="btn sm" type="button" onclick="loadAureliaProviderConfiguration()">Retry</button>';}
+};
+window.renderAureliaProviderCredentialForm=function(){
+ const host=document.getElementById('aurelia-provider-config-content');if(!host)return;
+ const supported=['razorpay','cashfree','payu','phonepe','paytm','jiopay'];
+ const byId=new Map(aureliaProviderAdminCatalogue.map(x=>[x.provider,x]));
+ const names={razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay'};
+ const options=supported.map(id=>'<option value="'+id+'">'+names[id]+'</option>').join('')+'<option value="ccavenue" disabled>CCAvenue · not implemented</option>';
+ const selected=document.getElementById('aurelia-provider-config-select')?.value||'razorpay';
+ const p=byId.get(selected)||byId.get('razorpay');
+ const fields=(p?.credentials||[]).map(field=>'<label class="fld"><span>'+esc(field.label)+(field.required?' *':'')+'</span><input id="aurelia-provider-field-'+esc(field.key)+'" name="'+esc(field.key)+'" type="'+(field.secret?'password':'text')+'" autocomplete="'+(field.secret?'new-password':'off')+'" '+(field.required?'required':'')+' maxlength="512" spellcheck="false" placeholder="'+(field.secret?'Enter merchant secret':'Enter '+esc(field.label))+'"></label>').join('');
+ const status=p?'<div class="lab">Configuration: '+(p.configured?'saved':'not configured')+' · Credential validation: '+(p.credentialsValidated?'passed':'not passed')+' · Sandbox acceptance: '+(p.sandboxTestPassed?'passed':'pending')+' · Webhook verification: '+(p.webhookVerified?'verified':'pending')+'</div>':'';
+ const active=aureliaProviderAdminActiveId?'<div class="tag ready">Active gateway: '+esc(names[aureliaProviderAdminActiveId]||aureliaProviderAdminActiveId)+'</div>':'<div class="tag out">No online gateway selected · default local payments remain active</div>';
+ const activate=p&&p.configured&&p.credentialsValidated&&p.sandboxTestPassed&&p.webhookVerified
+  ?'<button class="btn sm" type="button" onclick="activateAureliaPaymentProvider(\''+esc(p.provider)+'\')">Make this the active gateway</button>'
+  :'<p class="lab">Activation unlocks only after credentials, sandbox acceptance and a real verified webhook have all passed.</p>';
+ host.innerHTML=active+'<label class="fld"><span>Choose one gateway</span><select id="aurelia-provider-config-select" onchange="renderAureliaProviderCredentialForm()">'+options+'</select></label>'+
+  '<div class="tag out">Test / Sandbox configuration only · Live collection OFF</div>'+
+  '<form id="aurelia-provider-credential-form" onsubmit="event.preventDefault();saveAureliaProviderCredentials()">'+
+  '<div class="lab" style="margin:10px 0">Enter the exact merchant values supplied by '+esc(names[p?.provider]||'your provider')+'. Secret fields are write-only and are sent directly to the trusted backend.</div>'+
+  fields+'<button class="btn" type="submit" style="width:100%">Save and validate credentials</button></form>'+
+  status+activate+
+  '<p class="lab">CCAvenue is intentionally unavailable: no CCAvenue adapter or end-to-end payment flow is implemented. Do not enter CCAvenue credentials here.</p>';
+ const select=document.getElementById('aurelia-provider-config-select');if(select)select.value=p?.provider||'razorpay';
+};
+window.saveAureliaProviderCredentials=async function(){
+ const select=document.getElementById('aurelia-provider-config-select'),provider=select?.value||'';
+ const p=aureliaProviderAdminCatalogue.find(x=>x.provider===provider&&x.environment==='test');
+ if(!p){toast('This gateway is not available for configuration.');return;}
+ const body={environment:'test'};
+ for(const field of p.credentials||[]){
+  const input=document.getElementById('aurelia-provider-field-'+field.key),value=input?.value?.trim()||'';
+  if(field.required&&!value){toast('Enter '+field.label+'.');input?.focus();return;}
+  if(value)body[field.key]=value;
+ }
+ const button=document.querySelector('#aurelia-provider-credential-form button[type="submit"]');
+ if(button){button.disabled=true;button.textContent='Sending securely…';}
+ try{
+  await window.aureliaPaymentAdminRequest('/v1/admin/providers/'+encodeURIComponent(provider)+'/credentials','PUT',body);
+  document.querySelectorAll('#aurelia-provider-credential-form input').forEach(input=>{input.value='';});
+  toast('Credentials validated and stored securely. Complete sandbox and webhook acceptance before activation.');
+  await window.loadAureliaProviderConfiguration();
+ }catch(error){toast(error.message||'Credential save failed.');}
+ finally{if(button){button.disabled=false;button.textContent='Save and validate credentials';}}
+};
+window.activateAureliaPaymentProvider=async function(provider){
+ try{
+  await window.aureliaPaymentAdminRequest('/v1/admin/providers/'+encodeURIComponent(provider)+'/activate','POST',{environment:'test',confirm:true});
+  toast('Active online gateway updated. Default local payment methods remain available.');
+  await window.loadAureliaProviderConfiguration();
+ }catch(error){toast(error.message||'Gateway activation was rejected.');}
+};
+
+  return '<div class="card payment-platform-card" style="margin-top:14px"><h2>Payment Gateway</h2>'+backendPanel+'<p class="lab">Aurelia remains an offline-first PMS. Cash, manual card-on-delivery, receipts and local folio operations continue from device memory without a network or payment backend. The optional hybrid backend is used only for gateway checkout and trusted payment verification. Merchant credentials and webhook secrets stay in Google Secret Manager on the backend; they must never be entered into or stored by the APK or WebView.</p><div class="tag out">Live collection OFF · release gate enforced</div><p class="lab">Hybrid backend is optional. Local cash and manual payments continue to work from device memory. Connect a backend only when you want real gateway checkout. Live collection remains OFF until the safety gates pass and an authorised tenant administrator enables it in Settings.</p><p class="lab">Provider checkout callbacks are UI signals only. Only verified provider webhooks or an authenticated recovery job that re-checks provider status can establish capture. Automatic folio posting remains blocked until the signed authorization, journal and native projector path is release-qualified.</p>'+liveCollectionControlHtml()+providerConfigPanelHtml()+'<details><summary>Pay Bridge Connection · optional device transport</summary>'+bridge+'<p class="lab">Pay Bridge currently provides an authenticated handshake only. It is not a payment executor and does not replace the trusted backend or provider webhook ingress.</p></details><details><summary>Provider Directory & Integration Status</summary>'+providerBody+'</details><p class="lab" role="status">Live collection requires both the internal release authorization and the tenant administrator switch. Both remain OFF until sandbox, recovery, refund and folio acceptance evidence is approved.</p></div>';
  }
 
 const LOCAL_LEDGER_PENDING=new Map();
@@ -4528,7 +4598,7 @@ window.aureliaPaymentAdminRequest=async function(path,method='GET',body,options=
  if(!response.ok)throw new Error(data.error||('Payment backend returned HTTP '+response.status));
  return data;
 }
-// Merchant credential entry, mutation and validation are intentionally absent from the PMS.
+// Merchant credentials are entered only through the authenticated owner/admin form and sent directly to the trusted backend; values are never persisted by the PMS client.
  const originalSettings=SUB.set;
  SUB.set=function(){
   let out=originalSettings();
