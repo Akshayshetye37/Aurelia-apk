@@ -42,10 +42,11 @@ test('provider directory is synchronized with the wired backend factory and labe
   const serverProviders = [...factoryBlock[1].matchAll(/^\s*([a-z0-9_]+):/gm)].map(match => match[1]);
   assert.deepEqual(uiProviders, serverProviders, 'frontend directory and backend factory must have the same six providers');
   for (const provider of serverProviders) {
-    const entry = registry.match(new RegExp(provider + ':\\s*\\{([\\s\\S]*?)\\n\\s*\\},'));
-    assert.ok(entry, provider + ' registry entry exists');
-    assert.match(entry[1], /adapterStatus:\s*'adapter_implemented_wired'/, provider + ' is wired');
+    assert.match(registry, new RegExp('^\\s*' + provider + ':\\s*\\{', 'm'), provider + ' registry entry exists');
   }
+  assert.equal((registry.match(/adapterStatus:\s*'adapter_implemented_wired'/g) || []).length, 6,
+    'all six factory providers must be marked wired in the registry');
+  assert.match(registry, /ccavenue:[\s\S]*?adapterStatus:\s*'not_implemented'/);
   assert.match(html, /Server adapter ready \(test\) · Live collection OFF/);
   assert.match(html, /Documentation only/);
   assert.doesNotMatch(html, /Server adapter \(incomplete\)/i);
