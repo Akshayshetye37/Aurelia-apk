@@ -125,6 +125,21 @@ export function paymentDeviceNativeAvailable() {
   return !!(window.AureliaNative && typeof window.AureliaNative.postMessage === "function");
 }
 
+// Provider SDK callbacks are wake-up signals only. They trigger a server-side
+// intent lookup; they never authorize a folio mutation or prove capture.
+window.aureliaNativePaymentEvent = (transactionId, provider, callbackStatus, providerPaymentId) => {
+  if (typeof transactionId !== "string" || !/^[0-9a-f-]{36}$/i.test(transactionId) ||
+      !["razorpay", "cashfree"].includes(provider) ||
+      typeof callbackStatus !== "string") return false;
+  window.dispatchEvent(new CustomEvent("aurelia:native-payment-event", {
+    detail: {
+      transactionId, provider, callbackStatus,
+      providerPaymentId: typeof providerPaymentId === "string" ? providerPaymentId : ""
+    }
+  }));
+  return true;
+};
+
 export function getNativePaymentEngineStatus() {
   return nativeRequest("paymentEngineStatus");
 }
