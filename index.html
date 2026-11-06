@@ -744,7 +744,7 @@ function settlePayment(input){
  };
  return window.aureliaSettlePayment({...input,state:S,balanceDue:dueB(b),persist:persistSettlement,audit:(kind,detail)=>aud(kind,detail)});
 }
-function addPay(b,a,m,r,auto){return settlePayment({booking:b,amount:a,method:m,reference:r||'',source:auto?'auto':'manual',idempotencyKey:r?('ref:'+r):undefined})}
+// Legacy unconfirmed addPay shortcut removed; manual payments use the staff-confirmed folio form.
 let mchips=id=>`<div class="chips" id="${id}">${PM.map((p,k)=>`<button class="chip ${k?'':'on'}" onclick="$$('#${id} .chip').forEach(c=>c.classList.remove('on'));this.classList.add('on')">${p}</button>`).join('')}</div>`;
 const payForm=(d,i)=>{const booking=bk(i),requestId='manual:'+booking.id+':'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2));return `<input type="hidden" id="payment-request-id" value="${requestId}"><label class="fld"><span>Payment amount</span><input id="pa" type="number" value="${d}"></label>${mchips('pm')}<label class="fld"><span>Transaction reference</span><input id="pr"></label><label class="fld"><input id="pc" type="checkbox">I checked that the money has arrived</label><button class="btn" style="width:100%" onclick="pay(${i})">Record payment</button>`;};
 function folio(i){const b=bk(i),d=dueB(b);openS(`<h2 class="foil">${esc(b.g)}</h2><div class="lab">Folio · Room ${b.room}<br>
