@@ -6,7 +6,7 @@ const PERMANENT_FAILURES = new Set([
   "BOOKING_NOT_FOUND", "BOOKING_NOT_SETTLEABLE", "IDEMPOTENCY_KEY_CONFLICT",
   "PAYMENT_REFERENCE_ALREADY_APPLIED", "PAYMENT_REFERENCE_CONFLICT",
   "PAYMENT_EXCEEDS_BALANCE", "AUTHORIZATION_BINDING_MISMATCH",
-  "SETTLEMENT_AUTH_EXPIRED", "SETTLEMENT_AUTH_INVALID", "SETTLEMENT_AUTH_MISMATCH",
+  "SETTLEMENT_AUTH_EXPIRED", "SETTLEMENT_AUTH_INVALID", "SETTLEMENT_AUTH_SIGNATURE_INVALID", "SETTLEMENT_AUTH_KEY_INVALID", "SETTLEMENT_LEASE_DISABLED", "SETTLEMENT_AUTH_MISMATCH",
   "SETTLEMENT_LEASE_MISMATCH", "SETTLEMENT_LEASE_INVALID", "SETTLEMENT_LEASE_EXPIRED"
 ]);
 function fail(code, message) { const error = new Error(message); error.code = code; return error; }
@@ -80,12 +80,15 @@ export class SettlementProjector {
   }
   async confirmPersisted(binding) {
     const state = await this.readBack(); const booking = this.findBooking(state, binding.bookingId);
-    const rows = (Array.isArray(booking?.pays) ? booking.pays : []).filter(row => row?.idempotencyKey === binding.idempotencyKey);
+    const allBookings = [...(Array.isArray(state?.b) ? state.b : []), ...(Array.isArray(state?.cancelled) ? state.cancelled : [])];
+    const globalMatches = allBookings.flatMap(item => (Array.isArray(item?.pays) ? item.pays : [])
+      .filter(row => row?.idempotencyKey === binding.idempotencyKey).map(row => ({ booking: item, row })));
+    const rows = globalMatches.filter(match => match.booking === booking).map(match => match.row);
     const row = rows[0];
     const storedReference = row?.r ?? row?.reference;
     const normalizedReference = value => /upi|bank|neft|rtgs|imps|card|wallet/i.test(binding.method)
       ? String(value ?? "").replace(/\s+/g, "").toUpperCase() : String(value ?? "");
-    if (rows.length !== 1 || !row || row.bookingId !== binding.bookingId ||
+    if (globalMatches.length !== 1 || rows.length !== 1 || !row || row.bookingId !== binding.bookingId ||
         row.source !== "verified_gateway" || paise(row) !== binding.amountPaise ||
         String(row.m ?? row.method).toLowerCase() !== binding.method.toLowerCase() ||
         !storedReference || normalizedReference(storedReference) !== normalizedReference(binding.reference) ||
