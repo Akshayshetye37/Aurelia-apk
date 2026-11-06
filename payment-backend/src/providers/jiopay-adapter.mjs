@@ -86,9 +86,9 @@ export class JioPayAdapter extends PaymentProviderAdapter {
       status:'PENDING',checkoutUrl:d.redirectURI,transactionContext:d.tranCtx};
   }
   async getPaymentStatus(input) {
-    if(!validId(input?.orderId)) throw new TypeError('invalid_jiopay_order_id');
-    const d=await this.command({merchantId:this.credentials.merchantId,merchantTxnNo:input.orderId,
-      originalTxnNo:input.orderId,amount:'0.00',transactionType:'STATUS',addlParam1:'',addlParam2:''});
+    if(!validId(input?.orderId)||input.orderId.length>20) throw new TypeError('invalid_jiopay_order_id');
+    const d=await this.command({merchantId:this.credentials.merchantId,aggregatorID:this.credentials.aggregatorId||'',
+      merchantTxnNo:input.orderId,originalTxnNo:input.orderId,amount:'0.00',transactionType:'STATUS',addlParam1:'',addlParam2:''});
     if(d.merchantId!==this.credentials.merchantId||d.merchantTxnNo!==input.orderId)
       throw new Error('jiopay_status_identity_mismatch');
     const state=statusOf(d), amountMinor=toMinor(d.amount??d.txnAmount??d.transactionAmount);
@@ -110,7 +110,7 @@ export class JioPayAdapter extends PaymentProviderAdapter {
       const event=ct.includes('application/json')?JSON.parse(rawBody.toString('utf8')):
         Object.fromEntries(new URLSearchParams(rawBody.toString('utf8')).entries());
       if(!verifyJioPaySecureHash(event,this.credentials.saltOrHashKey)||
-        event.merchantId!==this.credentials.merchantId||!validId(event.merchantTxnNo)) return {valid:false};
+        event.merchantId!==this.credentials.merchantId||!validId(event.merchantTxnNo)||event.merchantTxnNo.length>20) return {valid:false};
       return {valid:true,event};
     } catch { return {valid:false}; }
   }
