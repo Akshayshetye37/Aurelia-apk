@@ -3582,6 +3582,18 @@ window.reconcileAureliaPendingGatewayPayments=async function(i){
  const last=pending[pending.length-1];await reconcileAureliaGatewayPayment(i,last.transactionId,last.providerPaymentId||undefined);
 };
 
+// Native SDK callbacks are only wake-up signals. Reconciliation always queries
+// the authenticated cloud provider adapter and never writes the PMS folio.
+window.addEventListener('aurelia:native-payment-event',async event=>{
+ const detail=event?.detail||{};
+ const booking=S.b.find(item=>(item.gatewayPayments||[]).some(record=>
+  record.transactionId===detail.transactionId&&record.provider===detail.provider));
+ if(!booking)return;
+ await window.reconcileAureliaGatewayPayment(
+  booking.id,detail.transactionId,detail.providerPaymentId||undefined
+ );
+});
+
 /* Settlement visibility: provider capture and PMS folio settlement are separate financial states. */
 window.aureliaGatewaySettlementLabel=function(state){
  const labels={
