@@ -146,3 +146,15 @@ Working branch: `feature/multi-provider-payment-backend`.
 The latest branch head was verified as `be8c1867e98c185de40f5f01b9e8c9e9a4afb549` when this section was written. GitHub had not yet reported workflow check results for that commit. The source changes and CI configuration were fetched back from the branch, but the new Node tests and syntax checks must not be described as executed until GitHub Actions reports their result.
 
 **Release status is unchanged:** this readiness improvement does not enable live payments, authorize settlement, install the missing standalone trusted Android Pay Bridge, or complete the cloud-to-local-folio accounting integration. Keep live collection and gateway-to-folio posting disabled.
+
+
+## Embedded preview storage limitation (2026-11-06)
+
+- The CodeShack live preview runs the application inside the embedded about:srcdoc sandbox. When that sandbox does not grant a same-origin storage context, browser localStorage is unavailable. Aurelia explicitly switches to a session-memory fallback in that environment.
+- Session-memory mode is **not durable**: records may disappear when the preview is reloaded or closed. Do not enter real guest, booking, financial, or operational records in this preview.
+- window.AureliaStorageDiagnostics now exposes the detected storage mode, whether the app is in an embedded preview, and the reason durable storage is unavailable. The app warning identifies this as an embedded-preview restriction instead of incorrectly implying that the device is necessarily full.
+- Strict persistence operations continue to reject writes in memory-only mode. This is intentional fail-closed behavior; the app must never report a successful durable save when data exists only in RAM.
+- Use a first-party HTTPS deployment with browser storage enabled, or a verified installed Android build with its native durable storage integration, for operational data. Merely opening the CodeShack preview in a larger viewport does not change its sandbox origin or grant persistent storage.
+- The latest change does not migrate existing preview-memory records into durable storage. Export a backup while the current preview session is still open if it contains data you need to retain.
+
+Latest storage-diagnostics commits: 7e6776c (runtime diagnostics and accurate warning) and fa70730 (regression test).
