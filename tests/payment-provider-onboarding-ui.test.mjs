@@ -20,9 +20,10 @@ test('native credential bridge fails closed and provider directory supports six 
   for (const provider of ['razorpay','cashfree','payu','phonepe','paytm','jiopay']) {
     assert.ok(html.includes(provider), 'missing provider: ' + provider);
   }
-  assert.ok(html.includes('gatewayVaultSave'));
-  assert.ok(html.includes('gatewayVaultStatus'));
-  assert.ok(html.includes('gatewayVaultRemove'));
+  assert.ok(!html.includes('gatewayVaultSave'));
+  assert.ok(!html.includes('gatewayVaultRemove'));
+  assert.ok(!html.includes('local-gw-'));
+  assert.ok(html.includes('Optional trusted HTTPS backend'));
   assert.ok(vault.includes('BACKEND_ONLY'));
 });
 
