@@ -528,6 +528,16 @@ import com.aurelia.pms.security.PaymentDeviceKeyStore;
 import com.aurelia.pms.security.PaymentDeviceClient;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.android.gms.tasks.Tasks;
+import com.razorpay.Checkout;
+import com.razorpay.PaymentData;
+import com.razorpay.PaymentResultWithDataListener;
+import com.cashfree.pg.api.CFPaymentGatewayService;
+import com.cashfree.pg.core.api.CFSession;
+import com.cashfree.pg.core.api.callback.CFCheckoutResponseCallback;
+import com.cashfree.pg.core.api.exception.CFException;
+import com.cashfree.pg.core.api.utils.CFErrorResponse;
+import com.cashfree.pg.core.api.webcheckout.CFWebCheckoutPayment;
+import com.cashfree.pg.core.api.webcheckout.CFWebCheckoutTheme;
 import androidx.activity.OnBackPressedCallback;
 import java.io.OutputStream;
 import java.io.InputStream;
@@ -536,7 +546,7 @@ import java.security.MessageDigest;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class MainActivity extends BridgeActivity {
+public class MainActivity extends BridgeActivity implements PaymentResultWithDataListener, CFCheckoutResponseCallback {
   private static final int PICK_BACKUP_FOLDER = 7101;
   private static final int CREATE_BACKUP_FILE = 7102;
   private static final int PICK_IMAGE_FILE = 7103;
@@ -554,6 +564,8 @@ public class MainActivity extends BridgeActivity {
   private PaymentDeviceKeyStore paymentDeviceKeyStore;
   private PaymentDeviceClient paymentDeviceClient;
   private final java.util.concurrent.ConcurrentHashMap<String, PaymentDeviceClient.Lease> paymentDeviceLeases = new java.util.concurrent.ConcurrentHashMap<>();
+  private String pendingCheckoutTransactionId = "";
+  private String pendingCheckoutProvider = "";
   private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor();
 
   @Override public void onCreate(Bundle savedInstanceState) {
@@ -583,6 +595,9 @@ public class MainActivity extends BridgeActivity {
     localPaymentLedger = new LocalPaymentLedger(this);
     paymentDeviceKeyStore = new PaymentDeviceKeyStore();
     initializePaymentDeviceClient();
+    try { CFPaymentGatewayService.getInstance().setCheckoutCallback(this); }
+    catch (CFException ignored) { }
+    Checkout.preload(getApplicationContext());
     getWindow().setStatusBarColor(Color.rgb(5, 17, 13));
     getWindow().setNavigationBarColor(Color.rgb(5, 17, 13));
     getWindow().getDecorView().setSystemUiVisibility(0);
@@ -599,6 +614,38 @@ public class MainActivity extends BridgeActivity {
     String token = Tasks.await(user.getIdToken(false)).getToken();
     if (token == null || token.length() < 20) throw new IllegalStateException("Firebase did not return a valid identity token.");
     return token;
+  }
+
+  private void emitNativePaymentEvent(String status, String providerPaymentId) {
+    String transactionId = pendingCheckoutTransactionId;
+    String provider = pendingCheckoutProvider;
+    if (transactionId.isEmpty()) return;
+    js("window.aureliaNativePaymentEvent && window.aureliaNativePaymentEvent(" +
+        q(transactionId) + "," + q(provider) + "," + q(status) + "," + q(providerPaymentId == null ? "" : providerPaymentId) + ")");
+  }
+
+  @Override public void onPaymentSuccess(String paymentId, PaymentData paymentData) {
+    emitNativePaymentEvent("RAZORPAY_CALLBACK", paymentId);
+    pendingCheckoutTransactionId = "";
+    pendingCheckoutProvider = "";
+  }
+
+  @Override public void onPaymentError(int code, String response, PaymentData paymentData) {
+    emitNativePaymentEvent("RAZORPAY_ERROR_CALLBACK", "");
+    pendingCheckoutTransactionId = "";
+    pendingCheckoutProvider = "";
+  }
+
+  @Override public void onPaymentVerify(String orderID) {
+    emitNativePaymentEvent("CASHFREE_CALLBACK", "");
+    pendingCheckoutTransactionId = "";
+    pendingCheckoutProvider = "";
+  }
+
+  @Override public void onPaymentFailure(CFErrorResponse error, String orderID) {
+    emitNativePaymentEvent("CASHFREE_ERROR_CALLBACK", "");
+    pendingCheckoutTransactionId = "";
+    pendingCheckoutProvider = "";
   }
 
   private void initializePaymentDeviceClient() {
@@ -1148,6 +1195,75 @@ public class MainActivity extends BridgeActivity {
           if (payBridgeClient != null) payBridgeClient.retryNow();
         } else if ("payBridgeDisconnect".equals(type)) {
           if (payBridgeClient != null) payBridgeClient.disconnect();
+        } else if ("paymentEngineStatus".equals(type)) {
+          boolean ready = paymentDeviceClient != null && paymentDeviceKeyStore != null &&
+              paymentDeviceKeyStore.hasAttestedIdentity() && FirebaseAuth.getInstance().getCurrentUser() != null;
+          JSONObject result = new JSONObject().put("ready", ready)
+              .put("livePaymentsEnabled", false)
+              .put("environment", "test")
+              .put("deviceId", prefs.getString("payment_device_id", ""));
+          js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
+        } else if ("paymentEngineStartCheckout".equals(type)) {
+          try {
+            if (paymentDeviceClient == null || !paymentDeviceKeyStore.hasAttestedIdentity()) {
+              throw new IllegalStateException("An attested payment device is required.");
+            }
+            String transactionId = obj.optString("transactionId", "");
+            String provider = obj.optString("provider", "");
+            String environment = obj.optString("environment", "");
+            String orderId = obj.optString("providerOrderId", "");
+            long amountMinor = obj.optLong("amountMinor", -1L);
+            String currency = obj.optString("currency", "");
+            JSONObject checkoutData = obj.optJSONObject("checkoutData");
+            if (!transactionId.matches("[0-9a-fA-F-]{36}") ||
+                !("razorpay".equals(provider) || "cashfree".equals(provider)) ||
+                !"test".equals(environment) || orderId.isEmpty() || amountMinor <= 0 ||
+                !"INR".equals(currency) || checkoutData == null) {
+              throw new IllegalArgumentException("Native checkout request is invalid or outside the test environment.");
+            }
+            pendingCheckoutTransactionId = transactionId;
+            pendingCheckoutProvider = provider;
+            if ("razorpay".equals(provider)) {
+              String keyId = checkoutData.optString("keyId", "");
+              if (keyId.isEmpty()) throw new IllegalArgumentException("Razorpay public checkout key is missing.");
+              JSONObject options = new JSONObject()
+                  .put("name", "Aurelia PMS")
+                  .put("description", "Property booking payment")
+                  .put("currency", currency)
+                  .put("amount", amountMinor)
+                  .put("order_id", orderId);
+              options.put("prefill", new JSONObject()
+                  .put("name", obj.optJSONObject("customer") == null ? "Guest" : obj.getJSONObject("customer").optString("name", "Guest"))
+                  .put("email", obj.optJSONObject("customer") == null ? "" : obj.getJSONObject("customer").optString("email", ""))
+                  .put("contact", obj.optJSONObject("customer") == null ? "" : obj.getJSONObject("customer").optString("phone", "")));
+              Checkout checkout = new Checkout();
+              checkout.setKeyID(keyId);
+              checkout.open(this, options);
+            } else {
+              String paymentSessionId = checkoutData.optString("sessionId", "");
+              if (paymentSessionId.isEmpty()) throw new IllegalArgumentException("Cashfree payment session is missing.");
+              CFSession session = new CFSession.CFSessionBuilder()
+                  .setEnvironment(CFSession.Environment.SANDBOX)
+                  .setPaymentSessionID(paymentSessionId)
+                  .setOrderId(orderId)
+                  .build();
+              CFWebCheckoutTheme theme = new CFWebCheckoutTheme.CFWebCheckoutThemeBuilder()
+                  .setNavigationBarBackgroundColor("#000000")
+                  .setNavigationBarTextColor("#FFFFFF")
+                  .build();
+              CFWebCheckoutPayment payment = new CFWebCheckoutPayment.CFWebCheckoutPaymentBuilder()
+                  .setSession(session)
+                  .setCFWebCheckoutUITheme(theme)
+                  .build();
+              CFPaymentGatewayService.getInstance().doPayment(this, payment);
+            }
+            JSONObject result = new JSONObject().put("opened", true).put("status", "PENDING")
+                .put("providerOrderId", orderId);
+            js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
+          } catch (Exception error) {
+            JSONObject result = new JSONObject().put("error", "native_provider_checkout_failed");
+            js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(requestId) + ",false," + q(result.toString()) + ")");
+          }
         } else if ("paymentDeviceGetIdToken".equals(type)) {
           backupExecutor.execute(() -> {
             try {
