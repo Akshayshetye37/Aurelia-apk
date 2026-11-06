@@ -1261,7 +1261,12 @@ app.post('/v1/admin/providers/:provider/activate', requireTenantAdmin, express.j
     return res.json({ active: true, ...result });
   } catch (error) {
     if (error.code === 'PROVIDER_NOT_CONFIGURED') return fail(res, 409, 'provider_credentials_not_configured');
-    if (error.code === 'PROVIDER_QUALIFICATION_INCOMPLETE') return fail(res, 409, 'provider_sandbox_or_webhook_acceptance_required');
+    if (error.code === 'PROVIDER_QUALIFICATION_INCOMPLETE') {
+      if (error.qualification?.credentialsRequired) return fail(res, 409, 'provider_credentials_not_validated');
+      if (error.qualification?.sandboxAcceptanceRequired) return fail(res, 409, 'sandbox_acceptance_required');
+      if (error.qualification?.webhookVerificationRequired) return fail(res, 409, 'webhook_verification_required');
+      return fail(res, 409, 'provider_qualification_incomplete');
+    }
     return fail(res, 503, 'provider_activation_unavailable');
   }
 });
