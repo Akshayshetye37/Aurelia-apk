@@ -1030,10 +1030,10 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
     const verified = sameOrder && samePayment && sameCurrency && sameAmount && status.captured === true;
     const eventId = provider === 'razorpay' ? req.get('x-razorpay-event-id')
       : provider === 'cashfree' ? (req.get('x-webhook-id') || crypto.createHash('sha256').update(req.body).digest('hex'))
-      : provider === 'phonepe' ? (event.eventId || event.id || crypto.createHash('sha256').update(req.body).digest('hex'))
-      : provider === 'payu' ? (event.mihpayid || event.txnid)
-      : provider === 'paytm' ? (event.ORDERID + ':' + (event.TXNID || 'event'))
-      : (event.merchantTxnNo + ':' + (event.pgTransactionId || 'event'));
+      : provider === 'phonepe' ? String(event.eventId || event.id || crypto.createHash('sha256').update(req.body).digest('hex'))
+      : provider === 'payu' ? String(event.mihpayid || event.txnid || '')
+      : provider === 'paytm' ? String(event.ORDERID || '') + ':' + String(event.TXNID || 'event')
+      : String(event.merchantTxnNo || '') + ':' + String(event.pgTransactionId || 'event');
     if (typeof eventId !== 'string' || !webhookEventIdPattern.test(eventId)) return fail(res, 400, 'invalid_event_id');
     const inboxId = crypto.createHash('sha256').update(tenantId + ':' + provider + ':' + environment + ':' + eventId).digest('hex');
     const payloadHash = crypto.createHash('sha256').update(req.body).digest('hex');
