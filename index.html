@@ -1,9 +1,9 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="theme-color" content="#05110d"><meta name="mobile-web-app-capable" content="yes"><meta name="application-name" content="Aurelia PMS"><meta name="aurelia-project-repository" content="https://github.com/Akshayshetye37/Aurelia-apk"><meta name="aurelia-project-branch" content="feature/multi-provider-payment-backend"><meta name="aurelia-project-entry" content="index.html"><meta name="apple-mobile-web-app-title" content="Aurelia PMS"><meta name="description" content="Aurelia PMS — offline-first property management for reservations, guests, rooms, folios and hotel operations. Payment collection remains securely disabled until provider and folio release gates pass."><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><!--
 AURELIA PERSISTENCE / RELEASE STATUS — 2026-11-07
 Architecture: local-first PMS; Android SQLite + browser/PWA IndexedDB are the target canonical stores.
-Implemented foundations: shared repository contract, transactional IndexedDB adapter, guarded async bootstrap/migration coordinator, native SQLite template, and local sync coordinator. The guarded bootstrap and asynchronous repository bridge are packaged but not yet connected to the live UI.
+Implemented foundations: shared repository contract, transactional IndexedDB adapter, guarded async bootstrap/migration coordinator, native SQLite template, and local sync coordinator. The root startup now awaits guarded storage bootstrap before replaying operational scripts; the repository bridge is bound, but legacy UI compatibility mode remains active until every domain read/write is migrated.
 Latest corrections: root-level outbox retry test now respects future retryAt backoff; scripts/prepare-web.js line breaks were repaired after CI exposed a malformed packaging block. The test suite passed 289/289 on the preceding commit; the corrected build is awaiting CI. See README.md for exact commit and workflow status.
-IMPORTANT: these repositories and the new bootstrap coordinator are NOT yet the active UI persistence path. The running PMS state still uses the legacy localStorage-backed runtime. The new bridge requires asynchronous calls and is not yet bound to operational screens. The coordinator validates and imports the exact aurelia_lodge_v2 snapshot into IndexedDB with full collection read-back, but explicitly reports uiCutover:false. The shared JavaScript bridge now exposes Promise-based domain mutation entry points over the repository contract. A Capacitor plugin is now registered for native SQLite initialization, entity reads and atomic entity/outbox writes. Full repository-contract parity and live UI binding are still incomplete. Do not remove or rewrite that state until asynchronous bootstrap, full domain migration/read-back, domain command routing, recovery and rollback have been verified.
+IMPORTANT: these repositories and the new bootstrap coordinator are NOT yet the active UI persistence path. The running PMS still uses the legacy localStorage-backed runtime after verified bootstrap; no domain cutover is claimed. The new bridge requires asynchronous calls and is not yet bound to operational screens. The coordinator validates and imports the exact aurelia_lodge_v2 snapshot into IndexedDB with full collection read-back, but explicitly reports uiCutover:false. The shared JavaScript bridge now exposes Promise-based domain mutation entry points over the repository contract. A Capacitor plugin is now registered for native SQLite initialization, entity reads and atomic entity/outbox writes. Full repository-contract parity and live UI binding are still incomplete. Do not remove or rewrite that state until asynchronous bootstrap, full domain migration/read-back, domain command routing, recovery and rollback have been verified.
 All booking/room/guest/folio/payment business writes must ultimately pass through the platform repository; entity update + outbox event must commit atomically. Do not simulate atomicity with asynchronous localStorage mirroring.
 Sync is disabled by default. Payment provider execution is separate from PMS sync; client callbacks are not authoritative payment proof.
 LIVE GATEWAY COLLECTION, AUTOMATIC SETTLEMENT AND AUTOMATED REFUND POSTING REMAIN OFF until provider verification, canonical folio posting, reconciliation, security and physical-device acceptance pass.
@@ -322,7 +322,12 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
 .settings-privacy-note{padding:12px 14px;border:1px solid var(--ln);border-radius:14px;background:rgba(255,255,255,.025);color:var(--mu);font-size:12px;line-height:1.55}
 @media(min-width:760px){.settings-accordion>summary{min-height:66px;padding:17px 20px}.settings-accordion__body{padding:0 20px 20px}}
 </style>
-</head><body>
+<style id="aurelia-runtime-shield-style">
+#aurelia-runtime-shield{position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;background:#071810;color:#f4f0df;font:14px/1.5 ui-monospace,monospace;text-align:center}
+#aurelia-runtime-shield h2{font:600 20px/1.3 system-ui,sans-serif;letter-spacing:.12em}
+#aurelia-runtime-shield p{max-width:34rem;color:#b9c7bb}
+#aurelia-runtime-shield[data-failed="true"] p{color:#ff9c9c}
+</style></head><body><div id="aurelia-runtime-shield" role="status" aria-live="polite"><h2>AURELIA LOCAL PMS</h2><p id="aurelia-runtime-shield-status">Verifying durable local storage and protected legacy data…</p></div>
 
 <script id="guest-contact-actions-early">
 /* Define guest contact markup before the first Stays render can run. */
@@ -475,7 +480,7 @@ window.AureliaAdsBridge = {
 <div class="app"><div class="top"><div class="crest" id="crest"></div><div class="pill" id="connection-status"><i></i>Local PMS · Internet optional</div></div><main id="v"></main></div>
 <nav class="dock" id="dock" style="--i:0"></nav>
 <div class="sheet" id="sh"><div class="scrim" onclick="closeS()"></div><div class="pan" id="pan"></div></div><div id="toast"></div>
-<script>
+<script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 const $=(s,e=document)=>e.querySelector(s),$$=(s,e=document)=>[...e.querySelectorAll(s)];
 
 
@@ -2163,7 +2168,7 @@ SUB.io=function(){
 })();
 
 </script>
-<script id="aurelia-fx">
+<script id="aurelia-fx" type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 (function(){
   var css = `
 /* Motion + polish on original theme — does not replace palette */
@@ -2287,7 +2292,7 @@ body:has(#sh.show) #hor-book, body:has(#sh.show) #hor-search{display:none!import
 
 
 
-<script id="aurelia-booking-api">
+<script id="aurelia-booking-api" type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 (function () {
   "use strict";
 
@@ -2600,7 +2605,7 @@ function listBookingsForApi(filter) {
 })();
 </script>
 
-<script>
+<script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 /* One uploaded hotel QR only; amount and due status refresh from the live folio balance. */
 function uploadedQrWithDynamicBalance(b){
  const src=String(S.set?.qr||'');if(!src)return '';
@@ -2640,7 +2645,7 @@ selectFolioPaymentMethod=function(method){
 };
 </script>
 
-<script>
+<script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 
 /* ===== Runtime fixes: guest occupants, invoices, availability, exports, dining data ===== */
 function renderGuestHits(q){
@@ -2691,7 +2696,7 @@ render=function(){fixDiningNumbers();return prevRender()};
 
 </script>
 
-<script>
+<script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 
 /* ===== Production UX patch: dining controls, payment folio, UPI and legible documents ===== */
 (function(){
@@ -2759,7 +2764,7 @@ folio=function(i){
 
 </script>
 
-<script>
+<script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 
 /* Invoice image export and identity extraction enhancement */
 async function exportInvoicePng(i,phone){
@@ -2809,7 +2814,7 @@ inv=function(i){
 
 </script>
 
-<script>
+<script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 
 /* Fix category corruption and preserve menu/table changes in durable storage. */
 function cleanDiningModel(){
@@ -2913,7 +2918,7 @@ SUB.rep=function(){return _repWithFinancialStatements()};
 
 </script>
 
-<script>
+<script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 
 
 /* User-requested payment and dining corrections. Keep changes isolated to final UI wrappers. */
@@ -3130,7 +3135,7 @@ completeCheckOut=function(i){const t=$('#actual-checkout-time')?.value;if(!t){to
 
 </script>
 
-<script>
+<script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 /* Repair legacy dining state and ensure payment screens render at most one QR. */
 function normalizeDiningBeforeRender(){
  const source=(S.menu&&typeof S.menu==='object')?S.menu:MENU,clean={};
@@ -3307,7 +3312,7 @@ V.dining=function(){
 })();
 </script>
 
-<script>
+<script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 /* Final NaN repair: preserve valid saved categories, sanitize both menu stores, and use one category source. */
 function repairMenu(menu){
  if(!menu||typeof menu!=='object'||Array.isArray(menu))return {};
@@ -3385,7 +3390,7 @@ V.dining=function(){
 })();
 </script>
 
-<script>
+<script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 /* Final consolidated payment UX patch: UPI QR gating, paid receipts, guest contacts and restaurant ledger. */
 (function(){
  const style=document.createElement('style');
@@ -3821,7 +3826,7 @@ V.stays=function(){
 }
 </style>
 
-<script>
+<script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 /* UX repair: safe payment-method fallback, stable calendar exit, cancellation, and responsive Stays alignment. */
 window.selectFolioPaymentMethod=window.selectFolioPaymentMethod||function(method){
  const root=document.querySelector('#pan'),chips=root&&root.querySelector('#pm');if(!root||!chips)return;
@@ -4054,7 +4059,7 @@ document.addEventListener('click',function(event){
 .payment-platform-card details[open] summary:after{content:'⌃'}
 .payment-platform-card .locked{opacity:.72}
 </style>
-<script type="module" id="aurelia-provider-platform-inline">
+<script id="aurelia-provider-platform-inline" type="application/x-aurelia-deferred" data-aurelia-original-type="module">
 window.AureliaPaymentPlatformLoadState = "loading";
 /**
  * Aurelia India payment-provider catalogue and integration policy.
@@ -4160,7 +4165,7 @@ if (typeof window !== "undefined") {
 window.AureliaPaymentPlatformLoadState = "ready";
 if (typeof window.render === "function") window.render();
 </script>
-<script>
+<script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 (function(){
  function providerNames(){const api=window.AureliaPaymentPlatform;return api&&Array.isArray(api.PMS_PROVIDER_CATALOGUE)?api.PMS_PROVIDER_CATALOGUE.filter(id=>api.PAYMENT_PROVIDERS[id]).map(id=>[id,api.PAYMENT_PROVIDERS[id].name]):[];}
  function bridgeStatus(){
@@ -4651,7 +4656,7 @@ window.aureliaPaymentAdminRequest=async function(path,method='GET',body,options=
 })();
 </script>
 
-<script id="aurelia-android-actions-and-export-search">
+<script id="aurelia-android-actions-and-export-search" type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 /* Reliable Android external intents and searchable guest/room export. */
 (function(){
   document.addEventListener('click',function(ev){
@@ -4686,7 +4691,7 @@ window.printGuestPreview=function(){
 };
 </script>
 
-<script id="aurelia-preview-settlement-fallback">
+<script id="aurelia-preview-settlement-fallback" type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 /* Standalone HTML preview fallback. Native/served builds replace this with settlement-service.mjs. */
 window.aureliaSettlePayment=function(input){
  const blocked=new Error('Accounting is in read-only safety mode. No payment balance changes are permitted.');blocked.code='ACCOUNTING_READ_ONLY_KILL_SWITCH';throw blocked;
@@ -4739,7 +4744,7 @@ window.aureliaSettlePayment=function(input){
  }
 };
 </script>
-<script type="module" id="aurelia-local-settlement-adapter">
+<script id="aurelia-local-settlement-adapter" type="application/x-aurelia-deferred" data-aurelia-original-type="module">
 import { settlePayment as settleLocalPayment } from './src/payments/settlement-service.mjs';
 window.aureliaSettlePayment = function(input) {
   // This adapter is the local/manual PMS ledger path only. A WebView caller
@@ -4765,7 +4770,7 @@ window.aureliaSettlePayment = function(input) {
   });
 };
 </script>
-<script type="module" id="aurelia-journaled-settlement-adapter">
+<script id="aurelia-journaled-settlement-adapter" type="application/x-aurelia-deferred" data-aurelia-original-type="module">
 import { IndexedDbSettlementJournal } from './src/payments/settlement-journal.mjs';
 import { SettlementAuthorizationVerifier } from './src/payments/settlement-authorization.mjs';
 import { SettlementProjector } from './src/payments/settlement-projector.mjs';
@@ -4941,7 +4946,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 }));
 </script>
 
-<script id="aurelia-isolated-invoice-export-v2">
+<script id="aurelia-isolated-invoice-export-v2" type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
 /*
  * Invoice export v2
  * - Never asks html2canvas to inspect the application window or any frame.
@@ -5207,6 +5212,51 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 })();
 </script>
 
-<script type="module" src="./src/bookings/cancellation-policy.mjs"></script>
-</body>
+<script src="./src/bookings/cancellation-policy.mjs" type="application/x-aurelia-deferred" data-aurelia-original-type="module"></script>
+<script type="module" id="aurelia-async-runtime-bootstrap">
+import { bootstrapper } from "./src/storage/pms-bootstrap-coordinator.mjs";
+import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
+
+const shield = document.getElementById("aurelia-runtime-shield");
+const status = document.getElementById("aurelia-runtime-shield-status");
+const setStatus = message => { if (status) status.textContent = message; };
+
+async function replayApplicationScripts() {
+  const deferred = Array.from(document.querySelectorAll('script[type="application/x-aurelia-deferred"]'));
+  for (const inert of deferred) {
+    const script = document.createElement("script");
+    const originalType = inert.getAttribute("data-aurelia-original-type") || "classic";
+    for (const attribute of Array.from(inert.attributes)) {
+      if (attribute.name === "type" || attribute.name === "data-aurelia-original-type") continue;
+      script.setAttribute(attribute.name, attribute.value);
+    }
+    if (originalType !== "classic") script.type = originalType;
+    if (script.hasAttribute("src")) script.async = false;
+    else script.textContent = inert.textContent;
+
+    const needsLoadEvent = script.hasAttribute("src") || originalType === "module";
+    const loaded = needsLoadEvent ? new Promise((resolve, reject) => {
+      script.addEventListener("load", resolve, { once: true });
+      script.addEventListener("error", () => reject(new Error("Application module failed: " + (script.src || script.id || "inline script"))), { once: true });
+    }) : null;
+    inert.replaceWith(script);
+    if (loaded) await loaded;
+  }
+}
+
+try {
+  setStatus("Opening canonical local database and validating the legacy snapshot…");
+  const boot = await bootstrapper.initializeApplication();
+  if (!boot || boot.success !== true || !boot.repository) throw new Error("Canonical storage bootstrap did not return a verified repository");
+  storageBridge.bindActiveEngine(boot.repository);
+  setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
+  await replayApplicationScripts();
+  if (shield) shield.remove();
+  console.info("[Aurelia Lifecycle] Canonical storage bootstrap verified; legacy UI compatibility mode remains active. UI cutover is not claimed.");
+} catch (error) {
+  if (shield) shield.setAttribute("data-failed", "true");
+  setStatus("PMS startup stopped safely: " + String(error?.message || error));
+  console.error("[Aurelia Lifecycle] Startup blocked by persistence verification failure.", error);
+}
+</script></body>
 </html>
