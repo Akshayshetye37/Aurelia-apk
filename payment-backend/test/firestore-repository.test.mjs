@@ -71,7 +71,7 @@ const setup = ({ createOrder, getPaymentStatus } = {}) => {
   let dispatches = 0;
   const repo = new FirestorePaymentRepository({
     db,
-    secretManager: { getProviderSecrets: async () => ({ keyId: 'test', keySecret: 'secret', webhookSecret: 'hook' }) },
+    secretManager: { getProviderSecrets: async () => ({ keyId: 'test', appId: 'cashfree_test', keySecret: 'secret', webhookSecret: 'hook' }) },
     providerFactory: () => ({
       createOrder: async input => {
         dispatches++;
