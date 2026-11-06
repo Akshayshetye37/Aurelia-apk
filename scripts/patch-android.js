@@ -16,6 +16,18 @@ if (!manifest.includes('<queries>')) {
 } else if (!manifest.includes('com.aurelia.paybridge')) {
   manifest = manifest.replace('</queries>', '        <package android:name="com.aurelia.paybridge" />\n    </queries>');
 }
+// Cashfree UPI Intent discovery on Android 11+ requires explicit package visibility.
+if (!manifest.includes('<data android:scheme="upi"')) {
+  const upiQueries = [
+    '        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="upi" /></intent>',
+    '        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="tez" /></intent>',
+    '        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="gpay" /></intent>',
+    '        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="phonepe" /></intent>',
+    '        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="paytmmp" /></intent>',
+    '        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="credpay" /></intent>'
+  ].join('\\n');
+  manifest = manifest.replace('</queries>', upiQueries + '\\n    </queries>');
+}
 if (!manifest.includes('com.aurelia.paybridge.permission.BIND_PAY_BRIDGE')) {
   manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE" />\n    <application');
 }
