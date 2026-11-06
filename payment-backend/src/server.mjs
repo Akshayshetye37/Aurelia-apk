@@ -359,9 +359,10 @@ app.post('/v1/admin/payments/reconcile', requireTenantAdmin,
 
 app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit: '8kb', strict: true }), async (req, res) => {
   const body = req.body || {};
-  const allowed = ['folioId', 'amountMinor', 'currency', 'provider', 'environment', 'idempotencyKey', 'customer', 'returnUrl'];
+  const allowed = ['folioId', 'amountMinor', 'currency', 'provider', 'environment', 'idempotencyKey', 'customer', 'returnUrl', 'deviceId'];
   if (Object.keys(body).some(k => !allowed.includes(k)) ||
-      !['folioId', 'amountMinor', 'currency', 'provider', 'environment'].every(k => Object.hasOwn(body, k))) {
+      !['folioId', 'amountMinor', 'currency', 'provider', 'environment'].every(k => Object.hasOwn(body, k)) ||
+      (body.deviceId !== undefined && !/^[A-Za-z0-9_-]{6,64}$/.test(body.deviceId))) {
     return fail(res, 400, 'invalid_payment_intent_schema');
   }
   const idempotencyKey = idempotencyOf(req) || body.idempotencyKey;
