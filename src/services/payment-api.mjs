@@ -112,7 +112,7 @@ export class PaymentApiClient {
         !Number.isSafeInteger(amountMinor) || amountMinor < 100 ||
         !IDEMPOTENCY_KEY.test(idempotencyKey || '') ||
         typeof reason !== 'string' || reason.length < 3 || reason.length > 100 ||
-        /[\\u0000-\\u001f\\u007f]/.test(reason)) {
+        [...reason].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
       throw new TypeError('invalid_payment_refund_request');
     }
     return this.request('/v1/payments/intents/' + encodeURIComponent(intentId) + '/refunds', {
