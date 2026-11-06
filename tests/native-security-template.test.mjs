@@ -172,3 +172,21 @@ test('Capacitor PMS SQLite plugin is copied and explicitly registered before Mai
   assert.match(patcher, /registerPlugin\(CapacitorPmsStoragePlugin\.class\)/);
   assert.match(patcher, /registerPlugin\(CapacitorPmsStoragePlugin\.class\);[\s\S]*?super\.onCreate/);
 });
+
+
+test('native PMS SQLite template implements repository and durable outbox contract', () => {
+  const repository = read('android/templates/LocalPmsRepository.java');
+  const plugin = read('android/templates/CapacitorPmsStoragePlugin.java');
+  for (const method of ['listEntities(', 'migrateLegacySnapshot(', 'readMigrationSnapshot(', 'claimOutboxBatch(', 'acknowledgeOutbox(', 'retryOutbox(', 'markOutboxConflict(']) {
+    assert.ok(repository.includes(method), 'repository method ' + method);
+  }
+  for (const method of ['listEntities(', 'migrateLegacySnapshot(', 'readMigrationSnapshot(', 'claimOutboxBatch(', 'acknowledgeOutbox(', 'retryOutbox(', 'markOutboxConflict(']) {
+    assert.ok(plugin.includes(method), 'plugin method ' + method);
+  }
+  assert.match(repository, /beginTransactionNonExclusive\(\)/);
+  assert.match(repository, /ENTITY_VERSION_CONFLICT/);
+  assert.match(repository, /OUTBOX_LEASE_MISMATCH/);
+  assert.match(repository, /legacy_migration_replay_payload_mismatch/);
+  assert.match(repository, /pms_outbox.*UNIQUE\(entity_type,entity_id,sequence\)/);
+  assert.match(plugin, /@CapacitorPlugin\(name = "CapacitorPmsStorage"\)/);
+});
