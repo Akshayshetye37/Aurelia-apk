@@ -800,10 +800,13 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
     const intentRef = orderData.intentId
       ? db.doc('paymentIntents/' + orderData.intentId)
       : null;
+    const deviceId = orderData.deviceId || null;
+    const deviceRef = deviceId ? paymentDeviceRef(db, tenantId, deviceId) : null;
     const outcome = await db.runTransaction(async tx => {
       const refs = [tx.get(inbox), tx.get(orderRef)];
       if (intentRef) refs.push(tx.get(intentRef));
-      const [seen, currentOrder, currentIntent] = await Promise.all(refs);
+      if (deviceRef) refs.push(tx.get(deviceRef));
+      const [seen, currentOrder, currentIntent, currentDevice] = await Promise.all(refs);
       if (!currentOrder.exists || currentOrder.data().tenantId !== tenantId ||
           currentOrder.data().provider !== provider || currentOrder.data().environment !== environment ||
           currentOrder.data().providerOrderId !== providerOrderId) {
@@ -830,11 +833,55 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
       // Do not downgrade previously persisted capture verification evidence
       // if a retry races a transient provider-status response.
       const captureVerified = verified || (seen.exists && seen.data().providerFetchVerified === true);
+      let settlementCommandId = seen.exists ? (seen.data().settlementCommandId || null) : null;
+      let settlementSequenceId = seen.exists ? (seen.data().settlementSequenceId || null) : null;
+      let commandCreated = false;
+      const deviceData = currentDevice?.exists ? currentDevice.data() : null;
+      const intentData = currentIntent?.exists ? currentIntent.data() : null;
+      const providerAccountId = currentOrder.data().providerAccountId || intentData?.providerAccountId || null;
+      const deviceReady = !!deviceData && deviceData.status === 'ACTIVE' &&
+        deviceData.tenantId === tenantId && deviceData.deviceId === deviceId &&
+        deviceData.attestationVerifiedAt &&
+        ['TRUSTED_ENVIRONMENT','STRONG_BOX'].includes(deviceData.attestationSecurityLevel) &&
+        deviceData.attestationVerifiedBootState === 'VERIFIED' &&
+        deviceData.attestationDeviceLocked === true;
+      if (captureVerified && intentRef && intentData && deviceReady && providerAccountId &&
+          intentData.deviceId === deviceId && !settlementCommandId) {
+        const sequenceId = (Number.isSafeInteger(deviceData.lastSequence) ? deviceData.lastSequence : 0) + 1;
+        const commandId = crypto.randomUUID();
+        const authorizationId = crypto.randomUUID();
+        const leaseId = crypto.randomUUID();
+        const settlement = {
+          tenantId, deviceId, provider, providerAccountId, environment, commandId,
+          providerTransactionId: paymentId, bookingId: currentOrder.data().folioId,
+          amountPaise: currentOrder.data().amountMinor, method: provider, reference: paymentId
+        };
+        const commandPayload = {
+          commandId, deviceId, sequenceId, transactionId: intentRef.id,
+          idempotencyKey: intentData.idempotencyKey, folioId: currentOrder.data().folioId,
+          amountMinor: currentOrder.data().amountMinor, currency: currentOrder.data().currency,
+          provider, providerAccountId, providerPaymentId: paymentId, settlement
+        };
+        const payloadCanonical = Buffer.from(canonicalBytes(commandPayload)).toString('utf8');
+        const commandPayloadHash = crypto.createHash('sha256').update(payloadCanonical).digest('hex');
+        const commandRef = deviceRef.collection('commands').doc(String(sequenceId));
+        tx.create(commandRef, {
+          ...commandPayload, payload: commandPayload, payloadCanonical,
+          payloadHash: commandPayloadHash, authorizationId, leaseId,
+          webhookInboxId: inboxId, status: 'PENDING',
+          leaseTokenHash: null, leaseExpiresAt: null, createdAt: FieldValue.serverTimestamp()
+        });
+        tx.update(deviceRef, { lastSequence: sequenceId, lastCommandAt: FieldValue.serverTimestamp() });
+        settlementCommandId = commandId;
+        settlementSequenceId = sequenceId;
+        commandCreated = true;
+      }
       const evidence = {
         eventId, tenantId, provider, environment, paymentId, providerOrderId, payloadHash,
         signatureVerified: true, providerFetchVerified: captureVerified,
         processingStatus: captureVerified ? 'CAPTURED_VERIFIED_PENDING_ACCOUNTING' : 'UNVERIFIED_RETRYABLE',
         accountingStatus: seen.exists ? (seen.data().accountingStatus || 'PENDING') : 'PENDING',
+        ...(settlementCommandId ? { settlementCommandId, settlementSequenceId } : {}),
         receivedAt: seen.exists ? (seen.data().receivedAt || FieldValue.serverTimestamp()) : FieldValue.serverTimestamp(),
         lastAttemptAt: FieldValue.serverTimestamp()
       };
@@ -857,7 +904,8 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
           verifiedWebhookProviderPatch(environment, () => FieldValue.serverTimestamp()),
           { merge: true });
       }
-      return { duplicate: false, verified: captureVerified };
+      return { duplicate: false, verified: captureVerified, commandCreated,
+        deviceReady, settlementCommandId, settlementSequenceId };
     });
 
     let accounting = outcome.accountingPosted ? 'posted' : 'not_verified';
@@ -876,7 +924,15 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: 'a
           ? 'COLLECTION_CONTROL_DISABLED'
           : !controlsAllowSettlement
             ? 'SETTLEMENT_CONTROL_DISABLED'
-            : 'TRUSTED_SETTLEMENT_BRIDGE_NOT_IMPLEMENTED';
+            : !settlementIssuerEnabled
+              ? 'SETTLEMENT_AUTHORITY_NOT_CONFIGURED'
+              : !deviceId
+                ? 'TRUSTED_DEVICE_NOT_BOUND_TO_INTENT'
+                : !outcome.deviceReady
+                  ? 'TRUSTED_DEVICE_NOT_ACTIVE'
+                  : !outcome.commandCreated && !outcome.settlementCommandId
+                    ? 'SETTLEMENT_COMMAND_NOT_CREATED'
+                    : 'AWAITING_TRUSTED_DEVICE_ACK';
       await inbox.set({
         accountingStatus: 'PENDING_CONTROL_OR_BRIDGE',
         processingStatus: 'CAPTURED_VERIFIED_PENDING_ACCOUNTING',
