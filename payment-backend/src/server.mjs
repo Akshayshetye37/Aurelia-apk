@@ -879,7 +879,10 @@ app.delete('/v1/admin/providers/:provider/credentials', requireTenantAdmin, asyn
   const { provider } = req.params, publicEnvironment = req.query?.environment;
   const environment = adapterEnvironmentOf(provider, publicEnvironment);
   if (!environment) return fail(res, 400, 'invalid_provider_environment');
-  if (publicEnvironment === 'live' && providerQualificationStatus(provider).liveCollection !== true) return fail(res, 403, 'live_collection_not_enabled');
+  if (publicEnvironment === 'live') {
+    const liveBlock = await liveCollectionBlockReason(req.tenant.id, provider);
+    if (liveBlock) return fail(res, liveBlock === 'payment_controls_unavailable' ? 503 : 403, liveBlock);
+  }
   try {
     const stateRef = providerTenantDoc(req.tenant.id, provider, environment);
     const state = await stateRef.get();
