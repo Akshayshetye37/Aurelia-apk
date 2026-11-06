@@ -118,3 +118,16 @@ test('native payment device transport is HTTPS-only, path-safe, signed, and resp
   assert.ok(source.includes("fun acknowledge(lease: Lease, ledgerAckId: String, idToken: String? = null): JSONObject"));
   assert.doesNotMatch(source, /@JavascriptInterface|addJavascriptInterface\s*\(/);
 });
+
+test('cloud device sync uses the existing MFA-aware Firebase web session', () => {
+  const bridge = read('src/payments/payment-device-bridge.mjs');
+  const patcher = read('scripts/patch-android.js');
+  assert.match(bridge, /window\.AureliaPaymentAuth/);
+  assert.match(bridge, /getFreshIdToken\(\)/);
+  const statusStart = patcher.indexOf('boolean ready = paymentDeviceClient != null');
+  const statusEnd = patcher.indexOf(';', statusStart);
+  assert.ok(statusStart >= 0 && statusEnd > statusStart);
+  const readiness = patcher.slice(statusStart, statusEnd);
+  assert.match(readiness, /hasAttestedIdentity\(\)/);
+  assert.doesNotMatch(readiness, /FirebaseAuth/);
+});
