@@ -324,3 +324,12 @@ The following are still release-blocking:
 - Root application modules: src/
 - Root tests: tests/
 - Payment backend tests: payment-backend/test/
+
+
+## Smart Checkpoint implementation (2026-11-07)
+
+- Added `src/payments/smart-checkpoint.mjs` as a local-first reconciliation domain engine. It calculates folio balances in integer paise, excludes unverified gateway evidence, handles refunds/credits/overpayments, records staff payments idempotently, requires manager authorization and a reason for write-offs, and requires explicit staff approval before marking a zero-balance folio settled.
+- Added optimistic folio-version checks and audit records. Opening a review does not lock the folio; stale approvals fail and must be refreshed.
+- Added `tests/smart-checkpoint.test.mjs` covering balance math, unverified evidence, stale versions, idempotency, manager-only write-offs, settlement approval and invalid amounts.
+- **Integration boundary:** the new engine requires an atomic local `transactFolio` repository. Aurelia's canonical booking/folio state is not yet exposed through that contract, and the popup is not yet wired into the live folio screen. No false localStorage atomicity or cross-device locking is claimed. See `docs/SMART-CHECKPOINT.md`.
+- Gateway settlement and live collection remain fail-closed. The engine does not verify provider signatures or authorize settlement from a checkout callback.
