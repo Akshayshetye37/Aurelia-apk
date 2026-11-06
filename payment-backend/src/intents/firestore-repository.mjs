@@ -282,13 +282,34 @@ export class FirestorePaymentRepository {
     }
     const tenantId = membership.tenantId;
 
+    // Resolve the tenant's active merchant account before reserving an intent.
+    // The account identity is part of the idempotency namespace, preventing
+    // transaction IDs from colliding across merchant accounts.
+    let credentials;
+    let adapter;
+    let providerAccountId;
+    try {
+      credentials = await this.secretManager.getProviderSecrets(
+        tenantId, payload.provider, payload.environment
+      );
+      adapter = this.providerFactory(payload.provider, {
+        credentials, environment: payload.environment
+      });
+      providerAccountId = payload.provider === 'razorpay' ? credentials.keyId : credentials.appId;
+      if (typeof providerAccountId !== 'string' || !providerAccountId.trim()) {
+        throw new Error('provider_account_identity_missing');
+      }
+    } catch {
+      const error = new Error('provider_credentials_unavailable'); error.statusCode = 503; throw error;
+    }
+
     const intentId = crypto.randomUUID();
-    const keyHash = digest(tenantId + ':' + payload.provider + ':' + payload.environment + ':' + payload.idempotencyKey);
+    const keyHash = digest(tenantId + ':' + payload.provider + ':' + payload.environment + ':' + providerAccountId + ':' + payload.idempotencyKey);
     const folioHash = digest(tenantId + ':' + payload.folioId);
     const fingerprint = digest(JSON.stringify({
       folioId: payload.folioId, amountMinor: payload.amountMinor,
       currency: payload.currency, provider: payload.provider,
-      environment: payload.environment,
+      environment: payload.environment, providerAccountId,
       // Customer and redirect metadata are part of the checkout identity.
       // Reusing an idempotency key with changed guest details must conflict.
       customer: payload.customer ? {
@@ -334,7 +355,7 @@ export class FirestorePaymentRepository {
         intentId, tenantId, folioId: payload.folioId,
         bookingId: authoritativeFolio.bookingId || null, folioRevision: authoritativeFolio.revision ?? null,
         provider: payload.provider, environment: payload.environment,
-        deviceId: payload.deviceId || null,
+        providerAccountId, deviceId: payload.deviceId || null,
         amountMinor: payload.amountMinor, currency: payload.currency,
         idempotencyKey: payload.idempotencyKey, fingerprint, providerReference,
         state: 'DISPATCHING', providerOrderId: null, providerPaymentId: null,
@@ -372,40 +393,9 @@ export class FirestorePaymentRepository {
       return { intentId: reservation.intentId, status: reservation.state, provider: payload.provider, environment: payload.environment, providerOrderId: reservation.providerOrderId, checkoutData: reservation.checkoutData, isDuplicate: true };
     }
 
-    // Fetching tenant secrets and constructing an adapter are local pre-dispatch
-    // operations. Do not mark the reservation as externally dispatched until
-    // all local setup has completed successfully.
-    let credentials;
-    let adapter;
-    let providerAccountId;
-    try {
-      credentials = await this.secretManager.getProviderSecrets(
-        tenantId, payload.provider, payload.environment
-      );
-      adapter = this.providerFactory(payload.provider, {
-        credentials, environment: payload.environment
-      });
-      providerAccountId = payload.provider === 'razorpay' ? credentials.keyId : credentials.appId;
-      if (typeof providerAccountId !== 'string' || !providerAccountId.trim()) {
-        throw new Error('provider_account_identity_missing');
-      }
-    } catch {
-      await this.db.runTransaction(async tx => {
-        const [intentSnap, idemSnap, lockSnap] = await Promise.all([
-          tx.get(intentRef), tx.get(idemRef), tx.get(lockRef)
-        ]);
-        if (!intentSnap.exists || intentSnap.data().state !== 'DISPATCHING') return;
-        const next = transitionIntent('DISPATCHING', { type: 'dispatch_rejected', definitive: true, requestMayHaveReachedProvider: false });
-        tx.update(intentRef, { state: next, updatedAt: this.clock().toISOString(), version: 2 });
-        if (idemSnap.exists && idemSnap.data().intentId === intentId) {
-          tx.update(idemRef, { state: next, updatedAt: this.clock().toISOString() });
-        }
-        if (lockSnap.exists && lockSnap.data().intentId === intentId) {
-          tx.update(lockRef, { state: next, active: false, updatedAt: this.clock().toISOString() });
-        }
-      });
-      return { intentId, status: 'FAILED_TO_INITIATE', message: 'Payment could not be dispatched.' };
-    }
+    // Credentials and adapter were resolved before reservation. No provider
+    // network call has occurred yet; the dispatch marker remains the last
+    // durable step before the external create-order request.
 
     // This transaction records that invocation of the remote provider API is
     // next. If it cannot be committed, the provider API is not called.
