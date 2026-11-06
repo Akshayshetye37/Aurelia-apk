@@ -568,6 +568,15 @@ app.get('/v1/payments/capabilities', requireTenantPaymentActor, async (req, res)
   });
 });
 
+app.post('/v1/payments/intents/:intentId/reconcile', requireTenantPaymentActor, async (req, res) => {
+  try {
+    return res.json(await paymentRepository.reconcilePaymentIntent(req.actor.uid, req.params.intentId));
+  } catch (error) {
+    const response = paymentRouteError(error);
+    return fail(res, response.status, response.error);
+  }
+});
+
 app.get('/v1/payments/intents/:intentId', requireTenantPaymentActor, async (req, res) => {
   try {
     return res.json(await paymentRepository.getPaymentIntent(req.actor.uid, req.params.intentId));
