@@ -598,7 +598,8 @@ async function updateRefundEvidence(refundRef, intentRef, remote, record) {
   if (!remote || (remote.refundId && record.provider !== 'razorpay' && remote.refundId !== record.refundId) ||
       (remote.amountMinor != null && remote.amountMinor !== record.amountMinor) ||
       (remote.currency != null && remote.currency !== 'INR') ||
-      (remote.paymentId != null && String(remote.paymentId) !== record.providerPaymentId) ||
+      (remote.paymentId != null && ['razorpay', 'cashfree', 'payu'].includes(record.provider) &&
+        String(remote.paymentId) !== record.providerPaymentId) ||
       (remote.orderId != null && remote.orderId !== record.providerOrderId)) {
     throw new Error('provider_refund_binding_mismatch');
   }
@@ -633,7 +634,7 @@ app.post('/v1/payments/intents/:intentId/refunds', requireTenantAdmin,
     if (!/^[0-9a-f-]{36}$/i.test(intentId || '') || !Number.isSafeInteger(amountMinor) || amountMinor < 100 ||
         typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(idempotencyKey) ||
         typeof reason !== 'string' || reason.length < 3 || reason.length > 100 ||
-        /[\\u0000-\\u001f\\u007f]/.test(reason) ||
+        /[\u0000-\u001f\u007f]/.test(reason) ||
         Object.keys(req.body || {}).some(k => !['amountMinor', 'idempotencyKey', 'reason'].includes(k))) {
       return fail(res, 400, 'invalid_refund_request');
     }
