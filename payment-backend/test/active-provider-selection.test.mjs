@@ -6,6 +6,7 @@ function fakeFirestore(initial = {}) {
   const docs = new Map(Object.entries(initial));
   const ref = path => ({
     path,
+    get: async () => ({ exists: docs.has(path), data: () => docs.get(path) }),
     collection: name => ({ doc: () => ref(path + '/' + name + '/audit-' + String(docs.size + 1)) })
   });
   const db = {
