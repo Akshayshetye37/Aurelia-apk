@@ -140,7 +140,8 @@ export async function updatePaymentControls({
     }
     // The tenant-facing switch can only be enabled after the independent,
     // internally approved live_collection release gate is already active.
-    if (changes.live_collection_enabled === true && current.live_collection !== true) {
+    if (changes.live_collection_enabled === true &&
+        (current.live_collection !== true || current.emergency_stop !== false)) {
       throw Object.assign(new Error("Live collection has not been internally authorised"), {
         code: "PAYMENT_LIVE_COLLECTION_NOT_AUTHORISED"
       });
