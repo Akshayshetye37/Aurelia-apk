@@ -118,3 +118,11 @@ export async function acknowledgeSettlementCommand({ commandId, ledgerAckId, tok
 export function paymentDeviceNativeAvailable() {
   return !!(window.AureliaNative && typeof window.AureliaNative.postMessage === "function");
 }
+
+export function getNativePaymentEngineStatus() {
+  return nativeRequest("paymentEngineStatus");
+}
+
+export function startNativeProviderCheckout(payload) {
+  return nativeRequest("paymentEngineStartCheckout", payload);
+}
