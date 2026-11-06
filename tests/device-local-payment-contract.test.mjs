@@ -19,15 +19,16 @@ test('checkout is fail-closed unless the native engine reports ready', () => {
   assert.doesNotMatch(checkout, /localGatewayApi\s*\(/);
 });
 
-test('device credential vault contains all seven agreed providers', () => {
+test('device credential vault exposes only the six wired providers and excludes CCAvenue', () => {
   const html = read('index.html');
   const vaultStart = html.indexOf('function localNativeGatewayHtml()');
   const vaultEnd = html.indexOf('window.saveAureliaNativeGateway=', vaultStart);
   assert.ok(vaultStart >= 0 && vaultEnd > vaultStart, 'native vault renderer exists');
   const vault = html.slice(vaultStart, vaultEnd);
-  for (const provider of ['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'ccavenue', 'jiopay']) {
+  for (const provider of ['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay']) {
     assert.match(vault, new RegExp(provider));
   }
+  assert.doesNotMatch(vault, /ccavenue/i);
   assert.match(vault, /Android Keystore/);
   assert.match(vault, /does not validate provider keys/);
   assert.match(vault, /phonepe:\['uat','production'\]/);
