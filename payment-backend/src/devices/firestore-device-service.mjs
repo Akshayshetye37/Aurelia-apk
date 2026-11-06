@@ -5,7 +5,7 @@ import { SETTLEMENT_AUTH_TYPE, SETTLEMENT_LEASE_TYPE, SETTLEMENT_ISSUER, SETTLEM
 const DEVICE_ID = /^[A-Za-z0-9_-]{6,64}$/;
 const COMMAND_ID = /^[0-9a-f-]{36}$/i;
 const sha256 = value => crypto.createHash("sha256").update(value).digest("hex");
-const deviceRef = (db, tenantId, deviceId) => db.collection("paymentDevices").doc(tenantId).collection("devices").doc(deviceId);
+export const paymentDeviceRef = (db, tenantId, deviceId) => db.collection("paymentDevices").doc(tenantId).collection("devices").doc(deviceId);
 const challengeRef = (db, tenantId, deviceId, challengeId) =>
   db.collection("paymentDeviceChallenges").doc(sha256(tenantId + ":" + deviceId + ":" + challengeId));
 
@@ -18,7 +18,7 @@ export async function createDeviceEnrollmentChallenge({ db, tenantId, actorUid, 
   requireId(tenantId, "tenant_id");
   requireId(deviceId, "device_id");
   if (typeof actorUid !== "string" || !actorUid) throw new TypeError("verified_owner_required");
-  const ref = deviceRef(db, tenantId, deviceId);
+  const ref = paymentDeviceRef(db, tenantId, deviceId);
   const challengeId = crypto.randomUUID();
   const nonce = crypto.randomBytes(32).toString("base64url");
   const issuedAt = now();
@@ -85,7 +85,7 @@ export async function verifyAndRegisterDevice({
   if (!crypto.timingSafeEqual(suppliedSpki, verifiedSpki)) {
     throw new Error("android_attested_public_key_mismatch");
   }
-  const ref = deviceRef(db, tenantId, deviceId);
+  const ref = paymentDeviceRef(db, tenantId, deviceId);
   await db.runTransaction(async tx => {
     const [deviceSnap, currentChallenge] = await Promise.all([tx.get(ref), tx.get(challengeDocument)]);
     const data = currentChallenge.exists ? currentChallenge.data() : null;
@@ -112,7 +112,7 @@ export async function verifyAndRegisterDevice({
 
 export async function activatePaymentDevice({ db, tenantId, actorUid, deviceId, now = () => new Date() }) {
   requireId(tenantId, "tenant_id"); requireId(deviceId, "device_id");
-  const ref = deviceRef(db, tenantId, deviceId);
+  const ref = paymentDeviceRef(db, tenantId, deviceId);
   await db.runTransaction(async tx => {
     const snap = await tx.get(ref);
     if (!snap.exists || snap.data().ownerUid !== actorUid || snap.data().status !== "PENDING" ||
@@ -130,7 +130,7 @@ export async function activatePaymentDevice({ db, tenantId, actorUid, deviceId, 
 
 export async function revokePaymentDevice({ db, tenantId, actorUid, deviceId, now = () => new Date() }) {
   requireId(tenantId, "tenant_id"); requireId(deviceId, "device_id");
-  const ref = deviceRef(db, tenantId, deviceId);
+  const ref = paymentDeviceRef(db, tenantId, deviceId);
   await db.runTransaction(async tx => {
     const snap = await tx.get(ref);
     if (!snap.exists || snap.data().ownerUid !== actorUid) throw new Error("payment_device_not_found");
@@ -152,7 +152,7 @@ export async function authenticatePaymentDeviceRequest({
   if (!Number.isSafeInteger(timestamp) || Math.abs(currentSeconds - timestamp) > 60) {
     throw new Error("device_request_timestamp_out_of_range");
   }
-  const ref = deviceRef(db, tenantId, deviceId);
+  const ref = paymentDeviceRef(db, tenantId, deviceId);
   const snap = await ref.get();
   if (!snap.exists || snap.data().status !== "ACTIVE" || !snap.data().publicKeySpkiBase64) {
     throw new Error("payment_device_not_active");
@@ -183,7 +183,7 @@ export async function authenticatePaymentDeviceRequest({
 export async function leaseNextSettlementCommand({
   db, tenantId, deviceId, signer, settlementAllowed, now = () => new Date()
 }) {
-  const ref = deviceRef(db, tenantId, deviceId);
+  const ref = paymentDeviceRef(db, tenantId, deviceId);
   const result = await db.runTransaction(async tx => {
     const deviceSnap = await tx.get(ref);
     if (!deviceSnap.exists || deviceSnap.data().status !== "ACTIVE") throw new Error("payment_device_not_active");
@@ -254,7 +254,7 @@ export async function acknowledgeSettlementCommand({
       !/^[A-Za-z0-9._:-]{8,128}$/.test(body.ledgerAckId || "")) {
     throw new TypeError("invalid_payment_device_acknowledgement");
   }
-  const ref = deviceRef(db, tenantId, deviceId);
+  const ref = paymentDeviceRef(db, tenantId, deviceId);
   return db.runTransaction(async tx => {
     const deviceSnap = await tx.get(ref);
     if (!deviceSnap.exists || deviceSnap.data().status !== "ACTIVE") throw new Error("payment_device_not_active");
@@ -271,8 +271,10 @@ export async function acknowledgeSettlementCommand({
     const intentRef = db.collection("paymentIntents").doc(command.transactionId);
     const inboxRef = command.webhookInboxId
       ? db.collection("paymentWebhookInbox").doc(command.webhookInboxId) : null;
-    const [intentSnap, inboxSnap] = await Promise.all([
-      tx.get(intentRef), inboxRef ? tx.get(inboxRef) : Promise.resolve(null)
+    const folioLockRef = db.collection("paymentFolioLocks")
+      .doc(sha256(tenantId + ":" + command.folioId));
+    const [intentSnap, inboxSnap, folioLockSnap] = await Promise.all([
+      tx.get(intentRef), inboxRef ? tx.get(inboxRef) : Promise.resolve(null), tx.get(folioLockRef)
     ]);
     const current = now();
     const leaseExpires = command.leaseExpiresAt?.toDate?.()?.getTime?.() || 0;
@@ -302,6 +304,12 @@ export async function acknowledgeSettlementCommand({
         ledgerAckId: body.ledgerAckId,
         accountingPostedAt: current
       }, { merge: true });
+    }
+    if (folioLockSnap.exists && folioLockSnap.data().intentId === command.transactionId) {
+      tx.update(folioLockRef, {
+        active: false, state: "POSTED_TO_LOCAL_FOLIO",
+        updatedAt: current, localLedgerAckId: body.ledgerAckId
+      });
     }
     return { acknowledged: true, duplicate: false, cursor: body.sequenceId };
   });
