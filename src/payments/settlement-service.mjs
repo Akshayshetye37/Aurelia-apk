@@ -62,7 +62,8 @@ function assertBindingMatches(binding, { booking, amountPaise, method, reference
   if (!Number.isFinite(nowMs) || binding.expiresAtMs <= nowMs) {
     const error = new Error("Settlement authorization or lease expired"); error.code = "AUTHORIZATION_EXPIRED"; throw error;
   }
-  if (binding.bookingId !== booking.id || binding.amountPaise !== amountPaise ||
+  const bookingReference = booking.folioId || "booking-" + String(booking.id);
+  if (binding.bookingId !== bookingReference || binding.amountPaise !== amountPaise ||
       normalizedPaymentMethod(binding.method) !== normalizedPaymentMethod(method) ||
       normalizedPaymentReference(binding.reference, binding.method) !== reference ||
       binding.idempotencyKey !== key || binding.tenantId !== tenantId ||
@@ -232,12 +233,12 @@ export function settlePayment({
     environment: authorization.environment, authorizationId: authorization.authorizationId, leaseId: authorization.leaseId } : {};
   const payment = {
     a: value, amountPaise, m: paymentMethod, r: ref, at: timestamp,
-    auto: source === "auto" || gateway, source, bookingId: booking.id,
+    auto: source === "auto" || gateway, source, bookingId: gateway ? bookingReference : booking.id,
     verificationConfirmed: true, idempotencyKey: key || undefined, ...gatewayFields
   };
   const history = {
     date: timestamp, amount: value, amountPaise, method: paymentMethod,
-    reference: ref, source, bookingId: booking.id,
+    reference: ref, source, bookingId: gateway ? bookingReference : booking.id,
     verificationConfirmed: true, idempotencyKey: key || undefined, ...gatewayFields
   };
 
