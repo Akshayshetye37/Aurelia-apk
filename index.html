@@ -4229,7 +4229,8 @@ if (typeof window.render === "function") window.render();
    const docs=(guide?.docs||definition.docs||[]).map(link=>'<li><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">'+esc(link.label)+'</a></li>').join('');
    const guideHtml='<p class="lab">'+esc(definition.category)+' · '+esc(definition.integration)+'<br>Methods: '+esc(definition.methods.join(', '))+'<br>'+esc(definition.verification)+'</p><ul>'+docs+'</ul>';
    if(id==='ccavenue')return '<details><summary>'+esc(name)+' · Documentation only</summary>'+guideHtml+'<div class="tag out">Documentation only</div><p class="lab">CCAvenue is not included in the active provider factory. No checkout, webhook, recovery, refund or settlement capability is exposed.</p></details>';
-   const availability='<div class="tag out">Server adapter ready (test) · Live collection OFF</div><p class="lab">The server adapter is wired for test/UAT use. Merchant credentials remain on the trusted backend. Provider sandbox acceptance and the complete payment-to-folio release proof are separate gates; live collection is unavailable.</p>';
+   const nativeHandoff=['razorpay','cashfree'].includes(id)?'Android native checkout handoff is integrated; provider merchant sandbox acceptance is still required.':'The server adapter is wired, but Android hosted-checkout handoff is not yet integrated. This provider is not selectable from the Android checkout flow yet; no payment intent will be dispatched from this device.';
+   const availability='<div class="tag out">Server adapter ready (test) · Live collection OFF</div><p class="lab">The server adapter is wired for test/UAT use. '+nativeHandoff+' Merchant credentials remain on the trusted backend. Provider sandbox acceptance and the complete payment-to-folio release proof are separate gates; live collection is unavailable.</p>';
    return '<details><summary>'+esc(name)+' · Server adapter ready (test) · Live collection OFF</summary>'+guideHtml+availability+'</details>';
   }).join('');
   const providerBody=providers||'<p class="lab">No providers are available in the catalogue.</p>';
@@ -4691,6 +4692,9 @@ window.AndroidPaymentEngine = Object.freeze({
  async createPaymentIntent(payload) {
   if(!payload || !/^[0-9a-f-]{36}$/i.test(payload.transactionId || '') ||
      !window.AureliaPaymentDeviceId) throw new Error('A verified payment device is required.');
+  if(!['razorpay','cashfree'].includes(payload.provider)) {
+   throw new Error('Android hosted-checkout handoff is not yet integrated for this provider. No cloud payment intent was created.');
+  }
   const { transactionId, idempotencyKey, ...intentInput } = payload;
   intentInput.deviceId = window.AureliaPaymentDeviceId;
   const result = await cloudPaymentApi().createIntent(intentInput, { idempotencyKey });
