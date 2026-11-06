@@ -2,7 +2,7 @@
 
 Aurelia is an offline-first property-management system (PMS) for reservations, guests, rooms, folios and operations, with an optional hybrid payment backend.
 
-> **Payment release status: NOT READY FOR LIVE PAYMENT COLLECTION.** The source contains explicit fail-closed interlocks. Payment recovery support is not production-ready. Do not enable gateway collection, automatic settlement or local folio writes until the release gates below are completed and approved.
+> **Payment release status: LIVE GATEWAY COLLECTION OFF.** Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available on the device. Automatic gateway settlement, native gateway folio projection and live collection remain fail-closed until the release gates below are completed and approved.
 
 ## Project location
 
@@ -75,7 +75,7 @@ All six providers remain live-disabled. Merchant UAT, canonical folio settlement
 - Merchant API keys, salts, webhook secrets and provider signing credentials are backend-only and are stored in Google Secret Manager. They must never be entered into the APK, WebView, SharedPreferences, SQLite, IndexedDB, application backup folders or device-local files.
 - Android Keystore is reserved for device identity/enrollment material and local database-key wrapping. It is not a merchant credential vault and does not hold provider keys.
 - The former Android Keystore-backed merchant credential vault has been retired. Its upgrade migration deletes the legacy `gateway-vault` files and `aurelia.local.gateway.v1` Keystore alias. Native attempts to save or activate merchant credentials now fail closed with `merchant_credentials_must_be_managed_by_trusted_backend`.
-- Ordinary PMS operations remain local-first. Cash and staff-confirmed manual payments use the local settlement service and durable device persistence; the optional cloud payment backend is not a prerequisite for ordinary hotel operations. The current application runtime must still pass the platform-specific persistent-storage checks before it may report a durable save.
+- Ordinary PMS operations remain local-first. Cash, manual card-on-delivery and staff-confirmed manual folio entries use the local settlement service without a network or payment backend. The optional cloud payment backend is not a prerequisite for ordinary hotel operations. The local manual-payment boundary is enabled; automatic gateway settlement and native gateway folio projection remain independently locked. The current application runtime must still pass the platform-specific persistent-storage checks before it may report a durable save.
 - The tenant live-collection switch is not an internal release switch. The server requires both `live_collection` (internal release approval) and `live_collection_enabled` (tenant-admin choice), with MFA and role checks on the control API. Missing, malformed or unreadable control state fails closed. Both values remain false until release evidence is approved.
 - Turning the tenant switch off blocks new live orders. It does not rewrite or silently settle in-flight intents; unresolved intents must remain pending/reconciliation-required for server-side review.
 
@@ -83,7 +83,7 @@ All six providers remain live-disabled. Merchant UAT, canonical folio settlement
 
 The app displays `Server adapter ready (test) · Live collection OFF` for Razorpay, Cashfree Payments, PayU, PhonePe, Paytm and JioPay. This label means a server adapter is wired for its non-live environment; it does **not** certify that the merchant's sandbox matrix, refund lifecycle, recovery or device-to-folio path has passed acceptance. CCAvenue is documentation only and is not in the active provider factory.
 
-The Payment Gateway screen explains that the hybrid backend is optional and that local cash/manual payments continue to work from device memory. Gateway checkout callbacks are UI-only signals; capture authority comes from verified provider webhooks or a recovery job that independently re-checks provider status.
+The Payment Gateway screen explains that the hybrid backend is optional and that local cash/manual payments continue to work from device memory. Gateway checkout callbacks are UI-only signals; capture authority comes from verified provider webhooks or a recovery job that independently re-checks provider status. A local staff-confirmed payment is not a gateway capture and must never be inferred from a client callback.
 
 ### Implemented foundations (source inspection)
 
