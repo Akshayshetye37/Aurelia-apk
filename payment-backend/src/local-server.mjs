@@ -173,6 +173,18 @@ CREATE TABLE IF NOT EXISTS device_command_state (
 CREATE INDEX IF NOT EXISTS commands_device_sequence ON settlement_commands(device_id,sequence_id);
 CREATE INDEX IF NOT EXISTS command_delivery_retry ON device_command_state(status,next_attempt_at);
 CREATE INDEX IF NOT EXISTS command_delivery_lease ON device_command_state(status,lease_expires_at);
+CREATE TABLE IF NOT EXISTS settlement_command_authority (
+ command_id TEXT PRIMARY KEY REFERENCES settlement_commands(command_id) ON DELETE CASCADE,
+ authorization_id TEXT NOT NULL UNIQUE,
+ lease_id TEXT NOT NULL UNIQUE,
+ created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS settlement_command_authority_immutable_update
+BEFORE UPDATE ON settlement_command_authority
+BEGIN SELECT RAISE(ABORT,'settlement_command_authority_is_immutable'); END;
+CREATE TRIGGER IF NOT EXISTS settlement_command_authority_immutable_delete
+BEFORE DELETE ON settlement_command_authority
+BEGIN SELECT RAISE(ABORT,'settlement_command_authority_is_immutable'); END;
 
 -- Database-level invariants: a queued command is an immutable projection of
 -- one captured transaction, and SETTLED is impossible without its durable
@@ -828,10 +840,13 @@ app.post('/v1/devices/:deviceId/commands/lease', deviceAuth, (req, res) => {
       .run(leaseDigest, expiresAt, command.command_id);
     const payload = JSON.parse(command.payload);
     const settlement = payload.settlement;
+    const authority = db.prepare('SELECT authorization_id,lease_id FROM settlement_command_authority WHERE command_id=?')
+      .get(command.command_id);
+    if (!authority) throw new Error('settlement_command_authority_missing');
     let policyLease = null, authorization = null;
     if (settlementSigner) {
       const issuedAt = now();
-      const leaseId = crypto.randomUUID();
+      const leaseId = authority.lease_id;
       const attested = device.owner_id !== null && device.property_id === PROPERTY_ID &&
         !!device.attestation_verified_at &&
         ['TRUSTED_ENVIRONMENT','STRONG_BOX'].includes(device.attestation_security_level) &&
@@ -856,7 +871,7 @@ app.post('/v1/devices/:deviceId/commands/lease', deviceAuth, (req, res) => {
           bookingId: settlement.bookingId, amountPaise: settlement.amountPaise,
           method: settlement.method, reference: settlement.reference,
           issuer: SETTLEMENT_ISSUER, audience: SETTLEMENT_AUDIENCE,
-          authorizationId: crypto.randomUUID(), leaseId, issuedAt,
+          authorizationId: authority.authorization_id, leaseId, issuedAt,
           expiresAt: new Date(Math.min(Date.parse(expiresAt), Date.now() + 5 * 60_000)).toISOString()
         };
         authorization = settlementSigner.sign(SETTLEMENT_AUTH_TYPE, authorizationPayload);
@@ -1174,6 +1189,8 @@ function transitionPayment(transactionId, expectedStatuses, nextStatus, reason, 
               idempotency_key,folio_id,amount_minor,currency,payload_hash,payload,created_at)
               VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(commandId,current.device_id,sequenceId,transactionId,
                 current.idempotency_key,current.folio_id,current.amount_minor,current.currency,payloadHash,payload,now());
+            db.prepare('INSERT INTO settlement_command_authority(command_id,authorization_id,lease_id,created_at) VALUES(?,?,?,?)')
+              .run(commandId,crypto.randomUUID(),crypto.randomUUID(),now());
             db.prepare('INSERT INTO device_command_state(command_id,status,next_attempt_at) VALUES(?,?,?)')
               .run(commandId,'PENDING',now());
           }
