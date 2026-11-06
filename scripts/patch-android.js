@@ -1217,11 +1217,15 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
               .put("applianceBaseUrl", prefs.getString("payment_device_appliance_url", ""));
           js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
         } else if ("paymentEngineStartCheckout".equals(type)) {
+          String transactionId = obj.optString("transactionId", "");
+          boolean checkoutClaimed = false;
           try {
+            if (!pendingCheckoutTransactionId.isEmpty()) {
+              throw new IllegalStateException("A provider checkout is already active on this device.");
+            }
             if (paymentDeviceClient == null || !paymentDeviceKeyStore.hasAttestedIdentity()) {
               throw new IllegalStateException("An attested payment device is required.");
             }
-            String transactionId = obj.optString("transactionId", "");
             String provider = obj.optString("provider", "");
             String environment = obj.optString("environment", "");
             String orderId = obj.optString("providerOrderId", "");
@@ -1236,6 +1240,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
             }
             pendingCheckoutTransactionId = transactionId;
             pendingCheckoutProvider = provider;
+            checkoutClaimed = true;
             if ("razorpay".equals(provider)) {
               String keyId = checkoutData.optString("keyId", "");
               if (keyId.isEmpty()) throw new IllegalArgumentException("Razorpay public checkout key is missing.");
@@ -1274,6 +1279,10 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
                 .put("providerOrderId", orderId);
             js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
           } catch (Exception error) {
+            if (checkoutClaimed && transactionId.equals(pendingCheckoutTransactionId)) {
+              pendingCheckoutTransactionId = "";
+              pendingCheckoutProvider = "";
+            }
             JSONObject result = new JSONObject().put("error", "native_provider_checkout_failed");
             js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(requestId) + ",false," + q(result.toString()) + ")");
           }
