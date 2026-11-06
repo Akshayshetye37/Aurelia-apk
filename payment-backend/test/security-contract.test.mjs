@@ -73,6 +73,17 @@ test('capability endpoint does not advertise incomplete money movement as implem
   assert.match(source, /reconciliation: false/);
 });
 
+test('provider refunds are test-only, idempotent, amount-bounded and status-recoverable', () => {
+  assert.match(source, /app\.post\('\/v1\/payments\/intents\/:intentId\/refunds'/);
+  assert.match(source, /app\.get\('\/v1\/payments\/intents\/:intentId\/refunds\/:refundId'/);
+  assert.match(source, /environment !== adapterEnvironmentOf\(intent\.provider, 'test'\)/);
+  assert.match(source, /refund_amount_exceeds_unrefunded_capture/);
+  assert.match(source, /refundReservedMinor/);
+  assert.match(source, /adapter\.createRefund\(refundCreateInput/);
+  assert.match(source, /adapter\.getRefundStatus\(refundLookupInput/);
+  assert.match(source, /never dispatch a duplicate refund/);
+});
+
 
 test('provider state and secrets use deterministic provider and environment namespaces', () => {
   assert.ok(source.includes('providerTenantDoc(tenantId, provider, environment)'));
