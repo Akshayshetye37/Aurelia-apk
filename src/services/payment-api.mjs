@@ -86,6 +86,7 @@ export class PaymentApiClient {
         input.currency !== 'INR' ||
         !DISPATCHABLE_PROVIDERS.has(input.provider) ||
         !['test', 'live'].includes(input.environment) ||
+        (input.deviceId !== undefined && !/^[A-Za-z0-9_-]{6,64}$/.test(input.deviceId)) ||
         !IDEMPOTENCY_KEY.test(idempotencyKey || '')) {
       throw new TypeError('invalid_payment_intent_request');
     }
