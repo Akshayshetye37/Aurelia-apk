@@ -82,12 +82,15 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
     const state = String(data.state || '').toUpperCase();
     const payment = Array.isArray(data.paymentDetails) ? data.paymentDetails.find(p =>
       !input.paymentId || String(p.transactionId) === String(input.paymentId)) : null;
-    const txnId = payment?.transactionId || data.paymentDetails?.[0]?.transactionId || null;
-    return { provider: 'phonepe', orderId: data.orderId || input.orderId,
+    const txnId = input.paymentId ? (payment?.transactionId || null)
+      : (payment?.transactionId || data.paymentDetails?.[0]?.transactionId || null);
+    const amountMinor = payment?.amount ?? data.amount;
+    const captured = state === 'COMPLETED' && minor(amountMinor) &&
+      (!input.paymentId || (payment?.state === 'COMPLETED' && String(txnId) === String(input.paymentId)));
+    return { provider: 'phonepe', orderId: data.merchantOrderId || input.orderId,
       paymentId: txnId == null ? null : String(txnId), paymentStatus: state,
-      amountMinor: data.amount, currency: 'INR',
-      captured: state === 'COMPLETED' && (!input.paymentId || String(txnId) === String(input.paymentId)),
-      found: true };
+      amountMinor: minor(amountMinor) ? amountMinor : null, currency: 'INR',
+      captured, found: true };
   }
   async verifyWebhook(rawBody, headers = {}) {
     if (!Buffer.isBuffer(rawBody) || !this.credentials.webhookUsername || !this.credentials.webhookPassword) {
@@ -119,14 +122,19 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
       merchantRefundId: input.refundId, originalMerchantOrderId: input.orderId,
       amount: input.amountMinor
     });
+    if (data.amount !== input.amountMinor || !['PENDING','COMPLETED'].includes(String(data.state || '').toUpperCase())) {
+      throw new Error('phonepe_refund_response_binding_mismatch');
+    }
     return { provider: 'phonepe', refundId: data.refundId || input.refundId,
-      status: data.state || 'PENDING', amountMinor: data.amount };
+      status: data.state, amountMinor: data.amount, currency: 'INR' };
   }
   async getRefundStatus(input) {
-    if (!id(input?.refundId)) throw new TypeError('invalid_phonepe_refund_id');
+    if (!id(input?.refundId) || !id(input?.orderId)) throw new TypeError('invalid_phonepe_refund_id');
     const data = await this.request('GET', '/payments/v2/refund/' +
       encodeURIComponent(input.refundId) + '/status');
-    return { provider: 'phonepe', refundId: data.merchantRefundId || input.refundId,
+    if (data.originalMerchantOrderId !== input.orderId || !['PENDING','COMPLETED','FAILED'].includes(String(data.state || '').toUpperCase()) ||
+        !minor(data.amount)) throw new Error('phonepe_refund_status_identity_mismatch');
+    return { provider: 'phonepe', refundId: input.refundId, providerRefundId: data.refundId || null,
       status: data.state, amountMinor: data.amount, currency: 'INR' };
   }
 }
