@@ -28,8 +28,8 @@ test('Generated root Gradle plugin management is not rewritten', () => {
 });
 
 test('Groovy and Kotlin DSL app dependencies are supported', () => {
-  assert.match(patchScript, /implementation platform/);
-  assert.match(patchScript, /implementation\\(platform/);
+  assert.ok(patchScript.includes('implementation platform'));
+  assert.ok(patchScript.includes('implementation(platform'));
   assert.ok(patchScript.includes("const auth = 'com.google.firebase:firebase-auth'"));
   assert.ok(patchScript.includes("const missing = [auth, ...paymentDependencies]"));
   assert.ok(patchScript.includes('implementation("' + dependency + '")'));
