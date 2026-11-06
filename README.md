@@ -46,19 +46,23 @@ The `payment-backend/src/server.mjs` Firebase Admin + Firestore + Secret Manager
 
 ## Payment release status
 
-### Seven-provider status (verified source registry)
+### Six-provider cloud integration status
 
-| Provider | Code status | Executable through production backend | Live collection |
-|---|---|---:|---:|
-| Razorpay | Adapter wired with order, lookup, payment status, raw webhook verification, refund and refund-status methods | Test flow only; merchant UAT pending | Disabled |
-| Cashfree | Adapter wired with order, lookup, payment status, raw webhook verification, refund and refund-status methods | Test flow only; merchant UAT pending | Disabled |
-| PayU | Prototype only; refund and refund-status methods deliberately fail closed; not in factory | No | Disabled |
-| PhonePe | Prototype only; merchant webhook/refund contract and server routing not accepted; not in factory | No | Disabled |
-| Paytm | Catalogue entry only; no operational adapter | No | Disabled |
-| JioPay | Documentation/scaffold only; no operational adapter | No | Disabled |
-| CCAvenue | Catalogue entry/scaffold only; no operational adapter | No | Disabled |
+| Provider | Factory / cloud API | Credential onboarding | Test checkout / webhook / refund | Live collection |
+|---|---|---|---|---|
+| Razorpay | Wired | Secret Manager + validation | Enabled | Blocked |
+| Cashfree | Wired | Secret Manager + validation | Enabled | Blocked |
+| PayU | Wired | Secret Manager + validation | Enabled | Blocked |
+| PhonePe | Wired | Secret Manager + webhook username/password validation | Enabled | Blocked |
+| Paytm | Wired | Secret Manager + websiteName validation | Enabled | Blocked |
+| JioPay | Wired | Secret Manager + UAT credential validation | Enabled | Blocked |
+| CCAvenue | Not implemented; documentation only | Not available | Not available | Blocked |
 
-The application catalogue is descriptive. Adapter class presence, credential fields or a checkout redirect do not qualify a provider as usable. The factory currently exposes only Razorpay and Cashfree. Both remain test-only and require merchant UAT, canonical local folio posting, Android acceptance, security review and owner approval before release.
+The canonical factory order is `razorpay, cashfree, payu, phonepe, paytm, jiopay`. Provider checkout and refunds are test-environment only. Provider credentials are written through Secret Manager; the save route validates them before marking onboarding complete. The webhook ingress dynamically selects the provider adapter and verifies the original raw request body before fetching provider status. Recovery uses provider-specific environment and status mappings, and ambiguous create/refund operations are never blindly redispatched.
+
+Refund initiation is exposed only for a captured test payment through `POST /v1/payments/intents/:intentId/refunds`; status recovery uses `GET /v1/payments/intents/:intentId/refunds/:refundId`. Refund reservations are idempotent and bounded by the captured amount. These routes record provider refund evidence only; they do not post a PMS folio or claim canonical accounting settlement.
+
+All six providers remain live-disabled. Merchant UAT, canonical folio settlement, physical-device acceptance, refund lifecycle acceptance, security review and owner release approval remain mandatory before any live collection capability can be enabled. CCAvenue is excluded from factory, cloud routes and active device configuration; its documentation entry is retained only for reference.
 ### Implemented foundations (source inspection)
 
 - Cloud backend with Firebase ID-token verification, tenant membership and role checks.
