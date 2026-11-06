@@ -1,5 +1,84 @@
 # Aurelia PMS
 
+## Architecture status and implementation roadmap (2026-11-07)
+
+**Current repository:** `Akshayshetye37/Aurelia-apk`  
+**Working branch:** `feature/multi-provider-payment-backend`  
+**Latest persistence implementation commit:** `469795fd560cc2246ba5dc7b4582d1100e76661b`
+
+### Product architecture
+
+Aurelia is being developed as a **local-first PMS**. The device is intended to own the operational database and canonical booking, room, guest, folio and audit state. Core hotel operations must remain usable without an internet connection. Network access is used only for functions that inherently require it, such as provider checkout, authoritative payment verification, optional configured sync and external integrations.
+
+The architecture has separate boundaries:
+
+1. **Canonical PMS storage:** device-local durable database; SQLite on Android and IndexedDB in browser/PWA.
+2. **Domain/write pipeline:** one command/repository path for all business mutations. A business entity update and its outbox event must commit atomically.
+3. **Payment execution and accounting:** gateway sessions and provider evidence are separate from PMS sync. A provider callback is not proof of capture. Only authoritative verification can authorize gateway settlement; cash/manual receipts follow explicit staff controls and audit.
+4. **Optional synchronization:** disabled by default, configured explicitly by the property owner/admin. Sync must never be required for local hotel operations and must not transport merchant secrets.
+5. **Release controls:** live collection, automatic gateway settlement and automated refund posting remain disabled until their end-to-end verification and operational acceptance gates pass.
+
+A zero-Aurelia-cloud standalone PMS mode remains a design goal for ordinary local operations. Some online payment-provider operations (for example secure order creation/signing, webhook verification and authoritative capture/refund reconciliation) require a trusted server-side component under provider security models; those functions must not be faked or moved into APK/local storage to simulate server capability.
+
+### What is implemented
+
+| Area | Implemented | Boundary / status |
+|---|---|---|
+| Existing PMS runtime | Current booking, room, guest and folio UI continues to run on its existing state path. | Still uses the legacy `localStorage`-backed application state; not yet migrated to the new canonical repository. |
+| IndexedDB repository | `src/storage/indexeddb-pms-repository.mjs` provides transactional entity/outbox storage, version checks, migration snapshot support, outbox leasing and delivery state. | Browser/PWA foundation only; not yet the active UI persistence path. |
+| Shared storage contract | `src/storage/pms-repository-contract.mjs` defines the common adapter surface and identity/version/event validation. | Needs full cross-adapter conformance tests and further API alignment as the domain command pipeline is integrated. |
+| IndexedDB hardening | Mutation callbacks are synchronous within a transaction; event metadata/sequence validation is applied; retry timestamps are enforced; exact raw migration JSON is required. | Regression tests added; latest CI result must be checked before treating the revision as validated. |
+| Android SQLite foundation | `android/templates/LocalPmsRepository.java` adds native entity/outbox tables, version-checked atomic writes and a transactional legacy snapshot/import foundation. | Template is copied by `scripts/patch-android.js`; it is not yet called by the WebView app or the live domain/UI path. |
+| Web packaging | `scripts/prepare-web.js` packages the shared storage modules. | Packaging inclusion is not equivalent to runtime activation. |
+| Local sync foundation | `src/sync/local-sync-coordinator.mjs` and its architecture documentation define event delivery, acknowledgement, retry and conflict boundaries. | Sync remains OFF; no production transport is active. |
+| Payment controls | Provider adapters and authenticated payment/refund API foundations exist for the multi-provider architecture. | Gateway collection, automated settlement and refund posting remain gated; provider-specific checkout and physical device acceptance are incomplete. |
+| Smart Checkpoint | Pure paise-based balance logic, stale-version rejection, idempotency and staff/manager controls have been implemented as a service foundation. | Not yet integrated with the canonical repository or production folio UI. |
+
+### What remains — ordered implementation plan
+
+**Phase 1 — Finish and verify the storage foundations**
+- Complete shared repository contract conformance tests for IndexedDB and Android SQLite.
+- Verify SQLite schema creation, transaction rollback, duplicate event rejection, version conflicts, migration replay and malformed snapshot handling.
+- Verify IndexedDB abort/rollback, transaction lifecycle, outbox lease expiry and retry timing in a real browser runtime.
+- Ensure the native SQLite template compiles in the generated Android project and test it on physical Android hardware.
+- Keep the original localStorage snapshot intact throughout migration and rollback testing.
+
+**Phase 2 — Activate the unified repository safely**
+- Add asynchronous application bootstrap: open the platform repository before enabling business mutations.
+- Import the exact legacy state into the new store in a single recoverable migration; read it back and compare all required state before declaring migration complete.
+- Keep a verified, unmodified legacy snapshot as rollback material. Do not delete or overwrite it during initial rollout.
+- Introduce shared domain commands for bookings, room blocks, guests, folios, payments, inventory and audit records.
+- Route every business write through the repository transaction boundary. Do not mirror writes asynchronously from legacy localStorage and call that atomic persistence.
+- Make the UI render from the committed in-memory projection; failed writes must leave the prior projection intact and surface a recoverable error.
+
+**Phase 3 — Recovery, durability and operational acceptance**
+- Add crash/restart recovery, interrupted migration recovery, database backup/export/restore and schema-upgrade tests.
+- Test concurrent writes, duplicate commands, stale UI snapshots, outbox replay and conflict quarantine.
+- Verify data survives process termination, device restart and low-storage conditions.
+- Complete Android physical-device and browser/PWA acceptance before switching the canonical store.
+
+**Phase 4 — Optional synchronization**
+- Keep sync disabled and endpoint blank by default.
+- Add authenticated device enrollment, tenant/property scoping, TLS, acknowledgements, bounded retries and human-review conflict handling.
+- Never sync provider credentials, card data or other payment secrets.
+- Do not allow sync failures to block local reservations, room operations or folio access.
+
+**Phase 5 — Payment and accounting release**
+- Complete provider checkout handoffs and provider-specific sandbox/UAT for every provider that is exposed.
+- Prove payment creation → provider confirmation → authoritative server-side verification/webhook → idempotent payment journal → canonical folio posting.
+- Prove refunds, reversals, duplicate webhooks, delayed callbacks, partial failures and reconciliation.
+- Keep gateway evidence distinct from staff-entered cash/manual payments and never settle from a client callback alone.
+- Enable live collection only through an explicit tenant-admin release control after security, accounting, provider and physical-device acceptance.
+
+### Current verification state
+
+- Latest source commit at this documentation update: `469795fd560cc2246ba5dc7b4582d1100e76661b`.
+- Latest PMS source tests / web packaging / Android validation workflow for that revision was **pending** when last checked. Earlier runs were cancelled as later commits superseded them.
+- Do not interpret a pending workflow, successful file upload or repository commit as a passing test, compiled Android build, physical-device acceptance or production certification.
+- Live gateway collection: **OFF**. Optional cloud sync: **OFF**. New SQLite/IndexedDB repositories: **not yet the active canonical application store**.
+
+---
+
 Aurelia is an offline-first property-management system (PMS) for reservations, guests, rooms, folios and operations, with an optional hybrid payment backend.
 
 > **Payment release status: LIVE GATEWAY COLLECTION OFF.** Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available on the device. Cloud payment recovery, automatic gateway settlement, native gateway folio projection and live collection are not production-ready and remain fail-closed until the release gates below are completed and approved.
