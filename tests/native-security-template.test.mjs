@@ -157,3 +157,18 @@ test('native PMS migration template serializes JSON values through Android-suppo
   assert.match(source, /private static String serializeJsonValue\(Object value\)/);
   assert.doesNotMatch(source, /JSONObject\.valueToString\s*\(/);
 });
+
+
+test('Capacitor PMS SQLite plugin is copied and explicitly registered before MainActivity startup', () => {
+  const plugin = read('android/templates/CapacitorPmsStoragePlugin.java');
+  const patcher = read('scripts/patch-android.js');
+  assert.match(plugin, /@CapacitorPlugin\(name = "CapacitorPmsStorage"\)/);
+  assert.match(plugin, /@PluginMethod public void initializeStorage/);
+  assert.match(plugin, /@PluginMethod public void getEntity/);
+  assert.match(plugin, /@PluginMethod public void transactBusinessChange/);
+  assert.match(plugin, /repository\.transactBusinessChange\(/);
+  assert.doesNotMatch(plugin, /beginTransaction|endTransaction|setTransactionSuccessful/);
+  assert.match(patcher, /CapacitorPmsStoragePlugin\.java/);
+  assert.match(patcher, /registerPlugin\(CapacitorPmsStoragePlugin\.class\)/);
+  assert.match(patcher, /registerPlugin\(CapacitorPmsStoragePlugin\.class\);[\s\S]*?super\.onCreate/);
+});
