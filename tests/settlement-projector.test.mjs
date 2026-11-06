@@ -108,15 +108,15 @@ test("journal transitions are one-way and persistent read-back is stable", async
   assert.equal((await j.get(record.key)).status, "APPLIED");
 });
 
-test("all production payment and accounting interlocks remain closed", () => {
+test("gateway settlement interlocks remain closed while local manual entry is available", () => {
   assert.deepEqual(PAYMENT_SAFETY_LOCKS, {
-    blockAllBalanceMutations: true, automaticSettlement: true,
+    blockAllBalanceMutations: false, automaticSettlement: true,
     liveCollection: true, nativeSettlementBridge: true
   });
   assert.equal(AUTO_FOLIO_SETTLEMENT_ENABLED, false);
 });
 
-test("projector records verified evidence but global accounting lock blocks folio mutation", async () => {
+test("projector records verified evidence but automatic gateway settlement remains blocked", async () => {
   const { lease, authorization } = await envelopes();
   const state = { b: [{ id: command.bookingId, st: "in", p: 0, pays: [] }], today: 0, aud: [] };
   let stored = JSON.stringify(state);
@@ -129,10 +129,8 @@ test("projector records verified evidence but global accounting lock blocks foli
     autoSettlementEnabled: true, now: () => iso(NOW) });
   const result = await projector.submit({ command, authorization });
   assert.equal(result.status, "pending");
-  assert.equal(result.code, "ACCOUNTING_READ_ONLY_KILL_SWITCH");
+  assert.equal(result.code, "AUTO_SETTLEMENT_KILL_SWITCH");
   assert.equal(state.b[0].pays.length, 0);
   assert.equal(state.b[0].p, 0);
   assert.equal((await j.get(result.key)).status, "PENDING");
-  assert.throws(() => settlePayment({ state, booking: state.b[0], amount: 1, method: "UPI",
-    balanceDue: 10, verificationConfirmed: true }), { code: "ACCOUNTING_READ_ONLY_KILL_SWITCH" });
 });
