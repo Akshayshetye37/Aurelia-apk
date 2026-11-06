@@ -6,8 +6,8 @@ const PERMANENT_FAILURES = new Set([
   "BOOKING_NOT_FOUND", "BOOKING_NOT_SETTLEABLE", "IDEMPOTENCY_KEY_CONFLICT",
   "PAYMENT_REFERENCE_ALREADY_APPLIED", "PAYMENT_REFERENCE_CONFLICT",
   "PAYMENT_EXCEEDS_BALANCE", "AUTHORIZATION_BINDING_MISMATCH",
-  "SETTLEMENT_AUTH_EXPIRED", "SETTLEMENT_AUTH_INVALID", "SETTLEMENT_AUTH_SIGNATURE_INVALID", "SETTLEMENT_AUTH_KEY_INVALID", "SETTLEMENT_LEASE_DISABLED", "SETTLEMENT_AUTH_MISMATCH",
-  "SETTLEMENT_LEASE_MISMATCH", "SETTLEMENT_LEASE_INVALID", "SETTLEMENT_LEASE_EXPIRED"
+  "SETTLEMENT_AUTH_INVALID", "SETTLEMENT_AUTH_SIGNATURE_INVALID", "SETTLEMENT_AUTH_KEY_INVALID", "SETTLEMENT_AUTH_UNKNOWN_KEY",
+  "SETTLEMENT_AUTH_MISMATCH", "SETTLEMENT_LEASE_MISMATCH"
 ]);
 function fail(code, message) { const error = new Error(message); error.code = code; return error; }
 function paise(row) { return Number.isSafeInteger(row?.amountPaise) ? row.amountPaise : Math.round(Number(row?.a ?? row?.amount) * 100); }
@@ -29,14 +29,14 @@ export class SettlementProjector {
     const exec = () => this.locks?.request ? this.locks.request("aurelia-settlement-projector", fn) : fn();
     const next = this.tail.then(exec, exec); this.tail = next.catch(() => {}); return next;
   }
-  async submit({ command, authorization }) {
-    const lease = await this.getLease();
-    await this.verifier.verify({ authorization, lease, command });
+  async submit({ command, authorization, lease }) {
+    const policyLease = lease || await this.getLease();
+    await this.verifier.verify({ authorization, lease: policyLease, command });
     const { record } = await this.journal.append({
       tenantId: command.tenantId, deviceId: command.deviceId, provider: command.provider,
       providerAccountId: command.providerAccountId, environment: command.environment,
       providerTransactionId: command.providerTransactionId, commandId: command.commandId,
-      payload: { command, authorization }
+      payload: { command }, authorization, policyLease
     });
     return this.project(record.key);
   }
@@ -51,9 +51,11 @@ export class SettlementProjector {
     if (!record) throw fail("SETTLEMENT_RECORD_NOT_FOUND", "Settlement journal record not found");
     if (record.status === "APPLIED") return { status: "applied", duplicate: true, key };
     if (record.status === "REJECTED") return { status: "rejected", code: record.rejectedReason, key };
-    const { command, authorization } = record.payload;
+    const command = record.payload.command;
+    const authorization = record.authorization;
+    const policyLease = record.policyLease;
     try {
-      const binding = await this.verifier.verify({ authorization, lease: await this.getLease(), command });
+      const binding = await this.verifier.verify({ authorization, lease: policyLease, command });
       const state = this.getState(); const booking = this.findBooking(state, command.bookingId);
       if (!booking) throw fail("BOOKING_NOT_FOUND", "Booking not found");
       const result = this.settle({
