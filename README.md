@@ -4,6 +4,31 @@ Aurelia is an offline-first property-management system (PMS) for reservations, g
 
 > **Payment release status: LIVE GATEWAY COLLECTION OFF.** Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available on the device. Cloud payment recovery, automatic gateway settlement, native gateway folio projection and live collection are not production-ready and remain fail-closed until the release gates below are completed and approved.
 
+
+## Latest implementation update (2026-11-07)
+
+Working branch: `feature/multi-provider-payment-backend`.
+
+### Tenant-scoped single active provider selection
+
+- Added `payment-backend/src/payment-controls/active-provider-selection.mjs` as the authoritative provider-selection service. It supports the six registered providers: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay.
+- The selected provider is stored per tenant in `paymentProviderSelection/{tenantId}`. Provider activation/deactivation and the authoritative selection record are updated in one Firestore transaction, with an audit record for each change.
+- Activation is fail-closed: the provider must already be configured, its credentials must be validated, its sandbox test must have passed and its webhook must be verified. The existing independent live-collection release gates remain in force.
+- New cloud payment-intent creation now checks the tenant's authoritative active provider, public environment and adapter environment. A provider that is not selected for that tenant cannot create a new intent, even if an old provider configuration remains present.
+- Provider removal, credential replacement and credential revalidation clear a matching active selection before changing provider state. The capability response now exposes `activeProviderId` and `activeProviderEnvironment` for clients to display the backend's decision.
+- Existing in-flight intents and delayed webhooks are not invalidated by a provider switch. Their provider-bound recovery remains necessary to resolve already-created transactions safely.
+- Added `payment-backend/test/active-provider-selection.test.mjs` covering atomic switching, qualification rejection, deactivation and malformed-selection fail-closed behavior.
+
+### Current client and release boundary
+
+- The Android checkout selector remains restricted to Razorpay and Cashfree because only those two native handoffs are implemented. PayU, PhonePe, Paytm and JioPay remain unavailable for device checkout until their hosted-checkout handoffs are implemented and physically tested.
+- The client-side active-provider display/selection still needs to consume the new `activeProviderId` capability fields consistently; the backend is authoritative and rejects mismatched provider intents regardless of client state.
+- The new backend tests and both CI workflows must be reported from GitHub Actions before they are described as passing. The changes are committed to the working branch, but CI status is not assumed here.
+- No cloud deployment, merchant sandbox acceptance, physical-device UAT, accounting settlement qualification or production signing is claimed. Live collection, automatic gateway settlement and gateway-to-folio posting remain disabled.
+
+**Operational rule:** configure and qualify one provider, activate it for the tenant, and let the backend enforce that selection for new intents. Do not infer that adapter availability means merchant qualification or production readiness.
+
+
 ## Project location
 
 - **Repository:** https://github.com/Akshayshetye37/Aurelia-apk
