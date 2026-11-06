@@ -45,7 +45,7 @@ export async function getPaymentDeviceIdToken() {
     throw new Error("The authenticated Firebase payment session is unavailable.");
   }
   const token = await auth.getFreshIdToken();
-  if (typeof token !== "string" || token.length < 20 || /\\s/.test(token)) {
+  if (typeof token !== "string" || token.length < 20 || /\s/.test(token)) {
     throw new Error("Firebase did not return a valid fresh identity token.");
   }
   return token;
