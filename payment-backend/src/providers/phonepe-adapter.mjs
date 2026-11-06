@@ -21,7 +21,9 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
     const form = new URLSearchParams({ client_id: this.credentials.clientId,
       client_version: String(this.credentials.clientVersion), client_secret: this.credentials.clientSecret,
       grant_type: 'client_credentials' });
-    const response = await this.fetch(this.baseUrl + '/v1/oauth/token', {
+    const tokenPath = this.environment === 'live' ? '/v1/oauth/token' : '/v1/oauth/token';
+    const tokenBase = this.environment === 'live' ? 'https://api.phonepe.com/apis/identity-manager' : this.baseUrl;
+    const response = await this.fetch(tokenBase + tokenPath, {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: form, signal: AbortSignal.timeout(15000)
     });
@@ -29,7 +31,10 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
     if (!response.ok || typeof data.access_token !== 'string') {
       throw Object.assign(new Error('phonepe_authentication_failed'), { providerStatus: response.status });
     }
-    this.token = { value: data.access_token, expiresAt: Date.now() + Number(data.expires_in || 0) * 1000 };
+    const expiresAt = Number(data.expires_at);
+    const expiresIn = Number(data.expires_in);
+    this.token = { value: data.access_token, expiresAt: Number.isFinite(expiresAt) && expiresAt > 0
+      ? expiresAt * 1000 : Date.now() + (Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 300) * 1000 };
     return this.token.value;
   }
   async request(method, path, body) {
@@ -84,18 +89,30 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
       captured: state === 'COMPLETED' && (!input.paymentId || String(txnId) === String(input.paymentId)),
       found: true };
   }
-  async verifyWebhook(rawBody, headers) {
-    if (!Buffer.isBuffer(rawBody)) return { valid: false };
-    const authorization = headers.authorization || headers.Authorization || '';
-    const expected = 'Basic ' + Buffer.from(this.credentials.webhookUsername + ':' +
-      this.credentials.webhookPassword).toString('base64');
-    const a = Buffer.from(String(authorization)), b = Buffer.from(expected);
+  async verifyWebhook(rawBody, headers = {}) {
+    if (!Buffer.isBuffer(rawBody) || !this.credentials.webhookUsername || !this.credentials.webhookPassword) {
+      return { valid: false };
+    }
+    const authorization = String(headers.authorization || headers.Authorization || '').trim();
+    const digest = crypto.createHash('sha256')
+      .update(this.credentials.webhookUsername + ':' + this.credentials.webhookPassword, 'utf8')
+      .digest('hex');
+    const expected = 'SHA256(' + digest + ')';
+    const a = Buffer.from(authorization);
+    const b = Buffer.from(expected);
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return { valid: false };
-    try { return { valid: true, event: JSON.parse(rawBody.toString('utf8')) }; }
-    catch { return { valid: false }; }
+    try {
+      const event = JSON.parse(rawBody.toString('utf8'));
+      if (!event || typeof event !== 'object' || !event.payload ||
+          typeof event.event !== 'string' || typeof event.payload.merchantOrderId !== 'string') {
+        return { valid: false };
+      }
+      return { valid: true, event };
+    } catch { return { valid: false }; }
   }
+
   async createRefund(input) {
-    if (!id(input?.refundId) || !id(input?.orderId) || !minor(input?.amountMinor)) {
+    if (!id(input?.refundId) || !id(input?.orderId) || !minor(input?.amountMinor) || input.amountMinor < 100) {
       throw new TypeError('invalid_phonepe_refund');
     }
     const data = await this.request('POST', '/payments/v2/refund', {
