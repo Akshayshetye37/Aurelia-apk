@@ -3,7 +3,7 @@ const root=path.join(__dirname,'..'),src=path.join(root,'index.html'),dest=path.
 if(!fs.existsSync(src))throw new Error('index.html not found');
 fs.mkdirSync(dest,{recursive:true});
 fs.copyFileSync(src,path.join(dest,'index.html'));
-const settlementSrc=path.join(root,'src','payments','settlement-service.mjs');
+const storageDest=path.join(dest,'src','storage');\nfs.mkdirSync(storageDest,{recursive:true});\nfor(const name of ['pms-repository-contract.mjs','indexeddb-pms-repository.mjs']){\n const source=path.join(root,'src','storage',name);\n if(!fs.existsSync(source))throw new Error('PMS storage module not found: '+source);\n fs.copyFileSync(source,path.join(storageDest,name));\n}\nconst settlementSrc=path.join(root,'src','payments','settlement-service.mjs');
 if(!fs.existsSync(settlementSrc))throw new Error('Settlement service not found: '+settlementSrc);
 const settlementDest=path.join(dest,'src','payments');
 fs.mkdirSync(settlementDest,{recursive:true});
