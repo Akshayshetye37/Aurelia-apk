@@ -4,14 +4,14 @@ import { CapacitorPmsStorageClient } from "../src/storage/capacitor-pms-storage.
 
 function fakePlugin() {
   const calls = [];
-  let row = null;
+  const rows = new Map();
   return {
     calls,
     async initializeStorage() { calls.push(["initializeStorage"]); return { success: true, engine: "android-sqlite" }; },
-    async getEntity(args) { calls.push(["getEntity", args]); return { entity: row }; },
+    async getEntity(args) { calls.push(["getEntity", args]); return { entity: rows.get(args.entityType + ":" + args.entityId) || null }; },
     async transactBusinessChange(args) {
       calls.push(["transactBusinessChange", args]);
-      if ((row?.version ?? 0) !== args.expectedVersion) {
+      const key = args.entityType + ":" + args.entityId;\n      const row = rows.get(key) || null;\n      if ((row?.version ?? 0) !== args.expectedVersion) {
         const error = new Error("stale");
         error.code = "ENTITY_VERSION_CONFLICT";
         throw error;
