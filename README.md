@@ -4,7 +4,7 @@
 
 **Current repository:** `Akshayshetye37/Aurelia-apk`  
 **Working branch:** `feature/multi-provider-payment-backend`  
-**Latest persistence/test correction:** `3acab169a17d4d09d21101ed7dd3380ddc51ca1e`
+**Latest storage/test/build correction:** `34c5775bef9886f9324f05292d313e6db0ffd8d8`
 
 ### Product architecture
 
@@ -74,7 +74,8 @@ A zero-Aurelia-cloud standalone PMS mode remains a design goal for ordinary loca
 
 - Latest source/test correction: `3acab169a17d4d09d21101ed7dd3380ddc51ca1e` (root-level outbox retry test now verifies that a future `retryAt` is respected and that conflict transitions require a separate active lease).
 - Previous CI run `42295367809` failed because the root-level test expected immediate re-claim after scheduling a future retry. That expectation contradicted the repository's enforced backoff behavior; the production retry implementation was retained.
-- CI for the correction must complete before the storage foundation is considered verified. A commit or queued workflow is not a passing test, compiled Android build, physical-device acceptance or production certification.
+- The follow-up CI run for `3acab16` reported all 289 tests passing, but its web build then failed because `scripts/prepare-web.js` contained literal `\\n` escape text in executable source. This was corrected in `34c5775` by restoring real line breaks in the storage-module packaging block.
+- CI for `34c5775` and the final documentation update must complete before the storage foundation is considered verified. A commit or queued workflow is not a passing test, compiled Android build, physical-device acceptance or production certification.
 - Live gateway collection: **OFF**. Optional cloud sync: **OFF**. New SQLite/IndexedDB repositories: **not yet the active canonical application store**.
 
 ---
