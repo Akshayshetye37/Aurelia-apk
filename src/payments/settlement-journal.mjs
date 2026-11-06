@@ -54,7 +54,13 @@ export class IndexedDbSettlementJournal {
     if (!providerTransactionId && !commandId) throw new TypeError("Provider transaction ID or command ID is required");
     const key = IndexedDbSettlementJournal.keyFor({ ...scope, providerTransactionId, commandId });
     const payload = canonicalize(input.payload);
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new TypeError("Settlement payload must be an object");
+    if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+        !payload.command || typeof payload.command !== "object" || Array.isArray(payload.command)) throw new TypeError("Settlement payload must contain a command object");
+    for (const field of ["tenantId", "deviceId", "provider", "providerAccountId", "environment"]) {
+      if (payload.command[field] !== scope[field]) throw new TypeError("Settlement command scope mismatch: " + field);
+    }
+    if ((payload.command.providerTransactionId ?? null) !== providerTransactionId ||
+        (payload.command.commandId ?? null) !== commandId) throw new TypeError("Settlement command identity mismatch");
     const payloadHash = await sha256Hex(payload, this.crypto); const db = await this.database();
     const tx = openWrite(db); const done = transactionComplete(tx); done.catch(() => {}); const store = tx.objectStore(STORE_NAME);
     try {
