@@ -512,6 +512,8 @@ import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
 import com.aurelia.pms.security.PaymentDeviceKeyStore;
 import com.aurelia.pms.security.PaymentDeviceClient;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.android.gms.tasks.Tasks;
 import androidx.activity.OnBackPressedCallback;
 import java.io.OutputStream;
 import java.io.InputStream;
@@ -575,6 +577,14 @@ public class MainActivity extends BridgeActivity {
     payBridgeClient = new PayBridgeClient(this, status -> js("window.aureliaPayBridgeStatusChanged && window.aureliaPayBridgeStatusChanged(" + q(status) + ")"));
     bridge.getWebView().addJavascriptInterface(new AureliaBridge(), "AureliaNative");
     payBridgeClient.connect();
+  }
+
+  private String freshFirebaseIdToken() throws Exception {
+    com.google.firebase.auth.FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+    if (user == null) throw new IllegalStateException("A signed-in Firebase identity is required.");
+    String token = Tasks.await(user.getIdToken(false)).getToken();
+    if (token == null || token.length() < 20) throw new IllegalStateException("Firebase did not return a valid identity token.");
+    return token;
   }
 
   private void initializePaymentDeviceClient() {
@@ -1124,6 +1134,16 @@ public class MainActivity extends BridgeActivity {
           if (payBridgeClient != null) payBridgeClient.retryNow();
         } else if ("payBridgeDisconnect".equals(type)) {
           if (payBridgeClient != null) payBridgeClient.disconnect();
+        } else if ("paymentDeviceGetIdToken".equals(type)) {
+          backupExecutor.execute(() -> {
+            try {
+              JSONObject result = new JSONObject().put("idToken", freshFirebaseIdToken());
+              js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
+            } catch (Exception error) {
+              JSONObject result = new JSONObject().put("error", "firebase_identity_unavailable");
+              js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(requestId) + ",false," + q(result.toString()) + ")");
+            }
+          });
         } else if ("paymentDeviceCreateAttestedIdentity".equals(type)) {
           String challenge = obj.optString("challengeBase64", "");
           if (challenge.isEmpty() || challenge.length() > 256) throw new IllegalArgumentException("Invalid attestation challenge.");
