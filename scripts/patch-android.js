@@ -1292,7 +1292,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
               JSONObject result = new JSONObject().put("idToken", freshFirebaseIdToken());
               js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
             } catch (Exception error) {
-              String result = "{\\"error\\":\\"firebase_identity_unavailable\\"}";
+              String result = "{\"error\":\"firebase_identity_unavailable\"}";
               js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(requestId) + ",false," + q(result.toString()) + ")");
             }
           });
@@ -1312,7 +1312,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
                   .put("securityLevel", identity.getSecurityLevel());
               js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",true," + q(result.toString()) + ")");
             } catch (Exception error) {
-              String result = "{\\"error\\":\\"attested_key_creation_failed\\"}";
+              String result = "{\"error\":\"attested_key_creation_failed\"}";
               js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",false," + q(result.toString()) + ")");
             }
           });
@@ -1352,7 +1352,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
                   .put("leaseExpiresAt", lease.getLeaseExpiresAt());
               js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",true," + q(result.toString()) + ")");
             } catch (Exception error) {
-              String result = "{\\"error\\":\\"payment_device_lease_failed\\"}";
+              String result = "{\"error\":\"payment_device_lease_failed\"}";
               js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",false," + q(result.toString()) + ")");
             }
           });
@@ -1372,7 +1372,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
               paymentDeviceLeases.remove(commandId);
               js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",true," + q(result.toString()) + ")");
             } catch (Exception error) {
-              String result = "{\\"error\\":\\"payment_device_acknowledgement_failed\\"}";
+              String result = "{\"error\":\"payment_device_acknowledgement_failed\"}";
               js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",false," + q(result.toString()) + ")");
             }
           });
