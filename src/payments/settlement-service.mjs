@@ -92,8 +92,9 @@ export function settlePayment({
   audit = () => {},
   now = () => new Date().toISOString()
 } = {}) {
-  // Global read-only interlock: this intentionally blocks manual and automated
-  // folio balance mutations until the accounting audit and release review pass.
+  // Local cash/manual, staff-reviewed and reservation-advance postings remain
+  // available offline after explicit staff confirmation. Gateway and automatic
+  // settlement are separately gated below and cannot use this local trust path.
   assertBalanceMutationAllowed();
   // The automatic path must fail closed before validation or any mutation.
   if (source === "auto") assertAutoFolioSettlementEnabled({
