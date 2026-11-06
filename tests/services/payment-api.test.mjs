@@ -63,20 +63,44 @@ test('preserves ambiguous network failure as reconciliation-required error', asy
 });
 
 
-test('rejects catalogue-only providers before network dispatch', async () => {
-  let called = false;
+test('allows all six wired providers through the authenticated test-mode API client', async () => {
+  const calls = [];
   const client = new PaymentApiClient({
     baseUrl: 'https://payments.example.com',
     tokenProvider: async () => token,
-    fetchImpl: async () => { called = true; return response(201, {}); }
+    fetchImpl: async (...args) => { calls.push(args); return response(201, { accepted: true }); }
   });
-  for (const provider of ['payu', 'phonepe', 'paytm', 'jiopay', 'ccavenue']) {
-    assert.throws(() => client.createIntent({
+  for (const provider of ['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay']) {
+    const result = await client.createIntent({
       folioId: 'folio_123', amountMinor: 1000, currency: 'INR',
       provider, environment: 'test'
-    }, { idempotencyKey: 'aurelia-test-key-123' }), /invalid_payment_intent_request/);
+    }, { idempotencyKey: 'aurelia-test-key-123' });
+    assert.equal(result.accepted, true);
   }
-  assert.equal(called, false);
+  assert.equal(calls.length, 6);
+  assert.throws(() => client.createIntent({
+    folioId: 'folio_123', amountMinor: 1000, currency: 'INR',
+    provider: 'ccavenue', environment: 'test'
+  }, { idempotencyKey: 'aurelia-test-key-123' }), /invalid_payment_intent_request/);
+});
+
+test('tenant live collection control updates are narrow, authenticated and reason-bound', async () => {
+  let call;
+  const client = new PaymentApiClient({
+    baseUrl: 'https://payments.example.com',
+    tokenProvider: async () => token,
+    fetchImpl: async (...args) => { call = args; return response(200, { updated: true }); }
+  });
+  assert.equal((await client.getPaymentControls()).updated, true);
+  assert.equal(call[0], 'https://payments.example.com/v1/admin/payment-controls');
+  assert.equal(call[1].method, undefined);
+  await client.updatePaymentControls({ live_collection_enabled: false }, 'Operator disabled collection');
+  assert.equal(call[1].method, 'PATCH');
+  assert.deepEqual(JSON.parse(call[1].body), {
+    changes: { live_collection_enabled: false }, reason: 'Operator disabled collection'
+  });
+  assert.throws(() => client.updatePaymentControls({ live_collection: true }, 'No'));
+  assert.throws(() => client.updatePaymentControls({ live_collection_enabled: true }, ''));
 });
 
 
