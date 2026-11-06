@@ -458,3 +458,16 @@ The browser/PWA IndexedDB repository is implemented at `src/storage/indexeddb-pm
 **Important boundary:** this is a guarded migration/bootstrap foundation, not the production UI cutover. The existing PMS still reads and writes its synchronous localStorage state. The coordinator reports `uiCutover: false`; it must not be wired into the live UI until every domain mutation and read path is moved to the asynchronous repository and recovery/rollback is proven.
 
 **Android boundary:** the current native SQLite repository is still a Java storage foundation, not a registered Capacitor repository plugin. This coordinator currently selects IndexedDB in the WebView and labels the engine accurately; it does not claim SQLite is active. A registered native bridge, encrypted database/key lifecycle, shared adapter conformance and physical-device recovery testing remain required. Cloud sync and live collection remain OFF.
+
+
+## Unified repository bridge (2026-11-07)
+
+- Added `src/storage/pms-repository-bridge.mjs`. It binds only to an engine implementing the shared repository contract and exposes Promise-based booking, ledger, folio, guest and room mutation entry points.
+- Each mutation uses the existing `transactBusinessChange` contract: optimistic version checks, synchronous pure mutation callback, entity update and immutable outbox event in one IndexedDB transaction. Native SQLite must implement the same contract before it can be bound.
+- The bridge intentionally uses asynchronous APIs. IndexedDB and Capacitor SQLite operations cannot honestly provide synchronous domain writes; a synchronous façade would either block the UI or create a second, unsafe localStorage write path.
+- Added `tests/pms-repository-bridge.test.mjs` for atomic entity/outbox writes, stale-version rejection, async-callback rejection and unbound-engine failure.
+- The web build now packages the bridge module.
+
+**Cutover remains blocked:** this bridge is not yet bound by the live UI. Existing UI reads and writes still use the legacy synchronous state in `index.html`. The proposed DOMContentLoaded wrapper is not inserted because the current app initializes operational state during script evaluation; adding a later event listener would not freeze or gate that initialization, and the suggested `initializeLegacyPmsUi()` function does not exist. A real startup refactor must move the existing app initialization behind an awaited bootstrap and route all domain commands before the shield can be removed.
+
+**Native boundary:** no registered Capacitor SQLite plugin is claimed by this commit. The Java repository template alone is not a WebView bridge. Android SQLite binding, native contract conformance, full UI command migration, recovery/rollback and physical-device verification remain outstanding. Payment integration and live collection remain gated.
