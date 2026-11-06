@@ -4,7 +4,7 @@
 
 **Current repository:** `Akshayshetye37/Aurelia-apk`  
 **Working branch:** `feature/multi-provider-payment-backend`  
-**Latest storage/test/build correction:** `34c5775bef9886f9324f05292d313e6db0ffd8d8`
+**Latest implementation commits:** Android JSON compatibility fix `72cf0acd` and native-template regression test `8131c18` (Android CI result pending).
 
 ### Product architecture
 
@@ -71,6 +71,15 @@ A zero-Aurelia-cloud standalone PMS mode remains a design goal for ordinary loca
 - Enable live collection only through an explicit tenant-admin release control after security, accounting, provider and physical-device acceptance.
 
 ### Current verification state
+
+### Multi-provider cloud coverage (2026-11-07)
+
+- The trusted cloud backend exposes all six implemented adapters—Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay—through tenant-scoped credential storage/validation, sandbox test-order creation, provider webhooks, status verification and the one-active-provider policy.
+- Public Aurelia environment choices remain `test` and `live`. The adapter maps Paytm test/live to staging/production and JioPay test/live to UAT/production; do not expose those adapter-native names as tenant environment controls.
+- A test order is not considered sandbox acceptance until a signed webhook is received and the provider API independently confirms the captured payment. Activation continues to require the independent sandbox and webhook evidence flags.
+- Android native checkout remains limited to Razorpay and Cashfree. The other four adapters are server-side integrations and are not offered as native device checkout until their platform handoffs are implemented and physically tested.
+- Cloud webhook processing records verified payment evidence and queues the trusted-device command protocol. It does not itself post a payment into the canonical local PMS folio. The cloud reconciliation endpoint remains explicitly blocked until the canonical-ledger bridge is implemented and proven.
+- Live collection, automated refunds-to-folio reversal, automatic settlement and production readiness remain OFF.
 
 - Latest source/test correction: `3acab169a17d4d09d21101ed7dd3380ddc51ca1e` (root-level outbox retry test now verifies that a future `retryAt` is respected and that conflict transitions require a separate active lease).
 - Previous CI run `42295367809` failed because the root-level test expected immediate re-claim after scheduling a future retry. That expectation contradicted the repository's enforced backoff behavior; the production retry implementation was retained.
