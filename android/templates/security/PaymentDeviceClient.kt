@@ -64,8 +64,8 @@ class PaymentDeviceClient(
     }
 
     /** Returns a validated lease envelope; the lease token is required for acknowledgement. */
-    fun leaseNext(): Lease? {
-        val response = post("/v1/devices/$deviceId/commands/lease", JSONObject())
+    fun leaseNext(idToken: String? = null): Lease? {
+        val response = post("/v1/devices/$deviceId/commands/lease", JSONObject(), idToken)
         if (!response.has("command") || response.isNull("command")) return null
         val command = response.getJSONObject("command")
         val token = response.optString("leaseToken")
@@ -97,7 +97,7 @@ class PaymentDeviceClient(
      * local ledger receipt. This class cannot establish that receipt itself.
      * The caller is responsible for approval, atomic persistence and read-back.
      */
-    fun acknowledge(lease: Lease, ledgerAckId: String): JSONObject {
+    fun acknowledge(lease: Lease, ledgerAckId: String, idToken: String? = null): JSONObject {
         val command = lease.command
         validateCommand(command)
         require(lease.settlementAuthorized && lease.authorization != null) {
@@ -120,7 +120,7 @@ class PaymentDeviceClient(
             .put("ledgerAckId", ledgerAckId)
         return post(
             "/v1/devices/$deviceId/commands/${command.getString("commandId")}/ack",
-            body
+            body, idToken
         )
     }
 
@@ -188,7 +188,7 @@ class PaymentDeviceClient(
         }
     }
 
-    private fun post(path: String, body: JSONObject): JSONObject {
+    private fun post(path: String, body: JSONObject, idToken: String? = null): JSONObject {
         val canonicalBody = canonicalJson(body)
         val bodyBytes = canonicalBody.toByteArray(Charsets.UTF_8)
         val bodyHash = sha256Hex(bodyBytes)
@@ -209,6 +209,12 @@ class PaymentDeviceClient(
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Accept", "application/json")
+            if (idToken != null) {
+                require(idToken.length in 20..8192 && !idToken.any { it.isWhitespace() }) {
+                    "A valid Firebase ID token is required for cloud device synchronization."
+                }
+                connection.setRequestProperty("Authorization", "Bearer " + idToken)
+            }
             connection.setRequestProperty("X-Aurelia-Device-Timestamp", timestamp)
             connection.setRequestProperty("X-Aurelia-Device-Nonce", nonce)
             connection.setRequestProperty("X-Aurelia-Device-Signature", signature)
