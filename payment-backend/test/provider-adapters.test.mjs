@@ -168,12 +168,12 @@ test('Cashfree rejects correctly signed stale webhook timestamps', async () => {
 
 test('provider factory exposes only adapters with the complete checkout contract', async () => {
   const { createProviderAdapter, implementedProviderAdapters, providerCapabilities } = await import('../src/providers/factory.mjs');
-  assert.deepEqual(implementedProviderAdapters().sort(), ['cashfree', 'razorpay']);
-  assert.equal(providerCapabilities('payu'), null);
+  assert.deepEqual(implementedProviderAdapters().sort(), ['cashfree', 'jiopay', 'paytm', 'payu', 'phonepe', 'razorpay']);
+  assert.equal(providerCapabilities('ccavenue'), null);
   const adapter = createProviderAdapter('cashfree', {
     credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' }, environment: 'test'
   });
-  for (const operation of ['validateCredentials', 'createOrder', 'getPaymentStatus', 'verifyWebhook', 'createRefund']) {
+  for (const operation of ['validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus', 'verifyWebhook', 'createRefund', 'getRefundStatus']) {
     assert.equal(typeof adapter[operation], 'function');
   }
   assert.throws(() => createProviderAdapter('ccavenue', {}), /provider_adapter_unavailable/);
