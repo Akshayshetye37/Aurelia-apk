@@ -3451,7 +3451,7 @@ function loadAureliaCheckoutScript(provider){
 window.aureliaGatewayFolioHtml=function(i){
  const a=window.AureliaLocalGatewayAdmin||{},providers=(a.providers||[]).filter(x=>x.environment==='test'&&x.active);
  const supported=providers.filter(x=>['razorpay','cashfree'].includes(x.provider)&&x.capabilities?.testCheckout===true&&x.capabilities?.liveCollection===false&&x.productionReady===false);
- const booking=bk(i),pending=(booking?.gatewayPayments||[]).filter(x=>!['FAILED','POSTED_TO_FOLIO'].includes(x.status));
+ const booking=bk(i),pending=(booking?.gatewayPayments||[]).filter(x=>x.status!=='POSTED_TO_FOLIO');
  const pendingHtml=pending.length?'<div class="card" style="margin:10px 0"><b>Unresolved online transactions</b>'+pending.map(x=>'<div class="ln"><span>'+esc(x.provider)+' · '+esc(x.status)+'<br><small>'+esc(x.transactionId)+'</small></span><button class="btn sm ghost" onclick="reconcileAureliaGatewayPayment('+Number(i)+',\''+esc(x.transactionId)+'\')">Reconcile</button></div>').join('')+'</div>':'';
  const setup='<button class="btn sm ghost" onclick="go(\'more\');setTimeout(()=>openAureliaGatewayAdmin(),100)">Open payment setup</button>';
  if(!S.set.backendConnection?.reachable||!a.authenticated)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">Online checkout is temporarily unavailable while the device-only Android payment engine is being integrated. No server or LAN appliance is required by the target architecture. Bookings, folios and cash/manual payments continue to work offline.</p>'+setup;
@@ -3601,7 +3601,7 @@ window.aureliaGatewaySettlementLabel=function(state){
   PENDING:'Awaiting provider confirmation',
   CAPTURED_PENDING_ACCOUNTING:'Payment captured · PMS posting pending',
   SETTLED:'Payment posted to PMS folio',
-  FAILED:'Payment failed · folio remains unpaid',
+  FAILED:'Provider reports failure · late capture still requires reconciliation',
   RECONCILIATION_REQUIRED:'Payment status requires reconciliation',
   UNKNOWN:'Payment outcome unknown · reconcile before retry',
   REFUNDED:'Refund confirmed by provider',
