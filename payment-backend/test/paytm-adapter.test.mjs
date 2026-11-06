@@ -1,16 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
+import PaytmChecksum from 'paytmchecksum';
 import { PaytmAdapter } from '../src/providers/paytm-adapter.mjs';
 
 const key='merchant-secret';
-const checksumImpl={
-  async generateSignature(value,secret){return crypto.createHash('sha256').update((typeof value==='string'?value:JSON.stringify(value))+secret).digest('hex');},
-  async verifySignature(value,secret,signature){
-    return signature===crypto.createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).update(secret).digest('hex');
-  }
-};
-const signed=body=>({body,head:{signature:crypto.createHash('sha256').update(JSON.stringify(body)+key).digest('hex')}});
+const checksumImpl=PaytmChecksum;
+const signed=async body=>({body,head:{signature:await PaytmChecksum.generateSignature(JSON.stringify(body),key)}});
 function mockFetch(handler){
   const calls=[];
   const fetchImpl=async(url,options)=>{calls.push({url,options});const body=await handler(url,options);
@@ -26,7 +21,7 @@ test('Paytm initiates hosted JS checkout with signed body and returns txn token'
     assert.equal(request.body.txnAmount.value,'125.00');
     assert.equal(request.body.txnAmount.currency,'INR');
     assert.equal(request.head.signature,await checksumImpl.generateSignature(JSON.stringify(request.body),key));
-    return signed({txnToken:'txn-token-123',resultInfo:{resultStatus:'S'}});
+    return await signed({txnToken:'txn-token-123',resultInfo:{resultStatus:'S'}});
   });
   const adapter=new PaytmAdapter({credentials:creds,environment:'staging',fetchImpl:mock.fetchImpl,checksumImpl});
   const result=await adapter.createOrder({orderId:'order_123',amountMinor:12500,currency:'INR',
@@ -40,7 +35,7 @@ test('Paytm queries authoritative payment status and binds MID and order ID',asy
     assert.equal(url,'https://securegw-stage.paytmpayments.in/v3/order/status');
     const request=JSON.parse(options.body);
     assert.equal(request.body.orderId,'order_123');
-    return signed({mid:creds.mid,orderId:'order_123',txnId:'txn_123',txnAmount:'125.00',
+    return await signed({mid:creds.mid,orderId:'order_123',txnId:'txn_123',txnAmount:'125.00',
       resultInfo:{resultStatus:'TXN_SUCCESS'}});
   });
   const adapter=new PaytmAdapter({credentials:creds,environment:'staging',fetchImpl:mock.fetchImpl,checksumImpl});
@@ -66,7 +61,7 @@ test('Paytm submits refund with official body fields and keeps accepted refunds 
     const request=JSON.parse(options.body);
     assert.deepEqual(request.body,{mid:creds.mid,orderId:'order_123',refId:'refund_123',
       txnId:'txn_123',txnType:'REFUND',refundAmount:'25.00'});
-    return signed({mid:creds.mid,orderId:'order_123',refId:'refund_123',txnId:'txn_123',
+    return await signed({mid:creds.mid,orderId:'order_123',refId:'refund_123',txnId:'txn_123',
       refundAmount:'25.00',resultInfo:{resultStatus:'PENDING',resultCode:'601'}});
   });
   const adapter=new PaytmAdapter({credentials:creds,environment:'staging',fetchImpl:mock.fetchImpl,checksumImpl});
@@ -77,7 +72,7 @@ test('Paytm submits refund with official body fields and keeps accepted refunds 
 
 test('Paytm fetches refund status and rejects mismatched refund identity',async()=>{
   const mock=mockFetch(async()=>{
-    return signed({mid:creds.mid,orderId:'order_123',refId:'refund_123',refundId:'provider_refund',
+    return await signed({mid:creds.mid,orderId:'order_123',refId:'refund_123',refundId:'provider_refund',
       txnId:'txn_123',refundAmount:'25.00',userCreditInitiateStatus:'SUCCESS',
       resultInfo:{resultStatus:'TXN_SUCCESS'}});
   });
