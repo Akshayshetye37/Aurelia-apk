@@ -82,7 +82,7 @@ Working branch: `feature/multi-provider-payment-backend`.
 
 ### Verification boundary
 
-The source changes for the optional gateway form, secure credential submission, active-provider enforcement and activation error reporting have been committed to this branch. GitHub Actions runs `42278130693` (payment backend CI) and `42278130696` (PMS source tests, web packaging and Android validation) were in progress at the last status check. Do not treat them as passing until GitHub reports successful conclusions. No cloud deployment, merchant sandbox certification or production release is claimed.
+The source changes for the optional gateway form, secure credential submission, active-provider enforcement and activation error reporting are committed to this branch. The authoritative current CI state is recorded in the top-level **Latest implementation update** section; older run IDs in earlier development notes are historical and must not be used to infer the status of the current branch head. No cloud deployment, merchant sandbox certification or production release is claimed.
 
 ## Project location
 
