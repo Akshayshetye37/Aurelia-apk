@@ -4138,11 +4138,14 @@ if (typeof window.render === "function") window.render();
  window.AureliaLiveCollectionControlState=window.AureliaLiveCollectionControlState||{loaded:false,enabled:false,internalAllowed:false,controlState:'NOT_LOADED',busy:false,error:null};
  function liveCollectionControlHtml(){
   const state=window.AureliaLiveCollectionControlState;
+  const authState=window.AureliaPaymentAuth?.getState?.()||{};
+  const signedIn=!!authState.user;
+  const authPanel=signedIn?'<p class="lab">Signed in as '+esc(authState.user.email||'authorised administrator')+'</p><button class="btn sm ghost" onclick="signOutAureliaPaymentAdmin()">Sign out</button>':'<label class="fld"><span>Administrator email</span><input id="aurelia-payment-admin-email" type="email" autocomplete="username"></label><label class="fld"><span>Password</span><input id="aurelia-payment-admin-password" type="password" autocomplete="current-password"></label><button class="btn sm" onclick="signInAureliaPaymentAdmin()">Sign in securely</button>';
   const status=state.loaded?(state.enabled?'ON':'OFF'):'Not loaded';
   const gate=state.loaded?(state.internalAllowed?'Internal release gate approved':'Internal release gate OFF'):'Server state not loaded';
-  const toggleDisabled=!state.loaded||state.busy||state.controlState!=='CONFIGURED'||(!state.enabled&&!state.internalAllowed);
-  const initialize=state.controlState==='UNCONFIGURED'?'<button class="btn sm" onclick="initializeAureliaPaymentControls()" '+(state.busy?'disabled':'')+'>Initialize safe server defaults</button>':'';
-  return '<section class="card" style="margin-top:14px"><div class="row"><h3>Live Collection</h3><span class="tag out">'+esc(status)+'</span></div><p class="lab">Tenant administrator control. The server remains authoritative and requires verified email, owner/admin membership, recent MFA and the independent internal release gate. This switch cannot approve the internal gate.</p><p class="lab" role="status">'+esc(gate)+' · '+esc(state.controlState)+'</p>'+(state.error?'<p class="lab" role="alert">'+esc(state.error)+'</p>':'')+'<div class="row" style="flex-wrap:wrap"><button class="btn sm ghost" onclick="refreshAureliaLiveCollectionControl()" '+(state.busy?'disabled':'')+'>Refresh server status</button>'+initialize+'<button class="btn sm" onclick="setAureliaLiveCollectionEnabled('+(!state.enabled)+')" '+(toggleDisabled?'disabled':'')+'>'+(state.enabled?'Turn OFF':'Turn ON')+'</button></div><p class="lab">OFF by default. Turning OFF blocks new live orders; unresolved in-flight intents remain pending/reconciliation-required for server-side review. Enabling requires recent MFA and will be rejected unless internal release approval is already active.</p></section>';
+  const toggleDisabled=!signedIn||!state.loaded||state.busy||state.controlState!=='CONFIGURED'||(!state.enabled&&!state.internalAllowed);
+  const initialize=state.controlState==='UNCONFIGURED'?'<button class="btn sm" onclick="initializeAureliaPaymentControls()" '+(!signedIn||state.busy?'disabled':'')>Initialize safe server defaults</button>':'';
+  return '<section class="card" style="margin-top:14px"><div class="row"><h3>Live Collection</h3><span class="tag out">'+esc(status)+'</span></div><p class="lab">Tenant administrator control. The server remains authoritative and requires verified email, owner/admin membership, recent MFA and the independent internal release gate. This switch cannot approve the internal gate.</p>'+authPanel+'<p class="lab" role="status">'+esc(gate)+' · '+esc(state.controlState)+'</p>'+(state.error?'<p class="lab" role="alert">'+esc(state.error)+'</p>':'')+'<div class="row" style="flex-wrap:wrap"><button class="btn sm ghost" onclick="refreshAureliaLiveCollectionControl()" '+(!signedIn||state.busy?'disabled':'')+'>Refresh server status</button>'+initialize+'<button class="btn sm" onclick="setAureliaLiveCollectionEnabled('+(!state.enabled)+')" '+(toggleDisabled?'disabled':'')+'>'+(state.enabled?'Turn OFF':'Turn ON')+'</button></div><p class="lab">OFF by default. Turning OFF blocks new live orders; unresolved in-flight intents remain pending/reconciliation-required for server-side review. Enabling requires recent MFA and will be rejected unless internal release approval is already active.</p></section>';
  }
  window.initializeAureliaPaymentControls=async function(){
   const state=window.AureliaLiveCollectionControlState;
@@ -4442,6 +4445,32 @@ window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;
   const sdk=await loadSdk();await sdk.signOut(auth);setState('SIGNED_OUT',null,null);
  }
  window.AureliaPaymentAuth={configure,initFromWindow,waitForReady,getIdTokenAsync,getFreshIdToken:()=>getIdTokenAsync(true),getIdToken:getIdTokenAsync,signIn,reauthenticate,signOut,getState:()=>({...state,user:state.user?{uid:state.user.uid,email:state.user.email}:null})};
+ window.signInAureliaPaymentAdmin=async function(){
+  const email=document.getElementById('aurelia-payment-admin-email')?.value||'';
+  const password=document.getElementById('aurelia-payment-admin-password')?.value||'';
+  if(!email.trim()||!password){window.AureliaLiveCollectionControlState.error='Enter the administrator email and password.';window.render();return;}
+  const mfaUi=async challenge=>{
+   if(challenge.type==='select'){
+    const choices=challenge.hints.map(h=>h.index+': '+(h.factorId==='totp'?'Authenticator app':h.factorId==='phone'?'SMS '+(h.phoneNumber||'enrolled phone'):h.factorId)).join('\\n');
+    const selected=window.prompt('Select your enrolled MFA method:\\n'+choices,'0');
+    if(selected===null)throw new Error('MFA challenge cancelled.');
+    return {index:Number(selected)};
+   }
+   const label=challenge.type==='totp'?'Enter the six-digit authenticator code.':'Enter the SMS verification code sent to '+(challenge.hint.phoneNumber||'your enrolled phone')+'.';
+   const code=window.prompt(label);if(code===null)throw new Error('MFA challenge cancelled.');return code;
+  };
+  try{
+   await window.AureliaPaymentAuth.signIn(email,password,mfaUi);
+   const input=document.getElementById('aurelia-payment-admin-password');if(input)input.value='';
+   window.AureliaLiveCollectionControlState.error=null;
+   window.render();
+   await window.refreshAureliaLiveCollectionControl();
+  }catch(error){window.AureliaLiveCollectionControlState.error=error.message||'Administrator sign-in failed.';window.render();}
+ };
+ window.signOutAureliaPaymentAdmin=async function(){
+  try{await window.AureliaPaymentAuth.signOut();window.AureliaLiveCollectionControlState.loaded=false;window.AureliaLiveCollectionControlState.enabled=false;window.render();}
+  catch(error){window.AureliaLiveCollectionControlState.error=error.message||'Sign out failed.';window.render();}
+ };
  // Initialize only the optional authentication subsystem. Failures never block local workflows.
  initFromWindow().catch(error=>console.warn('Optional payment administration authentication unavailable:',error.message));
 })();
