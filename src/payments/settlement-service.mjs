@@ -1,5 +1,6 @@
 import { AUTO_FOLIO_SETTLEMENT_ENABLED, assertAutoFolioSettlementEnabled } from "./settlement-gate.mjs";
 import { assertBalanceMutationAllowed } from "./payment-safety-gate.mjs";
+import { isVerifiedBinding } from "./settlement-authorization.mjs";
 
 /**
  * Single local mutation boundary for hotel folio payments.
@@ -8,7 +9,7 @@ import { assertBalanceMutationAllowed } from "./payment-safety-gate.mjs";
  * server-side transaction; gateway settlement remains disabled until a
  * trusted backend and atomic ledger are available.
  */
-const ALLOWED_SOURCES = new Set(["manual", "staff_review", "reservation_advance", "auto"]);
+const ALLOWED_SOURCES = new Set(["manual", "staff_review", "reservation_advance", "auto", "verified_gateway"]);
 const MAX_REFERENCE_LENGTH = 256;
 const MAX_METHOD_LENGTH = 40;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
@@ -54,6 +55,23 @@ function samePayment(payment, { booking, amountPaise, method, reference }) {
     normalizedPaymentReference(payment.r ?? payment.reference, payment.m ?? payment.method) === reference;
 }
 
+function assertBindingMatches(binding, { booking, amountPaise, method, reference, key, nowMs, tenantId, deviceId, providerAccountId, environment }) {
+  if (!isVerifiedBinding(binding)) {
+    const error = new Error("A verified settlement authorization is required"); error.code = "AUTHORIZATION_BINDING_REQUIRED"; throw error;
+  }
+  if (!Number.isFinite(nowMs) || binding.expiresAtMs <= nowMs) {
+    const error = new Error("Settlement authorization or lease expired"); error.code = "AUTHORIZATION_EXPIRED"; throw error;
+  }
+  if (binding.bookingId !== booking.id || binding.amountPaise !== amountPaise ||
+      normalizedPaymentMethod(binding.method) !== normalizedPaymentMethod(method) ||
+      normalizedPaymentReference(binding.reference, binding.method) !== reference ||
+      binding.idempotencyKey !== key || binding.tenantId !== tenantId ||
+      binding.deviceId !== deviceId || binding.providerAccountId !== providerAccountId ||
+      binding.environment !== environment) {
+    const error = new Error("Verified authorization does not match the folio mutation"); error.code = "AUTHORIZATION_BINDING_MISMATCH"; throw error;
+  }
+}
+
 export function settlePayment({
   state,
   booking,
@@ -66,6 +84,9 @@ export function settlePayment({
   verificationConfirmed = false,
   autoSettlementEnabled = AUTO_FOLIO_SETTLEMENT_ENABLED,
   gatewayActive = false,
+  authorization = null,
+  isEmergencyStopped = null,
+  tenantId = null, deviceId = null, providerAccountId = null, environment = null,
   persist = () => {},
   audit = () => {},
   now = () => new Date().toISOString()
@@ -79,7 +100,12 @@ export function settlePayment({
     gatewayActive
   });
   if (!ALLOWED_SOURCES.has(source)) throw new TypeError("Unsupported payment source");
-  if (verificationConfirmed !== true) {
+  const gateway = source === "verified_gateway";
+  if (gateway) {
+    if (autoSettlementEnabled !== true) { const e = new Error("Automatic settlement is disabled"); e.code = "AUTO_SETTLEMENT_DISABLED"; throw e; }
+    if (typeof isEmergencyStopped !== "function" || isEmergencyStopped() !== false) { const e = new Error("Settlement emergency stop is active or unavailable"); e.code = "EMERGENCY_STOP_ACTIVE"; throw e; }
+    if (persist.synchronous !== true || persist.constructor?.name === "AsyncFunction") { const e = new Error("Gateway projection requires an explicitly synchronous durable persistence adapter"); e.code = "SYNCHRONOUS_PERSISTENCE_REQUIRED"; throw e; }
+  } else if (verificationConfirmed !== true) {
     const error = new Error("Confirm that the payment was independently received before recording it");
     error.code = "PAYMENT_CONFIRMATION_REQUIRED";
     throw error;
@@ -110,6 +136,8 @@ export function settlePayment({
     throw new TypeError("Payment idempotency key is invalid or too long");
   }
   const key = suppliedKey || (ref && source !== "reservation_advance" ? "ref:" + ref : "");
+  if (gateway) assertBindingMatches(authorization, { booking, amountPaise, method: paymentMethod, reference: ref, key,
+    nowMs: Date.parse(now()), tenantId, deviceId, providerAccountId, environment });
 
   const allBookings = [
     ...state.b,
@@ -174,6 +202,13 @@ export function settlePayment({
   const duePaise = moneyToPaise(balanceDue, "Balance due", { allowZero: true });
   if (amountPaise > duePaise) throw new RangeError("Payment exceeds the balance due");
 
+  // Recheck all volatile authorization controls immediately before mutation.
+  assertBalanceMutationAllowed();
+  if (gateway) {
+    if (isEmergencyStopped() !== false) { const e = new Error("Settlement emergency stop is active"); e.code = "EMERGENCY_STOP_ACTIVE"; throw e; }
+    assertBindingMatches(authorization, { booking, amountPaise, method: paymentMethod, reference: ref, key,
+      nowMs: Date.parse(now()), tenantId, deviceId, providerAccountId, environment });
+  }
   const priorPays = Array.isArray(booking.pays) ? booking.pays : [];
   const priorHistory = Array.isArray(booking.payments) ? booking.payments : [];
   const priorPaid = booking.p;
@@ -183,15 +218,18 @@ export function settlePayment({
   const priorAudit = Array.isArray(state.aud) ? state.aud.slice() : null;
   const timestamp = now();
 
+  const gatewayFields = gateway ? { provider: authorization.provider, providerTransactionId: authorization.providerTransactionId,
+    tenantId: authorization.tenantId, deviceId: authorization.deviceId, providerAccountId: authorization.providerAccountId,
+    environment: authorization.environment, authorizationId: authorization.authorizationId, leaseId: authorization.leaseId } : {};
   const payment = {
     a: value, amountPaise, m: paymentMethod, r: ref, at: timestamp,
-    auto: source === "auto", source, bookingId: booking.id,
-    verificationConfirmed: true, idempotencyKey: key || undefined
+    auto: source === "auto" || gateway, source, bookingId: booking.id,
+    verificationConfirmed: true, idempotencyKey: key || undefined, ...gatewayFields
   };
   const history = {
     date: timestamp, amount: value, amountPaise, method: paymentMethod,
     reference: ref, source, bookingId: booking.id,
-    verificationConfirmed: true, idempotencyKey: key || undefined
+    verificationConfirmed: true, idempotencyKey: key || undefined, ...gatewayFields
   };
 
   try {
