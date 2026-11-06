@@ -25,8 +25,8 @@ if (!manifest.includes('<data android:scheme="upi"')) {
     '        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="phonepe" /></intent>',
     '        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="paytmmp" /></intent>',
     '        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="credpay" /></intent>'
-  ].join('\\n');
-  manifest = manifest.replace('</queries>', upiQueries + '\\n    </queries>');
+  ].join('\n');
+  manifest = manifest.replace('</queries>', upiQueries + '\n    </queries>');
 }
 if (!manifest.includes('com.aurelia.paybridge.permission.BIND_PAY_BRIDGE')) {
   manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE" />\n    <application');
