@@ -49,10 +49,11 @@ export const PROVIDERS = Object.freeze({
       { key: 'clientId', label: 'Client ID', type: 'text', secret: false, required: true },
       { key: 'clientSecret', label: 'Client Secret', type: 'password', secret: true, required: true },
       { key: 'clientVersion', label: 'Client Version', type: 'text', secret: false, required: true },
-      { key: 'merchantId', label: 'Merchant ID', type: 'text', secret: false, required: true }
+      { key: 'webhookUsername', label: 'Webhook Username', type: 'text', secret: false, required: true },
+      { key: 'webhookPassword', label: 'Webhook Password', type: 'password', secret: true, required: true }
     ],
     capabilities: ['checkout', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'prototype_unqualified_disabled'
+    adapterStatus: 'adapter_implemented_wired_not_uat_qualified'
   },
   paytm: {
     label: 'Paytm Payment Gateway',
