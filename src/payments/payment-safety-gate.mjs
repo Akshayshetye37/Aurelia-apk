@@ -1,12 +1,12 @@
 /**
  * Global payment/accounting safety interlock.
  *
- * All controls default to LOCKED. Unlocking requires an explicit source-code
- * change and a separate release review; environment variables cannot bypass
- * this client-side interlock.
+ * Offline manual folio entry remains available on-device. Only automatic,
+ * live-collection and native settlement paths stay locked until release review.
+ * Environment variables cannot bypass this client-side interlock.
  */
 export const PAYMENT_SAFETY_LOCKS = Object.freeze({
-  blockAllBalanceMutations: true,
+  blockAllBalanceMutations: false,
   automaticSettlement: true,
   liveCollection: true,
   nativeSettlementBridge: true
