@@ -368,14 +368,28 @@ const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-se
 function addFirebaseDependencies(contents, kotlinDsl) {
   const bom = 'com.google.firebase:firebase-bom:33.5.0';
   const auth = 'com.google.firebase:firebase-auth';
+  const paymentDependencies = [
+    'com.razorpay:checkout:1.6.41',
+    'com.cashfree.pg:api:2.6.1'
+  ];
   if (!/dependencies\s*\{/.test(contents)) {
-    throw new Error('App Gradle file has no dependencies block; refusing an incomplete Firebase integration.');
+    throw new Error('App Gradle file has no dependencies block; refusing an incomplete native payment integration.');
   }
-  if (contents.includes(auth)) return contents;
-  const dependencyLines = kotlinDsl
-    ? `\n    implementation(platform("${bom}"))\n    implementation("${auth}")`
-    : `\n    implementation platform("${bom}")\n    implementation "${auth}"`;
-  return contents.replace(/dependencies\s*\{/, match => match + dependencyLines);
+  let updated = contents;
+  const missing = [auth, ...paymentDependencies].filter(dependency => !updated.includes(dependency));
+  if (missing.length) {
+    const lines = kotlinDsl
+      ? '\\n' + missing.map(dependency => '    implementation("' + dependency + '")').join('\\n')
+      : '\\n' + missing.map(dependency => '    implementation "' + dependency + '"').join('\\n');
+    updated = updated.replace(/dependencies\s*\{/, match => match + lines);
+  }
+  if (!updated.includes(bom)) {
+    updated = updated.replace(/dependencies\s*\{/, match =>
+      match + (kotlinDsl
+        ? '\\n    implementation(platform("' + bom + '"))'
+        : '\\n    implementation platform("' + bom + '")'));
+  }
+  return updated;
 }
 
 function applyGoogleServices(contents, kotlinDsl) {
