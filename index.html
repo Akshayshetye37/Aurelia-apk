@@ -4817,6 +4817,16 @@ window.aureliaSyncVerifiedSettlements = async (tokenProvider = getPaymentDeviceI
  return window.aureliaApplyJournaledSettlement(lease, tokenProvider);
 };
 
+window.addEventListener('aurelia:native-payment-event', async event => {
+ const detail = event?.detail || {};
+ const state = window.AureliaAccountingBoundary?.getState?.();
+ const booking = state?.b?.find(item =>
+  (item.gatewayPayments || []).some(payment => payment.transactionId === detail.transactionId));
+ if(!booking || typeof window.reconcileAureliaGatewayPayment !== 'function') return;
+ const index = state.b.indexOf(booking);
+ await window.reconcileAureliaGatewayPayment(index, detail.transactionId, detail.providerPaymentId || undefined);
+});
+
 window.AureliaSettlementStatus = Object.freeze({
  trustedAuthorizationIssuerInstalled:true,
  signedAuthorizationVerificationInstalled:true,
