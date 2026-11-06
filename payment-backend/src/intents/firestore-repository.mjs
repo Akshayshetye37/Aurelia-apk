@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { createProviderAdapter } from '../providers/factory.mjs';
-import { transitionIntent } from './intent-state-machine.mjs';
+import { transitionIntent, mapVerifiedProviderStatus } from './intent-state-machine.mjs';
 
 const ID = /^[A-Za-z0-9_-]{6,64}$/;
 const IDEM = /^[A-Za-z0-9._:-]{12,100}$/;
@@ -70,6 +70,113 @@ export class FirestorePaymentRepository {
       accountingStatus: record.accountingStatus || 'PENDING',
       accountingBlockReason: record.accountingBlockReason || null,
       checkoutData: record.checkoutData || null, updatedAt: record.updatedAt
+    };
+  }
+
+  async reconcilePaymentIntent(authUid, intentId) {
+    if (typeof authUid !== 'string' || !authUid ||
+        typeof intentId !== 'string' || !/^[0-9a-f-]{36}$/i.test(intentId)) {
+      throw new TypeError('invalid_payment_intent_reconciliation');
+    }
+    const membershipSnap = await this.db.collection('paymentMemberships').doc(authUid).get();
+    const membership = membershipSnap.exists ? membershipSnap.data() : null;
+    if (!membership || membership.status !== 'active' || !ID.test(membership.tenantId || '') ||
+        !['owner', 'admin', 'staff'].includes(membership.role)) {
+      throw new Error('active_tenant_membership_required');
+    }
+    const tenantId = membership.tenantId;
+    const intentRef = this.db.collection('paymentIntents').doc(intentId);
+    const snapshot = await intentRef.get();
+    if (!snapshot.exists || snapshot.data().tenantId !== tenantId) {
+      const error = new Error('payment_intent_not_found'); error.statusCode = 404; throw error;
+    }
+    const record = snapshot.data();
+    if (['CAPTURED', 'FAILED_TO_INITIATE'].includes(record.state)) {
+      return this.getPaymentIntent(authUid, intentId);
+    }
+    if (!record.providerOrderId || !record.providerAccountId ||
+        !['razorpay', 'cashfree'].includes(record.provider) ||
+        !['test', 'live'].includes(record.environment)) {
+      const error = new Error('provider_order_binding_unavailable'); error.statusCode = 409; throw error;
+    }
+
+    // Reconciliation is a server-to-server provider lookup. Native SDK callbacks
+    // are never accepted as payment evidence.
+    const credentials = await this.secretManager.getProviderSecrets(
+      tenantId, record.provider, record.environment
+    );
+    const accountId = record.provider === 'razorpay' ? credentials.keyId : credentials.appId;
+    if (accountId !== record.providerAccountId) {
+      const error = new Error('provider_account_binding_mismatch'); error.statusCode = 409; throw error;
+    }
+    const adapter = this.providerFactory(record.provider, {
+      credentials, environment: record.environment
+    });
+    if (typeof adapter.getPaymentStatus !== 'function') {
+      const error = new Error('provider_status_lookup_unavailable'); error.statusCode = 503; throw error;
+    }
+    const remote = await adapter.getPaymentStatus({
+      orderId: record.providerOrderId,
+      ...(record.providerPaymentId ? { paymentId: record.providerPaymentId } : {})
+    });
+    if (!remote || remote.orderId !== record.providerOrderId) {
+      const error = new Error('provider_status_order_binding_mismatch'); error.statusCode = 409; throw error;
+    }
+    const providerState = mapVerifiedProviderStatus(
+      record.provider, remote.paymentStatus || remote.orderStatus
+    );
+    if (providerState === 'CAPTURED' &&
+        (remote.captured !== true || remote.paymentId == null ||
+         remote.amountMinor !== record.amountMinor || remote.currency !== record.currency)) {
+      const error = new Error('provider_capture_binding_mismatch'); error.statusCode = 409; throw error;
+    }
+    const observedAt = this.clock().toISOString();
+    let nextState = record.state;
+    await this.db.runTransaction(async tx => {
+      const currentSnap = await tx.get(intentRef);
+      if (!currentSnap.exists || currentSnap.data().tenantId !== tenantId) {
+        throw new Error('payment_intent_not_found');
+      }
+      const current = currentSnap.data();
+      if (current.providerOrderId !== record.providerOrderId ||
+          current.providerAccountId !== record.providerAccountId ||
+          current.amountMinor !== record.amountMinor || current.currency !== record.currency) {
+        throw new Error('payment_intent_changed_during_reconciliation');
+      }
+      if (['CAPTURED', 'FAILED_TO_INITIATE'].includes(current.state)) {
+        nextState = current.state;
+        return;
+      }
+      nextState = transitionIntent(current.state, {
+        type: 'provider_status', verified: true, bindingVerified: true, status: providerState
+      });
+      tx.update(intentRef, {
+        state: nextState,
+        providerPaymentId: remote.paymentId == null ? current.providerPaymentId || null : String(remote.paymentId),
+        providerStatusEvidence: {
+          provider: record.provider, environment: record.environment,
+          providerAccountId: record.providerAccountId, orderId: record.providerOrderId,
+          paymentId: remote.paymentId == null ? null : String(remote.paymentId),
+          status: String(remote.paymentStatus || remote.orderStatus || 'unknown'),
+          captured: remote.captured === true,
+          amountMinor: Number.isSafeInteger(remote.amountMinor) ? remote.amountMinor : null,
+          currency: remote.currency || null, observedAt
+        },
+        lastReconciledAt: observedAt,
+        updatedAt: observedAt,
+        version: (current.version || 1) + (nextState === current.state ? 0 : 1)
+      });
+    });
+    return {
+      intentId, status: nextState, provider: record.provider,
+      environment: record.environment, folioId: record.folioId,
+      amountMinor: record.amountMinor, currency: record.currency,
+      providerOrderId: record.providerOrderId,
+      providerPaymentId: remote.paymentId == null ? record.providerPaymentId || null : String(remote.paymentId),
+      accountingStatus: record.accountingStatus || 'PENDING',
+      accountingBlockReason: record.accountingBlockReason || null,
+      providerStatus: remote.paymentStatus || remote.orderStatus || 'unknown',
+      reconciledAt: observedAt
     };
   }
 
