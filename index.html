@@ -7,18 +7,21 @@
      Fresh-install posture: no fabricated rooms, guests, bookings, tables or revenue.
      Storage posture: durable write failures must surface; strict imports/restores
      require exact persistent read-back and rollback verification.
-     Payment release posture: live collection OFF; PMS accounting mutations remain
-     fail-closed. Settlement authorization v2 local verifier/journal/projector foundations
-     are present but backend issuer and trusted Android bridge are not integrated.
-     fail-closed. LAN SQLite settlement commands have DB-enforced transaction binding,
-     immutability and durable-receipt guards; this is not cross-database folio atomicity.
+     Payment release posture: live collection OFF; offline cash/manual folio posting
+     remains available after explicit staff confirmation. Gateway auto-settlement and
+     live collection remain fail-closed. Settlement authorization v2 verifier/journal/
+     projector foundations exist; the complete cloud issuer-to-Android projection path
+     is not yet release-qualified. Native SQLite payment journal commands enforce
+     transaction binding, immutability and durable-receipt guards; they are not the
+     complete PMS database or cross-database folio atomicity.
      Payment backend readiness: /readyz verifies Firestore access and a non-empty,
      accessible Secret Manager health-secret version; it returns only boolean checks.
      Regression tests cover dependency failure and empty-secret fail-closed behavior.
      Backend CI syntax-checks all .mjs source and test modules after npm test.
-     Latest documented source update: 2026-11-06, branch
-     feature/multi-provider-payment-backend, commit be8c186 (CI syntax check).
-     These changes do not enable live collection or folio settlement.
+     Merchant credentials are backend-only in Google Secret Manager. The legacy
+     device-local credential vault is purged and native writes fail closed. Full PMS
+     encrypted SQLite storage with a Keystore-wrapped key remains a release blocker.
+     These changes do not enable live collection or automatic gateway folio settlement.
      Android CI: full PMS tests, web build, privacy checks, Capacitor sync,
      debug APK build, APK identity/signature and manifest checks passed at
      9e0ed6b; CI artifact is a debug validation APK, not a production release.
