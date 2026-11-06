@@ -65,7 +65,7 @@ test('tenant live-collection switch is server-backed, double-gated and MFA prote
   assert.ok(html.includes('signInAureliaPaymentAdmin'));
   assert.ok(html.includes('signOutAureliaPaymentAdmin'));
   assert.ok(html.includes('aurelia-payment-admin-password'));
-  assert.ok(html.includes('select your enrolled MFA method'));
+  assert.ok(html.includes('Select your enrolled MFA method'));
   assert.ok(html.includes('/v1/admin/payment-controls'));
   assert.ok(html.includes('internal release gate'));
 });
