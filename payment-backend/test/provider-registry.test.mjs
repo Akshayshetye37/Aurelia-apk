@@ -24,7 +24,7 @@ test('all wired adapters expose every lifecycle operation but remain release-gat
     razorpay: [{keyId:'rzp_test_12345678',keySecret:'secret-value',webhookSecret:'hook-secret'},'test'],
     cashfree: [{appId:'app-id',secretKey:'secret-value',webhookSecret:'hook-secret'},'test'],
     jiopay: [{merchantId:'merchant-123',saltOrHashKey:'hash-secret'},'uat'],
-    paytm: [{mid:'merchant123',merchantKey:'merchant-secret',websiteName:'WEBSTAGING'},'staging'],
+    paytm: [{mid:'merchant123',merchantKey:'merchant-secret1',websiteName:'WEBSTAGING'},'staging'],
     phonepe: [{clientId:'client-id',clientSecret:'client-secret',clientVersion:'1',webhookUsername:'hook-user',webhookPassword:'hook-secret'},'test'],
     payu: [{merchantKey:'merchant-key',salt:'payu-salt-value'},'test']
   };
@@ -54,7 +54,7 @@ test('enabled adapters do not inherit abstract lifecycle methods', () => {
     razorpay: [{keyId:'rzp_test_12345678',keySecret:'secret-value',webhookSecret:'hook-secret'},'test'],
     cashfree: [{appId:'app-id',secretKey:'secret-value',webhookSecret:'hook-secret'},'test'],
     jiopay: [{merchantId:'merchant-123',saltOrHashKey:'hash-secret'},'uat'],
-    paytm: [{mid:'merchant123',merchantKey:'merchant-secret',websiteName:'WEBSTAGING'},'staging'],
+    paytm: [{mid:'merchant123',merchantKey:'merchant-secret1',websiteName:'WEBSTAGING'},'staging'],
     phonepe: [{clientId:'client-id',clientSecret:'client-secret',clientVersion:'1',webhookUsername:'hook-user',webhookPassword:'hook-secret'},'test'],
     payu: [{merchantKey:'merchant-key',salt:'payu-salt-value'},'test']
   };
