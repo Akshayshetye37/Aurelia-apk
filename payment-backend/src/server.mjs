@@ -526,12 +526,12 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
   }
   if (body.provider === 'payu' && (!body.customer || typeof body.customer.firstName !== 'string' ||
       !body.customer.firstName.trim() || typeof body.customer.email !== 'string' ||
-      !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.customer.email))) {
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.customer.email))) {
     return fail(res, 400, 'invalid_payu_customer_schema');
   }
   if (['cashfree', 'phonepe', 'jiopay'].includes(body.provider) &&
       (!body.customer || typeof body.customer.id !== 'string' || !/^[A-Za-z0-9_-]{6,64}$/.test(body.customer.id) ||
-       typeof body.customer.phone !== 'string' || !/^\\+?[0-9]{8,15}$/.test(body.customer.phone))) {
+       typeof body.customer.phone !== 'string' || !/^\+?[0-9]{8,15}$/.test(body.customer.phone))) {
     return fail(res, 400, 'invalid_provider_customer_schema');
   }
   if (body.provider === 'paytm' && (!body.customer || typeof body.customer.id !== 'string' ||
@@ -557,10 +557,11 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
 app.get('/v1/payments/capabilities', requireTenantPaymentActor, async (req, res) => {
   const providers = await Promise.all(providerCatalogue.flatMap(provider =>
     provider.environments.map(async environment => {
-      const snap = await providerTenantDoc(req.tenant.id, provider.id, environment).get();
+      const adapterEnvironment = adapterEnvironmentOf(provider.id, environment);
+      const snap = await providerTenantDoc(req.tenant.id, provider.id, adapterEnvironment).get();
       const state = snap.exists ? snap.data() : {};
       return {
-        provider: provider.id, label: provider.label, environment,
+        provider: provider.id, label: provider.label, environment, adapterEnvironment,
         capabilities: provider.capabilities, productionReady: provider.productionReady,
         configured: state.configured === true,
         credentialsValidated: state.credentialsValidated === true,
@@ -623,7 +624,7 @@ app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express
     razorpay: { publicKey: 'keyId', secretKeys: ['keySecret', 'webhookSecret'], valid: x => /^rzp_(test|live)_[A-Za-z0-9]{8,}$/.test(x.keyId || '') },
     cashfree: { publicKey: 'appId', secretKeys: ['secretKey', 'webhookSecret'], valid: x => typeof x.appId === 'string' && /^[A-Za-z0-9_-]{6,128}$/.test(x.appId) },
     payu: { publicKey: 'merchantKey', secretKeys: ['salt'], valid: x => /^[A-Za-z0-9_-]{4,50}$/.test(x.merchantKey || '') },
-    phonepe: { publicKey: 'clientId', secretKeys: ['clientSecret', 'webhookPassword'], extra: ['clientVersion', 'webhookUsername'], valid: x => typeof x.clientId === 'string' && /^\\d{1,8}$/.test(String(x.clientVersion || '')) && typeof x.webhookUsername === 'string' && x.webhookUsername.length > 0 },
+    phonepe: { publicKey: 'clientId', secretKeys: ['clientSecret', 'webhookPassword'], extra: ['clientVersion', 'webhookUsername'], valid: x => typeof x.clientId === 'string' && /^\d{1,8}$/.test(String(x.clientVersion || '')) && typeof x.webhookUsername === 'string' && x.webhookUsername.length > 0 },
     paytm: { publicKey: 'mid', secretKeys: ['merchantKey'], extra: ['websiteName'], valid: x => typeof x.mid === 'string' && /^[A-Za-z0-9._@-]{6,50}$/.test(x.mid) && Buffer.byteLength(x.merchantKey || '', 'utf8') === 16 && typeof x.websiteName === 'string' && /^[A-Za-z0-9_-]{1,50}$/.test(x.websiteName) },
     jiopay: { publicKey: 'merchantId', secretKeys: ['saltOrHashKey'], extra: ['aggregatorId'], valid: x => typeof x.merchantId === 'string' && /^[A-Za-z0-9_-]{6,50}$/.test(x.merchantId) && (x.aggregatorId === undefined || typeof x.aggregatorId === 'string') }
   };
