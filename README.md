@@ -445,3 +445,16 @@ See [docs/LOCAL_FIRST_SYNC_ARCHITECTURE.md](./docs/LOCAL_FIRST_SYNC_ARCHITECTURE
 ### Canonical local repository migration (in progress)
 
 The browser/PWA IndexedDB repository is implemented at `src/storage/indexeddb-pms-repository.mjs`. It atomically commits entity state and outbox events, applies optimistic version checks, and provides leased delivery/acknowledgement/retry/conflict operations. Its guarded legacy ingestion path preserves the exact original JSON snapshot and refuses destructive overwrite. This is not yet the active app persistence path: Android native SQLite and the UI/domain command migration remain outstanding. Existing localStorage data must remain untouched until migration integration and device recovery tests pass.
+
+
+## Guarded local-first bootstrap implementation (2026-11-07)
+
+- Added `src/storage/pms-bootstrap-coordinator.mjs`. It opens the canonical IndexedDB repository, reads the actual legacy key `aurelia_lodge_v2`, validates the real legacy state topology, and imports it through the existing atomic migration API.
+- Migration identity is stable for an exact source payload. Repeated bootstrap is idempotent; a different payload cannot silently overwrite an existing canonical migration.
+- Cutover verification checks the exact raw snapshot, source key, entity count, and every imported top-level legacy collection by read-back. The original `aurelia_lodge_v2` value is never deleted or rewritten. A local status key is only a diagnostic hint; repository metadata and snapshot read-back are authoritative.
+- Added `tests/pms-bootstrap-coordinator.test.mjs` for successful migration, replay, malformed data fail-closed behavior, clean installation and single-flight initialization.
+- `scripts/prepare-web.js` now packages the coordinator alongside the repository modules.
+
+**Important boundary:** this is a guarded migration/bootstrap foundation, not the production UI cutover. The existing PMS still reads and writes its synchronous localStorage state. The coordinator reports `uiCutover: false`; it must not be wired into the live UI until every domain mutation and read path is moved to the asynchronous repository and recovery/rollback is proven.
+
+**Android boundary:** the current native SQLite repository is still a Java storage foundation, not a registered Capacitor repository plugin. This coordinator currently selects IndexedDB in the WebView and labels the engine accurately; it does not claim SQLite is active. A registered native bridge, encrypted database/key lifecycle, shared adapter conformance and physical-device recovery testing remain required. Cloud sync and live collection remain OFF.
