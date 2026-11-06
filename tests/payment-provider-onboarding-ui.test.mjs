@@ -13,11 +13,12 @@ test('PMS presents the device-local vault and does not render the retired LAN ow
   assert.ok(html.includes('No LAN or Docker payment appliance is used.'));
 });
 
-test('native credential administration supports the seven-provider schema catalogue', () => {
-  for (const provider of ['razorpay','cashfree','payu','phonepe','paytm','ccavenue','jiopay']) {
+test('native credential administration supports only the six wired provider schema catalogue', () => {
+  for (const provider of ['razorpay','cashfree','payu','phonepe','paytm','jiopay']) {
     assert.ok(html.includes(provider), 'missing provider: ' + provider);
     assert.ok(vault.includes('"'+provider+'".equals(provider)'), 'native vault missing provider: ' + provider);
   }
+  assert.ok(!vault.includes('"ccavenue".equals(provider)'));
   assert.ok(html.includes('gatewayVaultSave'));
   assert.ok(html.includes('gatewayVaultStatus'));
   assert.ok(html.includes('gatewayVaultRemove'));
