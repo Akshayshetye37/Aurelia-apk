@@ -129,6 +129,10 @@ test('native Razorpay and Cashfree checkout pass the host Activity and only emit
   assert.ok(patcher.includes('emitNativePaymentEvent("RAZORPAY_CALLBACK"'));
   assert.ok(patcher.includes('emitNativePaymentEvent("CASHFREE_CALLBACK"'));
   assert.ok(patcher.includes('"test".equals(environment)'));
+  assert.ok(patcher.includes('A provider checkout is already active on this device.'));
+  assert.ok(patcher.includes('boolean checkoutClaimed = false;'));
+  assert.ok(patcher.includes('if (checkoutClaimed && transactionId.equals(pendingCheckoutTransactionId))'));
+  assert.ok(patcher.includes('pendingCheckoutTransactionId = "";'));
   assert.ok(!patcher.includes('checkout.open(this, options)'));
   assert.ok(!patcher.includes('doPayment(this, payment)'));
 });
