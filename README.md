@@ -120,3 +120,29 @@ The active branch now contains a hardened local settlement foundation:
 - Root test suite now includes concurrency and cross-tenant idempotency coverage using the declared fake-indexeddb development dependency.
 
 **This is not an end-to-end payment release.** The cloud backend does not yet issue the matching v2 authorization and policy-lease envelopes, the standalone trusted Android bridge is still absent, and the current global accounting read-only kill switch blocks all folio balance mutations. Live collection, automatic settlement, and gateway-to-folio posting remain disabled. The new projector must not be wired into a production payment path until the backend issuer, device trust, durable persistence adapter, Android acceptance and release evidence are implemented and verified.
+
+
+## Latest production-development update (2026-11-06)
+
+Working branch: `feature/multi-provider-payment-backend`.
+
+### Dependency readiness probe hardening
+
+- `payment-backend/src/http/readiness-probe.mjs` contains the reusable readiness contract. It evaluates Firestore and Secret Manager independently and reports ready only when both checks succeed.
+- `payment-backend/src/server.mjs` now checks Firestore access and calls Secret Manager `accessSecretVersion` for `aurelia-payment-backend-health/versions/latest`. A metadata-only secret lookup is no longer treated as proof of readiness.
+- Secret Manager readiness requires a non-empty accessible payload. The payload is never included in the HTTP response; `/readyz` exposes only boolean `firestore` and `secretManager` checks and returns HTTP 503 when either dependency check fails.
+- `payment-backend/test/readiness-probe.test.mjs` adds regression coverage for successful dependency access, empty secret payloads, dependency failures and supported payload representations.
+- `.github/workflows/payment-backend-ci.yml` now runs `node --check` over backend `.mjs` source and test modules after the backend test command.
+
+### Latest commits
+
+| Commit | Change |
+|---|---|
+| `797c7bb` | Verify Secret Manager version access in readiness |
+| `4d9f754` | Extract reusable dependency readiness probe |
+| `bf42c9d` | Add fail-closed readiness regression tests |
+| `be8c186` | Add backend module syntax validation to CI |
+
+The latest branch head was verified as `be8c1867e98c185de40f5f01b9e8c9e9a4afb549` when this section was written. GitHub had not yet reported workflow check results for that commit. The source changes and CI configuration were fetched back from the branch, but the new Node tests and syntax checks must not be described as executed until GitHub Actions reports their result.
+
+**Release status is unchanged:** this readiness improvement does not enable live payments, authorize settlement, install the missing standalone trusted Android Pay Bridge, or complete the cloud-to-local-folio accounting integration. Keep live collection and gateway-to-folio posting disabled.
