@@ -31,7 +31,7 @@ test('recovery guards are hoisted and status is initialized before startup recov
 
 test('empty booking inventory cannot abort the main script before SUB is initialized', () => {
   assert.ok(html.includes('if(S.b[1])S.b[1].p=1000;'));
-  assert.ok(!html.includes('S.b[1].p=1000;') || html.includes('if(S.b[1])S.b[1].p=1000;'));
+  const assignment = html.indexOf('S.b[1].p=1000;');\n  const guard = html.indexOf('if(S.b[1])S.b[1].p=1000;');\n  assert.equal(assignment, guard + 'if(S.b[1])'.length, 'the booking mutation must only exist behind its existence guard');
   const firstScript = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)][0]?.[1] || '';
   assert.ok(firstScript.indexOf('if(S.b[1])S.b[1].p=1000;') < firstScript.indexOf('const SUB={'),
     'guarded optional demo mutation must execute before SUB is declared');
