@@ -45,6 +45,7 @@ jobs:
           node --check src/payments/settlement-journal.mjs
           node --check src/payments/settlement-service.mjs
           node --check src/payments/settlement-projector.mjs
+          node --check src/payments/payment-device-bridge.mjs
           node --check tests/settlement-projector.test.mjs
       - name: Run full application test suite
         run: npm test
