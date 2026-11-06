@@ -4684,7 +4684,8 @@ import { IndexedDbSettlementJournal } from './src/payments/settlement-journal.mj
 import { SettlementAuthorizationVerifier } from './src/payments/settlement-authorization.mjs';
 import { SettlementProjector } from './src/payments/settlement-projector.mjs';
 import { SETTLEMENT_TRUSTED_KEYS, SETTLEMENT_AUTHORITY_ISSUER } from './src/payments/settlement-trust.mjs';
-import { enrollPaymentDevice, getPaymentDeviceIdToken, leaseNextSettlementCommand, acknowledgeSettlementCommand, paymentDeviceNativeAvailable } from './src/payments/payment-device-bridge.mjs';
+import { enrollPaymentDevice, getPaymentDeviceIdToken, leaseNextSettlementCommand, acknowledgeSettlementCommand, paymentDeviceNativeAvailable, getNativePaymentEngineStatus, startNativeProviderCheckout } from './src/payments/payment-device-bridge.mjs';
+import { PaymentApiClient } from './src/services/payment-api.mjs';
 
 const journalPromise = Promise.resolve().then(() => new IndexedDbSettlementJournal());
 const verifier = new SettlementAuthorizationVerifier({
@@ -4712,6 +4713,71 @@ const projectorPromise = journalPromise.then(journal => {
   autoSettlementEnabled:false,
   now:()=>new Date().toISOString()
  });
+});
+
+const pendingCloudIntents = new Map();
+function cloudPaymentApi() {
+ const baseUrl = window.AureliaPaymentApiBaseUrl;
+ if(!baseUrl)throw new Error('Enroll this Android device with the cloud payment authority first.');
+ return new PaymentApiClient({ baseUrl, tokenProvider:getPaymentDeviceIdToken });
+}
+function mapCloudPaymentStatus(intent) {
+ if(intent.accountingStatus === 'POSTED_TO_LOCAL_FOLIO') return 'POSTED_TO_FOLIO';
+ if(intent.status === 'CAPTURED_PENDING_ACCOUNTING') return 'CAPTURED_UNPOSTED';
+ if(intent.status === 'FAILED_TO_INITIATE' || intent.status === 'FAILED') return 'FAILED';
+ if(intent.status === 'RECONCILIATION_REQUIRED') return 'RECONCILIATION_REQUIRED';
+ if(intent.status === 'CREATED') return 'ORDER_CREATED';
+ return 'AWAITING_PROVIDER';
+}
+
+window.AndroidPaymentEngine = Object.freeze({
+ async getEngineStatus() {
+  if(!paymentDeviceNativeAvailable()) return { ready:false, livePaymentsEnabled:false };
+  const native = await getNativePaymentEngineStatus();
+  if(native?.ready !== true || !window.AureliaPaymentApiBaseUrl) {
+   return { ready:false, livePaymentsEnabled:false, deviceId:native?.deviceId || null };
+  }
+  const capabilities = await cloudPaymentApi().getCapabilities();
+  window.AureliaLocalGatewayAdmin = window.AureliaLocalGatewayAdmin || {};
+  window.AureliaLocalGatewayAdmin.providers = capabilities.providers || [];
+  return { ready:true, livePaymentsEnabled:false, deviceId:native.deviceId,
+   providers:capabilities.providers || [], folioSettlementEnabled:false };
+ },
+ async createPaymentIntent(payload) {
+  if(!payload || !/^[0-9a-f-]{36}$/i.test(payload.transactionId || '') ||
+     !window.AureliaPaymentDeviceId) throw new Error('A verified payment device is required.');
+  const { transactionId, idempotencyKey, ...intentInput } = payload;
+  intentInput.deviceId = window.AureliaPaymentDeviceId;
+  const result = await cloudPaymentApi().createIntent(intentInput, { idempotencyKey });
+  if(!result?.intentId || !result?.providerOrderId || !result?.checkoutData) {
+   throw new Error('Cloud payment authority returned an incomplete checkout intent.');
+  }
+  pendingCloudIntents.set(transactionId, { ...result, transactionId, payload });
+  return { transactionId, intentId:result.intentId, status:mapCloudPaymentStatus(result),
+   providerOrderId:result.providerOrderId, checkoutData:result.checkoutData };
+ },
+ async startCheckout({ transactionId } = {}) {
+  const intent = pendingCloudIntents.get(transactionId);
+  if(!intent) throw new Error('The verified cloud checkout intent is not available.');
+  if(intent.payload.environment !== 'test') throw new Error('Live checkout is disabled in this release.');
+  const result = await startNativeProviderCheckout({
+   transactionId, provider:intent.payload.provider, environment:intent.payload.environment,
+   providerOrderId:intent.providerOrderId, checkoutData:intent.checkoutData,
+   amountMinor:intent.payload.amountMinor, currency:intent.payload.currency,
+   customer:intent.payload.customer || null
+  });
+  if(result?.opened !== true) throw new Error('Native provider checkout did not open.');
+  return { status:'PENDING', providerOrderId:intent.providerOrderId, intentId:intent.intentId };
+ },
+ async getPaymentStatus({ transactionId, intentId } = {}) {
+  const pending = pendingCloudIntents.get(transactionId);
+  const id = intentId || pending?.intentId;
+  if(!id) throw new Error('The cloud payment intent ID is required for reconciliation.');
+  const intent = await cloudPaymentApi().getIntent(id);
+  return { transactionId, intentId:id, providerPaymentId:intent.providerPaymentId || null,
+   status:mapCloudPaymentStatus(intent), accountingStatus:intent.accountingStatus,
+   accountingBlockReason:intent.accountingBlockReason || null };
+ }
 });
 
 window.aureliaEnrollPaymentDevice = enrollPaymentDevice;
