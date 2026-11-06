@@ -1136,37 +1136,46 @@ function transitionPayment(transactionId, expectedStatuses, nextStatus, reason, 
       // The command, per-device sequence, and outbox event commit atomically
       // with the captured payment transition.
       if (current.device_id && current.folio_id) {
-        const prior = db.prepare('SELECT command_id FROM settlement_commands WHERE device_id=? AND transaction_id=?')
-          .get(current.device_id,transactionId);
-        if (!prior) {
-          db.prepare('INSERT OR IGNORE INTO device_sequence_counters(device_id,last_sequence) VALUES(?,0)').run(current.device_id);
-          const counter = db.prepare('SELECT last_sequence FROM device_sequence_counters WHERE device_id=?').get(current.device_id);
-          const sequenceId = counter.last_sequence + 1;
-          db.prepare('UPDATE device_sequence_counters SET last_sequence=? WHERE device_id=?').run(sequenceId,current.device_id);
-          const commandId = crypto.randomUUID();
-          const command = {
-            commandId, deviceId: current.device_id, sequenceId, transactionId,
-            idempotencyKey: current.idempotency_key, folioId: current.folio_id,
-            amountMinor: current.amount_minor, currency: current.currency,
-            provider: current.provider, providerPaymentId: current.provider_payment_id || null,
-            settlement: {
-              provider: current.provider, commandId, bookingId: current.folio_id,
-              amount: current.amount_minor / 100, method: current.provider,
-              reference: current.provider_payment_id || current.provider_order_id || current.id,
-              source: 'staff_review', verificationConfirmed: true,
-              idempotencyKey: 'settlement:' + current.provider + ':command:' + commandId
-            }
-          };
-          const payload = JSON.stringify(command);
-          // Hash the protocol's canonical representation, not insertion-order JSON.
-          // Native clients independently canonicalize the parsed payload before accepting it.
-          const payloadHash = crypto.createHash('sha256').update(canonicalJson(command)).digest('hex');
-          db.prepare(`INSERT INTO settlement_commands(command_id,device_id,sequence_id,transaction_id,
-            idempotency_key,folio_id,amount_minor,currency,payload_hash,payload,created_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(commandId,current.device_id,sequenceId,transactionId,
-              current.idempotency_key,current.folio_id,current.amount_minor,current.currency,payloadHash,payload,now());
-          db.prepare('INSERT INTO device_command_state(command_id,status,next_attempt_at) VALUES(?,?,?)')
-            .run(commandId,'PENDING',now());
+        // A settlement command is created only when the provider's immutable
+        // payment ID and the merchant-account identity were snapshotted at
+        // checkout dispatch. An order ID is not a substitute for a payment ID.
+        const verifiedPaymentId = providerPaymentId || current.provider_payment_id;
+        if (!current.provider_account_id || !verifiedPaymentId) {
+          writeAudit('PAYMENT_CAPTURED_WITHOUT_SETTLEMENT_COMMAND_BINDING', transactionId);
+        } else {
+          const prior = db.prepare('SELECT command_id FROM settlement_commands WHERE device_id=? AND transaction_id=?')
+            .get(current.device_id,transactionId);
+          if (!prior) {
+            db.prepare('INSERT OR IGNORE INTO device_sequence_counters(device_id,last_sequence) VALUES(?,0)').run(current.device_id);
+            const counter = db.prepare('SELECT last_sequence FROM device_sequence_counters WHERE device_id=?').get(current.device_id);
+            const sequenceId = counter.last_sequence + 1;
+            db.prepare('UPDATE device_sequence_counters SET last_sequence=? WHERE device_id=?').run(sequenceId,current.device_id);
+            const commandId = crypto.randomUUID();
+            const settlement = {
+              tenantId: PROPERTY_ID, deviceId: current.device_id,
+              provider: current.provider, providerAccountId: current.provider_account_id,
+              environment: current.environment, commandId,
+              providerTransactionId: verifiedPaymentId, bookingId: current.folio_id,
+              amountPaise: current.amount_minor, method: current.provider,
+              reference: verifiedPaymentId
+            };
+            const command = {
+              commandId, deviceId: current.device_id, sequenceId, transactionId,
+              idempotencyKey: current.idempotency_key, folioId: current.folio_id,
+              amountMinor: current.amount_minor, currency: current.currency,
+              provider: current.provider, providerAccountId: current.provider_account_id,
+              providerPaymentId: verifiedPaymentId, settlement
+            };
+            const payload = JSON.stringify(command);
+            // Hash the protocol's canonical representation, not insertion-order JSON.
+            const payloadHash = crypto.createHash('sha256').update(canonicalJson(command)).digest('hex');
+            db.prepare(`INSERT INTO settlement_commands(command_id,device_id,sequence_id,transaction_id,
+              idempotency_key,folio_id,amount_minor,currency,payload_hash,payload,created_at)
+              VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(commandId,current.device_id,sequenceId,transactionId,
+                current.idempotency_key,current.folio_id,current.amount_minor,current.currency,payloadHash,payload,now());
+            db.prepare('INSERT INTO device_command_state(command_id,status,next_attempt_at) VALUES(?,?,?)')
+              .run(commandId,'PENDING',now());
+          }
         }
       }
     }
@@ -1218,10 +1227,10 @@ app.post('/v1/payments/dispatch', ownerAuth, requireBrowserMutationOrigin, async
       ...(!checkout && existing.status === 'PENDING' ? { reconciliationRequired: true } : {}) });
   }
   const insert = db.transaction(() => {
-    db.prepare(`INSERT INTO transactions(id,provider,environment,amount_minor,currency,status,idempotency_key,device_id,folio_id,created_at,updated_at)
-      VALUES(?,?,?,?,?,'DISPATCHING',?,?,?,?,?)`).run(
+    db.prepare(`INSERT INTO transactions(id,provider,environment,amount_minor,currency,status,idempotency_key,provider_account_id,device_id,folio_id,created_at,updated_at)
+      VALUES(?,?,?,?,?,'DISPATCHING',?,?,?,?,?,?)`).run(
       b.transactionId, provider, environment, b.amountMinor, b.currency, b.idempotencyKey,
-      b.deviceId || null, b.folioId || null, now(), now());
+      providerAccountId, b.deviceId || null, b.folioId || null, now(), now());
     db.prepare('INSERT INTO transaction_journal(transaction_id,from_status,to_status,reason,created_at) VALUES(?,NULL,?,?,?)')
       .run(b.transactionId, 'DISPATCHING', 'durable_intent_created', now());
     writeAudit('PAYMENT_INTENT_CREATED', b.transactionId);
@@ -1231,6 +1240,7 @@ app.post('/v1/payments/dispatch', ownerAuth, requireBrowserMutationOrigin, async
     const raced = db.prepare('SELECT * FROM transactions WHERE idempotency_key=?').get(b.idempotencyKey);
     if (raced && raced.id === b.transactionId && raced.provider === provider &&
         raced.amount_minor === b.amountMinor && raced.currency === b.currency &&
+        raced.provider_account_id === providerAccountId &&
         raced.device_id === (b.deviceId || null) && raced.folio_id === (b.folioId || null)) {
       return res.status(200).json({ transactionId: raced.id, status: raced.status, duplicate: true });
     }
