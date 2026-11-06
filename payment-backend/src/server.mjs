@@ -420,12 +420,21 @@ app.get('/healthz', (_req, res) => res.json({ ok: true }));
 // service without exposing project, tenant, secret or provider information.
 app.get('/readyz', async (_req, res) => {
   const checks = { firestore: false, secretManager: false };
+  // A successful getSecret only proves that the metadata resource exists.
+  // Readiness must prove the runtime identity can access an enabled secret
+  // version, just as the payment credential path does. Never return its bytes.
+  const healthSecret = 'projects/' + projectId + '/secrets/aurelia-payment-backend-health/versions/latest';
   const results = await Promise.allSettled([
     db.doc('aureliaSystem/health').get(),
-    sm.getSecret({ name: 'projects/' + projectId + '/secrets/aurelia-payment-backend-health' })
+    sm.accessSecretVersion({ name: healthSecret })
   ]);
   checks.firestore = results[0].status === 'fulfilled';
-  checks.secretManager = results[1].status === 'fulfilled';
+  if (results[1].status === 'fulfilled') {
+    const payload = results[1].value?.[0]?.payload?.data;
+    checks.secretManager = Buffer.isBuffer(payload) ? payload.length > 0
+      : payload instanceof Uint8Array ? payload.byteLength > 0
+        : typeof payload === 'string' && payload.length > 0;
+  }
   const ready = checks.firestore && checks.secretManager;
   return res.status(ready ? 200 : 503).json({ ok: ready, checks });
 });
