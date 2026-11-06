@@ -512,8 +512,10 @@ export class FirestorePaymentRepository {
           idempotencyKey: 'aur_' + digest(intentId).slice(0, 32)
         };
 
+    let observedRemote = null;
     try {
       const remote = await adapter.createOrder(providerInput);
+      observedRemote = remote;
       if (!remote || typeof remote.orderId !== 'string' || !remote.orderId ||
           remote.amountMinor !== payload.amountMinor || remote.currency !== payload.currency) {
         throw new Error('provider_order_binding_mismatch');
@@ -567,6 +569,20 @@ export class FirestorePaymentRepository {
           tx.update(lockRef, { state: next, updatedAt: this.clock().toISOString() });
         }
       }).catch(() => {});
+      // A concurrent reconciliation worker may have recovered this exact
+      // provider order while the original create-order response was returning.
+      // Return the durable winner instead of incorrectly downgrading it to UNKNOWN.
+      if (observedRemote?.orderId) {
+        const refreshed = await intentRef.get().catch(() => null);
+        const winner = refreshed?.exists ? refreshed.data() : null;
+        if (winner?.state === 'CREATED' && winner.providerOrderId === observedRemote.orderId) {
+          return {
+            intentId, status: 'CREATED', provider: payload.provider,
+            environment: payload.environment, providerOrderId: winner.providerOrderId,
+            checkoutData: winner.checkoutData, isDuplicate: true, recovered: true
+          };
+        }
+      }
       return { intentId, status: 'UNKNOWN', message: 'Payment initiation outcome requires server reconciliation.' };
     }
   }
