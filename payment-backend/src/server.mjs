@@ -11,6 +11,7 @@ import { createGracefulShutdown } from './http/graceful-shutdown.mjs';
 import { configureHttpServerTimeouts } from './http/server-timeouts.mjs';
 import { publicHttpError } from './http/public-http-error.mjs';
 import { paymentRouteError } from './http/payment-route-errors.mjs';
+import { inspectReadinessDependencies } from './http/readiness-probe.mjs';
 import { disableAllEnabledSecretVersions } from './secrets/secret-version-management.mjs';
 import { canonicalBytes } from '../../src/payments/canonical.mjs';
 import { createSettlementSigner } from './settlement/authorization-signer.mjs';
@@ -419,24 +420,16 @@ app.get('/healthz', (_req, res) => res.json({ ok: true }));
 // runtime identity can reach the two Google Cloud dependencies used by the
 // service without exposing project, tenant, secret or provider information.
 app.get('/readyz', async (_req, res) => {
-  const checks = { firestore: false, secretManager: false };
-  // A successful getSecret only proves that the metadata resource exists.
-  // Readiness must prove the runtime identity can access an enabled secret
-  // version, just as the payment credential path does. Never return its bytes.
-  const healthSecret = 'projects/' + projectId + '/secrets/aurelia-payment-backend-health/versions/latest';
-  const results = await Promise.allSettled([
-    db.doc('aureliaSystem/health').get(),
-    sm.accessSecretVersion({ name: healthSecret })
-  ]);
-  checks.firestore = results[0].status === 'fulfilled';
-  if (results[1].status === 'fulfilled') {
-    const payload = results[1].value?.[0]?.payload?.data;
-    checks.secretManager = Buffer.isBuffer(payload) ? payload.length > 0
-      : payload instanceof Uint8Array ? payload.byteLength > 0
-        : typeof payload === 'string' && payload.length > 0;
-  }
-  const ready = checks.firestore && checks.secretManager;
-  return res.status(ready ? 200 : 503).json({ ok: ready, checks });
+  const result = await inspectReadinessDependencies({
+    firestoreCheck: () => db.doc('aureliaSystem/health').get(),
+    secretManagerCheck: async () => {
+      const healthSecret = 'projects/' + projectId + '/secrets/aurelia-payment-backend-health/versions/latest';
+      const [version] = await sm.accessSecretVersion({ name: healthSecret });
+      return version?.payload?.data;
+    }
+  });
+  const checks = { firestore: result.firestore, secretManager: result.secretManager };
+  return res.status(result.ready ? 200 : 503).json({ ok: result.ready, checks });
 });
 
 const paymentRepository = new FirestorePaymentRepository({
