@@ -4,7 +4,7 @@
 
 **Current repository:** `Akshayshetye37/Aurelia-apk`  
 **Working branch:** `feature/multi-provider-payment-backend`  
-**Latest persistence implementation commit:** `469795fd560cc2246ba5dc7b4582d1100e76661b`
+**Latest persistence/test correction:** `3acab169a17d4d09d21101ed7dd3380ddc51ca1e`
 
 ### Product architecture
 
@@ -27,7 +27,7 @@ A zero-Aurelia-cloud standalone PMS mode remains a design goal for ordinary loca
 | Existing PMS runtime | Current booking, room, guest and folio UI continues to run on its existing state path. | Still uses the legacy `localStorage`-backed application state; not yet migrated to the new canonical repository. |
 | IndexedDB repository | `src/storage/indexeddb-pms-repository.mjs` provides transactional entity/outbox storage, version checks, migration snapshot support, outbox leasing and delivery state. | Browser/PWA foundation only; not yet the active UI persistence path. |
 | Shared storage contract | `src/storage/pms-repository-contract.mjs` defines the common adapter surface and identity/version/event validation. | Needs full cross-adapter conformance tests and further API alignment as the domain command pipeline is integrated. |
-| IndexedDB hardening | Mutation callbacks are synchronous within a transaction; event metadata/sequence validation is applied; retry timestamps are enforced; exact raw migration JSON is required. | Regression tests added; latest CI result must be checked before treating the revision as validated. |
+| IndexedDB hardening | Mutation callbacks are synchronous within a transaction; event metadata/sequence validation is applied; retry timestamps are enforced; exact raw migration JSON is required. | The root-level CI test had a stale retry assertion that expected an event to be reclaimed before its future `retryAt`; corrected to assert it remains unavailable until backoff expires. The retry implementation is intentionally not weakened. |
 | Android SQLite foundation | `android/templates/LocalPmsRepository.java` adds native entity/outbox tables, version-checked atomic writes and a transactional legacy snapshot/import foundation. | Template is copied by `scripts/patch-android.js`; it is not yet called by the WebView app or the live domain/UI path. |
 | Web packaging | `scripts/prepare-web.js` packages the shared storage modules. | Packaging inclusion is not equivalent to runtime activation. |
 | Local sync foundation | `src/sync/local-sync-coordinator.mjs` and its architecture documentation define event delivery, acknowledgement, retry and conflict boundaries. | Sync remains OFF; no production transport is active. |
@@ -72,9 +72,9 @@ A zero-Aurelia-cloud standalone PMS mode remains a design goal for ordinary loca
 
 ### Current verification state
 
-- Latest source commit at this documentation update: `469795fd560cc2246ba5dc7b4582d1100e76661b`.
-- Latest PMS source tests / web packaging / Android validation workflow for that revision was **pending** when last checked. Earlier runs were cancelled as later commits superseded them.
-- Do not interpret a pending workflow, successful file upload or repository commit as a passing test, compiled Android build, physical-device acceptance or production certification.
+- Latest source/test correction: `3acab169a17d4d09d21101ed7dd3380ddc51ca1e` (root-level outbox retry test now verifies that a future `retryAt` is respected and that conflict transitions require a separate active lease).
+- Previous CI run `42295367809` failed because the root-level test expected immediate re-claim after scheduling a future retry. That expectation contradicted the repository's enforced backoff behavior; the production retry implementation was retained.
+- CI for the correction must complete before the storage foundation is considered verified. A commit or queued workflow is not a passing test, compiled Android build, physical-device acceptance or production certification.
 - Live gateway collection: **OFF**. Optional cloud sync: **OFF**. New SQLite/IndexedDB repositories: **not yet the active canonical application store**.
 
 ---
