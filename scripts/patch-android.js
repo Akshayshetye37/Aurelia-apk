@@ -1162,7 +1162,9 @@ public class MainActivity extends BridgeActivity {
           backupExecutor.execute(() -> {
             try {
               if (paymentDeviceClient == null) throw new IllegalStateException("Trusted payment device is not configured.");
-              PaymentDeviceClient.Lease lease = paymentDeviceClient.leaseNext();
+              String idToken = obj.optString("idToken", "");
+              if (idToken.length() < 20) throw new IllegalArgumentException("Fresh Firebase identity is required.");
+              PaymentDeviceClient.Lease lease = paymentDeviceClient.leaseNext(idToken);
               if (lease == null) {
                 js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",true," + q("{\"available\":false}") + ")");
                 return;
@@ -1192,7 +1194,9 @@ public class MainActivity extends BridgeActivity {
               if (paymentDeviceClient == null || lease == null || !lease.getSettlementAuthorized()) {
                 throw new IllegalStateException("No verified, unexpired settlement lease is available.");
               }
-              JSONObject result = paymentDeviceClient.acknowledge(lease, ledgerAckId);
+              String idToken = obj.optString("idToken", "");
+              if (idToken.length() < 20) throw new IllegalArgumentException("Fresh Firebase identity is required.");
+              JSONObject result = paymentDeviceClient.acknowledge(lease, ledgerAckId, idToken);
               paymentDeviceLeases.remove(commandId);
               js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",true," + q(result.toString()) + ")");
             } catch (Exception error) {
