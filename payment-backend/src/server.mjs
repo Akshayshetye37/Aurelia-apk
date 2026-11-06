@@ -1019,32 +1019,23 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
   }
 });
 app.post('/v1/admin/providers/:provider/activate', requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
-  const { provider } = req.params, environment = envOf(req);
-  if (!['razorpay', 'cashfree'].includes(provider) || !environment || req.body?.confirm !== true) {
+  const { provider } = req.params, publicEnvironment = envOf(req), environment = adapterEnvironmentOf(provider, publicEnvironment);
+  if (!implementedProviderAdapters().includes(provider) || !environment || req.body?.confirm !== true) {
     return fail(res, 400, 'explicit_activation_confirmation_required');
   }
-  const blocked = await enforcePaymentControl(req, res,
-    environment === 'live' ? 'live_collection' : 'test_collection');
-  if (blocked) return blocked;
-  // Independent production release gate: the control flag cannot override this.
-  if (environment === 'live') {
-    return fail(res, 409, 'live_payments_blocked_accounting_pipeline_incomplete');
+  if (publicEnvironment === 'live' && providerQualificationStatus(provider).liveCollection !== true) {
+    return fail(res, 403, 'live_collection_not_enabled');
   }
+  const blocked = await enforcePaymentControl(req, res, 'test_collection');
+  if (blocked) return blocked;
   const ref = providerTenantDoc(req.tenant.id, provider, environment);
   const snap = await ref.get(), state = snap.exists ? snap.data() : {};
   if (state.credentialsValidated !== true ||
-      (environment === 'test' && (state.sandboxTestPassed !== true || state.webhookVerified !== true))) {
+      state.sandboxTestPassed !== true || state.webhookVerified !== true) {
     return fail(res, 409, 'provider_onboarding_checks_incomplete');
   }
-  if (environment === 'live') {
-    const sandbox = await providerTenantDoc(req.tenant.id, provider, 'test').get();
-    if (!sandbox.exists || sandbox.data().sandboxTestPassed !== true || sandbox.data().webhookVerified !== true) {
-      return fail(res, 409, 'sandbox_acceptance_required');
-    }
-    if (state.webhookVerified !== true) return fail(res, 409, 'live_webhook_verification_required');
-  }
   await ref.set({ active: true, activatedAt: FieldValue.serverTimestamp(), activatedBy: req.actor.uid }, { merge: true });
-  return res.json({ active: true, provider, environment });
+  return res.json({ active: true, provider, environment: publicEnvironment, adapterEnvironment: environment });
 });
 app.use((err, _req, res, next) => {
   // Deliberately do not log request bodies, tokens, provider responses or secrets.
