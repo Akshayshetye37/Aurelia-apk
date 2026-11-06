@@ -4684,7 +4684,7 @@ import { IndexedDbSettlementJournal } from './src/payments/settlement-journal.mj
 import { SettlementAuthorizationVerifier } from './src/payments/settlement-authorization.mjs';
 import { SettlementProjector } from './src/payments/settlement-projector.mjs';
 import { SETTLEMENT_TRUSTED_KEYS, SETTLEMENT_AUTHORITY_ISSUER } from './src/payments/settlement-trust.mjs';
-import { enrollPaymentDevice, leaseNextSettlementCommand, acknowledgeSettlementCommand, paymentDeviceNativeAvailable } from './src/payments/payment-device-bridge.mjs';
+import { enrollPaymentDevice, getPaymentDeviceIdToken, leaseNextSettlementCommand, acknowledgeSettlementCommand, paymentDeviceNativeAvailable } from './src/payments/payment-device-bridge.mjs';
 
 const journalPromise = Promise.resolve().then(() => new IndexedDbSettlementJournal());
 const verifier = new SettlementAuthorizationVerifier({
@@ -4715,7 +4715,7 @@ const projectorPromise = journalPromise.then(journal => {
 });
 
 window.aureliaEnrollPaymentDevice = enrollPaymentDevice;
-window.aureliaApplyJournaledSettlement = async (lease, tokenProvider) => {
+window.aureliaApplyJournaledSettlement = async (lease, tokenProvider = getPaymentDeviceIdToken) => {
  if(!lease?.settlementAuthorized || !lease?.authorization || !lease?.policyLease) {
   return { status:'blocked', code:'SETTLEMENT_LEASE_DISABLED', message:'The signed policy lease does not authorize folio posting.' };
  }
@@ -4734,7 +4734,7 @@ window.aureliaApplyJournaledSettlement = async (lease, tokenProvider) => {
  return { ...result, acknowledgement };
 };
 
-window.aureliaSyncVerifiedSettlements = async tokenProvider => {
+window.aureliaSyncVerifiedSettlements = async (tokenProvider = getPaymentDeviceIdToken) => {
  if(!paymentDeviceNativeAvailable()) return { status:'blocked', code:'NATIVE_BRIDGE_UNAVAILABLE' };
  if(typeof tokenProvider !== 'function') return { status:'blocked', code:'FIREBASE_TOKEN_PROVIDER_REQUIRED' };
  const lease = await leaseNextSettlementCommand({ tokenProvider });
