@@ -67,9 +67,19 @@ export class IndexedDbSettlementJournal {
       const existing = await request(store.get(key));
       if (existing) {
         if (existing.payloadHash !== payloadHash) { const e = new Error("Settlement identity was reused with a different payload"); e.code = "SETTLEMENT_IDEMPOTENCY_CONFLICT"; throw e; }
+        // Signed authorization and short policy lease are renewable evidence.
+        // The immutable command payload/hash remains unchanged across redelivery.
+        if (existing.status === "PENDING" && input.authorization && input.policyLease) {
+          existing.authorization = canonicalize(input.authorization);
+          existing.policyLease = canonicalize(input.policyLease);
+          store.put(existing);
+        }
         await done; return { record: clone(existing), duplicate: true };
       }
-      const record = { key, ...scope, providerTransactionId, commandId, payload, payloadHash, status: "PENDING", createdAt: this.now(), appliedAt: null, rejectedAt: null, rejectedReason: null };
+      const record = { key, ...scope, providerTransactionId, commandId, payload, payloadHash,
+        authorization: input.authorization ? canonicalize(input.authorization) : null,
+        policyLease: input.policyLease ? canonicalize(input.policyLease) : null,
+        status: "PENDING", createdAt: this.now(), appliedAt: null, rejectedAt: null, rejectedReason: null };
       store.add(record); await done; return { record: clone(record), duplicate: false };
     } catch (error) {
       try { tx.abort(); } catch {} await done.catch(() => {});
