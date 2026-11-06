@@ -36,7 +36,11 @@ These controls improve runtime reliability and deployment safety; they do not co
 
 ## Implemented provider coverage
 
-The current cloud repository and provider factory allow only Razorpay and Cashfree. The other providers (PayU, PhonePe, Paytm, JioPay and CCAvenue) are not implemented in the cloud runtime. Do not mark them configured, validated, active or live-capable until their adapters, API contract tests, merchant sandbox/UAT and webhook/refund/reconciliation flows are complete.
+The provider factory now has seven-operation contract implementations wired for Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay. CCAvenue remains catalogue-only because the current official public material reviewed does not establish a complete standard checkout/status/refund contract for the merchant product.
+
+**Important separation:** only Razorpay and Cashfree are currently exposed by the cloud payment-intent, credential, test-order and webhook routes. PayU, PhonePe, Paytm and JioPay are factory-wired and adapter-contract-tested, but are not enabled through the cloud checkout API. Their provider-specific credential onboarding, webhook routing, reconciliation and merchant UAT are not yet integrated. The factory's qualification status reports this distinction; adapter existence is not production readiness.
+
+Do not mark any additional provider configured, validated, active or live-capable until its cloud API integration, provider-specific sandbox/UAT, verified webhook and refund recovery flows pass. Live collection remains disabled for every provider.
 
 See [Hybrid Payment Architecture](../docs/HYBRID_PAYMENT_ARCHITECTURE.md) and [Provider Integration Status](../docs/PROVIDER_INTEGRATION_STATUS.md).
 
