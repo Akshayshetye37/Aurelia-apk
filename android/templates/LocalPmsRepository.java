@@ -33,16 +33,16 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
 
   synchronized JSONObject getEntity(String type,String id) {
     validateIdentity(type,"entity type"); validateIdentity(id,"entity ID");
-    try(Cursor c=getReadableDatabase().rawQuery("SELECT version,data_json FROM pms_entities WHERE entity_type=? AND entity_id=?",new String[]{type,id})) {
+    try(Cursor c=getReadableDatabase().rawQuery("SELECT version,data_json,updated_at FROM pms_entities WHERE entity_type=? AND entity_id=?",new String[]{type,id})) {
       if(!c.moveToFirst())return null;
-      JSONObject out=new JSONObject(); out.put("version",c.getLong(0)); out.put("data",new JSONTokener(c.getString(1)).nextValue()); return out;
+      JSONObject out=new JSONObject(); out.put("key",type+":"+id);out.put("type",type);out.put("id",id);out.put("version",c.getLong(0));out.put("data",new JSONTokener(c.getString(1)).nextValue());out.put("updatedAt",isoTimestamp(c.getLong(2)));return out;
     } catch(Exception e){throw failure("pms_entity_read_failed",e);}
   }
 
   synchronized JSONArray listEntities(String type) {
     validateIdentity(type,"entity type"); JSONArray rows=new JSONArray();
     try(Cursor c=getReadableDatabase().rawQuery("SELECT entity_id,version,data_json,updated_at FROM pms_entities WHERE entity_type=? ORDER BY entity_id",new String[]{type})) {
-      while(c.moveToNext()) { JSONObject row=new JSONObject(); row.put("key",type+":"+c.getString(0)); row.put("type",type); row.put("id",c.getString(0)); row.put("version",c.getLong(1)); row.put("data",new JSONTokener(c.getString(2)).nextValue()); row.put("updatedAt",c.getLong(3)); rows.put(row); }
+      while(c.moveToNext()) { JSONObject row=new JSONObject(); row.put("key",type+":"+c.getString(0)); row.put("type",type); row.put("id",c.getString(0)); row.put("version",c.getLong(1)); row.put("data",new JSONTokener(c.getString(2)).nextValue()); row.put("updatedAt",c.getLong(3)); row.put("updatedAt",isoTimestamp(c.getLong(3)));rows.put(row); }
       return rows;
     } catch(Exception e){throw failure("pms_entity_list_failed",e);}
   }
@@ -147,6 +147,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static JSONObject outboxRow(Cursor c,String owner,long leaseUntil,int attempts) throws Exception {
     JSONObject x=new JSONObject();x.put("eventId",c.getString(0));x.put("tenantId",c.getString(1));x.put("propertyId",c.getString(2));x.put("deviceId",c.getString(3));x.put("entityType",c.getString(4));x.put("entityId",c.getString(5));x.put("sequence",c.getLong(6));x.put("eventType",c.getString(7));x.put("schemaVersion",c.getLong(8));x.put("occurredAt",c.getString(9));x.put("payload",new JSONTokener(c.getString(10)).nextValue());x.put("status","IN_FLIGHT");x.put("attempts",attempts);x.put("retryAt",c.isNull(13)?JSONObject.NULL:c.getString(13));x.put("leaseOwner",owner);x.put("leaseUntil",new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",java.util.Locale.US).format(new java.util.Date(leaseUntil)));x.put("acknowledgedAt",c.isNull(18)?JSONObject.NULL:c.getLong(18));x.put("lastErrorCode",c.isNull(16)?JSONObject.NULL:c.getString(16));x.put("createdAt",new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",java.util.Locale.US).format(new java.util.Date(c.getLong(17))));return x;
   }
+  private static String isoTimestamp(long value){return new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",java.util.Locale.US).format(new java.util.Date(value));}
   private static long entityVersion(SQLiteDatabase db,String type,String id){try(Cursor c=db.rawQuery("SELECT version FROM pms_entities WHERE entity_type=? AND entity_id=?",new String[]{type,id})){return c.moveToFirst()?c.getLong(0):0;}}
   private static void validateEvent(JSONObject e,String type,String id,long sequence){try{for(String k:new String[]{"eventId","tenantId","propertyId","deviceId","eventType"})validateIdentity(e.getString(k),k);if(!type.equals(e.getString("entityType"))||!id.equals(e.getString("entityId"))||e.getLong("sequence")!=sequence||e.getLong("schemaVersion")<1||!Double.isFinite(parseDate(e.getString("occurredAt"))))throw new IllegalArgumentException("invalid_pms_outbox_event");if(e.has("payload")&&serializeJsonValue(e.get("payload"))==null)throw new IllegalArgumentException("invalid_payload");}catch(RuntimeException x){throw x;}catch(Exception x){throw new IllegalArgumentException("invalid_pms_outbox_event",x);}}
   private static double parseDate(String value){try{java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX",java.util.Locale.US);f.setLenient(false);return f.parse(value).getTime();}catch(Exception e){return Double.NaN;}}
