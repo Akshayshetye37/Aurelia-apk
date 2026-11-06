@@ -18,6 +18,7 @@ test("explicit non-configured status cannot be overridden by otherwise permissiv
     manual_posting: true,
     test_collection: true,
     live_collection: true,
+    live_collection_enabled: true,
     automatic_settlement: true,
     native_settlement_bridge: true,
     refund_processing: true,
@@ -136,4 +137,47 @@ test("the control core never allows the emergency stop to be disabled", async ()
     error => error.code === "PAYMENT_EMERGENCY_STOP_RELEASE_FORBIDDEN"
   );
   assert.equal(transactions, 0);
+});
+
+
+test("live collection requires both internal authorisation and the tenant admin switch", () => {
+  const base = {
+    ...PAYMENT_CONTROL_DEFAULTS,
+    emergency_stop: false,
+    live_collection: true,
+    live_collection_enabled: false,
+    updatedAt: new Date("2026-11-06T12:00:00.000Z"),
+    updatedBy: "owner-1"
+  };
+  assert.equal(paymentControlAllows(base, "live_collection"), false);
+  assert.equal(paymentControlAllows({ ...base, live_collection_enabled: true }, "live_collection"), true);
+  assert.equal(paymentControlAllows({ ...base, live_collection: false, live_collection_enabled: true }, "live_collection"), false);
+  assert.equal(paymentControlAllows({ ...base, emergency_stop: true, live_collection_enabled: true }, "live_collection"), false);
+});
+
+test("tenant live switch cannot be enabled before internal live authorisation", async () => {
+  const controlRef = {
+    path: "paymentControls/tenant_123",
+    collection: name => ({ doc: () => ({ path: "paymentControls/tenant_123/" + name + "/audit-live" }) })
+  };
+  let writes = 0;
+  const db = {
+    doc: () => controlRef,
+    runTransaction: async fn => fn({
+      get: async ref => ref.path === controlRef.path
+        ? { exists: true, data: () => ({
+            ...PAYMENT_CONTROL_DEFAULTS, live_collection: false,
+            updatedAt: new Date("2026-11-06T12:00:00.000Z"), updatedBy: "owner-1"
+          }) }
+        : { exists: false, data: () => null },
+      set: () => { writes += 1; }
+    })
+  };
+  await assert.rejects(updatePaymentControls({
+    db, tenantId: "tenant_123",
+    actor: { uid: "admin-1", email: "admin@example.test" },
+    changes: { live_collection_enabled: true },
+    reason: "Enable live collection"
+  }), error => error.code === "PAYMENT_LIVE_COLLECTION_NOT_AUTHORISED");
+  assert.equal(writes, 0);
 });
