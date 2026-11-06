@@ -81,11 +81,11 @@ export const PROVIDERS = Object.freeze({
     environments: ['uat', 'production'],
     credentials: [
       { key: 'merchantId', label: 'Merchant ID', type: 'text', secret: false, required: true },
-      { key: 'merchantKey', label: 'Merchant Key', type: 'password', secret: true, required: true },
-      { key: 'saltOrHashKey', label: 'API Hash Key', type: 'password', secret: true, required: true }
+      { key: 'saltOrHashKey', label: 'API Hash Key', type: 'password', secret: true, required: true },
+      { key: 'aggregatorId', label: 'Aggregator ID (if assigned)', type: 'text', secret: false, required: false }
     ],
-    capabilities: ['sale', 'payment_status', 'callbacks', 'refunds'],
-    adapterStatus: 'not_implemented'
+    capabilities: ['hosted_checkout', 'payment_status', 'webhooks', 'refunds'],
+    adapterStatus: 'adapter_implemented_wired_not_uat_qualified'
   }
 });
 
