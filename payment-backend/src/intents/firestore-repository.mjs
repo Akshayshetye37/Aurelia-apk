@@ -283,7 +283,9 @@ export class FirestorePaymentRepository {
           (remote.orderId !== providerReference || typeof remote.paymentSessionId !== 'string' || !remote.paymentSessionId)) return null;
 
       // Do not fabricate a hosted-checkout token when a status lookup omits it.
-      const checkoutData = normalizeProviderCheckout(payload.provider, remote);
+      const checkoutData = payload.provider === 'razorpay'
+        ? { keyId: credentials.keyId }
+        : normalizeProviderCheckout(payload.provider, remote);
       if (!validCheckout(payload.provider, checkoutData)) return null;
 
       const intentRef = this.db.collection('paymentIntents').doc(intentId);
@@ -410,7 +412,7 @@ export class FirestorePaymentRepository {
     const idemRef = this.db.collection('paymentIntentIdempotency').doc(keyHash);
     const lockRef = this.db.collection('paymentFolioLocks').doc(folioHash);
     const folioRef = this.db.collection('paymentFolios').doc(paymentFolioDocumentId(tenantId, payload.folioId));
-    const providerReference = 'a_' + intentId.replace(/-/g, '').slice(0, 18);
+    const providerReference = 'aur_' + intentId.replace(/-/g, '').slice(0, 16);
     const now = this.clock().toISOString();
 
     const reservation = await this.db.runTransaction(async tx => {
