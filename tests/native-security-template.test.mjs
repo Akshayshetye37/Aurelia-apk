@@ -119,6 +119,20 @@ test('native payment device transport is HTTPS-only, path-safe, signed, and resp
   assert.doesNotMatch(source, /@JavascriptInterface|addJavascriptInterface\s*\(/);
 });
 
+test('native Razorpay and Cashfree checkout pass the host Activity and only emit reconciliation callbacks', () => {
+  const patcher = read('scripts/patch-android.js');
+  assert.match(patcher, /checkout\\.open\\(MainActivity\\.this, options\\)/);
+  assert.match(patcher, /CFPaymentGatewayService\\.getInstance\\(\\)\\.doPayment\\(MainActivity\\.this, payment\\)/);
+  assert.match(patcher, /implements PaymentResultWithDataListener, CFCheckoutResponseCallback/);
+  assert.match(patcher, /onPaymentSuccess\\(String paymentId, PaymentData paymentData\\)/);
+  assert.match(patcher, /onPaymentVerify\\(String orderID\\)/);
+  assert.match(patcher, /emitNativePaymentEvent\\("RAZORPAY_CALLBACK"/);
+  assert.match(patcher, /emitNativePaymentEvent\\("CASHFREE_CALLBACK"/);
+  assert.match(patcher, /"test"\\.equals\\(environment\\)/);
+  assert.doesNotMatch(patcher, /checkout\\.open\\(this, options\\)/);
+  assert.doesNotMatch(patcher, /doPayment\\(this, payment\\)/);
+});
+
 test('cloud device sync uses the existing MFA-aware Firebase web session', () => {
   const bridge = read('src/payments/payment-device-bridge.mjs');
   const patcher = read('scripts/patch-android.js');
