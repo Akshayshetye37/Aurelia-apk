@@ -26,14 +26,15 @@ test('provider-neutral credentials are namespaced by tenant, provider, environme
   assert.match(source, /providerSecretId\(tenantId, provider, environment, purpose\)/);
   assert.match(source, /storeSecret\(providerSecretId\(req\.tenant\.id, provider, environment, 'api'\)/);
   assert.match(source, /storeSecret\(providerSecretId\(req\.tenant\.id, provider, environment, 'webhook'\)/);
-  assert.match(source, /\['razorpay', 'cashfree'\]/);
+  assert.match(source, /implementedProviderAdapters\(\)/);
+  assert.match(source, /providerQualificationStatus\(provider\)/);
   assert.match(source, /keySecret/);
   assert.match(source, /webhookSecret/);
   assert.equal(source.includes('res.json({ keySecret'), false);
 });
 
 test('provider-neutral webhook route verifies raw body with provider adapter before accepting payment', () => {
-  assert.match(source, /express\.raw\(\{ type: 'application\/json'/);
+  assert.match(source, /express\.raw\(\{ type: '\*\/\*'/);
   assert.match(source, /adapter\.verifyWebhook\(req\.body, req\.headers\)/);
   assert.match(source, /adapter\.getPaymentStatus\(\{ orderId: providerOrderId, paymentId \}\)/);
   assert.match(source, /providerFetchVerified: captureVerified/);
@@ -49,13 +50,14 @@ test('ambiguous order creation is not retried with the same idempotency key', ()
 test('activation requires sandbox acceptance and explicit confirmation', () => {
   assert.match(source, /req\.body\?\.confirm !== true/);
   assert.match(source, /sandbox_acceptance_required/);
-  assert.match(source, /live_webhook_verification_required/);
+  assert.match(source, /webhook_verification_required/);
+  assert.match(source, /live_collection_not_enabled/);
 });
 
 test('live payment collection remains blocked until PMS accounting lifecycle is implemented', () => {
-  assert.match(source, /live_payments_blocked_accounting_pipeline_incomplete/);
-  assert.match(source, /if \(body\.environment === 'live'\)/);
-  assert.match(source, /if \(environment === 'live'\)/);
+  assert.match(source, /live_collection_not_enabled/);
+  assert.match(source, /if \(body\.environment !== 'test'\)/);
+  assert.match(source, /publicEnvironment === 'live'/);
   assert.match(source, /folioSettlement: false/);
   assert.match(source, /refunds: false/);
   assert.match(source, /reconciliation: false/);
