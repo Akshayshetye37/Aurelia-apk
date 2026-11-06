@@ -10,7 +10,6 @@ import { IndexedDbPmsRepository, parseLegacyPmsSnapshot } from "./indexeddb-pms-
 
 export const AURELIA_LEGACY_STATE_KEY = "aurelia_lodge_v2";
 export const AURELIA_MIGRATION_STATUS_KEY = "aurelia_canonical_migration_status";
-const LEGACY_FORMAT_VERSION = 1;
 
 function stableMigrationId(raw) {
   // Stable non-cryptographic identifier: migration replay protection is
@@ -34,12 +33,14 @@ export class PmsBootstrapCoordinator {
   constructor({
     storage = globalThis.localStorage,
     indexedDBImpl = globalThis.indexedDB,
+    databaseName = "aurelia-pms-canonical",
     repository = null,
     platform = null,
     now = () => new Date().toISOString()
   } = {}) {
     this.storage = storage;
     this.indexedDBImpl = indexedDBImpl;
+    this.databaseName = databaseName;
     this.repository = repository;
     this.platform = platform;
     this.now = now;
@@ -75,7 +76,8 @@ export class PmsBootstrapCoordinator {
     // labelled WebView fallback. It must not be represented as SQLite.
     if (!this.repository) {
       this.repository = new IndexedDbPmsRepository({
-        indexedDBImpl: this.indexedDBImpl
+        indexedDBImpl: this.indexedDBImpl,
+        databaseName: this.databaseName
       });
     }
 
