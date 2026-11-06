@@ -56,13 +56,19 @@ The `payment-backend/src/server.mjs` Firebase Admin + Firestore + Secret Manager
 | PhonePe | Wired | Secret Manager + webhook username/password validation | Implemented; sandbox acceptance pending | Hosted-checkout handoff pending | Blocked |
 | Paytm | Wired | Secret Manager + websiteName validation | Implemented; sandbox acceptance pending | Hosted-checkout handoff pending | Blocked |
 | JioPay | Wired | Secret Manager + UAT credential validation | Implemented; sandbox acceptance pending | Hosted-checkout handoff pending | Blocked |
-| CCAvenue | Not implemented; documentation only | Not available | Not available | Blocked |
+| CCAvenue | Not implemented; documentation only | Not available | Not available | Documentation only | Blocked |
 
 The canonical factory order is `razorpay, cashfree, payu, phonepe, paytm, jiopay`. All six server adapters expose test/UAT/staging order, status, webhook and refund interfaces. The Android native checkout UI currently dispatches only Razorpay and Cashfree; PayU, PhonePe, Paytm and JioPay must remain unavailable in the device checkout selector until their hosted-checkout handoffs are implemented and tested. The client rejects those four before creating a cloud intent, avoiding orphaned folio locks. Provider checkout and refunds are test-environment only. Provider credentials are written through Secret Manager; the save route validates them before marking onboarding complete. The webhook ingress dynamically selects the provider adapter and verifies the original raw request body before fetching provider status. Recovery uses provider-specific environment and status mappings, and ambiguous create/refund operations are never blindly redispatched.
 
 Refund initiation is exposed only for a captured test payment through `POST /v1/payments/intents/:intentId/refunds`; status recovery uses `GET /v1/payments/intents/:intentId/refunds/:refundId`. Refund reservations are idempotent and bounded by the captured amount. These routes record provider refund evidence only; they do not post a PMS folio or claim canonical accounting settlement.
 
 All six providers remain live-disabled. Merchant UAT, canonical folio settlement, physical-device acceptance, refund lifecycle acceptance, security review and owner release approval remain mandatory before any live collection capability can be enabled. CCAvenue is excluded from factory, cloud routes and active device configuration; its documentation entry is retained only for reference.
+
+### Offline persistence implementation boundary
+
+- The PMS core currently persists its application state through the existing browser storage layer (localStorage and IndexedDB). The native Android payment journal is SQLite-backed, but it is not the complete PMS database.
+- A full encrypted SQLite/SQLCipher store for all rooms, guests, bookings, folios, receipts and local audit records, with its database key wrapped by Android Keystore, is **not yet implemented**. Existing durable-write and read-back checks do not equal at-rest database encryption.
+- Offline-first cash/manual operations are designed to work without the payment backend. Production acceptance must still verify offline CRUD, restart/restore, storage quota handling and Android persistence on physical devices. Do not describe the current core store as encrypted SQLite.
 
 ### Credential and device-storage boundary (mandatory)
 
