@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
-import { IndexedDbSettlementJournal, applyJournaledSettlement } from "../src/payments/settlement-journal.mjs";
+import { IndexedDbSettlementJournal } from "../src/payments/settlement-journal.mjs";
 
 function makeJournal() {
   return new IndexedDbSettlementJournal({
@@ -46,41 +46,35 @@ test("crash after journal append is recoverable without losing the record", asyn
   assert.deepEqual(pending[0].payload, { bookingId: "B-1", amountPaise: 12500 });
 });
 
-test("projection failure leaves a pending record for startup recovery", async () => {
+test("an appended record remains pending until the guarded projector marks it applied", async () => {
   const journal = makeJournal();
-  await assert.rejects(applyJournaledSettlement({
-    journal, input: input(),
-    applyProjection: async () => { throw new Error("simulated crash"); }
-  }), /simulated crash/);
+  const appended = await journal.append(input());
+  assert.equal(appended.record.status, "PENDING");
   assert.equal((await journal.listPending()).length, 1);
+  // A failed or interrupted projection does not advance journal state.
+  assert.equal((await journal.get(appended.record.key)).status, "PENDING");
 });
 
-test("recovery replays pending record and marks it applied", async () => {
+test("recovery can mark a pending record applied after external read-back succeeds", async () => {
   const journal = makeJournal();
   await journal.append(input());
-  let applied = 0;
+  let readBackVerified = false;
   for (const record of await journal.listPending()) {
-    await applyJournaledSettlement({
-      journal,
-      input: {
-        provider: record.provider,
-        providerTransactionId: record.providerTransactionId || undefined,
-        commandId: record.commandId || undefined,
-        payload: record.payload
-      },
-      applyProjection: async () => { applied += 1; }
-    });
+    readBackVerified = true;
+    await journal.markApplied(record.key, record.payloadHash);
   }
-  assert.equal(applied, 1);
+  assert.equal(readBackVerified, true);
   assert.equal((await journal.listPending()).length, 0);
 });
 
-test("already-applied replay does not invoke projection again", async () => {
+test("already-applied replay remains idempotent and cannot regress journal status", async () => {
   const journal = makeJournal();
-  let applied = 0;
-  await applyJournaledSettlement({ journal, input: input(), applyProjection: async () => { applied += 1; } });
-  await applyJournaledSettlement({ journal, input: input(), applyProjection: async () => { applied += 1; } });
-  assert.equal(applied, 1);
+  const first = await journal.append(input());
+  await journal.markApplied(first.record.key, first.record.payloadHash);
+  const replay = await journal.append(input());
+  assert.equal(replay.duplicate, true);
+  assert.equal(replay.record.status, "APPLIED");
+  assert.equal((await journal.listPending()).length, 0);
 });
 
 test("invalid identity and missing crypto fail closed", async () => {
