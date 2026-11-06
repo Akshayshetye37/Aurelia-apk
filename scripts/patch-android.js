@@ -370,7 +370,7 @@ function addFirebaseDependencies(contents, kotlinDsl) {
   const auth = 'com.google.firebase:firebase-auth';
   const paymentDependencies = [
     'com.razorpay:checkout:1.6.41',
-    'com.cashfree.pg:api:2.2.9'
+    'com.cashfree.pg:api:2.6.1'
   ];
   if (!/dependencies\s*\{/.test(contents)) {
     throw new Error('App Gradle file has no dependencies block; refusing an incomplete native payment integration.');
@@ -386,8 +386,8 @@ function addFirebaseDependencies(contents, kotlinDsl) {
   if (!updated.includes(bom)) {
     updated = updated.replace(/dependencies\s*\{/, match =>
       match + (kotlinDsl
-        ? '\\n    implementation(platform("' + bom + '"))'
-        : '\\n    implementation platform("' + bom + '")'));
+        ? '\n    implementation(platform("' + bom + '"))'
+        : '\n    implementation platform("' + bom + '")'));
   }
   return updated;
 }
@@ -1240,7 +1240,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
               checkout.setKeyID(keyId);
               checkout.open(this, options);
             } else {
-              String paymentSessionId = checkoutData.optString("sessionId", "");
+              String paymentSessionId = checkoutData.optString("paymentSessionId", "");
               if (paymentSessionId.isEmpty()) throw new IllegalArgumentException("Cashfree payment session is missing.");
               CFSession session = new CFSession.CFSessionBuilder()
                   .setEnvironment(CFSession.Environment.SANDBOX)
