@@ -4754,7 +4754,7 @@ function cloudPaymentApi() {
 }
 function mapCloudPaymentStatus(intent) {
  if(intent.accountingStatus === 'POSTED_TO_LOCAL_FOLIO') return 'POSTED_TO_FOLIO';
- if(intent.status === 'CAPTURED_PENDING_ACCOUNTING') return 'CAPTURED_UNPOSTED';
+ if(intent.status === 'CAPTURED_PENDING_ACCOUNTING' || intent.status === 'CAPTURED') return 'CAPTURED_UNPOSTED';
  if(intent.status === 'FAILED_TO_INITIATE' || intent.status === 'FAILED') return 'FAILED';
  if(['UNKNOWN','DISPATCHING','RECONCILIATION_REQUIRED'].includes(intent.status)) return 'RECONCILIATION_REQUIRED';
  if(intent.status === 'CREATED') return 'ORDER_CREATED';
@@ -4815,7 +4815,7 @@ window.AndroidPaymentEngine = Object.freeze({
   const pending = pendingCloudIntents.get(transactionId);
   const id = intentId || pending?.intentId;
   if(!id) throw new Error('The cloud payment intent ID is required for reconciliation.');
-  const intent = await cloudPaymentApi().getIntent(id);
+  const intent = await cloudPaymentApi().reconcileIntent(id);
   return { transactionId, intentId:id, providerPaymentId:intent.providerPaymentId || null,
    status:mapCloudPaymentStatus(intent), accountingStatus:intent.accountingStatus,
    accountingBlockReason:intent.accountingBlockReason || null };
