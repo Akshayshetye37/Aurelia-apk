@@ -1009,6 +1009,11 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
   const environment = adapterEnvironmentOf(provider, publicEnvironment);
   if (!implementedProviderAdapters().includes(provider) || !tenantIdPattern.test(tenantId || '') ||
       !environment || !Buffer.isBuffer(req.body)) return fail(res, 400, 'invalid_webhook_request');
+  const webhookContentType = (req.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
+  const allowedWebhookTypes = provider === 'payu'
+    ? new Set(['application/json', 'application/x-www-form-urlencoded'])
+    : new Set(['application/json']);
+  if (!allowedWebhookTypes.has(webhookContentType)) return fail(res, 415, 'unsupported_webhook_content_type');
   if (publicEnvironment === 'live') {
     const liveBlock = await liveCollectionBlockReason(tenantId, provider);
     if (liveBlock) return fail(res, liveBlock === 'payment_controls_unavailable' ? 503 : 403, liveBlock);
