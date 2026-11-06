@@ -13,7 +13,7 @@ function makeJournal() {
   });
 }
 const scope = { tenantId: "tenant_01", deviceId: "device_01", provider: "manual",
-  providerAccountId: "local_installation_01", environment: "local" };
+  providerAccountId: "local_installation_01", environment: "test" };
 const input = (patch = {}) => {
   const command = { ...scope, commandId: "cmd-1", bookingId: "B-1", amountPaise: 12500, ...patch };
   return { ...scope, commandId: "cmd-1", payload: { command } };
@@ -80,7 +80,7 @@ test("already-applied replay remains idempotent and cannot regress journal statu
 
 test("invalid identity and missing crypto fail closed", async () => {
   const journal = makeJournal();
-  await assert.rejects(journal.append({ ...scope, payload: { command: { ...scope } } }), /command ID/);
+  await assert.rejects(journal.append({ ...scope, commandId: undefined, payload: { command: { ...scope } } }), /Provider transaction ID or command ID/);
   const noCrypto = new IndexedDbSettlementJournal({ indexedDBImpl: indexedDB, cryptoImpl: null, databaseName: "no-crypto" });
   await assert.rejects(noCrypto.append(input()), /Web Crypto is unavailable/);
 });
