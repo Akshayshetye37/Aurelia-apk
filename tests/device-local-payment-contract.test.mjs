@@ -30,6 +30,18 @@ test('every manual folio payment path requires explicit staff receipt confirmati
   assert.match(html, /Confirm that payment was actually received/);
 });
 
+test('provider directory labels reflect the six wired test adapters and documentation-only CCAvenue', () => {
+  const html = read('index.html');
+  for (const provider of ['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay']) {
+    assert.match(html, new RegExp("'" + provider + "'"));
+  }
+  assert.match(html, /Server adapter ready \(test\) · Live collection OFF/);
+  assert.match(html, /Documentation only/);
+  assert.doesNotMatch(html, /Server adapter \(incomplete\)/i);
+  assert.match(html, /Hybrid backend is optional\. Local cash and manual payments continue to work from device memory\./);
+  assert.match(html, /Live collection remains OFF until the safety gates pass and an authorised tenant administrator enables it in Settings\./);
+});
+
 test('merchant credentials are not exposed through WebView or Android local vault UI', () => {
   const html = read('index.html');
   const vault = read('android/templates/LocalGatewayVault.java');
