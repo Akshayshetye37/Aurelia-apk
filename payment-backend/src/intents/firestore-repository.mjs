@@ -188,6 +188,8 @@ export class FirestorePaymentRepository {
       const credentials = await this.secretManager.getProviderSecrets(
         tenantId, payload.provider, payload.environment
       );
+      const providerAccountId = payload.provider === 'razorpay' ? credentials.keyId : credentials.appId;
+      if (typeof providerAccountId !== 'string' || !providerAccountId.trim()) return null;
       const adapter = this.providerFactory(payload.provider, {
         credentials, environment: payload.environment
       });
@@ -206,11 +208,11 @@ export class FirestorePaymentRepository {
 
       const intentRef = this.db.collection('paymentIntents').doc(intentId);
       const idemRef = this.db.collection('paymentIntentIdempotency').doc(
-        digest(tenantId + ':' + payload.provider + ':' + payload.environment + ':' + payload.idempotencyKey)
+        digest(tenantId + ':' + payload.provider + ':' + payload.environment + ':' + providerAccountId + ':' + payload.idempotencyKey)
       );
       const lockRef = this.db.collection('paymentFolioLocks').doc(digest(tenantId + ':' + payload.folioId));
       const orderRef = this.db.collection('paymentProviderOrders').doc(
-        digest(tenantId + ':' + payload.provider + ':' + payload.environment + ':' + remote.orderId)
+        digest(tenantId + ':' + payload.provider + ':' + payload.environment + ':' + providerAccountId + ':' + remote.orderId)
       );
       const recoveredAt = this.clock().toISOString();
       const committed = await this.db.runTransaction(async tx => {
@@ -221,6 +223,7 @@ export class FirestorePaymentRepository {
             intentSnap.data().tenantId !== tenantId ||
             intentSnap.data().state !== 'UNKNOWN' ||
             intentSnap.data().providerReference !== providerReference ||
+            intentSnap.data().providerAccountId !== providerAccountId ||
             idemSnap.data().intentId !== intentId || lockSnap.data().intentId !== intentId) return false;
         // Never replace an existing provider-order binding during recovery.
         // A remote reference collision or stale binding must remain locked for
@@ -239,7 +242,7 @@ export class FirestorePaymentRepository {
         });
         tx.update(intentRef, {
           state: next, providerOrderId: remote.orderId, checkoutData,
-          providerAccountId: payload.provider === 'razorpay' ? credentials.keyId : credentials.appId,
+          providerAccountId,
           deviceId: payload.deviceId || null,
           updatedAt: recoveredAt, version: (intentSnap.data().version || 1) + 1,
           recoveryVerifiedAt: recoveredAt
