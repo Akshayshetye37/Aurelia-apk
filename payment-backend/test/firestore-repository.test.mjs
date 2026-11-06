@@ -6,7 +6,13 @@ import { FirestorePaymentRepository, paymentFolioDocumentId } from '../src/inten
 class FakeFirestore {
   constructor() { this.docs = new Map(); this.tail = Promise.resolve(); }
   collection(name) {
-    return { doc: id => ({ path: name + '/' + id }) };
+    return { doc: id => ({
+      path: name + '/' + id,
+      get: async () => {
+        const value = this.docs.get(name + '/' + id);
+        return { exists: value !== undefined, data: () => value && structuredClone(value) };
+      }
+    }) };
   }
   async runTransaction(fn) {
     // Serialize fake transactions to model Firestore's serializable commit/retry result.
@@ -58,7 +64,7 @@ const payload = (overrides = {}) => ({
   provider: 'razorpay', environment: 'test', idempotencyKey: 'checkout-key-12345',
   ...overrides
 });
-const setup = ({ createOrder } = {}) => {
+const setup = ({ createOrder, getPaymentStatus } = {}) => {
   const db = membershipDb(new FakeFirestore());
   db.seed('paymentMemberships/user_123', { tenantId: 'hotel_123', role: 'owner', status: 'active' });
   db.seed('paymentFolios/' + paymentFolioDocumentId('hotel_123', 'folio_123'), { tenantId: 'hotel_123', folioId: 'folio_123', bookingId: 'booking_123', status: 'open', currency: 'INR', balanceMinor: 1000000, revision: 7 });
@@ -66,13 +72,18 @@ const setup = ({ createOrder } = {}) => {
   const repo = new FirestorePaymentRepository({
     db,
     secretManager: { getProviderSecrets: async () => ({ keyId: 'test', keySecret: 'secret', webhookSecret: 'hook' }) },
-    providerFactory: () => ({ createOrder: async input => {
-      dispatches++;
-      return createOrder ? createOrder(input) : {
-        orderId: 'order_123', amountMinor: input.amountMinor,
-        currency: input.currency, keyId: 'rzp_test_12345678'
-      };
-    } })
+    providerFactory: () => ({
+      createOrder: async input => {
+        dispatches++;
+        return createOrder ? createOrder(input) : {
+          orderId: 'order_123', amountMinor: input.amountMinor,
+          currency: input.currency, keyId: 'rzp_test_12345678'
+        };
+      },
+      getPaymentStatus: async input => getPaymentStatus ? getPaymentStatus(input) : {
+        orderId: input.orderId, paymentId: null, paymentStatus: 'created', captured: false
+      }
+    })
   });
   return { db, repo, get dispatches() { return dispatches; } };
 };
@@ -383,4 +394,46 @@ test('UNKNOWN dispatch remains locked when provider lookup is inconclusive', asy
   const lock = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentFolioLocks/'))?.[1];
   assert.equal(lock.active, true);
   assert.equal(s.dispatches, 1);
+});
+
+
+test('provider capture is independently fetched and bound before intent becomes CAPTURED', async () => {
+  const s = setup({ getPaymentStatus: async input => ({
+    orderId: input.orderId, paymentId: 'pay_123', paymentStatus: 'captured',
+    captured: true, amountMinor: 450000, currency: 'INR'
+  }) });
+  const created = await s.repo.initializePaymentIntent('user_123', payload());
+  const reconciled = await s.repo.reconcilePaymentIntent('user_123', created.intentId);
+  assert.equal(reconciled.status, 'CAPTURED');
+  assert.equal(reconciled.providerPaymentId, 'pay_123');
+  assert.equal(reconciled.accountingStatus, 'PENDING');
+});
+
+test('capture with mismatched amount or currency is rejected without changing intent state', async () => {
+  const s = setup({ getPaymentStatus: async input => ({
+    orderId: input.orderId, paymentId: 'pay_bad', paymentStatus: 'captured',
+    captured: true, amountMinor: 450001, currency: 'INR'
+  }) });
+  const created = await s.repo.initializePaymentIntent('user_123', payload());
+  await assert.rejects(s.repo.reconcilePaymentIntent('user_123', created.intentId),
+    /provider_capture_binding_mismatch/);
+  const stored = await s.db.get('paymentIntents/' + created.intentId);
+  assert.equal(stored.state, 'CREATED');
+});
+
+test('late provider-verified capture supersedes a prior failure but never posts the folio', async () => {
+  let status = 'failed';
+  const s = setup({ getPaymentStatus: async input => ({
+    orderId: input.orderId, paymentId: status === 'captured' ? 'pay_late' : 'pay_failed',
+    paymentStatus: status, captured: status === 'captured',
+    amountMinor: status === 'captured' ? 450000 : null,
+    currency: status === 'captured' ? 'INR' : null
+  }) });
+  const created = await s.repo.initializePaymentIntent('user_123', payload());
+  const failed = await s.repo.reconcilePaymentIntent('user_123', created.intentId);
+  assert.equal(failed.status, 'FAILED');
+  status = 'captured';
+  const late = await s.repo.reconcilePaymentIntent('user_123', created.intentId);
+  assert.equal(late.status, 'CAPTURED');
+  assert.equal(late.accountingStatus, 'PENDING');
 });
