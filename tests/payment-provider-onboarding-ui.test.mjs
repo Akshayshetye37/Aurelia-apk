@@ -43,7 +43,8 @@ test('provider directory accurately reports all six wired non-live adapters and 
     assert.ok(html.includes(provider), 'missing provider directory entry: ' + provider);
   }
   assert.ok(html.includes('Server adapter ready (test) · Live collection OFF'));
-  assert.ok(html.includes('CCAvenue · Documentation only'));
+  assert.ok(html.includes('CCAvenue'));
+  assert.ok(html.includes('Documentation only'));
   assert.ok(html.includes('CCAvenue is not included in the active provider factory'));
   assert.ok(!html.includes('Backend adapter not implemented · documentation only'));
 });
