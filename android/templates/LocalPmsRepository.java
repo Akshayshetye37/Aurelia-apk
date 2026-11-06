@@ -154,5 +154,5 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static RuntimeException conflict(String code){return new IllegalStateException(code);}
   private static RuntimeException failure(String code,Exception cause){return new IllegalStateException(code,cause);}
   private static JSONObject migrationResult(boolean replay,String id,int count){JSONObject r=new JSONObject();try{r.put("alreadyMigrated",replay);r.put("migrationId",id);r.put("entityCount",count);}catch(Exception ignored){}return r;}
-  private static String serializeJsonValue(Object value) throws Exception {JSONArray wrapper=new JSONArray();wrapper.put(value);String encoded=wrapper.toString();return encoded.substring(1,encoded.length()-1);}
+  private static String serializeJsonValue(Object value) throws Exception {org.json.JSONArray wrapper=new org.json.JSONArray();wrapper.put(value);String encoded=wrapper.toString();return encoded.substring(1,encoded.length()-1);}
 }
