@@ -53,7 +53,8 @@ test('enabled adapters do not inherit abstract lifecycle methods', () => {
     cashfree: [{appId:'app-id',secretKey:'secret-value',webhookSecret:'hook-secret'},'test'],
     jiopay: [{merchantId:'merchant-123',saltOrHashKey:'hash-secret'},'uat'],
     paytm: [{mid:'merchant123',merchantKey:'merchant-secret',websiteName:'WEBSTAGING'},'staging'],
-    phonepe: [{clientId:'client-id',clientSecret:'client-secret',clientVersion:'1',webhookUsername:'hook-user',webhookPassword:'hook-secret'},'test']
+    phonepe: [{clientId:'client-id',clientSecret:'client-secret',clientVersion:'1',webhookUsername:'hook-user',webhookPassword:'hook-secret'},'test'],
+    payu: [{merchantKey:'merchant-key',salt:'payu-salt-value'},'test']
   };
   for (const [provider,[credentials,environment]] of Object.entries(configurations)) {
     const adapter=createProviderAdapter(provider,{credentials,environment});
