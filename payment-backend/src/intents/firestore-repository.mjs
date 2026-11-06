@@ -90,14 +90,43 @@ export class FirestorePaymentRepository {
     if (!snapshot.exists || snapshot.data().tenantId !== tenantId) {
       const error = new Error('payment_intent_not_found'); error.statusCode = 404; throw error;
     }
-    const record = snapshot.data();
+    let record = snapshot.data();
     if (['CAPTURED', 'FAILED_TO_INITIATE'].includes(record.state)) {
       return this.getPaymentIntent(authUid, intentId);
     }
-    if (!record.providerOrderId || !record.providerAccountId ||
+    if (!record.providerAccountId ||
         !['razorpay', 'cashfree'].includes(record.provider) ||
         !['test', 'live'].includes(record.environment)) {
       const error = new Error('provider_order_binding_unavailable'); error.statusCode = 409; throw error;
+    }
+
+    // DISPATCHING/UNKNOWN can mean the provider created an order but the
+    // response was lost. Recover only by deterministic merchant reference;
+    // never issue a second create-order request from reconciliation.
+    if (!record.providerOrderId && ['DISPATCHING', 'UNKNOWN'].includes(record.state)) {
+      await this.recoverUnknownIntent({
+        tenantId,
+        intentId,
+        providerReference: record.providerReference,
+        payload: {
+          folioId: record.folioId, amountMinor: record.amountMinor,
+          currency: record.currency, provider: record.provider,
+          environment: record.environment, idempotencyKey: record.idempotencyKey,
+          deviceId: record.deviceId || null
+        }
+      });
+      const refreshed = await intentRef.get();
+      if (refreshed.exists) record = refreshed.data();
+    }
+    if (!record.providerOrderId) {
+      return {
+        intentId, status: record.state, provider: record.provider,
+        environment: record.environment, folioId: record.folioId,
+        amountMinor: record.amountMinor, currency: record.currency,
+        providerOrderId: null, providerPaymentId: record.providerPaymentId || null,
+        accountingStatus: record.accountingStatus || 'PENDING',
+        accountingBlockReason: record.accountingBlockReason || null
+      };
     }
 
     // Reconciliation is a server-to-server provider lookup. Native SDK callbacks
@@ -221,7 +250,7 @@ export class FirestorePaymentRepository {
         ]);
         if (!intentSnap.exists || !idemSnap.exists || !lockSnap.exists ||
             intentSnap.data().tenantId !== tenantId ||
-            intentSnap.data().state !== 'UNKNOWN' ||
+            ![ 'UNKNOWN', 'DISPATCHING' ].includes(intentSnap.data().state) ||
             intentSnap.data().providerReference !== providerReference ||
             intentSnap.data().providerAccountId !== providerAccountId ||
             idemSnap.data().intentId !== intentId || lockSnap.data().intentId !== intentId) return false;
