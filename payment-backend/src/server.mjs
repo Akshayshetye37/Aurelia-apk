@@ -507,8 +507,16 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
   if (!idempotencyKey || !/^[A-Za-z0-9._:-]{12,100}$/.test(idempotencyKey)) return fail(res, 400, 'idempotency_key_required');
   const adapterEnvironment = adapterEnvironmentOf(body.provider, body.environment);
   if (!implementedProviderAdapters().includes(body.provider) || !adapterEnvironment) return fail(res, 400, 'provider_not_supported');
-  if (body.environment === 'live' && providerQualificationStatus(body.provider).liveCollection !== true) return fail(res, 403, 'live_collection_not_enabled');
   if (body.environment !== 'test') return fail(res, 403, 'live_collection_not_enabled');
+
+  const customerFields = {
+    razorpay: [], cashfree: ['id', 'phone', 'email'], payu: ['firstName', 'email', 'phone'],
+    phonepe: ['id', 'phone', 'email'], paytm: ['id'], jiopay: ['id', 'phone', 'email']
+  }[body.provider];
+  if (body.customer !== undefined && (!body.customer || typeof body.customer !== 'object' ||
+      Array.isArray(body.customer) || Object.keys(body.customer).some(k => !customerFields.includes(k)))) {
+    return fail(res, 400, 'invalid_provider_customer_schema');
+  }
   if (['cashfree', 'phonepe', 'paytm', 'jiopay', 'payu'].includes(body.provider)) {
     let returnUrl;
     try { returnUrl = new URL(body.returnUrl); } catch { return fail(res, 400, 'invalid_provider_return_url'); }
@@ -522,52 +530,23 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
     return fail(res, 400, 'invalid_payu_customer_schema');
   }
   if (['cashfree', 'phonepe', 'jiopay'].includes(body.provider) &&
-      (!body.customer || typeof body.customer.id !== 'string' ||
+      (!body.customer || typeof body.customer.id !== 'string' || !/^[A-Za-z0-9_-]{6,64}$/.test(body.customer.id) ||
        typeof body.customer.phone !== 'string' || !/^\\+?[0-9]{8,15}$/.test(body.customer.phone))) {
     return fail(res, 400, 'invalid_provider_customer_schema');
   }
-  if (body.provider === 'paytm' && (!body.customer || typeof body.customer.id !== 'string')) {
-    return fail(res, 400, 'invalid_paytm_customer_schema');
-  }
-  const intentControl = 'test_collection';
-  const blocked = await enforcePaymentControl(req, res, intentControl);
+  if (body.provider === 'paytm' && (!body.customer || typeof body.customer.id !== 'string' ||
+      !/^[A-Za-z0-9_-]{6,64}$/.test(body.customer.id))) return fail(res, 400, 'invalid_paytm_customer_schema');
+
+  const blocked = await enforcePaymentControl(req, res, 'test_collection');
   if (blocked) return blocked;
-  try { returnUrl = new URL(body.returnUrl); } catch { return fail(res, 400, 'invalid_cashfree_return_url'); }
-    if (returnUrl.protocol !== 'https:' || returnUrl.username || returnUrl.password ||
-        !origins.has(returnUrl.origin)) {
-      return fail(res, 400, 'cashfree_return_url_origin_not_allowed');
-    }
-    if (!body.customer || typeof body.customer !== 'object' || Array.isArray(body.customer) ||
-        Object.keys(body.customer).some(key => !['id', 'phone', 'email'].includes(key)) ||
-        (body.customer.email !== undefined &&
-          (typeof body.customer.email !== 'string' || body.customer.email.length > 254 ||
-           !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.customer.email)))) {
-      return fail(res, 400, 'invalid_cashfree_customer_schema');
-    }
-  }
-  if (!['razorpay', 'cashfree'].includes(body.provider) || !['test', 'live'].includes(body.environment)) {
-    return fail(res, 409, 'provider_environment_not_enabled_for_checkout');
-  }
-  const intentControl = body.environment === 'live' ? 'live_collection' : 'test_collection';
-  const blocked = await enforcePaymentControl(req, res, intentControl);
-  if (blocked) return blocked;
-  // Hard release gate: provider checkout alone cannot be called live until
-  // atomic PMS folio posting, refund lifecycle and durable reconciliation exist.
-  if (body.environment === 'live') {
-    return fail(res, 409, 'live_payments_blocked_accounting_pipeline_incomplete');
-  }
   try {
     const state = await providerTenantDoc(req.tenant.id, body.provider, adapterEnvironment).get();
     if (!state.exists || state.data().active !== true || state.data().credentialsValidated !== true) {
       return fail(res, 409, 'provider_not_active');
     }
-    if (body.environment === 'live') {
-      const sandbox = await providerTenantDoc(req.tenant.id, body.provider, 'test').get();
-      if (!sandbox.exists || sandbox.data().sandboxTestPassed !== true || sandbox.data().webhookVerified !== true) {
-        return fail(res, 409, 'sandbox_acceptance_required');
-      }
-    }
-    const result = await paymentRepository.initializePaymentIntent(req.actor.uid, { ...body, environment: adapterEnvironment, idempotencyKey });
+    const result = await paymentRepository.initializePaymentIntent(req.actor.uid, {
+      ...body, environment: adapterEnvironment, idempotencyKey
+    });
     return res.status(result.isDuplicate ? 200 : result.status === 'CREATED' ? 201 : result.status === 'FAILED_TO_INITIATE' ? 503 : 202).json(result);
   } catch (error) {
     const response = paymentRouteError(error);
