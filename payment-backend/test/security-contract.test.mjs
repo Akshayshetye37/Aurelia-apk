@@ -177,7 +177,7 @@ test('financial backend routes read tenant controls on each request and remain f
   assert.match(source, /enforcePaymentControl\(req, res, intentControl\)/);
   assert.match(source, /enforcePaymentControl\(req, res, 'test_collection'\)/);
   assert.match(source, /environment === 'live' \? 'live_collection' : 'test_collection'/);
-  assert.match(source, /live_payments_blocked_accounting_pipeline_incomplete/);
+  assert.match(source, /live_collection_not_enabled/);
 });
 
 test('server does not retain a second hard-coded backend kill-switch shadowing tenant controls', () => {
