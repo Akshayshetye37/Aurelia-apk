@@ -537,7 +537,8 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
   if (body.provider === 'paytm' && (!body.customer || typeof body.customer.id !== 'string' ||
       !/^[A-Za-z0-9_-]{6,64}$/.test(body.customer.id))) return fail(res, 400, 'invalid_paytm_customer_schema');
 
-  const blocked = await enforcePaymentControl(req, res, 'test_collection');
+  const intentControl = body.environment === 'live' ? 'live_collection' : 'test_collection';
+  const blocked = await enforcePaymentControl(req, res, intentControl);
   if (blocked) return blocked;
   try {
     const state = await providerTenantDoc(req.tenant.id, body.provider, adapterEnvironment).get();
