@@ -250,7 +250,7 @@ export class FirestorePaymentRepository {
         ]);
         if (!intentSnap.exists || !idemSnap.exists || !lockSnap.exists ||
             intentSnap.data().tenantId !== tenantId ||
-            ![ 'UNKNOWN', 'DISPATCHING' ].includes(intentSnap.data().state) ||
+            !['UNKNOWN', 'DISPATCHING'].includes(intentSnap.data().state) ||
             intentSnap.data().providerReference !== providerReference ||
             intentSnap.data().providerAccountId !== providerAccountId ||
             idemSnap.data().intentId !== intentId || lockSnap.data().intentId !== intentId) return false;
