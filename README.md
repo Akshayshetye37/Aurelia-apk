@@ -471,3 +471,14 @@ The browser/PWA IndexedDB repository is implemented at `src/storage/indexeddb-pm
 **Cutover remains blocked:** this bridge is not yet bound by the live UI. Existing UI reads and writes still use the legacy synchronous state in `index.html`. The proposed DOMContentLoaded wrapper is not inserted because the current app initializes operational state during script evaluation; adding a later event listener would not freeze or gate that initialization, and the suggested `initializeLegacyPmsUi()` function does not exist. A real startup refactor must move the existing app initialization behind an awaited bootstrap and route all domain commands before the shield can be removed.
 
 **Native boundary:** no registered Capacitor SQLite plugin is claimed by this commit. The Java repository template alone is not a WebView bridge. Android SQLite binding, native contract conformance, full UI command migration, recovery/rollback and physical-device verification remain outstanding. Payment integration and live collection remain gated.
+
+
+## Native Capacitor SQLite bridge foundation (2026-11-07)
+
+- Added `android/templates/CapacitorPmsStoragePlugin.java`, registered explicitly in the generated `MainActivity` before `super.onCreate`, and copied by `scripts/patch-android.js`.
+- The plugin exposes Promise-backed `initializeStorage`, `getEntity` and `transactBusinessChange` calls. Database work runs on a dedicated single-thread executor.
+- The plugin delegates writes to `LocalPmsRepository.transactBusinessChange()`. The repository owns the complete SQLite transaction, version check, entity write and outbox append. No transaction handle or begin/commit pair crosses the Capacitor bridge.
+- Added `src/storage/capacitor-pms-storage.mjs` as the JavaScript client and tests for initialization acknowledgement, native write delegation, stale-version rejection and asynchronous callback rejection.
+- Added a static Android generator guard requiring explicit plugin registration.
+
+**Important scope boundary:** this is a registered native SQLite transaction bridge foundation, not yet a drop-in complete implementation of every `PmsRepository` method. Native list, migration snapshot read-back, outbox leasing/acknowledgement/retry/conflict and shared contract conformance still need implementation before the bootstrap coordinator can select SQLite or the common repository bridge can bind to it. The live UI remains on its existing legacy localStorage state; no UI cutover or data deletion is performed.
