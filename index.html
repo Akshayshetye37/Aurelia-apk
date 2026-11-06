@@ -297,15 +297,18 @@ function guestContactActions(name,phone){
 <script id="aurelia-safe-storage">
 (function(){
   var mem = {};
+  var storageInitError = null;
   function canLS(){
     try{
       var k="__aurelia_ls_test__";
       window.localStorage.setItem(k,"1");
       window.localStorage.removeItem(k);
       return true;
-    }catch(e){return false}
+    }catch(e){storageInitError=e;return false}
   }
   var ok = canLS();
+  var embeddedPreview = false;
+  try{embeddedPreview=String(location.href).startsWith('about:srcdoc') || !!(window.frameElement && window.frameElement.hasAttribute('sandbox') && !window.frameElement.sandbox.contains('allow-same-origin'))}catch(e){embeddedPreview=String(location.href).startsWith('about:srcdoc')}
   window.__aureliaStorage = {
     getItem: function(k){
       try{ if(ok) return localStorage.getItem(k); }catch(e){}
@@ -325,8 +328,16 @@ function guestContactActions(name,phone){
       try{ if(ok) localStorage.removeItem(k); }catch(e){}
       delete mem[k];
     },
-    memoryOnly: !ok
+    memoryOnly: !ok,
+    memoryOnlyReason: !ok ? (embeddedPreview ? 'embedded-preview-sandbox' : (storageInitError&&storageInitError.name||'storage-unavailable')) : null,
+    persistent: ok
   };
+  window.AureliaStorageDiagnostics = Object.freeze({
+    persistent: ok,
+    mode: ok ? 'browser-local-storage' : 'session-memory-only',
+    reason: !ok ? (embeddedPreview ? 'The embedded HTML preview uses an opaque sandbox origin and blocks durable browser storage.' : (storageInitError&&storageInitError.message||'Browser storage is unavailable.')) : null,
+    embeddedPreview: embeddedPreview
+  });
   /* Memory fallback is explicit; failed durable writes are never silently downgraded. */
 })();
 </script>
@@ -1527,11 +1538,11 @@ async function restoreGo(){
 }
 const useMenu=m=>{Object.keys(MENU).forEach(k=>delete MENU[k]);Object.assign(MENU,m);S.menu=MENU};
 let LOCAL_STORAGE_WARNING_SHOWN=false;
-function persist(){if(RECOVERY_CHECK_PENDING)return;try{const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);(window.__aureliaStorage||localStorage).setItem(SK,JSON.stringify(o));if(window.__aureliaStorage&&window.__aureliaStorage.memoryOnly&&!LOCAL_STORAGE_WARNING_SHOWN){LOCAL_STORAGE_WARNING_SHOWN=true;toast('WARNING: Device persistence is unavailable. Data is session-only; export a backup before closing the app.')}}catch(e){if(!S.qw){S.qw=1;toast('Device storage is unavailable or full. Changes may not be saved. Export a backup before closing the app.')}}}
+function persist(){if(RECOVERY_CHECK_PENDING)return;try{const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);(window.__aureliaStorage||localStorage).setItem(SK,JSON.stringify(o));if(window.__aureliaStorage&&window.__aureliaStorage.memoryOnly&&!LOCAL_STORAGE_WARNING_SHOWN){LOCAL_STORAGE_WARNING_SHOWN=true;toast(window.AureliaStorageDiagnostics?.embeddedPreview?'PREVIEW ONLY: CodeShack embeds this app in a sandbox that blocks persistent storage. Changes are temporary. Open Aurelia from its own HTTPS site or installed Android app before entering real records.':'WARNING: Browser persistence is unavailable. Changes are temporary; export a backup and use a supported persistent browser or installed app.')}}catch(e){if(!S.qw){S.qw=1;toast('Persistent storage write failed ('+(e&&e.name||'StorageError')+'). Changes may not be saved. Export a backup before closing the app.')}}}
 function persistStrict(){
  if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
  const store=window.__aureliaStorage||localStorage;
- if(store.memoryOnly)throw new Error('Persistent device storage is unavailable; refusing to confirm this operation.');
+ if(store.memoryOnly)throw new Error(window.AureliaStorageDiagnostics?.reason||'Persistent device storage is unavailable; refusing to confirm this operation.');
  const state={tab:S.tab,bk:S.bk};DK.forEach(k=>state[k]=S[k]);
  const serialized=JSON.stringify(state);
  store.setItem(SK,serialized);
