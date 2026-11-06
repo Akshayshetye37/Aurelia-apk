@@ -267,6 +267,7 @@ export class FirestorePaymentRepository {
     // all local setup has completed successfully.
     let credentials;
     let adapter;
+    let providerAccountId;
     try {
       credentials = await this.secretManager.getProviderSecrets(
         tenantId, payload.provider, payload.environment
@@ -274,6 +275,10 @@ export class FirestorePaymentRepository {
       adapter = this.providerFactory(payload.provider, {
         credentials, environment: payload.environment
       });
+      providerAccountId = payload.provider === 'razorpay' ? credentials.keyId : credentials.appId;
+      if (typeof providerAccountId !== 'string' || !providerAccountId.trim()) {
+        throw new Error('provider_account_identity_missing');
+      }
     } catch {
       await this.db.runTransaction(async tx => {
         const [intentSnap, idemSnap, lockSnap] = await Promise.all([
@@ -338,10 +343,6 @@ export class FirestorePaymentRepository {
 
     // From the adapter invocation onward, the request may have been transmitted.
     // A timeout, transport error or malformed response remains UNKNOWN and locked.
-    const providerAccountId = payload.provider === 'razorpay' ? credentials.keyId : credentials.appId;
-    if (typeof providerAccountId !== 'string' || !providerAccountId.trim()) {
-      throw new Error('provider_account_identity_missing');
-    }
     const providerInput = payload.provider === 'razorpay'
       ? {
           amountMinor: payload.amountMinor, currency: payload.currency,
