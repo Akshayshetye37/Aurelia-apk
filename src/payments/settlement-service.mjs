@@ -1,5 +1,5 @@
 import { AUTO_FOLIO_SETTLEMENT_ENABLED, assertAutoFolioSettlementEnabled } from "./settlement-gate.mjs";
-import { assertBalanceMutationAllowed } from "./payment-safety-gate.mjs";
+import { assertBalanceMutationAllowed, assertAutomaticSettlementAllowed, assertNativeBridgeAllowed } from "./payment-safety-gate.mjs";
 import { isVerifiedBinding } from "./settlement-authorization.mjs";
 
 /**
@@ -102,6 +102,8 @@ export function settlePayment({
   if (!ALLOWED_SOURCES.has(source)) throw new TypeError("Unsupported payment source");
   const gateway = source === "verified_gateway";
   if (gateway) {
+    assertAutomaticSettlementAllowed();
+    assertNativeBridgeAllowed();
     if (autoSettlementEnabled !== true) { const e = new Error("Automatic settlement is disabled"); e.code = "AUTO_SETTLEMENT_DISABLED"; throw e; }
     if (typeof isEmergencyStopped !== "function" || isEmergencyStopped() !== false) { const e = new Error("Settlement emergency stop is active or unavailable"); e.code = "EMERGENCY_STOP_ACTIVE"; throw e; }
     if (persist.synchronous !== true || persist.constructor?.name === "AsyncFunction") { const e = new Error("Gateway projection requires an explicitly synchronous durable persistence adapter"); e.code = "SYNCHRONOUS_PERSISTENCE_REQUIRED"; throw e; }
