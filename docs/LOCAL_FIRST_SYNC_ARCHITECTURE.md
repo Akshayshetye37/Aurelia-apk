@@ -48,3 +48,12 @@ Payment-provider order creation, capture verification, refunds and webhooks are 
 Canonical SQLite/IndexedDB PMS repository, migration from localStorage, atomic outbox schema/adapter, device enrollment, HTTP transport, server authentication, snapshot bootstrap, conflict UI, retention/restore drills and physical crash/power-loss tests.
 
 **Release rule:** this foundation does not enable sync or change live-payment status. Complete the local database migration and atomic adapter before enabling any network worker.
+
+
+## Concrete browser/PWA repository implementation
+
+Added `src/storage/indexeddb-pms-repository.mjs`. Canonical entity state and the corresponding outbox event share one IndexedDB readwrite transaction. The adapter includes optimistic version checks, leased batches, device-bound acknowledgements, retry/conflict transitions, and guarded legacy JSON ingestion.
+
+Migration validates the existing PMS state shape, stores the exact raw source snapshot alongside imported structured legacy records in one transaction, refuses to overwrite a non-empty canonical database, and records a one-time migration marker. Replaying the same migration ID/source is idempotent.
+
+This is the browser/PWA adapter only. Android still requires a native SQLite implementation of the same contract. The current `index.html` app has not yet been switched to this asynchronous repository; do not delete or overwrite its localStorage state until UI/domain commands and on-device recovery have been migrated and tested.
