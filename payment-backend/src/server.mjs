@@ -520,7 +520,10 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
   if (!idempotencyKey || !/^[A-Za-z0-9._:-]{12,100}$/.test(idempotencyKey)) return fail(res, 400, 'idempotency_key_required');
   const adapterEnvironment = adapterEnvironmentOf(body.provider, body.environment);
   if (!implementedProviderAdapters().includes(body.provider) || !adapterEnvironment) return fail(res, 400, 'provider_not_supported');
-  if (body.environment !== 'test') return fail(res, 403, 'live_collection_not_enabled');
+  if (body.environment === 'live') {
+    const liveBlock = await liveCollectionBlockReason(req.tenant.id, body.provider);
+    if (liveBlock) return fail(res, liveBlock === 'payment_controls_unavailable' ? 503 : 403, liveBlock);
+  } else if (body.environment !== 'test') return fail(res, 400, 'invalid_payment_environment');
 
   const customerFields = {
     razorpay: [], cashfree: ['id', 'phone', 'email'], payu: ['firstName', 'email', 'phone'],
@@ -833,7 +836,10 @@ app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express
       (provider === 'razorpay' && publicEnvironment === 'live' && !body.keyId.startsWith('rzp_live_'))) {
     return fail(res, 400, 'invalid_provider_credential_schema');
   }
-  if (publicEnvironment === 'live' && providerQualificationStatus(provider).liveCollection !== true) return fail(res, 403, 'live_collection_not_enabled');
+  if (publicEnvironment === 'live') {
+    const liveBlock = await liveCollectionBlockReason(req.tenant.id, provider);
+    if (liveBlock) return fail(res, liveBlock === 'payment_controls_unavailable' ? 503 : 403, liveBlock);
+  }
   try {
     const stateRef = providerTenantDoc(req.tenant.id, provider, environment);
     await stateRef.set({ configured: false, credentialsValidated: false, sandboxTestPassed: false,
@@ -994,8 +1000,9 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
   const environment = adapterEnvironmentOf(provider, publicEnvironment);
   if (!implementedProviderAdapters().includes(provider) || !tenantIdPattern.test(tenantId || '') ||
       !environment || !Buffer.isBuffer(req.body)) return fail(res, 400, 'invalid_webhook_request');
-  if (publicEnvironment === 'live' && providerQualificationStatus(provider).liveCollection !== true) {
-    return fail(res, 403, 'live_collection_not_enabled');
+  if (publicEnvironment === 'live') {
+    const liveBlock = await liveCollectionBlockReason(tenantId, provider);
+    if (liveBlock) return fail(res, liveBlock === 'payment_controls_unavailable' ? 503 : 403, liveBlock);
   }
   try {
     const hookState = await providerTenantDoc(tenantId, provider, environment).get();
