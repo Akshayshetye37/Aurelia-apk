@@ -326,6 +326,19 @@ The following are still release-blocking:
 - Payment backend tests: payment-backend/test/
 
 
+## Persistence migration hardening (2026-11-07)
+
+The migration foundation has been extended without changing the active PMS persistence path:
+
+- Added `src/storage/pms-repository-contract.mjs` as the shared JavaScript repository contract and identity/version/event validators. The IndexedDB adapter now implements this contract.
+- Hardened `src/storage/indexeddb-pms-repository.mjs`: business mutation callbacks must be synchronous inside an IndexedDB transaction; asynchronous preparation must happen before opening the transaction. Entity version and event sequence are checked, and required tenant/property/device/event metadata is validated.
+- Outbox retry scheduling is now enforced: a RETRY event is not claimable before its `retryAt` timestamp. Legacy import requires the exact raw JSON snapshot.
+- Added `android/templates/LocalPmsRepository.java`, a native SQLite repository foundation. It uses Android's non-exclusive write transaction (SQLite IMMEDIATE writer-lock semantics) to atomically persist an entity version and its outbox event. It also imports the original legacy JSON snapshot, top-level entity records and migration marker in one SQLite transaction. The Android generator copies this template into the generated app.
+- The Android repository is currently a native storage foundation, not yet invoked by the PMS WebView or canonical UI command path. The migration API is deliberately non-destructive: it does not delete or modify localStorage.
+- The PWA adapter and Android adapter have not yet passed full shared contract conformance, migration/restore stress tests, device power-loss tests or physical-device acceptance. The SQLite template is compiled by the Android validation workflow; it is not evidence that the live UI is using SQLite.
+- No application UI/domain writes have been redirected. Existing localStorage remains the active app state until bootstrap, data import/read-back, command routing, recovery and rollback have been implemented and verified.
+- Cloud sync and live gateway collection remain disabled.
+
 ## Smart Checkpoint implementation (2026-11-07)
 
 - Added `src/payments/smart-checkpoint.mjs` as a local-first reconciliation domain engine. It calculates folio balances in integer paise, excludes unverified gateway evidence, handles refunds/credits/overpayments, records staff payments idempotently, requires manager authorization and a reason for write-offs, and requires explicit staff approval before marking a zero-balance folio settled.
