@@ -2,7 +2,7 @@ const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{12,100}$/;
 const INTENT_ID = /^[0-9a-f-]{36}$/i;
 // Keep the client contract aligned with the server's qualified adapter registry.
 // Catalogue-only providers must not be offered as dispatchable payment methods.
-const DISPATCHABLE_PROVIDERS = new Set(['razorpay', 'cashfree']);
+const DISPATCHABLE_PROVIDERS = new Set(['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay']);
 
 export class PaymentApiError extends Error {
   constructor(message, { status = 0, code = 'payment_api_error', retryable = false } = {}) {
@@ -109,5 +109,22 @@ export class PaymentApiClient {
 
   getCapabilities(options = {}) {
     return this.request('/v1/payments/capabilities', options);
+  }
+
+  getPaymentControls(options = {}) {
+    return this.request('/v1/admin/payment-controls', options);
+  }
+
+  updatePaymentControls(changes, reason, options = {}) {
+    if (!changes || typeof changes !== 'object' || Array.isArray(changes) ||
+        Object.keys(changes).length !== 1 ||
+        Object.keys(changes).some(key => key !== 'live_collection_enabled') ||
+        typeof changes.live_collection_enabled !== 'boolean' ||
+        typeof reason !== 'string' || !reason.trim() || reason.trim().length > 500) {
+      throw new TypeError('invalid_tenant_payment_control_update');
+    }
+    return this.request('/v1/admin/payment-controls', {
+      ...options, method: 'PATCH', body: { changes, reason }
+    });
   }
 }
