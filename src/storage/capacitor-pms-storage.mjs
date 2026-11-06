@@ -3,7 +3,7 @@ import { PmsRepository, assertPmsIdentity, assertPmsVersion } from "./pms-reposi
 
 const NativePmsStorage = registerPlugin("CapacitorPmsStorage");
 const ident = (v,n) => assertPmsIdentity(v,n);
-const version = (v,n="version") => assertPmsVersion(v,n);
+const version = (v,n="version") => assertPmsVersion(v,n);\nconst stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map(k=>[k,stable(value[k])])) : value;\nconst sameJson = (a,b) => JSON.stringify(stable(a)) === JSON.stringify(stable(b));
 
 export class CapacitorPmsStorageClient extends PmsRepository {
   constructor(plugin = NativePmsStorage) { super(); this.plugin = plugin; }
@@ -46,7 +46,7 @@ export class CapacitorPmsStorageClient extends PmsRepository {
     if(!snapshot||typeof snapshot.raw!=="string"||!snapshot.raw)throw new TypeError("Exact raw legacy JSON snapshot is required");
     ident(migrationId,"migration ID");ident(sourceKey,"source key");
     if(!Number.isFinite(Date.parse(sourceTimestamp)))throw new TypeError("Invalid migration source timestamp");
-    return this.plugin.migrateLegacySnapshot({migrationId,sourceKey,sourceTimestamp,raw:snapshot.raw});
+    const result=await this.plugin.migrateLegacySnapshot({migrationId,sourceKey,sourceTimestamp,raw:snapshot.raw});\n    const stored=await this.readMigrationSnapshot(migrationId);\n    if(!stored||stored.raw!==snapshot.raw||stored.sourceKey!==sourceKey)throw new Error("Native migration snapshot read-back verification failed");\n    const parsed=JSON.parse(snapshot.raw), imported=await this.listEntities("legacy");\n    if(imported.length!==Object.keys(parsed).length)throw new Error("Native migration entity-count verification failed");\n    const byId=new Map(imported.map(row=>[row.id,row.data]));\n    for(const [id,data] of Object.entries(parsed))if(!byId.has(id)||!sameJson(byId.get(id),data))throw new Error("Native migration entity read-back mismatch: "+id);\n    return result;
   }
 
   async readMigrationSnapshot(migrationId) {
