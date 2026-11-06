@@ -40,11 +40,15 @@ window.aureliaNativePaymentDeviceResult = (requestId, ok, raw) => {
 };
 
 export async function getPaymentDeviceIdToken() {
-  const result = await nativeRequest("paymentDeviceGetIdToken");
-  if (typeof result?.idToken !== "string" || result.idToken.length < 20) {
-    throw new Error("A signed-in Firebase identity is required.");
+  const auth = window.AureliaPaymentAuth;
+  if (!auth || typeof auth.getFreshIdToken !== "function") {
+    throw new Error("The authenticated Firebase payment session is unavailable.");
   }
-  return result.idToken;
+  const token = await auth.getFreshIdToken();
+  if (typeof token !== "string" || token.length < 20 || /\\s/.test(token)) {
+    throw new Error("Firebase did not return a valid fresh identity token.");
+  }
+  return token;
 }
 
 async function postJson(baseUrl, path, body, tokenProvider = getPaymentDeviceIdToken) {
