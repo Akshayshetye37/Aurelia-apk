@@ -351,7 +351,7 @@ test('UNKNOWN recovery never overwrites a provider order already bound to anothe
   assert.equal(first.status, 'UNKNOWN');
   const orderId = 'order_recovered';
   const orderHash = createHash('sha256')
-    .update('hotel_123:razorpay:test:' + orderId).digest('hex');
+    .update('hotel_123:razorpay:test:test:' + orderId).digest('hex');
   const priorBinding = {
     tenantId: 'hotel_123', folioId: 'another_folio', intentId: 'another_intent',
     provider: 'razorpay', environment: 'test', providerOrderId: orderId,
