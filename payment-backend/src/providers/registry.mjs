@@ -39,7 +39,7 @@ export const PROVIDERS = Object.freeze({
       { key: 'salt', label: 'Salt', type: 'password', secret: true, required: true }
     ],
     capabilities: ['hosted_checkout', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'adapter_implemented_factory_wired_cloud_api_not_enabled'
+    adapterStatus: 'adapter_implemented_wired'
   },
   phonepe: {
     label: 'PhonePe Payment Gateway',
@@ -52,7 +52,7 @@ export const PROVIDERS = Object.freeze({
       { key: 'webhookPassword', label: 'Webhook Password', type: 'password', secret: true, required: true }
     ],
     capabilities: ['checkout', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'adapter_implemented_factory_wired_cloud_api_not_enabled'
+    adapterStatus: 'adapter_implemented_wired'
   },
   paytm: {
     label: 'Paytm Payment Gateway',
@@ -63,7 +63,7 @@ export const PROVIDERS = Object.freeze({
       { key: 'websiteName', label: 'Website / Industry Type', type: 'text', secret: false, required: true }
     ],
     capabilities: ['initiate_transaction', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'adapter_implemented_factory_wired_cloud_api_not_enabled'
+    adapterStatus: 'adapter_implemented_wired'
   },
   ccavenue: {
     label: 'CCAvenue',
@@ -85,7 +85,7 @@ export const PROVIDERS = Object.freeze({
       { key: 'aggregatorId', label: 'Aggregator ID (if assigned)', type: 'text', secret: false, required: false }
     ],
     capabilities: ['hosted_checkout', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'adapter_implemented_factory_wired_cloud_api_not_enabled'
+    adapterStatus: 'adapter_implemented_wired'
   }
 });
 
