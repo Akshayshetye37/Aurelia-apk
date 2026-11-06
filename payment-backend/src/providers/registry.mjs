@@ -63,7 +63,7 @@ export const PROVIDERS = Object.freeze({
       { key: 'websiteName', label: 'Website / Industry Type', type: 'text', secret: false, required: true }
     ],
     capabilities: ['initiate_transaction', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'not_implemented'
+    adapterStatus: 'adapter_implemented_wired_not_uat_qualified'
   },
   ccavenue: {
     label: 'CCAvenue',
