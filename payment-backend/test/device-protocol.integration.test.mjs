@@ -42,6 +42,9 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   const port = 18000 + Math.floor(Math.random() * 20000);
   const setupToken = crypto.randomBytes(32).toString('hex');
   const ownerPassword = 'TestOwnerPassword!2026';
+  const { publicKey: settlementPublicKey, privateKey: settlementPrivateKey } =
+    crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const settlementPrivateKeyBase64 = settlementPrivateKey.export({ type: 'pkcs8', format: 'pem' }).toString('base64');
   const child = spawn(process.execPath, ['src/local-server.mjs'], {
     cwd: packageRoot,
     env: {
@@ -53,7 +56,11 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
       OWNER_SETUP_TOKEN: setupToken,
       AURELIA_OWNER_ORIGINS: 'https://localhost',
       TRUST_PROXY_HOPS: '1',
-      AURELIA_PROPERTY_ID: 'test-property'
+      AURELIA_PROPERTY_ID: 'test-property',
+      SETTLEMENT_AUTH_ISSUER_ENABLED: 'true',
+      SETTLEMENT_AUTH_SETTLEMENT_ENABLED: 'true',
+      SETTLEMENT_AUTH_KEY_ID: 'test-settlement-key-01',
+      SETTLEMENT_AUTH_PRIVATE_KEY_PEM_BASE64: settlementPrivateKeyBase64
     },
     stdio: 'ignore'
   });
@@ -155,24 +162,28 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   // The remaining lease/ack assertions isolate the transport protocol. Promote
   // the fixture directly in SQLite; this is deliberately NOT an enrollment test.
   assert.equal(db.prepare('SELECT status FROM device_registrations WHERE device_id=?').get(deviceId).status, 'PENDING');
-  db.prepare("UPDATE device_registrations SET status='ACTIVE' WHERE device_id=?").run(deviceId);
+  db.prepare(`UPDATE device_registrations SET status='ACTIVE',attestation_verified_at=?,
+    attestation_security_level='TRUSTED_ENVIRONMENT',attestation_verified_boot_state='VERIFIED',
+    attestation_device_locked=1 WHERE device_id=?`).run(new Date().toISOString(), deviceId);
   const transactionId = 'txn_test_0001';
   const commandId = crypto.randomUUID();
   const commandPayload = {
     commandId, deviceId, sequenceId: 1, transactionId, folioId: 'folio_0001',
     amountMinor: 12500, currency: 'INR', provider: 'razorpay',
+    providerAccountId: 'merchant_test_001', providerPaymentId: 'pay_test_001',
     settlement: {
-      provider: 'razorpay', commandId, bookingId: 'folio_0001', amount: 125,
-      method: 'razorpay', reference: 'pay_test_001', source: 'staff_review',
-      verificationConfirmed: true, idempotencyKey: 'settlement:razorpay:command:' + commandId
+      tenantId: 'test-property', deviceId, provider: 'razorpay',
+      providerAccountId: 'merchant_test_001', environment: 'test',
+      commandId, providerTransactionId: 'pay_test_001', bookingId: 'folio_0001',
+      amountPaise: 12500, method: 'razorpay', reference: 'pay_test_001'
     }
   };
   const payloadText = JSON.stringify(commandPayload);
   const payloadHash = crypto.createHash('sha256').update(canonicalJson(commandPayload)).digest('hex');
   const commandStamp = new Date().toISOString();
-  db.prepare(`INSERT INTO transactions(id,provider,environment,amount_minor,currency,status,idempotency_key,device_id,folio_id,created_at,updated_at)
-    VALUES(?,?,?,?,'INR','CAPTURED_PENDING_ACCOUNTING',?,?,?,?,?)`)
-    .run(transactionId, 'razorpay', 'test', 12500, 'idem_test_001', deviceId, 'folio_0001', commandStamp, commandStamp);
+  db.prepare(`INSERT INTO transactions(id,provider,environment,amount_minor,currency,status,idempotency_key,provider_account_id,device_id,folio_id,created_at,updated_at)
+    VALUES(?,?,?,?,'INR','CAPTURED_PENDING_ACCOUNTING',?,?,?,?,?,?)`)
+    .run(transactionId, 'razorpay', 'test', 12500, 'idem_test_001', 'merchant_test_001', deviceId, 'folio_0001', commandStamp, commandStamp);
   db.prepare(`INSERT INTO settlement_outbox(id,transaction_id,event_type,payload,status,created_at)
     VALUES(?,?,'PAYMENT_CAPTURED',?,'PENDING',?)`)
     .run(crypto.randomUUID(), transactionId, JSON.stringify({ transactionId, amountMinor: 12500, currency: 'INR', provider: 'razorpay' }), commandStamp);
@@ -212,6 +223,27 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   );
   assert.equal(lease.cursor, 0);
   assert.ok(lease.leaseToken);
+  assert.equal(lease.policyLease.kid, 'test-settlement-key-01');
+  assert.equal(lease.authorization.kid, 'test-settlement-key-01');
+  const leaseSigningBytes = Buffer.from(canonicalJson({
+    typ: 'aurelia.settlement.lease.v2', kid: lease.policyLease.kid, payload: lease.policyLease.payload
+  }));
+  assert.equal(crypto.verify('sha256', leaseSigningBytes,
+    { key: settlementPublicKey, dsaEncoding: 'ieee-p1363' },
+    Buffer.from(lease.policyLease.signature, 'base64')), true);
+  const authorizationSigningBytes = Buffer.from(canonicalJson({
+    typ: 'aurelia.settlement.authorization.v2', kid: lease.authorization.kid, payload: lease.authorization.payload
+  }));
+  assert.equal(crypto.verify('sha256', authorizationSigningBytes,
+    { key: settlementPublicKey, dsaEncoding: 'ieee-p1363' },
+    Buffer.from(lease.authorization.signature, 'base64')), true);
+  assert.equal(lease.policyLease.payload.tenantId, 'test-property');
+  assert.equal(lease.policyLease.payload.deviceId, deviceId);
+  assert.equal(lease.policyLease.payload.providerAccountId, 'merchant_test_001');
+  assert.equal(lease.policyLease.payload.settlementEnabled, true);
+  assert.equal(lease.authorization.payload.providerTransactionId, 'pay_test_001');
+  assert.equal(lease.authorization.payload.amountPaise, 12500);
+  assert.equal(lease.authorization.payload.leaseId, lease.policyLease.payload.leaseId);
 
   const replayedLease = await fetch(baseUrl + leasePath, {
     method: 'POST', headers: { ...leaseHeaders, 'Content-Type': 'application/json', 'X-Forwarded-Proto': 'https' },
