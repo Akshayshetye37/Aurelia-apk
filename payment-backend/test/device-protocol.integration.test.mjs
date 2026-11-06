@@ -62,8 +62,11 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
       SETTLEMENT_AUTH_KEY_ID: 'test-settlement-key-01',
       SETTLEMENT_AUTH_PRIVATE_KEY_PEM_BASE64: settlementPrivateKeyBase64
     },
-    stdio: 'ignore'
+    stdio: ['ignore', 'pipe', 'pipe']
   });
+  let startupOutput = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', chunk => { startupOutput += chunk; });
   let db;
   t.after(() => {
     try { child.kill('SIGTERM'); } catch {}
@@ -75,7 +78,7 @@ test('LAN activation gate, signed lease transport, durable acknowledgement, curs
   const baseUrl = 'http://127.0.0.1:' + port;
   let ready = false;
   for (let attempt = 0; attempt < 80; attempt++) {
-    if (child.exitCode !== null) throw new Error('LAN server exited during startup');
+    if (child.exitCode !== null) throw new Error('LAN server exited during startup: ' + startupOutput.slice(-4000));
     try {
       const response = await fetch(baseUrl + '/healthz', { headers: { 'X-Forwarded-Proto': 'https' } });
       if (response.ok) { ready = true; break; }
