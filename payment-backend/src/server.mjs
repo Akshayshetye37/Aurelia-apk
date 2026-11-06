@@ -542,16 +542,29 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
   }
 });
 
-app.get('/v1/payments/capabilities', requireTenantPaymentActor, (_req, res) => {
-  res.json({
+app.get('/v1/payments/capabilities', requireTenantPaymentActor, async (req, res) => {
+  const providers = await Promise.all(providerCatalogue.flatMap(provider =>
+    provider.environments.map(async environment => {
+      const snap = await providerTenantDoc(req.tenant.id, provider.id, environment).get();
+      const state = snap.exists ? snap.data() : {};
+      return {
+        provider: provider.id, label: provider.label, environment,
+        capabilities: provider.capabilities, productionReady: provider.productionReady,
+        configured: state.configured === true,
+        credentialsValidated: state.credentialsValidated === true,
+        sandboxTestPassed: state.sandboxTestPassed === true,
+        webhookVerified: state.webhookVerified === true,
+        active: state.active === true
+      };
+    })
+  ));
+  return res.json({
     liveCollection: false,
     folioSettlement: false,
     refunds: false,
     reconciliation: false,
     sdkCallbacksAuthoritative: false,
-    providers: providerCatalogue.map(({ id, label, capabilities, productionReady }) => ({
-      provider: id, label, capabilities, productionReady
-    }))
+    providers
   });
 });
 
