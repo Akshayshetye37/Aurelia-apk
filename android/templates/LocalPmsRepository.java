@@ -65,7 +65,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
     try {
       try(Cursor c=db.rawQuery("SELECT migration_id,source_key FROM pms_migrations WHERE migration_key='legacy-localstorage' ",null)){
-        if(c.moveToFirst()){if(migrationId.equals(c.getString(0))&&sourceKey.equals(c.getString(1))){db.setTransactionSuccessful();return true;}throw new IllegalStateException("legacy_migration_already_completed");}
+        if(c.moveToFirst()){if(migrationId.equals(c.getString(0))&&sourceKey.equals(c.getString(1))){try(Cursor snap=db.rawQuery("SELECT raw_json FROM pms_migration_snapshots WHERE snapshot_id=?",new String[]{migrationId})){if(snap.moveToFirst()&&rawJson.equals(snap.getString(0))){db.setTransactionSuccessful();return true;}}throw new IllegalStateException("legacy_migration_replay_payload_mismatch");}throw new IllegalStateException("legacy_migration_already_completed");}
       }
       if(DatabaseUtils.longForQuery(db,"SELECT COUNT(*) FROM pms_entities",null)!=0)throw new IllegalStateException("canonical_repository_not_empty");
       ContentValues snap=new ContentValues();snap.put("snapshot_id",migrationId);snap.put("source_key",sourceKey);snap.put("raw_json",rawJson);snap.put("created_at",System.currentTimeMillis());db.insertOrThrow("pms_migration_snapshots",null,snap);
