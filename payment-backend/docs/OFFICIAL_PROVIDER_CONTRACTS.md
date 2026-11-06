@@ -1,6 +1,6 @@
 # Official payment-provider integration contracts (research baseline)
 
-Research date: 2026-11-01. This document records the official public documentation reviewed for the seven gateways already named by Aurelia. It is a source-of-truth checklist, not a claim that adapters are implemented or merchant credentials are enabled.
+Research date: 2026-11-06. This document records the official public documentation reviewed for the seven gateways already named by Aurelia. It is a source-of-truth checklist, not a claim that adapters are implemented or merchant credentials are enabled.
 
 ## Shared Aurelia contract
 
@@ -45,31 +45,32 @@ Official developer portal: https://docs.payu.in/
 V2 API reference: https://docs.payu.in/v2/reference/introduction-api-reference
 Classic integration API map: https://docs.payu.in/docs/apis-used-for-merchant-integration
 
-- PayU exposes distinct V2 and classic hosted-checkout contracts. Do not combine their authentication, payloads or hash algorithms.
-- V2 documentation includes hosted checkout, verify payment, webhooks, create refund and refund status.
-- Classic hosted checkout uses a mode-specific SHA-512 request hash; post-service APIs use the documented key/command/var1/salt sequence.
-- Select one contract per merchant account during onboarding; implement its exact test/live endpoints and hash canonicalization.
-- Refund sandbox availability is feature-dependent; do not equate a successful mock/reference call with sandbox certification.
+- The Aurelia adapter selects the **classic PayU India hosted-checkout contract**; it does not mix the V2 HMAC authorization contract into classic requests.
+- Hosted checkout posts to `https://test.payu.in/_payment` or `https://secure.payu.in/_payment` with the classic SHA-512 request hash generated from the key/txnid/amount/product/customer/udf/salt sequence.
+- Payment verification and refund commands use the classic `merchant/postservice.php?form=2` interface and command hash `key|command|var1|salt`.
+- Refund initiation uses `cancel_refund_transaction` with PayU ID as `var1`, merchant refund token as `var2`, and decimal refund amount as `var3`; refund status is queried by request ID or PayU ID.
+- Merchant account UAT is still required to validate command response shapes, refund request IDs, callback reverse hash and account-specific permissions.
 
 ### PhonePe Payment Gateway
 Official developer portal: https://developer.phonepe.com/
 Standard Checkout V2: https://developer.phonepe.com/phonepe-payment-gateway/pg-v2-standard-checkout-integration
 
-- Use the merchant's enabled PhonePe PG product and its current Standard Checkout V2 contract.
-- Implement OAuth/token acquisition, payment creation, status fetch, webhook/callback verification and refund/status according to the merchant's enabled API version.
-- Client ID, client secret, client version and merchant ID are not sufficient evidence of a valid integration; verify the exact onboarding-issued values and API version.
-- Never treat redirect return as final payment confirmation.
+- The Aurelia adapter targets Standard Checkout V2: sandbox `https://api-preprod.phonepe.com/apis/pg-sandbox`, production `https://api.phonepe.com/apis/pg`, with the production OAuth token endpoint under `/apis/identity-manager/v1/oauth/token`.
+- Token expiry uses the provider `expires_at` epoch where returned; the bearer token is sent as `O-Bearer`.
+- Webhook authorization is verified against the configured SHA-256 digest of `username:password` using constant-time comparison; raw event JSON is parsed only after authentication.
+- Refund initiation and refund-status are separate provider calls; refund status must bind to the original merchant order and amount.
+- Client ID, client secret, client version and webhook credentials still require merchant sandbox/UAT confirmation; never treat redirect return as final payment confirmation.
 
 ### Paytm Payment Gateway
 Official docs: https://business.paytm.com/docs/
 Callback/webhook: https://business.paytm.com/docs/callback-and-webhook/
 Server SDK API operations: https://business.paytm.com/docs/server-sdk/php/
 
-- Initiate Transaction returns a transaction token used by the client payment flow.
-- Query Transaction Status server-side before fulfillment.
-- Sign requests and verify callbacks/webhooks with the official Paytm checksum library/algorithm for the selected API.
-- Refund initiation and refund-status are separate operations; model asynchronous refund states.
-- Use staging and production gateway hosts and credentials separately.
+- Initiate Transaction returns a transaction token used by the client checkout flow; the adapter uses the official `paytmchecksum` Node package rather than a simplified HMAC substitute.
+- Query Transaction Status server-side before fulfillment and bind the response MID/order ID to the local intent.
+- Verify callbacks using the official checksum implementation over the callback fields.
+- Refund initiation (`/refund/apply`) and refund status (`/v2/refund/status`) are separate operations; accepted refunds remain pending until the refund-specific credit state is terminal.
+- Use staging and production gateway hosts and credentials separately; merchant staging/UAT is still required.
 
 ### CCAvenue
 Official merchant site and technical FAQ: https://www.ccavenue.com/faq
@@ -87,9 +88,10 @@ Callbacks: https://docs.jiopay.in/docs/webhooks
 Status/refund command: https://docs.jiopay.in/reference/command
 
 - UAT base: `https://uat.jiopay.co.in/`; production base: `https://jiopay.co.in/`.
-- Requests and responses use a merchant secret-based SHA-256/HMAC secureHash. The documented canonicalization sorts parameter keys and concatenates values; follow the exact product-specific page and verify response hashes.
-- Server-to-server callbacks are recommended as the definitive notification path; still reconcile with the status API.
-- The status/refund command supports STATUS and REFUND with merchant transaction references and amount.
+- Requests and responses use merchant-secret HMAC-SHA256 `secureHash`: sort parameter keys alphabetically, concatenate parameter values without delimiters, then HMAC-SHA256 the message and encode lowercase hex. Null response values must follow the provider's exact string canonicalization.
+- Hosted checkout uses `/pg/api/v2/initiateSale` (UAT `/tsp/pg/api/v2/initiateSale`), `currencyCode: 356`, `payType: 0`, a 20-character maximum merchant transaction reference and a valid customer email (use the documented guest address when unavailable).
+- The command API uses `/pg/api/command` (UAT `/tsp/pg/api/command`) with `STATUS` and `REFUND`; for STATUS, `merchantTxnNo` is the same as `originalTxnNo`.
+- Server-to-server callbacks are recommended, but must be hash-verified and reconciled against the status API. Merchant/aggregator configuration and UAT are still required.
 - Hosted checkout, QR/intent and seamless flows are distinct. Do not implement a card-data seamless flow unless the merchant has the required PCI-DSS certification and explicitly enabled product.
 
 ## Deployment gates
