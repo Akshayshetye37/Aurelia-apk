@@ -10,6 +10,7 @@ export const PAYMENT_CONTROL_DEFAULTS = Object.freeze({
   manual_posting: false,
   test_collection: false,
   live_collection: false,
+  live_collection_enabled: false,
   automatic_settlement: false,
   native_settlement_bridge: false,
   refund_processing: false
@@ -20,6 +21,7 @@ export const PAYMENT_CONTROL_IDS = Object.freeze([
   "manual_posting",
   "test_collection",
   "live_collection",
+  "live_collection_enabled",
   "automatic_settlement",
   "native_settlement_bridge",
   "refund_processing"
@@ -54,7 +56,8 @@ export function paymentControlAllows(controls, control) {
   const state = normalizePaymentControls(controls);
   return state.controlState === "CONFIGURED" &&
     state.emergency_stop === false &&
-    state[control] === true;
+    state[control] === true &&
+    (control !== "live_collection" || state.live_collection_enabled === true);
 }
 
 export async function readPaymentControls({ db, tenantId }) {
@@ -133,6 +136,13 @@ export async function updatePaymentControls({
       : { ...PAYMENT_CONTROL_DEFAULTS, controlState: "UNCONFIGURED" };
     if (current.controlState === "INVALID_FAIL_CLOSED") {
       throw Object.assign(new Error("Stored payment control document is invalid"), { code: "PAYMENT_CONTROLS_INVALID" });
+    }
+    // The tenant-facing switch can only be enabled after the independent,
+    // internally approved live_collection release gate is already active.
+    if (changes.live_collection_enabled === true && current.live_collection !== true) {
+      throw Object.assign(new Error("Live collection has not been internally authorised"), {
+        code: "PAYMENT_LIVE_COLLECTION_NOT_AUTHORISED"
+      });
     }
     const next = { ...PAYMENT_CONTROL_DEFAULTS };
     for (const key of PAYMENT_CONTROL_IDS) next[key] = current[key] ?? PAYMENT_CONTROL_DEFAULTS[key];
