@@ -30,7 +30,10 @@ test('Generated root Gradle plugin management is not rewritten', () => {
 test('Groovy and Kotlin DSL app dependencies are supported', () => {
   assert.match(patchScript, /implementation platform/);
   assert.match(patchScript, /implementation\(platform/);
-  assert.match(patchScript, /implementation.*auth/);
+  assert.match(patchScript, /const auth = 'com\\.google\\.firebase:firebase-auth'/);
+  assert.match(patchScript, /const missing = \\[auth, \.\.\.paymentDependencies\\]/);
+  assert.match(patchScript, /implementation\\("' \\+ dependency \\+ '"\\)/);
+  assert.match(patchScript, /implementation "' \\+ dependency \\+ '"/);
 });
 
 test('Google Services plugin is conditional on a supplied app config', () => {
