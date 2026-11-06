@@ -526,6 +526,9 @@ fs.copyFileSync(localPaymentLedgerTemplate, path.join(javaDir, 'LocalPaymentLedg
 const localPmsRepositoryTemplate = path.join(androidDir, 'templates', 'LocalPmsRepository.java');
 if (!fs.existsSync(localPmsRepositoryTemplate)) throw new Error('LocalPmsRepository.java template is missing.');
 fs.copyFileSync(localPmsRepositoryTemplate, path.join(javaDir, 'LocalPmsRepository.java'));
+const pmsStoragePluginTemplate = path.join(androidDir, 'templates', 'CapacitorPmsStoragePlugin.java');
+if (!fs.existsSync(pmsStoragePluginTemplate)) throw new Error('CapacitorPmsStoragePlugin.java template is missing.');
+fs.copyFileSync(pmsStoragePluginTemplate, path.join(javaDir, 'CapacitorPmsStoragePlugin.java'));
 
 const javaPath = path.join(javaDir, 'MainActivity.java');
 const java = String.raw`
@@ -597,6 +600,8 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor();
 
   @Override public void onCreate(Bundle savedInstanceState) {
+    // Explicit registration is required: the custom plugin is not discovered by package scanning.
+    registerPlugin(CapacitorPmsStoragePlugin.class);
     super.onCreate(savedInstanceState);
     getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
       @Override public void handleOnBackPressed() {
