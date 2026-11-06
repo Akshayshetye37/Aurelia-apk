@@ -2,10 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-
 const root = process.cwd();
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
-
 test('native security templates exist and are copied by the maintained Android generator', () => {
   for (const name of [
     'AureliaCryptoEngine.kt',
@@ -23,7 +21,6 @@ test('native security templates exist and are copied by the maintained Android g
   assert.match(patcher, /BiometricVaultManager\.kt/);
   assert.match(patcher, /AureliaAppManager\.kt/);
 });
-
 test('PIN envelope uses Argon2id and AES-GCM with authenticated versioned metadata', () => {
   const source = read('android/templates/security/AureliaCryptoEngine.kt');
   assert.match(source, /ARGON2_id/);
@@ -34,7 +31,6 @@ test('PIN envelope uses Argon2id and AES-GCM with authenticated versioned metada
   assert.match(source, /kekBytes\.fill\(0\)/);
   assert.doesNotMatch(source, /pin\.toString\(\)/);
 });
-
 test('lockout state is encrypted and crash-safe rather than stored as plaintext preferences', () => {
   const source = read('android/templates/security/AppLockManager.kt');
   assert.match(source, /AtomicFile/);
@@ -44,7 +40,6 @@ test('lockout state is encrypted and crash-safe rather than stored as plaintext 
   assert.match(source, /BOOT_COUNT/);
   assert.match(source, /refusing unlock/);
 });
-
 test('biometric unlock requires an authenticated Keystore CryptoObject operation', () => {
   const source = read('android/templates/security/BiometricVaultManager.kt');
   assert.match(source, /AndroidKeyStore/);
@@ -53,7 +48,6 @@ test('biometric unlock requires an authenticated Keystore CryptoObject operation
   assert.match(source, /decryptAfterAuthentication/);
   assert.match(source, /setUserAuthenticationRequired\(true\)/);
 });
-
 test('recovery code is not silently enabled by the local native security foundation', () => {
   const readme = read('README.md');
   const recovery = read('docs/PIN-BACKUP-RECOVERY-STRATEGY.md');
@@ -61,8 +55,6 @@ test('recovery code is not silently enabled by the local native security foundat
   assert.match(recovery, /KMS\/HSM/);
   assert.match(readme, /not production-ready|planned\/incomplete|recovery support is not yet production-ready/i);
 });
-
-
 test('PIN policy is enforced by the cryptographic engine, not only by the launch form', () => {
   const crypto = read('android/templates/security/AureliaCryptoEngine.kt');
   const gate = read('android/templates/security/LockGateActivity.kt');
@@ -72,8 +64,6 @@ test('PIN policy is enforced by the cryptographic engine, not only by the launch
   assert.match(gate, /Forgot PIN\?/);
   assert.match(gate, /recovery service, which is not yet available/);
 });
-
-
 test('payment device identity uses Android Keystore P-256 and domain-separated protocol transcripts', () => {
   const source = read('android/templates/security/PaymentDeviceKeyStore.kt');
   const patcher = read('scripts/patch-android.js');
@@ -88,8 +78,6 @@ test('payment device identity uses Android Keystore P-256 and domain-separated p
   assert.doesNotMatch(source, /@JavascriptInterface|addJavascriptInterface\s*\(/);
   assert.match(source, /not provider verification or accounting approval/);
 });
-
-
 test('payment device identity stages challenge-bound hardware attestation and exports its chain', () => {
   const source = read('android/templates/security/PaymentDeviceKeyStore.kt');
   assert.match(source, /createAttestedIdentity\(serverChallenge: ByteArray\)/);
@@ -108,7 +96,6 @@ test('payment device identity stages challenge-bound hardware attestation and ex
   const generationGuard = source.slice(source.indexOf('fun createAttestedIdentity'), source.indexOf('fun generate(preferStrongBox'));
   assert.doesNotMatch(generationGuard, /deleteEntry\(ATTESTED_ALIAS\)/);
 });
-
 test('native payment device transport is HTTPS-only, path-safe, signed, and response-bounded', () => {
   const source = read('android/templates/security/PaymentDeviceClient.kt');
   const patcher = read('scripts/patch-android.js');
@@ -119,9 +106,8 @@ test('native payment device transport is HTTPS-only, path-safe, signed, and resp
   assert.match(source, /signRequest\(/);
   assert.match(source, /instanceFollowRedirects = false/);
   assert.ok(source.includes('connection.setRequestProperty("Authorization", "Bearer " + idToken)'));
-  assert.match(source, /Authorization", "Bearer " \\+ idToken/);
   assert.match(source, /MAX_RESPONSE_BYTES/);
-  assert.match(source, /fun leaseNext\(\): Lease\?/);
+  assert.ok(source.includes("fun leaseNext(idToken: String? = null): Lease?"));
   assert.match(source, /data class Lease/);
   assert.match(source, /leaseToken/);
   assert.match(source, /validateCommand\(/);
@@ -129,6 +115,6 @@ test('native payment device transport is HTTPS-only, path-safe, signed, and resp
   assert.match(source, /sha256Hex\(payloadCanonical\.toByteArray/);
   assert.match(source, /MessageDigest\.isEqual/);
   assert.match(source, /durableApplied/);
-  assert.match(source, /acknowledge\(lease: Lease/);
+  assert.ok(source.includes("fun acknowledge(lease: Lease, ledgerAckId: String, idToken: String? = null): JSONObject"));
   assert.doesNotMatch(source, /@JavascriptInterface|addJavascriptInterface\s*\(/);
 });
