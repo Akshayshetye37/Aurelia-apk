@@ -4,7 +4,7 @@
 
 **Current repository:** `Akshayshetye37/Aurelia-apk`  
 **Working branch:** `feature/multi-provider-payment-backend`  
-**Latest implementation commits:** Android JSON compatibility fix `72cf0acd` and native-template regression test `8131c18` (Android CI result pending).
+**Latest branch HEAD:** `209e4f9332c5239cb7fe5ba4294725d767853b2a` (`Preserve canonical native transaction result metadata`). The latest workflow completed with the PMS test suite and web packaging passing, but the Android debug APK compilation failed; this branch is not currently build-verified.
 
 ### Product architecture
 
@@ -509,3 +509,47 @@ The Android SQLite repository and registered Capacitor plugin now expose the sha
 New native adapter tests cover the JavaScript contract surface, stale-version rejection, migration replay/read-back, simulated interruption before migration commit, retry backoff, lease ownership, acknowledgement and conflict transitions. Static Android template checks require the complete plugin/repository method surface.
 
 **Verification boundary:** these are source-level implementation and adapter tests. GitHub Actions must pass the latest Android generation/compile workflow before claiming the Java templates compile. Simulated interruption tests do not replace instrumentation tests that kill the Android process during a real SQLite transaction or physical-device power-loss/restart testing. Native SQLite is still not selected by the bootstrap coordinator, and no PMS screen has been cut over to this adapter. Browser/PWA continues to use IndexedDB; Android UI continues in legacy compatibility mode until contract conformance, real-device recovery and complete UI migration are verified.
+
+
+## Production readiness status — verified 2026-11-07
+
+**Release decision: NOT PRODUCTION READY.** The latest checked branch head is `209e4f9332c5239cb7fe5ba4294725d767853b2a`. GitHub Actions run [42302690303](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42302690303) completed with **failure**. The complete PMS test suite, production web bundle, privacy checks, Android project generation, Aurelia template application and Capacitor sync passed. The Android debug APK compile failed, so APK identity/signature checks, merged-manifest verification and artifact upload were skipped.
+
+### Verified compile blockers in that run
+
+- `android/templates/CapacitorPmsStoragePlugin.java:54`: variables captured by the outbox-claim lambda are reassigned local variables and are therefore not effectively final.
+- `android/templates/LocalPmsRepository.java:90`: the legacy import loop serializes `value`, which is not defined in that scope; the value must be retrieved from the parsed legacy object for the current key and validated before insertion.
+
+These are concrete build failures, not device-only acceptance items. The native Android build must pass before the SQLite work can be considered compiled.
+
+### Production release gates
+
+1. **Persistence contract and Android SQLite**
+   - Fix the current Java compile errors and rerun the full Android build.
+   - Audit SQLite schema upgrades, entity listing, exact legacy snapshot import/read-back, optimistic version checks, atomic entity-plus-outbox commits, and lease/ack/retry/conflict state transitions against the IndexedDB contract.
+   - Add real Android instrumentation tests for transaction rollback, duplicate/replay handling, process interruption and restart recovery. Existing adapter tests that simulate interruption are not proof of real SQLite crash recovery.
+   - Select the native SQLite adapter in Android bootstrap only after contract conformance and migration verification pass. Keep IndexedDB for browser/PWA.
+2. **PMS domain cutover**
+   - Move all booking, room, guest, folio, inventory, settings and audit reads/writes off direct synchronous `localStorage` state and onto the asynchronous repository/domain-command pipeline.
+   - Verify startup, migration, rollback, upgrade and recovery with existing customer data. Preserve the original `aurelia_lodge_v2` snapshot until verified cutover and backup acceptance.
+3. **Payment end-to-end**
+   - Complete provider checkout handoffs and test each provider supported by the release.
+   - Connect authoritative provider verification and signed webhook processing to idempotent payment records and the canonical folio.
+   - Prove duplicate/out-of-order webhook handling, payment reconciliation, refunds and folio reversal, failure recovery and auditability. Do not treat a client callback as proof of capture.
+   - Keep live collection disabled until the complete payment-to-folio path is accepted. Merchant credentials and provider signing secrets must remain in an appropriate trusted backend, not APK/local storage.
+4. **Security and tenancy**
+   - Enforce tenant/property authorization at every repository, API, sync and payment boundary.
+   - Complete cross-tenant isolation, credential/secrets handling, input validation, webhook signature/replay protection, audit and privacy tests.
+5. **Offline sync and data resilience**
+   - Verify offline operation, reconnect replay, lease expiry, retry/backoff, conflict resolution and duplicate suppression under real network interruption.
+   - Define and test backup/restore, device replacement/loss, retention and disaster-recovery procedures.
+6. **Release operations**
+   - Pass Android build, signing, manifest/permission and artifact checks; test installation, upgrade and rollback on supported physical devices.
+   - Run real provider sandbox transactions and end-to-end acceptance tests.
+   - Add production diagnostics/monitoring, incident response, support and release rollback procedures; complete privacy/security review before enabling live operations.
+
+### Current capability boundary
+
+The async bootstrap currently validates/migrates the legacy snapshot into IndexedDB and binds the Promise-based repository bridge, then replays the existing UI in **legacy compatibility mode**. Existing screens still use synchronous legacy application state. The native SQLite bridge is not yet selected by bootstrap and no complete UI domain cutover is claimed. Payment live collection and automated settlement/refund posting remain gated.
+
+Do not describe Aurelia as production-ready until the release gates above are implemented and the corresponding CI, physical-device, security and payment acceptance evidence is recorded.
