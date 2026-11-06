@@ -32,7 +32,13 @@ const PROVIDER_STATES = Object.freeze({
   cashfree: Object.freeze({
     active: 'PENDING', paid: 'CAPTURED', success: 'CAPTURED',
     failed: 'FAILED', user_dropped: 'FAILED'
-  })
+  }),
+  payu: Object.freeze({ pending: 'PENDING', success: 'CAPTURED', failure: 'FAILED', failed: 'FAILED' }),
+  phonepe: Object.freeze({ initiated: 'PENDING', pending: 'PENDING', completed: 'CAPTURED', failed: 'FAILED', cancelled: 'FAILED' }),
+  paytm: Object.freeze({ txn_success: 'CAPTURED', pending: 'PENDING', open: 'PENDING', txn_failure: 'FAILED', no_record_found: 'UNKNOWN' }),
+  jiopay: Object.freeze({ pending: 'PENDING', success: 'CAPTURED', successful: 'CAPTURED',
+    completed: 'CAPTURED', captured: 'CAPTURED', failed: 'FAILED', failure: 'FAILED',
+    s0000: 'CAPTURED', suc: 'CAPTURED' })
 });
 
 export function mapVerifiedProviderStatus(provider, status) {
@@ -102,8 +108,9 @@ export function assertIntentBinding(expected, observed) {
     throw new Error('payment_intent_binding_mismatch');
   }
   if (!Number.isSafeInteger(observed.amountMinor) || observed.amountMinor <= 0 ||
-      observed.currency !== 'INR' || !['razorpay', 'cashfree'].includes(observed.provider) ||
-      !['test', 'live'].includes(observed.environment)) {
+      observed.currency !== 'INR' || !['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay'].includes(observed.provider) ||
+      !({ razorpay: ['test', 'live'], cashfree: ['test', 'live'], payu: ['test', 'live'],
+        phonepe: ['test', 'live'], paytm: ['staging', 'production'], jiopay: ['uat', 'production'] }[observed.provider] || []).includes(observed.environment)) {
     throw new TypeError('invalid_payment_intent_binding');
   }
   return true;
