@@ -24,7 +24,7 @@ const makeStorage = initial => {
   };
 };
 const coordinator = (name, storage, extra = {}) => new PmsBootstrapCoordinator({
-  storage, indexedDBImpl: indexedDB, platform: "BROWSER_OR_PWA",
+  storage, indexedDBImpl: indexedDB, databaseName: "pms-bootstrap-test-" + name, platform: "BROWSER_OR_PWA",
   ...extra,
   repository: extra.repository || undefined,
   now: () => "2026-11-07T00:00:00.000Z"
