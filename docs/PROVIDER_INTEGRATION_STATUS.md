@@ -2,17 +2,17 @@
 
 **Architecture:** Hybrid production backend. Android remains the offline-first PMS client; the cloud backend owns provider credentials, payment verification and accounting orchestration.  
 **Working branch:** `feature/multi-provider-payment-backend`  
-**Release status:** Live payment collection is OFF. No provider is production-ready.
+**Release status:** Live payment collection is OFF. No provider is production-ready. The factory can instantiate six complete seven-operation adapters; the cloud payment-intent/API routes still expose only Razorpay and Cashfree.
 
-| Provider | Code state | Exposed by production factory/API | Remaining gates |
+| Provider | Adapter/factory state | Cloud checkout API enabled | Remaining gates |
 |---|---|---:|---|
-| Razorpay | Adapter implemented; partial lifecycle | Yes, test checkout only | Verify provider contract tests, webhook replay/concurrency, refund idempotency/status, canonical folio posting, Android integration and sandbox UAT |
-| Cashfree | Adapter implemented; partial lifecycle | Yes, test checkout only | Verify current API/webhook/refund contracts, provider contract tests, replay/concurrency, canonical folio posting, Android integration and sandbox UAT |
-| PayU | Incomplete prototype; refund/status lifecycle disabled | No | Confirm exact PayU product/API contract, credential semantics, reverse-hash contract, refund APIs, server routing, adapter tests and sandbox UAT |
-| PhonePe | Incomplete prototype; not registered; webhook/refund semantics unqualified | No | Confirm exact PhonePe merchant product/version, OAuth, order/status/refund idempotency, callback authentication, server routing, adapter tests and sandbox UAT |
-| Paytm | Not implemented | No | Confirm merchant PG product, obtain current API contract, implement and test complete lifecycle |
-| JioPay | Documentation/scaffold only | No | Obtain merchant API pack, implement and test complete lifecycle |
-| CCAvenue | Not implemented | No | Obtain merchant integration kit/API version, implement and test complete lifecycle |
+| Razorpay | Implemented; seven-operation contract; factory-wired | Yes, test checkout only | Verify provider contract tests, webhook replay/concurrency, refund idempotency/status, canonical folio posting, Android integration and sandbox UAT |
+| Cashfree | Implemented; seven-operation contract; factory-wired | Yes, test checkout only | Verify current API/webhook/refund contracts, provider contract tests, replay/concurrency, canonical folio posting, Android integration and sandbox UAT |
+| PayU | Classic hosted checkout, payment verification, reverse-hash webhook and refund lifecycle implemented; factory-wired | No | Integrate credential/onboarding, checkout, webhook and recovery routes; merchant sandbox/UAT; canonical folio posting; physical-device acceptance |
+| PhonePe | Standard Checkout V2 OAuth, checkout, status, SHA256 webhook auth and refund lifecycle implemented; factory-wired | No | Integrate cloud routes and verify merchant-specific API version, webhook configuration, refund status, sandbox/UAT and physical-device acceptance |
+| Paytm | Official checksum-based initiate, status, callback and refund lifecycle implemented; factory-wired | No | Integrate cloud routes; verify merchant MID/website config, staging/UAT, callback and refund reconciliation |
+| JioPay | Hosted checkout, HMAC-SHA256, status, webhook and refund command lifecycle implemented; factory-wired | No | Confirm merchant/aggregator configuration, UAT status/refund responses, cloud routes and device acceptance |
+| CCAvenue | Catalogue-only; deliberately not wired | No | Obtain current merchant-specific integration kit and authoritative checkout/status/standard-refund contracts; implement and test before factory registration |
 
 ## Dependency-ordered delivery sequence
 
@@ -38,8 +38,8 @@
 
 ## Current evidence and limitations
 
-- The backend enables only Razorpay and Cashfree adapters. PayU and PhonePe prototypes are deliberately excluded: PayU's refund lifecycle is explicitly disabled and PhonePe's callback/refund contracts are not accepted as complete. Paytm, JioPay and CCAvenue remain catalogue-only.
+- The provider factory wires Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay after all seven adapter operations pass capability checks. Only Razorpay and Cashfree are exposed by the current cloud payment-intent, credential, test-order and webhook routes. The four additional adapters are not yet enabled through the cloud API. CCAvenue remains catalogue-only because the current official public documentation does not establish the complete standard refund/status contract.
 - The reconciliation endpoint is authenticated and batch-bounded, but currently invokes a manual sweep; it is not a scheduled service.
 - The worker and settlement helper still target `paymentFolios/{tenant+folio hash}` and `journalEntries/{intentId}`. The repository has not established that this matches the canonical deployed PMS schema.
 - Firestore indexes must be deployed with the backend. Concurrency, lease recovery and production query load remain to be verified.
-- No automated test pass, cloud deployment, provider sandbox/UAT, Android build or physical-device acceptance is asserted until CI/runtime evidence exists.
+- Unit/contract tests and backend CI cover the six factory-wired adapters. These tests use deterministic mock provider responses; they are not merchant sandbox/UAT evidence. No provider-specific live merchant UAT, cloud deployment, physical-device acceptance or live collection is asserted.
