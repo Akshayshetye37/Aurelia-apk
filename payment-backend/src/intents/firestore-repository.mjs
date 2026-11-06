@@ -4,8 +4,52 @@ import { transitionIntent, mapVerifiedProviderStatus } from './intent-state-mach
 
 const ID = /^[A-Za-z0-9_-]{6,64}$/;
 const IDEM = /^[A-Za-z0-9._:-]{12,100}$/;
-const PROVIDERS = new Set(['razorpay', 'cashfree']);
-const ENVIRONMENTS = new Set(['test', 'live']);
+const PROVIDERS = new Set(['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay']);
+const ENVIRONMENTS = Object.freeze({
+  razorpay: new Set(['test', 'live']), cashfree: new Set(['test', 'live']),
+  payu: new Set(['test', 'live']), phonepe: new Set(['test', 'live']),
+  paytm: new Set(['staging', 'production']), jiopay: new Set(['uat', 'production'])
+});
+function providerAccountIdentifier(provider, credentials) {
+  const field = { razorpay: 'keyId', cashfree: 'appId', payu: 'merchantKey',
+    phonepe: 'clientId', paytm: 'mid', jiopay: 'merchantId' }[provider];
+  const value = credentials?.[field];
+  if (typeof value !== 'string' || !value.trim()) throw new TypeError('provider_account_identity_missing');
+  return value.trim();
+}
+function buildProviderOrderInput(provider, { providerReference, intentId, folioId, amountMinor, currency, customer, returnUrl }) {
+  switch (provider) {
+    case 'razorpay': return { amountMinor, currency, receipt: providerReference, notes: { aurelia_intent_id: intentId, aurelia_folio_id: folioId } };
+    case 'cashfree': return { orderId: providerReference, amountMinor, currency, customer, returnUrl, idempotencyKey: 'aur_' + digest(intentId).slice(0, 32) };
+    case 'payu': return { orderId: providerReference, amountMinor, currency, customer, returnUrl };
+    case 'phonepe': return { orderId: providerReference, amountMinor, currency, returnUrl };
+    case 'paytm': return { orderId: providerReference, amountMinor, currency, customer, returnUrl, callbackUrl: returnUrl };
+    case 'jiopay': return { orderId: providerReference, amountMinor, currency, customer, returnUrl };
+    default: throw new TypeError('provider_not_supported');
+  }
+}
+function normalizeProviderCheckout(provider, remote) {
+  switch (provider) {
+    case 'razorpay': return { keyId: remote.keyId };
+    case 'cashfree': return { paymentSessionId: remote.paymentSessionId, checkoutUrl: remote.checkoutUrl || null };
+    case 'payu': return { checkout: remote.checkout };
+    case 'phonepe': return { checkoutUrl: remote.checkoutUrl || null };
+    case 'paytm': return { checkout: remote.checkout };
+    case 'jiopay': return { checkoutUrl: remote.checkoutUrl || null, transactionContext: remote.transactionContext || null };
+    default: throw new TypeError('provider_not_supported');
+  }
+}
+function validCheckout(provider, checkout) {
+  switch (provider) {
+    case 'razorpay': return typeof checkout.keyId === 'string' && checkout.keyId.length > 0;
+    case 'cashfree': return typeof checkout.paymentSessionId === 'string' && checkout.paymentSessionId.length > 0;
+    case 'payu': return typeof checkout.checkout?.action === 'string' && checkout.checkout.action.startsWith('https://') && typeof checkout.checkout.fields?.hash === 'string';
+    case 'phonepe': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://');
+    case 'paytm': return typeof checkout.checkout?.txnToken === 'string' && typeof checkout.checkout.checkoutHost === 'string' && checkout.checkout.checkoutHost.startsWith('https://');
+    case 'jiopay': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://') && typeof checkout.transactionContext === 'string';
+    default: return false;
+  }
+}
 
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 export const paymentFolioDocumentId = (tenantId, folioId) => digest(tenantId + ':' + folioId);
@@ -15,16 +59,24 @@ function validatePayload(payload) {
       !ID.test(payload.folioId || '') ||
       !Number.isSafeInteger(payload.amountMinor) || payload.amountMinor <= 0 ||
       payload.currency !== 'INR' || !PROVIDERS.has(payload.provider) ||
-      !ENVIRONMENTS.has(payload.environment) || !IDEM.test(payload.idempotencyKey || '') ||
+      !ENVIRONMENTS[payload.provider]?.has(payload.environment) || !IDEM.test(payload.idempotencyKey || '') ||
       (payload.deviceId !== undefined && !ID.test(payload.deviceId || ''))) {
     throw new TypeError('invalid_payment_intent_request');
   }
-  if (payload.provider === 'cashfree' &&
+  if (['cashfree', 'phonepe', 'jiopay'].includes(payload.provider) &&
       (!payload.customer || !ID.test(payload.customer.id || '') ||
-       typeof payload.customer.phone !== 'string' ||
-       !/^\+?[0-9]{8,15}$/.test(payload.customer.phone) ||
+       typeof payload.customer.phone !== 'string' || !/^\+?[0-9]{8,15}$/.test(payload.customer.phone) ||
        typeof payload.returnUrl !== 'string' || !payload.returnUrl.startsWith('https://'))) {
-    throw new TypeError('cashfree_customer_and_https_return_url_required');
+    throw new TypeError(payload.provider + '_customer_and_https_return_url_required');
+  }
+  if (payload.provider === 'payu' && (!payload.customer || typeof payload.customer.firstName !== 'string' ||
+      !payload.customer.firstName.trim() || typeof payload.customer.email !== 'string' ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.customer.email) ||
+      typeof payload.returnUrl !== 'string' || !payload.returnUrl.startsWith('https://'))) {
+    throw new TypeError('payu_customer_and_https_return_url_required');
+  }
+  if (payload.provider === 'paytm' && (!payload.customer || typeof payload.returnUrl !== 'string' || !payload.returnUrl.startsWith('https://'))) {
+    throw new TypeError('paytm_customer_and_https_return_url_required');
   }
   return payload;
 }
@@ -95,8 +147,8 @@ export class FirestorePaymentRepository {
       return this.getPaymentIntent(authUid, intentId);
     }
     if (!record.providerAccountId ||
-        !['razorpay', 'cashfree'].includes(record.provider) ||
-        !['test', 'live'].includes(record.environment)) {
+        !PROVIDERS.has(record.provider) ||
+        !ENVIRONMENTS[record.provider]?.has(record.environment)) {
       const error = new Error('provider_order_binding_unavailable'); error.statusCode = 409; throw error;
     }
 
@@ -134,7 +186,7 @@ export class FirestorePaymentRepository {
     const credentials = await this.secretManager.getProviderSecrets(
       tenantId, record.provider, record.environment
     );
-    const accountId = record.provider === 'razorpay' ? credentials.keyId : credentials.appId;
+    const accountId = providerAccountIdentifier(record.provider, credentials);
     if (accountId !== record.providerAccountId) {
       const error = new Error('provider_account_binding_mismatch'); error.statusCode = 409; throw error;
     }
@@ -217,7 +269,7 @@ export class FirestorePaymentRepository {
       const credentials = await this.secretManager.getProviderSecrets(
         tenantId, payload.provider, payload.environment
       );
-      const providerAccountId = payload.provider === 'razorpay' ? credentials.keyId : credentials.appId;
+      const providerAccountId = providerAccountIdentifier(payload.provider, credentials);
       if (typeof providerAccountId !== 'string' || !providerAccountId.trim()) return null;
       const adapter = this.providerFactory(payload.provider, {
         credentials, environment: payload.environment
@@ -230,10 +282,9 @@ export class FirestorePaymentRepository {
       if (payload.provider === 'cashfree' &&
           (remote.orderId !== providerReference || typeof remote.paymentSessionId !== 'string' || !remote.paymentSessionId)) return null;
 
-      const checkoutData = payload.provider === 'razorpay'
-        ? { keyId: credentials.keyId }
-        : { paymentSessionId: remote.paymentSessionId, checkoutUrl: remote.checkoutUrl || null };
-      if (payload.provider === 'razorpay' && typeof checkoutData.keyId !== 'string') return null;
+      // Do not fabricate a hosted-checkout token when a status lookup omits it.
+      const checkoutData = normalizeProviderCheckout(payload.provider, remote);
+      if (!validCheckout(payload.provider, checkoutData)) return null;
 
       const intentRef = this.db.collection('paymentIntents').doc(intentId);
       const idemRef = this.db.collection('paymentIntentIdempotency').doc(
@@ -283,7 +334,7 @@ export class FirestorePaymentRepository {
             tenantId, folioId: payload.folioId, intentId, provider: payload.provider,
             environment: payload.environment, providerOrderId: remote.orderId,
             deviceId: payload.deviceId || null,
-            providerAccountId: payload.provider === 'razorpay' ? credentials.keyId : credentials.appId,
+            providerAccountId,
             amountMinor: payload.amountMinor, currency: payload.currency, createdAt: recoveredAt
           });
         }
@@ -326,7 +377,7 @@ export class FirestorePaymentRepository {
       credentials = await this.secretManager.getProviderSecrets(
         tenantId, payload.provider, payload.environment
       );
-      const resolvedAccountId = payload.provider === 'razorpay' ? credentials.keyId : credentials.appId;
+      const resolvedAccountId = providerAccountIdentifier(payload.provider, credentials);
       if (typeof resolvedAccountId !== 'string' || !resolvedAccountId.trim()) {
         throw new Error('provider_account_identity_missing');
       }
@@ -359,9 +410,7 @@ export class FirestorePaymentRepository {
     const idemRef = this.db.collection('paymentIntentIdempotency').doc(keyHash);
     const lockRef = this.db.collection('paymentFolioLocks').doc(folioHash);
     const folioRef = this.db.collection('paymentFolios').doc(paymentFolioDocumentId(tenantId, payload.folioId));
-    const providerReference = payload.provider === 'razorpay'
-      ? 'aur_' + intentId.replace(/-/g, '').slice(0, 24)
-      : 'aur_' + intentId.replace(/-/g, '').slice(0, 32);
+    const providerReference = 'a_' + intentId.replace(/-/g, '').slice(0, 18);
     const now = this.clock().toISOString();
 
     const reservation = await this.db.runTransaction(async tx => {
@@ -499,18 +548,10 @@ export class FirestorePaymentRepository {
 
     // From the adapter invocation onward, the request may have been transmitted.
     // A timeout, transport error or malformed response remains UNKNOWN and locked.
-    const providerInput = payload.provider === 'razorpay'
-      ? {
-          amountMinor: payload.amountMinor, currency: payload.currency,
-          receipt: providerReference,
-          notes: { aurelia_intent_id: intentId, aurelia_folio_id: payload.folioId }
-        }
-      : {
-          orderId: providerReference,
-          amountMinor: payload.amountMinor, currency: payload.currency,
-          customer: payload.customer, returnUrl: payload.returnUrl,
-          idempotencyKey: 'aur_' + digest(intentId).slice(0, 32)
-        };
+    const providerInput = buildProviderOrderInput(payload.provider, {
+      providerReference, intentId, folioId: payload.folioId, amountMinor: payload.amountMinor,
+      currency: payload.currency, customer: payload.customer || {}, returnUrl: payload.returnUrl
+    });
 
     let observedRemote = null;
     try {
@@ -520,13 +561,8 @@ export class FirestorePaymentRepository {
           remote.amountMinor !== payload.amountMinor || remote.currency !== payload.currency) {
         throw new Error('provider_order_binding_mismatch');
       }
-      const checkoutData = payload.provider === 'razorpay'
-        ? { keyId: remote.keyId }
-        : { paymentSessionId: remote.paymentSessionId, checkoutUrl: remote.checkoutUrl || null };
-      if ((payload.provider === 'razorpay' && typeof checkoutData.keyId !== 'string') ||
-          (payload.provider === 'cashfree' && typeof checkoutData.paymentSessionId !== 'string')) {
-        throw new Error('provider_checkout_payload_invalid');
-      }
+      const checkoutData = normalizeProviderCheckout(payload.provider, remote);
+      if (!validCheckout(payload.provider, checkoutData)) throw new Error('provider_checkout_payload_invalid');
       await this.db.runTransaction(async tx => {
         const [currentIntent, currentIdem, currentLock] = await Promise.all([
           tx.get(intentRef), tx.get(idemRef), tx.get(lockRef)
