@@ -29,6 +29,10 @@ class PaymentDeviceClient(
 ) {
     data class Lease(
         val command: JSONObject,
+        val settlement: JSONObject,
+        val policyLease: JSONObject,
+        val authorization: JSONObject?,
+        val settlementAuthorized: Boolean,
         val leaseToken: String,
         val cursor: Long,
         val leaseExpiresAt: String
@@ -78,7 +82,14 @@ class PaymentDeviceClient(
         require(command.getLong("sequenceId") == cursor + 1L) {
             "Appliance returned a non-contiguous command sequence."
         }
-        return Lease(command, token, cursor, expiresAt)
+        val payload = command.getJSONObject("payload")
+        val settlement = payload.getJSONObject("settlement")
+        val policyLease = response.optJSONObject("policyLease")
+            ?: throw IllegalArgumentException("Signed settlement policy lease is missing.")
+        val authorization = response.optJSONObject("authorization")
+        val verified = SettlementEnvelopeVerifier().verify(settlement, policyLease, authorization)
+        return Lease(command, settlement, verified.policyLease, verified.authorization,
+            verified.settlementEnabled, token, cursor, expiresAt)
     }
 
     /**
@@ -89,6 +100,9 @@ class PaymentDeviceClient(
     fun acknowledge(lease: Lease, ledgerAckId: String): JSONObject {
         val command = lease.command
         validateCommand(command)
+        require(lease.settlementAuthorized && lease.authorization != null) {
+            "A disabled or unsigned settlement lease cannot be acknowledged as a folio posting."
+        }
         require(lease.leaseToken.matches(Regex("[A-Za-z0-9_-]{40,64}")) &&
             lease.cursor >= 0L && command.getLong("sequenceId") == lease.cursor + 1L &&
             parseLeaseExpiry(lease.leaseExpiresAt) > System.currentTimeMillis()) {
@@ -154,16 +168,22 @@ class PaymentDeviceClient(
             "Appliance command payload binding does not match its envelope."
         }
         val provider = payload.optString("provider")
+        val providerAccountId = payload.optString("providerAccountId")
         val settlement = payload.optJSONObject("settlement")
             ?: throw IllegalArgumentException("Appliance settlement binding is missing.")
         require(provider.isNotBlank() && provider.length <= 64 &&
+            providerAccountId.isNotBlank() && providerAccountId.length <= 128 &&
+            settlement.optString("tenantId").isNotBlank() &&
+            settlement.optString("deviceId") == deviceId &&
             settlement.optString("provider") == provider &&
+            settlement.optString("providerAccountId") == providerAccountId &&
+            settlement.optString("environment") == "test" &&
             settlement.optString("commandId") == commandId &&
+            settlement.optString("providerTransactionId") == payload.optString("providerPaymentId") &&
             settlement.optString("bookingId") == folioId &&
             settlement.optString("method") == provider &&
-            settlement.optDouble("amount", Double.NaN) == amountMinor.toDouble() / 100.0 &&
-            settlement.optString("source") == "staff_review" &&
-            settlement.optBoolean("verificationConfirmed", false)) {
+            settlement.optLong("amountPaise", -1L) == amountMinor &&
+            settlement.optString("reference") == payload.optString("providerPaymentId")) {
             "Appliance settlement binding is inconsistent."
         }
     }
