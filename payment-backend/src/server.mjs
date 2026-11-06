@@ -5,6 +5,8 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
+import { implementedProviderAdapters, providerQualificationStatus, createProviderAdapter } from './providers/factory.mjs';
+import { PROVIDERS } from './providers/registry.mjs';
 import { assertWebhookReplayIntegrity } from './webhooks/provider-webhook-router.mjs';
 import { installAsyncRouteErrorHandling } from './http/async-route-errors.mjs';
 import { createGracefulShutdown } from './http/graceful-shutdown.mjs';
@@ -405,6 +407,12 @@ const envOf = req => {
   const value = req.body?.environment || req.query?.environment;
   return value === 'test' || value === 'live' ? value : null;
 };
+const adapterEnvironmentOf = (provider, publicEnvironment) => {
+  if (!providerQualificationStatus(provider).implemented || !['test', 'live'].includes(publicEnvironment)) return null;
+  if (provider === 'paytm') return publicEnvironment === 'test' ? 'staging' : 'production';
+  if (provider === 'jiopay') return publicEnvironment === 'test' ? 'uat' : 'production';
+  return publicEnvironment;
+};
 const idempotencyOf = req => {
   const value = req.get('idempotency-key') || req.body?.idempotencyKey || '';
   return /^[A-Za-z0-9._:-]{12,100}$/.test(value) ? value : null;
@@ -436,25 +444,23 @@ const paymentRepository = new FirestorePaymentRepository({
   db,
   secretManager: {
     async getProviderSecrets(tenantId, provider, environment) {
-      if (!['razorpay', 'cashfree'].includes(provider)) throw new Error('provider_not_enabled_for_checkout');
+      if (!implementedProviderAdapters().includes(provider) || !PROVIDERS[provider]) throw new Error('provider_not_enabled_for_checkout');
       const api = JSON.parse(await loadSecret(providerSecretId(tenantId, provider, environment, 'api')));
-      const webhookSecret = await loadSecret(providerSecretId(tenantId, provider, environment, 'webhook'));
-      return { ...api, webhookSecret };
+      const webhookValue = await loadSecret(providerSecretId(tenantId, provider, environment, 'webhook'));
+      const webhook = provider === 'phonepe' ? JSON.parse(webhookValue) : { webhookSecret: webhookValue };
+      return { ...api, ...webhook };
     }
   }
 });
 // Capability truth is deliberately stricter than adapter method availability.
 // A provider API adapter is not an end-to-end PMS payment implementation.
-const providerCatalogue = [
-  { id: 'razorpay', label: 'Razorpay', environments: ['test', 'live'],
-    capabilities: { testCheckout: true, liveCollection: false, verifiedWebhook: true,
-      providerStatusLookup: true, folioSettlement: false, refunds: false, reconciliation: false },
-    productionReady: false },
-  { id: 'cashfree', label: 'Cashfree Payments', environments: ['test', 'live'],
-    capabilities: { testCheckout: true, liveCollection: false, verifiedWebhook: true,
-      providerStatusLookup: true, folioSettlement: false, refunds: false, reconciliation: false },
-    productionReady: false }
-];
+const providerCatalogue = implementedProviderAdapters().map(id => ({
+  id, label: PROVIDERS[id].label, environments: ['test', 'live'],
+  credentials: PROVIDERS[id].credentials.map(({ key, label, type, secret, required }) => ({ key, label, type, secret, required })),
+  capabilities: { testCheckout: true, liveCollection: false, verifiedWebhook: true,
+    providerStatusLookup: true, folioSettlement: false, refunds: false, reconciliation: false },
+  productionReady: false
+}));
 function providerTenantDoc(tenantId, provider, environment) {
   return db.doc('paymentTenants/' + tenantId + '/providers/' + provider + '_' + environment);
 }
