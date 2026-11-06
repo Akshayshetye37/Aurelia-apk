@@ -632,6 +632,7 @@ app.post('/v1/payments/intents/:intentId/refunds', requireTenantAdmin,
     const idempotencyKey = idempotencyOf(req) || req.body?.idempotencyKey;
     const reason = req.body?.reason == null ? 'Customer refund' : req.body.reason;
     if (!/^[0-9a-f-]{36}$/i.test(intentId || '') || !Number.isSafeInteger(amountMinor) || amountMinor < 100 ||
+        (req.body?.idempotencyKey && req.get('Idempotency-Key') && req.body.idempotencyKey !== req.get('Idempotency-Key')) ||
         typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{12,100}$/.test(idempotencyKey) ||
         typeof reason !== 'string' || reason.length < 3 || reason.length > 100 ||
         /[\u0000-\u001f\u007f]/.test(reason) ||
@@ -682,6 +683,7 @@ app.post('/v1/payments/intents/:intentId/refunds', requireTenantAdmin,
       const accountField = { razorpay: 'keyId', cashfree: 'appId', payu: 'merchantKey',
         phonepe: 'clientId', paytm: 'mid', jiopay: 'merchantId' }[record.provider];
       if (state[accountField] !== record.providerAccountId) return fail(res, 409, 'provider_account_binding_mismatch');
+      if (state.credentialsValidated !== true) return fail(res, 409, 'provider_credentials_not_validated');
       if (!reservation.created) {
         if (['SUCCEEDED', 'FAILED'].includes(record.state)) return res.status(200).json(record);
         // DISPATCHING/UNKNOWN is resolved only by provider status lookup; never dispatch a duplicate refund.
