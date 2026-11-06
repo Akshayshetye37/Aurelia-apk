@@ -15,7 +15,8 @@ function validatePayload(payload) {
       !ID.test(payload.folioId || '') ||
       !Number.isSafeInteger(payload.amountMinor) || payload.amountMinor <= 0 ||
       payload.currency !== 'INR' || !PROVIDERS.has(payload.provider) ||
-      !ENVIRONMENTS.has(payload.environment) || !IDEM.test(payload.idempotencyKey || '')) {
+      !ENVIRONMENTS.has(payload.environment) || !IDEM.test(payload.idempotencyKey || '') ||
+      (payload.deviceId !== undefined && !ID.test(payload.deviceId || ''))) {
     throw new TypeError('invalid_payment_intent_request');
   }
   if (payload.provider === 'cashfree' &&
@@ -128,6 +129,8 @@ export class FirestorePaymentRepository {
         });
         tx.update(intentRef, {
           state: next, providerOrderId: remote.orderId, checkoutData,
+          providerAccountId: payload.provider === 'razorpay' ? credentials.keyId : credentials.appId,
+          deviceId: payload.deviceId || null,
           updatedAt: recoveredAt, version: (intentSnap.data().version || 1) + 1,
           recoveryVerifiedAt: recoveredAt
         });
@@ -137,6 +140,8 @@ export class FirestorePaymentRepository {
           tx.create(orderRef, {
             tenantId, folioId: payload.folioId, intentId, provider: payload.provider,
             environment: payload.environment, providerOrderId: remote.orderId,
+            deviceId: payload.deviceId || null,
+            providerAccountId: payload.provider === 'razorpay' ? credentials.keyId : credentials.appId,
             amountMinor: payload.amountMinor, currency: payload.currency, createdAt: recoveredAt
           });
         }
@@ -181,7 +186,8 @@ export class FirestorePaymentRepository {
         phone: payload.customer.phone,
         email: payload.customer.email || null
       } : null,
-      returnUrl: payload.returnUrl || null
+      returnUrl: payload.returnUrl || null,
+      deviceId: payload.deviceId || null
     }));
     const intentRef = this.db.collection('paymentIntents').doc(intentId);
     const idemRef = this.db.collection('paymentIntentIdempotency').doc(keyHash);
@@ -218,6 +224,7 @@ export class FirestorePaymentRepository {
         intentId, tenantId, folioId: payload.folioId,
         bookingId: authoritativeFolio.bookingId || null, folioRevision: authoritativeFolio.revision ?? null,
         provider: payload.provider, environment: payload.environment,
+        deviceId: payload.deviceId || null,
         amountMinor: payload.amountMinor, currency: payload.currency,
         idempotencyKey: payload.idempotencyKey, fingerprint, providerReference,
         state: 'DISPATCHING', providerOrderId: null, providerPaymentId: null,
@@ -331,6 +338,10 @@ export class FirestorePaymentRepository {
 
     // From the adapter invocation onward, the request may have been transmitted.
     // A timeout, transport error or malformed response remains UNKNOWN and locked.
+    const providerAccountId = payload.provider === 'razorpay' ? credentials.keyId : credentials.appId;
+    if (typeof providerAccountId !== 'string' || !providerAccountId.trim()) {
+      throw new Error('provider_account_identity_missing');
+    }
     const providerInput = payload.provider === 'razorpay'
       ? {
           amountMinor: payload.amountMinor, currency: payload.currency,
@@ -368,7 +379,8 @@ export class FirestorePaymentRepository {
         }
         tx.update(intentRef, {
           state: 'CREATED', providerOrderId: remote.orderId,
-          checkoutData, updatedAt: this.clock().toISOString(), version: 2
+          checkoutData, providerAccountId, deviceId: payload.deviceId || null,
+          updatedAt: this.clock().toISOString(), version: 2
         });
         tx.update(idemRef, { state: 'CREATED', updatedAt: this.clock().toISOString() });
         tx.update(lockRef, { state: 'CREATED', providerOrderId: remote.orderId, updatedAt: this.clock().toISOString() });
@@ -377,6 +389,7 @@ export class FirestorePaymentRepository {
         ), {
           tenantId, folioId: payload.folioId, intentId,
           provider: payload.provider, environment: payload.environment,
+          deviceId: payload.deviceId || null, providerAccountId,
           providerOrderId: remote.orderId, amountMinor: payload.amountMinor,
           currency: payload.currency, createdAt: this.clock().toISOString()
         });
