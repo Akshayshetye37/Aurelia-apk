@@ -29,6 +29,14 @@ test('recovery guards are hoisted and status is initialized before startup recov
     'local state status must be initialized before loadAll executes');
 });
 
+test('empty booking inventory cannot abort the main script before SUB is initialized', () => {
+  assert.match(html, /if\\(S\\.b\\[1\\]\\)S\\.b\\[1\\]\\.p=1000;/);
+  assert.doesNotMatch(html, /S\\.b\\[1\\]\\.p=1000;/);
+  const firstScript = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)][0]?.[1] || '';
+  assert.ok(firstScript.indexOf('if(S.b[1])S.b[1].p=1000;') < firstScript.indexOf('const SUB={'),
+    'guarded optional demo mutation must execute before SUB is declared');
+});
+
 test('room-type catalogue is derived from persisted inventory and refreshed before rendering', () => {
   assert.match(html, /const types=\[\];\s*function syncRoomTypes\(\)/);
   assert.match(html, /types\.splice\(0,types\.length,\.\.\.byType\.values\(\)\)/);
