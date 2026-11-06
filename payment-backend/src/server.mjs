@@ -181,6 +181,18 @@ async function authenticateTenantMembership(req, res, next, allowedRoles, failur
   req.tenant = { id: m.tenantId, role: m.role };
   return next();
 }
+async function liveCollectionBlockReason(tenantId, provider) {
+  const controls = await readPaymentControls({ db, tenantId });
+  if (controls.controlState !== 'CONFIGURED') return 'payment_controls_unavailable';
+  if (controls.emergency_stop !== false) return 'payment_emergency_stop';
+  if (controls.live_collection !== true) return 'live_collection_not_authorised';
+  if (controls.live_collection_enabled !== true) return 'live_collection_disabled_by_admin';
+  const qualification = providerQualificationStatus(provider);
+  if (!qualification.implemented || qualification.liveCollection !== true) {
+    return 'provider_live_collection_not_enabled';
+  }
+  return null;
+}
 function requireTenantAdmin(req, res, next) {
   return authenticateTenantMembership(req, res, next, ['owner', 'admin'], 'active_tenant_admin_membership_required');
 }
@@ -398,6 +410,7 @@ app.patch('/v1/admin/payment-controls', requireTenantAdmin,
     } catch (error) {
       if (error.code === 'PAYMENT_CONTROLS_INVALID') return fail(res, 409, 'stored_payment_controls_invalid');
       if (error.code === 'PAYMENT_CONTROL_RELEASE_APPROVAL_REQUIRED') return fail(res, 423, 'payment_control_release_evidence_required');
+      if (error.code === 'PAYMENT_LIVE_COLLECTION_NOT_AUTHORISED') return fail(res, 423, 'live_collection_not_authorised');
       if (error instanceof TypeError) return fail(res, 400, 'invalid_payment_control_update');
       return fail(res, 503, 'payment_control_update_unavailable');
     }
