@@ -39,3 +39,21 @@ test('legacy LAN backend code is not used as the checkout fallback', () => {
   assert.ok(!checkout.includes('localGatewayApi('));
   assert.ok(!patch.includes('setAcceptThirdPartyCookies'));
 });
+
+
+test('provider directory accurately reports all six wired non-live adapters and CCAvenue documentation-only status', () => {
+  for (const provider of ['Razorpay','Cashfree Payments','PayU','PhonePe','Paytm','JioPay']) {
+    assert.ok(html.includes(provider), 'missing provider directory entry: ' + provider);
+  }
+  assert.ok(html.includes('Server adapter ready (test) · Live collection OFF'));
+  assert.ok(html.includes('CCAvenue · Documentation only'));
+  assert.ok(html.includes('CCAvenue is not included in the active provider factory'));
+  assert.ok(!html.includes('Backend adapter not implemented · documentation only'));
+});
+
+test('Payment Gateway messaging preserves offline-first operation and backend-only secrets', () => {
+  assert.ok(html.includes('Hybrid backend is optional. Local cash and manual payments continue to work from device memory.'));
+  assert.ok(html.includes('Merchant credentials and webhook secrets stay in Google Secret Manager'));
+  assert.ok(html.includes('Provider checkout callbacks are UI signals only'));
+  assert.ok(html.includes('Live collection OFF · release gate enforced'));
+});
