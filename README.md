@@ -338,3 +338,8 @@ The following are still release-blocking:
 ## Local-first data and optional cloud sync
 
 See [docs/LOCAL_FIRST_SYNC_ARCHITECTURE.md](./docs/LOCAL_FIRST_SYNC_ARCHITECTURE.md). The sync foundation is opt-in and local-only by default. It validates endpoint metadata and versioned event envelopes, rejects credential-like payload fields, and requires one repository transaction to commit a business mutation and its outbox event together. The current localStorage PMS record and separate payment journal do not meet that atomic contract. No sync transport, device enrollment, canonical database migration or conflict UI is enabled. Payment-provider checkout and verification remain separate. Do not enable sync until the canonical SQLite/IndexedDB repository and atomic outbox adapter are installed.
+
+
+### Canonical local repository migration (in progress)
+
+The browser/PWA IndexedDB repository is implemented at `src/storage/indexeddb-pms-repository.mjs`. It atomically commits entity state and outbox events, applies optimistic version checks, and provides leased delivery/acknowledgement/retry/conflict operations. Its guarded legacy ingestion path preserves the exact original JSON snapshot and refuses destructive overwrite. This is not yet the active app persistence path: Android native SQLite and the UI/domain command migration remain outstanding. Existing localStorage data must remain untouched until migration integration and device recovery tests pass.
