@@ -72,12 +72,12 @@ test('PhonePe creates and checks refunds using V2 refund endpoints',async()=>{
       assert.deepEqual(body,{merchantRefundId:'refund_123',originalMerchantOrderId:'order_123',amount:2500});
       return {status:200,body:{refundId:'pg_refund_123',state:'PENDING',amount:2500}};
     }
-    return {status:200,body:{merchantRefundId:'refund_123',refundId:'pg_refund_123',state:'COMPLETED',amount:2500}};
+    return {status:200,body:{originalMerchantOrderId:'order_123',refundId:'pg_refund_123',state:'COMPLETED',amount:2500}};
   });
   const adapter=new PhonePeAdapter({credentials,environment:'test',fetchImpl:mock.fetchImpl});
   const created=await adapter.createRefund({refundId:'refund_123',orderId:'order_123',amountMinor:2500});
   assert.equal(created.status,'PENDING');
-  const status=await adapter.getRefundStatus({refundId:'refund_123'});
+  const status=await adapter.getRefundStatus({refundId:'refund_123',orderId:'order_123'});
   assert.equal(status.status,'COMPLETED');
   assert.equal(status.amountMinor,2500);
 });
