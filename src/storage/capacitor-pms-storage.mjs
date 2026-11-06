@@ -41,7 +41,7 @@ export class CapacitorPmsStorageClient extends PmsRepository {
     if(nextData===undefined)throw new Error("Mutation must return entity data");
     const committed=await this.plugin.transactBusinessChange({entityType,entityId,expectedVersion,data:nextData,event});
     if(!committed||committed.version!==expectedVersion+1)throw new Error("Native PMS transaction returned an invalid committed version");
-    return {key:entityType+":"+entityId,type:entityType,id:entityId,version:committed.version,data:committed.data,updatedAt:Date.now()};
+    return {key:committed.key,type:committed.type,id:committed.id,version:committed.version,data:committed.data,updatedAt:committed.updatedAt};
   }
 
   async migrateLegacySnapshot(snapshot,{migrationId,sourceKey,sourceTimestamp=new Date().toISOString()}={}) {
