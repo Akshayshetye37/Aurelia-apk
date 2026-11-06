@@ -12,6 +12,13 @@ import { configureHttpServerTimeouts } from './http/server-timeouts.mjs';
 import { publicHttpError } from './http/public-http-error.mjs';
 import { paymentRouteError } from './http/payment-route-errors.mjs';
 import { disableAllEnabledSecretVersions } from './secrets/secret-version-management.mjs';
+import { canonicalBytes } from '../../src/payments/canonical.mjs';
+import { createSettlementSigner } from './settlement/authorization-signer.mjs';
+import {
+  createDeviceEnrollmentChallenge, verifyAndRegisterDevice, activatePaymentDevice,
+  revokePaymentDevice, authenticatePaymentDeviceRequest, leaseNextSettlementCommand,
+  acknowledgeSettlementCommand, paymentDeviceRef
+} from './devices/firestore-device-service.mjs';
 import { verifiedWebhookProviderPatch } from './webhooks/provider-webhook-state.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
@@ -118,6 +125,20 @@ async function loadSecret(id) {
   const [version] = await sm.accessSecretVersion({ name: secretName(id) + '/versions/latest' });
   return Buffer.from(version.payload.data).toString('utf8');
 }
+const settlementIssuerEnabled = process.env.SETTLEMENT_AUTH_ISSUER_ENABLED === 'true';
+const settlementSigningSecretId = process.env.SETTLEMENT_AUTH_SIGNING_SECRET_ID || 'aurelia-settlement-signing-key';
+const settlementSigningKeyId = process.env.SETTLEMENT_AUTH_KEY_ID || 'aurelia-settlement-2026-01';
+let settlementSignerPromise = null;
+async function getSettlementSigner() {
+  if (!settlementIssuerEnabled) throw new Error('settlement_authority_not_enabled');
+  if (!settlementSignerPromise) {
+    settlementSignerPromise = loadSecret(settlementSigningSecretId)
+      .then(privateKeyPem => createSettlementSigner({ privateKeyPem, keyId: settlementSigningKeyId }))
+      .catch(error => { settlementSignerPromise = null; throw error; });
+  }
+  return settlementSignerPromise;
+}
+const attestationVerifierUrl = process.env.ATTESTATION_VERIFIER_URL || 'http://127.0.0.1:8091';
 async function authenticateTenantMembership(req, res, next, allowedRoles, failureCode) {
   const header = req.get('authorization') || '';
   if (!/^Bearer\s+[^\s]+$/i.test(header)) return fail(res, 401, 'authentication_required');
