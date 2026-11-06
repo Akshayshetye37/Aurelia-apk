@@ -819,15 +819,18 @@ app.get('/v1/admin/providers', requireTenantAdmin, async (req, res) => {
       const d = snap.exists ? snap.data() : {};
       return {
         provider: provider.id, label: provider.label, environment,
+        credentials: provider.credentials,
         capabilities: provider.capabilities, productionReady: provider.productionReady,
         configured: d.configured === true, credentialsValidated: d.credentialsValidated === true,
         sandboxTestPassed: d.sandboxTestPassed === true, webhookVerified: d.webhookVerified === true,
-        active: d.active === true, merchantId: d.merchantId || d.keyId || d.appId || null,
+        active: d.active === true, merchantId: d.merchantId || d.keyId || d.appId || d.mid || d.clientId || null,
         updatedAt: d.updatedAt?.toDate?.().toISOString() || null
       };
     })
   ));
-  res.json({ providers });
+  const activeSelection = await readActiveProvider({ db, tenantId: req.tenant.id });
+  res.json({ providers, activeProviderId: activeSelection.configured ? activeSelection.activeProviderId : null,
+    activeProviderEnvironment: activeSelection.configured ? activeSelection.environment : null });
 });
 
 app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express.json({ limit: '8kb', strict: true }), async (req, res) => {
