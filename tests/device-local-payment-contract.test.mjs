@@ -30,10 +30,21 @@ test('every manual folio payment path requires explicit staff receipt confirmati
   assert.match(html, /Confirm that payment was actually received/);
 });
 
-test('provider directory labels reflect the six wired test adapters and documentation-only CCAvenue', () => {
+test('provider directory is synchronized with the wired backend factory and labels test readiness honestly', () => {
   const html = read('index.html');
-  for (const provider of ['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay']) {
-    assert.match(html, new RegExp("'" + provider + "'"));
+  const factory = read('payment-backend/src/providers/factory.mjs');
+  const registry = read('payment-backend/src/providers/registry.mjs');
+  const catalogue = html.match(/PMS_PROVIDER_CATALOGUE\s*=\s*Object\.freeze\(\[([^\]]+)\]\)/);
+  const factoryBlock = factory.match(/const FACTORIES = Object\.freeze\(\{([\s\S]*?)\}\);/);
+  assert.ok(catalogue, 'frontend provider catalogue exists');
+  assert.ok(factoryBlock, 'backend provider factory exists');
+  const uiProviders = [...catalogue[1].matchAll(/["']([a-z0-9_]+)["']/g)].map(match => match[1]);
+  const serverProviders = [...factoryBlock[1].matchAll(/^\s*([a-z0-9_]+):/gm)].map(match => match[1]);
+  assert.deepEqual(uiProviders, serverProviders, 'frontend directory and backend factory must have the same six providers');
+  for (const provider of serverProviders) {
+    const entry = registry.match(new RegExp(provider + ':\\s*\\{([\\s\\S]*?)\\n\\s*\\},'));
+    assert.ok(entry, provider + ' registry entry exists');
+    assert.match(entry[1], /adapterStatus:\s*'adapter_implemented_wired'/, provider + ' is wired');
   }
   assert.match(html, /Server adapter ready \(test\) · Live collection OFF/);
   assert.match(html, /Documentation only/);
@@ -41,6 +52,7 @@ test('provider directory labels reflect the six wired test adapters and document
   assert.match(html, /Hybrid backend is optional\. Local cash and manual payments continue to work from device memory\./);
   assert.match(html, /Live collection remains OFF until the safety gates pass and an authorised tenant administrator enables it in Settings\./);
 });
+
 
 test('merchant credentials are not exposed through WebView or Android local vault UI', () => {
   const html = read('index.html');
