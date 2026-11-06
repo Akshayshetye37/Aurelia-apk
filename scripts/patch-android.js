@@ -1251,7 +1251,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
                   .put("contact", obj.optJSONObject("customer") == null ? "" : obj.getJSONObject("customer").optString("phone", "")));
               Checkout checkout = new Checkout();
               checkout.setKeyID(keyId);
-              checkout.open(this, options);
+              checkout.open(MainActivity.this, options);
             } else {
               String paymentSessionId = checkoutData.optString("paymentSessionId", "");
               if (paymentSessionId.isEmpty()) throw new IllegalArgumentException("Cashfree payment session is missing.");
@@ -1268,7 +1268,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
                   .setSession(session)
                   .setCFWebCheckoutUITheme(theme)
                   .build();
-              CFPaymentGatewayService.getInstance().doPayment(this, payment);
+              CFPaymentGatewayService.getInstance().doPayment(MainActivity.this, payment);
             }
             JSONObject result = new JSONObject().put("opened", true).put("status", "PENDING")
                 .put("providerOrderId", orderId);
