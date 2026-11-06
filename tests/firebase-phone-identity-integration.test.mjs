@@ -29,13 +29,12 @@ test('Generated root Gradle plugin management is not rewritten', () => {
 
 test('Groovy and Kotlin DSL app dependencies are supported', () => {
   assert.match(patchScript, /implementation platform/);
-  assert.match(patchScript, /implementation\(platform/);
-  assert.match(patchScript, /const auth = 'com\\.google\\.firebase:firebase-auth'/);
-  assert.match(patchScript, /const missing = \\[auth, \.\.\.paymentDependencies\\]/);
-  assert.match(patchScript, /implementation\\("' \\+ dependency \\+ '"\\)/);
-  assert.match(patchScript, /implementation "' \\+ dependency \\+ '"/);
+  assert.match(patchScript, /implementation\\(platform/);
+  assert.ok(patchScript.includes("const auth = 'com.google.firebase:firebase-auth'"));
+  assert.ok(patchScript.includes("const missing = [auth, ...paymentDependencies]"));
+  assert.ok(patchScript.includes('implementation("' + dependency + '")'));
+  assert.ok(patchScript.includes('implementation "' + dependency + '"'));
 });
-
 test('Google Services plugin is conditional on a supplied app config', () => {
   assert.match(patchScript, /hasGoogleServicesConfig/);
   assert.match(patchScript, /com\.google\.gms\.google-services/);
