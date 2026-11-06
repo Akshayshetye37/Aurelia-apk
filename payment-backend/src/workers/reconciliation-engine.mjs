@@ -1,9 +1,17 @@
 import crypto from 'node:crypto';
+import { implementedProviderAdapters } from '../providers/factory.mjs';
 
-const SUPPORTED = new Set(['razorpay', 'cashfree']);
+const SUPPORTED = new Set(implementedProviderAdapters());
+const ENVIRONMENTS = Object.freeze({
+  razorpay: new Set(['test', 'live']), cashfree: new Set(['test', 'live']),
+  payu: new Set(['test', 'live']), phonepe: new Set(['test', 'live']),
+  paytm: new Set(['staging', 'production']), jiopay: new Set(['uat', 'production'])
+});
 const CAPTURED_STATUS = Object.freeze({
-  razorpay: new Set(['captured']),
-  cashfree: new Set(['SUCCESS'])
+  razorpay: new Set(['captured']), cashfree: new Set(['SUCCESS']),
+  payu: new Set(['success']), phonepe: new Set(['COMPLETED']),
+  paytm: new Set(['TXN_SUCCESS']),
+  jiopay: new Set(['SUCCESS', 'SUCCESSFUL', 'COMPLETED', 'CAPTURED', 'S0000', 'SUC'])
 });
 const MAX_BATCH = 50;
 
@@ -69,7 +77,7 @@ export async function runDurableReconciliationWorker({
     const intent = doc.data();
     const item = { intentId: doc.id, result: 'PENDING' };
     try {
-      if (!SUPPORTED.has(intent.provider) || !['test', 'live'].includes(intent.environment) ||
+      if (!SUPPORTED.has(intent.provider) || !ENVIRONMENTS[intent.provider]?.has(intent.environment) ||
           typeof intent.providerOrderId !== 'string' || !intent.providerOrderId ||
           typeof intent.providerPaymentId !== 'string' || !intent.providerPaymentId ||
           !Number.isSafeInteger(intent.amountMinor) || intent.amountMinor <= 0 ||
