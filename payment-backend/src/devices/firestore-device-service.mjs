@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { canonicalBytes } from "../../../src/payments/canonical.mjs";
+import { canonicalBytes } from "../shared/canonical.mjs";
 import { SETTLEMENT_AUTH_TYPE, SETTLEMENT_LEASE_TYPE, SETTLEMENT_ISSUER, SETTLEMENT_AUDIENCE } from "../settlement/authorization-signer.mjs";
 
 const DEVICE_ID = /^[A-Za-z0-9_-]{6,64}$/;
