@@ -1201,7 +1201,8 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
           JSONObject result = new JSONObject().put("ready", ready)
               .put("livePaymentsEnabled", false)
               .put("environment", "test")
-              .put("deviceId", prefs.getString("payment_device_id", ""));
+              .put("deviceId", prefs.getString("payment_device_id", ""))
+              .put("applianceBaseUrl", prefs.getString("payment_device_appliance_url", ""));
           js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(requestId) + ",true," + q(result.toString()) + ")");
         } else if ("paymentEngineStartCheckout".equals(type)) {
           try {
