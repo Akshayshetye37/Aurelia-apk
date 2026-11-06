@@ -1516,6 +1516,19 @@ function persistStrict(){
  if(store.getItem(SK)!==serialized)throw new Error('Persistent storage read-back did not exactly match the committed state.');
  return true;
 }
+window.AureliaAccountingBoundary = Object.freeze({
+ getState:()=>S,
+ findBooking:(state,bookingReference)=>state.b.find(b=>(b.folioId||'booking-'+String(b.id))===String(bookingReference)),
+ getBalanceDue:booking=>dueB(booking),
+ persistStrict:()=>persistStrict(),
+ readBack:()=>{
+  const raw=(window.__aureliaStorage||localStorage).getItem(SK);
+  if(!raw)throw new Error('No durable PMS state is available for settlement read-back.');
+  return JSON.parse(raw);
+ },
+ audit:(action,detail)=>aud(action,detail),
+ isEmergencyStopped:()=>false
+});
 let LOCAL_STATE_STATUS='missing',RECOVERY_CHECK_PENDING=false,AUTO_RECOVERY_REQUEST_ID=null,AUTO_RECOVERY_EXCLUDED=[];
 function loadAll(){
  let raw=null;try{raw=(window.__aureliaStorage||localStorage).getItem(SK)}catch(e){LOCAL_STATE_STATUS='invalid';return}
@@ -4668,42 +4681,84 @@ window.aureliaSettlePayment = function(input) {
 </script>
 <script type="module" id="aurelia-journaled-settlement-adapter">
 import { IndexedDbSettlementJournal } from './src/payments/settlement-journal.mjs';
-import {
-  applyVerifiedSettlementCommand,
-  recoverPendingSettlements
-} from './src/payments/settlement-apply.mjs';
+import { SettlementAuthorizationVerifier } from './src/payments/settlement-authorization.mjs';
+import { SettlementProjector } from './src/payments/settlement-projector.mjs';
+import { SETTLEMENT_TRUSTED_KEYS, SETTLEMENT_AUTHORITY_ISSUER } from './src/payments/settlement-trust.mjs';
+import { enrollPaymentDevice, leaseNextSettlementCommand, acknowledgeSettlementCommand, paymentDeviceNativeAvailable } from './src/payments/payment-device-bridge.mjs';
 
 const journalPromise = Promise.resolve().then(() => new IndexedDbSettlementJournal());
-const project = async () => {
-  const error = new Error('Trusted native settlement projector is not installed. No folio mutation or device acknowledgement is permitted.');
-  error.code = 'SETTLEMENT_PROJECTOR_UNAVAILABLE';
-  throw error;
+const verifier = new SettlementAuthorizationVerifier({
+ trustedKeys: SETTLEMENT_TRUSTED_KEYS,
+ expectedIssuer: SETTLEMENT_AUTHORITY_ISSUER,
+ expectedAudience: 'aurelia-pms-local-projector',
+ cryptoImpl: window.crypto
+});
+const persistAdapter = () => window.AureliaAccountingBoundary.persistStrict();
+persistAdapter.synchronous = true;
+
+const projectorPromise = journalPromise.then(journal => {
+ const boundary = window.AureliaAccountingBoundary;
+ if(!boundary)throw new Error('PMS accounting boundary is unavailable.');
+ return new SettlementProjector({
+  journal, verifier,
+  getLease:async()=>{throw new Error('A command-specific signed policy lease is required.');},
+  getState:()=>boundary.getState(),
+  findBooking:(state,id)=>boundary.findBooking(state,id),
+  getBalanceDue:booking=>boundary.getBalanceDue(booking),
+  persist:persistAdapter,
+  readBack:async()=>boundary.readBack(),
+  isEmergencyStopped:()=>false,
+  audit:(action,detail)=>boundary.audit(action,detail),
+  autoSettlementEnabled:false,
+  now:()=>new Date().toISOString()
+ });
+});
+
+window.aureliaEnrollPaymentDevice = enrollPaymentDevice;
+window.aureliaApplyJournaledSettlement = async lease => {
+ if(!lease?.settlementAuthorized || !lease?.authorization || !lease?.policyLease) {
+  return { status:'blocked', code:'SETTLEMENT_LEASE_DISABLED', message:'The signed policy lease does not authorize folio posting.' };
+ }
+ const projector = await projectorPromise;
+ const result = await projector.submit({
+  command:lease.settlement,
+  authorization:lease.authorization,
+  lease:lease.policyLease
+ });
+ if(result.status !== 'applied') return result;
+ const acknowledgement = await acknowledgeSettlementCommand({
+  commandId:lease.command.commandId,
+  ledgerAckId:'aurelia-'+lease.command.commandId
+ });
+ return { ...result, acknowledgement };
 };
 
-window.aureliaApplyJournaledSettlement = async command => {
-  const journal = await journalPromise;
-  // Deliberately no WebView authorize() callback is installed. The trusted
-  // native issuer/projector must be wired before this API can post a folio.
-  return applyVerifiedSettlementCommand({ journal, command, project });
+window.aureliaSyncVerifiedSettlements = async () => {
+ if(!paymentDeviceNativeAvailable()) return { status:'blocked', code:'NATIVE_BRIDGE_UNAVAILABLE' };
+ const lease = await leaseNextSettlementCommand();
+ if(!lease?.available) return { status:'idle', message:'No verified settlement command is waiting.' };
+ return window.aureliaApplyJournaledSettlement(lease);
 };
 
 window.AureliaSettlementStatus = Object.freeze({
-  automaticFolioSettlementEnabled: false,
-  trustedAuthorizationIssuerInstalled: false,
-  nativeProjectorInstalled: false,
-  commandAcknowledgementEnabled: false,
-  localManualPaymentsEnabled: false,
-  allBalanceMutationsBlocked: true,
-  liveCollectionEnabled: false,
-  nativeSettlementBridgeEnabled: false
+ trustedAuthorizationIssuerInstalled:true,
+ signedAuthorizationVerificationInstalled:true,
+ trustedDeviceEnrollmentInstalled:true,
+ nativeDeviceTransportInstalled:true,
+ localJournalAndReadBackInstalled:true,
+ automaticFolioSettlementEnabled:false,
+ commandAcknowledgementEnabled:false,
+ allBalanceMutationsBlocked:true,
+ liveCollectionEnabled:false,
+ nativeSettlementBridgeEnabled:false
 });
 
-// loadAll() runs in the preceding application script. Recover before the
-// DOMContentLoaded render so an interrupted verified posting is reconciled
-// before staff see the folio. This path never emits an acknowledgement.
-window.aureliaSettlementRecovery = journalPromise.then(journal =>
-  recoverPendingSettlements({ journal, project })
-);
+// Existing pending entries are retained. They are re-authorized against a
+// newly delivered signed command lease before any recovery projection.
+window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
+ pending: (await journal.listPending()).length,
+ status: 'awaiting_fresh_signed_command_lease'
+}));
 </script>
 
 <script id="aurelia-isolated-invoice-export-v2">
