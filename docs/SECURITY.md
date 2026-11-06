@@ -12,9 +12,10 @@ These notes reflect a preliminary static review of the supplied `index.html`; th
 
 ## Validation status
 
-- Inline JavaScript blocks previously passed Node.js syntax checks.
-- That check does not validate browser runtime behavior, HTML completeness, Android WebView integration, payment correctness, authorization, or backend connectivity.
-- The supplied file currently appears truncated at the end: it finishes after a CSS `</style>` block without closing document tags. Restore/complete the source and rerun HTML/JavaScript checks before release.
+- The current HTML source includes closing document tags, but a static source check does not validate browser runtime behavior, Android WebView integration, payment correctness, authorization, or backend connectivity.
+- GitHub Actions runs payment/parser/evidence-store regression tests before attempting the Android debug build. These unit tests do not replace browser, device, security, or end-to-end testing.
+- The IndexedDB evidence journal is local to one installation and is not suitable as the production ledger or as the source of truth across devices.
+- Automatic folio settlement is explicitly disabled. Keep it disabled until a trusted backend provides atomic ledger writes, durable idempotency, authorization, audit history, and tested failure recovery.
 
 ## Recommended release gate
 
