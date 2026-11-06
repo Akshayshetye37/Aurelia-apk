@@ -155,6 +155,33 @@ test("live collection requires both internal authorisation and the tenant admin 
   assert.equal(paymentControlAllows({ ...base, emergency_stop: true, live_collection_enabled: true }, "live_collection"), false);
 });
 
+test("tenant live switch cannot be enabled while the emergency stop is engaged", async () => {
+  const controlRef = {
+    path: "paymentControls/tenant_123",
+    collection: name => ({ doc: () => ({ path: "paymentControls/tenant_123/" + name + "/audit-stop" }) })
+  };
+  let writes = 0;
+  const db = {
+    doc: () => controlRef,
+    runTransaction: async fn => fn({
+      get: async ref => ref.path === controlRef.path
+        ? { exists: true, data: () => ({
+            ...PAYMENT_CONTROL_DEFAULTS, emergency_stop: true, live_collection: true,
+            updatedAt: new Date("2026-11-06T12:00:00.000Z"), updatedBy: "owner-1"
+          }) }
+        : { exists: true, data: () => ({ status: "APPROVED" }) },
+      set: () => { writes += 1; }
+    })
+  };
+  await assert.rejects(updatePaymentControls({
+    db, tenantId: "tenant_123",
+    actor: { uid: "admin-1", email: "admin@example.test" },
+    changes: { live_collection_enabled: true },
+    reason: "Enable live collection"
+  }), error => error.code === "PAYMENT_LIVE_COLLECTION_NOT_AUTHORISED");
+  assert.equal(writes, 0);
+});
+
 test("tenant live switch cannot be enabled before internal live authorisation", async () => {
   const controlRef = {
     path: "paymentControls/tenant_123",
