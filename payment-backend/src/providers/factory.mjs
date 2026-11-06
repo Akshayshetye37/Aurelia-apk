@@ -39,6 +39,13 @@ export function providerCapabilities(providerId) {
 
 export function providerQualificationStatus(providerId) {
   if (!FACTORIES[providerId]) return { implemented: false, testCheckout: false, liveCollection: false };
-  return { implemented: true, testCheckout: true, liveCollection: false, merchantUatRequired: true,
-    canonicalFolioPostingRequired: true, physicalDeviceAcceptanceRequired: true };
+  return {
+    implemented: true,
+    testCheckout: ['razorpay', 'cashfree'].includes(providerId),
+    liveCollection: false,
+    cloudCheckoutApiEnabled: ['razorpay', 'cashfree'].includes(providerId),
+    merchantUatRequired: true,
+    canonicalFolioPostingRequired: true,
+    physicalDeviceAcceptanceRequired: true
+  };
 }
