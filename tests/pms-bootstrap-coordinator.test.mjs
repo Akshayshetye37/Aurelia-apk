@@ -83,3 +83,12 @@ test("repeated initialize calls share one initialization operation", async () =>
   assert.equal(a.repository, b.repository);
   assert.equal(a.migration.migrationId, b.migration.migrationId);
 });
+
+test("ephemeral preview storage is rejected before canonical migration", async () => {
+  const raw = JSON.stringify(state);
+  const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: raw });
+  storage.memoryOnly = true;
+  const app = coordinator("memory-only", storage);
+  await assert.rejects(app.initializeApplication(), /durable Storage-compatible/i);
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
+});
