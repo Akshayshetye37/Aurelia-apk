@@ -21,50 +21,70 @@ function fixture() {
   };
 }
 
-test("local accounting controls remain hard-locked regardless of cloud control flags", () => {
+test("offline manual folio operations remain enabled while gateway controls stay locked", () => {
   assert.deepEqual(PAYMENT_SAFETY_LOCKS, {
-    blockAllBalanceMutations: true,
+    blockAllBalanceMutations: false,
     automaticSettlement: true,
     liveCollection: true,
     nativeSettlementBridge: true
   });
 });
 
-test("manual, staff-reviewed, reservation-advance and automatic posting all fail before mutation", () => {
-  for (const source of ["manual", "staff_review", "reservation_advance", "auto"]) {
+test("manual cash, staff-reviewed and reservation-advance payments post locally", () => {
+  for (const source of ["manual", "staff_review", "reservation_advance"]) {
     const app = fixture();
-    assert.throws(
-      () => settlePayment({ ...app.input, source }),
-      error => error.code === "ACCOUNTING_READ_ONLY_KILL_SWITCH"
-    );
-    assert.equal(app.booking.p, 25);
-    assert.deepEqual(app.booking.pays, []);
-    assert.deepEqual(app.booking.payments, []);
-    assert.equal(app.state.today, 0);
-    assert.deepEqual(app.state.aud, []);
-    assert.equal(app.persistCalls, 0);
-    assert.equal(app.auditCalls, 0);
+    const result = settlePayment({ ...app.input, source });
+    assert.equal(result.ok, true);
+    assert.equal(result.duplicate, false);
+    assert.equal(app.booking.p, 35);
+    assert.equal(app.booking.pays.length, 1);
+    assert.equal(app.booking.payments.length, 1);
+    assert.equal(app.booking.pays[0].verificationConfirmed, true);
+    assert.equal(app.state.today, 10);
+    assert.equal(app.persistCalls, 1);
+    assert.equal(app.auditCalls, 1);
   }
 });
 
-test("idempotent replay is also rejected while accounting is frozen", () => {
-  const app = fixture();
+test("automatic and gateway settlement remain fail-closed", () => {
+  const automatic = fixture();
   assert.throws(
-    () => settlePayment({ ...app.input, source: "manual", idempotencyKey: "existing-payment-123" }),
-    error => error.code === "ACCOUNTING_READ_ONLY_KILL_SWITCH"
+    () => settlePayment({ ...automatic.input, source: "auto" }),
+    error => error.code === "AUTO_SETTLEMENT_DISABLED"
   );
-  assert.equal(app.booking.p, 25);
-  assert.equal(app.booking.pays.length, 0);
+  assert.equal(automatic.booking.p, 25);
+  assert.equal(automatic.booking.pays.length, 0);
+  const gateway = fixture();
+  assert.throws(
+    () => settlePayment({ ...gateway.input, source: "verified_gateway" }),
+    error => error.code === "AUTO_SETTLEMENT_KILL_SWITCH"
+  );
+  assert.equal(gateway.booking.p, 25);
+  assert.equal(gateway.booking.pays.length, 0);
 });
 
-test("the global freeze is evaluated before input validation and before any write", () => {
+test("manual payment idempotency returns the original posting without double counting", () => {
+  const app = fixture();
+  const first = settlePayment({ ...app.input, source: "manual", idempotencyKey: "manual-payment-123" });
+  const replay = settlePayment({ ...app.input, source: "manual", idempotencyKey: "manual-payment-123" });
+  assert.equal(first.ok, true);
+  assert.equal(replay.duplicate, true);
+  assert.equal(app.booking.p, 35);
+  assert.equal(app.booking.pays.length, 1);
+  assert.equal(app.booking.payments.length, 1);
+  assert.equal(app.persistCalls, 1);
+});
+
+test("invalid manual amounts are rejected before any write", () => {
   const app = fixture();
   assert.throws(
-    () => settlePayment({ state: app.state, booking: app.booking, amount: -1 }),
-    error => error.code === "ACCOUNTING_READ_ONLY_KILL_SWITCH"
+    () => settlePayment({ ...app.input, amount: -1, source: "manual" }),
+    RangeError
   );
   assert.equal(app.booking.p, 25);
   assert.equal(app.booking.pays.length, 0);
+  assert.equal(app.persistCalls, 0);
+  assert.equal(app.auditCalls, 0);
 });
 
 test("addSig is evidence-only and keeps suggested matches in review", async () => {
