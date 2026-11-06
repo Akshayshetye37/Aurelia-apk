@@ -92,3 +92,19 @@ test("ephemeral preview storage is rejected before canonical migration", async (
   await assert.rejects(app.initializeApplication(), /durable Storage-compatible/i);
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
 });
+
+
+test("index startup awaits verified storage bootstrap before replaying operational scripts", async () => {
+  const fs = await import("node:fs");
+  const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const loaderAt = html.indexOf('id="aurelia-async-runtime-bootstrap"');
+  const mainAt = html.indexOf('data-aurelia-original-type="classic"');
+  assert.ok(html.includes('id="aurelia-runtime-shield"'));
+  assert.ok(loaderAt > mainAt, "bootstrap loader follows inert application scripts");
+  const loader = html.slice(loaderAt, html.indexOf("</script>", loaderAt));
+  assert.match(loader, /await bootstrapper\.initializeApplication\(\)/);
+  assert.match(loader, /storageBridge\.bindActiveEngine\(boot\.repository\)/);
+  assert.match(loader, /await replayApplicationScripts\(\)/);
+  assert.match(loader, /PMS startup stopped safely/);
+  assert.match(html, /type="application\/x-aurelia-deferred"/);
+});
