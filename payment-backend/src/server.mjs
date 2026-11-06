@@ -614,40 +614,43 @@ app.get('/v1/admin/providers', requireTenantAdmin, async (req, res) => {
 });
 
 app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express.json({ limit: '8kb', strict: true }), async (req, res) => {
-  const { provider } = req.params, environment = envOf(req), body = req.body || {};
+  const { provider } = req.params, publicEnvironment = envOf(req), environment = adapterEnvironmentOf(provider, publicEnvironment), body = req.body || {};
   const definitions = {
-    razorpay: { publicKey: 'keyId', secretKeys: ['keySecret', 'webhookSecret'], valid: c => /^rzp_(test|live)_[A-Za-z0-9]{8,}$/.test(c.keyId || '') },
-    cashfree: { publicKey: 'appId', secretKeys: ['secretKey', 'webhookSecret'], valid: c => typeof c.appId === 'string' && /^[A-Za-z0-9_-]{6,128}$/.test(c.appId) }
+    razorpay: { publicKey: 'keyId', secretKeys: ['keySecret', 'webhookSecret'], valid: x => /^rzp_(test|live)_[A-Za-z0-9]{8,}$/.test(x.keyId || '') },
+    cashfree: { publicKey: 'appId', secretKeys: ['secretKey', 'webhookSecret'], valid: x => typeof x.appId === 'string' && /^[A-Za-z0-9_-]{6,128}$/.test(x.appId) },
+    payu: { publicKey: 'merchantKey', secretKeys: ['salt'], valid: x => /^[A-Za-z0-9_-]{4,50}$/.test(x.merchantKey || '') },
+    phonepe: { publicKey: 'clientId', secretKeys: ['clientSecret', 'webhookPassword'], extra: ['clientVersion', 'webhookUsername'], valid: x => typeof x.clientId === 'string' && /^\\d{1,8}$/.test(String(x.clientVersion || '')) && typeof x.webhookUsername === 'string' && x.webhookUsername.length > 0 },
+    paytm: { publicKey: 'mid', secretKeys: ['merchantKey'], extra: ['websiteName'], valid: x => typeof x.mid === 'string' && /^[A-Za-z0-9._@-]{6,50}$/.test(x.mid) && Buffer.byteLength(x.merchantKey || '', 'utf8') === 16 && typeof x.websiteName === 'string' && /^[A-Za-z0-9_-]{1,50}$/.test(x.websiteName) },
+    jiopay: { publicKey: 'merchantId', secretKeys: ['saltOrHashKey'], extra: ['aggregatorId'], valid: x => typeof x.merchantId === 'string' && /^[A-Za-z0-9_-]{6,50}$/.test(x.merchantId) && (x.aggregatorId === undefined || typeof x.aggregatorId === 'string') }
   };
-  const def = definitions[provider];
-  const allowed = new Set(['environment', def?.publicKey, ...(def?.secretKeys || [])].filter(Boolean));
-  if (!def || !environment || Object.keys(body).some(k => !allowed.has(k)) || !def.valid(body) ||
+  const def = definitions[provider], allowed = new Set(['environment', def?.publicKey, ...(def?.secretKeys || []), ...(def?.extra || [])].filter(Boolean));
+  if (!def || !environment || !providerQualificationStatus(provider).implemented ||
+      Object.keys(body).some(k => !allowed.has(k)) || !def.valid(body) ||
       def.secretKeys.some(k => typeof body[k] !== 'string' || body[k].length < 8 || body[k].length > 512) ||
-      (provider === 'razorpay' && environment === 'test' && !body.keyId.startsWith('rzp_test_')) ||
-      (provider === 'razorpay' && environment === 'live' && !body.keyId.startsWith('rzp_live_'))) {
+      (provider === 'razorpay' && publicEnvironment === 'test' && !body.keyId.startsWith('rzp_test_')) ||
+      (provider === 'razorpay' && publicEnvironment === 'live' && !body.keyId.startsWith('rzp_live_'))) {
     return fail(res, 400, 'invalid_provider_credential_schema');
   }
+  if (publicEnvironment === 'live' && providerQualificationStatus(provider).liveCollection !== true) return fail(res, 403, 'live_collection_not_enabled');
   try {
     const stateRef = providerTenantDoc(req.tenant.id, provider, environment);
-    // Disable the previous credential set before rotating either secret. If a
-    // Secret Manager write fails midway, stale validation/activation cannot
-    // keep a partially rotated credential pair usable.
-    await stateRef.set({
-      configured: false, credentialsValidated: false, sandboxTestPassed: false,
-      webhookVerified: false, active: false,
-      updatedAt: FieldValue.serverTimestamp(), updatedBy: req.actor.uid
-    }, { merge: true });
-    const apiCredentials = Object.fromEntries(
-      [def.publicKey, ...def.secretKeys.filter(k => k !== 'webhookSecret')].map(k => [k, body[k]])
-    );
+    await stateRef.set({ configured: false, credentialsValidated: false, sandboxTestPassed: false,
+      webhookVerified: false, active: false, updatedAt: FieldValue.serverTimestamp(), updatedBy: req.actor.uid }, { merge: true });
+    const apiFields = [def.publicKey, ...(def.secretKeys || []), ...(def.extra || [])]
+      .filter(k => !['webhookPassword', 'webhookSecret'].includes(k));
+    const apiCredentials = Object.fromEntries(apiFields.map(k => [k, body[k]]).filter(([,v]) => v !== undefined));
+    const webhookValue = provider === 'phonepe'
+      ? JSON.stringify({ webhookUsername: body.webhookUsername, webhookPassword: body.webhookPassword })
+      : (body.webhookSecret || '');
     await storeSecret(providerSecretId(req.tenant.id, provider, environment, 'api'), JSON.stringify(apiCredentials));
-    await storeSecret(providerSecretId(req.tenant.id, provider, environment, 'webhook'), body.webhookSecret);
-    const patch = { provider, environment, configured: true, credentialsValidated: false,
+    await storeSecret(providerSecretId(req.tenant.id, provider, environment, 'webhook'), webhookValue);
+    const patch = { provider, environment, publicEnvironment, configured: true, credentialsValidated: false,
       sandboxTestPassed: false, webhookVerified: false, active: false,
       updatedAt: FieldValue.serverTimestamp(), updatedBy: req.actor.uid };
     patch[def.publicKey] = body[def.publicKey];
     await stateRef.set(patch, { merge: true });
-    return res.status(202).json({ accepted: true, provider, environment, status: 'credentials_stored_validation_pending' });
+    return res.status(202).json({ accepted: true, provider, environment: publicEnvironment,
+      adapterEnvironment: environment, status: 'credentials_stored_validation_pending' });
   } catch {
     return fail(res, 503, 'credential_storage_unavailable');
   }
