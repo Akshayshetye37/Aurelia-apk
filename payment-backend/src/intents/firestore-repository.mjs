@@ -282,25 +282,28 @@ export class FirestorePaymentRepository {
     }
     const tenantId = membership.tenantId;
 
-    // Resolve the tenant's active merchant account before reserving an intent.
-    // The account identity is part of the idempotency namespace, preventing
-    // transaction IDs from colliding across merchant accounts.
-    let credentials;
-    let adapter;
-    let providerAccountId;
+    // Resolve the merchant account identity before reserving the intent. A
+    // pre-dispatch failure still gets a durable FAILED_TO_INITIATE record, but
+    // no provider call is made. Unknown account identity is isolated in its
+    // own idempotency namespace and cannot collide with a configured account.
+    let credentials = null;
+    let adapter = null;
+    let providerAccountId = 'unavailable';
+    let preflightFailed = false;
     try {
       credentials = await this.secretManager.getProviderSecrets(
         tenantId, payload.provider, payload.environment
       );
+      const resolvedAccountId = payload.provider === 'razorpay' ? credentials.keyId : credentials.appId;
+      if (typeof resolvedAccountId !== 'string' || !resolvedAccountId.trim()) {
+        throw new Error('provider_account_identity_missing');
+      }
+      providerAccountId = resolvedAccountId;
       adapter = this.providerFactory(payload.provider, {
         credentials, environment: payload.environment
       });
-      providerAccountId = payload.provider === 'razorpay' ? credentials.keyId : credentials.appId;
-      if (typeof providerAccountId !== 'string' || !providerAccountId.trim()) {
-        throw new Error('provider_account_identity_missing');
-      }
     } catch {
-      const error = new Error('provider_credentials_unavailable'); error.statusCode = 503; throw error;
+      preflightFailed = true;
     }
 
     const intentId = crypto.randomUUID();
@@ -396,6 +399,27 @@ export class FirestorePaymentRepository {
     // Credentials and adapter were resolved before reservation. No provider
     // network call has occurred yet; the dispatch marker remains the last
     // durable step before the external create-order request.
+
+    if (preflightFailed) {
+      await this.db.runTransaction(async tx => {
+        const [intentSnap, idemSnap, lockSnap] = await Promise.all([
+          tx.get(intentRef), tx.get(idemRef), tx.get(lockRef)
+        ]);
+        if (!intentSnap.exists || intentSnap.data().state !== 'DISPATCHING') return;
+        const next = transitionIntent('DISPATCHING', {
+          type: 'dispatch_rejected', definitive: true, requestMayHaveReachedProvider: false
+        });
+        const failedAt = this.clock().toISOString();
+        tx.update(intentRef, { state: next, updatedAt: failedAt, version: 2 });
+        if (idemSnap.exists && idemSnap.data().intentId === intentId) {
+          tx.update(idemRef, { state: next, updatedAt: failedAt });
+        }
+        if (lockSnap.exists && lockSnap.data().intentId === intentId) {
+          tx.update(lockRef, { state: next, active: false, updatedAt: failedAt });
+        }
+      });
+      return { intentId, status: 'FAILED_TO_INITIATE', message: 'Payment could not be dispatched.' };
+    }
 
     // This transaction records that invocation of the remote provider API is
     // next. If it cannot be committed, the provider API is not called.
