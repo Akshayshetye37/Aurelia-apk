@@ -1189,7 +1189,7 @@ public class MainActivity extends BridgeActivity {
           backupExecutor.execute(() -> {
             try {
               PaymentDeviceClient.Lease lease = paymentDeviceLeases.get(commandId);
-              if (paymentDeviceClient == null || lease == null || !lease.isSettlementAuthorized()) {
+              if (paymentDeviceClient == null || lease == null || !lease.getSettlementAuthorized()) {
                 throw new IllegalStateException("No verified, unexpired settlement lease is available.");
               }
               JSONObject result = paymentDeviceClient.acknowledge(lease, ledgerAckId);
