@@ -10,7 +10,7 @@ test("provider registry exposes modular provider definitions", () => {
   assert.ok(PAYMENT_PROVIDERS.paytm);
   assert.ok(PAYMENT_PROVIDERS.jiopay);
   assert.ok(PAYMENT_PROVIDERS.ccavenue);
-  assert.deepEqual(PMS_PROVIDER_CATALOGUE, ["razorpay", "cashfree", "payu", "phonepe", "paytm", "jiopay", "ccavenue"]);
+  assert.deepEqual(PMS_PROVIDER_CATALOGUE, ["razorpay", "cashfree", "payu", "phonepe", "paytm", "jiopay"]);
 });
 
 test("provider config requires HTTPS backend and public merchant identifier", () => {
