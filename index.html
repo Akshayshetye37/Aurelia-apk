@@ -3486,7 +3486,7 @@ window.aureliaGatewayFolioHtml=function(i){
  const supported=providers.filter(x=>['razorpay','cashfree'].includes(x.provider)&&x.capabilities?.testCheckout===true&&x.capabilities?.liveCollection===false&&x.productionReady===false);
  const booking=bk(i),pending=(booking?.gatewayPayments||[]).filter(x=>x.status!=='POSTED_TO_FOLIO');
  const pendingHtml=pending.length?'<div class="card" style="margin:10px 0"><b>Unresolved online transactions</b>'+pending.map(x=>'<div class="ln"><span>'+esc(x.provider)+' · '+esc(x.status)+'<br><small>'+esc(x.transactionId)+'</small></span><button class="btn sm ghost" onclick="reconcileAureliaGatewayPayment('+Number(i)+',\''+esc(x.transactionId)+'\')">Reconcile</button></div>').join('')+'</div>':'';
- const setup='<button class="btn sm ghost" onclick="go(\'more\');setTimeout(()=>openAureliaGatewayAdmin(),100)">Open payment setup</button>';
+ const setup='<button class="btn sm ghost" onclick="S.tab=\\'more\\';S.sub=\\'set\\';render()">Open Payment Gateway settings</button>'
  if(!S.set.backendConnection?.reachable||!a.authenticated)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">Online checkout is unavailable until this device is enrolled with the optional trusted HTTPS payment backend. Bookings, folios and cash/manual payments continue to work offline.</p>'+setup;
  if(!supported.length)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">No backend-configured sandbox provider is active. Configure and validate a provider through the authenticated backend; merchant credentials remain in Google Secret Manager.</p>'+setup;
  const options=supported.map(x=>'<option value="'+esc(x.provider)+'">'+(x.provider==='razorpay'?'Razorpay':'Cashfree')+' · Sandbox</option>').join('');
