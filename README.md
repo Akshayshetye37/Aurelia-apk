@@ -482,3 +482,13 @@ The browser/PWA IndexedDB repository is implemented at `src/storage/indexeddb-pm
 - Added a static Android generator guard requiring explicit plugin registration.
 
 **Important scope boundary:** this is a registered native SQLite transaction bridge foundation, not yet a drop-in complete implementation of every `PmsRepository` method. Native list, migration snapshot read-back, outbox leasing/acknowledgement/retry/conflict and shared contract conformance still need implementation before the bootstrap coordinator can select SQLite or the common repository bridge can bind to it. The live UI remains on its existing legacy localStorage state; no UI cutover or data deletion is performed.
+
+
+## Asynchronous application startup gate (2026-11-07)
+
+- The operational inline scripts in `index.html` are now inert during HTML parsing. A runtime shield is present before the application scripts.
+- The final bootstrap module awaits `PmsBootstrapCoordinator.initializeApplication()`, binds the verified IndexedDB repository to the Promise-based bridge, then replays the original scripts in their original order. Module scripts are awaited before continuing.
+- If database initialization, legacy validation, migration or script loading fails, the shield remains visible and startup reports a fail-closed error. The legacy `aurelia_lodge_v2` record is not removed or rewritten.
+- Added a regression test that checks the ordering and fail-closed bootstrap gate.
+
+**Compatibility boundary:** after successful storage verification, the existing interface is replayed in legacy compatibility mode. Its existing domain reads/writes still use the synchronous localStorage state. The bridge is bound but not yet used by the screens. This startup sequencing change is not a completed domain persistence cutover and does not authorize payment-to-folio integration.
