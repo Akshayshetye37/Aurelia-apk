@@ -23,7 +23,8 @@ function stableMigrationId(raw) {
 }
 
 function assertStorage(storage) {
-  if (!storage || typeof storage.getItem !== "function" ||
+  if (!storage || storage.memoryOnly === true ||
+      typeof storage.getItem !== "function" ||
       typeof storage.setItem !== "function") {
     throw new TypeError("A durable Storage-compatible legacy store is required");
   }
@@ -31,7 +32,7 @@ function assertStorage(storage) {
 
 export class PmsBootstrapCoordinator {
   constructor({
-    storage = globalThis.localStorage,
+    storage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
     indexedDBImpl = globalThis.indexedDB,
     databaseName = "aurelia-pms-canonical",
     repository = null,
