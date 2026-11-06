@@ -29,10 +29,17 @@ test('recovery guards are hoisted and status is initialized before startup recov
     'local state status must be initialized before loadAll executes');
 });
 
-test('empty booking inventory cannot abort the main script before SUB is initialized', () => {
-  assert.ok(html.includes('if(S.b[1])S.b[1].p=1000;'));
-  const assignment = html.indexOf('S.b[1].p=1000;');\n  const guard = html.indexOf('if(S.b[1])S.b[1].p=1000;');\n  assert.equal(assignment, guard + 'if(S.b[1])'.length, 'the booking mutation must only exist behind its existence guard');
-  const firstScript = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)][0]?.[1] || '';
+test('empty booking and dining inventories cannot abort startup on sample-data mutations', () => {
+  for (const expression of [
+    'if(S.b[1])S.b[1].p=1000;',
+    'if(S.t[2])S.t[2].demo=1;',
+    "if(S.b[1])S.b[1].pays=[{a:1000,m:'Cash',r:'',at:new Date().toISOString()}];",
+    "if(S.t[2])S.t[2].o=[];"
+  ]) assert.ok(html.includes(expression), `missing empty-state guard: ${expression}`);
+  const unsafe = [...html.matchAll(/S\\.(?:b|t)\\[\\d+\\]\\.[\\w$]+/g)]
+    .filter(match => !html.slice(Math.max(0, match.index - 12), match.index).endsWith('if('));
+  assert.equal(unsafe.length, 0, 'no unguarded fixed-index booking or table mutations may remain');
+  const firstScript = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)][0]?.[1] || '';
   assert.ok(firstScript.indexOf('if(S.b[1])S.b[1].p=1000;') < firstScript.indexOf('const SUB={'),
     'guarded optional demo mutation must execute before SUB is declared');
 });
