@@ -49,7 +49,7 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
     io.execute(() -> {try{JSObject r=new JSObject();r.put("snapshot",repository.readMigrationSnapshot(id));call.resolve(r);}catch(Exception e){call.reject("Migration snapshot read failed","PMS_MIGRATION_READ_FAILED",e);}});
   }
   @PluginMethod public void claimOutboxBatch(PluginCall call) {
-    String device=call.getString("deviceId");Integer limit=call.getInt("limit",50);Long lease=call.getLong("leaseMs",60000L);
+    String device=call.getString("deviceId");Integer limit=call.getInt("limit");Long lease=call.getLong("leaseMs");if(limit==null)limit=50;if(lease==null)lease=60000L;
     if(empty(device)||limit==null||lease==null){call.reject("Invalid outbox lease request","PMS_INVALID_OUTBOX_REQUEST");return;}
     io.execute(() -> {try{JSObject r=new JSObject();r.put("events",repository.claimOutboxBatch(device,limit,lease));call.resolve(r);}catch(Exception e){call.reject("Outbox claim failed","PMS_OUTBOX_CLAIM_FAILED",e);}});
   }
