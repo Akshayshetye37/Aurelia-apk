@@ -58,6 +58,27 @@ test("stale folio version rejects approval without changing the ledger", async (
   assert.equal(repository.current.version, 4);
 });
 
+test("stale-version rejection does not mutate a direct repository record", async () => {
+  const { folio } = fixture();
+  const directRepository = {
+    current: structuredClone(folio),
+    async readFolio(id) { return id === this.current.folioId ? this.current : null; },
+    async transactFolio(id, callback) {
+      if (id !== this.current.folioId) throw new Error("not found");
+      // Deliberately exposes the stored object directly. The checkpoint must
+      // reject a stale version before applying any mutation to this object.
+      return callback(this.current);
+    }
+  };
+  const checkpoint = new SmartCheckpoint({ repository: directRepository });
+  const before = structuredClone(directRepository.current);
+  await assert.rejects(checkpoint.recordPayment({
+    folioId: "folio-1", expectedVersion: 3, amountPaise: 3000,
+    method: "Cash", paymentId: "cash-stale", staff
+  }), error => error.code === "FOLIO_VERSION_CONFLICT");
+  assert.deepEqual(directRepository.current, before);
+});
+
 test("staff can post cash as a distinct idempotent payment and the folio remains due", async () => {
   const { repository, checkpoint } = fixture();
   const input = { folioId: "folio-1", expectedVersion: 4, amountPaise: 3000, method: "Cash", reference: "", paymentId: "cash-1", staff };
