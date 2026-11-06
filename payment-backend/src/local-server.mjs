@@ -818,7 +818,9 @@ app.post('/v1/devices/:deviceId/commands/lease', deviceAuth, (req, res) => {
   const leaseDigest = crypto.createHash('sha256').update(leaseToken).digest('hex');
   const currentTime = Math.floor(Date.now() / 1000);
   const lease = db.transaction(() => {
-    const device = db.prepare('SELECT status FROM device_registrations WHERE device_id=?').get(deviceId);
+    const device = db.prepare(`SELECT status,owner_id,property_id,attestation_verified_at,
+      attestation_security_level,attestation_verified_boot_state,attestation_device_locked
+      FROM device_registrations WHERE device_id=?`).get(deviceId);
     if (!device || device.status !== 'ACTIVE') throw new Error('device_not_active');
     const cursor = db.prepare('SELECT last_applied_sequence FROM device_cursors WHERE device_id=?').get(deviceId);
     if (!cursor) throw new Error('device_cursor_missing');
