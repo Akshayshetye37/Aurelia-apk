@@ -4141,8 +4141,21 @@ if (typeof window.render === "function") window.render();
   const status=state.loaded?(state.enabled?'ON':'OFF'):'Not loaded';
   const gate=state.loaded?(state.internalAllowed?'Internal release gate approved':'Internal release gate OFF'):'Server state not loaded';
   const toggleDisabled=!state.loaded||state.busy||state.controlState!=='CONFIGURED'||(!state.enabled&&!state.internalAllowed);
-  return '<section class="card" style="margin-top:14px"><div class="row"><h3>Live Collection</h3><span class="tag out">'+esc(status)+'</span></div><p class="lab">Tenant administrator control. The server remains authoritative and requires verified email, owner/admin membership, recent MFA and the independent internal release gate. This switch cannot approve the internal gate.</p><p class="lab" role="status">'+esc(gate)+' · '+esc(state.controlState)+'</p>'+(state.error?'<p class="lab" role="alert">'+esc(state.error)+'</p>':'')+'<div class="row" style="flex-wrap:wrap"><button class="btn sm ghost" onclick="refreshAureliaLiveCollectionControl()" '+(state.busy?'disabled':'')+'>Refresh server status</button><button class="btn sm" onclick="setAureliaLiveCollectionEnabled('+(!state.enabled)+')" '+(toggleDisabled?'disabled':'')+'>'+(state.enabled?'Turn OFF':'Turn ON')+'</button></div><p class="lab">OFF by default. Turning OFF blocks new live orders; unresolved in-flight intents remain pending/reconciliation-required for server-side review. Enabling requires recent MFA and will be rejected unless internal release approval is already active.</p></section>';
+  const initialize=state.controlState==='UNCONFIGURED'?'<button class="btn sm" onclick="initializeAureliaPaymentControls()" '+(state.busy?'disabled':'')+'>Initialize safe server defaults</button>':'';
+  return '<section class="card" style="margin-top:14px"><div class="row"><h3>Live Collection</h3><span class="tag out">'+esc(status)+'</span></div><p class="lab">Tenant administrator control. The server remains authoritative and requires verified email, owner/admin membership, recent MFA and the independent internal release gate. This switch cannot approve the internal gate.</p><p class="lab" role="status">'+esc(gate)+' · '+esc(state.controlState)+'</p>'+(state.error?'<p class="lab" role="alert">'+esc(state.error)+'</p>':'')+'<div class="row" style="flex-wrap:wrap"><button class="btn sm ghost" onclick="refreshAureliaLiveCollectionControl()" '+(state.busy?'disabled':'')+'>Refresh server status</button>'+initialize+'<button class="btn sm" onclick="setAureliaLiveCollectionEnabled('+(!state.enabled)+')" '+(toggleDisabled?'disabled':'')+'>'+(state.enabled?'Turn OFF':'Turn ON')+'</button></div><p class="lab">OFF by default. Turning OFF blocks new live orders; unresolved in-flight intents remain pending/reconciliation-required for server-side review. Enabling requires recent MFA and will be rejected unless internal release approval is already active.</p></section>';
  }
+ window.initializeAureliaPaymentControls=async function(){
+  const state=window.AureliaLiveCollectionControlState;
+  if(state.busy||state.controlState!=='UNCONFIGURED')return;
+  state.busy=true;state.error=null;window.render();
+  try{
+   await window.aureliaPaymentAdminRequest('/v1/admin/payment-controls','PATCH',{
+    changes:{emergency_stop:true},reason:'Initialize payment controls with emergency stop engaged and all capabilities disabled.'
+   });
+   state.controlState='CONFIGURED';state.loaded=true;state.enabled=false;state.internalAllowed=false;
+  }catch(error){state.error=error.message||'Could not initialize safe payment controls.';}
+  finally{state.busy=false;window.render();}
+ };
  window.refreshAureliaLiveCollectionControl=async function(){
   const state=window.AureliaLiveCollectionControlState;state.busy=true;state.error=null;
   if(typeof window.render==='function')window.render();
