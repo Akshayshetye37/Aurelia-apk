@@ -44,7 +44,14 @@ export async function activateSingleProvider({ db, tenantId, provider, environme
     const target = targetSnap.data();
     if (target.configured !== true || target.credentialsValidated !== true ||
         target.sandboxTestPassed !== true || target.webhookVerified !== true) {
-      throw Object.assign(new Error('provider_qualification_incomplete'), { code: 'PROVIDER_QUALIFICATION_INCOMPLETE' });
+      const qualification = {
+        credentialsRequired: target.configured !== true || target.credentialsValidated !== true,
+        sandboxAcceptanceRequired: target.sandboxTestPassed !== true,
+        webhookVerificationRequired: target.webhookVerified !== true
+      };
+      throw Object.assign(new Error('provider_qualification_incomplete'), {
+        code: 'PROVIDER_QUALIFICATION_INCOMPLETE', qualification
+      });
     }
     const prior = selectionSnap.exists ? selectionSnap.data() : null;
     let priorRef = null;
