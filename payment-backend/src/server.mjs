@@ -348,7 +348,7 @@ app.get('/v1/admin/payment-controls', requireTenantAdmin, async (req, res) => {
 
 const CONTROL_RELEASE_EVIDENCE = Object.freeze({
   manual_posting: ['real_data_diagnostic', 'owner_discrepancy_classification'],
-  test_collection: ['local_credential_vault', 'test_order_creation', 'staff_confirmation_acceptance'],
+  test_collection: ['secret_manager_credential_validation', 'provider_sandbox_order_creation', 'verified_webhook_or_status_recovery', 'staff_confirmation_acceptance'],
   native_settlement_bridge: ['signed_authorization', 'signature_verification', 'ack_recovery'],
   automatic_settlement: ['crash_duplicate_offline_restore_acceptance'],
   live_collection: ['production_readiness_review', 'separate_owner_approval'],
