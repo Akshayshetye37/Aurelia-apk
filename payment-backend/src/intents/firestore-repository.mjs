@@ -66,6 +66,9 @@ export class FirestorePaymentRepository {
       intentId: record.intentId, status: record.state, provider: record.provider,
       environment: record.environment, folioId: record.folioId, amountMinor: record.amountMinor,
       currency: record.currency, providerOrderId: record.providerOrderId || null,
+      providerPaymentId: record.providerPaymentId || null,
+      accountingStatus: record.accountingStatus || 'PENDING',
+      accountingBlockReason: record.accountingBlockReason || null,
       checkoutData: record.checkoutData || null, updatedAt: record.updatedAt
     };
   }
