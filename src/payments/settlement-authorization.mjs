@@ -13,6 +13,13 @@ function time(value, label) {
   if (!Number.isFinite(result)) fail("SETTLEMENT_AUTH_INVALID", "Invalid " + label);
   return result;
 }
+function safeText(value, label, max = 256) {
+  if (typeof value !== "string" || !value.trim() || value !== value.trim() ||
+      value.length > max || /[\\u0000-\\u001f\\u007f]/.test(value)) {
+    fail("SETTLEMENT_AUTH_INVALID", "Invalid " + label);
+  }
+  return value;
+}
 function decodeSignature(value) {
   if (typeof value !== "string" || value.length > 256 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) fail("SETTLEMENT_AUTH_SIGNATURE_INVALID", "Malformed signature");
   const raw = atob(value); return Uint8Array.from(raw, c => c.charCodeAt(0));
@@ -66,8 +73,11 @@ export class SettlementAuthorizationVerifier {
     const authorizationId = id(auth.authorizationId, "authorizationId");
     if (auth.issuer !== this.expectedIssuer || auth.audience !== this.expectedAudience) fail("SETTLEMENT_AUTH_INVALID", "Authorization issuer/audience mismatch");
     const issued = time(auth.issuedAt, "authorization issuedAt"); const expires = time(auth.expiresAt, "authorization expiresAt");
-    if (issued > nowMs + this.clockSkewMs || expires <= nowMs || expires <= issued || expires - issued > this.maxAuthorizationTtlMs) fail("SETTLEMENT_AUTH_EXPIRED", "Authorization is not currently valid");
-    for (const field of ["commandId", "providerTransactionId", "bookingId", "method", "reference"]) requireEqual(id(auth[field], "authorization " + field), id(command[field], "command " + field), field);
+    if (issued > nowMs + this.clockSkewMs || issued < leaseIssued - this.clockSkewMs ||
+        expires <= nowMs || expires <= issued || expires > leaseExpires ||
+        expires - issued > this.maxAuthorizationTtlMs) fail("SETTLEMENT_AUTH_EXPIRED", "Authorization is not currently valid or is outside its policy lease");
+    for (const field of ["commandId", "providerTransactionId", "bookingId"]) requireEqual(id(auth[field], "authorization " + field), id(command[field], "command " + field), field);
+    for (const field of ["method", "reference"]) requireEqual(safeText(auth[field], "authorization " + field, field === "method" ? 40 : 256), safeText(command[field], "command " + field, field === "method" ? 40 : 256), field);
     if (!Number.isSafeInteger(auth.amountPaise) || auth.amountPaise <= 0 || auth.amountPaise !== command.amountPaise) fail("SETTLEMENT_AUTH_MISMATCH", "Authorization amount mismatch");
     const idempotencyKey = ["gw", command.tenantId, command.provider, command.environment, command.providerAccountId, command.providerTransactionId].join(":");
     const binding = Object.freeze({ authorizationId, leaseId, commandId: auth.commandId, tenantId: auth.tenantId, deviceId: auth.deviceId,
