@@ -3,6 +3,8 @@ package com.aurelia.pms;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
+import android.database.DatabaseUtils;
+import org.json.JSONTokener;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import org.json.JSONObject;
@@ -32,7 +34,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   synchronized JSONObject getEntity(String type,String id) {
     try(Cursor c=getReadableDatabase().rawQuery("SELECT version,data_json FROM pms_entities WHERE entity_type=? AND entity_id=?",new String[]{type,id})) {
       if(!c.moveToFirst())return null;
-      JSONObject out=new JSONObject(); out.put("version",c.getLong(0)); out.put("data",new JSONObject(c.getString(1))); return out;
+      JSONObject out=new JSONObject(); out.put("version",c.getLong(0)); out.put("data",new JSONTokener(c.getString(1)).nextValue()); return out;
     } catch(Exception e){throw new IllegalStateException("pms_entity_read_failed",e);}
   }
 
