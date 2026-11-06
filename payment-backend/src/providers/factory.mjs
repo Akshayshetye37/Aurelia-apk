@@ -1,5 +1,6 @@
 import { RazorpayAdapter } from './razorpay.mjs';
 import { CashfreeAdapter } from './cashfree.mjs';
+import { JioPayAdapter } from './jiopay-adapter.mjs';
 import { assertAdapterCapabilities } from './adapter-contract.mjs';
 
 // Provider capability means every operation below is implemented. It does not
@@ -10,7 +11,8 @@ const REQUIRED_OPERATIONS = Object.freeze([
 ]);
 const FACTORIES = Object.freeze({
   razorpay: options => new RazorpayAdapter(options),
-  cashfree: options => new CashfreeAdapter(options)
+  cashfree: options => new CashfreeAdapter(options),
+  jiopay: options => new JioPayAdapter(options)
 });
 
 export function createProviderAdapter(providerId, options) {
