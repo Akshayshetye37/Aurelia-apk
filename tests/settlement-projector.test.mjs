@@ -7,6 +7,8 @@ import { SettlementAuthorizationVerifier } from "../src/payments/settlement-auth
 import { IndexedDbSettlementJournal } from "../src/payments/settlement-journal.mjs";
 import { SettlementProjector } from "../src/payments/settlement-projector.mjs";
 import { settlePayment } from "../src/payments/settlement-service.mjs";
+import { PAYMENT_SAFETY_LOCKS } from "../src/payments/payment-safety-gate.mjs";
+import { AUTO_FOLIO_SETTLEMENT_ENABLED } from "../src/payments/settlement-gate.mjs";
 
 const scope = { tenantId: "tenant_01", deviceId: "device_01", provider: "razorpay", providerAccountId: "merchant_01", environment: "test" };
 const command = { ...scope, commandId: "cmd_01", providerTransactionId: "pay_01", bookingId: "booking_01", amountPaise: 150000, method: "UPI", reference: "UTR123456" };
@@ -81,6 +83,14 @@ test("journal transitions are one-way and persistent read-back is stable", async
   assert.equal((await j.markApplied(record.key, record.payloadHash)).status, "APPLIED");
   await assert.rejects(j.markRejected(record.key, record.payloadHash, "NO"), /Illegal/);
   assert.equal((await j.get(record.key)).status, "APPLIED");
+});
+
+test("all production payment and accounting interlocks remain closed", () => {
+  assert.deepEqual(PAYMENT_SAFETY_LOCKS, {
+    blockAllBalanceMutations: true, automaticSettlement: true,
+    liveCollection: true, nativeSettlementBridge: true
+  });
+  assert.equal(AUTO_FOLIO_SETTLEMENT_ENABLED, false);
 });
 
 test("projector records verified evidence but global accounting lock blocks folio mutation", async () => {
