@@ -4715,7 +4715,7 @@ const projectorPromise = journalPromise.then(journal => {
 });
 
 window.aureliaEnrollPaymentDevice = enrollPaymentDevice;
-window.aureliaApplyJournaledSettlement = async lease => {
+window.aureliaApplyJournaledSettlement = async (lease, tokenProvider) => {
  if(!lease?.settlementAuthorized || !lease?.authorization || !lease?.policyLease) {
   return { status:'blocked', code:'SETTLEMENT_LEASE_DISABLED', message:'The signed policy lease does not authorize folio posting.' };
  }
@@ -4728,16 +4728,18 @@ window.aureliaApplyJournaledSettlement = async lease => {
  if(result.status !== 'applied') return result;
  const acknowledgement = await acknowledgeSettlementCommand({
   commandId:lease.command.commandId,
-  ledgerAckId:'aurelia-'+lease.command.commandId
+  ledgerAckId:'aurelia-'+lease.command.commandId,
+  tokenProvider
  });
  return { ...result, acknowledgement };
 };
 
-window.aureliaSyncVerifiedSettlements = async () => {
+window.aureliaSyncVerifiedSettlements = async tokenProvider => {
  if(!paymentDeviceNativeAvailable()) return { status:'blocked', code:'NATIVE_BRIDGE_UNAVAILABLE' };
- const lease = await leaseNextSettlementCommand();
+ if(typeof tokenProvider !== 'function') return { status:'blocked', code:'FIREBASE_TOKEN_PROVIDER_REQUIRED' };
+ const lease = await leaseNextSettlementCommand({ tokenProvider });
  if(!lease?.available) return { status:'idle', message:'No verified settlement command is waiting.' };
- return window.aureliaApplyJournaledSettlement(lease);
+ return window.aureliaApplyJournaledSettlement(lease, tokenProvider);
 };
 
 window.AureliaSettlementStatus = Object.freeze({
