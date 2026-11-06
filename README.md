@@ -39,6 +39,26 @@ Working branch: `feature/multi-provider-payment-backend`.
 **Operational rule:** configure and qualify one provider, activate it for the tenant, and let the backend enforce that selection for new intents. Do not infer that adapter availability means merchant qualification or production readiness.
 
 
+## Latest payment configuration update (2026-11-07)
+
+Working branch: `feature/multi-provider-payment-backend`.
+
+### Optional gateway onboarding and default payment behaviour
+
+- Gateway setup is optional. A fresh property does not need to configure an online provider to use Aurelia.
+- The existing offline-first cash, manual payment, receipt and local folio workflows remain the default when no online gateway is configured and activated. They must not depend on a payment backend or network availability.
+- Payment Settings includes an authenticated owner/administrator configuration panel. It loads provider credential field metadata from the backend and sends submitted merchant values directly to the trusted backend credential endpoint.
+- Merchant credentials remain backend-side in Google Secret Manager. The client does not persist submitted merchant secrets in local storage, PMS records or APK resources, and clears secret input fields after submission.
+- Six server adapters are currently registered and supported by the active-provider control plane: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay. Only Razorpay and Cashfree currently have Android native checkout handoffs. The other four must not be offered for device checkout until their handoffs are implemented and tested.
+- CCAvenue is the seventh directory entry only. It is explicitly not implemented and is disabled in the credential selector. No CCAvenue adapter, checkout, webhook, refund or recovery capability is claimed.
+- Exactly one qualified online gateway may be active for new intents per tenant. Activation requires validated credentials, sandbox acceptance and verified webhook evidence. Provider switches do not invalidate already-created transactions or their provider-specific recovery.
+- The activation endpoint now returns distinct qualification errors: `provider_credentials_not_validated`, `sandbox_acceptance_required` and `webhook_verification_required`.
+- Live collection remains OFF. Automatic settlement and gateway-to-folio posting remain disabled until the trusted payment-to-folio lifecycle has passed its separate release gates.
+
+### Verification boundary
+
+The source changes for the optional gateway form, secure credential submission, active-provider enforcement and activation error reporting have been committed to this branch. GitHub Actions runs `42278130693` (payment backend CI) and `42278130696` (PMS source tests, web packaging and Android validation) were in progress at the last status check. Do not treat them as passing until GitHub reports successful conclusions. No cloud deployment, merchant sandbox certification or production release is claimed.
+
 ## Project location
 
 - **Repository:** https://github.com/Akshayshetye37/Aurelia-apk
