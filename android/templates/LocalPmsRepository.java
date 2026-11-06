@@ -61,7 +61,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       db.insertWithOnConflict("pms_entities",null,entity,SQLiteDatabase.CONFLICT_REPLACE);
       ContentValues out=new ContentValues();out.put("event_id",event.getString("eventId"));out.put("tenant_id",event.getString("tenantId"));out.put("property_id",event.getString("propertyId"));out.put("device_id",event.getString("deviceId"));out.put("entity_type",type);out.put("entity_id",id);out.put("sequence",expectedVersion+1);out.put("event_type",event.getString("eventType"));out.put("schema_version",event.getInt("schemaVersion"));out.put("occurred_at",event.getString("occurredAt"));out.put("payload_json",event.opt("payload")==null?"null":serializeJsonValue(event.opt("payload")));out.put("status","PENDING");out.put("attempts",0);out.put("created_at",now);
       db.insertOrThrow("pms_outbox",null,out); db.setTransactionSuccessful();
-      JSONObject result=new JSONObject();result.put("entityType",type);result.put("entityId",id);result.put("version",actual+1);result.put("data",nextData);return result;
+      JSONObject result=new JSONObject();result.put("key",type+":"+id);result.put("type",type);result.put("id",id);result.put("version",actual+1);result.put("data",nextData);result.put("updatedAt",isoTimestamp(now));return result;
     } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("pms_transaction_failed",e);}
     finally{db.endTransaction();}
   }
