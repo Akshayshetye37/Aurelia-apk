@@ -5,6 +5,31 @@ Aurelia is an offline-first property-management system (PMS) for reservations, g
 > **Payment release status: LIVE GATEWAY COLLECTION OFF.** Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available on the device. Cloud payment recovery, automatic gateway settlement, native gateway folio projection and live collection are not production-ready and remain fail-closed until the release gates below are completed and approved.
 
 
+## Latest implementation update (2026-11-07 — payment API hardening)
+
+### Authenticated refund API client
+
+- Extended `src/services/payment-api.mjs` with `createRefund(intentId, options)` and `getRefund(intentId, refundId)`, mapped to the existing tenant-admin refund endpoints.
+- Refund creation validates the intent UUID, minimum INR amount in paise, idempotency key, reason length and control characters before any network dispatch. The request uses the authenticated Firebase ID token and sends the same idempotency key in the request body and `Idempotency-Key` header.
+- Refund status lookup validates both the intent UUID and the server-issued refund reference before making an authenticated GET request.
+- Added regression coverage in `tests/services/payment-api.test.mjs` for authenticated refund creation, request binding, invalid-input rejection before network access and refund status lookup.
+- These client methods expose the existing backend API; they do not mean refund controls are enabled in the PMS UI, that a refund has been merchant-tested, or that a refund is reconciled into the PMS folio. Backend release capabilities still report refunds disabled until the accounting and operational release gates pass.
+
+### Verification of the current source revision
+
+- Current verified source commit before this documentation update: `2b9ca36b4b6eb61351aad858428d5cbf761c0abf`.
+- GitHub Actions workflow **PMS source tests, web packaging and Android validation** run `42280718865` completed successfully for that commit.
+- Settlement foundation CI run `42280662149` completed successfully for `fa38a55688d5b4e91fd39caa35acd822e6c6ccbef`; it predates the final refund-validation correction.
+- This verifies the repository workflow, not provider merchant certification, physical-device checkout, cloud deployment, production signing or live-payment readiness.
+
+### Remaining release boundaries
+
+- Android checkout is currently wired only for Razorpay and Cashfree. PayU, PhonePe, Paytm and JioPay have server-side checkout payloads but do not yet have a released Android checkout handoff.
+- Provider-specific payment-link creation and lifecycle management are not exposed as a complete Aurelia user workflow.
+- Refund API client methods now exist, but refund controls, operational approvals, provider sandbox refund acceptance and folio/accounting treatment are not released.
+- Gateway captures are not yet projected into the authoritative PMS folio. The backend reconciliation journal is not a substitute for the application's canonical folio ledger.
+- Live collection, automated settlement and live refunds remain disabled. Do not enable them by changing client-side flags.
+
 ## Latest implementation update (2026-11-07)
 
 ### Optional merchant gateway setup UI (2026-11-07)
