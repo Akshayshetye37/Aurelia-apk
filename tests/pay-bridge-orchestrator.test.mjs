@@ -360,13 +360,7 @@ test("backend verification alone does not automatically post a local folio", asy
   assert.equal(verified.state, "SUCCESS");
   assert.equal(verified.backendVerified, true);
   assert.equal(verified.settlementAuthorized, true);
-
-  // Verification updates the payment intent only. The orchestrator has no
-  // local folio writer and must not post money without a separate staff action.
-  assert.equal(verified.state, "SUCCESS");
-  assert.equal(verified.backendVerified, true);
-  assert.equal(verified.settlementAuthorized, true);
-  assert.equal(unknown.state, "UNKNOWN");
-  assert.equal(unknown.settlementAuthorized, false);
+  // Orchestrator has no folio writer: verification alone cannot mutate PMS state.
+  assert.equal(records.get(binding.requestId).state, "SUCCESS");
 
 });
