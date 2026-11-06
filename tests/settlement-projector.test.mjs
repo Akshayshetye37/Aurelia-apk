@@ -54,6 +54,16 @@ test("signed authorization binds tenant, device, merchant account and environmen
   }
 });
 
+test("signature tampering, unknown keys and expired authorizations fail closed", async () => {
+  const { lease, authorization } = await envelopes();
+  const badPayload = { ...authorization, payload: { ...authorization.payload, amountPaise: 1 } };
+  await assert.rejects(verifier().verify({ authorization: badPayload, lease, command }), { code: "SETTLEMENT_AUTH_SIGNATURE_INVALID" });
+  await assert.rejects(verifier().verify({ authorization: { ...authorization, kid: "untrusted_key" }, lease, command }), { code: "SETTLEMENT_AUTH_UNKNOWN_KEY" });
+  const expiredVerifier = new SettlementAuthorizationVerifier({ trustedKeys: { key_01: publicJwk },
+    expectedIssuer: "aurelia-payment-authority", cryptoImpl: webcrypto, now: () => iso(NOW + 130000) });
+  await assert.rejects(expiredVerifier.verify({ authorization, lease, command }), { code: "SETTLEMENT_AUTH_EXPIRED" });
+});
+
 test("IndexedDB journal serializes duplicate appends and rejects payload conflicts", async () => {
   const j = journal("journal-concurrency");
   const input = { ...scope, providerTransactionId: "pay_same", commandId: "cmd_same", payload: { command: { ...command, commandId: "cmd_same", providerTransactionId: "pay_same" } } };
