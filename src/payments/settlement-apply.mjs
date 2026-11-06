@@ -12,10 +12,25 @@
  * unauthenticated WebView callers.
  */
 
-import { applyJournaledSettlement } from "./settlement-journal.mjs";
 import { assertNativeBridgeAllowed } from "./payment-safety-gate.mjs";
 
 const AUTHORIZATION_HEADER = "x-aurelia-settlement-authorization";
+
+// Kept private to this guarded boundary. The journal module itself only stores
+// evidence; projection is reachable here only after the native kill switch and
+// cryptographic authorization checks above have passed.
+async function applyJournaledSettlement({ journal, input, applyProjection }) {
+  if (!journal || typeof journal.append !== "function" ||
+      typeof journal.markApplied !== "function" || typeof applyProjection !== "function") {
+    throw new TypeError("Settlement journal and projection dependencies are required");
+  }
+  const appended = await journal.append(input);
+  const record = appended.record;
+  if (record.status === "APPLIED") return { record, duplicate: true };
+  await applyProjection(record.payload, record);
+  const applied = await journal.markApplied(record.key, record.payloadHash);
+  return { record: applied, duplicate: appended.duplicate };
+}
 
 function requiredId(value, label, max = 256) {
   if (typeof value !== "string" || !value.trim() || value.length > max ||
