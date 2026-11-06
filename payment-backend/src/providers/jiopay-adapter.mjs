@@ -69,12 +69,12 @@ export class JioPayAdapter extends PaymentProviderAdapter {
     return {valid:true,validation:'authenticated_status_command'};
   }
   async createOrder(input) {
-    if(!validId(input?.orderId)||!validMinor(input?.amountMinor)||input.currency!=='INR'||
+    if(!validId(input?.orderId)||input.orderId.length>20||!validMinor(input?.amountMinor)||input.currency!=='INR'||
       typeof input.returnUrl!=='string'||!input.returnUrl.startsWith('https://')||
       (input.customer?.email!=null&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.customer.email)))
       throw new TypeError('invalid_jiopay_order');
-    const fields={amount:money(input.amountMinor),currencyCode:'356',customerEmailID:input.customer?.email||'',
-      merchantId:this.credentials.merchantId,aggregatorId:this.credentials.aggregatorId||'',
+    const fields={amount:money(input.amountMinor),currencyCode:'356',customerEmailID:input.customer?.email||'guest@jiopay.in',
+      merchantId:this.credentials.merchantId,aggregatorID:this.credentials.aggregatorId||'',
       merchantTxnNo:input.orderId,payType:'0',returnURL:input.returnUrl,transactionType:'SALE',txnDate:dateStamp()};
     const path=this.environment==='uat'?'/tsp/pg/api/v2/initiateSale':'/pg/api/v2/initiateSale';
     const d=await this.post(path,{...fields,secureHash:generateJioPaySecureHash(fields,this.credentials.saltOrHashKey)});
@@ -95,7 +95,7 @@ export class JioPayAdapter extends PaymentProviderAdapter {
     const inr=d.currencyCode==='356'||d.currency==='INR';
     return {provider:'jiopay',orderId:input.orderId,paymentId:d.pgTransactionId==null?null:String(d.pgTransactionId),
       paymentStatus:state||'UNKNOWN',amountMinor,currency:inr?'INR':null,
-      captured:['SUCCESS','SUCCESSFUL','COMPLETED','CAPTURED','S0000'].includes(state)&&validMinor(amountMinor)&&inr,
+      captured:['SUCCESS','SUCCESSFUL','COMPLETED','CAPTURED','S0000','SUC'].includes(state)&&validMinor(amountMinor)&&inr,
       found:!['NOT_FOUND','NO_RECORD','R4040'].includes(state)};
   }
   async findOrderByReference(input) {
@@ -115,7 +115,7 @@ export class JioPayAdapter extends PaymentProviderAdapter {
     } catch { return {valid:false}; }
   }
   async createRefund(input) {
-    if(!validId(input?.orderId)||!validId(input?.refundId)||!validMinor(input?.amountMinor))
+    if(!validId(input?.orderId)||input.orderId.length>20||!validId(input?.refundId)||input.refundId.length>20||!validMinor(input?.amountMinor))
       throw new TypeError('invalid_jiopay_refund');
     const d=await this.command({merchantId:this.credentials.merchantId,aggregatorID:this.credentials.aggregatorId||'',
       merchantTxnNo:input.refundId,originalTxnNo:input.orderId,amount:money(input.amountMinor),
