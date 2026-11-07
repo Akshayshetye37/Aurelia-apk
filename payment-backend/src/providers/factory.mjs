@@ -12,7 +12,11 @@ const REQUIRED_OPERATIONS = Object.freeze([
   'validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus',
   'verifyWebhook', 'createRefund', 'getRefundStatus'
 ]);
-const PROVIDER_OPERATIONS = Object.freeze({\n  ccavenue: Object.freeze(['validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus'])\n});\nconst operationsFor = providerId => PROVIDER_OPERATIONS[providerId] || REQUIRED_OPERATIONS;\nconst FACTORIES = Object.freeze({
+const PROVIDER_OPERATIONS = Object.freeze({
+  ccavenue: Object.freeze(['validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus'])
+});
+const operationsFor = providerId => PROVIDER_OPERATIONS[providerId] || REQUIRED_OPERATIONS;
+const FACTORIES = Object.freeze({
   razorpay: options => new RazorpayAdapter(options),
   cashfree: options => new CashfreeAdapter(options),
   payu: options => new PayUAdapter(options),
