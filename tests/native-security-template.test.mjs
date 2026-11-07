@@ -152,7 +152,7 @@ test('cloud device sync uses the existing MFA-aware Firebase web session', () =>
 
 test('native PMS migration template serializes JSON values through Android-supported JSONArray', () => {
   const source = read('android/templates/LocalPmsRepository.java');
-  assert.match(source, /serializeJsonValue\(value\)/);
+  assert.match(source, /Object value=parsed\.opt\(key\)/);\n  assert.match(source, /serializeJsonValue\(value\)/);\n  assert.doesNotMatch(source, /serializeJsonValue\(value\).*while\(keys\.hasNext\(\)\)/);
   assert.match(source, /new org\.json\.JSONArray\(\)/);
   assert.match(source, /private static String serializeJsonValue\(Object value\)/);
   assert.doesNotMatch(source, /JSONObject\.valueToString\s*\(/);
@@ -189,4 +189,13 @@ test('native PMS SQLite template implements repository and durable outbox contra
   assert.match(repository, /legacy_migration_replay_payload_mismatch/);
   assert.match(repository, /pms_outbox.*UNIQUE\(entity_type,entity_id,sequence\)/);
   assert.match(plugin, /@CapacitorPlugin\(name = "CapacitorPmsStorage"\)/);
+});
+
+
+test('native SQLite outbox claim captures validated immutable lease arguments', () => {
+  const source = read('android/templates/CapacitorPmsStoragePlugin.java');
+  assert.match(source, /final int limit=requestedLimit==null\?50:requestedLimit\.intValue\(\)/);
+  assert.match(source, /final long lease=requestedLease==null\?60000L:requestedLease\.longValue\(\)/);
+  assert.match(source, /final String owner=device/);
+  assert.match(source, /limit<1\|\|limit>100\|\|lease<1000L\|\|lease>3600000L/);
 });
