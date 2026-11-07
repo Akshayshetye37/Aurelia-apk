@@ -836,11 +836,6 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         pendingCheckoutTransactionId = "";
         pendingCheckoutProvider = "";
       }
-      @Override public void onBackPressedCancelTransaction() {
-        emitNativePaymentEvent("PAYTM_CANCEL_HINT", "");
-        pendingCheckoutTransactionId = "";
-        pendingCheckoutProvider = "";
-      }
       @Override public void onTransactionCancel(String message, Bundle response) {
         emitNativePaymentEvent("PAYTM_CANCEL_HINT", "");
         pendingCheckoutTransactionId = "";
