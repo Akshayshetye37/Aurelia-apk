@@ -69,7 +69,21 @@ test('Android checkout refuses providers without a completed hosted-checkout han
   const html = read('index.html');
   assert.match(html, /Android hosted-checkout handoff is not yet integrated/);
   assert.match(html, /No cloud payment intent was created/);
-  assert.match(html, /!\['razorpay','cashfree'\]\.includes\(payload\.provider\)/);
+  assert.match(html, /!\['razorpay','cashfree','phonepe','jiopay'\]\.includes\(payload\.provider\)/);
+});
+
+test('PhonePe and JioPay use HTTPS hosted checkout handoff and return only reconciliation hints', () => {
+  const html = read('index.html');
+  const androidPatcher = read('scripts/patch-android.js');
+  const bridge = read('src/payments/payment-device-bridge.mjs');
+  assert.match(html, /'phonepe','jiopay'/);
+  assert.match(html, /aurelia-hosted-provider-details/);
+  assert.match(androidPatcher, /"phonepe".equals\(provider\) \|\| "jiopay".equals\(provider\)/);
+  assert.match(androidPatcher, /checkoutUri.getScheme\(\)/);
+  assert.match(androidPatcher, /HOSTED_CHECKOUT_RETURNED/);
+  assert.match(bridge, /"phonepe", "jiopay"/);
+  assert.match(bridge, /aureliaNativePaymentEvent/);
+  assert.match(html, /Live collection remains OFF/);
 });
 
 test('native payment journal cannot mark a payment posted by status-only mutation', () => {
