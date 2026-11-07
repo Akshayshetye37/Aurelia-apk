@@ -205,7 +205,7 @@ export class PayBridgePaymentOrchestrator {
     }
     if (event.transactionId != null && (typeof event.transactionId !== "string" ||
         !event.transactionId || event.transactionId.length > 256 ||
-        /[\\u0000-\\u001f\\u007f]/.test(event.transactionId))) {
+        /[\u0000-\u001f\u007f]/.test(event.transactionId))) {
       throw new PaymentOrchestratorError("EVENT_BINDING_MISMATCH", "Bridge event transaction reference is invalid");
     }
     if (record.bridgeTransactionId && event.transactionId &&
