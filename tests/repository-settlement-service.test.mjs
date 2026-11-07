@@ -100,3 +100,22 @@ test("invalid or over-balance payment leaves repository and live projection unch
   assert.equal(ctx.state.today, 0);
   assert.equal((await ctx.repository.claimOutboxBatch({ deviceId: "device-local-test" })).length, 0);
 });
+
+test("concurrent settlements against one folio cannot double-post or advance the live projection twice", async () => {
+  const ctx = setup();
+  const outcomes = await Promise.allSettled([
+    command({ ...ctx, idempotencyKey: "race-payment-a" }),
+    command({ ...ctx, idempotencyKey: "race-payment-b" })
+  ]);
+  assert.equal(outcomes.filter(x => x.status === "fulfilled").length, 1);
+  assert.equal(outcomes.filter(x => x.status === "rejected" && x.reason.code === "ENTITY_VERSION_CONFLICT").length, 1);
+  const stored = await ctx.bridge.fetchEntity("folio", "folio-41");
+  assert.equal(stored.version, 1);
+  assert.equal(stored.data.pays.length, 1);
+  assert.equal(stored.data.p, 100);
+  assert.equal(ctx.booking.pays.length, 1);
+  assert.equal(ctx.booking.p, 100);
+  const events = await ctx.repository.claimOutboxBatch({ deviceId: "device-local-test" });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].eventType, "folio.payment_posted");
+});
