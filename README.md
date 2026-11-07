@@ -15,6 +15,10 @@ Verified steps: complete PMS test suite, production web bundle, production asset
 
 This is CI verification. It does not establish physical-device acceptance, uninstall/reinstall identity survival, provider sandbox acceptance or production readiness.
 
+### Running the web application (important)
+
+`index.html` is not a standalone single-file application. It imports runtime modules from `./src/`; opening the raw file in an online HTML preview/editor can omit those files or run the page in an opaque sandbox that blocks durable browser storage. The startup screen intentionally blocks in that environment rather than allowing bookings against volatile memory. Use the complete project served from its web deployment, or install/run the generated Capacitor Android application. Build the web asset tree with `npm run build`; deploy the complete `www/` directory (including its `src/` modules), not only `www/index.html`.
+
 ### Local-first identity and compatibility persistence update
 
 - Browser/PWA identity is generated locally using cryptographically secure UUIDs and stored in IndexedDB, with a verified localStorage fallback when IndexedDB is unavailable.
