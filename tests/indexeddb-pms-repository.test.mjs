@@ -12,3 +12,41 @@ test("retry scheduling is enforced and conflict transitions remain lease protect
 
 test("expired outbox leases cannot be acknowledged or transitioned and can be reclaimed",async()=>{const r=repo("expired-lease");await r.transactBusinessChange({entityType:"folio",entityId:"f1",expectedVersion:0,event:event(1)},()=>({v:1}));await r.claimOutboxBatch({deviceId:"d1",leaseMs:1000});const db=await r.database();const tx=db.transaction("outbox","readwrite"),store=tx.objectStore("outbox"),row=await new Promise((resolve,reject)=>{const q=store.get("event-1");q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});row.leaseUntil=new Date(Date.now()-1000).toISOString();store.put(row);await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});await assert.rejects(r.acknowledgeOutbox({deviceId:"d1",acknowledgements:[{eventId:"event-1",sequence:1}]}),/unexpired active lease/);await assert.rejects(r.retryOutbox({deviceId:"d1",eventId:"event-1",retryAt:"2999-11-07T00:01:00Z",errorCode:"NETWORK"}),/unexpired lease/);const reclaimed=await r.claimOutboxBatch({deviceId:"d2"});assert.equal(reclaimed.length,1);assert.equal(reclaimed[0].leaseOwner,"d2");assert.deepEqual(await r.acknowledgeOutbox({deviceId:"d2",acknowledgements:[{eventId:"event-1",sequence:1}]}),{acknowledged:1});});
 test("outbox lease duration is bounded by the repository contract",async()=>{const r=repo("lease-bounds");await assert.rejects(r.claimOutboxBatch({deviceId:"d1",leaseMs:999}),/Lease must be 1000/);await assert.rejects(r.claimOutboxBatch({deviceId:"d1",leaseMs:3600001}),/Lease must be 1000/);});
+
+test("multi-entity business batch commits all records and outbox events together",async()=>{
+ const r=repo("batch-atomic");
+ const roomEvent={...event(1,"room-1"),entityType:"room",entityId:"room-1",eventId:"event-room-1",eventType:"room.assignment_changed"};
+ const bookingEvent={...event(1,"booking-1"),entityType:"booking",entityId:"booking-1",eventId:"event-booking-1",eventType:"booking.room_reassigned"};
+ const rows=await r.transactBusinessBatch([
+  {entityType:"room",entityId:"room-1",expectedVersion:0,data:{id:"room-1",occupied:true},event:roomEvent},
+  {entityType:"booking",entityId:"booking-1",expectedVersion:0,data:{id:"booking-1",roomId:"room-1"},event:bookingEvent}
+ ]);
+ assert.deepEqual(rows.map(x=>x.version),[1,1]);
+ assert.equal((await r.getEntity("room","room-1")).data.occupied,true);
+ assert.equal((await r.getEntity("booking","booking-1")).data.roomId,"room-1");
+ assert.equal((await r.claimOutboxBatch({deviceId:"d1"})).length,2);
+});
+test("multi-entity batch rolls back every entity and event when any version is stale",async()=>{
+ const r=repo("batch-rollback");
+ await r.transactBusinessChange({entityType:"booking",entityId:"booking-1",expectedVersion:0,event:{...event(1,"booking-1"),entityType:"booking",entityId:"booking-1",eventId:"seed-booking"}},()=>({roomId:"room-old"}));
+ const before=await r.getEntity("booking","booking-1");
+ const roomEvent={...event(1,"room-1"),entityType:"room",entityId:"room-1",eventId:"batch-room"};
+ const bookingEvent={...event(2,"booking-1"),entityType:"booking",entityId:"booking-1",eventId:"batch-booking"};
+ await assert.rejects(r.transactBusinessBatch([
+  {entityType:"room",entityId:"room-1",expectedVersion:0,data:{id:"room-1"},event:roomEvent},
+  {entityType:"booking",entityId:"booking-1",expectedVersion:0,data:{roomId:"room-new"},event:bookingEvent}
+ ]),e=>e.code==="ENTITY_VERSION_CONFLICT");
+ assert.equal(await r.getEntity("room","room-1"),null);
+ assert.deepEqual(await r.getEntity("booking","booking-1"),before);
+ assert.equal((await r.claimOutboxBatch({deviceId:"d1"})).length,1);
+});
+test("multi-entity batch rejects duplicate entity keys before writing",async()=>{
+ const r=repo("batch-duplicate");
+ const ev1={...event(1,"room-1"),entityType:"room",entityId:"room-1",eventId:"dup-1"};
+ const ev2={...event(1,"room-1"),entityType:"room",entityId:"room-1",eventId:"dup-2"};
+ await assert.rejects(r.transactBusinessBatch([
+  {entityType:"room",entityId:"room-1",expectedVersion:0,data:{},event:ev1},
+  {entityType:"room",entityId:"room-1",expectedVersion:0,data:{},event:ev2}
+ ]),/Duplicate entity/);
+ assert.equal(await r.getEntity("room","room-1"),null);
+});
