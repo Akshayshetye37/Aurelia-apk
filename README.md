@@ -2,6 +2,9 @@
 
 ## Architecture status and implementation roadmap (2026-11-07)
 
+**Current branch:** `feature/multi-provider-payment-backend`  
+**Latest verified source commit:** `3c9d9654d112a73fe415545ffb992fe817b870a0`. The latest recorded CI run [42359366447](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42359366447) passed through Android debug APK build, signature/identity verification, manifest permission verification and artifact upload. This validates that commit's CI pipeline, not physical-device operation or production readiness.
+
 
 ## Current implementation and verification update (2026-11-07)
 
