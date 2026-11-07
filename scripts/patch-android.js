@@ -554,6 +554,13 @@ import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.SslErrorHandler;
+import android.net.http.SslError;
+import android.app.Dialog;
+import android.view.ViewGroup;
 import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
 import com.aurelia.pms.security.PaymentDeviceKeyStore;
@@ -685,6 +692,103 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     emitNativePaymentEvent("CASHFREE_ERROR_CALLBACK", "");
     pendingCheckoutTransactionId = "";
     pendingCheckoutProvider = "";
+  }
+
+  private void startPayUCheckout(String transactionId, String orderId, JSONObject checkoutData) throws Exception {
+    JSONObject data = checkoutData.optJSONObject("checkout");
+    JSONObject fields = data == null ? null : data.optJSONObject("fields");
+    String action = data == null ? "" : data.optString("action", "");
+    Uri actionUri = Uri.parse(action);
+    if (fields == null || !"POST".equals(data.optString("method", "")) ||
+        !"https".equalsIgnoreCase(actionUri.getScheme()) ||
+        !"test.payu.in".equalsIgnoreCase(actionUri.getHost()) ||
+        !"https://".equalsIgnoreCase(actionUri.getScheme() + "://")) {
+      throw new IllegalArgumentException("PayU sandbox checkout payload is invalid.");
+    }
+    String successUrl = fields.optString("surl", "");
+    String failureUrl = fields.optString("furl", "");
+    Uri successUri = Uri.parse(successUrl);
+    Uri failureUri = Uri.parse(failureUrl);
+    if (!"https".equalsIgnoreCase(successUri.getScheme()) ||
+        !"https".equalsIgnoreCase(failureUri.getScheme()) ||
+        successUri.getHost() == null || failureUri.getHost() == null) {
+      throw new IllegalArgumentException("PayU return URLs must be HTTPS.");
+    }
+    StringBuilder form = new StringBuilder();
+    java.util.Iterator<String> keys = fields.keys();
+    while (keys.hasNext()) {
+      String key = keys.next();
+      String value = fields.optString(key, "");
+      if (key.isEmpty() || value.length() > 4096 ||
+          key.matches(".*[\\\\r\\\\n].*") || value.matches(".*[\\\\r\\\\n].*")) {
+        throw new IllegalArgumentException("PayU checkout form contains an invalid field.");
+      }
+      if (form.length() > 0) form.append('&');
+      form.append(java.net.URLEncoder.encode(key, "UTF-8"));
+      form.append('=').append(java.net.URLEncoder.encode(value, "UTF-8"));
+    }
+    Dialog dialog = new Dialog(MainActivity.this);
+    WebView webView = new WebView(MainActivity.this);
+    WebView.setWebContentsDebuggingEnabled(false);
+    android.webkit.WebSettings settings = webView.getSettings();
+    settings.setJavaScriptEnabled(true);
+    settings.setDomStorageEnabled(true);
+    settings.setAllowFileAccess(false);
+    settings.setAllowContentAccess(false);
+    settings.setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+    webView.setWebViewClient(new WebViewClient() {
+      private boolean isReturn(Uri target) {
+        return "https".equalsIgnoreCase(target.getScheme()) &&
+            ((successUri.getHost().equalsIgnoreCase(target.getHost()) &&
+              successUri.getPath().equals(target.getPath())) ||
+             (failureUri.getHost().equalsIgnoreCase(target.getHost()) &&
+              failureUri.getPath().equals(target.getPath())));
+      }
+      @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+        Uri target = request.getUrl();
+        if (isReturn(target)) {
+          emitNativePaymentEvent("PAYU_CALLBACK", "");
+          pendingCheckoutTransactionId = "";
+          pendingCheckoutProvider = "";
+          dialog.dismiss();
+          return true;
+        }
+        String scheme = target.getScheme() == null ? "" : target.getScheme().toLowerCase(java.util.Locale.ROOT);
+        if ("upi".equals(scheme) || "intent".equals(scheme) ||
+            "phonepe".equals(scheme) || "paytmmp".equals(scheme) || "tez".equals(scheme)) {
+          try {
+            Intent external = "intent".equals(scheme)
+                ? Intent.parseUri(target.toString(), Intent.URI_INTENT_SCHEME)
+                : new Intent(Intent.ACTION_VIEW, target);
+            if (external.resolveActivity(getPackageManager()) != null) startActivity(external);
+          } catch (Exception ignored) { }
+          return true;
+        }
+        return !"https".equalsIgnoreCase(scheme);
+      }
+      @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+        handler.cancel();
+      }
+      @Override public void onReceivedError(WebView view, WebResourceRequest request,
+          android.webkit.WebResourceError error) {
+        if (request.isForMainFrame() && transactionId.equals(pendingCheckoutTransactionId)) {
+          emitNativePaymentEvent("PAYU_NETWORK_UNKNOWN", "");
+        }
+      }
+    });
+    dialog.setContentView(webView, new ViewGroup.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    dialog.setOnDismissListener(ignored -> {
+      if (transactionId.equals(pendingCheckoutTransactionId) && "payu".equals(pendingCheckoutProvider)) {
+        emitNativePaymentEvent("PAYU_CANCEL_HINT", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+    });
+    dialog.show();
+    if (dialog.getWindow() != null) dialog.getWindow().setLayout(
+        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+    webView.postUrl(action, form.toString().getBytes(StandardCharsets.UTF_8));
   }
 
   private void startPaytmCheckout(String orderId, long amountMinor, JSONObject checkoutData) throws Exception {
@@ -1374,6 +1478,8 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
                   .setCFWebCheckoutUITheme(theme)
                   .build();
               CFPaymentGatewayService.getInstance().doPayment(MainActivity.this, payment);
+            } else if ("payu".equals(provider)) {
+              startPayUCheckout(transactionId, orderId, checkoutData);
             } else if ("paytm".equals(provider)) {
               startPaytmCheckout(orderId, amountMinor, checkoutData);
             } else if ("phonepe".equals(provider) || "jiopay".equals(provider)) {
