@@ -71,7 +71,11 @@ const setup = ({ createOrder, getPaymentStatus, findOrderByReference } = {}) => 
   let dispatches = 0;
   const repo = new FirestorePaymentRepository({
     db,
-    secretManager: { getProviderSecrets: async () => ({ keyId: 'test', appId: 'cashfree_test', keySecret: 'secret', webhookSecret: 'hook' }) },
+    secretManager: { getProviderSecrets: async () => ({
+      keyId: 'test', appId: 'cashfree_test', merchantKey: 'payu-merchant-key',
+      clientId: 'phonepe-client', mid: 'paytm-mid', merchantId: 'jiopay-merchant',
+      keySecret: 'secret', webhookSecret: 'hook'
+    }) },
     providerFactory: () => ({
       createOrder: async input => {
         dispatches++;
