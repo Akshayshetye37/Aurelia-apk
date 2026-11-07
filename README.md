@@ -78,7 +78,7 @@ The current implementation contains substantial storage, payment and security fo
 | JioPay | Yes | Yes | No | **No** |
 | CCAvenue | No — catalogue only | No | No | **No** |
 
-All six factory-wired adapters expose seven lifecycle operations and have deterministic mocked contract tests. The cloud capability response deliberately reports folio settlement, refund-to-folio posting and reconciliation as unavailable; live collection is disabled for every provider. PayU's credential validation currently reports format-only validation, which is not proof that merchant credentials are authenticated. None of the six has been demonstrated with merchant-specific UAT evidence in this repository. CCAvenue requires the current merchant integration kit before implementation.
+All six factory-wired adapters expose seven lifecycle operations and have deterministic mocked contract tests. The cloud capability response deliberately reports folio settlement, refund-to-folio posting and reconciliation as unavailable; live collection is disabled for every provider. PayU credential validation now uses a non-mutating classic Verify Payment API probe; merchant sandbox/UAT remains required. None of the six has been demonstrated with merchant-specific UAT evidence in this repository. CCAvenue requires the current merchant integration kit before implementation.
 
 **Conclusion:** zero of seven gateways are qualified as end-to-end production-ready. Six have backend integration foundations; only two have Android checkout handoff. Provider adapters and cloud endpoints are not equivalent to a completed PMS payment lifecycle.
 
