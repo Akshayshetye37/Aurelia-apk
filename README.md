@@ -7,8 +7,9 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 - **GitHub repository:** https://github.com/Akshayshetye37/Aurelia-apk
 - **Project root:** repository root (`/`)
 - **Active engineering branch:** `feature/multi-provider-payment-backend`
-- **Current source revision audited:** `f66095bf00235ba4c069e612543725a0bd64799a`
-- **Recovery baseline:** [`backup/phase-0-baseline-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) at `e6707cb9411893b0987f6e0dc3f914e66c5fda38`
+- **Current branch HEAD inspected:** `5f11451f52933c5c705a87cafe49970e0e6e1652` (7 November 2026)
+- **Current-head checks:** GitHub returned no workflow runs and no commit status checks for this exact SHA during the current audit. Treat this revision as not CI-verified until fresh checks complete.
+- **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
 
 Useful project locations:
 
@@ -70,16 +71,18 @@ The current implementation contains substantial storage, payment and security fo
 
 **Native qualification limitation:** the Kotlin security template has static source-level regression coverage. Kotlin compilation, Android instrumentation, physical-device tamper/clock/process-death testing and hardware-backed attestation qualification have not been established by the latest source/backend CI runs. PIN/OTP recovery support is not yet production-ready.
 
-## Latest verified CI
+## CI evidence and verification boundary
 
-Both runs below completed successfully for commit `f66095bf00235ba4c069e612543725a0bd64799a`:
+The current branch HEAD inspected for this audit is `5f11451f52933c5c705a87cafe49970e0e6e1652`. GitHub returned no workflow runs and no commit status checks for this exact SHA during this audit. Therefore the current HEAD is **not CI-verified by the evidence currently available**.
 
-| Workflow | Result | Verified scope |
-|---|---:|---|
-| [PMS source tests and production web packaging — run 42398714431](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42398714431) | PASS | 341 tests, production web build, production asset privacy check |
-| [Aurelia payment backend CI — run 42398714456](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42398714456) | PASS | 222 tests, JavaScript syntax checks, Cloud Run container image build, non-root container check, Terraform format/validation |
+Historical evidence is commit-scoped and must not be treated as an automatic pass for later revisions:
 
-These runs do **not** build or qualify an Android APK, compile the Kotlin security template, test a physical device, execute merchant sandbox/UAT transactions, or certify production readiness. The source workflow's web build is not an Android release build.
+| Workflow evidence | Recorded scope | Boundary |
+|---|---|---|
+| [PMS source tests, production web packaging and Android debug build — run 42380831922](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42380831922) | Repository notes associate this run with `5f11451f52933c5c705a87cafe49970e0e6e1652`. | Inspect the Actions run itself and confirm its exact checked SHA, conclusion and steps before treating it as acceptance evidence. |
+| [Other historical workflow runs](https://github.com/Akshayshetye37/Aurelia-apk/actions) | Earlier commits | Historical only; not current-head CI evidence. |
+
+Even a successful debug APK build does not establish physical-device acceptance, Android transaction/process-death recovery, production signing, merchant sandbox acceptance or production readiness.
 
 ## What remains before production
 
@@ -150,5 +153,5 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 ---
 
-**Last audited source revision:** `f66095bf00235ba4c069e612543725a0bd64799a`  
+**Current branch HEAD inspected:** `5f11451f52933c5c705a87cafe49970e0e6e1652`  
 **Status:** engineering foundations verified by CI; production release not approved.
