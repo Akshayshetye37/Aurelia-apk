@@ -455,3 +455,51 @@ test('explicit reconciliation recovers a lost provider-order response without re
   assert.equal(reconciled.providerOrderId, 'order_recovered_by_reconcile');
   assert.equal(s.dispatches, 1);
 });
+
+
+test('PayU checkout is normalized to the exact POST action and signed fields expected by the client', async () => {
+  const s = setup({ createOrder: async input => ({
+    orderId: input.orderId, amountMinor: input.amountMinor, currency: input.currency,
+    checkout: { action:'https://test.payu.in/_payment', method:'POST',
+      fields:{ key:'merchant-key', hash:'provider-signed-hash', txnid:input.orderId } }
+  }) });
+  const result = await s.repo.initializePaymentIntent('user_123', payload({
+    provider:'payu', customer:{ firstName:'Guest', email:'guest@example.test' },
+    returnUrl:'https://pms.example/payment-return'
+  }));
+  const stored = await s.repo.getPaymentIntent('user_123', result.intentId);
+  assert.equal(stored.state, 'CREATED');
+  assert.equal(stored.checkoutData.action, 'https://test.payu.in/_payment');
+  assert.equal(stored.checkoutData.method, 'POST');
+  assert.equal(stored.checkoutData.fields.hash, 'provider-signed-hash');
+});
+
+test('Paytm checkout normalization preserves its hosted checkout origin and token', async () => {
+  const s = setup({ createOrder: async input => ({
+    orderId: input.orderId, amountMinor: input.amountMinor, currency: input.currency,
+    checkout: { mid:'merchant-mid', orderId:input.orderId, txnToken:'provider-token',
+      checkoutHost:'https://securestage.paytmpayments.com' }
+  }) });
+  const result = await s.repo.initializePaymentIntent('user_123', payload({
+    provider:'paytm', environment:'staging', customer:{ id:'guest_123' },
+    returnUrl:'https://pms.example/payment-return'
+  }));
+  const stored = await s.repo.getPaymentIntent('user_123', result.intentId);
+  assert.equal(stored.state, 'CREATED');
+  assert.equal(stored.checkoutData.orderId, stored.providerOrderId);
+  assert.equal(stored.checkoutData.txnToken, 'provider-token');
+  assert.equal(stored.checkoutData.checkoutHost, 'https://securestage.paytmpayments.com');
+});
+
+test('provider checkout response cannot redefine the persisted intent amount', async () => {
+  const s = setup({ createOrder: async input => ({
+    orderId:input.orderId, amountMinor:input.amountMinor + 1, currency:input.currency,
+    keyId:'rzp_test_12345678'
+  }) });
+  const result = await s.repo.initializePaymentIntent('user_123', payload());
+  assert.equal(result.status, 'UNKNOWN');
+  const intent = await s.repo.getPaymentIntent('user_123', result.intentId);
+  assert.equal(intent.state, 'UNKNOWN');
+  assert.equal(intent.checkoutData, undefined);
+  assert.equal(s.dispatches, 1);
+});
