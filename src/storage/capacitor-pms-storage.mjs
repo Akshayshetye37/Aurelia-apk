@@ -13,7 +13,14 @@ const sameJson = (a,b) => JSON.stringify(stable(a)) === JSON.stringify(stable(b)
 export class CapacitorPmsStorageClient extends PmsRepository {
   constructor(plugin) { super(); this.plugin = plugin || resolveNativePlugin(); }
 
-  async getOrCreateLocalIdentity() {\n    if (!this.plugin || typeof this.plugin.getOrCreateLocalIdentity !== "function") throw new Error("Native Keystore-backed local identity is unavailable");\n    const result = await this.plugin.getOrCreateLocalIdentity();\n    if (!result?.identity) throw new Error("Native local identity was not returned");\n    return result.identity;\n  }\n\n  async initializeStorage() {
+  async getOrCreateLocalIdentity() {
+    if (!this.plugin || typeof this.plugin.getOrCreateLocalIdentity !== "function") throw new Error("Native Keystore-backed local identity is unavailable");
+    const result = await this.plugin.getOrCreateLocalIdentity();
+    if (!result?.identity) throw new Error("Native local identity was not returned");
+    return result.identity;
+  }
+
+  async initializeStorage() {
     if (!this.plugin) throw new Error("CapacitorPmsStorage is not registered in this Android WebView");
     const result = await this.plugin.initializeStorage();
     if (!result || result.success !== true || result.engine !== "android-sqlite" || result.contractVersion !== 1) {
