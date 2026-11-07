@@ -81,6 +81,7 @@ test('PhonePe, JioPay and Paytm use native checkout handoff and return only reco
   assert.match(androidPatcher, /"phonepe".equals\(provider\) \|\| "jiopay".equals\(provider\)/);
   assert.match(androidPatcher, /checkoutUri.getScheme\(\)/);
   assert.match(androidPatcher, /HOSTED_CHECKOUT_RETURNED/);
+  assert.match(androidPatcher, /startPaytmCheckout\\(orderId, amountMinor, checkoutData\\)/);
   assert.match(bridge, /"phonepe", "jiopay", "paytm"/);
   assert.match(bridge, /aureliaNativePaymentEvent/);
   assert.match(html, /Live collection remains OFF/);
