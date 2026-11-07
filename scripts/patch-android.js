@@ -691,12 +691,12 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     String mid = checkoutData.optString("mid", "");
     String token = checkoutData.optString("txnToken", "");
     String host = checkoutData.optString("checkoutHost", "");
-    if (mid.isEmpty() || token.isEmpty() ||
+    String callbackUrl = checkoutData.optString("callbackUrl", "");
+    if (mid.isEmpty() || token.isEmpty() || !callbackUrl.startsWith("https://") ||
         !"https://securestage.paytmpayments.com".equals(host)) {
       throw new IllegalArgumentException("Paytm staging checkout binding is invalid.");
     }
     String amount = String.format(java.util.Locale.US, "%.2f", amountMinor / 100.0d);
-    String callbackUrl = host + "/theia/paytmCallback?ORDER_ID=" + Uri.encode(orderId);
     PaytmOrder order = new PaytmOrder(orderId, mid, token, amount, callbackUrl);
     TransactionManager manager = new TransactionManager(order, new PaytmPaymentTransactionCallback() {
       @Override public void onTransactionResponse(Bundle response) {
