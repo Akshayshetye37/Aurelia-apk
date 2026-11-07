@@ -91,7 +91,7 @@ All six factory-wired adapters expose seven lifecycle operations and have determ
 
 ## CI evidence and verification boundary
 
-The current branch HEAD inspected for this audit is `5f11451f52933c5c705a87cafe49970e0e6e1652`. The source revision immediately before these documentation-only commits, `5f11451f52933c5c705a87cafe49970e0e6e1652`, has a successful [PMS workflow run 42380831922](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42380831922), which checked that exact SHA. It passed the full PMS test suite, production web build, asset privacy checks, Android project generation/Capacitor sync, debug APK build, APK identity/signature checks and merged-manifest permission checks. The two commits updating this README and `index.html` change documentation only; they have not themselves been re-run through CI.
+The Phase 7 implementation baseline `5010f5e2a3a3c239a721b514f19d8435e0b8f852` passed [settlement-foundation CI run 42400767973](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42400767973): dependency installation, settlement-module syntax checks, the full application test suite and production web asset build. The earlier Phase 7 source-quality run [42400164718](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42400164718) also succeeded. These runs do not prove merchant sandbox/UAT, production backend deployment, Android physical-device qualification or release signing. Historical Android debug-build evidence is recorded separately below.
 
 Historical evidence is commit-scoped and must not be treated as an automatic pass for later revisions:
 
