@@ -702,7 +702,8 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     if (fields == null || !"POST".equals(data.optString("method", "")) ||
         !"https".equalsIgnoreCase(actionUri.getScheme()) ||
         !"test.payu.in".equalsIgnoreCase(actionUri.getHost()) ||
-        actionUri.getUserInfo() != null) {
+        (actionUri.getPort() != -1 && actionUri.getPort() != 443) ||
+        !"/_payment".equals(actionUri.getPath()) || actionUri.getUserInfo() != null) {
       throw new IllegalArgumentException("PayU sandbox checkout payload is invalid.");
     }
     String successUrl = fields.optString("surl", "");
@@ -711,7 +712,8 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     Uri failureUri = Uri.parse(failureUrl);
     if (!"https".equalsIgnoreCase(successUri.getScheme()) ||
         !"https".equalsIgnoreCase(failureUri.getScheme()) ||
-        successUri.getHost() == null || failureUri.getHost() == null) {
+        successUri.getHost() == null || failureUri.getHost() == null ||
+        successUri.getUserInfo() != null || failureUri.getUserInfo() != null) {
       throw new IllegalArgumentException("PayU return URLs must be HTTPS.");
     }
     StringBuilder form = new StringBuilder();
@@ -740,9 +742,9 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       private boolean isReturn(Uri target) {
         return "https".equalsIgnoreCase(target.getScheme()) &&
             ((successUri.getHost().equalsIgnoreCase(target.getHost()) &&
-              successUri.getPath().equals(target.getPath())) ||
+              java.util.Objects.equals(successUri.getPath(), target.getPath())) ||
              (failureUri.getHost().equalsIgnoreCase(target.getHost()) &&
-              failureUri.getPath().equals(target.getPath())));
+              java.util.Objects.equals(failureUri.getPath(), target.getPath())));
       }
       @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
         Uri target = request.getUrl();
@@ -760,7 +762,16 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
             Intent external = "intent".equals(scheme)
                 ? Intent.parseUri(target.toString(), Intent.URI_INTENT_SCHEME)
                 : new Intent(Intent.ACTION_VIEW, target);
-            if (external.resolveActivity(getPackageManager()) != null) startActivity(external);
+            Uri externalData = external.getData();
+            String externalPackage = external.getPackage();
+            boolean allowedUpiPackage = externalPackage == null ||
+                java.util.Arrays.asList("com.phonepe.app", "net.one97.paytm",
+                    "com.google.android.apps.nbu.paisa.user", "in.org.npci.upiapp")
+                    .contains(externalPackage);
+            if (externalData != null && "upi".equalsIgnoreCase(externalData.getScheme()) &&
+                allowedUpiPackage && external.resolveActivity(getPackageManager()) != null) {
+              startActivity(external);
+            }
           } catch (Exception ignored) { }
           return true;
         }
