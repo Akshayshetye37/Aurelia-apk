@@ -74,13 +74,13 @@ The current implementation contains substantial storage, payment and security fo
 | Cashfree | Yes | Yes | Yes | **No** |
 | PayU | Yes | Yes | No | **No** |
 | PhonePe | Yes | Yes | Yes — hosted HTTPS (test) | **No** |
-| Paytm | Yes | Yes | No | **No** |
+| Paytm | Yes | Yes | Yes — All-in-One SDK (staging) | **No** |
 | JioPay | Yes | Yes | Yes — hosted HTTPS (UAT) | **No** |
 | CCAvenue | No — catalogue only | No | No | **No** |
 
 All six factory-wired adapters expose seven lifecycle operations and have deterministic mocked contract tests. The cloud capability response deliberately reports folio settlement, refund-to-folio posting and reconciliation as unavailable; live collection is disabled for every provider. PayU credential validation now uses a non-mutating classic Verify Payment API probe; merchant sandbox/UAT remains required. None of the six has been demonstrated with merchant-specific UAT evidence in this repository. CCAvenue requires the current merchant integration kit before implementation.
 
-**Conclusion:** zero of seven gateways are qualified as end-to-end production-ready. Six have backend integration foundations; four have Android checkout handoff (two native SDKs and two hosted HTTPS redirects). Provider adapters and cloud endpoints are not equivalent to a completed PMS payment lifecycle.
+**Conclusion:** zero of seven gateways are qualified as end-to-end production-ready. Six have backend integration foundations; five have Android checkout handoff (three native SDKs and two hosted HTTPS redirects). Provider adapters and cloud endpoints are not equivalent to a completed PMS payment lifecycle.
 
 **Payment limitation:** the client intent CAS and provider adapter tests do not constitute an exactly-once financial ledger. The canonical PMS folio, provider capture, webhook inbox, trusted device authorization, local posting/read-back, backend acknowledgement, refunds and reversals still need complete end-to-end integration and acceptance.
 
