@@ -1,15 +1,18 @@
 <!--
-AURELIA PMS — SOURCE AND RELEASE STATUS
+AURELIA PMS — CURRENT SOURCE AND RELEASE BOUNDARY
 Repository: https://github.com/Akshayshetye37/Aurelia-apk
-Working branch: feature/multi-provider-payment-backend
-Recovery point for Android HTML preparation: backup/android-html-prep-2026-11-07
-Architecture: local-first PMS; browser/PWA uses IndexedDB, Android uses the native SQLite adapter.
-Local identity: generated independently of Firebase authentication. Local tenant/property/device identity is not a cloud tenant identity.
-Compatibility persistence: verified legacy saves are asynchronously mirrored to a versioned repository audit entity and immutable outbox event. This is not atomic dual-write of every domain entity.
-CUTOVER: uiCutover=false. Existing PMS screens and manual-payment UI are not yet fully migrated to async repository commands. Legacy state remains operationally authoritative.
-PREVIEW REQUIREMENT: this is a multi-file application. The complete project, including ./src modules, must be served. Embedded/opaque-sandbox previews without durable storage are blocked intentionally; no volatile-memory PMS operation is permitted.
-PAYMENTS: cloud sync OFF; live gateway collection OFF; automatic gateway settlement OFF; refund-to-folio automation OFF.
-ANDROID TARGET: Capacitor Android appId com.aurelia.pms, appName Aurelia PMS, webDir www; native storage uses Android Keystore-backed local identity and SQLite through CapacitorPmsStorage. This HTML is the WebView UI bundle and must be packaged with the complete ./src module tree. ANDROID RELEASE: NOT AUTHORIZED. The repository release plan requires all ten engineering workstreams to pass and owner approval before any Android/APK build, signing or publishing. Physical-device storage/recovery, complete repository UI migration, payment reconciliation and provider acceptance remain incomplete.
+Project root: /
+Active branch: feature/multi-provider-payment-backend
+Audited source revision: f66095bf00235ba4c069e612543725a0bd64799a
+Recovery baseline: backup/phase-0-baseline-2026-11-07 at e6707cb9411893b0987f6e0dc3f914e66c5fda38
+Architecture: local-first PMS; browser/PWA uses IndexedDB and Android uses the native SQLite repository bridge.
+Identity: local installation/property/device identity is distinct from Firebase authentication and cloud tenant identity.
+Migration: guarded legacy snapshot migration and repository transaction foundations exist; legacy synchronous UI writes are still present.
+CUTOVER: uiCutover=false. Full booking/room/guest/folio UI migration and stable room-reference reassignment are not complete.
+RUNTIME: serve/package the complete project and ./src module tree. The startup shield must remain until durable storage bootstrap and snapshot verification succeed. Embedded previews without durable storage are unsupported; do not enter real records there.
+PAYMENTS: payment-intent CAS, provider checkout validation and backend adapters are foundations, not proof of canonical folio settlement. Cloud sync, live gateway collection, automatic settlement and automatic refund posting remain OFF.
+ANDROID: Capacitor appId com.aurelia.pms; webDir www. Native SQLite/security templates require generated-project compilation, instrumentation and physical-device qualification. Android release is NOT AUTHORIZED.
+LATEST CI: 341 PMS tests and 222 payment-backend tests passed on the audited revision. These workflows do not certify Kotlin/device behavior or production payment acceptance.
 The application must never contain merchant credentials, webhook secrets, signing keys or backend secrets.
 -->
 
@@ -27,13 +30,11 @@ The application must never contain merchant credentials, webhook secrets, signin
      See README.md, docs/END_TO_END_REMEDIATION_PLAN.md and
      docs/PMS_ACCOUNTING_SCHEMA.md for current implementation and release gates.
 -->
-<meta name="application-name" content="Aurelia PMS">
-<meta name="description" content="Local-first property management for reservations, guests, rooms and folios. Secure offline operation with optional trusted payment services.">
-<meta name="theme-color" content="#081711">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Aurelia PMS</title>
 <meta name="application-name" content="Aurelia PMS">
-<meta name="description" content="Aurelia PMS — local-first property management for rooms, guests, reservations and folios.">
+<meta name="description" content="Aurelia PMS — local-first property management for reservations, guests, rooms and folios, with trusted online payment services.">
 <meta name="theme-color" content="#081711">
 <meta name="color-scheme" content="dark">
 <meta name="mobile-web-app-capable" content="yes">
