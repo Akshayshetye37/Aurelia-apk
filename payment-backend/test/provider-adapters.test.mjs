@@ -338,3 +338,37 @@ test('Razorpay rejects a malformed payment ID even when an order ID is valid', a
   }), /invalid_razorpay_payment_lookup/);
   assert.equal(mock.calls.length, 0);
 });
+
+
+test('provider-neutral checkout contract normalizes all six implemented adapter payloads', async () => {
+  const { assertCheckoutRequest, normalizeCheckoutSession } = await import('../src/providers/checkout-contract.mjs');
+  const fixtures = [
+    ['razorpay', 'test', { orderId:'rz_order_1', amountMinor:12500, currency:'INR', keyId:'rzp_test_key' }, { keyId:'rzp_test_key' }],
+    ['cashfree', 'test', { orderId:'cf_order_1', amountMinor:12500, currency:'INR', paymentSessionId:'session_1', checkoutUrl:'https://checkout.cashfree.com/session_1' }, { paymentSessionId:'session_1', checkoutUrl:'https://checkout.cashfree.com/session_1' }],
+    ['phonepe', 'live', { orderId:'pp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'https://checkout.phonepe.com/session_1' }, { checkoutUrl:'https://checkout.phonepe.com/session_1' }],
+    ['jiopay', 'uat', { orderId:'jp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'https://checkout.jiopay.co.in/session_1', transactionContext:'ctx_1' }, { checkoutUrl:'https://checkout.jiopay.co.in/session_1', transactionContext:'ctx_1' }],
+    ['payu', 'test', { orderId:'pu_order_1', amountMinor:12500, currency:'INR', checkout:{ action:'https://test.payu.in/_payment', method:'POST', fields:{ key:'merchant-key', hash:'signed-hash', txnid:'pu_order_1' } } }, { action:'https://test.payu.in/_payment', method:'POST', fields:{ key:'merchant-key', hash:'signed-hash', txnid:'pu_order_1' } }],
+    ['paytm', 'staging', { orderId:'pt_order_1', amountMinor:12500, currency:'INR', checkout:{ mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token' } }, { mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token' }]
+  ];
+  for (const [provider, environment, result, checkout] of fixtures) {
+    const request = { provider, environment, amountMinor:12500, currency:'INR', idempotencyKey:'checkout-idem-12345' };
+    assert.equal(assertCheckoutRequest(request), request);
+    assert.deepEqual(normalizeCheckoutSession(provider, result, request).checkout, checkout);
+  }
+});
+
+test('provider-neutral checkout contract rejects environment drift and unbound native payloads', async () => {
+  const { assertCheckoutRequest, normalizeCheckoutSession } = await import('../src/providers/checkout-contract.mjs');
+  const base = { provider:'paytm', environment:'staging', amountMinor:12500, currency:'INR', idempotencyKey:'checkout-idem-12345' };
+  assert.throws(() => assertCheckoutRequest({ ...base, environment:'test' }), /invalid_checkout_request/);
+  assert.throws(() => normalizeCheckoutSession('phonepe', {
+    orderId:'pp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'http://insecure.example/checkout'
+  }, { ...base, provider:'phonepe', environment:'test' }), /phonepe_checkout_url_invalid/);
+  assert.throws(() => normalizeCheckoutSession('paytm', {
+    orderId:'pt_order_1', amountMinor:12500, currency:'INR',
+    checkout:{ mid:'merchant-mid', orderId:'other-order', txnToken:'txn-token' }
+  }, base), /paytm_checkout_order_binding_mismatch/);
+  assert.throws(() => normalizeCheckoutSession('jiopay', {
+    orderId:'jp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'https://checkout.jiopay.co.in/session'
+  }, { ...base, provider:'jiopay', environment:'uat' }), /jiopay_checkout_binding_missing/);
+});
