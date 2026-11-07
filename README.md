@@ -28,6 +28,12 @@ This CI verification does not establish physical-device acceptance, uninstall/re
 - Legacy saves are mirrored asynchronously into a versioned repository audit entity with an immutable outbox event. The legacy `aurelia_lodge_v2` value remains in place as rollback material. Mirror failures are logged and do not falsely report the local save as failed.
 - The mirror is a compatibility/audit snapshot path, not atomic dual-write of every business entity. It does not make the repository the operational source of truth.
 
+### Financial integrity — concurrent folio settlement regression
+
+- Added a regression test that races two distinct payment commands against the same folio version. The repository must accept only one commit, reject the stale writer with `ENTITY_VERSION_CONFLICT`, retain one canonical payment row and emit exactly one outbox event.
+- CI run [42392922129](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42392922129) passed: 331 tests, 0 failures.
+- This is a verified concurrency guard, not completion of Phase 2. A canonical multi-entity transaction and cross-adapter financial ledger integration remain unimplemented; gateway settlement remains disabled.
+
 ### Room inventory command foundation — 2026-11-07
 
 - Added `src/storage/room-inventory-service.mjs` for stable-ID room creation, scoped room edits, integer-paise rate validation, and versioned housekeeping/maintenance status changes.
