@@ -3575,7 +3575,7 @@ window.startAureliaGatewayCheckout=async function(i){
  if(provider==='phonepe'||provider==='jiopay'){
   const phone=document.getElementById('aurelia-hosted-phone')?.value?.trim()||'';
   const returnUrl=document.getElementById('aurelia-hosted-return')?.value?.trim()||'';
-  if(!/^\\+?[0-9]{10,15}$/.test(phone)||!/^https:\\/\\//i.test(returnUrl))
+  if(!/^\+?[0-9]{10,15}$/.test(phone)||!/^https:\/\//i.test(returnUrl))
    return stop('Enter a valid guest mobile number and an approved HTTPS return URL.');
   payload.customer={id:'guest-'+String(b.id),phone};
   payload.returnUrl=returnUrl;
