@@ -9,7 +9,8 @@ const PROVIDERS = new Set(['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', '
 const ENVIRONMENTS = Object.freeze({
   razorpay: new Set(['test', 'live']), cashfree: new Set(['test', 'live']),
   payu: new Set(['test', 'live']), phonepe: new Set(['test', 'live']),
-  paytm: new Set(['staging', 'production']), jiopay: new Set(['uat', 'production']),\n  ccavenue: new Set(['test', 'live'])
+  paytm: new Set(['staging', 'production']), jiopay: new Set(['uat', 'production']),
+  ccavenue: new Set(['test', 'live'])
 });
 function providerAccountIdentifier(provider, credentials) {
   const field = { razorpay: 'keyId', cashfree: 'appId', payu: 'merchantKey',
@@ -25,7 +26,8 @@ function buildProviderOrderInput(provider, { providerReference, intentId, folioI
     case 'payu': return { orderId: providerReference, amountMinor, currency, customer, returnUrl };
     case 'phonepe': return { orderId: providerReference, amountMinor, currency, returnUrl };
     case 'paytm': return { orderId: providerReference, amountMinor, currency, customer, returnUrl, callbackUrl: returnUrl };
-    case 'jiopay': return { orderId: providerReference, amountMinor, currency, customer, returnUrl };\n    default: throw new TypeError('provider_not_supported');
+    case 'jiopay': return { orderId: providerReference, amountMinor, currency, customer, returnUrl };
+    default: throw new TypeError('provider_not_supported');
   }
 }
 function normalizeProviderCheckout(provider, remote, expected) {
@@ -44,7 +46,8 @@ function validCheckout(provider, checkout) {
     case 'payu': return typeof checkout.checkout?.action === 'string' && checkout.checkout.action.startsWith('https://') && checkout.checkout.method === 'POST' && typeof checkout.checkout.fields?.key === 'string' && typeof checkout.checkout.fields?.hash === 'string';
     case 'phonepe': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://');
     case 'paytm': return typeof checkout.checkout?.txnToken === 'string' && typeof checkout.checkout.mid === 'string' && typeof checkout.checkout.orderId === 'string' && typeof checkout.checkout.checkoutHost === 'string' && checkout.checkout.checkoutHost.startsWith('https://');
-    case 'jiopay': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://') && typeof checkout.transactionContext === 'string';\n    default: return false;
+    case 'jiopay': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://') && typeof checkout.transactionContext === 'string';
+    default: return false;
   }
 }
 
