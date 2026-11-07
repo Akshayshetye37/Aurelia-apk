@@ -102,3 +102,33 @@ test("bridge dispatch marker cannot be downgraded after it is persisted", async 
     /Bridge dispatch marker cannot be downgraded/
   );
 });
+
+
+test("compare-and-swap rejects a stale payment intent writer without overwriting the winner", async () => {
+  const db = store();
+  const created = await db.put(intent());
+  assert.equal(created.version, 1);
+  const firstWriter = await db.get("req-local-1");
+  const secondWriter = await db.get("req-local-1");
+
+  const winner = await db.put({ ...firstWriter, state: "REQUESTED" }, { expectedVersion: firstWriter.version });
+  assert.equal(winner.version, 2);
+
+  await assert.rejects(
+    db.put({ ...secondWriter, state: "CANCELLED" }, { expectedVersion: secondWriter.version }),
+    error => error.code === "PAYMENT_INTENT_VERSION_CONFLICT" && error.actualVersion === 2
+  );
+  const persisted = await db.get("req-local-1");
+  assert.equal(persisted.state, "REQUESTED");
+  assert.equal(persisted.version, 2);
+});
+
+test("compare-and-swap can require a previously absent payment intent", async () => {
+  const db = store();
+  await assert.rejects(
+    db.put(intent(), { expectedVersion: 1 }),
+    error => error.code === "PAYMENT_INTENT_VERSION_CONFLICT" && error.actualVersion === 0
+  );
+  assert.equal(await db.get("req-local-1"), null);
+  assert.equal((await db.put(intent(), { expectedVersion: 0 })).version, 1);
+});
