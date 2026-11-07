@@ -16,7 +16,7 @@ const ENVIRONMENTS = Object.freeze({
 const PROVIDERS = new Set(Object.keys(ENVIRONMENTS));
 
 function nonEmpty(value) {
-  return typeof value === "string" && value.length > 0 && !/[\\u0000-\\u001f]/.test(value);
+  return typeof value === "string" && value.length > 0 && !/[\x00-\x1f]/.test(value);
 }
 function secureUrl(value) {
   if (!nonEmpty(value)) return false;
