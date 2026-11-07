@@ -348,7 +348,7 @@ test('provider-neutral checkout contract normalizes all six implemented adapter 
     ['phonepe', 'live', { orderId:'pp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'https://checkout.phonepe.com/session_1' }, { checkoutUrl:'https://checkout.phonepe.com/session_1' }],
     ['jiopay', 'uat', { orderId:'jp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'https://checkout.jiopay.co.in/session_1', transactionContext:'ctx_1' }, { checkoutUrl:'https://checkout.jiopay.co.in/session_1', transactionContext:'ctx_1' }],
     ['payu', 'test', { orderId:'pu_order_1', amountMinor:12500, currency:'INR', checkout:{ action:'https://test.payu.in/_payment', method:'POST', fields:{ key:'merchant-key', hash:'signed-hash', txnid:'pu_order_1' } } }, { action:'https://test.payu.in/_payment', method:'POST', fields:{ key:'merchant-key', hash:'signed-hash', txnid:'pu_order_1' } }],
-    ['paytm', 'staging', { orderId:'pt_order_1', amountMinor:12500, currency:'INR', checkout:{ mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com' } }, { mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com' }]
+    ['paytm', 'staging', { orderId:'pt_order_1', amountMinor:12500, currency:'INR', checkout:{ mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com', callbackUrl:'https://pms.example/payment-return' } }, { mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com', callbackUrl:'https://pms.example/payment-return' }]
   ];
   for (const [provider, environment, result, checkout] of fixtures) {
     const request = { provider, environment, amountMinor:12500, currency:'INR', idempotencyKey:'checkout-idem-12345' };
@@ -366,7 +366,7 @@ test('provider-neutral checkout contract rejects environment drift and unbound n
   }, { ...base, provider:'phonepe', environment:'test' }), /phonepe_checkout_url_invalid/);
   assert.throws(() => normalizeCheckoutSession('paytm', {
     orderId:'pt_order_1', amountMinor:12500, currency:'INR',
-    checkout:{ mid:'merchant-mid', orderId:'other-order', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com' }
+    checkout:{ mid:'merchant-mid', orderId:'other-order', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com', callbackUrl:'https://pms.example/payment-return' }
   }, base), /paytm_checkout_order_binding_mismatch/);
   assert.throws(() => normalizeCheckoutSession('jiopay', {
     orderId:'jp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'https://checkout.jiopay.co.in/session'
