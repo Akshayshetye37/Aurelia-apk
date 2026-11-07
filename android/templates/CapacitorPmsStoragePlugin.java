@@ -8,7 +8,18 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;\nimport java.util.UUID;\nimport java.nio.charset.StandardCharsets;\nimport android.content.SharedPreferences;\nimport android.security.keystore.KeyGenParameterSpec;\nimport android.security.keystore.KeyProperties;\nimport android.util.Base64;\nimport java.security.KeyStore;\nimport javax.crypto.Cipher;\nimport javax.crypto.KeyGenerator;\nimport javax.crypto.SecretKey;\nimport javax.crypto.spec.GCMParameterSpec;
+import java.util.concurrent.Executors;
+import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import android.content.SharedPreferences;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
+import android.util.Base64;
+import java.security.KeyStore;
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
 
 /** Promise boundary for the complete local SQLite repository contract. */
 @CapacitorPlugin(name = "CapacitorPmsStorage")
