@@ -107,12 +107,11 @@ export class PayBridgePaymentOrchestrator {
       if (existing.state !== "CREATED") return clone(existing);
       current = existing;
     } else {
-      await this.store.put(record);
-      current = record;
+      current = await this.persist(record);
     }
     if (!this.bridge.isAuthenticated()) throw new PaymentOrchestratorError("BRIDGE_DISCONNECTED", "Gateway checkout is unavailable; payment request remains safely recorded");
     current = transitionPayment(current, "REQUESTED", {}, this.now);
-    await this.store.put(current);
+    current = await this.persist(current);
     try {
       current = await this.ensureBackendSession(current);
       return await this.dispatchRequested(current);
@@ -123,7 +122,7 @@ export class PayBridgePaymentOrchestrator {
       const latest = await this.store.get(requestId);
       if (latest && ["REQUESTED", "PROCESSING"].includes(latest.state) &&
           ALLOWED[latest.state].has("UNKNOWN")) {
-        await this.store.put(transitionPayment(latest, "UNKNOWN", {
+        await this.persist(transitionPayment(latest, "UNKNOWN", {
           lastErrorCode: String(error?.code || error?.name || "REQUEST_OUTCOME_UNKNOWN").slice(0, 64)
         }, this.now));
       }
@@ -146,8 +145,7 @@ export class PayBridgePaymentOrchestrator {
       throw new PaymentOrchestratorError("INVALID_BACKEND_SESSION", "Backend returned an invalid payment session binding");
     }
     const updated = { ...record, backendSessionId: text(session.sessionId, "sessionId"), updatedAt: this.now() };
-    await this.store.put(updated);
-    return updated;
+    return this.persist(updated);
   }
 
   /**
@@ -167,7 +165,7 @@ export class PayBridgePaymentOrchestrator {
       ...record, bridgeDispatchStarted: true, updatedAt: this.now(),
       history: [...(record.history || []).slice(-99), { state: "REQUESTED", event: "BRIDGE_DISPATCH_STARTED", at: this.now() }]
     };
-    await this.store.put(marked);
+    const persistedMarked = await this.persist(marked);
     const result = await this.bridge.createPayment({
       requestId: record.requestId, sessionId: record.backendSessionId,
       amountPaise: record.amountPaise, currency: record.currency,
@@ -180,12 +178,12 @@ export class PayBridgePaymentOrchestrator {
       result.transactionId.length > 0 && result.transactionId.length <= 256 &&
       !/[\u0000-\u001f\u007f]/.test(result.transactionId);
     const nextState = result.status === "processing" && hasSafeTransactionId ? "PROCESSING" : "UNKNOWN";
-    const updated = transitionPayment(marked, nextState, {
+    const updated = transitionPayment(persistedMarked, nextState, {
       bridgeTransactionId: hasSafeTransactionId ? result.transactionId : marked.bridgeTransactionId
     }, this.now);
-    await this.store.put(updated);
+    const persistedUpdated = await this.persist(updated);
     if (nextState === "UNKNOWN") return this.reconcileOne(record.requestId);
-    return clone(updated);
+    return clone(persistedUpdated);
   }
 
   async resumeUndispatched(record) {
@@ -220,15 +218,15 @@ export class PayBridgePaymentOrchestrator {
     const next = event.status === "processing" ? "PROCESSING" : "UNKNOWN";
     if (["FAILED", "CANCELLED"].includes(record.state)) {
       const reopened = transitionPayment(record, "RECONCILIATION", {}, this.now);
-      await this.store.put(reopened);
+      await this.persist(reopened);
       return this.reconcileOne(requestId);
     }
     if (!ALLOWED[record.state].has(next)) return clone(record);
     const updated = transitionPayment(record, next, { bridgeTransactionId: event.transactionId || record.bridgeTransactionId }, this.now);
-    await this.store.put(updated);
+    const persistedUpdated = await this.persist(updated);
     if (next === "UNKNOWN") return this.reconcileOne(requestId);
     // A bridge "success" is intentionally mapped to UNKNOWN pending backend proof.
-    return clone(updated);
+    return clone(persistedUpdated);
   }
 
   async verifyPayment(requestId) {
@@ -238,11 +236,11 @@ export class PayBridgePaymentOrchestrator {
       // persisting the marker. Treat that legacy state as ambiguous.
       if (record.bridgeDispatchStarted === false) return this.resumeUndispatched(record);
       record = transitionPayment(record, "UNKNOWN", { lastErrorCode: "DISPATCH_OUTCOME_UNKNOWN" }, this.now);
-      await this.store.put(record);
+      record = await this.persist(record);
     }
     if (["UNKNOWN", "FAILED", "CANCELLED"].includes(record.state)) {
       record = transitionPayment(record, "RECONCILIATION", {}, this.now);
-      await this.store.put(record);
+      record = await this.persist(record);
     }
     const result = await this.backend.verifyPayment({
       requestId: record.requestId, sessionId: record.backendSessionId,
@@ -266,7 +264,7 @@ export class PayBridgePaymentOrchestrator {
     if (!ALLOWED[record.state].has("SUCCESS")) {
       if (["REQUESTED", "UNKNOWN", "FAILED", "CANCELLED"].includes(record.state)) {
         const recon = transitionPayment(record, "RECONCILIATION", {}, this.now);
-        await this.store.put(recon);
+        await this.persist(recon);
         return this.verifyPayment(requestId);
       }
       throw new PaymentOrchestratorError("INVALID_TRANSITION", "Payment cannot be verified from state " + record.state);
@@ -276,8 +274,8 @@ export class PayBridgePaymentOrchestrator {
       bridgeTransactionId: result.transactionId, backendVerified: true,
       settlementAuthorized: true, backendVerifiedAt: this.now()
     }, this.now);
-    await this.store.put(verified);
-    return clone(verified);
+    const persistedVerified = await this.persist(verified);
+    return clone(persistedVerified);
   }
 
   async reconcileOne(requestId) {
@@ -291,11 +289,11 @@ export class PayBridgePaymentOrchestrator {
       // Missing/true markers are treated as ambiguous and never replayed.
       if (record.bridgeDispatchStarted === false) return this.resumeUndispatched(record);
       record = transitionPayment(record, "UNKNOWN", { lastErrorCode: "DISPATCH_OUTCOME_UNKNOWN" }, this.now);
-      await this.store.put(record);
+      record = await this.persist(record);
     }
     if (["UNKNOWN", "FAILED", "CANCELLED"].includes(record.state)) {
       record = transitionPayment(record, "RECONCILIATION", {}, this.now);
-      await this.store.put(record);
+      record = await this.persist(record);
     }
     const result = await this.backend.reconcile({
       requestId: record.requestId, sessionId: record.backendSessionId,
@@ -317,20 +315,20 @@ export class PayBridgePaymentOrchestrator {
     if (!bound) return clone(record);
     if (!record.backendSessionId) {
       record = { ...record, backendSessionId: result.sessionId, updatedAt: this.now() };
-      await this.store.put(record);
+      record = await this.persist(record);
     }
     if (result.status === "success") return this.verifyPayment(requestId);
     if (result.status === "failed" && ALLOWED[record.state].has("FAILED")) {
       const failed = transitionPayment(record, "FAILED", { backendVerified: true }, this.now);
-      await this.store.put(failed); return clone(failed);
+      return clone(await this.persist(failed));
     }
     if (result.status === "cancelled" && ALLOWED[record.state].has("CANCELLED")) {
       const cancelled = transitionPayment(record, "CANCELLED", { backendVerified: true }, this.now);
-      await this.store.put(cancelled); return clone(cancelled);
+      return clone(await this.persist(cancelled));
     }
     if (result.status === "processing" && ALLOWED[record.state].has("PROCESSING")) {
       const pending = transitionPayment(record, "PROCESSING", { backendVerified: true }, this.now);
-      await this.store.put(pending); return clone(pending);
+      return clone(await this.persist(pending));
     }
     return clone(record);
   }
@@ -353,8 +351,7 @@ export class PayBridgePaymentOrchestrator {
     if (record.state === "CREATED" ||
         (record.state === "REQUESTED" && record.bridgeDispatchStarted === false)) {
       const cancelled = transitionPayment(record, "CANCELLED", {}, this.now);
-      await this.store.put(cancelled);
-      return clone(cancelled);
+      return clone(await this.persist(cancelled));
     }
     if (!this.bridge.isAuthenticated()) throw new PaymentOrchestratorError("BRIDGE_DISCONNECTED", "Pay Bridge is unavailable");
     try {
@@ -367,11 +364,22 @@ export class PayBridgePaymentOrchestrator {
     }
     const latest = await this.requireRecord(requestId);
     if (ALLOWED[latest.state].has("UNKNOWN")) {
-      await this.store.put(transitionPayment(latest, "UNKNOWN", {}, this.now));
+      await this.persist(transitionPayment(latest, "UNKNOWN", {}, this.now));
     }
     const reconciled = await this.reconcileOne(requestId);
     if (reconciled.state === "CANCELLED") return clone(reconciled);
     throw new PaymentOrchestratorError("CANCEL_UNCONFIRMED", "Backend has not independently confirmed cancellation; payment remains " + reconciled.state);
+  }
+
+  async persist(record) {
+    // Every state write is compare-and-swap against the version read by this
+    // orchestrator. Concurrent callbacks/reconcilers cannot overwrite newer state.
+    const expectedVersion = Number.isSafeInteger(record.version) ? record.version : 0;
+    const saved = await this.store.put(record, { expectedVersion });
+    if (saved && Number.isSafeInteger(saved.version)) return saved;
+    // Compatibility for test/dummy stores. Production durable stores return
+    // the committed version from put().
+    return { ...record, version: expectedVersion + 1 };
   }
 
   async requireRecord(requestId) {
