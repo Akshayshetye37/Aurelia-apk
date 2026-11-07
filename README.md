@@ -4,16 +4,16 @@
 
 **Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)  
 **Working branch:** `feature/multi-provider-payment-backend`  
-**Current source commit:** `5f11451f52933c5c705a87cafe49970e0e6e1652`  
+**Current source commit:** `e435b62af31d94e89a2c0dc85b560d0cf48781d0`  
 **Pre-change recovery point:** [`backup/pre-local-first-cutover-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-local-first-cutover-2026-11-07) at `8b74f3d2cb723237b5f3a8901e22ef7370552812`.
 
 ### Latest CI verification
 
-The [PMS source tests, web packaging and Android validation run 42380831922](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42380831922) completed successfully for commit `5f11451f52933c5c705a87cafe49970e0e6e1652`.
+The [PMS source tests and production web packaging run 42392435843](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42392435843) completed successfully for commit `e435b62af31d94e89a2c0dc85b560d0cf48781d0`.
 
-Verified steps: complete PMS test suite, production web bundle, production asset privacy checks, Android project generation, Aurelia Android configuration, Capacitor synchronization, Android debug APK build, APK identity/signature verification, merged-manifest permission verification and validation artifact upload.
+Verified steps: complete PMS test suite (**330 passed, 0 failed**), production web bundle, production asset privacy checks and web artifact upload. The workflow does **not** build an Android APK.
 
-This is CI verification. It does not establish physical-device acceptance, uninstall/reinstall identity survival, provider sandbox acceptance or production readiness.
+This CI verification does not establish physical-device acceptance, uninstall/reinstall identity survival, provider sandbox acceptance or production readiness.
 
 ### Running the web application (important)
 
@@ -27,6 +27,13 @@ This is CI verification. It does not establish physical-device acceptance, unins
 - Bootstrap obtains and validates local identity before returning the repository to the application startup gate. The identity is passed to the repository bridge as its mutation context.
 - Legacy saves are mirrored asynchronously into a versioned repository audit entity with an immutable outbox event. The legacy `aurelia_lodge_v2` value remains in place as rollback material. Mirror failures are logged and do not falsely report the local save as failed.
 - The mirror is a compatibility/audit snapshot path, not atomic dual-write of every business entity. It does not make the repository the operational source of truth.
+
+### Room inventory command foundation — 2026-11-07
+
+- Added `src/storage/room-inventory-service.mjs` for stable-ID room creation, scoped room edits, integer-paise rate validation, and versioned housekeeping/maintenance status changes.
+- Every room command commits the room entity and immutable outbox event through the shared repository transaction, then verifies durable read-back.
+- Room occupancy remains booking-derived. Room deletion/reassignment and legacy room-screen cutover are intentionally not exposed until booking references can be updated atomically; the current room UI still writes legacy state.
+- `tests/room-inventory-service.test.mjs` covers create/edit/status persistence, invalid values, scope isolation and concurrent version conflicts.
 
 ### Canonical storage and payment boundary
 
