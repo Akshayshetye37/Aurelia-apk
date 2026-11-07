@@ -688,10 +688,12 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   }
 
   private void startPaytmCheckout(String orderId, long amountMinor, JSONObject checkoutData) throws Exception {
-    String mid = checkoutData.optString("mid", "");
-    String token = checkoutData.optString("txnToken", "");
-    String host = checkoutData.optString("checkoutHost", "");
-    String callbackUrl = checkoutData.optString("callbackUrl", "");
+    JSONObject data = checkoutData.optJSONObject("checkout");
+    if (data == null) throw new IllegalArgumentException("Paytm checkout payload is missing.");
+    String mid = data.optString("mid", "");
+    String token = data.optString("txnToken", "");
+    String host = data.optString("checkoutHost", "");
+    String callbackUrl = data.optString("callbackUrl", "");
     if (mid.isEmpty() || token.isEmpty() || !callbackUrl.startsWith("https://") ||
         !"https://securestage.paytmpayments.com".equals(host)) {
       throw new IllegalArgumentException("Paytm staging checkout binding is invalid.");
