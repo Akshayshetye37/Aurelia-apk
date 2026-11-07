@@ -1591,6 +1591,7 @@ function persistStrict(){
  const serialized=JSON.stringify(state);
  store.setItem(SK,serialized);
  if(store.getItem(SK)!==serialized)throw new Error('Persistent storage read-back did not exactly match the committed state.');
+ if(window.AureliaRepositoryCompatibility)window.AureliaRepositoryCompatibility.persist(state).catch(error=>console.error('[Aurelia Repository Mirror] Verified strict local save succeeded but repository mirror failed; local state remains authoritative.',error));
  return true;
 }
 let LOCAL_STATE_STATUS='missing';
