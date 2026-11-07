@@ -482,7 +482,7 @@ test('Paytm checkout normalization preserves its hosted checkout origin and toke
   const s = setup({ createOrder: async input => ({
     orderId: input.orderId, amountMinor: input.amountMinor, currency: input.currency,
     checkout: { mid:'merchant-mid', orderId:input.orderId, txnToken:'provider-token',
-      checkoutHost:'https://securestage.paytmpayments.com' }
+      checkoutHost:'https://securestage.paytmpayments.com', callbackUrl:input.callbackUrl }
   }) });
   const result = await s.repo.initializePaymentIntent('user_123', payload({
     provider:'paytm', environment:'staging', customer:{ id:'guest_123' },
@@ -493,6 +493,7 @@ test('Paytm checkout normalization preserves its hosted checkout origin and toke
   assert.equal(stored.checkoutData.checkout.orderId, stored.providerOrderId);
   assert.equal(stored.checkoutData.checkout.txnToken, 'provider-token');
   assert.equal(stored.checkoutData.checkout.checkoutHost, 'https://securestage.paytmpayments.com');
+  assert.equal(stored.checkoutData.checkout.callbackUrl, 'https://pms.example/payment-return');
 });
 
 test('provider checkout response cannot redefine the persisted intent amount', async () => {
