@@ -9,8 +9,7 @@ const PROVIDERS = new Set(['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', '
 const ENVIRONMENTS = Object.freeze({
   razorpay: new Set(['test', 'live']), cashfree: new Set(['test', 'live']),
   payu: new Set(['test', 'live']), phonepe: new Set(['test', 'live']),
-  paytm: new Set(['staging', 'production']), jiopay: new Set(['uat', 'production']),
-  ccavenue: new Set(['test', 'live'])
+  paytm: new Set(['staging', 'production']), jiopay: new Set(['uat', 'production'])
 });
 function providerAccountIdentifier(provider, credentials) {
   const field = { razorpay: 'keyId', cashfree: 'appId', payu: 'merchantKey',
