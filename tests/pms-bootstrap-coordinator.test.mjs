@@ -107,7 +107,7 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.ok(loaderAt > mainAt, "bootstrap loader follows inert application scripts");
   const loader = html.slice(loaderAt, html.indexOf("</script>", loaderAt));
   assert.match(loader, /await bootstrapper\.initializeApplication\(\)/);
-  assert.match(loader, /storageBridge\.bindActiveEngine\(boot\.repository\)/);
+  assert.match(loader, /storageBridge\.bindActiveEngine\(boot\.repository, boot\.identity\)/);
   assert.match(loader, /await replayApplicationScripts\(\)/);
   assert.match(loader, /PMS startup stopped safely/);
   assert.match(html, /type="application\/x-aurelia-deferred"/);
