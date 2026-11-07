@@ -78,11 +78,13 @@ test('all six wired providers have Android checkout handoff and return only reco
   const bridge = read('src/payments/payment-device-bridge.mjs');
   assert.match(html, /'razorpay','cashfree','payu','phonepe','jiopay','paytm'/);
   assert.match(html, /aurelia-hosted-provider-details/);
-  assert.match(html, /aurelia-paytm-details/);\n  assert.match(html, /aurelia-payu-details/);
+  assert.match(html, /aurelia-paytm-details/);
+  assert.match(html, /aurelia-payu-details/);
   assert.match(androidPatcher, /"phonepe".equals\(provider\) \|\| "jiopay".equals\(provider\)/);
   assert.match(androidPatcher, /checkoutUri.getScheme\(\)/);
   assert.match(androidPatcher, /HOSTED_CHECKOUT_RETURNED/);
-  assert.match(androidPatcher, /startPaytmCheckout\(orderId, amountMinor, checkoutData\)/);\n  assert.match(androidPatcher, /startPayUCheckout\(transactionId, orderId, checkoutData\)/);
+  assert.match(androidPatcher, /startPaytmCheckout\(orderId, amountMinor, checkoutData\)/);
+  assert.match(androidPatcher, /startPayUCheckout\(transactionId, orderId, checkoutData\)/);
   assert.match(bridge, /"payu", "phonepe", "jiopay", "paytm"/);
   assert.match(bridge, /aureliaNativePaymentEvent/);
   assert.match(html, /Live collection remains OFF/);
