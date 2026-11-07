@@ -134,7 +134,7 @@ export function paymentDeviceNativeAvailable() {
 // intent lookup; they never authorize a folio mutation or prove capture.
 window.aureliaNativePaymentEvent = (transactionId, provider, callbackStatus, providerPaymentId) => {
   if (typeof transactionId !== "string" || !/^[0-9a-f-]{36}$/i.test(transactionId) ||
-      !["razorpay", "cashfree", "phonepe", "jiopay"].includes(provider) ||
+      !["razorpay", "cashfree", "phonepe", "jiopay", "paytm"].includes(provider) ||
       typeof callbackStatus !== "string") return false;
   window.dispatchEvent(new CustomEvent("aurelia:native-payment-event", {
     detail: {
