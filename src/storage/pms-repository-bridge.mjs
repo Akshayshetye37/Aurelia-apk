@@ -52,7 +52,7 @@ export class PmsRepositoryBridge {
     return row ? clone(row) : null;
   }
 
-  async mutateEntity({ entityType, entityId, expectedVersion, eventType, mutate, tenantId, propertyId, deviceId }) {
+  async mutateEntity({ entityType, entityId, expectedVersion, eventType, mutate, tenantId, propertyId, deviceId, eventPayload }) {
     this.assertBound();
     assertPmsIdentity(entityType, "entity type");
     assertPmsIdentity(entityId, "entity ID");
@@ -78,7 +78,7 @@ export class PmsRepositoryBridge {
       eventType,
       schemaVersion: 1,
       occurredAt: this.now(),
-      payload: { entityType, entityId, operation: eventType }
+      payload: eventPayload || { entityType, entityId, operation: eventType }
     });
     const committed = await this.repo.transactBusinessChange(
       { entityType, entityId, expectedVersion, event },
