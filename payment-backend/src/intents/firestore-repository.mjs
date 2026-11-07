@@ -29,10 +29,10 @@ function buildProviderOrderInput(provider, { providerReference, intentId, folioI
     default: throw new TypeError('provider_not_supported');
   }
 }
-function normalizeProviderCheckout(provider, remote) {
+function normalizeProviderCheckout(provider, remote, expected) {
   const normalized = normalizeCheckoutSession(provider, remote, {
-    amountMinor: remote?.amountMinor,
-    currency: remote?.currency
+    amountMinor: expected?.amountMinor,
+    currency: expected?.currency
   });
   return normalized.checkout;
 }
@@ -40,9 +40,9 @@ function validCheckout(provider, checkout) {
   switch (provider) {
     case 'razorpay': return typeof checkout.keyId === 'string' && checkout.keyId.length > 0;
     case 'cashfree': return typeof checkout.paymentSessionId === 'string' && checkout.paymentSessionId.length > 0;
-    case 'payu': return typeof checkout.checkout?.action === 'string' && checkout.checkout.action.startsWith('https://') && typeof checkout.checkout.fields?.hash === 'string';
+    case 'payu': return typeof checkout.action === 'string' && checkout.action.startsWith('https://') && checkout.method === 'POST' && typeof checkout.fields?.key === 'string' && typeof checkout.fields?.hash === 'string';
     case 'phonepe': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://');
-    case 'paytm': return typeof checkout.checkout?.txnToken === 'string' && typeof checkout.checkout.checkoutHost === 'string' && checkout.checkout.checkoutHost.startsWith('https://');
+    case 'paytm': return typeof checkout.txnToken === 'string' && typeof checkout.mid === 'string' && typeof checkout.orderId === 'string' && typeof checkout.checkoutHost === 'string' && checkout.checkoutHost.startsWith('https://');
     case 'jiopay': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://') && typeof checkout.transactionContext === 'string';
     default: return false;
   }
@@ -282,7 +282,7 @@ export class FirestorePaymentRepository {
       // Do not fabricate a hosted-checkout token when a status lookup omits it.
       const checkoutData = payload.provider === 'razorpay'
         ? { keyId: credentials.keyId }
-        : normalizeProviderCheckout(payload.provider, remote);
+        : normalizeProviderCheckout(payload.provider, remote, payload);
       if (!validCheckout(payload.provider, checkoutData)) return null;
 
       const intentRef = this.db.collection('paymentIntents').doc(intentId);
@@ -560,7 +560,7 @@ export class FirestorePaymentRepository {
           remote.amountMinor !== payload.amountMinor || remote.currency !== payload.currency) {
         throw new Error('provider_order_binding_mismatch');
       }
-      const checkoutData = normalizeProviderCheckout(payload.provider, remote);
+      const checkoutData = normalizeProviderCheckout(payload.provider, remote, payload);
       if (!validCheckout(payload.provider, checkoutData)) throw new Error('provider_checkout_payload_invalid');
       await this.db.runTransaction(async tx => {
         const [currentIntent, currentIdem, currentLock] = await Promise.all([
