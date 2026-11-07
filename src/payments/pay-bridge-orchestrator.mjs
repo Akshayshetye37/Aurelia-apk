@@ -203,7 +203,18 @@ export class PayBridgePaymentOrchestrator {
         event.folioId !== record.folioId || event.bookingId !== record.bookingId) {
       throw new PaymentOrchestratorError("EVENT_BINDING_MISMATCH", "Bridge event does not match the original payment");
     }
+    if (event.transactionId != null && (typeof event.transactionId !== "string" ||
+        !event.transactionId || event.transactionId.length > 256 ||
+        /[\\u0000-\\u001f\\u007f]/.test(event.transactionId))) {
+      throw new PaymentOrchestratorError("EVENT_BINDING_MISMATCH", "Bridge event transaction reference is invalid");
+    }
+    if (record.bridgeTransactionId && event.transactionId &&
+        record.bridgeTransactionId !== event.transactionId) {
+      throw new PaymentOrchestratorError("EVENT_BINDING_MISMATCH", "Bridge event attempted to replace the bound transaction reference");
+    }
     if (record.state === "SUCCESS") return clone(record);
+    if (record.state === "PROCESSING" && event.status === "processing" &&
+        (!event.transactionId || event.transactionId === record.bridgeTransactionId)) return clone(record);
     // Bridge events are hints only. A failure, cancellation or success event
     // triggers backend reconciliation; it never directly finalizes a payment.
     const next = event.status === "processing" ? "PROCESSING" : "UNKNOWN";
