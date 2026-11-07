@@ -2,7 +2,7 @@
 
 **Architecture:** Hybrid production backend. Android remains the offline-first PMS client; the cloud backend owns provider credentials, payment verification and accounting orchestration.  
 **Working branch:** `feature/phase-7-pms-persistence` (base: `feature/multi-provider-payment-backend`)  
-**Release status:** Live payment collection is OFF. No provider is production-ready. Six complete seven-operation adapters are factory-wired and exposed through the cloud checkout/onboarding/webhook/status/refund API surface. Android checkout handoff covers Razorpay and Cashfree native SDKs plus PhonePe and JioPay hosted HTTPS redirects in test/UAT; PayU and Paytm remain unintegrated.
+**Release status:** Live payment collection is OFF. No provider is production-ready. Six complete seven-operation adapters are factory-wired and exposed through the cloud checkout/onboarding/webhook/status/refund API surface. Android checkout handoff covers Razorpay, Cashfree and Paytm native SDKs plus PhonePe and JioPay hosted HTTPS redirects in test/UAT; PayU remains unintegrated.
 
 | Provider | Adapter/factory | Cloud backend routes | Android checkout handoff | End-to-end / production ready |
 |---|---|---:|---:|---:|
@@ -14,7 +14,7 @@
 | JioPay | Hosted checkout, HMAC-SHA256, status, webhook and refund command lifecycle; wired | Yes — test path; live blocked | No | **No** — merchant/aggregator UAT, device acceptance and folio posting open |
 | CCAvenue | Catalogue-only; no concrete adapter/factory | No | No | **No** — obtain merchant integration kit, implement and test before registration |
 
-**Count:** six backend adapters/cloud API integrations; four Android checkout handoffs; one catalogue-only provider; zero production-qualified gateways. Cloud adapter refund endpoints do not mean refund-to-folio posting is enabled.
+**Count:** six backend adapters/cloud API integrations; five Android checkout handoffs; one catalogue-only provider; zero production-qualified gateways. Cloud adapter refund endpoints do not mean refund-to-folio posting is enabled.
 
 ## Dependency-ordered delivery sequence
 
@@ -40,7 +40,7 @@
 
 ## Current evidence and limitations
 
-- The provider factory wires Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay after all seven adapter operations pass capability checks. The cloud server's provider catalogue, tenant-scoped credential onboarding/validation, test-order creation, webhook verification, authoritative status lookup and refund request/status endpoints accept all six factory-wired providers. The public Android checkout handoff covers Razorpay, Cashfree, PhonePe and JioPay; PayU and Paytm remain unintegrated. CCAvenue remains catalogue-only because a complete merchant-specific checkout/status/refund contract has not been supplied.
+- The provider factory wires Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay after all seven adapter operations pass capability checks. The cloud server's provider catalogue, tenant-scoped credential onboarding/validation, test-order creation, webhook verification, authoritative status lookup and refund request/status endpoints accept all six factory-wired providers. The public Android checkout handoff covers Razorpay, Cashfree, PhonePe, JioPay and Paytm; PayU remains unintegrated. CCAvenue remains catalogue-only because a complete merchant-specific checkout/status/refund contract has not been supplied.
 - The reconciliation endpoint is authenticated and batch-bounded, but currently invokes a manual sweep; it is not a scheduled service.
 - The worker and settlement helper still target `paymentFolios/{tenant+folio hash}` and `journalEntries/{intentId}`. The repository has not established that this matches the canonical deployed PMS schema.
 - Firestore indexes must be deployed with the backend. Concurrency, lease recovery and production query load remain to be verified.
