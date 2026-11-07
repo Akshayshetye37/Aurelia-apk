@@ -5,7 +5,7 @@ import { transitionIntent, mapVerifiedProviderStatus } from './intent-state-mach
 
 const ID = /^[A-Za-z0-9_-]{6,64}$/;
 const IDEM = /^[A-Za-z0-9._:-]{12,100}$/;
-const PROVIDERS = new Set(['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay', 'ccavenue']);
+const PROVIDERS = new Set(['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay']);
 const ENVIRONMENTS = Object.freeze({
   razorpay: new Set(['test', 'live']), cashfree: new Set(['test', 'live']),
   payu: new Set(['test', 'live']), phonepe: new Set(['test', 'live']),
@@ -13,7 +13,7 @@ const ENVIRONMENTS = Object.freeze({
 });
 function providerAccountIdentifier(provider, credentials) {
   const field = { razorpay: 'keyId', cashfree: 'appId', payu: 'merchantKey',
-    phonepe: 'clientId', paytm: 'mid', jiopay: 'merchantId', ccavenue: 'merchantId' }[provider];
+    phonepe: 'clientId', paytm: 'mid', jiopay: 'merchantId' }[provider];
   const value = credentials?.[field];
   if (typeof value !== 'string' || !value.trim()) throw new TypeError('provider_account_identity_missing');
   return value.trim();
@@ -25,8 +25,7 @@ function buildProviderOrderInput(provider, { providerReference, intentId, folioI
     case 'payu': return { orderId: providerReference, amountMinor, currency, customer, returnUrl };
     case 'phonepe': return { orderId: providerReference, amountMinor, currency, returnUrl };
     case 'paytm': return { orderId: providerReference, amountMinor, currency, customer, returnUrl, callbackUrl: returnUrl };
-    case 'jiopay': return { orderId: providerReference, amountMinor, currency, customer, returnUrl };\n    case 'ccavenue': return { orderId: providerReference, amountMinor, currency, returnUrl };
-    default: throw new TypeError('provider_not_supported');
+    case 'jiopay': return { orderId: providerReference, amountMinor, currency, customer, returnUrl };\n    default: throw new TypeError('provider_not_supported');
   }
 }
 function normalizeProviderCheckout(provider, remote, expected) {
@@ -45,8 +44,7 @@ function validCheckout(provider, checkout) {
     case 'payu': return typeof checkout.checkout?.action === 'string' && checkout.checkout.action.startsWith('https://') && checkout.checkout.method === 'POST' && typeof checkout.checkout.fields?.key === 'string' && typeof checkout.checkout.fields?.hash === 'string';
     case 'phonepe': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://');
     case 'paytm': return typeof checkout.checkout?.txnToken === 'string' && typeof checkout.checkout.mid === 'string' && typeof checkout.checkout.orderId === 'string' && typeof checkout.checkout.checkoutHost === 'string' && checkout.checkout.checkoutHost.startsWith('https://');
-    case 'jiopay': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://') && typeof checkout.transactionContext === 'string';\n    case 'ccavenue': return typeof checkout.checkout?.action === 'string' && checkout.checkout.action.startsWith('https://') && checkout.checkout.method === 'POST' && typeof checkout.checkout.fields?.encRequest === 'string' && typeof checkout.checkout.fields?.access_code === 'string';
-    default: return false;
+    case 'jiopay': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://') && typeof checkout.transactionContext === 'string';\n    default: return false;
   }
 }
 
