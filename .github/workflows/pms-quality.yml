@@ -1,4 +1,4 @@
-name: PMS source tests, web packaging and Android validation
+name: PMS source tests and production web packaging
 
 on:
   push:
@@ -13,13 +13,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: pms-quality-${{ github.ref }}
+  group: pms-source-quality-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  source-tests:
+  source-tests-web:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - name: Checkout PMS
         uses: actions/checkout@v4
@@ -28,12 +28,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -47,72 +41,19 @@ jobs:
       - name: Enforce production asset privacy boundaries
         run: node scripts/check-release-boundaries.mjs
 
-      - name: Generate Android project from Capacitor and native templates
-        shell: bash
-        run: |
-          set -euo pipefail
-          template_dir="$RUNNER_TEMP/aurelia-android-templates"
-          if [[ -d android/templates ]]; then
-            mv android/templates "$template_dir"
-          fi
-          if [[ -d android ]]; then
-            rmdir android
-          fi
-          npx cap add android
-          if [[ -d "$template_dir" ]]; then
-            mkdir -p android/templates
-            cp -a "$template_dir/." android/templates/
-          fi
-          test -f android/gradlew
-          test -f android/app/build.gradle
-
-      - name: Apply Aurelia Android configuration
-        run: node scripts/patch-android.js
-
-      - name: Synchronize Capacitor Android project
-        run: npx cap sync android
-
-      - name: Build Android debug APK
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace assembleDebug
-
-      - name: Verify APK identity and signature
-        working-directory: android
-        shell: bash
-        run: |
-          set -euo pipefail
-          apk="app/build/outputs/apk/debug/app-debug.apk"
-          test -s "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | tee "$RUNNER_TEMP/aurelia-pms-badging.txt"
-          grep -F "package: name='com.aurelia.pms'" "$RUNNER_TEMP/aurelia-pms-badging.txt"
-          sha256sum "$apk" > "$apk.sha256"
-
-      - name: Verify merged Android manifest permissions
-        working-directory: android
-        shell: bash
-        run: |
-          set -euo pipefail
-          manifest="$(find app/build/intermediates/merged_manifest -type f -name AndroidManifest.xml -print -quit)"
-          if [[ -z "$manifest" ]]; then
-            echo "::error::Merged Android manifest was not found."
-            exit 1
-          fi
-          blocked_permissions='PACKAGE_USAGE_STATS|WRITE_SECURE_SETTINGS|READ_BASIC_PHONE_STATE|READ_CELL_BROADCASTS|BIND_VPN_SERVICE|BIND_NOTIFICATION_LISTENER_SERVICE|BIND_ACCESSIBILITY_SERVICE|ACCESS_MEDIA_LOCATION|READ_CALENDAR|WRITE_CALENDAR|READ_VOICEMAIL|WRITE_VOICEMAIL|ACCEPT_HANDOVER|UWB_RANGING|READ_HEALTH_DATA_IN_BACKGROUND|READ_HEALTH_DATA|WRITE_HEALTH_DATA|FOREGROUND_SERVICE|FOREGROUND_SERVICE_DATA_SYNC|FOREGROUND_SERVICE_CONNECTED_DEVICE|FOREGROUND_SERVICE_HEALTH|FOREGROUND_SERVICE_REMOTE_MESSAGING|FOREGROUND_SERVICE_SYSTEM_EXEMPTED|FOREGROUND_SERVICE_PHONE_CALL|USE_FULL_SCREEN_INTENT|REQUEST_COMPANION_RUN_IN_BACKGROUND|REQUEST_COMPANION_USE_DATA_IN_BACKGROUND|REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND|READ_SMS|RECEIVE_SMS|SEND_SMS|RECEIVE_MMS|RECEIVE_WAP_PUSH|CAMERA|RECORD_AUDIO|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|READ_MEDIA_IMAGES|READ_MEDIA_VIDEO|READ_MEDIA_AUDIO|READ_MEDIA_VISUAL_USER_SELECTED|MANAGE_EXTERNAL_STORAGE|READ_CALL_LOG|WRITE_CALL_LOG|READ_PHONE_STATE|READ_PHONE_NUMBERS|CALL_PHONE|ANSWER_PHONE_CALLS|PROCESS_OUTGOING_CALLS|ADD_VOICEMAIL|USE_SIP|READ_CONTACTS|WRITE_CONTACTS|GET_ACCOUNTS|ACCESS_FINE_LOCATION|ACCESS_COARSE_LOCATION|ACCESS_BACKGROUND_LOCATION|BODY_SENSORS|ACTIVITY_RECOGNITION|POST_NOTIFICATIONS|BLUETOOTH|BLUETOOTH_ADMIN|BLUETOOTH_SCAN|BLUETOOTH_CONNECT|BLUETOOTH_ADVERTISE|NEARBY_WIFI_DEVICES|NFC|ACCESS_NETWORK_STATE|QUERY_ALL_PACKAGES|SYSTEM_ALERT_WINDOW|WRITE_SETTINGS|ACCESS_NOTIFICATION_POLICY|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|REQUEST_IGNORE_BATTERY_OPTIMIZATIONS|USE_BIOMETRIC|USE_FINGERPRINT|FOREGROUND_SERVICE_CAMERA|FOREGROUND_SERVICE_MICROPHONE|FOREGROUND_SERVICE_LOCATION|FOREGROUND_SERVICE_MEDIA_PROJECTION|FOREGROUND_SERVICE_SPECIAL_USE|REQUEST_INSTALL_PACKAGES'
-          if grep -E "android.permission.($blocked_permissions)|com.google.android.gms.permission.AD_ID|BIND_NOTIFICATION_LISTENER_SERVICE|BIND_ACCESSIBILITY_SERVICE" "$manifest"; then
-            echo "::error::A blocked sensitive permission/service declaration remains."
-            exit 1
-          fi
-          echo "Merged manifest passed the sensitive-permission check."
-
-      - name: Upload Android debug validation artifact
+      - name: Upload complete production web bundle (not an Android APK)
         uses: actions/upload-artifact@v4
         with:
-          name: aurelia-pms-debug-validation-${{ github.sha }}
-          path: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          name: aurelia-pms-web-${{ github.sha }}
+          path: www/
           if-no-files-found: error
           retention-days: 7
+
+      - name: Record Android release gate
+        run: |
+          {
+            echo "## Android release status"
+            echo "Android/APK builds, signing and publishing are intentionally not part of this source-quality workflow."
+            echo "The repository release plan prohibits Android builds until all ten acceptance workstreams pass and owner approval is recorded."
+            echo "This run validates source tests, web packaging and client asset privacy only."
+          } >> "$GITHUB_STEP_SUMMARY"
