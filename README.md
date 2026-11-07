@@ -53,6 +53,8 @@ The current implementation contains substantial storage, payment and security fo
 
 **Cutover limitation:** the full booking, room, guest, folio and manual-payment UI is not yet migrated to use the asynchronous repository as its sole canonical read/write path. `uiCutover` remains false. Some operational UI state still uses the legacy synchronous application state. The room reassignment/stable room-reference migration is not complete.
 
+**Phase 7 progress:** `PmsRepositoryBridge.listEntities()` now provides tenant/property-scoped canonical reads with validation and deterministic ordering. `buildLegacyBookingShadowPlan()` generates a deterministic, read-only booking projection for active and cancelled records, preserving original fields and blocking ambiguous IDs. This is a planner only: no real snapshot was imported, no canonical parity report exists yet, and no operational UI has switched.
+
 ### Payment and provider backend
 
 - Payment intent state persistence uses optimistic compare-and-set version checks across orchestrator transitions.
@@ -76,7 +78,7 @@ The current implementation contains substantial storage, payment and security fo
 | JioPay | Yes | Yes | No | **No** |
 | CCAvenue | No — catalogue only | No | No | **No** |
 
-All six factory-wired adapters expose seven lifecycle operations and have deterministic mocked contract tests. The cloud capability response deliberately reports folio settlement, refunds as an accepted capability, and reconciliation as unavailable; live collection is disabled for every provider. PayU's credential validation currently reports format-only validation, which is not proof that merchant credentials are authenticated. None of the six has been demonstrated with merchant-specific UAT evidence in this repository. CCAvenue requires the current merchant integration kit before implementation.
+All six factory-wired adapters expose seven lifecycle operations and have deterministic mocked contract tests. The cloud capability response deliberately reports folio settlement, refund-to-folio posting and reconciliation as unavailable; live collection is disabled for every provider. PayU's credential validation currently reports format-only validation, which is not proof that merchant credentials are authenticated. None of the six has been demonstrated with merchant-specific UAT evidence in this repository. CCAvenue requires the current merchant integration kit before implementation.
 
 **Conclusion:** zero of seven gateways are qualified as end-to-end production-ready. Six have backend integration foundations; only two have Android checkout handoff. Provider adapters and cloud endpoints are not equivalent to a completed PMS payment lifecycle.
 
