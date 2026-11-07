@@ -86,6 +86,12 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
     io.execute(() -> {try{JSONObject committed=repository.transactBusinessChange(type,id,version.longValue(),new JSONObject(data.toString()),new JSONObject(event.toString()));call.resolve(new JSObject(committed.toString()));}
       catch(Exception e){String code=e.getMessage()!=null&&e.getMessage().contains("ENTITY_VERSION_CONFLICT")?"ENTITY_VERSION_CONFLICT":"PMS_SQLITE_TRANSACTION_FAILED";call.reject("Native PMS transaction rejected",code,e);}});
   }
+  @PluginMethod public void transactBusinessBatch(PluginCall call) {
+    JSONArray changes=call.getArray("changes");
+    if(changes==null||changes.length()<2||changes.length()>20){call.reject("Invalid multi-entity PMS transaction packet","PMS_INVALID_BUSINESS_BATCH");return;}
+    io.execute(() -> {try{JSObject r=new JSObject();r.put("entities",repository.transactBusinessBatch(changes));call.resolve(r);}
+      catch(Exception e){String code=e.getMessage()!=null&&e.getMessage().contains("ENTITY_VERSION_CONFLICT")?"ENTITY_VERSION_CONFLICT":"PMS_SQLITE_BATCH_FAILED";call.reject("Native multi-entity PMS transaction rejected",code,e);}});
+  }
   @PluginMethod public void migrateLegacySnapshot(PluginCall call) {
     String id=call.getString("migrationId"),source=call.getString("sourceKey"),sourceTimestamp=call.getString("sourceTimestamp"),raw=call.getString("raw");
     if(empty(id)||empty(source)||sourceTimestamp==null||raw==null||raw.isEmpty()){call.reject("Exact migration ID, source key and raw snapshot are required","PMS_INVALID_MIGRATION");return;}
