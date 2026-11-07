@@ -13,10 +13,10 @@ import org.json.JSONObject;
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String NAME = "aurelia-pms.db";
-  private static final int VERSION = 2;
+  private static final int VERSION = 3;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
-  LocalPmsRepository(Context context) { super(context.getApplicationContext(), NAME, null, VERSION); }
+  LocalPmsRepository(Context context) { super(context.getApplicationContext(), NAME, null, VERSION); setWriteAheadLoggingEnabled(true); }
 
   @Override public void onCreate(SQLiteDatabase db) {
     db.execSQL("PRAGMA foreign_keys=ON");
@@ -24,11 +24,15 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     db.execSQL("CREATE TABLE pms_outbox(event_id TEXT PRIMARY KEY NOT NULL,tenant_id TEXT NOT NULL,property_id TEXT NOT NULL,device_id TEXT NOT NULL,entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence>=1),event_type TEXT NOT NULL,schema_version INTEGER NOT NULL,occurred_at TEXT NOT NULL,payload_json TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('PENDING','IN_FLIGHT','ACKNOWLEDGED','RETRY','CONFLICT')),attempts INTEGER NOT NULL DEFAULT 0,retry_at TEXT,lease_owner TEXT,lease_until INTEGER,last_error_code TEXT,created_at INTEGER NOT NULL,acknowledged_at INTEGER,UNIQUE(entity_type,entity_id,sequence))");
     db.execSQL("CREATE INDEX pms_outbox_delivery_idx ON pms_outbox(status,retry_at,created_at)");
     db.execSQL("CREATE TABLE pms_migrations(migration_key TEXT PRIMARY KEY NOT NULL,migration_id TEXT NOT NULL,source_key TEXT NOT NULL,completed_at INTEGER NOT NULL,entity_count INTEGER NOT NULL)");
-    db.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL,created_at INTEGER NOT NULL)");
+    db.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL,source_timestamp TEXT NOT NULL,created_at INTEGER NOT NULL,format_version INTEGER NOT NULL)");
   }
   @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {
     if(oldVersion<2) db.execSQL("ALTER TABLE pms_outbox ADD COLUMN acknowledged_at INTEGER");
-    if(newVersion>2) throw new IllegalStateException("Explicit versioned PMS repository migration required");
+    if(oldVersion<3) {
+      db.execSQL("ALTER TABLE pms_migration_snapshots ADD COLUMN source_timestamp TEXT NOT NULL DEFAULT ''");
+      db.execSQL("ALTER TABLE pms_migration_snapshots ADD COLUMN format_version INTEGER NOT NULL DEFAULT 1");
+    }
+    if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
 
   synchronized JSONObject getEntity(String type,String id) {
