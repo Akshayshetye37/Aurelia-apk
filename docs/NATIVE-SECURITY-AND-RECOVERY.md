@@ -25,6 +25,12 @@ Retry state is stored in an Android `AtomicFile` encrypted and authenticated wit
 
 This protects against casual file edits. It does not make a rooted OS, a privileged attacker, kernel compromise or live instrumentation impossible.
 
+## Payment-device acknowledgement boundary
+
+The native payment-device client retains the original signed policy-lease and settlement-authorization envelopes for the lifetime of a command lease. Because Android `JSONObject` values are mutable, successful verification during lease retrieval is not treated as durable authorization. Immediately before acknowledgement, the client re-verifies both signatures, expiry, issuer/audience, device/tenant/provider scope, transaction/folio/amount bindings, and equality between the current command settlement and the verified settlement. A modified or expired envelope fails closed and cannot produce an acknowledgement.
+
+This is protocol-integrity defense in depth, not a local ledger implementation. The caller must still commit and read back an idempotent ledger receipt before acknowledging. Kotlin compilation, device-level tamper tests, clock manipulation tests, and hardware attestation qualification remain mandatory.
+
 ## Launch and lifecycle boundary
 
 The Android generation script makes `LockGateActivity` the exported launcher and marks the Capacitor `MainActivity` internal. The gate contains no WebView and starts the PMS activity only after initial PIN enrollment or successful envelope authentication. The process-scoped manager clears its in-memory DEK on lock and on session timeout.
