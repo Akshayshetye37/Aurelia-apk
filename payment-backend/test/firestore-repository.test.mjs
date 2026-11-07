@@ -339,7 +339,7 @@ test('UNKNOWN dispatch recovers an existing provider order by deterministic refe
   assert.equal(recovered.providerOrderId, 'order_recovered');
   assert.equal(s.dispatches, 1);
   const stored = await s.db.get('paymentIntents/' + first.intentId);
-  assert.equal(stored.state, 'CREATED');
+  assert.equal(stored.status, 'CREATED');
   assert.equal(stored.providerOrderId, 'order_recovered');
   const lock = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentFolioLocks/'))?.[1];
   assert.equal(lock.active, true);
@@ -419,7 +419,7 @@ test('capture with mismatched amount or currency is rejected without changing in
   await assert.rejects(s.repo.reconcilePaymentIntent('user_123', created.intentId),
     /provider_capture_binding_mismatch/);
   const stored = await s.db.get('paymentIntents/' + created.intentId);
-  assert.equal(stored.state, 'CREATED');
+  assert.equal(stored.status, 'CREATED');
 });
 
 test('late provider-verified capture supersedes a prior failure but never posts the folio', async () => {
@@ -468,7 +468,7 @@ test('PayU checkout is normalized to the exact POST action and signed fields exp
     returnUrl:'https://pms.example/payment-return'
   }));
   const stored = await s.repo.getPaymentIntent('user_123', result.intentId);
-  assert.equal(stored.state, 'CREATED');
+  assert.equal(stored.status, 'CREATED');
   assert.equal(stored.checkoutData.action, 'https://test.payu.in/_payment');
   assert.equal(stored.checkoutData.method, 'POST');
   assert.equal(stored.checkoutData.fields.hash, 'provider-signed-hash');
@@ -485,7 +485,7 @@ test('Paytm checkout normalization preserves its hosted checkout origin and toke
     returnUrl:'https://pms.example/payment-return'
   }));
   const stored = await s.repo.getPaymentIntent('user_123', result.intentId);
-  assert.equal(stored.state, 'CREATED');
+  assert.equal(stored.status, 'CREATED');
   assert.equal(stored.checkoutData.orderId, stored.providerOrderId);
   assert.equal(stored.checkoutData.txnToken, 'provider-token');
   assert.equal(stored.checkoutData.checkoutHost, 'https://securestage.paytmpayments.com');
@@ -499,7 +499,7 @@ test('provider checkout response cannot redefine the persisted intent amount', a
   const result = await s.repo.initializePaymentIntent('user_123', payload());
   assert.equal(result.status, 'UNKNOWN');
   const intent = await s.repo.getPaymentIntent('user_123', result.intentId);
-  assert.equal(intent.state, 'UNKNOWN');
-  assert.equal(intent.checkoutData, undefined);
+  assert.equal(intent.status, 'UNKNOWN');
+  assert.equal(intent.checkoutData, null);
   assert.equal(s.dispatches, 1);
 });
