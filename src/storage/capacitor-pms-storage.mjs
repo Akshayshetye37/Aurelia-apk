@@ -55,6 +55,16 @@ export class CapacitorPmsStorageClient extends PmsRepository {
     return {key:committed.key,type:committed.type,id:committed.id,version:committed.version,data:committed.data,updatedAt:committed.updatedAt};
   }
 
+  async transactBusinessBatch(changes) {
+    if(!Array.isArray(changes)||changes.length<2||changes.length>20)throw new TypeError("Business batch must contain 2..20 changes");
+    const keys=new Set(),eventIds=new Set();
+    for(const c of changes){ident(c?.entityType,"entity type");ident(c?.entityId,"entity ID");version(c?.expectedVersion,"expected entity version");if(!c.data||typeof c.data!=="object"||Array.isArray(c.data)||!c.event)throw new TypeError("Invalid business batch change");const key=c.entityType+":"+c.entityId;if(keys.has(key)||eventIds.has(c.event.eventId))throw new TypeError("Duplicate business batch entity or event");keys.add(key);eventIds.add(c.event.eventId);}
+    const result=await this.plugin.transactBusinessBatch({changes});
+    if(!Array.isArray(result?.entities)||result.entities.length!==changes.length)throw new Error("Native SQLite returned an invalid business batch result");
+    for(let i=0;i<changes.length;i++){const c=changes[i],row=result.entities[i];if(row.type!==c.entityType||row.id!==c.entityId||row.version!==c.expectedVersion+1)throw new Error("Native SQLite returned an invalid committed batch version");}
+    return result.entities;
+  }
+
   async migrateLegacySnapshot(snapshot,{migrationId,sourceKey,sourceTimestamp=new Date().toISOString()}={}) {
     if(!snapshot||typeof snapshot.raw!=="string"||!snapshot.raw)throw new TypeError("Exact raw legacy JSON snapshot is required");
     ident(migrationId,"migration ID");ident(sourceKey,"source key");
