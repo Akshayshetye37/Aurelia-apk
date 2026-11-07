@@ -1,5 +1,6 @@
 import { RazorpayAdapter } from './razorpay.mjs';
 import { CashfreeAdapter } from './cashfree.mjs';
+import { CCAvenueAdapter } from './ccavenue-adapter.mjs';
 import { JioPayAdapter } from './jiopay-adapter.mjs';
 import { PaytmAdapter } from './paytm-adapter.mjs';
 import { PhonePeAdapter } from './phonepe-adapter.mjs';
@@ -18,7 +19,8 @@ const FACTORIES = Object.freeze({
   payu: options => new PayUAdapter(options),
   phonepe: options => new PhonePeAdapter(options),
   paytm: options => new PaytmAdapter(options),
-  jiopay: options => new JioPayAdapter(options)
+  jiopay: options => new JioPayAdapter(options),
+  ccavenue: options => new CCAvenueAdapter(options)
 });
 
 export function createProviderAdapter(providerId, options) {
@@ -45,6 +47,8 @@ export function providerQualificationStatus(providerId) {
     liveCollection: false,
     cloudCheckoutApiEnabled: true,
     merchantUatRequired: true,
+    refundsAvailable: providerId !== 'ccavenue',
+    webhookAcceptanceRequired: true,
     canonicalFolioPostingRequired: true,
     physicalDeviceAcceptanceRequired: true
   };
