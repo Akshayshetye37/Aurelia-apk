@@ -111,10 +111,10 @@ export class PmsRepositoryBridge {
       const hash = Array.from(new Uint8Array(bytes), value => value.toString(16).padStart(2, "0")).join("");
       let lastError;
       for (let attempt = 0; attempt < 4; attempt += 1) {
-        const current = await this.fetchEntity("legacy", "aurelia_lodge_v2");
+        const current = await this.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
         try {
           return await this.mutateEntity({
-            entityType: "legacy", entityId: "aurelia_lodge_v2", expectedVersion: current?.version ?? 0,
+            entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2", expectedVersion: current?.version ?? 0,
             eventType: "legacy.snapshot_saved",
             eventPayload: { sourceKey: "aurelia_lodge_v2", snapshotSha256: hash, byteLength: new TextEncoder().encode(serialized).length },
             mutate: entity => { entity.snapshot = JSON.parse(serialized); entity.snapshotSha256 = hash; entity.sourceKey = "aurelia_lodge_v2"; }
