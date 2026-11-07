@@ -705,6 +705,8 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     if (hostedCheckoutBackgrounded && !pendingCheckoutTransactionId.isEmpty()) {
       hostedCheckoutBackgrounded = false;
       emitNativePaymentEvent("HOSTED_CHECKOUT_RETURNED", "");
+      pendingCheckoutTransactionId = "";
+      pendingCheckoutProvider = "";
     }
     if (payBridgeClient != null) payBridgeClient.connect();
   }
