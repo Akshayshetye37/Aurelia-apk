@@ -71,9 +71,9 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   }
 
   /** Imports the exact original localStorage payload and every top-level key atomically. */
-  synchronized JSONObject migrateLegacySnapshot(String migrationId,String sourceKey,String rawJson) {
+  synchronized JSONObject migrateLegacySnapshot(String migrationId,String sourceKey,String sourceTimestamp,String rawJson) {
     validateIdentity(migrationId,"migration ID");validateIdentity(sourceKey,"source key");
-    if(rawJson==null||rawJson.isEmpty())throw new IllegalArgumentException("invalid_legacy_snapshot");
+    if(rawJson==null||rawJson.isEmpty()||sourceTimestamp==null||!Double.isFinite(parseDate(sourceTimestamp)))throw new IllegalArgumentException("invalid_legacy_snapshot");
     final JSONObject parsed;
     try { parsed=new JSONObject(rawJson); for(String key:LEGACY_ARRAYS)if(!(parsed.opt(key) instanceof JSONArray))throw new IllegalArgumentException("legacy_snapshot_missing_"+key); if(!(parsed.opt("set") instanceof JSONObject)||!(parsed.opt("menu") instanceof JSONObject))throw new IllegalArgumentException("legacy_snapshot_missing_object"); }
     catch(RuntimeException e){throw e;} catch(Exception e){throw failure("invalid_legacy_snapshot",e);}
@@ -92,7 +92,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       if(DatabaseUtils.longForQuery(db,"SELECT COUNT(*) FROM pms_entities",null)!=0)throw new IllegalStateException("canonical_repository_not_empty");
       java.util.Iterator<String> keys=parsed.keys();int imported=0;long now=System.currentTimeMillis();
       while(keys.hasNext()){String key=keys.next();validateIdentity(key,"legacy entity key");ContentValues row=new ContentValues();row.put("entity_type","legacy");row.put("entity_id",key);row.put("version",1);Object value=parsed.opt(key);\n        row.put("data_json",serializeJsonValue(value));row.put("updated_at",now);db.insertOrThrow("pms_entities",null,row);imported++;}
-      ContentValues snap=new ContentValues();snap.put("snapshot_id",migrationId);snap.put("source_key",sourceKey);snap.put("raw_json",rawJson);snap.put("created_at",now);db.insertOrThrow("pms_migration_snapshots",null,snap);
+      ContentValues snap=new ContentValues();snap.put("snapshot_id",migrationId);snap.put("source_key",sourceKey);snap.put("raw_json",rawJson);snap.put("source_timestamp",sourceTimestamp);snap.put("created_at",now);snap.put("format_version",1);db.insertOrThrow("pms_migration_snapshots",null,snap);
       ContentValues marker=new ContentValues();marker.put("migration_key",MIGRATION_KEY);marker.put("migration_id",migrationId);marker.put("source_key",sourceKey);marker.put("completed_at",now);marker.put("entity_count",imported);db.insertOrThrow("pms_migrations",null,marker);
       db.setTransactionSuccessful();return migrationResult(false,migrationId,imported);
     } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("legacy_migration_failed",e);}
@@ -101,8 +101,8 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
 
   synchronized JSONObject readMigrationSnapshot(String migrationId) {
     validateIdentity(migrationId,"migration ID");
-    try(Cursor c=getReadableDatabase().rawQuery("SELECT source_key,raw_json,created_at FROM pms_migration_snapshots WHERE snapshot_id=?",new String[]{migrationId})) {
-      if(!c.moveToFirst())return null;JSONObject out=new JSONObject();out.put("id",migrationId);out.put("sourceKey",c.getString(0));out.put("raw",c.getString(1));out.put("createdAt",c.getLong(2));return out;
+    try(Cursor c=getReadableDatabase().rawQuery("SELECT source_key,raw_json,source_timestamp,created_at,format_version FROM pms_migration_snapshots WHERE snapshot_id=?",new String[]{migrationId})) {
+      if(!c.moveToFirst())return null;JSONObject out=new JSONObject();out.put("id",migrationId);out.put("sourceKey",c.getString(0));out.put("raw",c.getString(1));out.put("sourceTimestamp",c.getString(2));out.put("importedAt",isoTimestamp(c.getLong(3)));out.put("formatVersion",c.getLong(4));return out;
     } catch(Exception e){throw failure("migration_snapshot_read_failed",e);}
   }
 
