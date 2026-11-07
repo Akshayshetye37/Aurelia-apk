@@ -12,6 +12,27 @@ function mockFetch(handler){
   return {fetchImpl,calls};
 }
 
+test('PayU credential validation authenticates through verify_payment without creating an order',async()=>{
+  const mock=mockFetch(async(url,options)=>{
+    const form=Object.fromEntries(new URLSearchParams(options.body));
+    assert.equal(form.command,'verify_payment');
+    assert.match(form.var1,/^AURCRED[A-Fa-f0-9]{24}$/);
+    assert.equal(form.hash,generatePayUCommandHash({key:credentials.merchantKey,command:'verify_payment',var1:form.var1},credentials.salt));
+    return {status:200,body:{status:0,msg:'0 out of 1 Transactions Fetched Successfully',
+      transaction_details:{[form.var1]:{mihpayid:'Not Found',status:'Not Found'}}}};
+  });
+  const adapter=new PayUAdapter({credentials,environment:'test',fetchImpl:mock.fetchImpl});
+  const result=await adapter.validateCredentials();
+  assert.deepEqual(result,{valid:true,validation:'authenticated_verify_payment_api'});
+  assert.equal(mock.calls.length,1);
+});
+
+test('PayU credential validation rejects a response that does not prove merchant authentication',async()=>{
+  const mock=mockFetch(async()=>({status:200,body:{status:0,msg:'Merchant key is empty'}}));
+  const adapter=new PayUAdapter({credentials,environment:'test',fetchImpl:mock.fetchImpl});
+  await assert.rejects(adapter.validateCredentials(),/payu_credentials_not_authenticated/);
+});
+
 test('PayU prepares classic hosted checkout with server-generated hash and no salt leakage',async()=>{
   const adapter=new PayUAdapter({credentials,environment:'test'});
   const result=await adapter.createOrder({orderId:'order_123',amountMinor:12500,currency:'INR',
