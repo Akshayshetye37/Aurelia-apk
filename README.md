@@ -1,30 +1,45 @@
 # Aurelia PMS
 
-## Architecture status and implementation roadmap (2026-11-07)
+## Current architecture and release status — 2026-11-07
 
-**Current branch:** `feature/multi-provider-payment-backend`  
-**Latest verified source commit:** `3c9d9654d112a73fe415545ffb992fe817b870a0`. The latest recorded CI run [42359366447](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42359366447) passed through Android debug APK build, signature/identity verification, manifest permission verification and artifact upload. This validates that commit's CI pipeline, not physical-device operation or production readiness.
+**Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)  
+**Working branch:** `feature/multi-provider-payment-backend`  
+**Current source commit:** `5f11451f52933c5c705a87cafe49970e0e6e1652`  
+**Pre-change recovery point:** [`backup/pre-local-first-cutover-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-local-first-cutover-2026-11-07) at `8b74f3d2cb723237b5f3a8901e22ef7370552812`.
 
+### Latest CI verification
 
-## Current implementation and verification update (2026-11-07)
+The [PMS source tests, web packaging and Android validation run 42380831922](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42380831922) completed successfully for commit `5f11451f52933c5c705a87cafe49970e0e6e1652`.
 
-This section is the authoritative current status. Older dated sections below are retained as implementation history; where their status statements conflict with this section, this section takes precedence.
+Verified steps: complete PMS test suite, production web bundle, production asset privacy checks, Android project generation, Aurelia Android configuration, Capacitor synchronization, Android debug APK build, APK identity/signature verification, merged-manifest permission verification and validation artifact upload.
 
-### Native local-first persistence foundation
+This is CI verification. It does not establish physical-device acceptance, uninstall/reinstall identity survival, provider sandbox acceptance or production readiness.
 
-- The Android SQLite repository schema is at version 3. The implementation includes WAL, upgrade paths for earlier schemas, entity listing, optimistic version checks, and atomic entity-plus-outbox writes.
-- Legacy migration preserves the exact source JSON, source key and source timestamp, imports top-level records transactionally, and supports read-back verification and idempotent replay.
-- The registered Capacitor storage plugin exposes the native repository operations for initialization, entity reads/listing, business transactions, migration snapshot import/read-back, outbox leasing, acknowledgement, retry and conflict handling.
-- Native timestamps and outbox acknowledgement timestamps are normalized to UTC ISO-8601 to align with the JavaScript repository contract.
-- JavaScript adapter tests cover repository behavior, migration replay/read-back, simulated interruption recovery, stale versions, outbox lease ownership, retry backoff and conflict transitions. Static template tests guard important native implementation details.
+### Local-first identity and compatibility persistence update
 
-### Verified CI result
+- Browser/PWA identity is generated locally using cryptographically secure UUIDs and stored in IndexedDB, with a verified localStorage fallback when IndexedDB is unavailable.
+- Android identity is persisted in app-private preferences as AES-GCM ciphertext; the encryption key is generated and held by Android Keystore.
+- Identity includes stable local installation, tenant-scope, property and device identifiers. The tenant identifier is explicitly local-only and is not a Firebase/cloud tenant identity.
+- Bootstrap obtains and validates local identity before returning the repository to the application startup gate. The identity is passed to the repository bridge as its mutation context.
+- Legacy saves are mirrored asynchronously into a versioned repository audit entity with an immutable outbox event. The legacy `aurelia_lodge_v2` value remains in place as rollback material. Mirror failures are logged and do not falsely report the local save as failed.
+- The mirror is a compatibility/audit snapshot path, not atomic dual-write of every business entity. It does not make the repository the operational source of truth.
 
-- Workflow: [PMS source tests, web packaging and Android validation](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42359366447)
-- Commit: `3c9d9654d112a73fe415545ffb992fe817b870a0`
-- Result: **success**.
-- Verified steps include the full PMS test suite, production web bundle, privacy checks, Android project generation, Aurelia template/configuration, Capacitor sync, Android debug APK compilation, APK identity/signature checks, merged-manifest permission checks and validation artifact upload.
+### Canonical storage and payment boundary
 
+- Android bootstrap selects the registered native SQLite adapter; browser/PWA uses IndexedDB.
+- The guarded migration verifies the exact legacy snapshot and imported records. The original legacy value is preserved.
+- The Promise-based repository bridge and repository-backed folio settlement command exist, but the operational PMS screens and manual-payment UI are not yet fully migrated to repository commands.
+- `uiCutover` remains **false**. Legacy synchronous UI state remains operationally authoritative during this reversible stage.
+- Cloud sync remains **OFF**. Live gateway collection, automatic gateway settlement and automated refund-to-folio posting remain **OFF**.
+- Production readiness remains **NOT APPROVED**. Physical-device process-death/recovery tests, uninstall/reinstall identity acceptance, full domain-command migration, payment reconciliation and security/accounting release gates remain outstanding.
+
+### Recovery and rollback
+
+The backup branch above preserves the pre-change commit. The original `aurelia_lodge_v2` browser state is not deleted or overwritten by the compatibility mirror. Do not remove either rollback source until repository durability and the complete UI cutover have been independently accepted.
+
+### Current implementation history
+
+This section is the authoritative current status. The dated sections below are retained as implementation history; where older status statements conflict with this section, this section takes precedence.
 
 ### Repository parity hardening — lease expiry and integer safety
 
