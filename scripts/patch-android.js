@@ -768,8 +768,13 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
                 java.util.Arrays.asList("com.phonepe.app", "net.one97.paytm",
                     "com.google.android.apps.nbu.paisa.user", "in.org.npci.upiapp")
                     .contains(externalPackage);
-            if (externalData != null && "upi".equalsIgnoreCase(externalData.getScheme()) &&
-                allowedUpiPackage && external.resolveActivity(getPackageManager()) != null) {
+            String externalScheme = externalData == null ? "" : externalData.getScheme();
+            boolean allowedPaymentScheme = "upi".equalsIgnoreCase(externalScheme) ||
+                "phonepe".equalsIgnoreCase(externalScheme) ||
+                "paytmmp".equalsIgnoreCase(externalScheme) ||
+                "tez".equalsIgnoreCase(externalScheme);
+            if (allowedPaymentScheme && allowedUpiPackage &&
+                external.resolveActivity(getPackageManager()) != null) {
               startActivity(external);
             }
           } catch (Exception ignored) { }
