@@ -343,7 +343,7 @@ test('UNKNOWN dispatch recovers an existing provider order by deterministic refe
   assert.equal(recovered.providerOrderId, 'order_recovered');
   assert.equal(s.dispatches, 1);
   const stored = await s.db.get('paymentIntents/' + first.intentId);
-  assert.equal(stored.status, 'CREATED');
+  assert.equal(stored.state, 'CREATED');
   assert.equal(stored.providerOrderId, 'order_recovered');
   const lock = [...s.db.docs.entries()].find(([path]) => path.startsWith('paymentFolioLocks/'))?.[1];
   assert.equal(lock.active, true);
@@ -423,7 +423,7 @@ test('capture with mismatched amount or currency is rejected without changing in
   await assert.rejects(s.repo.reconcilePaymentIntent('user_123', created.intentId),
     /provider_capture_binding_mismatch/);
   const stored = await s.db.get('paymentIntents/' + created.intentId);
-  assert.equal(stored.status, 'CREATED');
+  assert.equal(stored.state, 'CREATED');
 });
 
 test('late provider-verified capture supersedes a prior failure but never posts the folio', async () => {
