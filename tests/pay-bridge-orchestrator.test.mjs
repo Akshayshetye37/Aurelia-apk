@@ -377,3 +377,49 @@ test("Pay Bridge callback rejects malformed transaction references",async()=>{
  const f=fixture();await f.orchestrator.createPayment(input);
  await assert.rejects(f.orchestrator.receiveBridgeEvent({requestId:"req-1",bookingId:"booking-1",folioId:"folio-1",amountPaise:12500,currency:"INR",status:"unknown",transactionId:"bad"+String.fromCharCode(0)+"txn"}),e=>e.code==="EVENT_BINDING_MISMATCH");
 });
+
+
+test("orchestrator threads committed CAS versions through every persisted transition", async () => {
+  const f = fixture();
+  const writes = [];
+  f.store.put = async (record, options = {}) => {
+    const existing = f.records.get(record.requestId);
+    const actualVersion = existing?.version ?? 0;
+    if (options.expectedVersion !== undefined && options.expectedVersion !== actualVersion) {
+      throw Object.assign(new Error("Payment intent version conflict"), {
+        code: "PAYMENT_INTENT_VERSION_CONFLICT", actualVersion
+      });
+    }
+    writes.push(options.expectedVersion);
+    const saved = structuredClone({ ...record, version: actualVersion + 1 });
+    f.records.set(record.requestId, saved);
+    return saved;
+  };
+  const result = await f.orchestrator.createPayment(input);
+  assert.deepEqual(writes, [0, 1, 2, 3, 4]);
+  assert.equal(result.version, 5);
+  assert.equal((await f.store.get("req-1")).version, 5);
+});
+
+test("stale orchestrator snapshots cannot overwrite a newer payment intent", async () => {
+  const f = fixture();
+  let current = { ...input, state:"CREATED", version:1, backendVerified:false, settlementAuthorized:false, history:[] };
+  f.store.get = async () => structuredClone(current);
+  f.store.put = async (record, options = {}) => {
+    if (options.expectedVersion !== current.version) {
+      throw Object.assign(new Error("Payment intent version conflict"), {
+        code:"PAYMENT_INTENT_VERSION_CONFLICT", actualVersion:current.version
+      });
+    }
+    current = structuredClone({ ...record, version:current.version + 1 });
+    return structuredClone(current);
+  };
+  const staleSnapshot = await f.orchestrator.requireRecord("req-1");
+  await f.orchestrator.persist({ ...staleSnapshot, state:"REQUESTED" });
+  await assert.rejects(
+    f.orchestrator.persist({ ...staleSnapshot, state:"CANCELLED" }),
+    error => error.code === "PAYMENT_INTENT_VERSION_CONFLICT"
+  );
+  assert.equal(current.state, "REQUESTED");
+  assert.equal(current.version, 2);
+});
