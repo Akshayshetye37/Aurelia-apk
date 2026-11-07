@@ -44,7 +44,7 @@ function validCheckout(provider, checkout) {
     case 'cashfree': return typeof checkout.paymentSessionId === 'string' && checkout.paymentSessionId.length > 0;
     case 'payu': return typeof checkout.checkout?.action === 'string' && checkout.checkout.action.startsWith('https://') && checkout.checkout.method === 'POST' && typeof checkout.checkout.fields?.key === 'string' && typeof checkout.checkout.fields?.hash === 'string';
     case 'phonepe': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://');
-    case 'paytm': return typeof checkout.checkout?.txnToken === 'string' && typeof checkout.checkout.mid === 'string' && typeof checkout.checkout.orderId === 'string' && typeof checkout.checkout.checkoutHost === 'string' && checkout.checkout.checkoutHost.startsWith('https://');
+    case 'paytm': return typeof checkout.checkout?.txnToken === 'string' && typeof checkout.checkout.mid === 'string' && typeof checkout.checkout.orderId === 'string' && typeof checkout.checkout.checkoutHost === 'string' && checkout.checkout.checkoutHost.startsWith('https://') && typeof checkout.checkout.callbackUrl === 'string' && checkout.checkout.callbackUrl.startsWith('https://');
     case 'jiopay': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://') && typeof checkout.transactionContext === 'string';
     default: return false;
   }
