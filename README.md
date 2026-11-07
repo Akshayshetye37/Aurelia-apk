@@ -32,7 +32,7 @@ This section is the authoritative current status. Older dated sections below are
 - IndexedDB enforces the same bounded lease duration as the native adapter (1,000–3,600,000 ms).
 - The native plugin reads entity versions as 64-bit values rather than narrowing the contract to Java `Integer`. It rejects values outside JavaScript safe-integer range, and native event sequence/schema validation rejects non-integral or unsafe numeric values.
 - Regression coverage exercises expired-lease rejection, reclaim by a second worker, acknowledgement by the new lease owner, lease bounds and native template guards.
-- These changes harden the repository contract; they do **not** activate native SQLite in bootstrap or migrate operational UI screens.
+- These changes harden the repository contract. Android bootstrap now activates native SQLite for initialization and guarded migration, but operational UI screens remain in legacy compatibility mode.
 
 
 ### Android bootstrap integration — native SQLite selection
@@ -44,9 +44,9 @@ This section is the authoritative current status. Older dated sections below are
 
 ### Runtime integration still incomplete
 
-- Android bootstrap has **not** selected the native SQLite adapter; the current bootstrap path still selects IndexedDB.
+- Android bootstrap now selects the registered native SQLite adapter; browser/PWA continues to use IndexedDB. Android fails closed if the native plugin is unavailable.
 - Existing PMS screens still use the legacy synchronous `localStorage` application state. The asynchronous repository bridge is not yet the screens' canonical read/write path.
-- The Capacitor JavaScript adapter's runtime module resolution and activation path must be verified before native SQLite is selected.
+- The raw-module runtime issue has been addressed by resolving the plugin through the Capacitor global registration API; the latest CI run verifies packaging and APK compilation, but not on-device plugin invocation.
 - Existing JavaScript simulated-interruption tests are not equivalent to Android instrumentation tests that interrupt a real SQLite transaction, restart the process and verify recovery. Physical-device acceptance is still required.
 - The legacy `aurelia_lodge_v2` source value remains preserved; do not remove it until canonical migration, backup and rollback have been accepted.
 
@@ -62,7 +62,7 @@ This section is the authoritative current status. Older dated sections below are
 
 **Current repository:** `Akshayshetye37/Aurelia-apk`  
 **Working branch:** `feature/multi-provider-payment-backend`  
-**Latest verified branch HEAD:** `3c9d9654d112a73fe415545ffb992fe817b870a0` (`Update landing page with SQLite persistence progress`). GitHub Actions run [42359366447](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42359366447) completed successfully, including the complete PMS test suite, production web bundle, privacy checks, Android project generation/sync, debug APK build, APK identity/signature verification, merged-manifest permission verification and artifact upload. This is CI build verification only; it is not physical-device acceptance or production certification.
+**Latest verified branch HEAD:** `95839cc88a9acc7a529b066d700a649c6e3df7a2` (`Reuse single registered Capacitor SQLite plugin proxy`). GitHub Actions run [42376232968](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42376232968) completed successfully: full PMS test suite, production web bundle, privacy checks, Android generation/sync, debug APK build, APK identity/signature verification, merged-manifest permission verification and artifact upload. This is CI verification only, not physical-device acceptance or production certification.
 
 ### Product architecture
 
@@ -608,7 +608,7 @@ These are concrete build failures, not device-only acceptance items. The native 
 
 ### Current capability boundary
 
-The async bootstrap currently validates/migrates the legacy snapshot into IndexedDB and binds the Promise-based repository bridge, then replays the existing UI in **legacy compatibility mode**. Existing screens still use synchronous legacy application state. The native SQLite bridge is not yet selected by bootstrap and no complete UI domain cutover is claimed. Payment live collection and automated settlement/refund posting remain gated.
+The async bootstrap currently validates/migrates the legacy snapshot into IndexedDB and binds the Promise-based repository bridge, then replays the existing UI in **legacy compatibility mode**. Existing screens still use synchronous legacy application state. Android bootstrap now selects native SQLite and browser/PWA selects IndexedDB; no complete UI domain cutover is claimed. Payment live collection and automated settlement/refund posting remain gated.
 
 Do not describe Aurelia as production-ready until the release gates above are implemented and the corresponding CI, physical-device, security and payment acceptance evidence is recorded.
 
