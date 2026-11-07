@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { createProviderAdapter } from '../providers/factory.mjs';
+import { normalizeCheckoutSession } from '../providers/checkout-contract.mjs';
 import { transitionIntent, mapVerifiedProviderStatus } from './intent-state-machine.mjs';
 
 const ID = /^[A-Za-z0-9_-]{6,64}$/;
@@ -29,15 +30,11 @@ function buildProviderOrderInput(provider, { providerReference, intentId, folioI
   }
 }
 function normalizeProviderCheckout(provider, remote) {
-  switch (provider) {
-    case 'razorpay': return { keyId: remote.keyId };
-    case 'cashfree': return { paymentSessionId: remote.paymentSessionId, checkoutUrl: remote.checkoutUrl || null };
-    case 'payu': return { checkout: remote.checkout };
-    case 'phonepe': return { checkoutUrl: remote.checkoutUrl || null };
-    case 'paytm': return { checkout: remote.checkout };
-    case 'jiopay': return { checkoutUrl: remote.checkoutUrl || null, transactionContext: remote.transactionContext || null };
-    default: throw new TypeError('provider_not_supported');
-  }
+  const normalized = normalizeCheckoutSession(provider, remote, {
+    amountMinor: remote?.amountMinor,
+    currency: remote?.currency
+  });
+  return normalized.checkout;
 }
 function validCheckout(provider, checkout) {
   switch (provider) {
