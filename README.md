@@ -62,7 +62,7 @@ The current implementation contains substantial storage, payment and security fo
 - Provider checkout normalization binds amount and currency to the persisted intent rather than trusting provider-echoed values.
 - Provider-specific PayU and Paytm checkout response validation has been added without changing the established nested checkout response shape.
 - Backend adapter and cloud API paths are wired for six providers: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay. The cloud catalogue, tenant-scoped credential onboarding, test-order creation, webhook verification, status lookup and refund request/status routes cover those six. CCAvenue is catalogue-only and has no concrete adapter/factory registration.
-- Android checkout handoff remains limited to Razorpay and Cashfree. The other four wired adapters are not yet exposed through the Android checkout path.
+- Android checkout handoff now covers Razorpay and Cashfree native SDKs plus PhonePe and JioPay HTTPS hosted checkout in test/UAT. PayU and Paytm still lack Android handoff.
 - The provider integration document records which providers are exposed through cloud API routes and which still need route integration and merchant qualification.
 
 
@@ -73,14 +73,14 @@ The current implementation contains substantial storage, payment and security fo
 | Razorpay | Yes | Yes | Yes | **No** |
 | Cashfree | Yes | Yes | Yes | **No** |
 | PayU | Yes | Yes | No | **No** |
-| PhonePe | Yes | Yes | No | **No** |
+| PhonePe | Yes | Yes | Yes — hosted HTTPS (test) | **No** |
 | Paytm | Yes | Yes | No | **No** |
-| JioPay | Yes | Yes | No | **No** |
+| JioPay | Yes | Yes | Yes — hosted HTTPS (UAT) | **No** |
 | CCAvenue | No — catalogue only | No | No | **No** |
 
 All six factory-wired adapters expose seven lifecycle operations and have deterministic mocked contract tests. The cloud capability response deliberately reports folio settlement, refund-to-folio posting and reconciliation as unavailable; live collection is disabled for every provider. PayU credential validation now uses a non-mutating classic Verify Payment API probe; merchant sandbox/UAT remains required. None of the six has been demonstrated with merchant-specific UAT evidence in this repository. CCAvenue requires the current merchant integration kit before implementation.
 
-**Conclusion:** zero of seven gateways are qualified as end-to-end production-ready. Six have backend integration foundations; only two have Android checkout handoff. Provider adapters and cloud endpoints are not equivalent to a completed PMS payment lifecycle.
+**Conclusion:** zero of seven gateways are qualified as end-to-end production-ready. Six have backend integration foundations; four have Android checkout handoff (two native SDKs and two hosted HTTPS redirects). Provider adapters and cloud endpoints are not equivalent to a completed PMS payment lifecycle.
 
 **Payment limitation:** the client intent CAS and provider adapter tests do not constitute an exactly-once financial ledger. The canonical PMS folio, provider capture, webhook inbox, trusted device authorization, local posting/read-back, backend acknowledgement, refunds and reversals still need complete end-to-end integration and acceptance.
 
