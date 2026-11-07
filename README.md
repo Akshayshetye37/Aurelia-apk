@@ -25,6 +25,15 @@ This section is the authoritative current status. Older dated sections below are
 - Result: **success**.
 - Verified steps include the full PMS test suite, production web bundle, privacy checks, Android project generation, Aurelia template/configuration, Capacitor sync, Android debug APK compilation, APK identity/signature checks, merged-manifest permission checks and validation artifact upload.
 
+
+### Repository parity hardening — lease expiry and integer safety
+
+- Outbox acknowledgement, retry and conflict transitions require the caller to own an **unexpired** lease. Expired workers cannot mutate delivery state; another worker may reclaim the event after expiry.
+- IndexedDB enforces the same bounded lease duration as the native adapter (1,000–3,600,000 ms).
+- The native plugin reads entity versions as 64-bit values rather than narrowing the contract to Java `Integer`. It rejects values outside JavaScript safe-integer range, and native event sequence/schema validation rejects non-integral or unsafe numeric values.
+- Regression coverage exercises expired-lease rejection, reclaim by a second worker, acknowledgement by the new lease owner, lease bounds and native template guards.
+- These changes harden the repository contract; they do **not** activate native SQLite in bootstrap or migrate operational UI screens.
+
 ### Runtime integration still incomplete
 
 - Android bootstrap has **not** selected the native SQLite adapter; the current bootstrap path still selects IndexedDB.

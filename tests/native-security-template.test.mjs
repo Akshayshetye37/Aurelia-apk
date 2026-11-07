@@ -216,3 +216,5 @@ test('native SQLite upgrades persist migration provenance and use UTC WAL timest
   assert.match(plugin, /call\.getString\("sourceTimestamp"\)/);
   assert.match(plugin, /migrateLegacySnapshot\(id,source,sourceTimestamp,raw\)/);
 });
+
+test("native SQLite rejects expired leases and unsafe event/version numbers",()=>{const repository=read("android/templates/LocalPmsRepository.java");const plugin=read("android/templates/CapacitorPmsStoragePlugin.java");assert.match(repository,/lease_owner=\? AND lease_until>\?/);assert.match(repository,/safeJsonInteger\(e,"sequence",1\)/);assert.match(repository,/safeJsonInteger\(e,"schemaVersion",1\)/);assert.match(repository,/9007199254740991d/);assert.match(plugin,/Long version=call\.getLong\("expectedVersion"\)/);assert.match(plugin,/version>=9007199254740991L/);assert.doesNotMatch(plugin,/Integer version=call\.getInt\("expectedVersion"\)/);});

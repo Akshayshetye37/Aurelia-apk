@@ -33,9 +33,9 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
     io.execute(() -> {try{JSObject r=new JSObject();r.put("entities",repository.listEntities(type));call.resolve(r);}catch(Exception e){call.reject("Native SQLite list failed","PMS_SQLITE_LIST_FAILED",e);}});
   }
   @PluginMethod public void transactBusinessChange(PluginCall call) {
-    String type=call.getString("entityType"),id=call.getString("entityId");Integer version=call.getInt("expectedVersion");JSObject data=call.getObject("data"),event=call.getObject("event");
-    if(empty(type)||empty(id)||version==null||version<0||data==null||event==null){call.reject("Invalid native PMS transaction packet","PMS_INVALID_TRANSACTION");return;}
-    io.execute(() -> {try{JSONObject committed=repository.transactBusinessChange(type,id,version,new JSONObject(data.toString()),new JSONObject(event.toString()));call.resolve(new JSObject(committed.toString()));}
+    String type=call.getString("entityType"),id=call.getString("entityId");Long version=call.getLong("expectedVersion");JSObject data=call.getObject("data"),event=call.getObject("event");
+    if(empty(type)||empty(id)||version==null||version<0L||version>=9007199254740991L||data==null||event==null){call.reject("Invalid native PMS transaction packet","PMS_INVALID_TRANSACTION");return;}
+    io.execute(() -> {try{JSONObject committed=repository.transactBusinessChange(type,id,version.longValue(),new JSONObject(data.toString()),new JSONObject(event.toString()));call.resolve(new JSObject(committed.toString()));}
       catch(Exception e){String code=e.getMessage()!=null&&e.getMessage().contains("ENTITY_VERSION_CONFLICT")?"ENTITY_VERSION_CONFLICT":"PMS_SQLITE_TRANSACTION_FAILED";call.reject("Native PMS transaction rejected",code,e);}});
   }
   @PluginMethod public void migrateLegacySnapshot(PluginCall call) {
