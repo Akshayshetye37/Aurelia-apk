@@ -42,6 +42,15 @@ This section is the authoritative current status. Older dated sections below are
 - Android bootstrap initializes the native SQLite plugin before migration, then performs the existing exact snapshot and entity read-back checks. The result continues to report `uiCutover: false`: operational screens still require async repository migration before this database is the sole business-data writer.
 - Tests cover plugin registration resolution, Android engine selection, guarded migration and missing-plugin fail-closed behavior. The injected repository test validates coordinator routing; it is not a substitute for real-device SQLite instrumentation.
 
+
+### Canonical folio settlement command foundation
+
+- Added an asynchronous repository-backed settlement command that reuses the existing local payment validation and idempotency rules, applies a payment against the repository's current folio entity version, and commits the updated folio plus an immutable `folio.payment_posted` outbox event atomically.
+- Duplicate idempotency retries abort before creating another outbox event. Version conflicts and validation failures leave the canonical folio unchanged.
+- The command updates the in-memory booking projection only after the repository commit succeeds; it does not write a shadow copy to localStorage.
+- The module is included in production web packaging. IndexedDB-backed tests cover successful commit, duplicate replay, failure rollback and domain-specific outbox payloads.
+- This is a command foundation, not yet the live UI settlement path. Existing UI call sites still use the synchronous compatibility settlement function and must be migrated to await this repository command before the folio is considered cut over. Gateway settlement remains separately hard-off.
+
 ### Runtime integration still incomplete
 
 - Android bootstrap now selects the registered native SQLite adapter; browser/PWA continues to use IndexedDB. Android fails closed if the native plugin is unavailable.
@@ -62,7 +71,7 @@ This section is the authoritative current status. Older dated sections below are
 
 **Current repository:** `Akshayshetye37/Aurelia-apk`  
 **Working branch:** `feature/multi-provider-payment-backend`  
-**Latest verified branch HEAD:** `95839cc88a9acc7a529b066d700a649c6e3df7a2` (`Reuse single registered Capacitor SQLite plugin proxy`). GitHub Actions run [42376232968](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42376232968) completed successfully: full PMS test suite, production web bundle, privacy checks, Android generation/sync, debug APK build, APK identity/signature verification, merged-manifest permission verification and artifact upload. This is CI verification only, not physical-device acceptance or production certification.
+**Latest verified branch HEAD:** `fe9eb2c7072c8b92b51b05f80b3a1b260f179184`. GitHub Actions run [42377406743](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42377406743) passed the complete PMS test suite, production web bundle, privacy checks, Android project generation/sync, debug APK build, APK identity/signature verification, merged-manifest permission verification and artifact upload. The settlement-foundation workflow [42377406787](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42377406787) also passed the full application tests and production asset build. These are CI results, not physical-device acceptance or production certification.
 
 ### Product architecture
 
