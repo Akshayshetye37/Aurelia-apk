@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { PaymentProviderAdapter } from './adapter-contract.mjs';
 import { generatePayUPaymentHash, generatePayUCommandHash, verifyPayUResponseHash } from './payu-crypto.mjs';
 
@@ -37,7 +38,18 @@ export class PayUAdapter extends PaymentProviderAdapter {
   }
   async validateCredentials() {
     if(this.key.length<4||this.key.length>50||this.salt.length<8)throw new Error('payu_credentials_invalid');
-    return {valid:true,validation:'format_only'};
+    // PayU's classic verify_payment API returns an explicit "Not Found" row
+    // for an unknown transaction when the merchant key + command hash are valid.
+    // A unique probe avoids creating a payment or mutating merchant state.
+    const probe='AURCRED'+crypto.randomUUID().replace(/-/g,'').slice(0,24);
+    const data=await this.command('verify_payment',probe);
+    const row=data?.transaction_details?.[probe];
+    if(row?.status==='Not Found'&&row?.mihpayid==='Not Found') {
+      return {valid:true,validation:'authenticated_verify_payment_api'};
+    }
+    throw Object.assign(new Error('payu_credentials_not_authenticated'),{
+      providerCode:String(data?.error_code||data?.status||'unexpected_probe_response')
+    });
   }
   async createOrder(input) {
     const customer=input?.customer||{};
