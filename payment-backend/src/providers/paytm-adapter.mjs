@@ -64,7 +64,7 @@ export class PaytmAdapter extends PaymentProviderAdapter {
       throw new Error('paytm_transaction_token_missing_or_invalid');
     return {provider:'paytm',orderId:input.orderId,amountMinor:input.amountMinor,currency:'INR',
       status:'PENDING',checkout:{mid:this.credentials.mid,orderId:input.orderId,txnToken:token,
-        checkoutHost:this.hosts.checkout}};
+        checkoutHost:this.hosts.checkout,callbackUrl}};
   }
   async getPaymentStatus(input) {
     if(!id(input?.orderId))throw new TypeError('invalid_paytm_order_id');
