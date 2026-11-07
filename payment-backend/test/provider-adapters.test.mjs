@@ -366,7 +366,7 @@ test('provider-neutral checkout contract rejects environment drift and unbound n
   }, { ...base, provider:'phonepe', environment:'test' }), /phonepe_checkout_url_invalid/);
   assert.throws(() => normalizeCheckoutSession('paytm', {
     orderId:'pt_order_1', amountMinor:12500, currency:'INR',
-    checkout:{ mid:'merchant-mid', orderId:'other-order', txnToken:'txn-token' }
+    checkout:{ mid:'merchant-mid', orderId:'other-order', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com' }
   }, base), /paytm_checkout_order_binding_mismatch/);
   assert.throws(() => normalizeCheckoutSession('jiopay', {
     orderId:'jp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'https://checkout.jiopay.co.in/session'
