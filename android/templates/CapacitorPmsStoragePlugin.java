@@ -39,9 +39,9 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
       catch(Exception e){String code=e.getMessage()!=null&&e.getMessage().contains("ENTITY_VERSION_CONFLICT")?"ENTITY_VERSION_CONFLICT":"PMS_SQLITE_TRANSACTION_FAILED";call.reject("Native PMS transaction rejected",code,e);}});
   }
   @PluginMethod public void migrateLegacySnapshot(PluginCall call) {
-    String id=call.getString("migrationId"),source=call.getString("sourceKey"),raw=call.getString("raw");
-    if(empty(id)||empty(source)||raw==null||raw.isEmpty()){call.reject("Exact migration ID, source key and raw snapshot are required","PMS_INVALID_MIGRATION");return;}
-    io.execute(() -> {try{JSONObject result=repository.migrateLegacySnapshot(id,source,raw);call.resolve(new JSObject(result.toString()));}
+    String id=call.getString("migrationId"),source=call.getString("sourceKey"),sourceTimestamp=call.getString("sourceTimestamp"),raw=call.getString("raw");
+    if(empty(id)||empty(source)||sourceTimestamp==null||raw==null||raw.isEmpty()){call.reject("Exact migration ID, source key and raw snapshot are required","PMS_INVALID_MIGRATION");return;}
+    io.execute(() -> {try{JSONObject result=repository.migrateLegacySnapshot(id,source,sourceTimestamp,raw);call.resolve(new JSObject(result.toString()));}
       catch(Exception e){call.reject("Legacy snapshot migration failed","PMS_MIGRATION_FAILED",e);}});
   }
   @PluginMethod public void readMigrationSnapshot(PluginCall call) {
