@@ -168,15 +168,15 @@ test('Cashfree rejects correctly signed stale webhook timestamps', async () => {
 
 test('provider factory exposes only adapters with the complete checkout contract', async () => {
   const { createProviderAdapter, implementedProviderAdapters, providerCapabilities } = await import('../src/providers/factory.mjs');
-  assert.deepEqual(implementedProviderAdapters().sort(), ['cashfree', 'jiopay', 'paytm', 'payu', 'phonepe', 'razorpay']);
-  assert.equal(providerCapabilities('ccavenue'), null);
+  assert.deepEqual(implementedProviderAdapters().sort(), ['cashfree', 'ccavenue', 'jiopay', 'paytm', 'payu', 'phonepe', 'razorpay']);
+  assert.ok(providerCapabilities('ccavenue').includes('createOrder'));
   const adapter = createProviderAdapter('cashfree', {
     credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' }, environment: 'test'
   });
   for (const operation of ['validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus', 'verifyWebhook', 'createRefund', 'getRefundStatus']) {
     assert.equal(typeof adapter[operation], 'function');
   }
-  assert.throws(() => createProviderAdapter('ccavenue', {}), /provider_adapter_unavailable/);
+  const cca = createProviderAdapter('ccavenue', { credentials: { merchantId:'123456', accessCode:'access', workingKey:'working' }, environment:'test' });\n  assert.equal(typeof cca.createOrder, 'function');\n  await assert.rejects(cca.createRefund({}), /ccavenue_general_refund_api_not_qualified/);
 });
 
 test('provider-neutral checkout contract rejects amount or provider response binding drift', async () => {
