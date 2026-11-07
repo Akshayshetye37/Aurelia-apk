@@ -129,6 +129,8 @@ The following are release blockers, not optional polish.
 
 ## Safety controls that must remain closed
 
+Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available. These local/manual workflows are distinct from gateway collection and must continue to be audited.
+
 - `uiCutover`: false until full repository migration is accepted.
 - Optional cloud sync: OFF by default.
 - Live gateway collection: OFF.
