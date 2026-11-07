@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
+import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import {
   PmsBootstrapCoordinator,
   AURELIA_LEGACY_STATE_KEY,
@@ -108,3 +109,6 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(loader, /PMS startup stopped safely/);
   assert.match(html, /type="application\/x-aurelia-deferred"/);
 });
+
+test("Android bootstrap selects native SQLite and verifies migration before releasing startup",async()=>{const raw=JSON.stringify(state),storage=makeStorage({[AURELIA_LEGACY_STATE_KEY]:raw}),nativeRepository=new IndexedDbPmsRepository({indexedDBImpl:indexedDB,databaseName:"pms-bootstrap-native-contract",now:()=>"2026-11-07T00:00:00.000Z"});let initialized=false;nativeRepository.initializeStorage=async()=>{initialized=true;await nativeRepository.database();return{success:true,engine:"android-sqlite",contractVersion:1};};const app=new PmsBootstrapCoordinator({storage,indexedDBImpl:indexedDB,databaseName:"unused-android-idb",platform:"ANDROID_WEBVIEW",nativeRepositoryFactory:async()=>nativeRepository,now:()=>"2026-11-07T00:00:00.000Z"});const result=await app.initializeApplication();assert.equal(initialized,true);assert.equal(result.storageEngine,"ANDROID_SQLITE");assert.equal(result.uiCutover,false);assert.equal(result.migration.status,"MIGRATION_VERIFIED");assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY),raw);});
+test("Android bootstrap fails closed when the native SQLite plugin is not registered",async()=>{const previous=globalThis.Capacitor;globalThis.Capacitor={};const raw=JSON.stringify(state),storage=makeStorage({[AURELIA_LEGACY_STATE_KEY]:raw}),app=new PmsBootstrapCoordinator({storage,indexedDBImpl:indexedDB,databaseName:"unused-missing-native-plugin",platform:"ANDROID_WEBVIEW",now:()=>"2026-11-07T00:00:00.000Z"});try{await assert.rejects(app.initializeApplication(),/not registered/);assert.equal(app.status,"FAILED_CLOSED");assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY),raw);}finally{if(previous===undefined)delete globalThis.Capacitor;else globalThis.Capacitor=previous;}});

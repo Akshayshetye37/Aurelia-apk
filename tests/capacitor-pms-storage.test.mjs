@@ -87,3 +87,5 @@ test("outbox lease, acknowledgement, retry schedule and conflict lifecycle enfor
  await r.transactBusinessChange({entityType:"booking",entityId:"b-1",expectedVersion:1,event:event("out-2","booking","b-1",2)},()=>({status:"cancelled"}));
  batch=await r.claimOutboxBatch({deviceId:"device-1"});await r.markOutboxConflict({deviceId:"device-1",eventId:"out-2",conflictCode:"VERSION_CONFLICT"});assert.equal(p.outbox.get("out-2").status,"CONFLICT");
 });
+
+test("native adapter resolves the registered Capacitor plugin without a bare package import",async()=>{const previous=globalThis.Capacitor,p=fakePlugin();let registered=null;globalThis.Capacitor={registerPlugin(name){registered=name;return p;}};try{const client=new CapacitorPmsStorageClient();assert.equal((await client.initializeStorage()).engine,"android-sqlite");assert.equal(registered,"CapacitorPmsStorage");}finally{if(previous===undefined)delete globalThis.Capacitor;else globalThis.Capacitor=previous;}});

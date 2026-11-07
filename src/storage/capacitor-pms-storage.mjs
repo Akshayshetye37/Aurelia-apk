@@ -1,16 +1,20 @@
-import { registerPlugin } from "@capacitor/core";
 import { PmsRepository, assertPmsIdentity, assertPmsVersion } from "./pms-repository-contract.mjs";
 
-const NativePmsStorage = registerPlugin("CapacitorPmsStorage");
+function resolveNativePlugin() {
+  const capacitor = globalThis.Capacitor;
+  if (!capacitor || typeof capacitor.registerPlugin !== "function") return null;
+  return capacitor.registerPlugin("CapacitorPmsStorage");
+}
 const ident = (v,n) => assertPmsIdentity(v,n);
 const version = (v,n="version") => assertPmsVersion(v,n);
 const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map(k=>[k,stable(value[k])])) : value;
 const sameJson = (a,b) => JSON.stringify(stable(a)) === JSON.stringify(stable(b));
 
 export class CapacitorPmsStorageClient extends PmsRepository {
-  constructor(plugin = NativePmsStorage) { super(); this.plugin = plugin; }
+  constructor(plugin) { super(); this.plugin = plugin || resolveNativePlugin(); }
 
   async initializeStorage() {
+    if (!this.plugin) throw new Error("CapacitorPmsStorage is not registered in this Android WebView");
     const result = await this.plugin.initializeStorage();
     if (!result || result.success !== true || result.engine !== "android-sqlite" || result.contractVersion !== 1) {
       throw new Error("Native PMS storage did not confirm the supported SQLite contract");

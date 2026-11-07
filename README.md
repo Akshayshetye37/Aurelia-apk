@@ -34,6 +34,14 @@ This section is the authoritative current status. Older dated sections below are
 - Regression coverage exercises expired-lease rejection, reclaim by a second worker, acknowledgement by the new lease owner, lease bounds and native template guards.
 - These changes harden the repository contract; they do **not** activate native SQLite in bootstrap or migrate operational UI screens.
 
+
+### Android bootstrap integration — native SQLite selection
+
+- The Capacitor storage adapter no longer imports the bare `@capacitor/core` package from the raw HTML runtime. It resolves the plugin through the Capacitor global `registerPlugin` API, avoiding an unresolved bare-module specifier in the unbundled WebView.
+- Bootstrap now selects Android SQLite on native Android and IndexedDB on browser/PWA. It does not silently fall back to IndexedDB when the Android plugin is absent; startup fails closed and preserves the original legacy snapshot.
+- Android bootstrap initializes the native SQLite plugin before migration, then performs the existing exact snapshot and entity read-back checks. The result continues to report `uiCutover: false`: operational screens still require async repository migration before this database is the sole business-data writer.
+- Tests cover plugin registration resolution, Android engine selection, guarded migration and missing-plugin fail-closed behavior. The injected repository test validates coordinator routing; it is not a substitute for real-device SQLite instrumentation.
+
 ### Runtime integration still incomplete
 
 - Android bootstrap has **not** selected the native SQLite adapter; the current bootstrap path still selects IndexedDB.

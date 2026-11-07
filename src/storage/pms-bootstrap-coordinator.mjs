@@ -11,6 +11,11 @@ import { IndexedDbPmsRepository, parseLegacyPmsSnapshot } from "./indexeddb-pms-
 export const AURELIA_LEGACY_STATE_KEY = "aurelia_lodge_v2";
 export const AURELIA_MIGRATION_STATUS_KEY = "aurelia_canonical_migration_status";
 
+async function createNativeRepository() {
+  const { CapacitorPmsStorageClient } = await import("./capacitor-pms-storage.mjs");
+  return new CapacitorPmsStorageClient();
+}
+
 function stableMigrationId(raw) {
   // Stable non-cryptographic identifier: migration replay protection is
   // enforced by the repository marker and exact raw snapshot comparison.
@@ -36,6 +41,7 @@ export class PmsBootstrapCoordinator {
     indexedDBImpl = globalThis.indexedDB,
     databaseName = "aurelia-pms-canonical",
     repository = null,
+    nativeRepositoryFactory = createNativeRepository,
     platform = null,
     now = () => new Date().toISOString()
   } = {}) {
@@ -43,6 +49,8 @@ export class PmsBootstrapCoordinator {
     this.indexedDBImpl = indexedDBImpl;
     this.databaseName = databaseName;
     this.repository = repository;
+    this.nativeRepositoryFactory = nativeRepositoryFactory;
+    this.storageEngine = null;
     this.platform = platform;
     this.now = now;
     this.environment = "UNINITIALIZED";
@@ -72,18 +80,33 @@ export class PmsBootstrapCoordinator {
     assertStorage(this.storage);
     this.environment = this.detectEnvironment();
 
-    // Until the registered SQLite Capacitor plugin exposes the same tested
-    // repository contract, Android uses durable IndexedDB as an explicitly
-    // labelled WebView fallback. It must not be represented as SQLite.
     if (!this.repository) {
-      this.repository = new IndexedDbPmsRepository({
-        indexedDBImpl: this.indexedDBImpl,
-        databaseName: this.databaseName
-      });
+      if (this.environment === "ANDROID_WEBVIEW") {
+        this.repository = await this.nativeRepositoryFactory();
+      } else {
+        this.repository = new IndexedDbPmsRepository({
+          indexedDBImpl: this.indexedDBImpl,
+          databaseName: this.databaseName
+        });
+      }
     }
 
-    // Opening the database proves that the selected storage engine is usable.
-    await this.repository.database();
+    // Android must use the registered SQLite plugin; silently substituting
+    // WebView IndexedDB would recreate the dual-state architecture we are
+    // removing. Browser/PWA remains on IndexedDB.
+    if (this.environment === "ANDROID_WEBVIEW") {
+      if (typeof this.repository.initializeStorage !== "function") {
+        throw new Error("Android SQLite repository does not expose initializeStorage");
+      }
+      await this.repository.initializeStorage();
+      this.storageEngine = "ANDROID_SQLITE";
+    } else {
+      if (typeof this.repository.database !== "function") {
+        throw new Error("Browser repository does not expose IndexedDB initialization");
+      }
+      await this.repository.database();
+      this.storageEngine = "INDEXEDDB";
+    }
     this.status = "ENGINE_READY";
 
     const migration = await this.executeGuardedMigration();
@@ -91,7 +114,7 @@ export class PmsBootstrapCoordinator {
     return Object.freeze({
       success: true,
       environment: this.environment,
-      storageEngine: "INDEXEDDB",
+      storageEngine: this.storageEngine,
       uiCutover: false,
       migration,
       repository: this.repository
