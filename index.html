@@ -3,16 +3,17 @@ AURELIA PMS — CURRENT SOURCE AND RELEASE BOUNDARY
 Repository: https://github.com/Akshayshetye37/Aurelia-apk
 Project root: /
 Active branch: feature/multi-provider-payment-backend
-Audited source revision: f66095bf00235ba4c069e612543725a0bd64799a
-Recovery baseline: backup/phase-0-baseline-2026-11-07 at e6707cb9411893b0987f6e0dc3f914e66c5fda38
-Architecture: local-first PMS; browser/PWA uses IndexedDB and Android uses the native SQLite repository bridge.
-Identity: local installation/property/device identity is distinct from Firebase authentication and cloud tenant identity.
-Migration: guarded legacy snapshot migration and repository transaction foundations exist; legacy synchronous UI writes are still present.
-CUTOVER: uiCutover=false. Full booking/room/guest/folio UI migration and stable room-reference reassignment are not complete.
-RUNTIME: serve/package the complete project and ./src module tree. The startup shield must remain until durable storage bootstrap and snapshot verification succeed. Embedded previews without durable storage are unsupported; do not enter real records there.
-PAYMENTS: payment-intent CAS, provider checkout validation and backend adapters are foundations, not proof of canonical folio settlement. Cloud sync, live gateway collection, automatic settlement and automatic refund posting remain OFF.
-ANDROID: Capacitor appId com.aurelia.pms; webDir www. Native SQLite/security templates require generated-project compilation, instrumentation and physical-device qualification. Android release is NOT AUTHORIZED.
-LATEST CI: 341 PMS tests and 222 payment-backend tests passed on the audited revision. These workflows do not certify Kotlin/device behavior or production payment acceptance.
+Current branch HEAD inspected before documentation commit: 5f11451f52933c5c705a87cafe49970e0e6e1652
+Documentation-only README update: 743b9f99a4572c46791c2e427fa2db858789e642
+Recovery point: backup/pre-local-first-cutover-2026-11-07 at 8b74f3d2cb723237b5f3a8901e22ef7370552812; backup/pre-release-html-update-2026-11-07 preserves the pre-documentation-update snapshot.
+CI evidence: run 42380831922 is associated with the above source revision in existing repository notes. The current audit queried commit-scoped workflow/status endpoints and received no records; confirm the Actions run's exact SHA, conclusion and steps before using it as acceptance evidence.
+LOCAL IDENTITY: browser/PWA uses a cryptographically generated local identity in IndexedDB with a verified localStorage fallback. Android stores identity encrypted with AES-GCM using an Android Keystore key. Local identity is distinct from Firebase/cloud tenant identity.
+COMPATIBILITY PERSISTENCE: verified legacy saves are mirrored asynchronously to a versioned repository audit entity with an immutable outbox event. The legacy aurelia_lodge_v2 value is preserved. This is a compatibility/audit snapshot, not atomic dual-write of every domain entity.
+CUTOVER: uiCutover=false. Existing PMS screens still use legacy synchronous state; the asynchronous repository is not yet the sole operational source of truth.
+RUNTIME: serve/package the complete project and ./src module tree. Startup must fail closed if durable storage bootstrap or exact snapshot verification fails. Embedded previews without durable storage are unsupported.
+PAYMENTS: six adapter/factory foundations exist. The provider integration matrix states only Razorpay and Cashfree currently have cloud checkout API routes; PayU, PhonePe, Paytm and JioPay cloud route integration remains outstanding. CCAvenue is catalogue-only. Adapter tests do not prove merchant UAT or production support.
+ANDROID: Capacitor appId com.aurelia.pms; webDir www. Previous CI notes report a debug APK build, not production signing or physical-device qualification. Native process-death recovery and device acceptance remain open.
+RELEASE: cloud sync OFF; live gateway collection OFF; automatic gateway settlement OFF; automatic refund posting OFF; production release NOT AUTHORIZED.
 The application must never contain merchant credentials, webhook secrets, signing keys or backend secrets.
 -->
 
