@@ -5223,7 +5223,9 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
   var embedded = diagnostics.embeddedPreview === true;
   var status = document.getElementById("aurelia-runtime-shield-status");
   var shield = document.getElementById("aurelia-runtime-shield");
-  var previewBlocked = embedded && diagnostics.persistent !== true;
+  var inFrame = false;
+  try { inFrame = window.top !== window; } catch (_) { inFrame = true; }
+  var previewBlocked = diagnostics.persistent !== true && (embedded || inFrame);
   window.__AURELIA_BOOTSTRAP_DIAGNOSTICS = {
     phase: previewBlocked ? "PREVIEW_SANDBOX_BLOCKED" : "MODULE_NOT_STARTED",
     startedAt: Date.now(),
@@ -5231,7 +5233,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
   };
   if (previewBlocked && status && shield) {
     shield.setAttribute("data-preview-blocked", "true");
-    status.textContent = "This is an embedded HTML preview, not the Aurelia app runtime. Its sandbox blocks durable storage and the preview may not serve the required ./src modules. Open the complete Aurelia project from its hosted app URL or installed Android app. Your saved PMS data has not been changed.";
+    status.textContent = "This is an embedded HTML preview, not the Aurelia app runtime. Its frame or sandbox blocks durable storage and the preview may not serve the required ./src modules. Open the complete Aurelia project from its hosted app URL or installed Android app. Your saved PMS data has not been changed.";
     console.warn("[Aurelia Lifecycle] Embedded preview blocked: durable storage is unavailable. Use the complete hosted project or Android app.");
   }
   window.setTimeout(function () {
