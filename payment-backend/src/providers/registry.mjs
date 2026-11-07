@@ -74,7 +74,7 @@ export const PROVIDERS = Object.freeze({
       { key: 'workingKey', label: 'Working Key', type: 'password', secret: true, required: true }
     ],
     capabilities: ['hosted_checkout', 'payment_verification'],
-    adapterStatus: 'adapter_partial_no_webhook_or_general_refunds'
+    adapterStatus: 'not_implemented'
   },
   jiopay: {
     label: 'Jio Payment Solutions',
