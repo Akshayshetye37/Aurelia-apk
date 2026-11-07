@@ -4,12 +4,14 @@ on:
   push:
     branches:
       - feature/multi-provider-payment-backend
+      - feature/phase-7-pms-persistence
     paths:
       - "payment-backend/**"
       - ".github/workflows/payment-backend-ci.yml"
   pull_request:
     branches:
       - feature/multi-provider-payment-backend
+      - feature/phase-7-pms-persistence
     paths:
       - "payment-backend/**"
       - ".github/workflows/payment-backend-ci.yml"
