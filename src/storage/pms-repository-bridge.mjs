@@ -53,6 +53,39 @@ export class PmsRepositoryBridge {
     return row ? clone(row) : null;
   }
 
+  /**
+   * Read the active domain collection without exposing records from another
+   * tenant/property. Canonical domain services use this for async list screens;
+   * legacy snapshot rows are intentionally not exposed through this method.
+   */
+  async listEntities(entityType) {
+    this.assertBound();
+    assertPmsIdentity(entityType, "entity type");
+    if (!PMS_ENTITY_TYPES.includes(entityType)) {
+      throw new TypeError("Unsupported canonical PMS entity type");
+    }
+    const { tenantId, propertyId } = this.context || {};
+    assertPmsIdentity(tenantId, "tenant ID");
+    assertPmsIdentity(propertyId, "property ID");
+    if (typeof this.repo.listEntities !== "function") {
+      throw new Error("Repository does not implement entity listing");
+    }
+    const rows = await this.repo.listEntities(entityType);
+    if (!Array.isArray(rows)) throw new Error("Repository returned an invalid entity collection");
+    const scoped = [];
+    for (const row of rows) {
+      if (!row || row.type !== entityType || typeof row.id !== "string" ||
+          !Number.isSafeInteger(row.version) || row.version < 1 ||
+          !row.data || typeof row.data !== "object" || Array.isArray(row.data)) {
+        throw new Error("Repository returned an invalid canonical entity row");
+      }
+      // Do not return unscoped or foreign-property records to operational UI.
+      if (row.data.tenantId !== tenantId || row.data.propertyId !== propertyId) continue;
+      scoped.push(clone(row));
+    }
+    return scoped.sort((a, b) => a.id.localeCompare(b.id));
+  }
+
   async mutateEntity({ entityType, entityId, expectedVersion, eventType, mutate, tenantId, propertyId, deviceId, eventPayload }) {
     this.assertBound();
     assertPmsIdentity(entityType, "entity type");
