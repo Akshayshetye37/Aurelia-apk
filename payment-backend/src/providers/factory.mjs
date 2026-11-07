@@ -1,6 +1,5 @@
 import { RazorpayAdapter } from './razorpay.mjs';
 import { CashfreeAdapter } from './cashfree.mjs';
-import { CCAvenueAdapter } from './ccavenue-adapter.mjs';
 import { JioPayAdapter } from './jiopay-adapter.mjs';
 import { PaytmAdapter } from './paytm-adapter.mjs';
 import { PhonePeAdapter } from './phonepe-adapter.mjs';
@@ -19,15 +18,14 @@ const PROVIDER_OPERATIONS = Object.freeze({\n  ccavenue: Object.freeze(['validat
   payu: options => new PayUAdapter(options),
   phonepe: options => new PhonePeAdapter(options),
   paytm: options => new PaytmAdapter(options),
-  jiopay: options => new JioPayAdapter(options),
-  ccavenue: options => new CCAvenueAdapter(options)
+  jiopay: options => new JioPayAdapter(options)
 });
 
 export function createProviderAdapter(providerId, options) {
   const factory = FACTORIES[providerId];
   if (!factory) throw new Error('provider_adapter_unavailable');
   const adapter = factory(options);
-  assertAdapterCapabilities(adapter, operationsFor(providerId));
+  assertAdapterCapabilities(adapter, REQUIRED_OPERATIONS);
   return adapter;
 }
 
@@ -36,7 +34,7 @@ export function implementedProviderAdapters() {
 }
 
 export function providerCapabilities(providerId) {
-  return FACTORIES[providerId] ? [...operationsFor(providerId)] : null;
+  return FACTORIES[providerId] ? [...REQUIRED_OPERATIONS] : null;
 }
 
 export function providerQualificationStatus(providerId) {
