@@ -6,8 +6,8 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 
 - **GitHub repository:** https://github.com/Akshayshetye37/Aurelia-apk
 - **Project root:** repository root (`/`)
-- **Active engineering branch:** `feature/multi-provider-payment-backend`
-- **Current branch HEAD inspected:** `5f11451f52933c5c705a87cafe49970e0e6e1652` (7 November 2026)
+- **Active Phase 7 engineering branch:** `feature/phase-7-pms-persistence` (base: `feature/multi-provider-payment-backend`)
+- **Audited implementation baseline:** `5010f5e2a3a3c239a721b514f19d8435e0b8f852` (7 November 2026); this documentation refresh is committed after that source baseline.
 - **Current-head checks:** GitHub returned no workflow runs and no commit status checks for this exact SHA during the current audit. Treat this revision as not CI-verified until fresh checks complete.
 - **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
 
@@ -59,8 +59,26 @@ The current implementation contains substantial storage, payment and security fo
 - Pay Bridge callback handling validates transaction references, rejects binding changes and treats duplicate processing callbacks idempotently.
 - Provider checkout normalization binds amount and currency to the persisted intent rather than trusting provider-echoed values.
 - Provider-specific PayU and Paytm checkout response validation has been added without changing the established nested checkout response shape.
-- Backend provider adapters/factory foundations cover Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay. CCAvenue remains catalogue-only.
+- Backend adapter and cloud API paths are wired for six providers: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay. The cloud catalogue, tenant-scoped credential onboarding, test-order creation, webhook verification, status lookup and refund request/status routes cover those six. CCAvenue is catalogue-only and has no concrete adapter/factory registration.
+- Android checkout handoff remains limited to Razorpay and Cashfree. The other four wired adapters are not yet exposed through the Android checkout path.
 - The provider integration document records which providers are exposed through cloud API routes and which still need route integration and merchant qualification.
+
+
+### Seven-gateway end-to-end qualification snapshot
+
+| Gateway | Concrete adapter | Cloud backend routes | Android checkout handoff | Production / E2E ready |
+|---|---:|---:|---:|---:|
+| Razorpay | Yes | Yes | Yes | **No** |
+| Cashfree | Yes | Yes | Yes | **No** |
+| PayU | Yes | Yes | No | **No** |
+| PhonePe | Yes | Yes | No | **No** |
+| Paytm | Yes | Yes | No | **No** |
+| JioPay | Yes | Yes | No | **No** |
+| CCAvenue | No — catalogue only | No | No | **No** |
+
+All six factory-wired adapters expose seven lifecycle operations and have deterministic mocked contract tests. The cloud capability response deliberately reports folio settlement, refunds as an accepted capability, and reconciliation as unavailable; live collection is disabled for every provider. PayU's credential validation currently reports format-only validation, which is not proof that merchant credentials are authenticated. None of the six has been demonstrated with merchant-specific UAT evidence in this repository. CCAvenue requires the current merchant integration kit before implementation.
+
+**Conclusion:** zero of seven gateways are qualified as end-to-end production-ready. Six have backend integration foundations; only two have Android checkout handoff. Provider adapters and cloud endpoints are not equivalent to a completed PMS payment lifecycle.
 
 **Payment limitation:** the client intent CAS and provider adapter tests do not constitute an exactly-once financial ledger. The canonical PMS folio, provider capture, webhook inbox, trusted device authorization, local posting/read-back, backend acknowledgement, refunds and reversals still need complete end-to-end integration and acceptance.
 
@@ -79,7 +97,8 @@ Historical evidence is commit-scoped and must not be treated as an automatic pas
 
 | Workflow evidence | Recorded scope | Boundary |
 |---|---|---|
-| [PMS source tests, production web packaging and Android debug build — run 42380831922](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42380831922) | Exact SHA `5f11451f52933c5c705a87cafe49970e0e6e1652`; conclusion `success`. | Full PMS suite, web build/privacy checks, Android generation/sync, debug APK build, APK identity/signature and manifest permission checks; validation artifact uploaded. |
+| [Phase 7 source tests and production web build — run 42400767973](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42400767973) | Exact Phase 7 baseline `5010f5e2a3a3c239a721b514f19d8435e0b8f852`; conclusion `success`. | Full application test suite, settlement syntax checks and production web build; no APK or deployment. |
+| [Historical PMS/Android debug validation — run 42380831922](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42380831922) | Earlier source revision; conclusion `success`. | PMS suite, web build/privacy checks, Android generation/sync, debug APK build, identity/signature and manifest checks; historical only. |
 | [Other historical workflow runs](https://github.com/Akshayshetye37/Aurelia-apk/actions) | Earlier commits | Historical only; not current-head CI evidence. |
 
 Even a successful debug APK build does not establish physical-device acceptance, Android transaction/process-death recovery, production signing, merchant sandbox acceptance or production readiness.
@@ -153,5 +172,6 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 ---
 
-**Current branch HEAD inspected:** `5f11451f52933c5c705a87cafe49970e0e6e1652`  
-**Status:** engineering foundations verified by CI; production release not approved.
+**Audited implementation baseline:** `5010f5e2a3a3c239a721b514f19d8435e0b8f852`  
+**Active work branch:** `feature/phase-7-pms-persistence`  
+**Status:** Phase 7 foundations and source CI verified; production release not approved.
