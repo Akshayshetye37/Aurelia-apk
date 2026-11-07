@@ -702,7 +702,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     if (fields == null || !"POST".equals(data.optString("method", "")) ||
         !"https".equalsIgnoreCase(actionUri.getScheme()) ||
         !"test.payu.in".equalsIgnoreCase(actionUri.getHost()) ||
-        !"https://".equalsIgnoreCase(actionUri.getScheme() + "://")) {
+        actionUri.getUserInfo() != null) {
       throw new IllegalArgumentException("PayU sandbox checkout payload is invalid.");
     }
     String successUrl = fields.optString("surl", "");
@@ -720,7 +720,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       String key = keys.next();
       String value = fields.optString(key, "");
       if (key.isEmpty() || value.length() > 4096 ||
-          key.matches(".*[\\\\r\\\\n].*") || value.matches(".*[\\\\r\\\\n].*")) {
+          key.matches(".*[\\r\\n].*") || value.matches(".*[\\r\\n].*")) {
         throw new IllegalArgumentException("PayU checkout form contains an invalid field.");
       }
       if (form.length() > 0) form.append('&');
