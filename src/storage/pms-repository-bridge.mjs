@@ -26,7 +26,8 @@ export class PmsRepositoryBridge {
     this.repo = null;
     this.context = { tenantId, propertyId, deviceId };
     this.now = now;
-    this.eventId = eventId;\n    this.compatibilityWrite = Promise.resolve();
+    this.eventId = eventId;
+    this.compatibilityWrite = Promise.resolve();
   }
 
   bindActiveEngine(repositoryInstance, context = {}) {
