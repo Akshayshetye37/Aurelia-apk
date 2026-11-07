@@ -31,7 +31,7 @@ test("multi-entity batch rolls back every entity and event when any version is s
  await r.transactBusinessChange({entityType:"booking",entityId:"booking-1",expectedVersion:0,event:{...event(1,"booking-1"),entityType:"booking",entityId:"booking-1",eventId:"seed-booking"}},()=>({roomId:"room-old"}));
  const before=await r.getEntity("booking","booking-1");
  const roomEvent={...event(1,"room-1"),entityType:"room",entityId:"room-1",eventId:"batch-room"};
- const bookingEvent={...event(2,"booking-1"),entityType:"booking",entityId:"booking-1",eventId:"batch-booking"};
+ const bookingEvent={...event(1,"booking-1"),entityType:"booking",entityId:"booking-1",eventId:"batch-booking"};
  await assert.rejects(r.transactBusinessBatch([
   {entityType:"room",entityId:"room-1",expectedVersion:0,data:{id:"room-1"},event:roomEvent},
   {entityType:"booking",entityId:"booking-1",expectedVersion:0,data:{roomId:"room-new"},event:bookingEvent}
