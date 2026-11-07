@@ -364,3 +364,16 @@ test("backend verification alone does not automatically post a local folio", asy
   assert.equal(records.get(binding.requestId).state, "SUCCESS");
 
 });
+
+test("duplicate Pay Bridge processing callback is idempotent and cannot replace transaction binding",async()=>{
+ const f=fixture();
+ const initial=await f.orchestrator.createPayment(input);
+ assert.equal(initial.state,"PROCESSING");
+ const duplicate=await f.orchestrator.receiveBridgeEvent({requestId:"req-1",bookingId:"booking-1",folioId:"folio-1",amountPaise:12500,currency:"INR",status:"processing",transactionId:"txn-1"});
+ assert.equal(duplicate.state,"PROCESSING");
+ await assert.rejects(f.orchestrator.receiveBridgeEvent({requestId:"req-1",bookingId:"booking-1",folioId:"folio-1",amountPaise:12500,currency:"INR",status:"processing",transactionId:"txn-attacker"}),e=>e.code==="EVENT_BINDING_MISMATCH");
+});
+test("Pay Bridge callback rejects malformed transaction references",async()=>{
+ const f=fixture();await f.orchestrator.createPayment(input);
+ await assert.rejects(f.orchestrator.receiveBridgeEvent({requestId:"req-1",bookingId:"booking-1",folioId:"folio-1",amountPaise:12500,currency:"INR",status:"unknown",transactionId:"bad\\u0000txn"}),e=>e.code==="EVENT_BINDING_MISMATCH");
+});
