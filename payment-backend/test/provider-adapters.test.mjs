@@ -348,7 +348,7 @@ test('provider-neutral checkout contract normalizes all six implemented adapter 
     ['phonepe', 'live', { orderId:'pp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'https://checkout.phonepe.com/session_1' }, { checkoutUrl:'https://checkout.phonepe.com/session_1' }],
     ['jiopay', 'uat', { orderId:'jp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'https://checkout.jiopay.co.in/session_1', transactionContext:'ctx_1' }, { checkoutUrl:'https://checkout.jiopay.co.in/session_1', transactionContext:'ctx_1' }],
     ['payu', 'test', { orderId:'pu_order_1', amountMinor:12500, currency:'INR', checkout:{ action:'https://test.payu.in/_payment', method:'POST', fields:{ key:'merchant-key', hash:'signed-hash', txnid:'pu_order_1' } } }, { action:'https://test.payu.in/_payment', method:'POST', fields:{ key:'merchant-key', hash:'signed-hash', txnid:'pu_order_1' } }],
-    ['paytm', 'staging', { orderId:'pt_order_1', amountMinor:12500, currency:'INR', checkout:{ mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token' } }, { mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token' }]
+    ['paytm', 'staging', { orderId:'pt_order_1', amountMinor:12500, currency:'INR', checkout:{ mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com' } }, { mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com' }]
   ];
   for (const [provider, environment, result, checkout] of fixtures) {
     const request = { provider, environment, amountMinor:12500, currency:'INR', idempotencyKey:'checkout-idem-12345' };
