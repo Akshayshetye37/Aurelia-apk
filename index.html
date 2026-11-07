@@ -5216,9 +5216,32 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 </script>
 
 <script src="./src/bookings/cancellation-policy.mjs" type="application/x-aurelia-deferred" data-aurelia-original-type="module"></script>
+<script id="aurelia-bootstrap-watchdog">
+/* Classic-script guard still runs if ES-module imports fail before evaluation. */
+(function () {
+  window.__AURELIA_BOOTSTRAP_DIAGNOSTICS = { phase: "MODULE_NOT_STARTED", startedAt: Date.now() };
+  window.setTimeout(function () {
+    var state = window.__AURELIA_BOOTSTRAP_DIAGNOSTICS;
+    if (!state || state.phase === "READY" || state.phase === "FAILED") return;
+    var status = document.getElementById("aurelia-runtime-shield-status");
+    var shield = document.getElementById("aurelia-runtime-shield");
+    if (!status || !shield) return;
+    shield.setAttribute("data-timeout", "true");
+    if (state.phase === "MODULE_NOT_STARTED") {
+      status.textContent = "Aurelia startup modules did not load. This preview may be running as a standalone HTML file without the required ./src modules. Open the complete project from its hosted app URL or installed Android app; do not enter real bookings in an isolated HTML preview.";
+      console.error("[Aurelia Lifecycle] Bootstrap module did not start. Check module import/network errors and serve the complete project directory.");
+    } else {
+      status.textContent = "Aurelia startup is taking longer than expected (" + state.phase + "). Durable storage has not been verified. Keep this screen open or restart from the installed app; do not clear browser/app data.";
+      console.error("[Aurelia Lifecycle] Bootstrap watchdog detected a stalled startup phase:", state.phase);
+    }
+  }, 12000);
+})();
+</script>
 <script type="module" id="aurelia-async-runtime-bootstrap">
 import { bootstrapper } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
+
+if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
 
 const shield = document.getElementById("aurelia-runtime-shield");
 const status = document.getElementById("aurelia-runtime-shield-status");
@@ -5249,15 +5272,20 @@ async function replayApplicationScripts() {
 
 try {
   setStatus("Opening canonical local database and validating the legacy snapshot…");
+  if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "STORAGE_INITIALIZATION";
   const boot = await bootstrapper.initializeApplication();
   if (!boot || boot.success !== true || !boot.repository) throw new Error("Canonical storage bootstrap did not return a verified repository");
+  if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "REPOSITORY_BINDING";
   storageBridge.bindActiveEngine(boot.repository, boot.identity);
   window.AureliaRepositoryCompatibility = Object.freeze({ persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot) });
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
+  if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "APPLICATION_MODULES";
   await replayApplicationScripts();
+  if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "READY";
   if (shield) shield.remove();
   console.info("[Aurelia Lifecycle] Canonical storage bootstrap verified; legacy UI compatibility mode remains active. UI cutover is not claimed.");
 } catch (error) {
+  if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "FAILED";
   if (shield) shield.setAttribute("data-failed", "true");
   setStatus("PMS startup stopped safely: " + String(error?.message || error));
   console.error("[Aurelia Lifecycle] Startup blocked by persistence verification failure.", error);
