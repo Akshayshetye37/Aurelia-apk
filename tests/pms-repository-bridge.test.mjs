@@ -68,3 +68,5 @@ test("bridge requires a verified contract-compatible engine and tenant context",
   assert.throws(() => bridge.bindActiveEngine({}), /repository contract/);
   await assert.rejects(bridge.fetchEntity("booking", "x"), /not bound/);
 });
+
+test("bridge persists a caller-supplied event payload with the entity transaction",async()=>{const {repository,bridge}=setup();await bridge.mutateFolioState({entityId:"folio-event-payload",expectedVersion:0,eventType:"folio.payment_posted",eventPayload:{bookingId:"booking-9",amountPaise:12500,source:"manual"},mutate:folio=>{folio.paid=125;}});const events=await repository.claimOutboxBatch({deviceId:"device-test"});assert.deepEqual(events[0].payload,{bookingId:"booking-9",amountPaise:12500,source:"manual"});});
