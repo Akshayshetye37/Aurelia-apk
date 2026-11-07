@@ -33,6 +33,8 @@ class PaymentDeviceClient(
         val policyLease: JSONObject,
         val authorization: JSONObject?,
         val settlementAuthorized: Boolean,
+        val signedPolicyLease: JSONObject,
+        val signedAuthorization: JSONObject?,
         val leaseToken: String,
         val cursor: Long,
         val leaseExpiresAt: String
@@ -89,7 +91,7 @@ class PaymentDeviceClient(
         val authorization = response.optJSONObject("authorization")
         val verified = SettlementEnvelopeVerifier().verify(settlement, policyLease, authorization)
         return Lease(command, settlement, verified.policyLease, verified.authorization,
-            verified.settlementEnabled, token, cursor, expiresAt)
+            verified.settlementEnabled, policyLease, authorization, token, cursor, expiresAt)
     }
 
     /**
@@ -100,8 +102,22 @@ class PaymentDeviceClient(
     fun acknowledge(lease: Lease, ledgerAckId: String, idToken: String? = null): JSONObject {
         val command = lease.command
         validateCommand(command)
-        require(lease.settlementAuthorized && lease.authorization != null) {
+        require(lease.settlementAuthorized && lease.authorization != null &&
+            lease.signedAuthorization != null) {
             "A disabled or unsigned settlement lease cannot be acknowledged as a folio posting."
+        }
+        // JSONObject is mutable. Re-verify the original signed envelopes at the
+        // point of acknowledgement so a caller cannot mutate a previously
+        // verified lease or its settlement between leaseNext() and acknowledge().
+        val reverified = SettlementEnvelopeVerifier().verify(
+            lease.settlement, lease.signedPolicyLease, lease.signedAuthorization
+        )
+        require(reverified.settlementEnabled && reverified.authorization != null &&
+            canonicalJson(reverified.policyLease) == canonicalJson(lease.policyLease) &&
+            canonicalJson(reverified.authorization) == canonicalJson(lease.authorization) &&
+            canonicalJson(lease.command.getJSONObject("payload").getJSONObject("settlement")) ==
+                canonicalJson(lease.settlement)) {
+            "Settlement authorization changed after lease verification."
         }
         require(lease.leaseToken.matches(Regex("[A-Za-z0-9_-]{40,64}")) &&
             lease.cursor >= 0L && command.getLong("sequenceId") == lease.cursor + 1L &&
