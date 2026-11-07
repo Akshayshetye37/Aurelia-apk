@@ -37,7 +37,9 @@ test("bootstrap migrates the actual Aurelia legacy key and preserves its exact r
   const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: raw });
   const app = coordinator("migration", storage);
   const result = await app.initializeApplication();
-  assert.equal(result.success, true);\n  assert.equal(result.identity.scope, "LOCAL_ONLY");\n  assert.ok(result.identity.installationId && result.identity.propertyId && result.identity.deviceId);
+  assert.equal(result.success, true);
+  assert.equal(result.identity.scope, "LOCAL_ONLY");
+  assert.ok(result.identity.installationId && result.identity.propertyId && result.identity.deviceId);
   assert.equal(result.storageEngine, "INDEXEDDB");
   assert.equal(result.migration.status, "MIGRATION_VERIFIED");
   assert.equal(result.migration.entityCount, Object.keys(state).length);
