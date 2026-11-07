@@ -597,6 +597,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   private final java.util.concurrent.ConcurrentHashMap<String, PaymentDeviceClient.Lease> paymentDeviceLeases = new java.util.concurrent.ConcurrentHashMap<>();
   private String pendingCheckoutTransactionId = "";
   private String pendingCheckoutProvider = "";
+  private boolean hostedCheckoutBackgrounded = false;
   private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor();
 
   @Override public void onCreate(Bundle savedInstanceState) {
@@ -701,10 +702,18 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       return;
     }
     super.onResume();
+    if (hostedCheckoutBackgrounded && !pendingCheckoutTransactionId.isEmpty()) {
+      hostedCheckoutBackgrounded = false;
+      emitNativePaymentEvent("HOSTED_CHECKOUT_RETURNED", "");
+    }
     if (payBridgeClient != null) payBridgeClient.connect();
   }
 
   @Override public void onPause() {
+    if (!pendingCheckoutTransactionId.isEmpty() &&
+        ("phonepe".equals(pendingCheckoutProvider) || "jiopay".equals(pendingCheckoutProvider))) {
+      hostedCheckoutBackgrounded = true;
+    }
     com.aurelia.pms.security.AureliaSecurityRuntime.INSTANCE.manager(this).onBackground();
     super.onPause();
   }
@@ -1253,11 +1262,14 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
             long amountMinor = obj.optLong("amountMinor", -1L);
             String currency = obj.optString("currency", "");
             JSONObject checkoutData = obj.optJSONObject("checkoutData");
-            if (!transactionId.matches("[0-9a-fA-F-]{36}") ||
-                !("razorpay".equals(provider) || "cashfree".equals(provider)) ||
-                !"test".equals(environment) || orderId.isEmpty() || amountMinor <= 0 ||
-                !"INR".equals(currency) || checkoutData == null) {
-              throw new IllegalArgumentException("Native checkout request is invalid or outside the test environment.");
+            boolean supportedEnvironment =
+                (("razorpay".equals(provider) || "cashfree".equals(provider) ||
+                  "payu".equals(provider) || "phonepe".equals(provider)) && "test".equals(environment)) ||
+                ("jiopay".equals(provider) && "uat".equals(environment)) ||
+                ("paytm".equals(provider) && "staging".equals(environment));
+            if (!transactionId.matches("[0-9a-fA-F-]{36}") || !supportedEnvironment ||
+                orderId.isEmpty() || amountMinor <= 0 || !"INR".equals(currency) || checkoutData == null) {
+              throw new IllegalArgumentException("Native checkout request is invalid or outside the provider test environment.");
             }
             pendingCheckoutTransactionId = transactionId;
             pendingCheckoutProvider = provider;
@@ -1278,7 +1290,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
               Checkout checkout = new Checkout();
               checkout.setKeyID(keyId);
               checkout.open(MainActivity.this, options);
-            } else {
+            } else if ("cashfree".equals(provider)) {
               String paymentSessionId = checkoutData.optString("paymentSessionId", "");
               if (paymentSessionId.isEmpty()) throw new IllegalArgumentException("Cashfree payment session is missing.");
               CFSession session = new CFSession.CFSessionBuilder()
@@ -1295,6 +1307,21 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
                   .setCFWebCheckoutUITheme(theme)
                   .build();
               CFPaymentGatewayService.getInstance().doPayment(MainActivity.this, payment);
+            } else if ("phonepe".equals(provider) || "jiopay".equals(provider)) {
+              String checkoutUrl = checkoutData.optString("checkoutUrl", "");
+              Uri checkoutUri = Uri.parse(checkoutUrl);
+              if (!"https".equalsIgnoreCase(checkoutUri.getScheme()) ||
+                  checkoutUri.getHost() == null || checkoutUri.getUserInfo() != null ||
+                  checkoutUrl.length() > 4096) {
+                throw new IllegalArgumentException("Provider checkout URL is invalid.");
+              }
+              Intent checkoutIntent = new Intent(Intent.ACTION_VIEW, checkoutUri);
+              if (checkoutIntent.resolveActivity(getPackageManager()) == null) {
+                throw new IllegalStateException("No secure browser is available for provider checkout.");
+              }
+              startActivity(checkoutIntent);
+            } else {
+              throw new IllegalArgumentException("This provider's native checkout contract is not yet qualified.");
             }
             JSONObject result = new JSONObject().put("opened", true).put("status", "PENDING")
                 .put("providerOrderId", orderId);
