@@ -27,6 +27,7 @@ test('Paytm initiates hosted JS checkout with signed body and returns txn token'
   const result=await adapter.createOrder({orderId:'order_123',amountMinor:12500,currency:'INR',
     callbackUrl:'https://pms.example/paytm/callback',customer:{id:'guest_123'}});
   assert.equal(result.checkout.txnToken,'txn-token-123');
+  assert.equal(result.checkout.callbackUrl,'https://pms.example/paytm/callback');
   assert.equal(result.amountMinor,12500);
 });
 
