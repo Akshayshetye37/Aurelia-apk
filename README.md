@@ -25,7 +25,7 @@ Useful project locations:
 
 ## Current release decision
 
-**NOT PRODUCTION READY — production release, live gateway collection and automatic settlement remain disabled.**
+**NOT PRODUCTION READY — LIVE GATEWAY COLLECTION OFF; production release and automatic settlement remain disabled.**
 
 The current implementation contains substantial storage, payment and security foundations. It is not yet an accepted end-to-end hotel operations and payment product. In particular, operational UI cutover, canonical accounting integration, provider UAT, Android device qualification and formal release acceptance remain open.
 
@@ -68,7 +68,7 @@ The current implementation contains substantial storage, payment and security fo
 - Native payment-device lease handling retains original signed policy and authorization envelopes.
 - The acknowledgement path re-verifies those signed envelopes and checks the current settlement payload immediately before acknowledgement, reducing mutable-object time-of-check/time-of-use risk.
 
-**Native qualification limitation:** the Kotlin security template has static source-level regression coverage. Kotlin compilation, Android instrumentation, physical-device tamper/clock/process-death testing and hardware-backed attestation qualification have not been established by the latest source/backend CI runs.
+**Native qualification limitation:** the Kotlin security template has static source-level regression coverage. Kotlin compilation, Android instrumentation, physical-device tamper/clock/process-death testing and hardware-backed attestation qualification have not been established by the latest source/backend CI runs. PIN/OTP recovery support is not yet production-ready.
 
 ## Latest verified CI
 
@@ -136,7 +136,7 @@ The following are release blockers, not optional polish.
 - Automatic refund-to-folio posting: OFF.
 - Android release authorization: NOT GRANTED.
 
-Do not weaken these controls to make a demo appear functional. A passing unit test or backend container build is not a substitute for accounting, provider, device and operational acceptance.
+Do not weaken these controls to make a demo appear functional. A passing unit test or backend container build is not a substitute for accounting, provider, device and operational acceptance. The active development branch is currently unprotected; required status checks and branch rules must be configured before release-critical changes are merged.
 
 ## Key engineering references
 
