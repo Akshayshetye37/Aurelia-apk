@@ -12,10 +12,6 @@ const REQUIRED_OPERATIONS = Object.freeze([
   'validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus',
   'verifyWebhook', 'createRefund', 'getRefundStatus'
 ]);
-const PROVIDER_OPERATIONS = Object.freeze({
-  ccavenue: Object.freeze(['validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus'])
-});
-const operationsFor = providerId => PROVIDER_OPERATIONS[providerId] || REQUIRED_OPERATIONS;
 const FACTORIES = Object.freeze({
   razorpay: options => new RazorpayAdapter(options),
   cashfree: options => new CashfreeAdapter(options),
@@ -49,8 +45,6 @@ export function providerQualificationStatus(providerId) {
     liveCollection: false,
     cloudCheckoutApiEnabled: true,
     merchantUatRequired: true,
-    refundsAvailable: providerId !== 'ccavenue',
-    webhookAcceptanceRequired: true,
     canonicalFolioPostingRequired: true,
     physicalDeviceAcceptanceRequired: true
   };
