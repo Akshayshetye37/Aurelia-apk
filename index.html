@@ -1582,7 +1582,7 @@ async function restoreGo(){
 }
 const useMenu=m=>{Object.keys(MENU).forEach(k=>delete MENU[k]);Object.assign(MENU,m);S.menu=MENU};
 let LOCAL_STORAGE_WARNING_SHOWN=false;
-function persist(){if(RECOVERY_CHECK_PENDING)return;try{const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);(window.__aureliaStorage||localStorage).setItem(SK,JSON.stringify(o));if(window.__aureliaStorage&&window.__aureliaStorage.memoryOnly&&!LOCAL_STORAGE_WARNING_SHOWN){LOCAL_STORAGE_WARNING_SHOWN=true;toast(window.AureliaStorageDiagnostics?.embeddedPreview?'PREVIEW ONLY: CodeShack embeds this app in a sandbox that blocks persistent storage. Changes are temporary. Open Aurelia from its own HTTPS site or installed Android app before entering real records.':'WARNING: Browser persistence is unavailable. Changes are temporary; export a backup and use a supported persistent browser or installed app.')}}catch(e){if(!S.qw){S.qw=1;toast('Persistent storage write failed ('+(e&&e.name||'StorageError')+'). Changes may not be saved. Export a backup before closing the app.')}}}
+function persist(){if(RECOVERY_CHECK_PENDING)return;try{const o={tab:S.tab,bk:S.bk};DK.forEach(k=>o[k]=S[k]);(window.__aureliaStorage||localStorage).setItem(SK,JSON.stringify(o));if(window.AureliaRepositoryCompatibility)window.AureliaRepositoryCompatibility.persist(o).catch(error=>console.error('[Aurelia Repository Mirror] Legacy save succeeded but repository mirror failed; local state remains authoritative until cutover.',error));if(window.__aureliaStorage&&window.__aureliaStorage.memoryOnly&&!LOCAL_STORAGE_WARNING_SHOWN){LOCAL_STORAGE_WARNING_SHOWN=true;toast(window.AureliaStorageDiagnostics?.embeddedPreview?'PREVIEW ONLY: CodeShack embeds this app in a sandbox that blocks persistent storage. Changes are temporary. Open Aurelia from its own HTTPS site or installed Android app before entering real records.':'WARNING: Browser persistence is unavailable. Changes are temporary; export a backup and use a supported persistent browser or installed app.')}}catch(e){if(!S.qw){S.qw=1;toast('Persistent storage write failed ('+(e&&e.name||'StorageError')+'). Changes may not be saved. Export a backup before closing the app.')}}}
 function persistStrict(){
  if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
  const store=window.__aureliaStorage||localStorage;
@@ -5248,7 +5248,7 @@ try {
   setStatus("Opening canonical local database and validating the legacy snapshot…");
   const boot = await bootstrapper.initializeApplication();
   if (!boot || boot.success !== true || !boot.repository) throw new Error("Canonical storage bootstrap did not return a verified repository");
-  storageBridge.bindActiveEngine(boot.repository);
+  storageBridge.bindActiveEngine(boot.repository, boot.identity);\n  window.AureliaRepositoryCompatibility = Object.freeze({ persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot) });
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
   await replayApplicationScripts();
   if (shield) shield.remove();
