@@ -8,7 +8,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Executors;\nimport java.util.UUID;\nimport java.nio.charset.StandardCharsets;\nimport android.content.SharedPreferences;\nimport android.security.keystore.KeyGenParameterSpec;\nimport android.security.keystore.KeyProperties;\nimport android.util.Base64;\nimport java.security.KeyStore;\nimport javax.crypto.Cipher;\nimport javax.crypto.KeyGenerator;\nimport javax.crypto.SecretKey;\nimport javax.crypto.spec.GCMParameterSpec;
 
 /** Promise boundary for the complete local SQLite repository contract. */
 @CapacitorPlugin(name = "CapacitorPmsStorage")
@@ -18,6 +18,43 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
 
   @Override public void load() { super.load(); repository = new LocalPmsRepository(getContext()); }
   @Override protected void handleOnDestroy() { io.shutdown(); super.handleOnDestroy(); }
+
+  @PluginMethod public void getOrCreateLocalIdentity(PluginCall call) {
+    io.execute(() -> { try {
+      SharedPreferences prefs=getContext().getSharedPreferences("aurelia_local_identity_v1",android.content.Context.MODE_PRIVATE);
+      String sealed=prefs.getString("identity",null),json;
+      if(sealed!=null) json=decryptIdentity(sealed);
+      else {
+        String installation="ins_"+UUID.randomUUID().toString();
+        JSONObject identity=new JSONObject(); identity.put("schemaVersion",1); identity.put("installationId",installation);
+        identity.put("tenantId","local_"+installation); identity.put("propertyId","property_"+UUID.randomUUID().toString());
+        identity.put("deviceId","device_"+UUID.randomUUID().toString()); identity.put("createdAt",new java.util.Date().toInstant().toString());
+        identity.put("scope","LOCAL_ONLY"); json=identity.toString();
+        String encrypted=encryptIdentity(json);
+        if(!prefs.edit().putString("identity",encrypted).commit() || !json.equals(decryptIdentity(prefs.getString("identity",null)))) throw new IllegalStateException("Keystore identity read-back failed");
+      }
+      JSObject result=new JSObject(); result.put("identity",new JSObject(json)); call.resolve(result);
+    } catch(Exception e){call.reject("Keystore-backed local identity initialization failed","PMS_LOCAL_IDENTITY_FAILED",e);} });
+  }
+  private static final String IDENTITY_ALIAS="aurelia.pms.local.identity.v1";
+  private SecretKey identityKey() throws Exception {
+    KeyStore ks=KeyStore.getInstance("AndroidKeyStore"); ks.load(null);
+    if(ks.containsAlias(IDENTITY_ALIAS)) return ((KeyStore.SecretKeyEntry)ks.getEntry(IDENTITY_ALIAS,null)).getSecretKey();
+    KeyGenerator kg=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore");
+    kg.init(new KeyGenParameterSpec.Builder(IDENTITY_ALIAS,KeyProperties.PURPOSE_ENCRYPT|KeyProperties.PURPOSE_DECRYPT)
+      .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+      .setRandomizedEncryptionRequired(true).build()); return kg.generateKey();
+  }
+  private String encryptIdentity(String plain) throws Exception {
+    Cipher c=Cipher.getInstance("AES/GCM/NoPadding"); c.init(Cipher.ENCRYPT_MODE,identityKey());
+    return Base64.encodeToString(c.getIV(),Base64.NO_WRAP)+":"+Base64.encodeToString(c.doFinal(plain.getBytes(StandardCharsets.UTF_8)),Base64.NO_WRAP);
+  }
+  private String decryptIdentity(String sealed) throws Exception {
+    if(sealed==null)throw new IllegalStateException("Encrypted identity is missing"); String[] p=sealed.split(":",2);
+    if(p.length!=2)throw new IllegalStateException("Encrypted identity format is invalid");
+    Cipher c=Cipher.getInstance("AES/GCM/NoPadding"); c.init(Cipher.DECRYPT_MODE,identityKey(),new GCMParameterSpec(128,Base64.decode(p[0],Base64.NO_WRAP)));
+    return new String(c.doFinal(Base64.decode(p[1],Base64.NO_WRAP)),StandardCharsets.UTF_8);
+  }
 
   @PluginMethod public void initializeStorage(PluginCall call) {
     io.execute(() -> { try { repository.getWritableDatabase(); JSObject r=new JSObject();r.put("success",true);r.put("engine","android-sqlite");r.put("contractVersion",1);call.resolve(r); }
