@@ -5217,21 +5217,35 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 
 <script src="./src/bookings/cancellation-policy.mjs" type="application/x-aurelia-deferred" data-aurelia-original-type="module"></script>
 <script id="aurelia-bootstrap-watchdog">
-/* Classic-script guard still runs if ES-module imports fail before evaluation. */
+/* Detect HTML sandbox previews before ES-module imports can fail silently. */
 (function () {
-  window.__AURELIA_BOOTSTRAP_DIAGNOSTICS = { phase: "MODULE_NOT_STARTED", startedAt: Date.now() };
+  var diagnostics = window.AureliaStorageDiagnostics || {};
+  var embedded = diagnostics.embeddedPreview === true;
+  var status = document.getElementById("aurelia-runtime-shield-status");
+  var shield = document.getElementById("aurelia-runtime-shield");
+  var previewBlocked = embedded && diagnostics.persistent !== true;
+  window.__AURELIA_BOOTSTRAP_DIAGNOSTICS = {
+    phase: previewBlocked ? "PREVIEW_SANDBOX_BLOCKED" : "MODULE_NOT_STARTED",
+    startedAt: Date.now(),
+    previewBlocked: previewBlocked
+  };
+  if (previewBlocked && status && shield) {
+    shield.setAttribute("data-preview-blocked", "true");
+    status.textContent = "This is an embedded HTML preview, not the Aurelia app runtime. Its sandbox blocks durable storage and the preview may not serve the required ./src modules. Open the complete Aurelia project from its hosted app URL or installed Android app. Your saved PMS data has not been changed.";
+    console.warn("[Aurelia Lifecycle] Embedded preview blocked: durable storage is unavailable. Use the complete hosted project or Android app.");
+  }
   window.setTimeout(function () {
     var state = window.__AURELIA_BOOTSTRAP_DIAGNOSTICS;
-    if (!state || state.phase === "READY" || state.phase === "FAILED") return;
-    var status = document.getElementById("aurelia-runtime-shield-status");
-    var shield = document.getElementById("aurelia-runtime-shield");
-    if (!status || !shield) return;
-    shield.setAttribute("data-timeout", "true");
+    if (!state || state.phase === "READY" || state.phase === "FAILED" || state.previewBlocked) return;
+    var message = document.getElementById("aurelia-runtime-shield-status");
+    var overlay = document.getElementById("aurelia-runtime-shield");
+    if (!message || !overlay) return;
+    overlay.setAttribute("data-timeout", "true");
     if (state.phase === "MODULE_NOT_STARTED") {
-      status.textContent = "Aurelia startup modules did not load. This preview may be running as a standalone HTML file without the required ./src modules. Open the complete project from its hosted app URL or installed Android app; do not enter real bookings in an isolated HTML preview.";
+      message.textContent = "Aurelia startup modules did not load. The complete project must be served with its ./src modules; a standalone index.html preview cannot run the PMS. Open the hosted app or installed Android app. Do not clear browser/app data.";
       console.error("[Aurelia Lifecycle] Bootstrap module did not start. Check module import/network errors and serve the complete project directory.");
     } else {
-      status.textContent = "Aurelia startup is taking longer than expected (" + state.phase + "). Durable storage has not been verified. Keep this screen open or restart from the installed app; do not clear browser/app data.";
+      message.textContent = "Aurelia startup is taking longer than expected (" + state.phase + "). Durable storage has not been verified. Keep this screen open or restart from the installed app; do not clear browser/app data.";
       console.error("[Aurelia Lifecycle] Bootstrap watchdog detected a stalled startup phase:", state.phase);
     }
   }, 12000);
