@@ -212,6 +212,7 @@ test('native SQLite upgrades persist migration provenance and use UTC WAL timest
   assert.match(repository, /snap\.put\("source_timestamp",sourceTimestamp\)/);
   assert.match(repository, /out\.put\("sourceTimestamp",c\.getString\(2\)\)/);
   assert.match(repository, /TimeZone\.getTimeZone\("UTC"\)/);
+  assert.match(repository, /acknowledgedAt",c\.isNull\(18\)\?JSONObject\.NULL:isoTimestamp\(c\.getLong\(18\)\)/);
   assert.match(plugin, /call\.getString\("sourceTimestamp"\)/);
   assert.match(plugin, /migrateLegacySnapshot\(id,source,sourceTimestamp,raw\)/);
 });
