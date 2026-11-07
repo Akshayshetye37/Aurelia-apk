@@ -8,7 +8,7 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 - **Project root:** repository root (`/`)
 - **Active Phase 7 engineering branch:** `feature/phase-7-pms-persistence` (base: `feature/multi-provider-payment-backend`)
 - **Audited implementation baseline:** `5010f5e2a3a3c239a721b514f19d8435e0b8f852` (7 November 2026); this documentation refresh is committed after that source baseline.
-- **Current-head checks:** GitHub returned no workflow runs and no commit status checks for this exact SHA during the current audit. Treat this revision as not CI-verified until fresh checks complete.
+- **Current-head checks:** all required workflows passed on `7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301`: [PMS source tests + production web build](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42403900585), [settlement foundation CI](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42403905199), and [payment backend + container + Terraform CI](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42403905213). These are not Android release/device qualification.
 - **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
 
 Useful project locations:
