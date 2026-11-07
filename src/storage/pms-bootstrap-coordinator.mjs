@@ -7,6 +7,7 @@
  * routed through the repository.
  */
 import { IndexedDbPmsRepository, parseLegacyPmsSnapshot } from "./indexeddb-pms-repository.mjs";
+import { getOrCreateBrowserLocalIdentity } from "./pms-local-identity.mjs";
 
 export const AURELIA_LEGACY_STATE_KEY = "aurelia_lodge_v2";
 export const AURELIA_MIGRATION_STATUS_KEY = "aurelia_canonical_migration_status";
@@ -43,7 +44,8 @@ export class PmsBootstrapCoordinator {
     repository = null,
     nativeRepositoryFactory = createNativeRepository,
     platform = null,
-    now = () => new Date().toISOString()
+    now = () => new Date().toISOString(),
+    identityProvider = null
   } = {}) {
     this.storage = storage;
     this.indexedDBImpl = indexedDBImpl;
@@ -53,6 +55,7 @@ export class PmsBootstrapCoordinator {
     this.storageEngine = null;
     this.platform = platform;
     this.now = now;
+    this.identityProvider = identityProvider;
     this.environment = "UNINITIALIZED";
     this.status = "NOT_STARTED";
     this.initialization = null;
@@ -109,6 +112,15 @@ export class PmsBootstrapCoordinator {
     }
     this.status = "ENGINE_READY";
 
+    const identity = this.identityProvider
+      ? await this.identityProvider({ environment: this.environment, repository: this.repository })
+      : this.environment === "ANDROID_WEBVIEW"
+        ? await this.repository.getOrCreateLocalIdentity()
+        : await getOrCreateBrowserLocalIdentity({ indexedDBImpl: this.indexedDBImpl, storage: this.storage });
+    if (!identity || identity.scope !== "LOCAL_ONLY" || !identity.installationId || !identity.tenantId || !identity.propertyId || !identity.deviceId) {
+      throw new Error("Durable local PMS identity was not verified");
+    }
+
     const migration = await this.executeGuardedMigration();
     this.status = migration.status;
     return Object.freeze({
@@ -117,7 +129,8 @@ export class PmsBootstrapCoordinator {
       storageEngine: this.storageEngine,
       uiCutover: false,
       migration,
-      repository: this.repository
+      repository: this.repository,
+      identity
     });
   }
 
