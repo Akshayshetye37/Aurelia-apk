@@ -473,9 +473,9 @@ test('PayU checkout is normalized to the exact POST action and signed fields exp
   }));
   const stored = await s.repo.getPaymentIntent('user_123', result.intentId);
   assert.equal(stored.status, 'CREATED');
-  assert.equal(stored.checkoutData.action, 'https://test.payu.in/_payment');
-  assert.equal(stored.checkoutData.method, 'POST');
-  assert.equal(stored.checkoutData.fields.hash, 'provider-signed-hash');
+  assert.equal(stored.checkoutData.checkout.action, 'https://test.payu.in/_payment');
+  assert.equal(stored.checkoutData.checkout.method, 'POST');
+  assert.equal(stored.checkoutData.checkout.fields.hash, 'provider-signed-hash');
 });
 
 test('Paytm checkout normalization preserves its hosted checkout origin and token', async () => {
@@ -490,9 +490,9 @@ test('Paytm checkout normalization preserves its hosted checkout origin and toke
   }));
   const stored = await s.repo.getPaymentIntent('user_123', result.intentId);
   assert.equal(stored.status, 'CREATED');
-  assert.equal(stored.checkoutData.orderId, stored.providerOrderId);
-  assert.equal(stored.checkoutData.txnToken, 'provider-token');
-  assert.equal(stored.checkoutData.checkoutHost, 'https://securestage.paytmpayments.com');
+  assert.equal(stored.checkoutData.checkout.orderId, stored.providerOrderId);
+  assert.equal(stored.checkoutData.checkout.txnToken, 'provider-token');
+  assert.equal(stored.checkoutData.checkout.checkoutHost, 'https://securestage.paytmpayments.com');
 });
 
 test('provider checkout response cannot redefine the persisted intent amount', async () => {
