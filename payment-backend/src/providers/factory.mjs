@@ -13,7 +13,7 @@ const REQUIRED_OPERATIONS = Object.freeze([
   'validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus',
   'verifyWebhook', 'createRefund', 'getRefundStatus'
 ]);
-const FACTORIES = Object.freeze({
+const PROVIDER_OPERATIONS = Object.freeze({\n  ccavenue: Object.freeze(['validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus'])\n});\nconst operationsFor = providerId => PROVIDER_OPERATIONS[providerId] || REQUIRED_OPERATIONS;\nconst FACTORIES = Object.freeze({
   razorpay: options => new RazorpayAdapter(options),
   cashfree: options => new CashfreeAdapter(options),
   payu: options => new PayUAdapter(options),
@@ -27,7 +27,7 @@ export function createProviderAdapter(providerId, options) {
   const factory = FACTORIES[providerId];
   if (!factory) throw new Error('provider_adapter_unavailable');
   const adapter = factory(options);
-  assertAdapterCapabilities(adapter, REQUIRED_OPERATIONS);
+  assertAdapterCapabilities(adapter, operationsFor(providerId));
   return adapter;
 }
 
@@ -36,7 +36,7 @@ export function implementedProviderAdapters() {
 }
 
 export function providerCapabilities(providerId) {
-  return FACTORIES[providerId] ? [...REQUIRED_OPERATIONS] : null;
+  return FACTORIES[providerId] ? [...operationsFor(providerId)] : null;
 }
 
 export function providerQualificationStatus(providerId) {
