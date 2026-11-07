@@ -2,9 +2,47 @@
 
 ## Architecture status and implementation roadmap (2026-11-07)
 
+
+## Current implementation and verification update (2026-11-07)
+
+This section is the authoritative current status. Older dated sections below are retained as implementation history; where their status statements conflict with this section, this section takes precedence.
+
+### Native local-first persistence foundation
+
+- The Android SQLite repository schema is at version 3. The implementation includes WAL, upgrade paths for earlier schemas, entity listing, optimistic version checks, and atomic entity-plus-outbox writes.
+- Legacy migration preserves the exact source JSON, source key and source timestamp, imports top-level records transactionally, and supports read-back verification and idempotent replay.
+- The registered Capacitor storage plugin exposes the native repository operations for initialization, entity reads/listing, business transactions, migration snapshot import/read-back, outbox leasing, acknowledgement, retry and conflict handling.
+- Native timestamps and outbox acknowledgement timestamps are normalized to UTC ISO-8601 to align with the JavaScript repository contract.
+- JavaScript adapter tests cover repository behavior, migration replay/read-back, simulated interruption recovery, stale versions, outbox lease ownership, retry backoff and conflict transitions. Static template tests guard important native implementation details.
+
+### Verified CI result
+
+- Workflow: [PMS source tests, web packaging and Android validation](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42359366447)
+- Commit: `3c9d9654d112a73fe415545ffb992fe817b870a0`
+- Result: **success**.
+- Verified steps include the full PMS test suite, production web bundle, privacy checks, Android project generation, Aurelia template/configuration, Capacitor sync, Android debug APK compilation, APK identity/signature checks, merged-manifest permission checks and validation artifact upload.
+
+### Runtime integration still incomplete
+
+- Android bootstrap has **not** selected the native SQLite adapter; the current bootstrap path still selects IndexedDB.
+- Existing PMS screens still use the legacy synchronous `localStorage` application state. The asynchronous repository bridge is not yet the screens' canonical read/write path.
+- The Capacitor JavaScript adapter's runtime module resolution and activation path must be verified before native SQLite is selected.
+- Existing JavaScript simulated-interruption tests are not equivalent to Android instrumentation tests that interrupt a real SQLite transaction, restart the process and verify recovery. Physical-device acceptance is still required.
+- The legacy `aurelia_lodge_v2` source value remains preserved; do not remove it until canonical migration, backup and rollback have been accepted.
+
+### Release controls
+
+- Android CI APK build: **verified passing** for the commit above.
+- Physical Android device acceptance: **not yet verified**.
+- Canonical SQLite/IndexedDB UI cutover: **not complete**.
+- Optional cloud sync: **OFF**.
+- Live gateway collection, automated gateway settlement and automatic refund-to-folio posting: **OFF**.
+- Production readiness: **NOT APPROVED**. Payment-to-folio reconciliation, provider acceptance, security review, operational recovery and release acceptance remain separate gates.
+
+
 **Current repository:** `Akshayshetye37/Aurelia-apk`  
 **Working branch:** `feature/multi-provider-payment-backend`  
-**Latest branch HEAD:** `209e4f9332c5239cb7fe5ba4294725d767853b2a` (`Preserve canonical native transaction result metadata`). The latest workflow completed with the PMS test suite and web packaging passing, but the Android debug APK compilation failed; this branch is not currently build-verified.
+**Latest verified branch HEAD:** `3c9d9654d112a73fe415545ffb992fe817b870a0` (`Update landing page with SQLite persistence progress`). GitHub Actions run [42359366447](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42359366447) completed successfully, including the complete PMS test suite, production web bundle, privacy checks, Android project generation/sync, debug APK build, APK identity/signature verification, merged-manifest permission verification and artifact upload. This is CI build verification only; it is not physical-device acceptance or production certification.
 
 ### Product architecture
 
