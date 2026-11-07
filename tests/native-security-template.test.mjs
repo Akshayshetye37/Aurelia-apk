@@ -220,3 +220,19 @@ test('native SQLite upgrades persist migration provenance and use UTC WAL timest
 test("native SQLite rejects expired leases and unsafe event/version numbers",()=>{const repository=read("android/templates/LocalPmsRepository.java");const plugin=read("android/templates/CapacitorPmsStoragePlugin.java");assert.match(repository,/lease_owner=\? AND lease_until>\?/);assert.match(repository,/safeJsonInteger\(e,"sequence",1\)/);assert.match(repository,/safeJsonInteger\(e,"schemaVersion",1\)/);assert.match(repository,/9007199254740991d/);assert.match(plugin,/Long version=call\.getLong\("expectedVersion"\)/);assert.match(plugin,/version>=9007199254740991L/);assert.doesNotMatch(plugin,/Integer version=call\.getInt\("expectedVersion"\)/);});
 
 test("native SQLite JavaScript adapter uses the Capacitor global and has no unresolved bare package import",()=>{const adapter=read("src/storage/capacitor-pms-storage.mjs");assert.doesNotMatch(adapter,/from\s+["']@capacitor\/core/);assert.match(adapter,/globalThis\.Capacitor/);assert.match(adapter,/registerPlugin\("CapacitorPmsStorage"\)/);});
+
+
+test('native device acknowledgement re-verifies immutable signed settlement envelopes at use time', () => {
+  const source = read('android/templates/security/PaymentDeviceClient.kt');
+  const start = source.indexOf('fun acknowledge(');
+  const end = source.indexOf('private fun validateCommand', start);
+  assert.ok(start >= 0 && end > start);
+  const acknowledge = source.slice(start, end);
+  assert.match(source, /val signedPolicyLease: JSONObject/);
+  assert.match(source, /val signedAuthorization: JSONObject\?/);
+  assert.match(source, /policyLease, authorization, token, cursor, expiresAt/);
+  assert.match(acknowledge, /SettlementEnvelopeVerifier\(\)\.verify\(/);
+  assert.match(acknowledge, /canonicalJson\(reverified\.authorization\) == canonicalJson\(lease\.authorization\)/);
+  assert.match(acknowledge, /canonicalJson\(lease\.command\.getJSONObject\("payload"\)\.getJSONObject\("settlement"\)\)/);
+  assert.match(acknowledge, /Settlement authorization changed after lease verification/);
+});
