@@ -12,8 +12,8 @@ export const AURELIA_LEGACY_STATE_KEY = "aurelia_lodge_v2";
 export const AURELIA_MIGRATION_STATUS_KEY = "aurelia_canonical_migration_status";
 
 async function createNativeRepository() {
-  const { CapacitorPmsStorageClient } = await import("./capacitor-pms-storage.mjs");
-  return new CapacitorPmsStorageClient();
+  const { capacitorPmsStorage } = await import("./capacitor-pms-storage.mjs");
+  return capacitorPmsStorage;
 }
 
 function stableMigrationId(raw) {
