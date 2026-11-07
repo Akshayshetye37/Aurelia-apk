@@ -395,7 +395,8 @@ function addFirebaseDependencies(contents, kotlinDsl) {
   const auth = 'com.google.firebase:firebase-auth';
   const paymentDependencies = [
     'com.razorpay:checkout:1.6.41',
-    'com.cashfree.pg:api:2.6.1'
+    'com.cashfree.pg:api:2.6.1',
+    'com.paytmpayments.appinvokesdk:appinvokesdk:1.0.3'
   ];
   if (!/dependencies\s*\{/.test(contents)) {
     throw new Error('App Gradle file has no dependencies block; refusing an incomplete native payment integration.');
@@ -563,6 +564,9 @@ import com.razorpay.Checkout;
 import com.razorpay.PaymentData;
 import com.razorpay.PaymentResultWithDataListener;
 import com.cashfree.pg.api.CFPaymentGatewayService;
+import com.paytm.pgsdk.PaytmOrder;
+import com.paytm.pgsdk.PaytmPaymentTransactionCallback;
+import com.paytm.pgsdk.TransactionManager;
 import com.cashfree.pg.core.api.CFSession;
 import com.cashfree.pg.core.api.callback.CFCheckoutResponseCallback;
 import com.cashfree.pg.core.api.exception.CFException;
@@ -581,6 +585,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   private static final int PICK_BACKUP_FOLDER = 7101;
   private static final int CREATE_BACKUP_FILE = 7102;
   private static final int PICK_IMAGE_FILE = 7103;
+  private static final int PAYTM_REQUEST_CODE = 7104;
   private String folderRequestId = "";
   private String folderPurpose = "drive";
   private String pendingFileRequestId = "";
@@ -680,6 +685,64 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     emitNativePaymentEvent("CASHFREE_ERROR_CALLBACK", "");
     pendingCheckoutTransactionId = "";
     pendingCheckoutProvider = "";
+  }
+
+  private void startPaytmCheckout(String orderId, long amountMinor, JSONObject checkoutData) throws Exception {
+    String mid = checkoutData.optString("mid", "");
+    String token = checkoutData.optString("txnToken", "");
+    String host = checkoutData.optString("checkoutHost", "");
+    if (mid.isEmpty() || token.isEmpty() ||
+        !"https://securestage.paytmpayments.com".equals(host)) {
+      throw new IllegalArgumentException("Paytm staging checkout binding is invalid.");
+    }
+    String amount = String.format(java.util.Locale.US, "%.2f", amountMinor / 100.0d);
+    String callbackUrl = host + "/theia/paytmCallback?ORDER_ID=" + Uri.encode(orderId);
+    PaytmOrder order = new PaytmOrder(orderId, mid, token, amount, callbackUrl);
+    TransactionManager manager = new TransactionManager(order, new PaytmPaymentTransactionCallback() {
+      @Override public void onTransactionResponse(Bundle response) {
+        String paymentId = response == null ? "" : response.getString("TXNID", "");
+        emitNativePaymentEvent("PAYTM_CALLBACK", paymentId);
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void networkNotAvailable() {
+        emitNativePaymentEvent("PAYTM_NETWORK_UNKNOWN", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void onErrorProceed(String error) {
+        emitNativePaymentEvent("PAYTM_ERROR_CALLBACK", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void clientAuthenticationFailed(String error) {
+        emitNativePaymentEvent("PAYTM_ERROR_CALLBACK", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void someUIErrorOccurred(String error) {
+        emitNativePaymentEvent("PAYTM_ERROR_CALLBACK", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void onErrorLoadingWebPage(int code, String message, String url) {
+        emitNativePaymentEvent("PAYTM_NETWORK_UNKNOWN", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void onBackPressedCancelTransaction() {
+        emitNativePaymentEvent("PAYTM_CANCEL_HINT", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void onTransactionCancel(String message, Bundle response) {
+        emitNativePaymentEvent("PAYTM_CANCEL_HINT", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+    });
+    manager.setShowPaymentUrl(host + "/theia/api/v1/showPaymentPage");
+    manager.startTransaction(MainActivity.this, PAYTM_REQUEST_CODE);
   }
 
   private void initializePaymentDeviceClient() {
@@ -1309,6 +1372,8 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
                   .setCFWebCheckoutUITheme(theme)
                   .build();
               CFPaymentGatewayService.getInstance().doPayment(MainActivity.this, payment);
+            } else if ("paytm".equals(provider)) {
+              startPaytmCheckout(orderId, amountMinor, checkoutData);
             } else if ("phonepe".equals(provider) || "jiopay".equals(provider)) {
               String checkoutUrl = checkoutData.optString("checkoutUrl", "");
               Uri checkoutUri = Uri.parse(checkoutUrl);
@@ -1661,6 +1726,13 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
 
   @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode == PAYTM_REQUEST_CODE && !pendingCheckoutTransactionId.isEmpty() &&
+        "paytm".equals(pendingCheckoutProvider)) {
+      emitNativePaymentEvent("PAYTM_CALLBACK", "");
+      pendingCheckoutTransactionId = "";
+      pendingCheckoutProvider = "";
+      return;
+    }
     if (requestCode == PICK_BACKUP_FOLDER) {
       if (resultCode == RESULT_OK && data != null && data.getData() != null) {
         Uri uri = data.getData();
