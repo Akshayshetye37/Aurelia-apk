@@ -4,7 +4,7 @@
 
 **Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)  
 **Working branch:** `feature/multi-provider-payment-backend`  
-**Current source commit:** `e435b62af31d94e89a2c0dc85b560d0cf48781d0`  
+**Room inventory implementation commit:** `e435b62af31d94e89a2c0dc85b560d0cf48781d0`  
 **Pre-change recovery point:** [`backup/pre-local-first-cutover-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-local-first-cutover-2026-11-07) at `8b74f3d2cb723237b5f3a8901e22ef7370552812`.
 
 ### Latest CI verification
