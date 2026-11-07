@@ -27,6 +27,7 @@ export class PmsRepository {
   getEntity(){throw new Error("Not implemented");}
   listEntities(){throw new Error("Not implemented");}
   transactBusinessChange(){throw new Error("Not implemented");}
+  transactBusinessBatch(){throw new Error("Not implemented");}
   claimOutboxBatch(){throw new Error("Not implemented");}
   acknowledgeOutbox(){throw new Error("Not implemented");}
   retryOutbox(){throw new Error("Not implemented");}
