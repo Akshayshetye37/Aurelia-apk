@@ -70,6 +70,25 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     finally{db.endTransaction();}
   }
 
+  /** Commits multiple entity versions and all corresponding outbox events atomically. */
+  synchronized JSONArray transactBusinessBatch(JSONArray changes) {
+    if(changes==null||changes.length()<2||changes.length()>20)throw new IllegalArgumentException("invalid_business_batch_size");
+    java.util.HashSet<String> keys=new java.util.HashSet<>(),eventIds=new java.util.HashSet<>();
+    try {
+      for(int i=0;i<changes.length();i++){JSONObject c=changes.getJSONObject(i),event=c.getJSONObject("event");String type=c.getString("entityType"),id=c.getString("entityId"),key=type+":"+id;validateIdentity(type,"entity type");validateIdentity(id,"entity ID");safeJsonInteger(c,"expectedVersion",0);if(!(c.opt("data") instanceof JSONObject))throw new IllegalArgumentException("invalid_batch_entity_data");validateEvent(event,type,id,c.getLong("expectedVersion")+1);if(!keys.add(key))throw new IllegalArgumentException("duplicate_business_batch_entity");if(!eventIds.add(event.getString("eventId")))throw new IllegalArgumentException("duplicate_business_batch_event");}
+    } catch(RuntimeException e){throw e;}catch(Exception e){throw failure("invalid_business_batch",e);}
+    SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
+    try {
+      JSONArray results=new JSONArray();long now=System.currentTimeMillis();
+      for(int i=0;i<changes.length();i++){JSONObject c=changes.getJSONObject(i),event=c.getJSONObject("event");String type=c.getString("entityType"),id=c.getString("entityId");long expected=c.getLong("expectedVersion"),actual=entityVersion(db,type,id);if(actual!=expected)throw conflict("ENTITY_VERSION_CONFLICT");}
+      for(int i=0;i<changes.length();i++){JSONObject c=changes.getJSONObject(i),event=c.getJSONObject("event");String type=c.getString("entityType"),id=c.getString("entityId");long version=c.getLong("expectedVersion")+1;JSONObject data=c.getJSONObject("data");ContentValues entity=new ContentValues();entity.put("entity_type",type);entity.put("entity_id",id);entity.put("version",version);entity.put("data_json",data.toString());entity.put("updated_at",now);db.insertWithOnConflict("pms_entities",null,entity,SQLiteDatabase.CONFLICT_REPLACE);
+        ContentValues out=new ContentValues();out.put("event_id",event.getString("eventId"));out.put("tenant_id",event.getString("tenantId"));out.put("property_id",event.getString("propertyId"));out.put("device_id",event.getString("deviceId"));out.put("entity_type",type);out.put("entity_id",id);out.put("sequence",version);out.put("event_type",event.getString("eventType"));out.put("schema_version",event.getInt("schemaVersion"));out.put("occurred_at",event.getString("occurredAt"));out.put("payload_json",event.opt("payload")==null?"null":serializeJsonValue(event.opt("payload")));out.put("status","PENDING");out.put("attempts",0);out.put("created_at",now);db.insertOrThrow("pms_outbox",null,out);
+        JSONObject row=new JSONObject();row.put("key",type+":"+id);row.put("type",type);row.put("id",id);row.put("version",version);row.put("data",data);row.put("updatedAt",isoTimestamp(now));results.put(row);}
+      db.setTransactionSuccessful();return results;
+    } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("pms_business_batch_failed",e);}
+    finally{db.endTransaction();}
+  }
+
   /** Imports the exact original localStorage payload and every top-level key atomically. */
   synchronized JSONObject migrateLegacySnapshot(String migrationId,String sourceKey,String sourceTimestamp,String rawJson) {
     validateIdentity(migrationId,"migration ID");validateIdentity(sourceKey,"source key");
