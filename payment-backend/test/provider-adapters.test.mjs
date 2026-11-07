@@ -176,7 +176,9 @@ test('provider factory exposes only adapters with the complete checkout contract
   for (const operation of ['validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus', 'verifyWebhook', 'createRefund', 'getRefundStatus']) {
     assert.equal(typeof adapter[operation], 'function');
   }
-  const cca = createProviderAdapter('ccavenue', { credentials: { merchantId:'123456', accessCode:'access', workingKey:'working' }, environment:'test' });\n  assert.equal(typeof cca.createOrder, 'function');\n  await assert.rejects(cca.createRefund({}), /ccavenue_general_refund_api_not_qualified/);
+  const cca = createProviderAdapter('ccavenue', { credentials: { merchantId:'123456', accessCode:'access', workingKey:'working' }, environment:'test' });
+  assert.equal(typeof cca.createOrder, 'function');
+  await assert.rejects(cca.createRefund({}), /ccavenue_general_refund_api_not_qualified/);
 });
 
 test('provider-neutral checkout contract rejects amount or provider response binding drift', async () => {
