@@ -3520,16 +3520,16 @@ function loadAureliaCheckoutScript(provider){
 window.aureliaGatewayFolioHtml=function(i){
  const a=window.AureliaPaymentProviderState||{},providers=(a.providers||[]).filter(x=>x.environment==='test'&&x.active);
  const activeProviderId=a.activeProviderId||null;
-  const supported=providers.filter(x=>x.provider===activeProviderId&&['razorpay','cashfree','phonepe','jiopay'].includes(x.provider)&&x.capabilities?.testCheckout===true&&x.capabilities?.liveCollection===false&&x.productionReady===false);
+  const supported=providers.filter(x=>x.provider===activeProviderId&&['razorpay','cashfree','phonepe','jiopay','paytm'].includes(x.provider)&&x.capabilities?.testCheckout===true&&x.capabilities?.liveCollection===false&&x.productionReady===false);
  const booking=bk(i),pending=(booking?.gatewayPayments||[]).filter(x=>x.status!=='POSTED_TO_FOLIO');
  const pendingHtml=pending.length?'<div class="card" style="margin:10px 0"><b>Unresolved online transactions</b>'+pending.map(x=>'<div class="ln"><span>'+esc(x.provider)+' · '+esc(x.status)+'<br><small>'+esc(x.transactionId)+'</small></span><button class="btn sm ghost" onclick="reconcileAureliaGatewayPayment('+Number(i)+',\''+esc(x.transactionId)+'\')">Reconcile</button></div>').join('')+'</div>':'';
  const setup='<button class="btn sm ghost" onclick="S.tab=&quot;more&quot;;S.sub=&quot;set&quot;;render()">Open Payment Gateway settings</button>';
  if(!S.set.backendConnection?.reachable||!a.authenticated)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">Online checkout is unavailable until this device is enrolled with the optional trusted HTTPS payment backend. Bookings, folios and cash/manual payments continue to work offline.</p>'+setup;
- if(!supported.length)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">No qualified, supported sandbox provider is selected as this tenant\'s active provider. Select one qualified provider in the trusted backend; merchant credentials remain in Google Secret Manager. PayU and Paytm are not yet available in the Android checkout handoff.</p>'+setup;
- const options=supported.map(x=>'<option value="'+esc(x.provider)+'">'+({razorpay:'Razorpay',cashfree:'Cashfree',phonepe:'PhonePe',jiopay:'JioPay'}[x.provider]||x.provider)+' · Sandbox / UAT</option>').join('');
- return '<h3>Online payment · Sandbox</h3>'+pendingHtml+'<p class="lab">The backend has selected '+esc(supported[0].provider)+' as this tenant\'s single active provider. Only that backend-selected provider is selectable. This local app uses the provider checkout over the device internet connection; the trusted backend verifies payment independently. Live collection remains disabled; provider success alone never posts a PMS receipt. Gateway-to-folio posting is not released.</p><label class="fld"><span>Payment provider</span><select id="aurelia-online-provider">'+options+'</select></label><label class="fld"><span>Amount (INR)</span><input id="aurelia-online-amount" type="number" min="0.01" step="0.01" value="'+Math.max(0,Number(dueB(booking))||0).toFixed(2)+'"></label><div id="aurelia-cashfree-details" hidden><label class="fld"><span>Guest mobile number (Cashfree)</span><input id="aurelia-cashfree-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number"></label><label class="fld"><span>Public HTTPS return URL (Cashfree)</span><input id="aurelia-cashfree-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><div id="aurelia-hosted-provider-details" hidden><label class="fld"><span>Guest mobile number (PhonePe / JioPay)</span><input id="aurelia-hosted-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number"></label><label class="fld"><span>Public HTTPS return URL</span><input id="aurelia-hosted-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><button class="btn" style="width:100%" onclick="startAureliaGatewayCheckout('+Number(i)+')">Create secure checkout</button><div id="aurelia-gateway-checkout-status" class="lab" role="status" style="margin-top:8px"></div>';
+ if(!supported.length)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">No qualified, supported sandbox provider is selected as this tenant\'s active provider. Select one qualified provider in the trusted backend; merchant credentials remain in Google Secret Manager. PayU is not yet available in the Android checkout handoff.</p>'+setup;
+ const options=supported.map(x=>'<option value="'+esc(x.provider)+'">'+({razorpay:'Razorpay',cashfree:'Cashfree',phonepe:'PhonePe',jiopay:'JioPay',paytm:'Paytm'}[x.provider]||x.provider)+' · Sandbox / UAT</option>').join('');
+ return '<h3>Online payment · Sandbox</h3>'+pendingHtml+'<p class="lab">The backend has selected '+esc(supported[0].provider)+' as this tenant\'s single active provider. Only that backend-selected provider is selectable. This local app uses the provider checkout over the device internet connection; the trusted backend verifies payment independently. Live collection remains disabled; provider success alone never posts a PMS receipt. Gateway-to-folio posting is not released.</p><label class="fld"><span>Payment provider</span><select id="aurelia-online-provider">'+options+'</select></label><label class="fld"><span>Amount (INR)</span><input id="aurelia-online-amount" type="number" min="0.01" step="0.01" value="'+Math.max(0,Number(dueB(booking))||0).toFixed(2)+'"></label><div id="aurelia-cashfree-details" hidden><label class="fld"><span>Guest mobile number (Cashfree)</span><input id="aurelia-cashfree-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number"></label><label class="fld"><span>Public HTTPS return URL (Cashfree)</span><input id="aurelia-cashfree-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><div id="aurelia-paytm-details" hidden><label class="fld"><span>Public HTTPS return URL (Paytm)</span><input id="aurelia-paytm-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><div id="aurelia-hosted-provider-details" hidden><label class="fld"><span>Guest mobile number (PhonePe / JioPay)</span><input id="aurelia-hosted-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number"></label><label class="fld"><span>Public HTTPS return URL</span><input id="aurelia-hosted-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><button class="btn" style="width:100%" onclick="startAureliaGatewayCheckout('+Number(i)+')">Create secure checkout</button><div id="aurelia-gateway-checkout-status" class="lab" role="status" style="margin-top:8px"></div>';
 };
-document.addEventListener('change',e=>{if(e.target?.id==='aurelia-online-provider'){const box=document.getElementById('aurelia-cashfree-details');if(box)box.hidden=e.target.value!=='cashfree';const hosted=document.getElementById('aurelia-hosted-provider-details');if(hosted)hosted.hidden=!['phonepe','jiopay'].includes(e.target.value);}});
+document.addEventListener('change',e=>{if(e.target?.id==='aurelia-online-provider'){const box=document.getElementById('aurelia-cashfree-details');if(box)box.hidden=e.target.value!=='cashfree';const hosted=document.getElementById('aurelia-hosted-provider-details');if(hosted)hosted.hidden=!['phonepe','jiopay'].includes(e.target.value);const paytm=document.getElementById('aurelia-paytm-details');if(paytm)paytm.hidden=e.target.value!=='paytm';}});
 window.startAureliaGatewayCheckout=async function(i){
  const b=bk(i);if(!b){toast('Booking not found');return}
  const status=document.getElementById('aurelia-gateway-checkout-status');
@@ -3553,7 +3553,7 @@ window.startAureliaGatewayCheckout=async function(i){
  const amount=Number(document.getElementById('aurelia-online-amount')?.value);
  const amountMinor=Math.round(amount*100);
  const due=Math.round(Math.max(0,Number(dueB(b))||0)*100);
- if(!['razorpay','cashfree','phonepe','jiopay'].includes(provider)||provider!==(window.AureliaPaymentProviderState?.activeProviderId||'')||!Number.isSafeInteger(amountMinor)||
+ if(!['razorpay','cashfree','phonepe','jiopay','paytm'].includes(provider)||provider!==(window.AureliaPaymentProviderState?.activeProviderId||'')||!Number.isSafeInteger(amountMinor)||
     amountMinor<=0||Math.abs(amount*100-amountMinor)>1e-7||amountMinor>due){
   return stop('Enter a valid payment amount up to the current folio balance.');
  }
@@ -3570,6 +3570,13 @@ window.startAureliaGatewayCheckout=async function(i){
   if(!/^\+?[0-9]{10,15}$/.test(phone)||!/^https:\/\//i.test(returnUrl))
    return stop('Enter a valid guest mobile number and an approved HTTPS return URL for Cashfree.');
   payload.customer={id:'guest-'+String(b.id),phone};
+  payload.returnUrl=returnUrl;
+ }
+ if(provider==='paytm'){
+  const returnUrl=document.getElementById('aurelia-paytm-return')?.value?.trim()||'';
+  if(!/^https:\/\//i.test(returnUrl))
+   return stop('Enter an approved HTTPS return URL for Paytm.');
+  payload.customer={id:'guest-'+String(b.id)};
   payload.returnUrl=returnUrl;
  }
  if(provider==='phonepe'||provider==='jiopay'){
@@ -4279,7 +4286,7 @@ if (typeof window.render === "function") window.render();
    const docs=(guide?.docs||definition.docs||[]).map(link=>'<li><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">'+esc(link.label)+'</a></li>').join('');
    const guideHtml='<p class="lab">'+esc(definition.category)+' · '+esc(definition.integration)+'<br>Methods: '+esc(definition.methods.join(', '))+'<br>'+esc(definition.verification)+'</p><ul>'+docs+'</ul>';
    if(id==='ccavenue')return '<details><summary>'+esc(name)+' · Documentation only</summary>'+guideHtml+'<div class="tag out">Documentation only</div><p class="lab">CCAvenue is not included in the active provider factory. No checkout, webhook, recovery, refund or settlement capability is exposed.</p></details>';
-   const nativeHandoff=['razorpay','cashfree','phonepe','jiopay'].includes(id)?'Android native checkout handoff is integrated; provider merchant sandbox acceptance is still required.':'The server adapter is wired, but Android hosted-checkout handoff is not yet integrated. This provider is not selectable from the Android checkout flow yet; no payment intent will be dispatched from this device.';
+   const nativeHandoff=['razorpay','cashfree','phonepe','jiopay','paytm'].includes(id)?'Android native checkout handoff is integrated; provider merchant sandbox acceptance is still required.':'The server adapter is wired, but Android hosted-checkout handoff is not yet integrated. This provider is not selectable from the Android checkout flow yet; no payment intent will be dispatched from this device.';
    const availability='<div class="tag out">Server adapter ready (test) · Live collection OFF</div><p class="lab">The server adapter is wired for test/UAT use. '+nativeHandoff+' Merchant credentials remain on the trusted backend. Provider sandbox acceptance and the complete payment-to-folio release proof are separate gates; live collection is unavailable.</p>';
    return '<details><summary>'+esc(name)+' · Server adapter ready (test) · Live collection OFF</summary>'+guideHtml+availability+'</details>';
   }).join('');
@@ -4843,7 +4850,7 @@ window.AndroidPaymentEngine = Object.freeze({
  async createPaymentIntent(payload) {
   if(!payload || !/^[0-9a-f-]{36}$/i.test(payload.transactionId || '') ||
      !window.AureliaPaymentDeviceId) throw new Error('A verified payment device is required.');
-  if(!['razorpay','cashfree','phonepe','jiopay'].includes(payload.provider)) {
+  if(!['razorpay','cashfree','phonepe','jiopay','paytm'].includes(payload.provider)) {
    throw new Error('Android hosted-checkout handoff is not yet integrated for this provider. No cloud payment intent was created.');
   }
   const { transactionId, idempotencyKey, ...intentInput } = payload;
