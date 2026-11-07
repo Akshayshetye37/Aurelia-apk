@@ -49,9 +49,12 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
     io.execute(() -> {try{JSObject r=new JSObject();r.put("snapshot",repository.readMigrationSnapshot(id));call.resolve(r);}catch(Exception e){call.reject("Migration snapshot read failed","PMS_MIGRATION_READ_FAILED",e);}});
   }
   @PluginMethod public void claimOutboxBatch(PluginCall call) {
-    String device=call.getString("deviceId");Integer limit=call.getInt("limit");Long lease=call.getLong("leaseMs");if(limit==null)limit=50;if(lease==null)lease=60000L;
-    if(empty(device)||limit==null||lease==null){call.reject("Invalid outbox lease request","PMS_INVALID_OUTBOX_REQUEST");return;}
-    io.execute(() -> {try{JSObject r=new JSObject();r.put("events",repository.claimOutboxBatch(device,limit,lease));call.resolve(r);}catch(Exception e){call.reject("Outbox claim failed","PMS_OUTBOX_CLAIM_FAILED",e);}});
+    String device=call.getString("deviceId");Integer requestedLimit=call.getInt("limit");Long requestedLease=call.getLong("leaseMs");
+    final int limit=requestedLimit==null?50:requestedLimit.intValue();
+    final long lease=requestedLease==null?60000L:requestedLease.longValue();
+    if(empty(device)||limit<1||limit>100||lease<1000L||lease>3600000L){call.reject("Invalid outbox lease request","PMS_INVALID_OUTBOX_REQUEST");return;}
+    final String owner=device;
+    io.execute(() -> {try{JSObject r=new JSObject();r.put("events",repository.claimOutboxBatch(owner,limit,lease));call.resolve(r);}catch(Exception e){call.reject("Outbox claim failed","PMS_OUTBOX_CLAIM_FAILED",e);}});
   }
   @PluginMethod public void acknowledgeOutbox(PluginCall call) {
     String device=call.getString("deviceId");JSONArray a=call.getArray("acknowledgements");
