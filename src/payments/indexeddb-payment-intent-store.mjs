@@ -122,7 +122,7 @@ export class IndexedDbPaymentIntentStore {
     return this.databasePromise;
   }
 
-  async put(input) {
+  async put(input, { expectedVersion } = {}) {
     const record = validate(clone(input));
     const db = await this.database();
     // Older Android System WebView releases may reject the durability options
@@ -139,6 +139,12 @@ export class IndexedDbPaymentIntentStore {
     try {
       const existing = await request(store.get(record.requestId));
       if (existing) {
+        if (expectedVersion !== undefined && existing.version !== expectedVersion) {
+          const error = new Error("Payment intent version conflict");
+          error.code = "PAYMENT_INTENT_VERSION_CONFLICT";
+          error.actualVersion = existing.version;
+          throw error;
+        }
         for (const key of IMMUTABLE) {
           if (existing[key] !== record[key]) throw new Error("Immutable payment intent binding changed: " + key);
         }
@@ -165,6 +171,12 @@ export class IndexedDbPaymentIntentStore {
         record.createdAt = existing.createdAt;
         record.version = (existing.version || 1) + 1;
       } else {
+        if (expectedVersion !== undefined && expectedVersion !== 0) {
+          const error = new Error("Payment intent version conflict");
+          error.code = "PAYMENT_INTENT_VERSION_CONFLICT";
+          error.actualVersion = 0;
+          throw error;
+        }
         record.version = 1;
       }
       store.put(record);
