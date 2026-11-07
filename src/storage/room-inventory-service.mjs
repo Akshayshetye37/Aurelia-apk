@@ -5,7 +5,7 @@ const MAINTENANCE = new Set(["NORMAL", "MAINTENANCE", "OUT_OF_ORDER"]);
 const clone = value => structuredClone(value);
 
 function roomText(value, label) {
-  if (typeof value !== "string" || !value.trim() || value.trim().length > 80 || /[\\u0000-\\u001f]/.test(value)) {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > 80 || /[\u0000-\u001f]/.test(value)) {
     throw new TypeError("Invalid " + label);
   }
   return value.trim();
