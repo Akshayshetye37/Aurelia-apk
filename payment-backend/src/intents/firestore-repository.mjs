@@ -34,15 +34,17 @@ function normalizeProviderCheckout(provider, remote, expected) {
     amountMinor: expected?.amountMinor,
     currency: expected?.currency
   });
-  return normalized.checkout;
+  return ['payu', 'paytm'].includes(provider)
+    ? { checkout: normalized.checkout }
+    : normalized.checkout;
 }
 function validCheckout(provider, checkout) {
   switch (provider) {
     case 'razorpay': return typeof checkout.keyId === 'string' && checkout.keyId.length > 0;
     case 'cashfree': return typeof checkout.paymentSessionId === 'string' && checkout.paymentSessionId.length > 0;
-    case 'payu': return typeof checkout.action === 'string' && checkout.action.startsWith('https://') && checkout.method === 'POST' && typeof checkout.fields?.key === 'string' && typeof checkout.fields?.hash === 'string';
+    case 'payu': return typeof checkout.checkout?.action === 'string' && checkout.checkout.action.startsWith('https://') && checkout.checkout.method === 'POST' && typeof checkout.checkout.fields?.key === 'string' && typeof checkout.checkout.fields?.hash === 'string';
     case 'phonepe': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://');
-    case 'paytm': return typeof checkout.txnToken === 'string' && typeof checkout.mid === 'string' && typeof checkout.orderId === 'string' && typeof checkout.checkoutHost === 'string' && checkout.checkoutHost.startsWith('https://');
+    case 'paytm': return typeof checkout.checkout?.txnToken === 'string' && typeof checkout.checkout.mid === 'string' && typeof checkout.checkout.orderId === 'string' && typeof checkout.checkout.checkoutHost === 'string' && checkout.checkout.checkoutHost.startsWith('https://');
     case 'jiopay': return typeof checkout.checkoutUrl === 'string' && checkout.checkoutUrl.startsWith('https://') && typeof checkout.transactionContext === 'string';
     default: return false;
   }
