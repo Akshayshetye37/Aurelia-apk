@@ -1,57 +1,35 @@
 <!--
-AURELIA PERSISTENCE / RELEASE STATUS — 2026-11-07
+AURELIA PMS — SOURCE AND RELEASE STATUS
+Repository: https://github.com/Akshayshetye37/Aurelia-apk
 Working branch: feature/multi-provider-payment-backend
-Current source commit: 5f11451f52933c5c705a87cafe49970e0e6e1652
-Recovery point: backup/pre-local-first-cutover-2026-11-07 at 8b74f3d2cb723237b5f3a8901e22ef7370552812
-CI: run 42380831922 passed the complete PMS test suite, production web build, privacy checks, Android generation/configuration/sync, debug APK compilation, APK identity/signature checks, merged-manifest permission checks and artifact upload.
-LOCAL IDENTITY: browser/PWA uses a cryptographically generated local identity in IndexedDB with a verified localStorage fallback. Android stores the identity encrypted with AES-GCM using an Android Keystore key. Local tenant/property/device identity is independent of Firebase authentication.
-COMPATIBILITY PERSISTENCE: verified legacy saves are mirrored asynchronously to a versioned repository audit entity with an immutable outbox event. The original aurelia_lodge_v2 value remains preserved for rollback. This is a compatibility/audit snapshot, not atomic dual-write of every domain entity.
-IMPORTANT CUTOVER LIMITATION: uiCutover remains false. Existing PMS screens still use legacy synchronous state and are not yet fully migrated to asynchronous repository commands. Do not treat the repository as the operational source of truth until all domain reads/writes and settlement paths have been migrated and verified.
-ANDROID ACCEPTANCE: CI compilation is successful; physical-device plugin invocation, process-death recovery and uninstall/reinstall identity survival remain unverified.
-PAYMENT / RELEASE: cloud sync OFF; live gateway collection OFF; automated gateway settlement and refund-to-folio posting OFF; production readiness NOT APPROVED.
+Recovery point for this change: backup/pre-release-html-update-2026-11-07
+Architecture: local-first PMS; browser/PWA uses IndexedDB, Android uses the native SQLite adapter.
+Local identity: generated independently of Firebase authentication. Local tenant/property/device identity is not a cloud tenant identity.
+Compatibility persistence: verified legacy saves are asynchronously mirrored to a versioned repository audit entity and immutable outbox event. This is not atomic dual-write of every domain entity.
+CUTOVER: uiCutover=false. Existing PMS screens and manual-payment UI are not yet fully migrated to async repository commands. Legacy state remains operationally authoritative.
+PREVIEW REQUIREMENT: this is a multi-file application. The complete project, including ./src modules, must be served. Embedded/opaque-sandbox previews without durable storage are blocked intentionally; no volatile-memory PMS operation is permitted.
+PAYMENTS: cloud sync OFF; live gateway collection OFF; automatic gateway settlement OFF; refund-to-folio automation OFF.
+ANDROID RELEASE: NOT AUTHORIZED. The repository release plan requires all ten engineering workstreams to pass and owner approval before any Android/APK build, signing or publishing. Physical-device storage/recovery, complete repository UI migration, payment reconciliation and provider acceptance remain incomplete.
+The application must never contain merchant credentials, webhook secrets, signing keys or backend secrets.
 -->
-<!-- Aurelia project metadata
-     Repository: https://github.com/Akshayshetye37/Aurelia-apk
-     Active working branch: feature/multi-provider-payment-backend
-     Project root: /
-     Primary application entry: /index.html
-     Architecture: offline-first PMS with optional trusted cloud payment backend.
+
+<!-- Application metadata
      Fresh-install posture: no fabricated rooms, guests, bookings, tables or revenue.
-     Storage posture: durable write failures must surface; strict imports/restores
-     require exact persistent read-back and rollback verification.
-     Payment release posture: live collection OFF; one tenant-scoped active provider is enforced by the cloud backend; offline cash/manual folio posting
-     remains available after explicit staff confirmation. Gateway auto-settlement and
-     live collection remain fail-closed. Settlement authorization v2 verifier/journal/
-     projector foundations exist; the complete cloud issuer-to-Android projection path
-     is not yet release-qualified. Native SQLite payment journal commands enforce
-     transaction binding, immutability and durable-receipt guards; they are not the
-     complete PMS database or cross-database folio atomicity.
-     Payment backend readiness: /readyz verifies Firestore access and a non-empty,
-     accessible Secret Manager health-secret version; it returns only boolean checks.
-     Regression tests cover dependency failure and empty-secret fail-closed behavior.
-     Backend CI syntax-checks all .mjs source and test modules after npm test.
-     Merchant credentials are backend-only in Google Secret Manager. The legacy
-     device-local credential vault is purged and native writes fail closed. Full PMS
-     encrypted SQLite storage with a Keystore-wrapped key remains a release blocker.
-     These changes do not enable live collection or automatic gateway folio settlement.
-     Android CI: full PMS tests, web build, privacy checks, Capacitor sync,
-     debug APK build, APK identity/signature and manifest checks passed at
-     9e0ed6b; CI artifact is a debug validation APK, not a production release.
-     This repository and branch are the source of truth. The UI bundle must never
-     contain merchant secrets, webhook secrets, salts, signing keys or credentials.
-     Latest payment configuration (2026-11-07): cloud adapters cover six providers; Android native checkout currently supports Razorpay and Cashfree. Sandbox activation and live settlement remain gated.
-     onboarding supports six registered server adapters; CCAvenue is directory-only
-     and explicitly disabled. Default offline cash/manual/receipt/local-folio flows
-     remain available without gateway configuration. Only one qualified provider
-     may be active per tenant for new intents. Android native checkout currently
-     supports Razorpay and Cashfree only; PayU, PhonePe, Paytm and JioPay handoffs
-     remain unimplemented. Merchant credentials are submitted to the trusted backend
-     and stored in Secret Manager, never persisted by this client. Live collection
-     and automatic gateway-to-folio posting remain OFF. CI run IDs 42278130693 and
-     42278130696 were in progress at the last documentation check; see README.md
-     for current verification status.
-     See README.md and docs/PMS_ACCOUNTING_SCHEMA.md for implementation status.
+     Storage posture: durable write failures surface; strict import/restore requires
+     exact persistent read-back and rollback verification.
+     Browser runtime: IndexedDB and local identity modules are served from ./src.
+     Android runtime: Capacitor native SQLite plugin; missing native plugin fails closed.
+     Payment credentials are backend-only. WebView JavaScript and provider redirects
+     are never settlement authority. Merchant secrets remain in managed Secret Manager.
+     Android native checkout is limited to the provider paths documented in
+     docs/PROVIDER_INTEGRATION_STATUS.md. Provider adapters do not imply production
+     merchant acceptance. Live collection remains disabled.
+     See README.md, docs/END_TO_END_REMEDIATION_PLAN.md and
+     docs/PMS_ACCOUNTING_SCHEMA.md for current implementation and release gates.
 -->
+<meta name="application-name" content="Aurelia PMS">
+<meta name="description" content="Local-first property management for reservations, guests, rooms and folios. Secure offline operation with optional trusted payment services.">
+<meta name="theme-color" content="#081711">
 <title>Aurelia PMS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
