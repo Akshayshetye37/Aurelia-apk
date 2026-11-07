@@ -4,12 +4,12 @@ Repository: https://github.com/Akshayshetye37/Aurelia-apk
 Project root: /
 Active Phase 7 branch: feature/phase-7-pms-persistence
 Base branch: feature/multi-provider-payment-backend
-Audited implementation baseline: 5010f5e2a3a3c239a721b514f19d8435e0b8f852 (7 November 2026)
-Phase 7 CI: run 42400767973 succeeded — full application tests, settlement syntax checks and production web asset build. This did not build an APK or deploy the backend.
+Audited implementation baseline: 7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301 (8 November 2026)
+Current branch CI: PMS source/build run 42403900585, settlement foundation run 42403905199, and payment backend/container/Terraform run 42403905213 all succeeded on 7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301. No Android release APK or physical-device qualification was performed.
 PHASE 7: tenant/property-scoped canonical list read and deterministic read-only legacy booking shadow planner are implemented. No real snapshot import, canonical UI cutover or financial migration has been performed. uiCutover=false.
 LOCAL IDENTITY: browser/PWA uses a cryptographically generated local identity in IndexedDB with a verified localStorage fallback. Android stores identity encrypted with AES-GCM using an Android Keystore key. Local identity is distinct from Firebase/cloud tenant identity.
 COMPATIBILITY PERSISTENCE: verified legacy saves are mirrored asynchronously to a versioned repository audit entity with an immutable outbox event. The legacy aurelia_lodge_v2 value is preserved. This is a compatibility/audit snapshot, not atomic dual-write of every domain entity.
-PAYMENTS: six backend adapters and cloud API routes are wired (Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay). Android checkout handoff covers all six backend-wired providers: Razorpay, Cashfree, PayU, PhonePe, JioPay and Paytm. CCAvenue is catalogue-only with no concrete adapter. Zero of seven providers is production-ready; no merchant UAT or complete canonical folio settlement acceptance is recorded.
+PAYMENTS: six backend adapters and cloud API routes are wired (Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay). Android checkout handoff covers all six backend-wired providers: Razorpay, Cashfree, PayU, PhonePe, JioPay and Paytm (test/UAT only). CCAvenue is catalogue-only with no concrete adapter. Zero of seven providers is production-ready; no merchant UAT or complete canonical folio settlement acceptance is recorded.
 ANDROID: Capacitor appId com.aurelia.pms; webDir www. Historical CI records a debug APK build, not production signing or physical-device qualification. Native process-death recovery and device acceptance remain open.
 RELEASE: cloud sync OFF; live gateway collection OFF; automatic gateway settlement OFF; automatic refund posting OFF; production release NOT AUTHORIZED.
 The application must never contain merchant credentials, webhook secrets, signing keys or backend secrets.
