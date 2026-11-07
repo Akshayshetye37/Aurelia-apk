@@ -62,11 +62,12 @@ function checkoutPayload(provider, result) {
       return { action: result.checkout.action, method: "POST", fields: { ...result.checkout.fields } };
     case "paytm":
       if (!result.checkout || !nonEmpty(result.checkout.mid) ||
-          !nonEmpty(result.checkout.orderId) || !nonEmpty(result.checkout.txnToken)) {
+          !nonEmpty(result.checkout.orderId) || !nonEmpty(result.checkout.txnToken) ||
+          !secureUrl(result.checkout.checkoutHost)) {
         throw new Error("paytm_checkout_payload_invalid");
       }
       if (result.checkout.orderId !== result.orderId) throw new Error("paytm_checkout_order_binding_mismatch");
-      return { mid: result.checkout.mid, orderId: result.checkout.orderId, txnToken: result.checkout.txnToken };
+      return { mid: result.checkout.mid, orderId: result.checkout.orderId, txnToken: result.checkout.txnToken, checkoutHost: result.checkout.checkoutHost };
     default:
       throw new Error("provider_checkout_not_supported");
   }
