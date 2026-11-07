@@ -70,9 +70,8 @@ test('tenant live-collection switch is server-backed, double-gated and MFA prote
   assert.ok(html.includes('internal release gate'));
 });
 
-test('PayU and Paytm remain blocked until their Android checkout contracts are integrated', () => {
+test('PayU remains blocked until its Android checkout contract is integrated', () => {
   assert.ok(html.includes('Android hosted-checkout handoff is not yet integrated'));
   assert.ok(html.includes('No cloud payment intent was created.'));
   assert.ok(html.includes('PayU'));
-  assert.ok(html.includes('Paytm'));
 });
