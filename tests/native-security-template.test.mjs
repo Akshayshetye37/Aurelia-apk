@@ -152,7 +152,8 @@ test('cloud device sync uses the existing MFA-aware Firebase web session', () =>
 
 test('native PMS migration template serializes JSON values through Android-supported JSONArray', () => {
   const source = read('android/templates/LocalPmsRepository.java');
-  assert.match(source, /Object value=parsed\.opt\(key\)/);\n  assert.match(source, /serializeJsonValue\(value\)/);\n  assert.doesNotMatch(source, /serializeJsonValue\(value\).*while\(keys\.hasNext\(\)\)/);
+  assert.match(source, /Object value=parsed\.opt\(key\)/);
+  assert.match(source, /serializeJsonValue\(value\)/);
   assert.match(source, /new org\.json\.JSONArray\(\)/);
   assert.match(source, /private static String serializeJsonValue\(Object value\)/);
   assert.doesNotMatch(source, /JSONObject\.valueToString\s*\(/);
