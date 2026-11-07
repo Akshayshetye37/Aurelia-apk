@@ -553,3 +553,19 @@ These are concrete build failures, not device-only acceptance items. The native 
 The async bootstrap currently validates/migrates the legacy snapshot into IndexedDB and binds the Promise-based repository bridge, then replays the existing UI in **legacy compatibility mode**. Existing screens still use synchronous legacy application state. The native SQLite bridge is not yet selected by bootstrap and no complete UI domain cutover is claimed. Payment live collection and automated settlement/refund posting remain gated.
 
 Do not describe Aurelia as production-ready until the release gates above are implemented and the corresponding CI, physical-device, security and payment acceptance evidence is recorded.
+
+
+## Section 1 implementation progress — native SQLite (2026-11-07)
+
+The first native persistence hardening pass has been committed on this branch.
+
+- Fixed the Android Java compilation defects found in the prior build: legacy migration now reads each entity value from the parsed snapshot, and the outbox lease executor captures validated immutable arguments.
+- Added SQLite schema version 3. Upgrades from earlier versions add the outbox acknowledgement timestamp and migration snapshot provenance columns without discarding existing rows.
+- Enabled SQLite write-ahead logging through `SQLiteOpenHelper`.
+- Native migration now accepts, validates, persists and reads back the source timestamp, exact raw snapshot and format version.
+- Normalized native timestamps to UTC ISO-8601, including lease expiry, creation time and acknowledgement time, to match the JavaScript repository representation.
+- Added regression checks for the compile defects, migration metadata upgrade, WAL enablement, UTC timestamps and acknowledgement timestamp representation.
+
+**Verification boundary:** GitHub Actions run [42359117304](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42359117304) passed the complete PMS test suite, web bundle, privacy checks, Android generation, template application and Capacitor sync on commit `5bf6190`. Its Android debug APK build was still running when subsequent source changes superseded that run. The later acknowledgement timestamp alignment and its regression assertion require the current branch CI run to complete. Therefore, do not yet claim that the latest branch has a successful APK build.
+
+**Still deliberately not activated:** Android bootstrap continues to select IndexedDB; native SQLite has not been selected for live application startup. The operational PMS screens still use legacy synchronous state. Native SQLite crash/restart behavior has not yet been proven with Android instrumentation or a physical device. The bridge module's runtime module resolution and full domain-screen cutover remain integration work.
