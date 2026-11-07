@@ -26,7 +26,7 @@ export class PmsRepositoryBridge {
     this.repo = null;
     this.context = { tenantId, propertyId, deviceId };
     this.now = now;
-    this.eventId = eventId;
+    this.eventId = eventId;\n    this.compatibilityWrite = Promise.resolve();
   }
 
   bindActiveEngine(repositoryInstance, context = {}) {
@@ -98,6 +98,32 @@ export class PmsRepositoryBridge {
       }
     );
     return Object.freeze({ entity: clone(committed), result: clone(result) });
+  }
+
+  persistCompatibilitySnapshot(snapshot) {
+    this.assertBound();
+    const serialized = JSON.stringify(snapshot);
+    if (typeof serialized !== "string") return Promise.reject(new TypeError("Compatibility snapshot must be JSON serializable"));
+    const write = async () => {
+      if (!globalThis.crypto?.subtle || !globalThis.TextEncoder) throw new Error("Secure snapshot digest is unavailable");
+      const bytes = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(serialized));
+      const hash = Array.from(new Uint8Array(bytes), value => value.toString(16).padStart(2, "0")).join("");
+      let lastError;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const current = await this.fetchEntity("legacy", "aurelia_lodge_v2");
+        try {
+          return await this.mutateEntity({
+            entityType: "legacy", entityId: "aurelia_lodge_v2", expectedVersion: current?.version ?? 0,
+            eventType: "legacy.snapshot_saved",
+            eventPayload: { sourceKey: "aurelia_lodge_v2", snapshotSha256: hash, byteLength: new TextEncoder().encode(serialized).length },
+            mutate: entity => { entity.snapshot = JSON.parse(serialized); entity.snapshotSha256 = hash; entity.sourceKey = "aurelia_lodge_v2"; }
+          });
+        } catch (error) { lastError = error; if (error?.code !== "ENTITY_VERSION_CONFLICT") throw error; }
+      }
+      throw lastError || new Error("Compatibility snapshot version conflict retry limit exceeded");
+    };
+    this.compatibilityWrite = this.compatibilityWrite.then(write, write);
+    return this.compatibilityWrite;
   }
 
   saveBooking(input) { return this.mutateEntity({ ...input, entityType: "booking", eventType: input.eventType || "booking.saved" }); }
