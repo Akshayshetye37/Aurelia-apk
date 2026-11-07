@@ -11,7 +11,8 @@ const ENVIRONMENTS = Object.freeze({
   payu: ["test", "live"],
   phonepe: ["test", "live"],
   paytm: ["staging", "production"],
-  jiopay: ["uat", "production"]
+  jiopay: ["uat", "production"],
+  ccavenue: ["test", "live"]
 });
 const PROVIDERS = new Set(Object.keys(ENVIRONMENTS));
 
