@@ -73,12 +73,15 @@ Server SDK API operations: https://business.paytm.com/docs/server-sdk/php/
 - Use staging and production gateway hosts and credentials separately; merchant staging/UAT is still required.
 
 ### CCAvenue
-Official merchant site and technical FAQ: https://www.ccavenue.com/faq
+Official merchant technical FAQ: https://www.ccavenue.com/faq  
+Published Merchant API v1.3 guide: https://links.avenues.info/downloads/CCAvenues_API_Vers-1_3.pdf  
+Merchant activation and integration-kit process: https://www.ccavenue.com/compliance
 
-- CCAvenue merchant integrations are product/account-specific; merchant ID, access code and working key alone do not fully define the integration contract.
-- Public documentation available in this research pass did not expose a current, authoritative API reference for checkout encryption/decryption, status and refund endpoints.
-- Do not implement guessed encryption, endpoints, field names or signature rules. Obtain the current CCAvenue integration kit/specification from the merchant dashboard or CCAvenue onboarding/support, record its version, then implement and test that exact contract.
-- Keep access code and working key in Secret Manager. Validate encrypted response integrity and independently query transaction status before folio posting.
+- The published Merchant API v1.3 guide documents `orderStatusTracker`, encrypted API requests/responses, staging and production API hosts, and requires the merchant's public egress IP to be registered with CCAvenue.
+- The guide says encryption must follow the real-time transaction integration kit, but does not specify the complete key derivation, IV, padding, callback authentication or general refund contract needed to implement safely.
+- Its documented `splitRefund` is specifically for split-payout transactions and is limited to one refund; it is not a general refund lifecycle.
+- CCAvenue remains catalogue-only and is intentionally not factory-wired. Do not guess encryption parameters, treat encrypted callbacks as authenticated webhooks, or map split refunds to ordinary refunds.
+- Obtain the current merchant-specific integration kit and API entitlement, record its version, registered egress IP, callback specification and refund capability, then implement against that exact contract. Keep access code and working key in Secret Manager.
 
 ### Jio Payment Solutions Limited (JioPay)
 Official docs: https://docs.jiopay.in/
