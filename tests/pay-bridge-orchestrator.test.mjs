@@ -375,5 +375,5 @@ test("duplicate Pay Bridge processing callback is idempotent and cannot replace 
 });
 test("Pay Bridge callback rejects malformed transaction references",async()=>{
  const f=fixture();await f.orchestrator.createPayment(input);
- await assert.rejects(f.orchestrator.receiveBridgeEvent({requestId:"req-1",bookingId:"booking-1",folioId:"folio-1",amountPaise:12500,currency:"INR",status:"unknown",transactionId:"bad\\u0000txn"}),e=>e.code==="EVENT_BINDING_MISMATCH");
+ await assert.rejects(f.orchestrator.receiveBridgeEvent({requestId:"req-1",bookingId:"booking-1",folioId:"folio-1",amountPaise:12500,currency:"INR",status:"unknown",transactionId:"bad"+String.fromCharCode(0)+"txn"}),e=>e.code==="EVENT_BINDING_MISMATCH");
 });
