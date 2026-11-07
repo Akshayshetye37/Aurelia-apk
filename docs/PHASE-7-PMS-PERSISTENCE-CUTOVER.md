@@ -54,3 +54,12 @@ Regression tests cover tenant/property isolation, deterministic ordering, unsupp
 - Native SQLite contract or device qualification failure.
 
 **Current release decision:** no operational UI cutover, no ledger mutation, no gateway collection, no automatic settlement, and no APK build or production deployment.
+
+
+## 2026-11-07 — deterministic booking shadow-plan foundation
+
+Added `src/storage/legacy-booking-shadow-plan.mjs` as a pure, read-only planner. It creates deterministic canonical booking keys from legacy booking IDs, scopes each planned envelope to an explicitly supplied tenant/property, and retains the complete original booking object under `legacyRecord`. This preserves unknown fields and the original `p`, `pays[]`, and `payments[]` values without selecting a financial source of truth.
+
+The planner scans both active `b[]` and cancelled `cancelled[]` collections. Missing/invalid IDs, malformed rows, and duplicate IDs across either collection are reported as blocking issues; ambiguous records are not assigned guessed identities. Planning does not write to the repository, alter the input snapshot, resolve guest identities from names, or infer canonical room IDs from room numbers. Re-running the planner against the same snapshot and scope yields the same plan.
+
+**Boundary:** this is a deterministic shadow-plan generator, not an executed migration. No real PMS snapshot was available, no canonical entity was written, and no operational screen was switched. The next gate is collision-checked guest/room linkage and an explicit source snapshot digest + migration-run journal before bounded transactional import can be considered.
