@@ -5248,7 +5248,8 @@ try {
   setStatus("Opening canonical local database and validating the legacy snapshot…");
   const boot = await bootstrapper.initializeApplication();
   if (!boot || boot.success !== true || !boot.repository) throw new Error("Canonical storage bootstrap did not return a verified repository");
-  storageBridge.bindActiveEngine(boot.repository, boot.identity);\n  window.AureliaRepositoryCompatibility = Object.freeze({ persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot) });
+  storageBridge.bindActiveEngine(boot.repository, boot.identity);
+  window.AureliaRepositoryCompatibility = Object.freeze({ persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot) });
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
   await replayApplicationScripts();
   if (shield) shield.remove();
