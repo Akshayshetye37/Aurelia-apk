@@ -8,7 +8,7 @@
 |---|---|---:|---:|---:|
 | Razorpay | Seven lifecycle operations; wired | Yes — test path; live blocked | Yes | **No** — merchant UAT, canonical folio posting, device acceptance and release gates open |
 | Cashfree | Seven lifecycle operations; wired | Yes — test path; live blocked | Yes | **No** — merchant UAT, canonical folio posting, device acceptance and release gates open |
-| PayU | Classic hosted checkout, status, reverse-hash webhook and refund lifecycle; wired | Yes — test path; live blocked | No | **No** — credential validation is format-only; merchant UAT, route/device acceptance and folio posting open |
+| PayU | Classic hosted checkout, status, reverse-hash webhook and refund lifecycle; wired | Yes — test path; live blocked | No | **No** — credential validation now uses a non-mutating authenticated classic Verify Payment API probe; merchant UAT, route/device acceptance and folio posting open |
 | PhonePe | Standard Checkout V2 OAuth, status, webhook auth and refund lifecycle; wired | Yes — test path; live blocked | No | **No** — merchant UAT, route/device acceptance and folio posting open |
 | Paytm | Checksum-based initiate, status, callback and refund lifecycle; wired | Yes — test path; live blocked | No | **No** — staging/UAT, merchant config, device acceptance and folio posting open |
 | JioPay | Hosted checkout, HMAC-SHA256, status, webhook and refund command lifecycle; wired | Yes — test path; live blocked | No | **No** — merchant/aggregator UAT, device acceptance and folio posting open |
