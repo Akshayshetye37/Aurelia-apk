@@ -8,7 +8,7 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 - **Project root:** repository root (`/`)
 - **Active engineering branch:** `feature/multi-provider-payment-backend`
 - **Active branch:** `feature/multi-provider-payment-backend` (resolve the current SHA from the branch ref; avoid hard-coded moving HEAD values).
-- **Latest verification:** GitHub Actions run [42489986017](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42489986017) passed on commit `e16749c82b9b2afd68b5d9789615b4c12e987336`: 392/392 Node tests, production web bundle build, production asset privacy checks and Android release-gate check. This workflow did **not** build or qualify an APK.
+- **Latest verification:** GitHub Actions run [42490192816](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42490192816) passed on commit `4968dcaec4d5a804811be1f4ced8e62228560256`: 394/394 Node tests, production web bundle build, production asset privacy checks and Android release-gate check. This workflow did **not** build or qualify an APK.
 - **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
 
 Useful project locations:
@@ -166,5 +166,5 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 ---
 
 **Active branch:** `feature/multi-provider-payment-backend`  
-**Latest CI:** [run 42489986017 — passed](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42489986017); 392 tests passed, web bundle and privacy checks passed. No APK/device qualification was performed.  
+**Latest CI:** [run 42490192816 — passed](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42490192816); 394 tests passed, web bundle and privacy checks passed. No APK/device qualification was performed.  
 **Status:** engineering foundations exist; production release not approved.
