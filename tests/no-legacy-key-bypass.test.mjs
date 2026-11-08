@@ -22,11 +22,13 @@ function collect(directory, files = []) {
   return files;
 }
 
-test("legacy snapshot key is confined to src/storage", () => {
+test("legacy snapshot key is confined to src/storage and index.html has no Web Storage access", () => {
   const violations = collect(root).flatMap(file => {
     const source = fs.readFileSync(file, "utf8");
     if (source.includes("\\0")) return [];
     return source.includes(forbidden) ? [path.relative(root, file)] : [];
   });
   assert.deepEqual(violations, [], "Legacy snapshot key leaked outside src/storage: " + violations.join(", "));
+  const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  assert.doesNotMatch(html, /\\blocalStorage\\b/, "index.html must not access Web Storage directly");
 });
