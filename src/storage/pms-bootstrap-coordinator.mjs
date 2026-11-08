@@ -335,8 +335,9 @@ export class PmsBootstrapCoordinator {
       const actual = new Map(rows.map(row => [row.id, row]));
       for (const [key, value] of expected) {
         const row = actual.get(key);
-        if (!row || row.version !== 1 || JSON.stringify(row.data) !== JSON.stringify(value)) {
-          throw new Error("Verified migration source read-back mismatch for " + key);
+        if (!row || row.version !== 1 ||
+            await canonicalSha256(row.data) !== await canonicalSha256(value)) {
+          throw new Error("Verified migration source SHA-256 read-back mismatch for " + key);
         }
       }
       const latest = await this.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
