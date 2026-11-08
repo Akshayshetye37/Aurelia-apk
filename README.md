@@ -69,7 +69,7 @@ All six factory-wired adapters expose seven lifecycle operations and have determ
 
 ## CI evidence and verification boundary
 
-The latest source commit `0331d145dc50d056d98404f751f1ec04ea04ec96` passed the two workflows triggered for this revision: [settlement foundation CI — run 42453640895](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42453640895) and [payment backend CI — run 42453640768](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42453640768). The backend run passed 272/272 tests, JavaScript syntax, Cloud Run container build, non-root verification and Terraform validation. The settlement run passed the full application test suite and production web build. These do not prove Android Gradle/R8 compilation, physical-device acceptance, merchant UAT, production deployment or release signing.
+The latest verified code commit `a0c5d2eb0c56a004f49e8807d48bf05a920b857d` passed all three workflows: [payment backend CI — run 42467288914](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288914), [infrastructure validation — run 42467288923](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288923), and [settlement foundation CI — run 42467288972](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288972). Backend CI passed 306/306 tests, the explicit CCAvenue Mobile SDK request-hash vector (2/2), JavaScript syntax, Gitleaks history scan, Cloud Run image build/non-root verification and Terraform validation. Infrastructure formatting/validation and the full application test suite/web build also passed. These results do not prove Android Gradle/R8 compilation, physical-device acceptance, CCAvenue merchant sandbox interoperability, static egress/IP registration, production deployment or release signing.
 
 Historical evidence is commit-scoped and must not be treated as an automatic pass for later revisions:
 
@@ -150,7 +150,7 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 ---
 
-**Latest verified source commit:** `0331d145dc50d056d98404f751f1ec04ea04ec96`  
+**Latest verified code commit:** `a0c5d2eb0c56a004f49e8807d48bf05a920b857d`  
 **Active work branch:** `feature/phase-7-pms-persistence`  
 **Status:** accounting proposal mapper and Android R8 source configuration implemented; current-head settlement/backend CI passed; 0/6 implemented providers production-qualified; production release not approved.
 
