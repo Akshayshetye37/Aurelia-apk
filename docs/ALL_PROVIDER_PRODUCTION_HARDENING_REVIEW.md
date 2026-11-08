@@ -42,6 +42,10 @@ Provider idempotency is not interchangeable. Aurelia must persist its own immuta
 - **JioPay:** retain merchant transaction/refund numbers; use signed STATUS recovery before repeating a mutating operation.
 - **All providers:** `outcomeUnknown` means do not create a new order/refund identity. Reconcile the original operation first.
 
+### JioPay published status-response compatibility correction (8 November 2026)
+
+The published JioPay hosted-checkout and status examples identify the merchant transaction with `merchantTxnNo` and the provider transaction with `txnID`; the status response uses `txnStatus: "SUC"` and does not include `currencyCode`. The earlier adapter only read `pgTransactionId` and required an explicit currency field. That meant a valid documented status response could not be bound to its payment ID or recognized as INR. The adapter and webhook ingress now prefer `txnID`, retain legacy identifier fallbacks, enforce an optional requested payment-ID match, and normalize an omitted currency to INR only within this INR-only adapter. Explicit non-INR responses remain non-capturable. Regression tests use the documented response shape. This is a contract-compatibility correction, not merchant UAT evidence.
+
 ## 3. Shared payment lifecycle controls
 
 The required lifecycle is provider-independent:
