@@ -63,5 +63,6 @@ test("cancellation accounting waits for canonical snapshot commit and verifies t
   const strictSyncEnd = html.indexOf("\n}", strictSyncStart);
   const strictSync = html.slice(strictSyncStart, strictSyncEnd);
   assert.match(strictSync, /Synchronous accounting persistence is disabled/);
-  assert.doesNotMatch(strictSync, /localStorage|setItem\(SK/);
+  assert.doesNotMatch(strictSync, /localStorage/);
+  assert.equal(strictSync.includes("setItem(SK"), false);
 });
