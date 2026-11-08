@@ -423,11 +423,12 @@ merchant-approved override. It sends status requests to
 
 The API response is documented as a form envelope containing `status` and
 `enc_response`. If envelope `status=1`, CCAvenue says the error response is
-plain text and must not be decrypted. For `status=0`, the decrypted JSON
-contains `Order_Status_Result`, including `order_no`, `reference_no`,
-`order_amt`, `order_currncy` (the spelling in the guide) and
-`order_status`. It is not the `order_Status_List[0]` structure in the
-example proposal. The service validates both the merchant order ID and the
+plain text and must not be decrypted. For `status=0`, the decrypted JSON example in the guide is a flat object
+containing `order_no`, `reference_no`, `order_amt`, `order_currncy` (the
+spelling in the guide) and `order_status`; the XML response uses an
+`Order_Status_Result` wrapper. The verifier accepts the documented flat JSON
+shape (and the XML-style wrapper when supplied by a merchant-specific API
+variant). It is not the `order_Status_List[0]` structure in the example proposal. The service validates both the merchant order ID and the
 CCAvenue reference number when both are supplied. CCAvenue warns that order
 number uniqueness is the merchant's responsibility and order-only lookup can
 return the latest matching order; Aurelia therefore uses a unique order ID
