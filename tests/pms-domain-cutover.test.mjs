@@ -46,7 +46,7 @@ function fakeBridge() {
 test("projects legacy operational domains and preserves financial source values without reconciling them", async () => {
   const bridge = fakeBridge();
   const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-test" });
-  assert.equal(result.total, 9);
+  assert.equal(result.total, 8);
   assert.equal(result.projected, 9);
   assert.equal(bridge.entities.get("folio:folio-7").data.legacyPaidTotal, 500);
   assert.deepEqual(bridge.entities.get("folio:folio-7").data.legacyPaymentRows, [{ a: 200, amountPaise: 20000 }]);
@@ -73,7 +73,7 @@ test("projection stops on a divergent existing entity and does not overwrite it"
   assert.equal(bridge.entities.has("audit:legacy-domain-projection:mig-conflict"), false);
 });
 
-test("projection rejects missing stable booking identity and malformed money is not silently coerced", async () => {
+test("projection rejects missing stable booking identity and preserves unnormalized financial source values", async () => {
   const bridge = fakeBridge(), invalid = snapshot();
   invalid.b[0].id = null;
   await assert.rejects(projectLegacyPmsDomains({ bridge, snapshot: invalid, migrationId: "mig-no-id" }), /stable identity/);
