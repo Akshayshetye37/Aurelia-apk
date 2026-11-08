@@ -101,3 +101,14 @@ test('native cloud enrollment binds server challenge, Play token and attested ke
   assert.match(client, /status == "PENDING"/);
   assert.doesNotMatch(client, /\/activate/);
 });
+
+
+test('device enrollment challenges are single-current, one-use and freshness-bounded at activation', () => {
+  const service = read('payment-backend/src/devices/firestore-device-service.mjs');
+  assert.match(service, /enrollmentChallengeId: challengeId/);
+  assert.match(service, /deviceSnap\.data\(\)\.enrollmentChallengeId !== challengeId/);
+  assert.match(service, /data\.consumedAt/);
+  assert.match(service, /payment_device_attestation_already_submitted_owner_activation_required/);
+  assert.match(service, /currentTime\.getTime\(\) - integrityVerifiedAt > 10 \* 60_000/);
+  assert.match(service, /playIntegrityStrongIntegrityRequired/);
+});
