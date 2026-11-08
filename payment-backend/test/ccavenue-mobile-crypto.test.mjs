@@ -25,3 +25,18 @@ test('CCAvenue requestHash rejects non-canonical or unbound input', () => {
     assert.throws(() => createCcaVenueRequestHash({ ...valid, ...patch }));
   }
 });
+
+ 
+test('CCAvenue Mobile SDK requestHash uses the exact documented concatenation order', () => {
+  // Independent deterministic fixture: SHA-512("212016048802INR1.00test-working-key").
+  // This is a local formula test, not a CCAvenue-issued merchant interoperability vector.
+  assert.equal(
+    createCcaVenueRequestHash({
+      trackingId: '212016048802',
+      currency: 'INR',
+      amount: '1.00',
+      workingKey: 'test-working-key'
+    }),
+    'a660da1eef4b3cedcc18c251326b31f393531428fb09e651ccbbf0dbdc7dd512eac21a8d74b3c5f4d92ad494873862917c9fff90972bddb63769bbb73dd45bd5'
+  );
+});
