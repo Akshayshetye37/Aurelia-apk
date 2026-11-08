@@ -128,3 +128,26 @@ test('staff-reviewed UPI approval uses the canonical transaction and cannot mark
   assert.doesNotMatch(approve, /s\.st='matched'/);
   assert.doesNotMatch(approve, /persistCanonicalStrict/);
 });
+
+test('check-in, check-out and cancellation commit booking, room and snapshot atomically', () => {
+  const html = read('index.html');
+  const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
+  assert.match(runtime, /repository-operational-mutation-service\.mjs/);
+  assert.match(runtime, /commitOperationalMutation: input => commitOperationalStateMutation/);
+  assert.match(html, /async function commitStayMutation\(/);
+  assert.match(html, /await commit\(\{snapshot,bookingId:booking\.id,roomId:String\(room\.n\),eventType\}\)/);
+
+  const checkIns = [...html.matchAll(/async function completeCheckIn\(i\)/g)];
+  const checkOuts = [...html.matchAll(/async function completeCheckOut\(i\)/g)];
+  assert.equal(checkIns.length, 2, 'both legacy check-in declarations use the async transaction');
+  assert.equal(checkOuts.length, 2, 'both legacy check-out declarations use the async transaction');
+  assert.match(html, /eventType:'booking\.checked_in'/);
+  assert.match(html, /eventType:'booking\.checked_out'/);
+  const cancelStart = html.indexOf('async function cxl(i)');
+  const cancelEnd = html.indexOf('\nV.stays=', cancelStart);
+  assert.ok(cancelStart >= 0 && cancelEnd > cancelStart);
+  const cancel = html.slice(cancelStart, cancelEnd);
+  assert.match(cancel, /eventType:'booking\.cancelled'/);
+  assert.match(cancel, /await commitStayMutation/);
+  assert.doesNotMatch(cancel, /persist\(\)/);
+});
