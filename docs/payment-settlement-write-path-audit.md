@@ -4,7 +4,7 @@
 **Inspected integration branch:** `feature/multi-provider-payment-backend`  
 **Phase A hotfix:** `0dcf0e319f0c6c0fa3bc16383482dcb479110b88`  
 **Phase B implementation commits:** `5433111`, `9a684ca`, `b0d9f28`, `233df47`, `bdaf590`, `d3a2948`, `418beb0`, `c8afa7f`, `fde1fd0`  
-**Status (2026-11-08):** Manual folio payments and staff-reviewed UPI approvals now use an asynchronous repository transaction that commits the booking entity, folio projection and full recovery snapshot in one IndexedDB/SQLite batch, followed by exact read-back. The source-only CI suite and production web bundle passed on commit `773d98443a361f9c26d736d977afa17a5b991f97` (354 tests). Android APK/device qualification and provider UAT remain outstanding. Automatic gateway settlement remains disabled.
+**Status (2026-11-08):** Manual folio payments and staff-reviewed UPI approvals commit booking, folio projection and recovery snapshot in one IndexedDB/SQLite batch. Check-in, check-out and cancellation commit booking, room and recovery snapshot together; standalone housekeeping status changes commit room and recovery snapshot together. The primary guest/reservation form awaits canonical snapshot commit and exact read-back. GitHub Actions run [42487581657](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42487581657) passed 362/362 tests, production web bundle build and asset privacy checks. Android APK/device qualification and provider UAT remain outstanding. Automatic gateway settlement remains disabled.
 
 ## Deployment and connectivity policy
 
@@ -51,6 +51,22 @@ The provider/automatic sources remain rejected by this adapter. They still requi
 
 Tests: `tests/repository-settlement-service.test.mjs` covers atomic commit, exact read-back, idempotent retry, staff UPI evidence approval/replay, evidence-state mismatch, canonical booking divergence, provider-source rejection, failed storage and cache refresh.
 
+## Operational booking and room lifecycle transactions — 2026-11-08
+
+`src/storage/repository-operational-mutation-service.mjs` now provides the local repository boundary for lifecycle mutations:
+
+- Check-in and check-out commit the booking entity, room occupancy entity and complete recovery snapshot in one version-checked batch.
+- Reservation cancellation commits the booking in the cancelled collection, the room entity and the recovery snapshot together. It does not silently delete the canonical booking record.
+- Standalone housekeeping/availability status changes commit the room entity and recovery snapshot together.
+- Existing domain entities are compared with the previous canonical snapshot before mutation. Divergence fails closed rather than overwriting either copy.
+- Exact read-back of the changed entity/entities and complete snapshot is required before the UI reports success.
+- On a pre-commit failure, the UI restores its prior in-memory state. Runtime rollback preserves `Date` objects instead of JSON-stringifying them.
+- The synchronous localStorage-compatible key is refreshed only after the repository commit; it is not used as the transaction authority.
+
+The browser/PWA IndexedDB implementation is exercised by repository transaction tests. The Android SQLite adapter shares the repository contract and batch API, but a physical Android build/device qualification has not yet been performed.
+
+**Remaining lifecycle work:** guest edits and stable guest IDs, room creation/reassignment and stable room references, reservation advance plus guest/booking/folio creation as one domain transaction, inventory, expenses, POS, charges, settings and the remaining legacy mutation paths are not yet cut over. `uiCutover` remains false; do not describe the PMS as fully device-primary until those paths and all read paths have been migrated and qualified.
+
 ## Build integration
 
 `index.html` loads `./src/payments/settlement-service.mjs`. `scripts/prepare-web.js` now copies both `settlement-service.mjs` and `settlement-gate.mjs` into `www/src/payments/` so the module import remains available in the Capacitor APK.
@@ -59,7 +75,7 @@ Tests: `tests/repository-settlement-service.test.mjs` covers atomic commit, exac
 
 `tests/settlement-service.test.mjs` covers manual success, staff-review success, idempotency/UTR dedupe, automatic-source rejection with the gate disabled, overpayment rejection, rollback after a thrown persistence error, evidence-only `addSig`, and manual/staff route wiring.
 
-**Verification:** GitHub Actions run [42486548554](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486548554) passed 354/354 tests, production web bundle build and asset privacy checks on the exact commit shown above. This was a web/source workflow, not an APK build or physical-device test. Android release and device qualification remain open.
+**Verification:** GitHub Actions run [42487581657](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42487581657) passed 362/362 tests, production web bundle build and asset privacy checks on commit `70d28be9b82cb4101d2091e482e613797ab47660`. This was a web/source workflow, not an APK build or physical-device test. Android release and device qualification remain open.
 
 ## Gate and product stance
 
