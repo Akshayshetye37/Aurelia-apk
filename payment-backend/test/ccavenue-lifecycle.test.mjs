@@ -217,7 +217,7 @@ test('CCAvenue webhook handler acknowledges only after verified evidence persist
 
 test('CCAvenue webhook handler does not acknowledge when authoritative status is unavailable', async () => {
   const handler = createCcaVenueWebhookHandler({
-    notificationWorkingKey: KEY,
+    notificationWorkingKey: NOTIFY_KEY,
     resolveExpectedPayment: async () => EXPECTED,
     createVerificationService: async () => ({
       verifyOrderStatus: async () => { throw new Error('ccavenue_status_transport_error'); }
@@ -227,7 +227,7 @@ test('CCAvenue webhook handler does not acknowledge when authoritative status is
   const response = { statusCode: 0, body: null, status(code) { this.statusCode = code; return this; },
     json(value) { this.body = value; return this; } };
   const plaintext = 'order_id=' + EXPECTED.orderId + '&tracking_id=212016048802';
-  await handler({ body: { encResp: new CCAvenueCrypto(KEY).encrypt(plaintext) } }, response);
+  await handler({ body: { encResp: new CCAvenueCrypto(NOTIFY_KEY).encrypt(plaintext) } }, response);
   assert.equal(response.statusCode, 503);
   assert.equal(response.body.error, 'provider_reconciliation_unavailable');
 });
