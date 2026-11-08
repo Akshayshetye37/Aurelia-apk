@@ -55,7 +55,7 @@ Merchant credentials, private keys, webhook secrets and signing material remain 
 
 The local-first runtime policy module defines the device-primary policy and rejects a platform/storage-engine mismatch or an incomplete local repository contract. The PMS bootstrap coordinator establishes this policy after durable local storage and guarded migration verification, before releasing the application scripts. The runtime reports cloud sync disabled and network not required for startup.
 
-Regression coverage is provided by the local-first runtime policy test and bootstrap assertions.
+The bootstrap validates a declared inventory of 26 product feature areas (reservations, guests, rooms, housekeeping, maintenance, folios, manual payments, gateway intents, refunds, inventory, expenses, settings, staff workflows, payment review, reports, invoices, notifications, audit/recovery and provider selection) against the no-network/no-cloud-prerequisite contract. Regression coverage is provided by the local-first runtime policy test and bootstrap assertions.
 
 ## 7. Honest implementation boundary
 
