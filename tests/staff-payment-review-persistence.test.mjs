@@ -50,3 +50,16 @@ test('the guest folio displays its saved payment decisions and opens the origina
   assert.ok(folio.includes('Open review'));
   assert.ok(folio.includes('sigM'));
 });
+
+test('staff approval commits evidence decision and folio credit through one canonical transaction', () => {
+  const start = html.indexOf('async function sigA(');
+  const end = html.indexOf('/* money flow */', start);
+  assert.ok(start >= 0 && end > start);
+  const approve = html.slice(start, end);
+  assert.ok(approve.includes('await settlePayment('));
+  assert.ok(approve.includes('source:\'staff_review\''));
+  assert.ok(approve.includes('evidenceId:id'));
+  assert.ok(!approve.includes('await persistCanonicalStrict()'));
+  const service = html.includes('settlePaymentToRepository');
+  assert.ok(service, 'runtime loads the repository settlement service');
+});
