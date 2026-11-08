@@ -15,7 +15,6 @@ const REQUIRED_OPERATIONS = Object.freeze([
   'verifyWebhook', 'createRefund', 'getRefundStatus'
 ]);
 const CCA_VENUE_OPERATIONS = Object.freeze(['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
-const CCA_VENUE_OPERATIONS = Object.freeze(['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
 const FACTORIES = Object.freeze({
   razorpay: options => new RazorpayAdapter(options),
   cashfree: options => new CashfreeAdapter(options),
