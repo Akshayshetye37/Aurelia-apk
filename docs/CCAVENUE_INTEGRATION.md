@@ -534,3 +534,29 @@ verifier is implemented but cannot be considered production-network-ready.
 Before sandbox/production API qualification, provision a controlled static
 egress IP, register it with CCAvenue for the correct environment, and test
 outbound connectivity from the deployed Cloud Run revision.
+
+
+## Android gateway integration checklist — Appzlogic article review (8 November 2026)
+
+Reviewed: https://www.appzlogic.com/blog/how-to-implement-a-payment-gateway-in-your-android-app/
+
+The article is a high-level implementation checklist covering SDK setup, initialization, checkout UI, secure transport, response handling, sandbox testing, production credentials, error handling, SDK updates, PCI DSS and privacy. It is not a provider protocol specification or a production acceptance standard. Aurelia's provider contract, this document's CCAvenue-specific requirements, and server-side financial controls take precedence.
+
+### Aurelia-specific interpretation
+
+- **SDK and initialization:** integrate only the official merchant-issued SDK and exact supported API/package. Do not guess an Activity, dependency coordinate, callback, key name or initialization method. Keep merchant credentials and cryptographic material exclusively on the trusted backend.
+- **Checkout UI and handoff:** Android obtains a persisted payment intent and short-lived, non-secret checkout parameters from the backend. It must not calculate the payable amount independently or construct merchant secrets into the APK.
+- **Transport and response handling:** require HTTPS and strict callback/redirect allowlists. An SDK callback, WebView navigation, redirect URL or client-rendered success screen is a reconciliation hint only; none is proof of capture.
+- **Authoritative lifecycle:** the backend independently queries the provider and binds the result to tenant, environment, payment intent, unique merchant order ID, provider tracking/reference ID, amount and currency before recording provider evidence. Unknown outcomes remain locked against creating duplicate charges until reconciled.
+- **Persistence and accounting:** provider evidence is not itself a folio settlement or ledger posting. Any journal writer must remain separately authorized by Finance, use the canonical PMS payment/folio model, and be idempotent with durable read-back and audit evidence.
+- **Testing:** qualify success, decline, pending, timeout, transport ambiguity, duplicate/out-of-order callbacks, replay, process death, app restart, full refund, partial refund and refund-status recovery against merchant sandbox/UAT and supported physical Android devices.
+- **Compliance:** using a PCI DSS-validated gateway does not by itself establish Aurelia's PCI DSS scope or SAQ eligibility. Confirm the actual hosted/redirect/embedded-page design and applicable obligations with the acquirer or qualified assessor.
+- **Android payments policy:** classify the transaction before choosing the payment rail. Accommodation and other physical services must not be confused with digital goods/content subject to Google Play Billing.
+
+### CCAvenue-specific decision
+
+The article's generic SDK steps do not close the CCAvenue Mobile SDK gates. The Mobile SDK flow remains distinct from classic hosted checkout: the backend must create and validate the Tracking ID, decrypt the response using merchant-confirmed crypto, calculate the documented request hash, and hand only the official SDK's non-secret request fields to Android. The official merchant SDK and merchant-approved AES interoperability evidence remain prerequisites. Backend status lookup, notification authentication semantics, static source egress registration and a general refund contract/merchant entitlement also remain open.
+
+### Release boundary
+
+Do not register CCAvenue, enable live collection, enable automatic settlement/refund posting, or authorize an Android production release merely because the generic article checklist is complete. Current implementation status and the release gates above remain authoritative.
