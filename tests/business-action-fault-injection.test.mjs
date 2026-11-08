@@ -1,0 +1,23 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { indexedDB } from "fake-indexeddb";
+import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
+import { createIndexedDbStorageAdapter } from "../src/storage/indexeddb-storage-adapter.mjs";
+import { createBusinessActions } from "../src/storage/business-actions.mjs";
+import { createVerifiedPaymentTokenForTests } from "../src/payments/backend-payment-verifier.mjs";
+const context={tenantId:"tenant-fault",propertyId:"property-fault",deviceId:"device-fault"};
+const entity=(type,id,data)=>({key:type+":"+id,type,id,version:1,data,updatedAt:"2026-11-08T00:00:00.000Z",deletedAt:null});
+function adapter(name){return createIndexedDbStorageAdapter(new IndexedDbPmsRepository({indexedDBImpl:indexedDB,databaseName:"fault-"+name}));}
+async function seed(a,rows){await a.transaction(tx=>rows.forEach(r=>tx.compareAndPut("entities",r.key,0,r)));}
+function scenarios(){return[
+ {name:"checkout",rows:[entity("booking","b1",{id:"b1",folioId:"f1"}),entity("folio","f1",{id:"f1",balancePaise:0})],run:x=>x.checkout({bookingId:"b1",folioId:"f1"})},
+ {name:"posSale",rows:[entity("folio","f1",{id:"f1",balancePaise:0}),entity("inventory","sku1",{id:"sku1",sku:"sku1",quantity:2}),entity("stock_movement","opening",{id:"opening",sku:"sku1",quantityDelta:2})],run:x=>x.posSale({saleId:"sale1",folioId:"f1",items:[{sku:"sku1",quantity:1,unitPricePaise:500}]})},
+ {name:"adjustStock",rows:[entity("inventory","sku1",{id:"sku1",sku:"sku1",quantity:0})],run:x=>x.adjustStock({sku:"sku1",quantityDelta:2,reason:"count"})},
+ {name:"approvePayment",rows:[entity("booking","b1",{id:"b1",folioId:"f1"}),entity("folio","f1",{id:"f1",balancePaise:1000}),entity("payment","p1",{id:"p1",bookingId:"b1",folioId:"f1",amountPaise:1000,method:"UPI",reference:"UTR1",status:"PENDING"}),entity("ledger","charge1",{id:"charge1",folioId:"f1",amountPaise:1000,entryType:"CHARGE"})],run:x=>x.approvePayment({paymentId:"p1",verifiedToken:createVerifiedPaymentTokenForTests({bookingId:"b1",amountPaise:1000,method:"UPI",reference:"UTR1",providerTransactionId:"txn1",authorizationId:"auth1",expiresAtMs:Date.now()+60000})})},
+ {name:"requestRefund",rows:[entity("booking","b1",{id:"b1",folioId:"f1"}),entity("folio","f1",{id:"f1",balancePaise:0}),entity("payment","p1",{id:"p1",bookingId:"b1",folioId:"f1",amountPaise:1000,method:"UPI",status:"PAID"}),entity("ledger","charge1",{id:"charge1",folioId:"f1",amountPaise:1000,entryType:"CHARGE"}),entity("ledger","payment1",{id:"payment1",folioId:"f1",paymentId:"p1",amountPaise:-1000,entryType:"PAYMENT"})],run:x=>x.requestRefund({paymentId:"p1",refundId:"r1",amountPaise:500,reason:"guest request"})}
+];}
+function wrap(base,{failAt=null}={}){let writes=0;const adapter={get:base.get.bind(base),list:base.list.bind(base),getMeta:base.getMeta.bind(base),putMeta:base.putMeta.bind(base),getBackup:base.getBackup.bind(base),putBackup:base.putBackup.bind(base),integrityCheck:base.integrityCheck.bind(base),authority:base.authority.bind(base),transaction(fn){return base.transaction(tx=>fn({put(...args){writes++;if(writes===failAt)throw Error("Injected write fault "+writes);return tx.put(...args)},compareAndPut(...args){writes++;if(writes===failAt)throw Error("Injected write fault "+writes);return tx.compareAndPut(...args)},meta:tx.meta,backup:tx.backup}));}};return{adapter,writes:()=>writes};}
+function actions(a){let id=0;return createBusinessActions({adapter:a,context,eventId:()=>"evt-"+(++id),now:()=>"2026-11-08T00:00:00.000Z"});}
+async function snapshot(a){const entities=await a.list("entities"),outbox=await a.list("outbox");const sort=x=>x.sort((a,b)=>String(a.key||a.eventId).localeCompare(String(b.key||b.eventId)));return{entities:sort(entities),outbox:sort(outbox)};}
+
+test("Nth-write fault injection rolls back every business action to its exact pre-state",async()=>{for(const scenario of scenarios()){const successful=adapter("success-"+scenario.name);await seed(successful,scenario.rows);const counted=wrap(successful);await scenario.run(actions(counted.adapter));const writeCount=counted.writes();assert.ok(writeCount>=2,scenario.name+" must write domain rows and outbox");for(let n=1;n<=writeCount;n++){const candidate=adapter("fault-"+scenario.name+"-"+n);await seed(candidate,scenario.rows);const before=await snapshot(candidate);const faulted=wrap(candidate,{failAt:n});await assert.rejects(scenario.run(actions(faulted.adapter)),new RegExp("Injected write fault "+n));assert.deepEqual(await snapshot(candidate),before,scenario.name+" changed durable state when write "+n+" failed");}}});
