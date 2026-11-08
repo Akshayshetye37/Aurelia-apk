@@ -66,6 +66,32 @@ test("bootstrap replay is idempotent and verifies the original snapshot", async 
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
 });
 
+test("verified migration compares canonical SHA-256 rather than object insertion order", async () => {
+  const raw = JSON.stringify(state);
+  const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: raw });
+  const first = await coordinator("canonical-hash-order", storage).initializeApplication();
+  const db = await first.repository.database();
+  const tx = db.transaction("entities", "readwrite");
+  const store = tx.objectStore("entities");
+  const row = await new Promise((resolve, reject) => {
+    const request = store.get("legacy:set");
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  row.data = Object.fromEntries(Object.entries(row.data).reverse());
+  store.put(row);
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+  const replay = await coordinator("canonical-hash-order-replay", storage, {
+    repository: first.repository
+  }).initializeApplication();
+  assert.equal(replay.migration.status, "MIGRATION_VERIFIED");
+  assert.equal(await replay.repository.getAuthority(), "canonical");
+});
+
 test("missing legacy UI state is recovered from the last committed canonical snapshot", async () => {
   const raw = JSON.stringify(state);
   const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: raw });
