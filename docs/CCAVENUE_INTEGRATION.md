@@ -1,6 +1,6 @@
 # CCAvenue integration decision and implementation boundary
 
-**Status: ADAPTER NOT REGISTERED / NOT PRODUCTION-ENABLED.** Isolated hosted-checkout, AES envelope, status-verification and notification-reconciliation modules now exist, with schema-only credential storage. CCAvenue is not an implemented seven-operation adapter. Do not expose a customer checkout route or enable live collection, settlement or refund posting.
+**Status: SANDBOX CREDENTIAL ONBOARDING AVAILABLE / ADAPTER NOT REGISTERED / NOT ACTIVATABLE.** Isolated hosted-checkout, AES envelope, status-verification and notification-reconciliation modules now exist, with schema-only credential storage. CCAvenue is not an implemented seven-operation adapter. Do not expose a customer checkout route or enable live collection, settlement or refund posting.
 
 ## Correct integration model
 
@@ -560,3 +560,10 @@ The article's generic SDK steps do not close the CCAvenue Mobile SDK gates. The 
 ### Release boundary
 
 Do not register CCAvenue, enable live collection, enable automatic settlement/refund posting, or authorize an Android production release merely because the generic article checklist is complete. Current implementation status and the release gates above remain authoritative.
+
+
+## Aurelia Payment Gateway UI — sandbox credential onboarding
+
+CCAvenue is selectable in the Aurelia Payment Gateway provider list so an authorized tenant administrator can enter the merchant's sandbox credential set through the protected admin session. The form posts to the dedicated CCAvenue credential endpoint, which stores API and notification secrets in Google Secret Manager and records only non-secret configuration metadata in Firestore. The UI clears secret inputs after submission and explicitly reports that schema acceptance is not credential validation.
+
+This onboarding affordance does not register the adapter, mark credentials validated, pass sandbox acceptance, verify notification authenticity, or permit activation. The activation action remains unavailable for CCAvenue and the backend factory/tenant-selection allowlist remain unchanged. New CCAvenue checkout must remain blocked until the documented merchant-kit, tracking-ID/AES, notification-authentication, authoritative status, general refund and Android SDK gates are satisfied. This prevents a configuration-only screen from implying payment capability.
