@@ -387,3 +387,101 @@ This is a useful isolated implementation boundary, not a complete CCAvenue
 provider adapter. The factory intentionally remains unchanged and CCAvenue
 remains unavailable until all required operations pass the merchant sandbox
 contract tests.
+
+
+## Backend lifecycle implementation increment (8 November 2026)
+
+The following isolated backend components are now present:
+
+- `src/providers/ccavenue-crypto.mjs`: AES-128-CBC envelope codec using
+  MD5(merchant key) and the legacy fixed 00..0f IV construction. The key and IV
+  are held in private class fields; malformed hex, invalid key material,
+  oversized input and decryption errors fail closed.
+- `src/providers/ccavenue-hosted-checkout.mjs`: constructs the v3.3 hosted
+  billing-page POST fields and uses the test/production billing hosts.
+- `src/providers/ccavenue-verification.mjs`: server-to-server
+  `orderStatusTracker` client using the documented test/production API hosts,
+  encrypted JSON query, URL-encoded form envelope, status=1 plaintext error
+  handling, and strict returned order/reference/amount/currency binding.
+- `src/providers/ccavenue-notification.mjs`: decrypts the Dynamic Event
+  Notification `encResp`, uses only the order ID to resolve Aurelia's own
+  payment binding, then performs authoritative status lookup before calling
+  an injected evidence-persistence function. It never posts a ledger entry.
+- `test/ccavenue-lifecycle.test.mjs`: regression tests for the codec,
+  hosted-checkout construction, status lookup, response binding, provider
+  status mapping and notification reconciliation.
+
+### Important protocol corrections
+
+The merchant API v1.3 document is the *guide revision*, not the API request
+version value. The guide's request parameter section lists `version=1.1` as
+the current value; this implementation defaults to 1.1 and allows an explicit
+merchant-approved override. It sends status requests to
+`https://apitest.ccavenue.com/apis/servlet/DoWebTrans` or
+`https://api.ccavenue.com/apis/servlet/DoWebTrans`, not
+`https://ccavenue.com`.
+
+The API response is documented as a form envelope containing `status` and
+`enc_response`. If envelope `status=1`, CCAvenue says the error response is
+plain text and must not be decrypted. For `status=0`, the decrypted JSON
+contains `Order_Status_Result`, including `order_no`, `reference_no`,
+`order_amt`, `order_currncy` (the spelling in the guide) and
+`order_status`. It is not the `order_Status_List[0]` structure in the
+example proposal. The service validates both the merchant order ID and the
+CCAvenue reference number when both are supplied. CCAvenue warns that order
+number uniqueness is the merchant's responsibility and order-only lookup can
+return the latest matching order; Aurelia therefore uses a unique order ID
+and prefers lookup with the tracking reference when available.
+
+### Cryptographic qualification boundary
+
+The public Merchant API v1.3 guide confirms AES encryption/decryption and says
+the API Encryption Key is mapped to the Access Code, but it does not specify
+the AES mode, MD5 derivation, IV bytes, padding, or a known-answer vector.
+The MD5-derived AES-128-CBC key and fixed 00..0f IV implementation follows
+the legacy CCAvenue-compatible construction shown in corroborating public
+integration code; it is not represented as an independently authenticated
+CCAvenue source-code release. AES-CBC also provides no message authentication.
+Therefore:
+- use the API Encryption Key for Merchant API request/response envelopes;
+- use a separately configured primary-URL notification working key for
+  Dynamic Event Notification `encResp` decryption;
+- keep the Mobile SDK requestHash working key purpose-specific;
+- obtain the current merchant-issued AesCryptUtil source/test vector and pass
+  CCAvenue sandbox interoperability tests before production use;
+- never treat CBC decryption alone as proof that a webhook is authentic.
+
+### Notification processing boundary
+
+CCAvenue's public Dynamic Event Notification article confirms securely posted
+event objects and merchant-configured URLs, but does not publish a MAC or
+signature-verification contract. The notification processor consequently
+treats decrypted fields as an untrusted trigger. Tenant, folio, amount and
+currency are loaded from Aurelia's own stored order binding; callback
+merchant parameters are ignored. The processor calls `orderStatusTracker`
+with order ID and tracking ID, and only then passes verified evidence to an
+injected persistence boundary. The injected persistence implementation must
+be idempotent and must write provider evidence only. Canonical PMS ledger
+posting remains separately gated.
+
+### Not activated
+
+These components are not yet registered in `providers/factory.mjs`. The
+admin credential route still rejects CCAvenue, no merchant credentials or
+official merchant-issued SDK are present, and the Instant Refund API contract
+is still unavailable publicly. The components above are code-level
+foundations; they do not prove merchant sandbox compatibility or end-to-end
+production readiness. The existing six-provider factory and all production
+financial controls remain unchanged.
+
+### Production deployment decision
+
+The supplied deployment workflow was not copied into the repository. Its
+project ID, Workload Identity Provider, deployer service account and service
+topology are placeholders; the health URL does not match this service's
+`/readyz` endpoint; accepting HTTP 401 would not establish readiness; and
+listing revisions is not a rollback. A production workflow must be bound to
+real GitHub Environment approvals, real WIF/IAM resources, the repository's
+actual Cloud Run/Terraform configuration, a reachable protected health-check
+path and an explicit traffic rollback operation. No production deployment
+workflow or live financial switch is enabled by this change.
