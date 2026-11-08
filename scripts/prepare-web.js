@@ -5,7 +5,10 @@ fs.mkdirSync(dest,{recursive:true});
 fs.copyFileSync(src,path.join(dest,'index.html'));
 const storageDest=path.join(dest,'src','storage');
 fs.mkdirSync(storageDest,{recursive:true});
-for(const name of ['pms-repository-contract.mjs','pms-local-identity.mjs','indexeddb-pms-repository.mjs','pms-bootstrap-coordinator.mjs','pms-repository-bridge.mjs','capacitor-pms-storage.mjs']){
+const androidBuild=process.argv.includes('--android');
+const storageModules=['pms-repository-contract.mjs','pms-local-identity.mjs','legacy-snapshot-parser.mjs','pms-bootstrap-coordinator.mjs','pms-repository-bridge.mjs','capacitor-pms-storage.mjs'];
+if(!androidBuild)storageModules.push('indexeddb-pms-repository.mjs');
+for(const name of storageModules){
  const source=path.join(root,'src','storage',name);
  if(!fs.existsSync(source))throw new Error('PMS storage module not found: '+source);
  fs.copyFileSync(source,path.join(storageDest,name));
