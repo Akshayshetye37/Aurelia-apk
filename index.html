@@ -660,7 +660,7 @@ io:()=>hd('Import and export')+`<div class="grid">${[['Copy full backup (JSON)',
 set:()=>{const s=S.set,sw=(k,d)=>`<div class="row" style="padding:10px 0;border-bottom:1px dotted var(--ln);${d?'opacity:.4':''}"><span>${k==='Automatic reconciliation'?'Suggest matches':k}</span><button class="sw ${S.fe[k]?'on':''}" aria-label="${k==='Automatic reconciliation'?'Suggest matches':k}" onclick="tg('${k}')"></button></div>`;return hd('Settings')+`<div class="card"><h2>Hotel identity</h2>${[['name','Business name'],['phone','Phone'],['addr','Address'],['tax','GST or TPIN'],['upi','UPI or mobile money ID'],['cur','Currency']].map(([k,l])=>`<label class="fld"><span>${l}</span><input data-s="${k}" value="${esc(s[k]||'')}"></label>`).join('')}<label class="fld"><span>Hotel logo</span><input type="file" accept="image/*" onchange="pv(this,'lg')"></label><img id="lg" alt="" style="max-height:70px;display:none;border-radius:12px"><label class="fld"><span>Payment QR</span><input type="file" accept="image/*" onchange="pv(this,'qr')"></label><img id="qr" alt="" style="max-height:120px;display:none;border-radius:12px"><button class="btn" style="margin-top:12px" onclick="sv()">Save identity</button></div><div class="card" style="margin-top:14px"><h2>Feature controls</h2>${M.map(k=>sw(k)).join('')}</div>${Object.entries(G).map(([g,c])=>`<div class="card" style="margin-top:14px"><h2>${g}</h2>${sw(g)}${c.map(k=>sw(k,!S.fe[g])).join('')}</div>`).join('')}<div class="card" style="margin-top:14px"><h2>Guest terms</h2><label class="fld"><textarea id="tm">${esc(S.terms)}</textarea></label><div class="row"><button class="btn sm" onclick="S.terms=$('#tm').value;toast('Terms saved')">Save terms</button><button class="btn sm ghost" onclick="navigator.clipboard.writeText(S.terms).then(()=>toast('Terms copied'),()=>toast('Copy was blocked'))">Copy</button></div></div><div class="card" style="margin-top:14px"><h2>Data care</h2><div class="row"><button class="btn sm" onclick="hc()">Run health check</button><button class="btn sm ghost" onclick="demoRm()">Remove demo entries</button><button class="btn sm ghost" onclick="resetAll()">Reset all data</button></div></div>`}};
 V.more=()=>(SUB[S.sub]||SUB.menu)();
 const _r=render;render=function(){if(S.tab!=='more')S.sub=null;_r();const action=document.getElementById('hor-book'),search=document.getElementById('hor-search');const showActions=S.tab==='home'||S.tab==='stays';if(action)action.style.display=showActions?'flex':'none';if(search)search.style.display=showActions?'grid':'none'};
-function rs(n,s){rm(n).s=s;aud('Room '+n,s==='ready'?'Released to available':s==='clean'?'Marked for cleaning':s);render();toast('Room '+n+' updated')}
+async function rs(n,s){const room=rm(n);if(!room)return;try{const result=await commitRoomStatusMutation({room,apply:()=>{room.s=s},auditAction:'Room '+n,auditDetail:s==='ready'?'Released to available':s==='clean'?'Marked for cleaning':s});render();toast(result.cacheRefreshed===false?'Room saved to device storage; compatibility cache refresh failed.':'Room '+n+' updated')}catch(error){toast(error.message||'Room status was not saved')}}
 function tg(k){S.fe[k]=!S.fe[k];const y=scrollY;render();scrollTo({top:y,behavior:'instant'})}
 function pv(e,id){const f=e.files[0];if(!f)return;const i=$('#'+id);i.src=URL.createObjectURL(f);i.style.display='block'}
 function sv(){$$('[data-s]').forEach(e=>S.set[e.dataset.s]=e.value);aud('Settings','Hotel identity saved');toast('Identity saved')}
@@ -1664,6 +1664,27 @@ async function commitStayMutation({booking,room,eventType,apply,auditAction,audi
   if(error&&error.code==='OPERATIONAL_CANONICAL_READBACK_MISMATCH'){
    RECOVERY_CHECK_PENDING=true;
    console.error('[Aurelia Lifecycle] Repository read-back mismatch after a committed lifecycle transaction. Writes are frozen.',error);
+   throw new Error('CRITICAL: Device storage read-back is inconsistent. Do not retry or edit; keep the app open for recovery.');
+  }
+  Object.keys(S).forEach(key=>delete S[key]);
+  Object.assign(S,before);
+  throw error;
+ }
+}
+async function commitRoomStatusMutation({room,apply,auditAction,auditDetail}){
+ if(RECOVERY_CHECK_PENDING)throw new Error('Operational writes are paused during recovery.');
+ const before=cloneRuntimeState(S);
+ try{
+  apply();
+  if(typeof aud==='function')aud(auditAction,auditDetail);
+  const snapshot={tab:S.tab,bk:S.bk};DK.forEach(k=>snapshot[k]=S[k]);
+  const commit=window.AureliaRepositoryCompatibility?.commitRoomMutation;
+  if(typeof commit!=='function')throw new Error('Canonical local repository is unavailable; room change was not saved.');
+  return await commit({snapshot,roomId:String(room.n),eventType:'room.status_changed'});
+ }catch(error){
+  if(error&&error.code==='OPERATIONAL_CANONICAL_READBACK_MISMATCH'){
+   RECOVERY_CHECK_PENDING=true;
+   console.error('[Aurelia Room] Repository read-back mismatch after room commit. Writes are frozen.',error);
    throw new Error('CRITICAL: Device storage read-back is inconsistent. Do not retry or edit; keep the app open for recovery.');
   }
   Object.keys(S).forEach(key=>delete S[key]);
@@ -5332,7 +5353,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 import { bootstrapper } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
-import { commitOperationalStateMutation } from "./src/storage/repository-operational-mutation-service.mjs";
+import { commitOperationalStateMutation, commitRoomStateMutation } from "./src/storage/repository-operational-mutation-service.mjs";
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
 
@@ -5377,7 +5398,8 @@ try {
        return row?.data || null;
      },
      settlePayment: input => settlePaymentToRepository({ ...input, bridge: storageBridge }),
-     commitOperationalMutation: input => commitOperationalStateMutation({ ...input, bridge: storageBridge })
+     commitOperationalMutation: input => commitOperationalStateMutation({ ...input, bridge: storageBridge }),
+     commitRoomMutation: input => commitRoomStateMutation({ ...input, bridge: storageBridge })
    });
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "APPLICATION_MODULES";
