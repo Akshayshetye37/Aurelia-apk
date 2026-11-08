@@ -2,7 +2,7 @@
  * Local-first sync foundation. No transport is enabled here.
  * A repository MUST atomically commit the business mutation and outbox event
  * in one SQLite transaction (Android) or one IndexedDB readwrite transaction.
- * localStorage plus a separate journal is not an atomic adapter.
+ * A separate key-value shadow store is not an atomic adapter.
  */
 const ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
 const EVENT=/^[A-Z][A-Z0-9_]{1,79}$/;
