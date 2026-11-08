@@ -7,8 +7,8 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 - **GitHub repository:** https://github.com/Akshayshetye37/Aurelia-apk
 - **Project root:** repository root (`/`)
 - **Active engineering branch:** `feature/multi-provider-payment-backend`
-- **Current branch HEAD inspected:** `92791223146f8ae95b8c4007361c4f938c51b652` (8 November 2026)
-- **Current-head checks:** GitHub returned no workflow runs and no commit status checks for this exact SHA during the audit on 8 November 2026. Treat this revision as not CI-verified until fresh checks complete.
+- **Active branch:** `feature/multi-provider-payment-backend` (resolve the current SHA from the branch ref; avoid hard-coded moving HEAD values).
+- **Latest verification:** canonical recovery implementation and regression tests are committed. The latest commits have no returned workflow run or status-check evidence; tests have not been represented as executed.
 - **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
 
 Useful project locations:
@@ -47,6 +47,7 @@ The current implementation contains substantial storage, payment and security fo
 - IndexedDB repository with entity version checks, transactional entity/outbox writes, migration snapshot support and outbox leasing/retry/conflict operations.
 - Native SQLite repository and Capacitor bridge foundations, including atomic entity/outbox writes, version checks, migration/read-back and lease lifecycle operations.
 - Guarded local identity/bootstrap and legacy snapshot migration.
+- Startup recovery restores a missing legacy UI state from the committed canonical audit snapshot, validates the complete PMS schema, and verifies exact durable read-back. If canonical records exist but no complete recovery snapshot is available, startup fails closed rather than presenting an empty PMS.
 - Multi-entity batch transaction support in the browser and native repository layers.
 - Room inventory command foundation for stable-ID room creation, scoped edits, paise-based rate validation and versioned housekeeping/maintenance state.
 - Repository-backed folio settlement command foundation and concurrency regression coverage.
@@ -75,7 +76,7 @@ The current implementation contains substantial storage, payment and security fo
 
 ## CI evidence and verification boundary
 
-The current branch HEAD inspected for this audit is `92791223146f8ae95b8c4007361c4f938c51b652` (8 November 2026). GitHub returned no workflow runs and no commit status checks for this exact SHA. The older [PMS workflow run 42380831922](https://github.com/Akshayshety37/Aurelia-apk/actions/runs/42380831922) is historical evidence for its recorded SHA only and does not establish verification of the current branch head. No new Android build is authorized by this audit.
+The active branch is `feature/multi-provider-payment-backend`. GitHub returned no workflow runs and no commit status checks for the latest storage recovery commit. The older [PMS workflow run 42380831922](https://github.com/Akshayshety37/Aurelia-apk/actions/runs/42380831922) is historical evidence for its recorded SHA only and does not establish verification of the current branch head. No new Android build is authorized by this audit.
 
 Historical evidence is commit-scoped and must not be treated as an automatic pass for later revisions:
 
@@ -155,6 +156,6 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 ---
 
-**Current branch HEAD inspected:** `92791223146f8ae95b8c4007361c4f938c51b652` (8 November 2026)  
-**Current-head CI:** not verified; no workflow runs or commit status checks were returned.  
+**Active branch:** `feature/multi-provider-payment-backend`  
+**Latest CI:** not verified; no workflow runs or commit status checks were returned.  
 **Status:** engineering foundations exist; production release not approved.
