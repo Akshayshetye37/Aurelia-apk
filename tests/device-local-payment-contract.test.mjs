@@ -304,3 +304,20 @@ test('restaurant-to-folio posting awaits a single canonical booking, table, sale
   assert.match(handler, /await commitRestaurantFolioState/);
   assert.doesNotMatch(handler, /persist\(\)/);
 });
+
+test('restaurant table settlement records the sale and clears the table only after local commit', () => {
+  const html = read('index.html');
+  const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
+  assert.match(runtime, /commitRestaurantTableSettlement/);
+  assert.match(runtime, /commitRestaurantTableSettlement: input => commitRestaurantTableSettlement/);
+  const helperStart = html.indexOf('async function commitRestaurantSettlementState(');
+  const helperEnd = html.indexOf('\nlet LOCAL_STATE_STATUS', helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart);
+  assert.match(html.slice(helperStart, helperEnd), /await commit\(\{snapshot,tableId,saleId,saleIndex\}\)/);
+  const start = html.lastIndexOf('async function settleGo()');
+  const end = html.indexOf('\nfunction chg(i)', start);
+  assert.ok(start >= 0 && end > start);
+  const handler = html.slice(start, end);
+  assert.match(handler, /await commitRestaurantSettlementState/);
+  assert.doesNotMatch(handler, /persist\(\)/);
+});
