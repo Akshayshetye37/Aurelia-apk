@@ -26,6 +26,9 @@ export class SqliteStorageAdapter extends StorageAdapter{
  putBackup(id,value){return this.put("legacy_backup",id,{...value,id});}
  async integrityCheck(){const r=await this.plugin.storageIntegrityCheck();if(r?.ok!==true)throw new Error("SQLite integrity_check failed");return r;}
  async authority(){const r=await this.plugin.storageGetAuthority();if(!["legacy","migrating","canonical"].includes(r?.state))throw new Error("SQLite returned an invalid authority state");return r.state;}
+ async authorityRecord(){return this.plugin.storageGetAuthority();}
+ async setAuthorityRecord(record){return this.setAuthority(record?.state||record?.value||"legacy",record?.migrationId||null);}
+ async wipe(){await this.plugin.storageWipe();return true;}
  async setAuthority(state,migrationId=null){if(!["legacy","migrating","canonical"].includes(state))throw new TypeError("Invalid storage authority state");const r=await this.plugin.storageSetAuthority({state,migrationId});if(r?.state!==state)throw new Error("SQLite authority update read-back mismatch");return r.state;}
 }
 export function createSqliteStorageAdapter(plugin){return assertStorageAdapter(new SqliteStorageAdapter(plugin));}
