@@ -68,7 +68,7 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
   }
 
   @PluginMethod public void initializeStorage(PluginCall call) {
-    io.execute(() -> { try { repository.getWritableDatabase(); JSObject r=new JSObject();r.put("success",true);r.put("engine","android-sqlite");r.put("contractVersion",1);call.resolve(r); }
+    io.execute(() -> { try { repository.getWritableDatabase(); JSONObject integrity=repository.storageIntegrityCheck();if(!integrity.optBoolean("ok",false))throw new IllegalStateException("SQLite integrity_check failed at startup");JSONObject authority=repository.storageAuthority();if(!"legacy".equals(authority.optString("state"))&&!"migrating".equals(authority.optString("state"))&&!"canonical".equals(authority.optString("state")))throw new IllegalStateException("Invalid SQLite authority state");JSObject r=new JSObject();r.put("success",true);r.put("engine","android-sqlite");r.put("contractVersion",1);r.put("integrity",integrity);r.put("authority",authority);call.resolve(r); }
       catch(Exception e){call.reject("Native SQLite initialization failed","PMS_SQLITE_INIT_FAILED",e);} });
   }
   @PluginMethod public void getEntity(PluginCall call) {
