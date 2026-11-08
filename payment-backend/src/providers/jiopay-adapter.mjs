@@ -98,16 +98,28 @@ export class JioPayAdapter extends PaymentProviderAdapter {
       status:'PENDING',checkoutUrl:d.redirectURI,transactionContext:d.tranCtx};
   }
   async getPaymentStatus(input) {
-    if(!validId(input?.orderId)||input.orderId.length>20) throw new TypeError('invalid_jiopay_order_id');
+    if(!validId(input?.orderId)||input.orderId.length>20||
+      (input.paymentId!=null&&!validId(String(input.paymentId)))) throw new TypeError('invalid_jiopay_order_id');
     const d=await this.command({merchantId:this.credentials.merchantId,aggregatorID:this.credentials.aggregatorId||'',
       merchantTxnNo:input.orderId,originalTxnNo:input.orderId,amount:'0.00',transactionType:'STATUS',addlParam1:'',addlParam2:''});
     if(d.merchantId!==this.credentials.merchantId||d.merchantTxnNo!==input.orderId)
       throw new Error('jiopay_status_identity_mismatch');
-    const state=statusOf(d), amountMinor=toMinor(d.amount??d.txnAmount??d.transactionAmount);
-    const inr=d.currencyCode==='356'||d.currency==='INR';
-    return {provider:'jiopay',orderId:input.orderId,paymentId:d.pgTransactionId==null?null:String(d.pgTransactionId),
+    // JioPay's published status response uses txnStatus/txnID and omits
+    // currencyCode. This adapter only creates INR orders (currencyCode 356),
+    // so an omitted currency is normalized to INR; an explicit non-INR value
+    // remains untrusted and cannot qualify as a capture.
+    const state=statusOf(d);
+    const amountMinor=toMinor(d.amount??d.txnAmount??d.transactionAmount);
+    const explicitCurrency=d.currencyCode!=null||d.currency!=null;
+    const inr=explicitCurrency
+      ? (String(d.currencyCode)==='356'||d.currency==='INR')
+      : true;
+    const paymentId=d.txnID??d.pgTransactionId??d.paymentID??d.txnAuthID??null;
+    if(input.paymentId!=null&&String(paymentId)!==String(input.paymentId))
+      throw new Error('jiopay_status_payment_identity_mismatch');
+    return {provider:'jiopay',orderId:input.orderId,paymentId:paymentId==null?null:String(paymentId),
       paymentStatus:state||'UNKNOWN',amountMinor,currency:inr?'INR':null,
-      captured:['SUCCESS','SUCCESSFUL','COMPLETED','CAPTURED','S0000','SUC'].includes(state)&&validMinor(amountMinor)&&inr,
+      captured:['SUCCESS','SUCCESSFUL','COMPLETED','CAPTURED','S0000','SUC','0000'].includes(state)&&validMinor(amountMinor)&&inr,
       found:!['NOT_FOUND','NO_RECORD','R4040'].includes(state)};
   }
   async findOrderByReference(input) {
