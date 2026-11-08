@@ -106,3 +106,21 @@ test("failed canonical transaction leaves the live folio untouched", async () =>
   assert.equal(await bridge.fetchEntity("booking", "41"), null);
   assert.equal(await bridge.fetchEntity("folio", "folio-41"), null);
 });
+
+test("legacy UI cache is refreshed only after the canonical payment snapshot is committed", async () => {
+  const { bridge, booking, state } = fixture();
+  const values = new Map();
+  const legacyStorage = {
+    memoryOnly: false,
+    setItem: (key, value) => values.set(key, String(value)),
+    getItem: key => values.has(key) ? values.get(key) : null
+  };
+  const result = await settlePaymentToRepository({
+    bridge, state, booking, balanceDueFor, amount: 125, method: "Cash",
+    source: "manual", verificationConfirmed: true, legacyStorage
+  });
+  assert.equal(result.cacheRefreshed, true);
+  const cached = JSON.parse(values.get("aurelia_lodge_v2"));
+  assert.equal(cached.b[0].p, 125);
+  assert.equal(cached.b[0].pays.length, 1);
+});
