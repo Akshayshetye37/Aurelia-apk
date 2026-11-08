@@ -65,17 +65,35 @@ test('JioPay status command uses authenticated form request and binds transactio
     assert.equal(options.headers['Content-Type'],'application/x-www-form-urlencoded');
     const request=Object.fromEntries(new URLSearchParams(options.body));
     assert.equal(verifyJioPaySecureHash(request,credentials.saltOrHashKey),true);
+    // Shape documented by JioPay's published status-check response:
+    // txnStatus=SUC, txnID present, and no currencyCode in the response.
     const response={merchantId:credentials.merchantId,merchantTxnNo:'order_123',
-      transactionStatus:'SUCCESS',amount:'125.00',currencyCode:'356',pgTransactionId:'pg-123'};
+      txnStatus:'SUC',txnResponseCode:'0000',amount:'125.00',txnID:'7700206064604'};
     return {status:200,body:{...response,secureHash:generateJioPaySecureHash(response,credentials.saltOrHashKey)}};
   });
   const adapter=new JioPayAdapter({credentials,environment:'uat',fetchImpl:mock.fetchImpl});
-  const result=await adapter.getPaymentStatus({orderId:'order_123'});
+  const result=await adapter.getPaymentStatus({orderId:'order_123',paymentId:'7700206064604'});
   assert.equal(result.captured,true);
   assert.equal(result.amountMinor,12500);
-  assert.equal(result.paymentId,'pg-123');
+  assert.equal(result.currency,'INR');
+  assert.equal(result.paymentId,'7700206064604');
 });
 
+
+
+test('JioPay status rejects a different provider transaction ID and does not capture pending status',async()=>{
+  const mock=mockFetch(async()=>{
+    const response={merchantId:credentials.merchantId,merchantTxnNo:'order_123',
+      txnStatus:'P0030',respDescription:'Awaiting user action',amount:'125.00',txnID:'7700206064604'};
+    return {status:200,body:{...response,secureHash:generateJioPaySecureHash(response,credentials.saltOrHashKey)}};
+  });
+  const adapter=new JioPayAdapter({credentials,environment:'uat',fetchImpl:mock.fetchImpl});
+  await assert.rejects(adapter.getPaymentStatus({orderId:'order_123',paymentId:'another-txn'}),
+    /jiopay_status_payment_identity_mismatch/);
+  const status=await adapter.getPaymentStatus({orderId:'order_123'});
+  assert.equal(status.captured,false);
+  assert.equal(status.paymentStatus,'P0030');
+});
 
 test('JioPay creates a refund and reconciles it by the merchant refund reference',async()=>{
   const mock=mockFetch(async(url,options)=>{
