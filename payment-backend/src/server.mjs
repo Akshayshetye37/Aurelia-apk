@@ -30,6 +30,7 @@ import {
   paymentControlAllows, updatePaymentControls
 } from './payment-controls/firestore-controls.mjs';
 import { activateSingleProvider, deactivateSingleProvider, readActiveProvider } from './payment-controls/active-provider-selection.mjs';
+import { evaluateProviderProductionQualification } from './payment-controls/provider-production-qualification.mjs';
 // No folio settlement writer is imported: this service records provider evidence
 // only until a trusted local accounting bridge passes its separate release gates.
 
@@ -189,11 +190,25 @@ async function liveCollectionBlockReason(tenantId, provider) {
   if (controls.emergency_stop !== false) return 'payment_emergency_stop';
   if (controls.live_collection !== true) return 'live_collection_not_authorised';
   if (controls.live_collection_enabled !== true) return 'live_collection_disabled_by_admin';
-  const qualification = providerQualificationStatus(provider);
-  if (!qualification.implemented || qualification.liveCollection !== true) {
-    return 'provider_live_collection_not_enabled';
+  if (!implementedProviderAdapters().includes(provider)) return 'provider_not_implemented';
+  try {
+    const qualificationRef = db.doc('paymentProviderQualifications/' + tenantId + '/providers/' + provider);
+    const qualificationSnap = await qualificationRef.get();
+    const qualification = evaluateProviderProductionQualification({
+      provider,
+      record: qualificationSnap.exists ? qualificationSnap.data() : null
+    });
+    if (!qualification.ready) return qualification.reason;
+    const adapterEnvironment = adapterEnvironmentOf(provider, 'live');
+    const providerState = await providerTenantDoc(tenantId, provider, adapterEnvironment).get();
+    if (!providerState.exists || providerState.data().active !== true ||
+        providerState.data().configured !== true || providerState.data().credentialsValidated !== true) {
+      return 'production_provider_credentials_not_validated';
+    }
+    return null;
+  } catch {
+    return 'provider_qualification_unavailable';
   }
-  return null;
 }
 function requireTenantAdmin(req, res, next) {
   return authenticateTenantMembership(req, res, next, ['owner', 'admin'], 'active_tenant_admin_membership_required');
