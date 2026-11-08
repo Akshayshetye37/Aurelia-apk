@@ -4342,18 +4342,20 @@ if (typeof window.render === "function") window.render();
 function providerConfigPanelHtml(){
  return '<section class="provider-config-panel" style="margin:14px 0;padding:16px;border:1px solid var(--ln);border-radius:16px;min-width:0;width:100%;overflow:hidden">'+
   '<h3 style="margin:0 0 8px">Connect a payment gateway (optional)</h3>'+
-  '<p class="lab">Aurelia runs locally on this device and can use online gateways whenever this device has internet access and is enrolled with the trusted HTTPS payment backend. Gateway setup remains optional: without a qualified active provider, cash/manual payments, receipts and local folios continue to work offline. Merchant credentials stay on the backend; never enter provider secret keys into the device app.</p>'+
+  '<p class="lab">Aurelia runs locally on this device and can use online gateways whenever this device has internet access and is enrolled with the trusted HTTPS payment backend. Gateway setup remains optional: without a qualified active provider, cash/manual payments, receipts and local folios continue to work offline. The primary provider is selected once for the whole Aurelia app (tenant) and applies across its enrolled device installations. Merchant credentials stay on the backend; never enter provider secret keys into the device app.</p>'+
   '<div id="aurelia-provider-config-content"><button class="btn sm" type="button" onclick="loadAureliaProviderConfiguration()">Load secure gateway setup</button><p class="lab">Sign in as the property owner or administrator with MFA to load the supported gateway credential fields.</p></div>'+
-  '<p class="lab">Only one qualified gateway can be active for new online payments at a time. Switching does not erase pending transactions from the previous gateway. The device app launches supported checkout over the internet; provider verification remains server-side. Refund API client support exists, but refund UI/folio accounting and payment-link workflows are not released. Live collection remains disabled.</p></section>';
+  '<p class="lab">Exactly one qualified gateway is primary for the whole Aurelia app at a time. An authorized user must explicitly confirm a provider switch; the newly activated provider becomes primary for every enrolled device and all new online payments. The previous provider is frozen for new checkout, but its historical transactions remain available for webhooks, verification, refunds and reconciliation. There is no automatic fallback. The device app launches checkout through the app-wide primary provider; provider verification remains server-side. Refund API client support exists, but refund UI/folio accounting and payment-link workflows are not released. Live collection remains disabled.</p></section>';
 }
 let aureliaProviderAdminCatalogue=[];
 let aureliaProviderAdminActiveId=null;
+let aureliaProviderAdminActiveEnvironment=null;
 window.loadAureliaProviderConfiguration=async function(){
  const host=document.getElementById('aurelia-provider-config-content');if(host)host.innerHTML='<p class="lab">Loading protected provider configuration…</p>';
  try{
   const result=await window.aureliaPaymentAdminRequest('/v1/admin/providers','GET');
   aureliaProviderAdminCatalogue=Array.isArray(result.providers)?result.providers.filter(x=>x.environment==='test'):[];
   aureliaProviderAdminActiveId=result.activeProviderId||null;
+  aureliaProviderAdminActiveEnvironment=result.activeProviderEnvironment||null;
   window.renderAureliaProviderCredentialForm();
  }catch(error){if(host)host.innerHTML='<p class="lab" role="alert">'+esc(error.message||'Could not load provider configuration.')+'</p><button class="btn sm" type="button" onclick="loadAureliaProviderConfiguration()">Retry</button>';}
 };
@@ -4365,10 +4367,10 @@ window.renderAureliaProviderCredentialForm=function(selectedProvider){
  const currentSelect=document.getElementById('aurelia-provider-config-select');
  const selected=selectedProvider||currentSelect?.value||'razorpay';
  const p=byId.get(selected)||byId.get('razorpay')||null;
- const options=supported.map(id=>'<option value="'+id+'"'+(p?.provider===id?' selected':'')+'>'+names[id]+'</option>').join('')+'<option value="ccavenue" disabled>CCAvenue · not implemented</option>';
+ const options=supported.map(id=>'<option value="'+id+'"'+(p?.provider===id?' selected':'')+'>'+names[id]+'</option>').join('')+'<option value="ccavenue" disabled>CCAvenue · in development, not activatable</option>';
  const fields=(p?.credentials||[]).map(field=>'<label class="fld"><span>'+esc(field.label)+(field.required?' *':'')+'</span><input id="aurelia-provider-field-'+esc(field.key)+'" name="'+esc(field.key)+'" type="'+(field.secret?'password':'text')+'" autocomplete="'+(field.secret?'new-password':'off')+'" '+(field.required?'required':'')+' maxlength="512" spellcheck="false" placeholder="'+(field.secret?'Enter merchant secret':'Enter '+esc(field.label))+'"></label>').join('');
  const status=p?'<div class="provider-config-status lab" role="status">Configuration: '+(p.configured?'saved':'not configured')+' · Credential validation: '+(p.credentialsValidated?'passed':'not passed')+' · Sandbox acceptance: '+(p.sandboxTestPassed?'passed':'pending')+' · Webhook verification: '+(p.webhookVerified?'verified':'pending')+'</div>':'<p class="lab" role="status">No configuration record was returned for this gateway. Save is unavailable until the backend exposes this provider.</p>';
- const active=aureliaProviderAdminActiveId?'<div class="tag ready">Active gateway: '+esc(names[aureliaProviderAdminActiveId]||aureliaProviderAdminActiveId)+'</div>':'<div class="tag out">No online gateway selected · default local payments remain active</div>';
+ const active=aureliaProviderAdminActiveId?'<div class="tag ready">App-wide primary provider: '+esc(names[aureliaProviderAdminActiveId]||aureliaProviderAdminActiveId)+(aureliaProviderAdminActiveEnvironment?' · '+esc(aureliaProviderAdminActiveEnvironment):'')+'</div><p class="lab">This selection applies to the entire Aurelia app and all enrolled device installations.</p>':'<div class="tag out">No app-wide online provider selected · gateway checkout is unavailable; local payments remain active</div>';
  const activate=p&&p.configured&&p.credentialsValidated&&p.sandboxTestPassed&&p.webhookVerified
   ?'<button class="btn sm" type="button" onclick="activateAureliaPaymentProvider(\''+esc(p.provider)+'\')">Make this the active gateway</button>'
   :'<p class="lab">Activation unlocks only after credentials, sandbox acceptance and a real verified webhook have all passed.</p>';
@@ -4379,7 +4381,7 @@ window.renderAureliaProviderCredentialForm=function(selectedProvider){
   '<div class="lab" style="margin:10px 0">Enter the exact merchant values supplied by '+esc(names[p?.provider]||'your provider')+'. Secret fields are write-only and are sent directly to the trusted backend.</div>'+
   fields+'<button class="btn provider-save-button" type="submit" '+(!p?'disabled':'')+'>Save and validate credentials</button></form>'+
   status+activate+
-  '<p class="lab">CCAvenue is intentionally unavailable: no CCAvenue adapter or end-to-end payment flow is implemented. Do not enter CCAvenue credentials here.</p></div>';
+  '<p class="lab">CCAvenue is listed as the seventh gateway but remains unavailable for selection and activation until its complete adapter, credential validation, authenticated webhook, authoritative status, refund lifecycle and merchant acceptance tests are implemented. Do not enter CCAvenue credentials here.</p></div>';
 };
 window.saveAureliaProviderCredentials=async function(){
  const select=document.getElementById('aurelia-provider-config-select'),provider=select?.value||'';
@@ -4405,9 +4407,16 @@ window.saveAureliaProviderCredentials=async function(){
  }
 };
 window.activateAureliaPaymentProvider=async function(provider){
+ if(!['razorpay','cashfree','payu','phonepe','paytm','jiopay'].includes(provider)){
+  toast('This provider is not available for activation.');return false;
+ }
+ if(provider===aureliaProviderAdminActiveId){toast('This provider is already the app-wide primary gateway.');return true;}
+ const label=({razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay'})[provider]||provider;
+ const previous=({razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay'})[aureliaProviderAdminActiveId]||aureliaProviderAdminActiveId||'no provider';
+ if(!window.confirm('Switch the primary payment provider for the entire Aurelia app from '+previous+' to '+label+'? All new online payments across enrolled devices will use '+label+'. '+previous+' will stop receiving new payments, but existing transactions remain available for status checks, webhooks, refunds and reconciliation. No automatic fallback will occur.'))return false;
  try{
   await window.aureliaPaymentAdminRequest('/v1/admin/providers/'+encodeURIComponent(provider)+'/activate','POST',{environment:'test',confirm:true});
-  toast('Active online gateway updated. Default local payment methods remain available.');
+  toast(label+' is now the primary provider for the entire Aurelia app. Existing transactions remain with their original provider.');
   await window.loadAureliaProviderConfiguration();
  }catch(error){toast(error.message||'Gateway activation was rejected.');}
 };
