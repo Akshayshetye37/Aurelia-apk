@@ -4,6 +4,45 @@
 
 ## Correct integration model
 
+## Important distinction: Web Integration v3.1 is not the Mobile SDK flow
+
+The supplied Integration Document v3.1 describes the classic hosted billing-page
+flow. It posts `encRequest` and `access_code` to
+`/transaction/transaction.do?command=initiateTransaction`; the request is
+encrypted using the merchant integration kit's `AesCryptUtil` and the
+merchant's encryption key. The guide's sample calls that value `enc_key`.
+It does not specify the MD5(working_key) key-and-IV construction in the
+submitted Node.js snippet. That construction is therefore not adopted.
+
+The v3.1 guide also describes a different merchant parameter contract:
+`merchant_id`, `order_id`, `currency`, `amount`, `redirect_url`,
+`cancel_url`, and `language`. The user's proposed `generateSecurePayload`
+is only a partial classic web-checkout parameter builder; it is not the
+Mobile SDK Tracking ID API.
+
+The Mobile SDK v1.7 flow is distinct:
+
+- Backend creates a CCAvenue Tracking ID by posting `access_code` and
+  AES-128-encrypted merchant parameters including `regId`, currency, amount
+  and order ID to the Tracking ID Generation API.
+- Backend decrypts the returned `encResp` using the merchant-kit-compatible
+  AES implementation and validates its status and tracking ID.
+- Backend computes the Mobile SDK request hash using the documented SHA-512
+  concatenation. This hash primitive is implemented and covered by the
+  published test vector.
+- Android receives the SDK's documented request dictionary, including
+  `trackingId` and `requestHash`, and launches the official merchant SDK.
+  It does not receive a classic `encRequest` token and does not launch an
+  invented Activity class.
+
+The public v3.1 PDF is not a substitute for the current merchant-specific
+Mobile SDK kit. Neither guide provides enough evidence to safely implement
+the precise AES key derivation/padding/encoding in this project without the
+official server sample or known-answer test vectors. Do not infer an IV from
+the working key, and do not assume the access code, working key and encryption
+key are interchangeable.
+
+
 The previously proposed RSA public-key flow and Android class
 `com.ccavenue.android.automated.CCAvenueActivity` are not supported by the
 CCAvenue Mobile SDK Integration Guide v1.7 (28 March 2024).
