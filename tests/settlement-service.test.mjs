@@ -123,5 +123,6 @@ test("reservation advance form retains amount validation and rollback checks", a
   assert.match(handler, /Guest or reservation could not be verified in device storage/);
   assert.match(handler, /S\.b=priorBookings/);
   assert.match(handler, /await persistCanonicalStrict\(\)/);
+  assert.match(handler, /return withLocalOperationalLock\(async\(\)=>/);
   assert.doesNotMatch(handler, /\n\s*persist\(\);/);
 });
