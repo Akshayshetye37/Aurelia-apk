@@ -209,3 +209,22 @@ test("a stale legacy cache is repaired from the latest canonical snapshot withou
   assert.equal(restarted.migration.migrationId, first.migration.migrationId);
   assert.equal(restarted.domainProjection.alreadyProjected, true);
 });
+
+test("fresh canonical installation can save, restart and project without legacy migration rows", async () => {
+  const storage = makeStorage();
+  const first = await coordinator("fresh-canonical-first", storage).initializeApplication();
+  assert.equal(first.migration.status, "READY_EMPTY");
+  const bridge = new PmsRepositoryBridge({
+    tenantId: first.identity.tenantId, propertyId: first.identity.propertyId, deviceId: first.identity.deviceId
+  });
+  bridge.bindActiveEngine(first.repository, first.identity);
+  await bridge.persistCompatibilitySnapshot(state);
+  storage.setItem(AURELIA_LEGACY_STATE_KEY, JSON.stringify(state));
+  const restarted = await coordinator("fresh-canonical-restart", storage, { repository: first.repository }).initializeApplication();
+  assert.equal(restarted.migration.status, "READY_CANONICAL");
+  assert.equal(restarted.migration.freshInstallation, true);
+  assert.equal(restarted.migration.entityCount, 0);
+  assert.equal(storage.getItem(AURELIA_MIGRATION_STATUS_KEY), "READY_CANONICAL:" + restarted.migration.migrationId);
+  assert.equal(restarted.domainProjection.manifest.preservesLegacySnapshot, true);
+  assert.ok(await restarted.repository.getEntity("room", "101"));
+});

@@ -113,3 +113,9 @@ test('active room management commands use canonical room mutations', async () =>
   assert.doesNotMatch(html.slice(activeRoomS, activeRoomEnd), /\.s='\$\{k\}'/);
   assert.match(html.slice(activeRoomEnd), /commitRoomCatalogState\(\{roomId:r\.n,operation:'remove'/);
 });
+
+test('fresh Android installations are not misclassified as failed recovery', async () => {
+  const fs = await import("node:fs");
+  const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /RECOVERY_CHECK_PENDING=!!window\.AureliaNative&&LOCAL_STATE_STATUS==='invalid'/);
+});

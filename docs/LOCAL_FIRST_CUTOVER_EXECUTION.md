@@ -2,7 +2,7 @@
 
 **Branch:** `feature/multi-provider-payment-backend`  
 **Baseline:** `7262091cce720c48933d534071f8f77065efcbee`  
-**Status:** Canonical-first serialized writes are active; startup verifies migration replay and restores the latest canonical snapshot; domain projection is wired; room housekeeping status, room catalogue mutations and the active room read projection are routed through canonical room entities; global UI cutover remains OFF.
+**Status:** Canonical-first serialized writes are active; startup verifies migration replay and restores the latest canonical snapshot; domain projection is wired; room housekeeping status, room catalogue mutations and the active room read projection are routed through canonical room entities; global UI cutover remains OFF. Fresh installs now receive a durable READY_CANONICAL marker on their first committed snapshot, so they do not get misclassified as legacy migrations on the next launch.
 
 ## Objective
 
