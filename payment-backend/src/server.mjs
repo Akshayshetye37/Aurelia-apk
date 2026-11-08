@@ -939,6 +939,27 @@ app.put('/v1/admin/providers/ccavenue/credentials', requireTenantAdmin,
     }
   });
 
+app.delete('/v1/admin/providers/ccavenue/credentials', requireTenantAdmin, async (req, res) => {
+  const environment = req.query?.environment;
+  if (!['test', 'live'].includes(environment)) return fail(res, 400, 'invalid_provider_environment');
+  try {
+    const stateRef = providerTenantDoc(req.tenant.id, 'ccavenue', environment);
+    await stateRef.set({
+      configured: false, credentialsValidated: false, sandboxTestPassed: false,
+      webhookVerified: false, active: false, updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: req.actor.uid
+    }, { merge: true });
+    for (const purpose of ['api', 'webhook']) {
+      const id = providerSecretId(req.tenant.id, 'ccavenue', environment, purpose);
+      await disableAllEnabledSecretVersions(sm, secretName(id));
+    }
+    await stateRef.delete();
+    return res.json({ removed: true, provider: 'ccavenue', environment, active: false });
+  } catch {
+    return fail(res, 503, 'ccavenue_credential_removal_unavailable');
+  }
+});
+
 app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express.json({ limit: '8kb', strict: true }), async (req, res) => {
   const { provider } = req.params, publicEnvironment = envOf(req), environment = adapterEnvironmentOf(provider, publicEnvironment), body = req.body || {};
   const definitions = {
