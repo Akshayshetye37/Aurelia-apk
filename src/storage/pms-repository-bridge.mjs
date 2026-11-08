@@ -10,7 +10,7 @@
  */
 import { buildPmsOutboxEvent, PMS_ENTITY_TYPES, assertPmsIdentity, assertPmsVersion } from "./pms-repository-contract.mjs";
 
-const LEGACY_SNAPSHOT_ENTITY_ID = "legacy_snapshot:aurelia_lodge_v2";
+export const LEGACY_SNAPSHOT_ENTITY_ID = "legacy_snapshot:aurelia_lodge_v2";
 
 const clone = value => value == null ? value :
   (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
