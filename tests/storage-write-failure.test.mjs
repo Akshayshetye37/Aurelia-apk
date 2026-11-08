@@ -21,7 +21,7 @@ test("localStorage quota or security errors must propagate instead of falling ba
 
 test("strict accounting persistence cannot write outside the canonical asynchronous repository", () => {
   const p = html.indexOf("function persistStrict(){");
-  const q = html.indexOf("\nlet LOCAL_STATE_STATUS", p);
+  const q = html.indexOf("\n}\n\n// Awaitable canonical commit", p);
   assert.ok(p >= 0 && q > p);
   const strict = html.slice(p, q);
   assert.match(strict, /Synchronous accounting persistence is disabled/);
