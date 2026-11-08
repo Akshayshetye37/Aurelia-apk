@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/multi-provider-payment-backend
+      - fix/p0-storage-authority
   pull_request:
     branches:
       - main
