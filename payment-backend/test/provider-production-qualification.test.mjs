@@ -70,6 +70,16 @@ test('expired evidence, future verification and expired owner approval fail clos
   assert.equal(evaluateProviderProductionQualification({ provider: 'razorpay', record: expiredApproval, now }).ready, false);
 });
 
+test('qualification requires independent reviewers and owner approval after evidence verification', () => {
+  const sameActor = approved();
+  sameActor.evidence.merchant_uat.verifiedBy = sameActor.approvedBy;
+  assert.equal(evaluateProviderProductionQualification({ provider: 'razorpay', record: sameActor, now }).ready, false);
+
+  const prematureApproval = approved();
+  prematureApproval.approvedAt = new Date('2026-11-06T12:00:00.000Z');
+  assert.equal(evaluateProviderProductionQualification({ provider: 'razorpay', record: prematureApproval, now }).ready, false);
+});
+
 test('malformed evidence references and identities are rejected', () => {
   const record = approved();
   record.evidence.refund_lifecycle_uat.evidenceRef = 'x';
