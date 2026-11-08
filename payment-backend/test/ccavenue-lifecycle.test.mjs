@@ -114,7 +114,7 @@ test('CCAvenue Dynamic Event Notification only records status after independent 
         verifierInput = input;
         return { provider: 'ccavenue', orderId: expected.orderId, trackingId: '212016048802',
           paymentStatus: 'CAPTURED', providerStatus: 'Successful', amountMinor: expected.amountMinor,
-          currency: expected.currency, verified: true };
+          currency: expected.currency, verified: true, evidenceSource: 'ccavenue_order_status_tracker' };
       }
     }),
     recordVerifiedEvidence: async evidence => { recorded = evidence; }
@@ -198,7 +198,8 @@ test('CCAvenue webhook handler acknowledges only after verified evidence persist
       verifyOrderStatus: async () => ({
         provider: 'ccavenue', orderId: EXPECTED.orderId, trackingId: '212016048802',
         paymentStatus: 'CAPTURED', providerStatus: 'Successful',
-        amountMinor: EXPECTED.amountMinor, currency: EXPECTED.currency, verified: true
+        amountMinor: EXPECTED.amountMinor, currency: EXPECTED.currency, verified: true,
+        evidenceSource: 'ccavenue_order_status_tracker'
       })
     }),
     recordVerifiedEvidence: async () => {}
