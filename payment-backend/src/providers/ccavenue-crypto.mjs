@@ -23,7 +23,7 @@ const MAX_CIPHERTEXT_BYTES = 128 * 1024;
 export class CCAvenueCrypto {
   constructor(encryptionKey) {
     if (typeof encryptionKey !== 'string' || encryptionKey.length < 8 ||
-        encryptionKey.length > 512 || /[\\u0000-\\u001f\\u007f]/.test(encryptionKey)) {
+        encryptionKey.length > 512 || /[\x00-\x1f\x7f]/.test(encryptionKey)) {
       throw new TypeError('ccavenue_encryption_key_invalid');
     }
     this.key = crypto.createHash('md5').update(encryptionKey, 'utf8').digest();
