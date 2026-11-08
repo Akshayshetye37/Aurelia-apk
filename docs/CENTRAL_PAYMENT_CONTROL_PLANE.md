@@ -324,3 +324,25 @@ container build, non-root image and Terraform validation. The application
 workflow exposed one integration-contract assertion because the cloud
 enrollment route had not yet been updated to accept the token; that route has
 since been corrected and its current-head workflow must pass before acceptance.
+
+
+### Follow-up verification and posting interlock (8 November 2026)
+
+Every journal proposal now also carries explicit
+`postingEligible: false`, `postingAuthorization: NOT_AUTHORIZED` and
+`chartOfAccountsStatus: PROPOSAL_ONLY` fields. A downstream writer must not
+treat a mathematically balanced proposal as posting permission. The new
+canonical-journal regression test asserts this boundary.
+
+The complete workflow set on commit
+`cb2a53d7a348d9339f53215d6bb672a3e76ceaed` passed:
+- PMS source tests and production web packaging.
+- Settlement foundation CI.
+- Payment backend contract/security tests, JavaScript syntax, Cloud Run
+  container build, non-root runtime check, Terraform formatting, provider
+  initialization and Cloud Run infrastructure validation.
+
+The current head includes the additional non-postable proposal metadata and
+its regression assertion. Its workflows are running separately; do not
+transfer the previous commit's green status to the newer head until those
+runs finish.
