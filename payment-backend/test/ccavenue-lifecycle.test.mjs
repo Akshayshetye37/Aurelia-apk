@@ -247,3 +247,11 @@ test('CCAvenue partial capture and high-risk flag do not become full captured pa
   });
   assert.equal(highRisk.paymentStatus, 'REVIEW');
 });
+
+test('CCAvenue status verifier normalizes a safe numeric tracking reference without precision loss', async () => {
+  const flat = { ...jsonStatus().Order_Status_Result, reference_no: 212016048802 };
+  const result = await service(async () => apiResponse(flat))
+    .verifyOrderStatus({ orderId: EXPECTED.orderId, trackingId: '212016048802',
+      expectedAmountMinor: EXPECTED.amountMinor, expectedCurrency: 'INR' });
+  assert.equal(result.trackingId, '212016048802');
+});
