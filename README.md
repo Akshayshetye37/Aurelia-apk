@@ -4,7 +4,7 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 
 ## Production safety status
 
-**LIVE GATEWAY COLLECTION OFF.** Automatic settlement and automatic refund posting remain OFF. CCAvenue now has isolated hosted-checkout request construction, an AES-128-CBC compatibility codec, Merchant API order-status verification, tenant-scoped notification reconciliation, and schema-only Secret Manager credential storage/revocation. It remains unregistered and not merchant-qualified; notification signature authentication, merchant AES interoperability, static API egress registration, Android SDK and refund lifecycle remain unverified. No gateway is production-qualified, and production deployment is not authorized by this branch.
+**LIVE GATEWAY COLLECTION OFF.** Automatic settlement and automatic refund posting remain OFF. CCAvenue has isolated hosted-checkout construction, an unqualified legacy AES compatibility codec, Merchant API order-status verification and tenant-scoped notification reconciliation. These paths are now hard-restricted to the test environment; live credential onboarding and live notifications are rejected. The codec has not passed merchant-kit interoperability vectors, notification authentication is not established, static API egress registration is absent, and the Android SDK and general refund lifecycle remain unverified. CCAvenue is not factory-registered or activatable. No gateway is production-qualified, and production deployment is not authorized by this branch.
 
 ## Architecture
 
