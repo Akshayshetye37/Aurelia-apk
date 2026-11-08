@@ -4,7 +4,7 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 
 ## Production safety status
 
-**LIVE GATEWAY COLLECTION OFF.** Automatic settlement and automatic refund posting remain OFF. CCAvenue remains catalogue-only. No gateway is production-qualified, and production deployment is not authorized by this branch.
+**LIVE GATEWAY COLLECTION OFF.** Automatic settlement and automatic refund posting remain OFF. CCAvenue has isolated hosted-checkout, AES-envelope, server-status and notification-reconciliation foundations, but remains unregistered and unavailable. No gateway is production-qualified, and production deployment is not authorized by this branch.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 - Pay Bridge callback handling validates transaction references, rejects binding changes and treats duplicate processing callbacks idempotently.
 - Provider checkout normalization binds amount and currency to the persisted intent rather than trusting provider-echoed values.
 - Provider-specific PayU and Paytm checkout response validation has been added without changing the established nested checkout response shape.
-- Backend adapter and cloud API paths are wired for six providers: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay. The cloud catalogue, tenant-scoped credential onboarding, test-order creation, webhook verification, status lookup and refund request/status routes cover those six. CCAvenue is catalogue-only and has no concrete adapter/factory registration.
+- Backend adapter and cloud API paths are wired for six providers: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay. The cloud catalogue, tenant-scoped credential onboarding, test-order creation, webhook verification, status lookup and refund request/status routes cover those six. CCAvenue now has unregistered hosted-checkout construction, AES envelope compatibility code, API v1.3 order-status verification and notification-to-status-reconciliation modules with regression tests. It still has no complete seven-operation adapter, admin credential onboarding, merchant SDK integration or production qualification.
 - Android checkout handoff now covers all six backend-wired providers: Razorpay, Cashfree and Paytm native SDKs; PayU hosted POST in WebView; PhonePe and JioPay HTTPS hosted checkout. All remain test/UAT only.
 - The provider integration document records which providers are exposed through cloud API routes and which still need route integration and merchant qualification.
 
@@ -52,9 +52,9 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 | PhonePe | Yes | Yes | Yes — hosted HTTPS (test) | **No** |
 | Paytm | Yes | Yes | Yes — All-in-One SDK (staging) | **No** |
 | JioPay | Yes | Yes | Yes — hosted HTTPS (UAT) | **No** |
-| CCAvenue | No — catalogue only | No | No | **No** |
+| CCAvenue | No — lifecycle foundation only; factory disabled | No | No | **No** |
 
-All six factory-wired adapters expose seven lifecycle operations and have deterministic mocked contract tests. The cloud capability response deliberately reports folio settlement, refund-to-folio posting and reconciliation as unavailable; live collection is disabled for every provider. PayU credential validation now uses a non-mutating classic Verify Payment API probe; merchant sandbox/UAT remains required. None of the six has been demonstrated with merchant-specific UAT evidence in this repository. CCAvenue requires the current merchant integration kit before implementation.
+All six factory-wired adapters expose seven lifecycle operations and have deterministic mocked contract tests. The cloud capability response deliberately reports folio settlement, refund-to-folio posting and reconciliation as unavailable; live collection is disabled for every provider. PayU credential validation now uses a non-mutating classic Verify Payment API probe; merchant sandbox/UAT remains required. None of the six has been demonstrated with merchant-specific UAT evidence in this repository. CCAvenue requires merchant-issued AesCryptUtil interoperability vectors, account-specific notification key confirmation, current Android SDK kit and Instant Refund API contract before adapter registration.
 
 **Conclusion:** zero of seven gateways are qualified as end-to-end production-ready. Six have backend integration foundations; six have Android checkout handoff (three native SDKs and three hosted flows). Provider adapters and cloud endpoints are not equivalent to a completed PMS payment lifecycle.
 
@@ -166,4 +166,4 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 **Not implemented by design:** no PostgreSQL schema, no parallel `payment_records` database, no legacy backfill, no accounting writer, no scheduled reconciliation. Aurelia's actual PMS storage is local IndexedDB/native SQLite with a Firestore payment backend; the proposed PostgreSQL tables do not exist in this repository. Account 2020 normal balance still requires Finance approval.
 
-**Release safeguards remain locked:** live collection OFF, automatic settlement OFF, automatic refund posting OFF, CCAvenue disabled, and 0/6 providers production-qualified. These source changes do not constitute production readiness.
+**Release safeguards remain locked:** live collection OFF, automatic settlement OFF, automatic refund posting OFF, CCAvenue adapter disabled, and 0/6 registered providers production-qualified. These source changes do not constitute production readiness.
