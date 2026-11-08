@@ -42,7 +42,7 @@ export const PROVIDERS = Object.freeze({
     ],
     capabilities: ['hosted_checkout', 'payment_status', 'webhooks', 'refunds'],
     adapterStatus: 'adapter_implemented_wired',
-    cloudCheckoutApiEnabled: false
+    cloudCheckoutApiEnabled: true
   },
   phonepe: {
     label: 'PhonePe Payment Gateway',
@@ -56,7 +56,7 @@ export const PROVIDERS = Object.freeze({
     ],
     capabilities: ['checkout', 'payment_status', 'webhooks', 'refunds'],
     adapterStatus: 'adapter_implemented_wired',
-    cloudCheckoutApiEnabled: false
+    cloudCheckoutApiEnabled: true
   },
   paytm: {
     label: 'Paytm Payment Gateway',
@@ -68,7 +68,7 @@ export const PROVIDERS = Object.freeze({
     ],
     capabilities: ['initiate_transaction', 'payment_status', 'webhooks', 'refunds'],
     adapterStatus: 'adapter_implemented_wired',
-    cloudCheckoutApiEnabled: false
+    cloudCheckoutApiEnabled: true
   },
   ccavenue: {
     label: 'CCAvenue',
@@ -92,7 +92,7 @@ export const PROVIDERS = Object.freeze({
     ],
     capabilities: ['hosted_checkout', 'payment_status', 'webhooks', 'refunds'],
     adapterStatus: 'adapter_implemented_wired',
-    cloudCheckoutApiEnabled: false
+    cloudCheckoutApiEnabled: true
   }
 });
 
