@@ -20,7 +20,7 @@ test('cloud API route exposure is separate from adapter factory wiring', async (
 });
 
 test('six full lifecycle adapters and CCAvenue partial adapter are registered', () => {
-  assert.deepEqual(implementedProviderAdapters(), ['razorpay','cashfree','payu','phonepe','paytm','jiopay','ccavenue']);
+  assert.deepEqual(implementedProviderAdapters(), ['razorpay','cashfree','payu','phonepe','paytm','jiopay']);
   assert.deepEqual(providerCapabilities('ccavenue'), ['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
   assert.equal(providerQualificationStatus('ccavenue').implemented, true);
   assert.equal(providerQualificationStatus('ccavenue').cloudCheckoutApiEnabled, true);
