@@ -557,3 +557,82 @@ export async function commitRestaurantFolioCharge({
     snapshotVersion: storedSnapshot.version, versions: committed.entities.map(row => row.version)
   });
 }
+
+/** Atomically settles a restaurant table sale without touching a hotel folio. */
+export async function commitRestaurantTableSettlement({
+  bridge, snapshot, tableId, saleId, saleIndex,
+  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
+  now = () => new Date().toISOString()
+} = {}) {
+  if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
+    throw new TypeError("A bound transactional PMS repository bridge is required");
+  }
+  if (!snapshot || !Array.isArray(snapshot.t) || !Array.isArray(snapshot.sales) ||
+      !Number.isInteger(saleIndex) || saleIndex < 0 || tableId == null || saleId == null) {
+    throw new TypeError("A complete snapshot and stable table/sale IDs are required");
+  }
+  if (bridge.compatibilityWrite && typeof bridge.compatibilityWrite.then === "function") await bridge.compatibilityWrite;
+  const snapshotRow = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  if (!snapshotRow?.data?.snapshot) throw fail("CANONICAL_SNAPSHOT_MISSING", "The canonical recovery snapshot is missing; restaurant settlement was not recorded.");
+  const priorTable = (snapshotRow.data.snapshot.t || []).find(row => String(row?.n) === String(tableId));
+  const nextTable = snapshot.t.find(row => String(row?.n) === String(tableId));
+  const sale = snapshot.sales[saleIndex];
+  if (!priorTable || !nextTable || !sale || String(sale.id) !== String(saleId) ||
+      sale.entity !== "restaurant" || sale.postedToHotel === true || String(sale.t) !== String(tableId)) {
+    throw fail("RESTAURANT_SETTLEMENT_INVALID", "The restaurant sale or table is missing or incorrectly classified.");
+  }
+  const order = Array.isArray(priorTable.o) ? priorTable.o : [];
+  const items = Array.isArray(sale.items) ? sale.items : [];
+  const normalized = rows => rows.map(row => [String(row?.[0] || ""), Math.round((Number(row?.[1]) || 0) * 100)]);
+  const orderTotal = order.reduce((sum, row) => sum + (Number(row?.[1]) || 0), 0);
+  const saleAmount = Number(sale.a);
+  if (!order.length || !sameJson(normalized(order), normalized(items)) ||
+      !Number.isFinite(saleAmount) || saleAmount <= 0 ||
+      !Number.isSafeInteger(Math.round(saleAmount * 100)) ||
+      Math.abs(saleAmount * 100 - Math.round(saleAmount * 100)) > 1e-7 ||
+      Math.round(orderTotal * 100) !== Math.round(saleAmount * 100) ||
+      !nextTable.o || nextTable.o.length !== 0) {
+    throw fail("RESTAURANT_SETTLEMENT_AMOUNT_MISMATCH", "Settled sale lines and amount must exactly match the table order, and the table must be cleared.");
+  }
+  const existingSale = await bridge.fetchEntity("restaurant_sale", String(saleId));
+  if (existingSale) throw fail("RESTAURANT_SALE_ALREADY_SETTLED", "This restaurant sale ID already exists; duplicate settlement was blocked.");
+  const tableRow = await bridge.fetchEntity("restaurant_table", String(tableId));
+  if (tableRow?.data && !sameJson(comparableEntity(tableRow.data), comparableEntity(priorTable))) {
+    throw fail("CANONICAL_RESTAURANT_TABLE_DIVERGENCE", "Restaurant table changed in canonical storage; reload before settlement.");
+  }
+  const committedAt = now();
+  const payload = { tableId: String(tableId), saleId: String(saleId), amountPaise: Math.round(saleAmount * 100), method: String(sale.m || "") };
+  const committed = await bridge.mutateEntities([
+    {
+      entityType: "restaurant_table", entityId: String(tableId), expectedVersion: tableRow?.version ?? 0,
+      eventType: "restaurant.table_settled", eventPayload: payload,
+      mutate: entity => { for (const key of Object.keys(entity)) delete entity[key]; Object.assign(entity, clone(nextTable), { updatedAt: committedAt }); }
+    },
+    {
+      entityType: "restaurant_sale", entityId: String(saleId), expectedVersion: 0,
+      eventType: "restaurant.sale_settled", eventPayload: payload,
+      mutate: entity => Object.assign(entity, clone(sale), { updatedAt: committedAt })
+    },
+    {
+      entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2", expectedVersion: snapshotRow.version,
+      eventType: "pms.snapshot_restaurant_settlement", eventPayload: payload,
+      mutate: entity => { entity.sourceKey = "aurelia_lodge_v2"; entity.snapshot = clone(snapshot); entity.updatedAt = committedAt; }
+    }
+  ]);
+  const [storedTable, storedSale, storedSnapshot] = await Promise.all([
+    bridge.fetchEntity("restaurant_table", String(tableId)),
+    bridge.fetchEntity("restaurant_sale", String(saleId)),
+    bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")
+  ]);
+  if (!storedTable || !storedSale || !storedSnapshot ||
+      !sameJson(comparableEntity(storedTable.data), comparableEntity(nextTable)) ||
+      !sameJson(comparableEntity(storedSale.data), comparableEntity(sale)) ||
+      !sameJson(storedSnapshot.data.snapshot, snapshot)) {
+    throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Restaurant settlement committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
+  }
+  return Object.freeze({
+    canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
+    table: storedTable, sale: storedSale, snapshotVersion: storedSnapshot.version,
+    versions: committed.entities.map(row => row.version)
+  });
+}
