@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
-import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation } from "../src/storage/repository-operational-mutation-service.mjs";
+import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation } from "../src/storage/repository-operational-mutation-service.mjs";
 
 let sequence = 0;
 async function fixture() {
@@ -18,7 +18,7 @@ async function fixture() {
   }).bindActiveEngine(repository);
   const booking = { id: 51, g: "Guest", room: "101", st: "res", p: 0, pays: [], ch: [] };
   const room = { n: "101", s: "ready", r: 1000, t: "Deluxe" };
-  const snapshot = { tab: "stays", bk: {}, b: [booking], cancelled: [], rooms: [room], g: [], aud: [] };
+  const snapshot = { tab: "stays", bk: {}, b: [booking], cancelled: [], rooms: [room], g: [], inv: [], led: [], aud: [] };
   await bridge.persistCompatibilitySnapshot(snapshot);
   await bridge.mutateEntity({
     entityType: "booking", entityId: "51", expectedVersion: 0, eventType: "booking.seeded",
@@ -217,4 +217,48 @@ test("guest edit rejects a divergent canonical profile", async () => {
     bridge, snapshot, guestId: "guest-2", guestIndex: 0, operation: "update",
     expectedPreviousGuest: prior, legacyStorage: null
   }), error => error.code === "CANONICAL_GUEST_DIVERGENCE");
+});
+
+test("inventory item creation commits stable item entity and complete stock snapshot", async () => {
+  const { bridge, snapshot } = await fixture();
+  const item = { id: "inv-1", n: "Towels", q: 20, ro: 5, u: 80, price: 0, sellable: false };
+  snapshot.inv.push(item);
+  const result = await commitInventoryItemMutation({
+    bridge, snapshot, inventoryId: item.id, inventoryIndex: 0, operation: "create", legacyStorage: null
+  });
+  assert.equal(result.canonical, true);
+  assert.equal((await bridge.fetchEntity("inventory", "inv-1")).data.q, 20);
+  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.inv[0].id, "inv-1");
+});
+
+test("stock issue commits quantity and immutable stock movement history together", async () => {
+  const { bridge, snapshot } = await fixture();
+  const prior = { n: "Towels", q: 20, ro: 5, u: 80, price: 0, sellable: false };
+  snapshot.inv = [prior];
+  await bridge.persistCompatibilitySnapshot(snapshot);
+  const next = { ...prior, id: "inv-legacy-1", q: 17 };
+  snapshot.inv[0] = next;
+  snapshot.led.unshift(["Towels", -3, "", "2026-11-08T12:00:00.000Z"]);
+  const result = await commitInventoryItemMutation({
+    bridge, snapshot, inventoryId: next.id, inventoryIndex: 0, operation: "update",
+    expectedPreviousItem: prior, legacyStorage: null
+  });
+  assert.equal(result.item.data.q, 17);
+  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.led[0][1], -3);
+});
+
+test("inventory mutation rejects stale canonical stock rather than overwriting it", async () => {
+  const { bridge, snapshot } = await fixture();
+  const prior = { id: "inv-stale", n: "Soap", q: 10, ro: 2, u: 4, price: 0 };
+  snapshot.inv = [prior];
+  await bridge.persistCompatibilitySnapshot(snapshot);
+  await bridge.mutateEntity({
+    entityType: "inventory", entityId: prior.id, expectedVersion: 0, eventType: "inventory.external_issue",
+    mutate: entity => { entity.q = 4; }
+  });
+  snapshot.inv[0] = { ...prior, q: 9 };
+  await assert.rejects(commitInventoryItemMutation({
+    bridge, snapshot, inventoryId: prior.id, inventoryIndex: 0, operation: "update",
+    expectedPreviousItem: prior, legacyStorage: null
+  }), error => error.code === "CANONICAL_INVENTORY_DIVERGENCE");
 });
