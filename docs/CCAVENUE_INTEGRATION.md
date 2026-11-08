@@ -243,9 +243,11 @@ apiKey field. Do not add or request one unless the merchant's current
 CCAvenue-issued kit explicitly requires it. Access code, encryption key and
 working key must never be exposed to Android, browser responses, logs,
 screenshots, or source control. Merchant API v1.3 also requires the merchant's
-server public IP to be registered by CCAvenue before API calls will work. The admin user can populate the fields after merchant activation;
-credential validation remains unavailable until the actual kit's server API
-and merchant account are integrated.
+server public IP to be registered by CCAvenue before API calls will work. These are intended future configuration fields only: the current admin
+credential-save/validation route deliberately rejects CCAvenue while no
+complete adapter is registered. Do not present the fields as currently
+configurable in the live admin UI. Enable that route only alongside the
+verified adapter, secure secret handling and merchant-kit crypto implementation.
 
 The public website confirms product availability and onboarding/kit delivery.
 The published Merchant API v1.3 guide provides the orderStatusTracker API and
