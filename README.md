@@ -93,7 +93,7 @@ All six factory-wired adapters expose seven lifecycle operations and have determ
 
 ## CI evidence and verification boundary
 
-The Phase 7 implementation baseline `5010f5e2a3a3c239a721b514f19d8435e0b8f852` passed [settlement-foundation CI run 42400767973](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42400767973): dependency installation, settlement-module syntax checks, the full application test suite and production web asset build. The earlier Phase 7 source-quality run [42400164718](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42400164718) also succeeded. These runs do not prove merchant sandbox/UAT, production backend deployment, Android physical-device qualification or release signing. Historical Android debug-build evidence is recorded separately below.
+The audited branch baseline `7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301` (8 November 2026) has successful current-head checks recorded in the project status: [PMS source tests + production web build — run 42403900585](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42403900585), [settlement foundation CI — run 42403905199](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42403905199), and [payment backend, container and Terraform CI — run 42403905213](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42403905213). The latest connector status query returned the settlement and backend runs; the README's source/build run link is retained from the recorded branch evidence. These checks cover source tests/build and backend/container/Terraform validation only. They do not prove Android compilation for the current source, physical-device acceptance, merchant sandbox/UAT, production deployment or release signing.
 
 Historical evidence is commit-scoped and must not be treated as an automatic pass for later revisions:
 
@@ -174,6 +174,6 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 ---
 
-**Audited implementation baseline:** `5010f5e2a3a3c239a721b514f19d8435e0b8f852`  
+**Audited implementation baseline:** `7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301`  
 **Active work branch:** `feature/phase-7-pms-persistence`  
-**Status:** Phase 7 foundations and source CI verified; production release not approved.
+**Status:** Phase 7 foundations and recorded source/backend CI verified; seven-gateway production qualification remains 0/7; production release not approved.
