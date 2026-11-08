@@ -5342,6 +5342,9 @@ try {
   if (!boot || boot.success !== true || !boot.repository) throw new Error("Canonical storage bootstrap did not return a verified repository");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "REPOSITORY_BINDING";
   storageBridge.bindActiveEngine(boot.repository, boot.identity);
+  // Expose the verified device-primary contract before any feature script runs.
+  window.AureliaLocalFirstPolicy = boot.runtimePolicy;
+  window.AureliaFeatureContracts = boot.featureContracts;
   window.AureliaRepositoryCompatibility = Object.freeze({ persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot) });
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "APPLICATION_MODULES";
