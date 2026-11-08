@@ -1654,17 +1654,12 @@ function persistStrict(){
 // success boundary; localStorage is refreshed only as a legacy UI cache.
 async function persistCanonicalStrict(){
  if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
- if(!window.AureliaRepositoryCompatibility?.persist||!window.AureliaRepositoryCompatibility?.readBack)throw new Error('Canonical local PMS repository is unavailable.');
+ const coordinator=window.AureliaLocalFirstWrites;
+ if(!coordinator||typeof coordinator.save!=='function')throw new Error('Canonical local PMS write coordinator is unavailable.');
  const state={tab:S.tab,bk:S.bk};DK.forEach(k=>state[k]=S[k]);
- const serialized=JSON.stringify(state);
- await window.AureliaRepositoryCompatibility.persist(state);
- const committed=await window.AureliaRepositoryCompatibility.readBack();
- if(!committed||JSON.stringify(committed.snapshot)!==serialized)throw new Error('Canonical repository read-back did not exactly match the requested PMS state.');
- try{
-  const cache=window.__aureliaStorage||localStorage;
-  if(!cache.memoryOnly){cache.setItem(SK,serialized);if(cache.getItem(SK)!==serialized)console.warn('[Aurelia Local Cache] Canonical state committed; cache read-back failed and will be recovered at startup.')}
- }catch(cacheError){console.warn('[Aurelia Local Cache] Canonical state committed; cache refresh failed and will be recovered at startup.',cacheError)}
- return committed.snapshot;
+ const result=await coordinator.save(state);
+ if(!result?.committed||!result.snapshot)throw new Error('Canonical local PMS commit was not verified.');
+ return result.snapshot;
 }
 function cloneRuntimeState(value){
  if(value instanceof Date)return new Date(value.getTime());
