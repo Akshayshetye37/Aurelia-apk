@@ -81,7 +81,7 @@ jobs:
           if grep -q '^networkTimeout=' "$wrapper_properties"; then
             sed -i 's/^networkTimeout=.*/networkTimeout=120000/' "$wrapper_properties"
           else
-            printf '\\nnetworkTimeout=120000\\n' >> "$wrapper_properties"
+            echo 'networkTimeout=120000' >> "$wrapper_properties"
           fi
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace assembleDebug
