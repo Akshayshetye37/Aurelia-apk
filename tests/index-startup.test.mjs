@@ -93,8 +93,8 @@ test('startup hydrates the UI projection from the verified canonical snapshot be
   const canonicalHydrationAt = html.indexOf('window.__AURELIA_CANONICAL_BOOTSTRAP_RAW = JSON.stringify(hydrated)');
   const replayAt = html.indexOf('await replayApplicationScripts()');
   assert.ok(bootstrapAt >= 0 && roomHydrationAt > bootstrapAt && canonicalHydrationAt > roomHydrationAt && replayAt > canonicalHydrationAt);
-  assert.match(html, /import\("\.\/src\/storage\/pms-room-read-cutover\.mjs"\)/);
-  assert.match(html, /function loadAll\(\)\{\s*let raw=window\.__AURELIA_CANONICAL_BOOTSTRAP_RAW\|\|null;\s*if\(!raw\)\{try\{raw=/);
+  assert.match(html, /import\("\.\/src\/storage\/pms-room-read-cutover\.mjs"\)/);\n  assert.match(html, /window\.AureliaPmsSnapshotFacade = Object\.freeze/);\n  assert.doesNotMatch(html, /getItem\(SK\)|setItem\(SK/);
+  assert.match(html, /function loadAll\(\)\{\s*let raw=window\.__AURELIA_CANONICAL_BOOTSTRAP_RAW\|\|null;\s*if\(!raw\)\{LOCAL_STATE_STATUS=.missing.;return\}/);
 });
 
 test('active room management commands use canonical room mutations', async () => {
