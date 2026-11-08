@@ -2,34 +2,7 @@
 
 Aurelia is a local-first property management system (PMS) for reservations, guests, rooms, folios and property operations, with a separately trusted backend for online payment-provider operations.
 
-## Project location
-
-- **GitHub repository:** https://github.com/Akshayshetye37/Aurelia-apk
-- **Project root:** repository root (`/`)
-- **Active Phase 7 engineering branch:** `feature/phase-7-pms-persistence` (base: `feature/multi-provider-payment-backend`)
-- **Audited implementation baseline:** `7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301` (8 November 2026); subsequent commits contain the verified provider matrix, PR metadata and CI evidence refresh.
-- **Current-head checks:** all required workflows passed on `7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301`: [PMS source tests + production web build](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42403900585), [settlement foundation CI](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42403905199), and [payment backend + container + Terraform CI](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42403905213). These are not Android release/device qualification.
-- **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
-
-Useful project locations:
-
-| Path | Purpose |
-|---|---|
-| `index.html` | PMS application UI and startup/runtime gate |
-| `src/storage/` | Repository contract, IndexedDB/native storage clients, bootstrap and domain storage services |
-| `src/payments/` | Client payment intent and Pay Bridge orchestration |
-| `payment-backend/` | Trusted payment API, provider adapters, Firestore persistence and backend tests |
-| `android/` | Capacitor Android project and native source templates |
-| `tests/` | PMS, storage, payment and native-template regression tests |
-| `docs/` | Architecture, security, accounting and release qualification documents |
-| `.github/workflows/` | Automated source, backend and packaging checks |
-
-## Current release decision
-
-**NOT PRODUCTION READY — LIVE GATEWAY COLLECTION OFF; production release and automatic settlement remain disabled.**
-
-The current implementation contains substantial storage, payment and security foundations. It is not yet an accepted end-to-end hotel operations and payment product. In particular, operational UI cutover, canonical accounting integration, provider UAT, Android device qualification and formal release acceptance remain open.
-
+NaN
 ## Architecture
 
 - **Local-first PMS:** ordinary property operations are designed to remain available without cloud connectivity.
@@ -93,7 +66,7 @@ All six factory-wired adapters expose seven lifecycle operations and have determ
 
 ## CI evidence and verification boundary
 
-The audited branch baseline `7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301` (8 November 2026) has successful current-head checks recorded in the project status: [PMS source tests + production web build — run 42403900585](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42403900585), [settlement foundation CI — run 42403905199](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42403905199), and [payment backend, container and Terraform CI — run 42403905213](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42403905213). The latest connector status query returned the settlement and backend runs; the README's source/build run link is retained from the recorded branch evidence. These checks cover source tests/build and backend/container/Terraform validation only. They do not prove Android compilation for the current source, physical-device acceptance, merchant sandbox/UAT, production deployment or release signing.
+The latest source commit `0331d145dc50d056d98404f751f1ec04ea04ec96` passed the two workflows triggered for this revision: [settlement foundation CI — run 42453640895](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42453640895) and [payment backend CI — run 42453640768](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42453640768). The backend run passed 272/272 tests, JavaScript syntax, Cloud Run container build, non-root verification and Terraform validation. The settlement run passed the full application test suite and production web build. These do not prove Android Gradle/R8 compilation, physical-device acceptance, merchant UAT, production deployment or release signing.
 
 Historical evidence is commit-scoped and must not be treated as an automatic pass for later revisions:
 
@@ -174,15 +147,15 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 ---
 
-**Audited implementation baseline:** `7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301`  
+**Latest verified source commit:** `0331d145dc50d056d98404f751f1ec04ea04ec96`  
 **Active work branch:** `feature/phase-7-pms-persistence`  
-**Status:** Phase 7 foundations and recorded source/backend CI verified; seven-gateway production qualification remains 0/7; production release not approved.
+**Status:** accounting proposal mapper and Android R8 source configuration implemented; current-head settlement/backend CI passed; 0/6 implemented providers production-qualified; production release not approved.
 
 
 ## Canonical accounting integration — current phase
 
 - Added `payment-backend/src/accounting/pms-ledger-mapping.mjs`: a pure evidence-gated adapter from the actual `booking.pays[]` legacy payment row to canonical non-postable journal proposals.
-- Capture, processor fee and cancellation/refund mappings require independent provider evidence and exact integer-paise amounts. Legacy rupee decimals are parsed with integer arithmetic; binary floating-point multiplication is not used.
+- Capture, processor fee and cancellation/refund mappings require independent provider evidence and exact integer-paise amounts. Legacy rupee decimals are parsed with decimal-string validation and BigInt arithmetic; binary floating-point multiplication is not used. The latest backend CI passed all 272 tests after correcting the decimal separator parser.
 - Mapping directions remain provisional: capture Dr 2020 / Cr 1010; actual processor fee Dr 5010 / Cr 2020; verified refund Dr 1010 / Cr 2020.
 - Added regression tests in `payment-backend/test/pms-ledger-mapping.test.mjs`.
 - Added `android/templates/security/proguard-rules.pro` and Android generation wiring for Razorpay, Cashfree and Paytm R8 preservation rules. This is source-level configuration only; Android Gradle compilation and release shrinker verification remain outstanding.
