@@ -94,3 +94,19 @@ test('startup hydrates the UI projection from the verified canonical snapshot be
   assert.ok(bootstrapAt >= 0 && canonicalHydrationAt > bootstrapAt && replayAt > canonicalHydrationAt);
   assert.match(html, /function loadAll\(\)\{\s*let raw=window\.__AURELIA_CANONICAL_BOOTSTRAP_RAW\|\|null;\s*if\(!raw\)\{try\{raw=/);
 });
+
+test('room housekeeping status changes commit through the canonical room transaction', () => {
+  const start = html.indexOf('async function updateRoomStatus(n,status)');
+  const end = html.indexOf('\nfunction roomS(', start);
+  assert.ok(start >= 0 && end > start, 'canonical room status handler must exist');
+  const body = html.slice(start, end);
+  assert.match(body, /await commitRoomStatusMutation\(/);
+  assert.match(body, /apply:\(\)=>\{room\.s=status\}/);
+  assert.match(body, /catch\(error\)/);
+  assert.doesNotMatch(body, /localStorage|persist\(\)/);
+  const roomModalStart = html.indexOf('function roomS(');
+  const roomModalEnd = html.indexOf('\nfunction addI(', roomModalStart);
+  assert.ok(roomModalStart >= 0 && roomModalEnd > roomModalStart);
+  assert.match(html.slice(roomModalStart, roomModalEnd), /updateRoomStatus\(/);
+  assert.doesNotMatch(html.slice(roomModalStart, roomModalEnd), /rm\('\$\{n\}'\)\.s=/);
+});

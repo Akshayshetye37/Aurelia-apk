@@ -2,7 +2,7 @@
 
 **Branch:** `feature/multi-provider-payment-backend`  
 **Baseline:** `7262091cce720c48933d534071f8f77065efcbee`  
-**Status:** Canonical-first serialized writes are active; startup verifies migration replay and restores the latest canonical snapshot; domain projection is wired; application UI cutover remains OFF.
+**Status:** Canonical-first serialized writes are active; startup verifies migration replay and restores the latest canonical snapshot; domain projection is wired; room housekeeping status is the first UI command routed through the transactional room repository; global UI cutover remains OFF.
 
 ## Objective
 
@@ -30,9 +30,10 @@ This is a migration primitive, not a completed application cutover:
 
 ## Next mandatory implementation stages
 
-1. Convert each application command to async repository reads and transactional writes; remove direct mutation of the legacy state object from that command.
-2. Cut over in bounded domains: rooms/housekeeping; guests/reservations; folio/accounting; inventory/expenses; restaurant/tables; settings/audit.
-3. For each domain, add tests for reload, duplicate commands, stale versions, transaction rollback, migration replay and read-back.
-4. Remove localStorage as a write authority only after every read and write path is migrated and recovery/rollback is qualified.
+1. Continue the room domain: route room catalogue create/update/retire and all room reads through the canonical repository, then verify reload and stale-version behavior.
+2. Convert each remaining application command to async repository reads and transactional writes; remove direct mutation of the legacy state object from that command.
+3. Cut over in bounded domains: rooms/housekeeping; guests/reservations; folio/accounting; inventory/expenses; restaurant/tables; settings/audit.
+4. For each domain, add tests for reload, duplicate commands, stale versions, transaction rollback, migration replay and read-back.
+5. Remove localStorage as a write authority only after every read and write path is migrated and recovery/rollback is qualified.
 
 **Release controls:** cloud sync OFF; live gateway collection OFF; automatic settlement OFF; automatic refund posting OFF; APK/release authorization NOT GRANTED.

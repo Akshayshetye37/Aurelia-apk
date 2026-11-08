@@ -563,7 +563,27 @@ Stay ${fd(b.in)} → ${fd(b.out)}
  · Out ${esc(b.checkOutTime||defCheckOutTime())}${b.actualCheckOutAt?' (actual '+dateDDMMYYYY(new Date(b.actualCheckOutAt))+' '+new Date(b.actualCheckOutAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+')':''}
 </div>${paymentReviews.length?`<div class="card" style="margin:14px 0"><h3>Payment verification records</h3><div class="lab">Saved payment evidence and staff decisions remain attached to this folio.</div>${paymentReviews.map(s=>`<div class="item"><div class="f"><b>${K(s.amt)} · ${esc(s.app)}</b><small>${esc(s.ref||'No transaction reference')} · ${s.st==='rejected'?'Rejected':s.st==='matched'?'Approved':'Awaiting review'}</small>${s.st==='rejected'?`<small>Reason: ${esc(s.rejectionReason||'Not recorded')}</small>`:''}</div><button class="btn sm ghost" onclick="sigM('${s.id}')">Open review</button></div>`).join('')}</div>`:''}<div style="margin:14px 0">${L.map(x=>`<div class="ln"><span>${x[0]}</span><span>${K(x[1])}</span></div>`).join('')}</div><div class="row"><span class="lab">Total due</span><span class="tot">${K(T)}</span></div><div class="chips" style="margin:12px 0">${['Cash','MTN MoMo','Airtel Money','Zamtel','Card','Bank transfer'].map(p=>`<button class="chip ${p==='Cash'?'on':''}" onclick="$$('.pan .chip').forEach(c=>c.classList.remove('on'));this.classList.add('on');S.pay='${p}'">${p}</button>`).join('')}</div><button class="btn" style="width:100%" onclick="out(${b.id},${T})">Settle and check out</button>`)}
 function out(i,T){const b=S.b.find(x=>x.id===i);b.st='done';rm(b.room).s='clean';S.today+=T;closeS();render();toast(K(T)+' received by '+S.pay)}
-function roomS(n){const r=rm(n);if(r.s==='occ'){toast('Room '+n+' is occupied');return}openS(`<h2 class="foil">Room ${n}</h2><div class="lab">${r.t}. Set its status.</div><div style="display:grid;gap:10px;margin-top:16px">${[['ready','Ready for guests'],['clean','Needs cleaning'],['out','Out of service']].map(([k,l])=>`<button class="btn ${r.s===k?'':'ghost'}" onclick="rm('${n}').s='${k}';closeS();render();toast('Room ${n} marked ${k==='out'?'out of service':k}')">${l}</button>`).join('')}</div>`)}
+async function updateRoomStatus(n,status){
+ const room=rm(n);
+ if(!room){toast('Room '+n+' was not found');return}
+ if(room.s==='occ'){toast('Occupied rooms cannot be changed from housekeeping status');return}
+ if(!['ready','clean','out'].includes(status)){toast('Invalid room status');return}
+ const labels={ready:'Ready for guests',clean:'Needs cleaning',out:'Out of service'};
+ try{
+  const result=await commitRoomStatusMutation({
+   room,
+   auditAction:'Room status changed',
+   auditDetail:'Room '+String(n)+' · '+labels[status],
+   apply:()=>{room.s=status}
+  });
+  closeS();render();
+  toast(result.cacheRefreshed===false?'Room status committed to device storage; compatibility cache refresh failed.':'Room '+n+' marked '+(status==='out'?'out of service':status));
+ }catch(error){
+  toast(error?.message||'Room status was not saved');
+  console.error('[Aurelia Room] Canonical room status commit failed.',error);
+ }
+}
+function roomS(n){const r=rm(n);if(!r){toast('Room '+n+' was not found');return}if(r.s==='occ'){toast('Room '+n+' is occupied');return}openS(`<h2 class="foil">Room ${n}</h2><div class="lab">${r.t}. Set its status.</div><div style="display:grid;gap:10px;margin-top:16px">${[['ready','Ready for guests'],['clean','Needs cleaning'],['out','Out of service']].map(([k,l])=>`<button class="btn ${r.s===k?'':'ghost'}" onclick="updateRoomStatus('${String(n).replace(/'/g,"&#39;")}','${k}')">${l}</button>`).join('')}</div>`)}
 function addI(c,i){const m=MENU[c][i];S.t[S.tb-1].o.push([m[0],m[1]]);render();window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})}
 function toRoom(){
  const g=inh();
