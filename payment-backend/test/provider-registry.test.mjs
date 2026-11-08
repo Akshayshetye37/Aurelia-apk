@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createProviderAdapter, implementedProviderAdapters, providerCapabilities,
-  providerQualificationStatus
+  createProviderAdapter, implementedProviderAdapters, checkoutEnabledProviderAdapters,
+  providerCapabilities, providerQualificationStatus
 } from '../src/providers/factory.mjs';
 
 const REQUIRED = ['validateCredentials','createOrder','findOrderByReference','getPaymentStatus',
@@ -21,11 +21,14 @@ test('cloud API route exposure is separate from adapter factory wiring', async (
 
 test('six full lifecycle adapters and CCAvenue partial adapter are registered', () => {
   assert.deepEqual(implementedProviderAdapters(), ['razorpay','cashfree','payu','phonepe','paytm','jiopay']);
+  assert.deepEqual(checkoutEnabledProviderAdapters(), ['razorpay','cashfree','payu','phonepe','paytm','jiopay','ccavenue']);
   assert.deepEqual(providerCapabilities('ccavenue'), ['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
   assert.equal(providerQualificationStatus('ccavenue').implemented, true);
   assert.equal(providerQualificationStatus('ccavenue').cloudCheckoutApiEnabled, true);
   assert.equal(providerQualificationStatus('ccavenue').testCheckout, true);
   assert.equal(providerQualificationStatus('ccavenue').refunds, false);
+  assert.equal(providerQualificationStatus('ccavenue').refundStatus, false);
+  assert.equal(providerQualificationStatus('ccavenue').liveCollection, false);
 });
 
 test('all wired adapters expose every lifecycle operation but remain release-gated', () => {
