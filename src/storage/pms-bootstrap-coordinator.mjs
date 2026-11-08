@@ -111,6 +111,20 @@ export class PmsBootstrapCoordinator {
         throw new Error("Browser repository does not expose IndexedDB initialization");
       }
       await this.repository.database();
+      // Ask the browser to protect the authoritative database from routine
+      // storage-pressure eviction. A denial is surfaced, never treated as a
+      // successful guarantee or as a reason to fall back to Web Storage.
+      this.persistenceRequested = false;
+      this.persistenceGranted = null;
+      const storageManager = globalThis.navigator?.storage;
+      if (typeof storageManager?.persist === "function") {
+        this.persistenceRequested = true;
+        try { this.persistenceGranted = await storageManager.persist(); }
+        catch (error) {
+          this.persistenceGranted = false;
+          console.warn("[Aurelia Storage] Persistent-storage request failed; IndexedDB remains authoritative.", error);
+        }
+      }
       this.storageEngine = "INDEXEDDB";
     }
     this.status = "ENGINE_READY";
@@ -158,6 +172,7 @@ export class PmsBootstrapCoordinator {
 
     return Object.freeze({
       success: true, environment: this.environment, storageEngine: this.storageEngine,
+      persistentStorage: Object.freeze({ requested: Boolean(this.persistenceRequested), granted: this.persistenceGranted }),
       uiCutover: false, recovery, migration, domainProjection,
       repository: this.repository, identity
     });
