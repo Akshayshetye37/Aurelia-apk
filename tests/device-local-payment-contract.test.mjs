@@ -269,3 +269,21 @@ test('inventory creation and stock movements await local canonical transactions'
     assert.doesNotMatch(body, /persist\(\)/);
   }
 });
+
+test('expense creation and voiding use canonical local expense transactions', () => {
+  const html = read('index.html');
+  const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
+  assert.match(runtime, /commitExpenseMutation/);
+  assert.match(runtime, /commitExpenseMutation: input => commitExpenseMutation/);
+  const start = html.indexOf('async function commitExpenseCatalogState(');
+  const end = html.indexOf('\nlet LOCAL_STATE_STATUS', start);
+  assert.ok(start >= 0 && end > start);
+  assert.match(html.slice(start, end), /await commit\(\{snapshot,expenseId,expenseIndex,operation,expectedPreviousExpense\}\)/);
+  for (const name of ['async function expAdd()', 'async function expVoid(i)']) {
+    const i = html.indexOf(name);
+    assert.ok(i >= 0, name + ' is present');
+    const body = html.slice(i, html.indexOf('\nfunction ', i + 10));
+    assert.match(body, /await commitExpenseCatalogState/);
+    assert.doesNotMatch(body, /persist\(\)/);
+  }
+});
