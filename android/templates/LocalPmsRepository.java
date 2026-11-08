@@ -20,7 +20,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   LocalPmsRepository(Context context) { super(context.getApplicationContext(), NAME, null, VERSION); setWriteAheadLoggingEnabled(true); }
 
-  @Override public void onConfigure(SQLiteDatabase db) { super.onConfigure(db); db.setForeignKeyConstraintsEnabled(true); db.execSQL("PRAGMA synchronous=FULL"); }
+  @Override public void onConfigure(SQLiteDatabase db) { super.onConfigure(db); db.setForeignKeyConstraintsEnabled(true); try(Cursor mode=db.rawQuery("PRAGMA journal_mode=WAL",null)){if(!mode.moveToFirst()||!"wal".equalsIgnoreCase(mode.getString(0)))throw new IllegalStateException("SQLite WAL mode could not be enabled");} db.execSQL("PRAGMA synchronous=FULL"); }
 
   @Override public void onCreate(SQLiteDatabase db) {
     db.execSQL("PRAGMA foreign_keys=ON");
@@ -235,7 +235,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     finally{db.endTransaction();}
   }
 
-  synchronized void storageWipe() { SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();try{for(String table:new String[]{"pms_outbox","pms_entities","pms_meta","pms_legacy_backup","pms_migration_snapshots","pms_migrations","pms_authority"})db.delete(table,null,null);db.setTransactionSuccessful();}finally{db.endTransaction();} }
+  synchronized void storageWipe() { SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();try{for(String table:new String[]{"pms_outbox","pms_entities","pms_meta","pms_legacy_backup","pms_migration_snapshots","pms_migration_checkpoints","pms_migrations","pms_authority"})db.delete(table,null,null);db.setTransactionSuccessful();}finally{db.endTransaction();} }
 
   synchronized JSONObject storageIntegrityCheck() {
     try(Cursor c=getReadableDatabase().rawQuery("PRAGMA integrity_check",null)){if(!c.moveToFirst())throw new IllegalStateException("sqlite_integrity_check_empty");String result=c.getString(0);JSONObject out=new JSONObject();out.put("ok","ok".equalsIgnoreCase(result));out.put("engine","android-sqlite");out.put("result",result);return out;}catch(Exception e){throw failure("sqlite_integrity_check_failed",e);}
