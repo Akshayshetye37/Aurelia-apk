@@ -34,7 +34,8 @@ export function createCcaVenueWebhookHandler(dependencies) {
         return res.status(503).json({ error: 'provider_reconciliation_unavailable' });
       }
       if (code.includes('payload_invalid') || code.includes('identity_invalid') ||
-          code.includes('duplicate_field') || code.includes('decryption_failed')) {
+          code.includes('duplicate_field') || code.includes('ciphertext_invalid') ||
+          code.includes('decryption_failed')) {
         return res.status(400).json({ error: 'invalid_provider_notification' });
       }
       if (code.includes('_mismatch') || code.includes('_order_mismatch') || code.includes('_tracking_mismatch')) {
