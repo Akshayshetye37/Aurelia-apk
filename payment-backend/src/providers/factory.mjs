@@ -13,6 +13,7 @@ const REQUIRED_OPERATIONS = Object.freeze([
   'validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus',
   'verifyWebhook', 'createRefund', 'getRefundStatus'
 ]);
+const CCA_VENUE_OPERATIONS = Object.freeze(['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
 const FACTORIES = Object.freeze({
   razorpay: options => new RazorpayAdapter(options),
   cashfree: options => new CashfreeAdapter(options),
@@ -43,8 +44,8 @@ export function providerQualificationStatus(providerId) {
     testCheckout: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
     liveCollection: false,
     cloudCheckoutApiEnabled: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
-    refunds: true,
-    refundStatus: true,
+    refunds: providerId !== 'ccavenue',
+    refundStatus: providerId !== 'ccavenue',
     merchantUatRequired: true,
     canonicalFolioPostingRequired: true,
     physicalDeviceAcceptanceRequired: true
