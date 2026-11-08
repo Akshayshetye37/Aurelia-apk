@@ -46,7 +46,9 @@ export async function createDeviceEnrollmentChallenge({ db, tenantId, actorUid, 
 
 export async function verifyAndRegisterDevice({
   db, tenantId, actorUid, deviceId, challengeId, publicKeyPem,
-  certificateChainBase64, attestationVerifierUrl = "http://127.0.0.1:8091",
+  certificateChainBase64, integrityToken, expectedPackageName,
+  allowedCertificateSha256Digests, decodeIntegrityToken, requireStrongIntegrity = false,
+  attestationVerifierUrl = "http://127.0.0.1:8091",
   fetchImpl = globalThis.fetch, now = () => new Date()
 }) {
   requireId(tenantId, "tenant_id"); requireId(deviceId, "device_id");
@@ -115,6 +117,13 @@ export async function verifyAndRegisterDevice({
       attestationSecurityLevel: verified.securityLevel,
       attestationVerifiedBootState: verified.verifiedBootState,
       attestationDeviceLocked: true,
+      playIntegrityVerifiedAt: current.toISOString(),
+      playIntegrityAppRecognitionVerdict: integrity.appRecognitionVerdict,
+      playIntegrityAppLicensingVerdict: integrity.appLicensingVerdict,
+      playIntegrityDeviceRecognitionVerdicts: [...integrity.deviceRecognitionVerdicts],
+      playIntegrityCertificateSha256Digest: [...integrity.certificateSha256Digest],
+      playIntegrityTimestampMillis: integrity.timestampMillis,
+      playIntegrityRequestHash: integrity.requestHash,
       attestationChainSha256: sha256(certificateChainBase64.join(".")),
       updatedAt: current
     });
@@ -132,7 +141,12 @@ export async function activatePaymentDevice({ db, tenantId, actorUid, deviceId, 
         snap.data().attestationSecurityLevel !== "TRUSTED_ENVIRONMENT" &&
           snap.data().attestationSecurityLevel !== "STRONG_BOX" ||
         snap.data().attestationVerifiedBootState !== "VERIFIED" ||
-        snap.data().attestationDeviceLocked !== true) {
+        snap.data().attestationDeviceLocked !== true ||
+        snap.data().playIntegrityAppRecognitionVerdict !== "PLAY_RECOGNIZED" ||
+        snap.data().playIntegrityAppLicensingVerdict !== "LICENSED" ||
+        !Array.isArray(snap.data().playIntegrityDeviceRecognitionVerdicts) ||
+        !snap.data().playIntegrityDeviceRecognitionVerdicts.includes("MEETS_DEVICE_INTEGRITY") ||
+        !snap.data().playIntegrityVerifiedAt) {
       throw new Error("payment_device_attestation_not_ready");
     }
     tx.update(ref, { status: "ACTIVE", activatedAt: now(), activatedBy: actorUid });
