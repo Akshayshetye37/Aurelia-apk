@@ -262,3 +262,23 @@ test("inventory mutation rejects stale canonical stock rather than overwriting i
     expectedPreviousItem: prior, legacyStorage: null
   }), error => error.code === "CANONICAL_INVENTORY_DIVERGENCE");
 });
+
+test("inventory rejects fractional unit quantities before writing", async () => {
+  const { bridge, snapshot } = await fixture();
+  const item = { id: "inv-fraction", n: "Soap", q: 1.5, ro: 2, u: 4, price: 0 };
+  snapshot.inv.push(item);
+  await assert.rejects(commitInventoryItemMutation({
+    bridge, snapshot, inventoryId: item.id, inventoryIndex: 0, operation: "create", legacyStorage: null
+  }), error => error.code === "INVALID_INVENTORY_QUANTITY");
+  assert.equal(await bridge.fetchEntity("inventory", item.id), null);
+});
+
+test("inventory rejects sub-paise cost precision before writing", async () => {
+  const { bridge, snapshot } = await fixture();
+  const item = { id: "inv-precision", n: "Soap", q: 1, ro: 0, u: 1.001, price: 0 };
+  snapshot.inv.push(item);
+  await assert.rejects(commitInventoryItemMutation({
+    bridge, snapshot, inventoryId: item.id, inventoryIndex: 0, operation: "create", legacyStorage: null
+  }), error => error.code === "INVALID_INVENTORY_PRICE");
+  assert.equal(await bridge.fetchEntity("inventory", item.id), null);
+});
