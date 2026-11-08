@@ -256,3 +256,34 @@ general refund-creation operation, establish signed webhooks, or verify the
 current private Android package coordinates. Those must be taken from the merchant activation kit. No values
 from third-party document mirrors or leaked examples are used as credentials
 or implementation authority.
+
+### Additional published API contract evidence
+
+- Merchant API v1.3, dated 29 April 2020, hosted on CCAvenue's
+  `links.avenues.info` document domain:
+  https://links.avenues.info/downloads/CCAvenues_API_Vers-1_3.pdf
+  It documents `orderStatusTracker`, the `DoWebTrans` staging and production
+  API hosts, JSON/XML/string request formats, AES-encrypted `enc_request`,
+  encrypted `enc_response`, and status values `0` (API call succeeded) and
+  `1` (API call failed). The order lookup can use the merchant `order_no`,
+  CCAvenue `reference_no`, or both. Its returned order status vocabulary
+  includes Successful, Shipped, Awaited, Initiated, Unsuccessful, Refunded,
+  Auto-Reversed and other operational states. Do not equate a browser return
+  or SDK callback with this server-side status result.
+- The same v1.3 document's API inventory lists `splitRefund`, explicitly
+  described as refunding amounts split to a sub-account through Split Payout.
+  It does not document a generic standalone refund-create operation.
+- A separate Merchant API v1.1 `getRefundDetails` guide, dated 28 November
+  2016, is mirrored by the National Institute of Solar Energy:
+  https://testing.nise.res.in/assets/upload/front/1560925577CCAvenues_API_Vers-1_1_getRefundDetails_Verified.pdf
+  It documents lookup by CCAvenue `reference_no` and refund states
+  `TS-REFC`, `TS-REFA`, `TS-REFF` and `TS-REFD`. This is an old document
+  hosted by a third party; treat it as corroborating evidence only and
+  confirm its availability/version with CCAvenue before production use.
+
+These API documents materially improve the status-lookup specification, but
+they still do not provide a verified AES implementation/test vector for the
+merchant's account, a signed webhook contract, or an ordinary refund-create
+operation. The API v1.3 guide also requires CCAvenue to register the server's
+public IP before API calls are accepted. These account-side prerequisites
+cannot be completed from source code or by inventing credentials.
