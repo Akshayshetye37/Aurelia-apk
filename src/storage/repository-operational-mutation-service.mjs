@@ -348,8 +348,6 @@ export async function commitInventoryItemMutation({
       (Number.isFinite(Number(value)) && Number(value) >= 0 && Number.isSafeInteger(Math.round(Number(value) * 100)) && Math.abs(Number(value) * 100 - Math.round(Number(value) * 100)) < 1e-7))) {
     throw fail("INVALID_INVENTORY_PRICE", "Inventory unit cost and sell price must be non-negative values with at most two decimal places.");
   }
-    throw fail("CANONICAL_INVENTORY_DIVERGENCE", "Inventory item changed in another session; reload before editing.");
-  }
   const committedAt = now();
   const payload = { operation: "inventory." + operation, inventoryId: String(inventoryId), itemName: String(nextItem.n || "") };
   const committed = await bridge.mutateEntities([
