@@ -1041,7 +1041,7 @@ V.stays=()=>{if(S.f==='cal')return cal();const F={all:'All',res:'Arriving',in:'I
 V.rooms=()=>`<div class="row"><h2 style="margin-top:6px;font-size:36px">Rooms</h2><button class="btn sm" onclick="roomNew()">Add room</button></div>${S.rooms.length?`<div class="rooms">${S.rooms.map((r,i)=>{const b=S.b.find(b=>b.room===r.n&&b.st==='in');return`<div class="card room" onclick="roomS(${i})"><div class="row"><span class="n">${esc(r.n)}</span><span class="tag ${r.s}">${{ready:'Ready',occ:'Occupied',clean:'Cleaning',out:'Out of service'}[r.s]}</span></div><div class="lab">${esc(r.t)}</div><div style="margin-top:6px;color:var(--gold)">${K(r.r)} a night</div><div class="lab" style="margin-top:8px;min-height:22px">${b?esc(b.g):'&nbsp;'}</div></div>`}).join('')}</div>`:'<div class="empty">No rooms yet. Add your first room.</div>'}`;
 const rform=(r,i)=>{syncRoomTypes();return `<label class="fld"><span>Room number</span><input id="rn1" value="${esc(r.n)}"></label><label class="fld"><span>Room type</span><input id="rn2" list="rtl" value="${esc(r.t)}"><datalist id="rtl">${types.map(t=>`<option>${esc(t[0])}`).join('')}</datalist></label><label class="fld"><span>Rate per night</span><input id="rn3" type="number" value="${r.r}"></label>`};
 function roomNew(){openS(`<h2 class="foil">Add room</h2>${rform({n:'',t:'Standard',r:850})}<button class="btn" style="width:100%" onclick="roomSave(-1)">Add room</button>`)}
-function roomSave(i){const n=$('#rn1').value.trim(),t=$('#rn2').value.trim(),r=+$('#rn3').value;if(!n||!t||!(r>0)||!Number.isSafeInteger(Math.round(r*100))||Math.abs(r*100-Math.round(r*100))>1e-7){toast('Enter a number, a type and a rate with no more than two decimal places');return}if(S.rooms.some((x,k)=>k!==i&&x.n===n)){toast('Room '+n+' already exists');return}if(i<0){S.rooms.push({n,t,r,s:'ready'});aud('Room added',n)}else{const o=S.rooms[i];S.b.forEach(b=>{if(b.room===o.n){if(b.rate==null||!Number.isFinite(Number(b.rate))||Number(b.rate)<0)b.rate=Math.round(Number(o.r)*100)/100;else b.rate=Math.round(Number(b.rate)*100)/100;b.room=n}});Object.assign(o,{n,t,r});aud('Room edited',n)}closeS();render()}
+async function roomSave(i){const n=$('#rn1').value.trim(),t=$('#rn2').value.trim(),r=+$('#rn3').value;if(!n||!t||!(r>0)||!Number.isSafeInteger(Math.round(r*100))||Math.abs(r*100-Math.round(r*100))>1e-7){toast('Enter a number, a type and a rate with no more than two decimal places');return}if(S.rooms.some((x,k)=>k!==i&&x.n===n)){toast('Room '+n+' already exists');return}const existing=i<0?null:S.rooms[i];if(i>=0&&!existing){toast('Room not found');return}if(existing&&existing.n!==n){toast('Room number is the stable local room ID. Add a new room, then reassign bookings before retiring the old room.');return}if(existing&&Number(existing.r)!==r&&S.b.some(b=>String(b.room)===String(existing.n)&&(b.rate==null||!Number.isFinite(Number(b.rate))||Number(b.rate)<0))){toast('Rate change blocked: older bookings need immutable rate snapshots before this room rate can change.');return}const next=existing?{...existing,t,r}:{n,t,r,s:'ready'};try{const result=await commitRoomCatalogState({roomId:n,operation:existing?'update':'create',auditAction:existing?'Room edited':'Room added',auditDetail:n,apply:()=>{if(existing)Object.assign(existing,{t,r});else S.rooms.push(next)}});closeS();render();toast(result.cacheRefreshed===false?'Room saved to device storage; compatibility cache refresh failed.':'Room '+n+' saved')}catch(error){toast(error.message||'Room details were not saved')}}
 function roomS(i){const r=S.rooms[i];openS(`<h2 class="foil">Room ${esc(r.n)}</h2>${rform(r)}<button class="btn sm" onclick="roomSave(${i})">Save details</button>${r.s==='occ'?'<div class="lab" style="margin-top:12px">This room is occupied. Check the guest out to change its status.</div>':`<div style="display:grid;gap:8px;margin-top:14px">${[['ready','Ready for guests'],['clean','Needs cleaning'],['out','Out of service']].map(([k,l])=>`<button class="btn ${r.s===k?'':'ghost'}" onclick="rs('${r.n}','${k}');closeS()">${l}</button>`).join('')}</div>`}<button class="btn ghost sm" style="margin-top:14px" onclick="ask('Remove room ${esc(r.n)}','The room and its details are deleted.','Remove','rdel(${i})')">Remove room</button>`)}
 function rdel(i){const r=S.rooms[i];if(S.b.some(b=>b.room===r.n&&!r.demo)){toast('Room '+r.n+' has bookings. Mark it out of service instead.');return}S.b=S.b.filter(b=>b.room!==r.n);S.rooms.splice(i,1);aud('Room removed',r.n);render()}
 /* dining and menu */
@@ -1705,6 +1705,30 @@ async function commitRoomStatusMutation({room,apply,auditAction,auditDetail}){
  }
  });
 }
+async function commitRoomCatalogState({roomId,operation,apply,auditAction,auditDetail}){
+ return withLocalOperationalLock(async()=>{
+  if(RECOVERY_CHECK_PENDING)throw new Error('Operational writes are paused during recovery.');
+  const before=cloneRuntimeState(S);
+  try{
+   apply();
+   if(typeof aud==='function')aud(auditAction,auditDetail);
+   const snapshot={tab:S.tab,bk:S.bk};DK.forEach(k=>snapshot[k]=S[k]);
+   const commit=window.AureliaRepositoryCompatibility?.commitRoomCatalogMutation;
+   if(typeof commit!=='function')throw new Error('Canonical local repository is unavailable; room details were not saved.');
+   return await commit({snapshot,roomId:String(roomId),operation});
+  }catch(error){
+   if(error&&error.code==='OPERATIONAL_CANONICAL_READBACK_MISMATCH'){
+    RECOVERY_CHECK_PENDING=true;
+    console.error('[Aurelia Room] Repository read-back mismatch after room catalog commit. Writes are frozen.',error);
+    throw new Error('CRITICAL: Device storage read-back is inconsistent. Do not retry or edit; keep the app open for recovery.');
+   }
+   Object.keys(S).forEach(key=>delete S[key]);
+   Object.assign(S,before);
+   throw error;
+  }
+ });
+}
+
 let LOCAL_STATE_STATUS='missing';
 window.AureliaAccountingBoundary = Object.freeze({
  getState:()=>S,
@@ -5366,7 +5390,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 import { bootstrapper } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
-import { commitOperationalStateMutation, commitRoomStateMutation } from "./src/storage/repository-operational-mutation-service.mjs";
+import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation } from "./src/storage/repository-operational-mutation-service.mjs";
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
 
@@ -5415,7 +5439,8 @@ try {
        return typeof window.AureliaLocalOperationalLock === "function" ? window.AureliaLocalOperationalLock(commit) : commit();
      },
      commitOperationalMutation: input => commitOperationalStateMutation({ ...input, bridge: storageBridge }),
-     commitRoomMutation: input => commitRoomStateMutation({ ...input, bridge: storageBridge })
+     commitRoomMutation: input => commitRoomStateMutation({ ...input, bridge: storageBridge }),
+     commitRoomCatalogMutation: input => commitRoomCatalogMutation({ ...input, bridge: storageBridge })
    });
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "APPLICATION_MODULES";
