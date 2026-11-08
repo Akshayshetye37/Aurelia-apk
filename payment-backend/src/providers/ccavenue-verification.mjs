@@ -137,7 +137,8 @@ export class CCAvenueVerificationService {
     } catch (cause) {
       throw Object.assign(new Error('ccavenue_status_response_decode_failed'), { cause });
     }
-    const result = payload?.Order_Status_Result;
+    const result = payload?.Order_Status_Result && typeof payload.Order_Status_Result === 'object'
+      ? payload.Order_Status_Result : payload;
     if (!result || typeof result !== 'object' || Array.isArray(result)) {
       throw new Error('ccavenue_status_result_missing');
     }
