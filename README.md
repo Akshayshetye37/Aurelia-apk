@@ -1,3 +1,34 @@
+## Current project status — 8 November 2026 (verified against PR #11)
+
+**Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)  
+**Project root:** repository root `/`  
+**Active branch:** `feature/phase-7-pms-persistence`  
+**Pull request:** [#11 — Phase 7 canonical repository read path](https://github.com/Akshayshetye37/Aurelia-apk/pull/11) — open, draft, unmerged  
+**Source commit reviewed:** `dce2ecca07072e7aba8b8ebe06c40cac007119b6`
+
+### Latest verification
+
+- Payment backend CI: **PASSED** — [run 42472177493](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177493). Backend contract/security tests, explicit CCAvenue request-hash test, JavaScript syntax, Cloud Run image/non-root checks, Terraform validation and secret scan passed.
+- Infrastructure validation: **PASSED** — [run 42472177384](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177384).
+- Settlement foundation CI: **PASSED** — [run 42472177596](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177596).
+- PMS Android debug build: **FAILED at Kotlin compilation** — [run 42472177382](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177382). The generated Capacitor project, native patching and sync completed; `AureliaPlayIntegrityClient.kt:58` has an unresolved `IntegrityTokenRequest` reference. APK verification and artifact upload were skipped. This is a source compilation blocker, not a successful APK build.
+- Gradle distribution timeout was mitigated by increasing the wrapper download timeout to 120 seconds; the subsequent build progressed to Kotlin compilation.
+
+### Implemented foundations and verified boundaries
+
+- Local-first PMS foundations: browser IndexedDB, Android SQLite/Capacitor bridge, tenant/property-scoped repository reads and read-only legacy booking shadow planning.
+- Payment backend integrations: six registered providers — Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay — with test/UAT checkout handoffs. No provider is end-to-end production-qualified.
+- CCAvenue: hosted checkout, unqualified AES compatibility codec, Merchant API order-status verification and notification reconciliation modules exist, but are hard-restricted to test. It is not factory-registered or activatable. Official merchant-kit cryptographic vectors, notification authentication contract, current Android SDK, general refund-create contract and merchant UAT remain unverified.
+- Accounting: evidence-gated journal proposal engine and PMS `booking.pays[]` mapping exist. They are proposal-only; no production ledger writer or scheduled reconciliation is connected. Account 2020 normal-balance semantics still require Finance approval.
+- Android: Play Integrity and hardware key-attestation foundations and R8 preservation configuration exist. Kotlin compilation, R8 execution, Play Console linkage, instrumentation and physical-device acceptance are not yet proven.
+- PMS migration: full operational UI cutover remains false; no complete historical import/parity acceptance has occurred.
+
+### Production/release controls — remain closed
+
+Live gateway collection, automatic settlement, automatic refund-to-folio posting and production deployment remain OFF / unauthorized. PR #11 remains draft and unmerged. Do not treat backend/container CI as Android build or production acceptance. Build and sign a production release only after the source-level Android blocker, provider merchant UAT, canonical accounting approval and writer/reconciliation acceptance, PMS cutover, security review, physical-device acceptance and explicit release authorization have passed.
+
+---
+
 # Aurelia PMS
 
 Aurelia is a local-first property management system (PMS) for reservations, guests, rooms, folios and property operations, with a separately trusted backend for online payment-provider operations.
@@ -151,9 +182,9 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 ---
 
-**Latest verified code commit:** `a0c5d2eb0c56a004f49e8807d48bf05a920b857d`  
+**Latest source commit reviewed:** `dce2ecca07072e7aba8b8ebe06c40cac007119b6`  
 **Active work branch:** `feature/phase-7-pms-persistence`  
-**Status:** accounting proposal mapper and Android R8 source configuration implemented; current-head settlement/backend CI passed; 0/6 implemented providers production-qualified; production release not approved.
+**Status:** backend CI passed; Android debug build currently fails at Kotlin compilation; production release not approved.
 
 
 ## Canonical accounting integration — current phase
