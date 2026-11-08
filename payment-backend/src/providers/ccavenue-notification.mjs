@@ -63,7 +63,9 @@ export async function reconcileCcaVenueNotification({
     expectedAmountMinor: expected.amountMinor,
     expectedCurrency: expected.currency
   });
-  if (!verified.verified || verified.orderId !== expected.orderId ||
+  if (!verified.verified || verified.provider !== 'ccavenue' ||
+      verified.evidenceSource !== 'ccavenue_order_status_tracker' ||
+      verified.orderId !== expected.orderId ||
       verified.trackingId !== event.tracking_id ||
       verified.amountMinor !== expected.amountMinor ||
       verified.currency !== expected.currency) {
