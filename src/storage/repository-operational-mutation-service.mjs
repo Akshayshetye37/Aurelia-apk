@@ -320,7 +320,7 @@ export async function commitInventoryItemMutation({
   const snapshotRow = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
   if (!snapshotRow?.data?.snapshot) throw fail("CANONICAL_SNAPSHOT_MISSING", "The canonical recovery snapshot is missing; inventory change was not committed.");
   const priorItems = Array.isArray(snapshotRow.data.snapshot.inv) ? snapshotRow.data.snapshot.inv : [];
-  const priorItem = priorItems.find(row => String(row?.id || "") === String(inventoryId)) || priorItems[inventoryIndex] || null;
+  const priorItem = priorItems.find(row => String(row?.id || "") === String(inventoryId)) || (operation === "update" ? priorItems[inventoryIndex] : null) || null;
   const nextItem = snapshot.inv[inventoryIndex];
   if (!nextItem || String(nextItem.id) !== String(inventoryId)) {
     throw fail("INVENTORY_ITEM_NOT_FOUND", "The updated inventory item with its stable ID is missing from the requested snapshot.");
