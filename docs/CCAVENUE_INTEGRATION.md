@@ -513,3 +513,16 @@ article does not publish a MAC/signature contract. It never writes the PMS
 ledger or issues a settlement command. The endpoint requires credentials to
 have been provisioned through the dedicated route and a corresponding
 CCAvenue provider-order/payment-intent binding to exist.
+
+
+### CCAvenue API network prerequisite
+
+The official Merchant API v1.3 guide requires CCAvenue to register the public
+source IP address used for API requests before calls are accepted. The current
+`payment-backend/infra/terraform` Cloud Run topology provisions the HTTPS
+load balancer and restricted Cloud Run service, but does not provision a
+static Cloud Run egress IP, VPC egress path or Cloud NAT. Therefore the status
+verifier is implemented but cannot be considered production-network-ready.
+Before sandbox/production API qualification, provision a controlled static
+egress IP, register it with CCAvenue for the correct environment, and test
+outbound connectivity from the deployed Cloud Run revision.
