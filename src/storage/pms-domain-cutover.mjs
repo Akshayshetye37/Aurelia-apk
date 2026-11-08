@@ -104,7 +104,7 @@ function records(snapshot, migrationId) {
  * are deleted, balances repaired, or legacy source values rewritten.
  */
 export async function projectLegacyPmsDomains({ bridge, snapshot, migrationId, batchSize = 20 }) {
-  if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
+  if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function" || typeof bridge.mutateEntity !== "function") {
     throw new TypeError("A bound canonical PMS repository bridge is required.");
   }
   const id = safeId(migrationId, "migration ID");
@@ -145,7 +145,11 @@ export async function projectLegacyPmsDomains({ bridge, snapshot, migrationId, b
       }
       batch.push({
         ...row, expectedVersion: 0,
-        mutate: entity => { for (const key of Object.keys(entity)) delete entity[key]; Object.assign(entity, clone(row.data)); }
+        mutate: entity => {
+          for (const key of Object.keys(entity)) delete entity[key];
+          Object.assign(entity, clone(row.data));
+          return entity;
+        }
       });
     }
     if (batch.length) {
@@ -167,7 +171,11 @@ export async function projectLegacyPmsDomains({ bridge, snapshot, migrationId, b
     entityType: "audit", entityId: manifestId, expectedVersion: 0,
     eventType: "legacy.domain_projection_verified",
     eventPayload: { migrationId: id, recordCount: planned.length, counts: manifest.counts },
-    mutate: entity => Object.assign(entity, manifest)
+    mutate: entity => {
+      for (const key of Object.keys(entity)) delete entity[key];
+      Object.assign(entity, manifest);
+      return entity;
+    }
   });
   const verify = await bridge.fetchEntity("audit", manifestId);
   if (!verify || verify.version !== 1 || !same(verify.data, manifest)) {

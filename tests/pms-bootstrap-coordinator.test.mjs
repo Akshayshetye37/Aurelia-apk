@@ -163,7 +163,8 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(html, /sandbox blocks durable storage/);
   assert.match(html, /state\.previewBlocked/);
   assert.match(html, /async function persistCanonicalStrict\(\)/);
-  assert.match(html, /await window\.AureliaRepositoryCompatibility\.persist\(state\)/);
+  assert.match(html, /persist: snapshot => storageBridge\.persistCompatibilitySnapshot\(snapshot\)/);
+  assert.match(html, /coordinator\.save\(state\)/);
   assert.match(html, /readBack: async \(\) =>/);
   assert.match(html, /async function addSig\(o\)/);
   assert.match(html, /async function sigReject\(id,bookingId\)/);

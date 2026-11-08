@@ -186,7 +186,7 @@ export class PmsBootstrapCoordinator {
         throw new Error("Canonical recovery rejected: restored latest snapshot failed exact read-back verification");
       }
       return Object.freeze({
-        restored: true, source: "canonical-audit-snapshot", migrationAlreadyVerified: true,
+        restored: true, source: "canonical-audit-snapshot", migrationAlreadyVerified: !markerMatch,
         migrationId: markerMatch?.[1] || null, version: canonical.version,
         snapshotSha256: canonical.data.snapshotSha256 || null
       });
@@ -203,7 +203,7 @@ export class PmsBootstrapCoordinator {
         }
         return Object.freeze({
           restored: true, source: "canonical-migration-snapshot",
-          migrationAlreadyVerified: true, migrationId: markerMatch[1]
+          migrationAlreadyVerified: false, migrationId: markerMatch[1]
         });
       }
     }

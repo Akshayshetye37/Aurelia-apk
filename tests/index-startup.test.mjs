@@ -48,7 +48,8 @@ test('sandboxed CodeShack preview is identified as session-only, never reported 
   assert.ok(html.includes("String(location.href).startsWith('about:srcdoc')"));
   assert.ok(html.includes("mode: ok ? 'browser-local-storage' : 'session-memory-only'"));
   assert.ok(html.includes("embedded-preview-sandbox"));
-  assert.ok(html.includes("PREVIEW ONLY: CodeShack embeds this app in a sandbox that blocks persistent storage"));
+  assert.ok(html.includes("This is an embedded HTML preview, not the Aurelia app runtime."));
+  assert.ok(html.includes("frame or sandbox blocks durable storage"));
   assert.ok(html.includes('if(store.memoryOnly)throw new Error(window.AureliaStorageDiagnostics?.reason'));
 });
 
