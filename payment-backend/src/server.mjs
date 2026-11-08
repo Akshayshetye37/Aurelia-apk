@@ -892,7 +892,7 @@ app.put('/v1/admin/providers/ccavenue/credentials', requireTenantAdmin,
       'environment', 'merchantId', 'regId', 'accessCode', 'encryptionKey', 'hostedCheckoutKey',
       'workingKey', 'notificationWorkingKey', 'apiVersion'
     ]);
-    if (!['test', 'live'].includes(environment) ||
+    if (environment !== 'test' ||
         Object.keys(body).some(key => !allowed.has(key)) ||
         typeof body.merchantId !== 'string' || !/^[A-Za-z0-9]{1,20}$/.test(body.merchantId) ||
         typeof body.accessCode !== 'string' || !/^[A-Za-z0-9]{8,64}$/.test(body.accessCode) ||
@@ -1155,7 +1155,7 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
 app.post('/v1/webhooks/ccavenue/:tenantId/:environment',
   express.raw({ type: '*/*', limit: '128kb' }), async (req, res) => {
     const { tenantId, environment } = req.params;
-    if (!tenantIdPattern.test(tenantId || '') || !['test', 'live'].includes(environment) ||
+    if (!tenantIdPattern.test(tenantId || '') || environment !== 'test' ||
         !Buffer.isBuffer(req.body)) return fail(res, 400, 'invalid_ccavenue_notification_request');
     const contentType = (req.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
     if (!['application/json', 'application/x-www-form-urlencoded'].includes(contentType)) {
