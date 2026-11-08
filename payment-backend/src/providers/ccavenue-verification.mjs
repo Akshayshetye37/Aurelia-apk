@@ -145,7 +145,9 @@ export class CCAvenueVerificationService {
     }
 
     const returnedOrderId = result.order_no;
-    const returnedTrackingId = result.reference_no;
+    const returnedTrackingId = typeof result.reference_no === 'string' ? result.reference_no
+      : Number.isSafeInteger(result.reference_no) && result.reference_no >= 0
+        ? String(result.reference_no) : null;
     if (returnedOrderId !== orderId) throw new Error('ccavenue_status_order_mismatch');
     if (trackingId && returnedTrackingId !== trackingId) {
       throw new Error('ccavenue_status_tracking_mismatch');
