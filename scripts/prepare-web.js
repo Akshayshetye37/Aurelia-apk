@@ -39,7 +39,8 @@ if(!fs.existsSync(bookingPolicySource))throw new Error('Booking cancellation pol
 const bookingPolicyDest=path.join(dest,'src','bookings');
 fs.mkdirSync(bookingPolicyDest,{recursive:true});
 fs.copyFileSync(bookingPolicySource,path.join(bookingPolicyDest,'cancellation-policy.mjs'));
-console.log('Prepared web app, settlement modules, backend routing policy, and UPI reconciliation bridge for Capacitor');
+if(androidBuild){for(const forbidden of ['indexeddb-pms-repository.mjs','indexeddb-storage-adapter.mjs']){const target=path.join(storageDest,forbidden);if(fs.existsSync(target))fs.unlinkSync(target);}for(const forbidden of ['indexeddb-pms-repository.mjs','indexeddb-storage-adapter.mjs'])if(fs.existsSync(path.join(storageDest,forbidden)))throw new Error('Android bundle must not include IndexedDB business adapter: '+forbidden);}
+console.log('Prepared '+(androidBuild?'Android SQLite':'browser IndexedDB')+' web app, settlement modules, backend routing policy, and UPI reconciliation bridge');
 const platformSrc=path.join(root,'src','payments','provider-platform.mjs');
 if(!fs.existsSync(platformSrc))throw new Error('Payment platform module not found: '+platformSrc);
 fs.copyFileSync(platformSrc,path.join(settlementDest,'provider-platform.mjs'));
