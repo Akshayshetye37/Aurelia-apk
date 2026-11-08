@@ -47,7 +47,7 @@ test('all wired adapters expose every lifecycle operation but remain release-gat
     const status = providerQualificationStatus(provider);
     assert.equal(status.implemented,true);
     assert.equal(status.liveCollection,false);
-    assert.equal(status.testCheckout,true);
+    assert.equal(status.testCheckout,['razorpay','cashfree'].includes(provider));
     assert.equal(status.cloudCheckoutApiEnabled,['razorpay','cashfree'].includes(provider));
     assert.equal(status.merchantUatRequired,true);
     assert.equal(status.canonicalFolioPostingRequired,true);
