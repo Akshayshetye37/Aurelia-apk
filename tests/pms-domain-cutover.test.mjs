@@ -25,7 +25,8 @@ function fakeBridge() {
         const key = c.entityType + ":" + c.entityId;
         const old = entities.get(key);
         assert.equal(old?.version ?? 0, c.expectedVersion);
-        const data = c.mutate(old ? structuredClone(old.data) : { id: c.entityId });
+        const data = old ? structuredClone(old.data) : { id: c.entityId };
+        c.mutate(data);
         const row = { type: c.entityType, id: c.entityId, version: c.expectedVersion + 1, data };
         entities.set(key, row); rows.push(structuredClone(row));
       }

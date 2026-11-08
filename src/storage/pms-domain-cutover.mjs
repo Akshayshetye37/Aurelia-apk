@@ -15,7 +15,7 @@ const stable = value => Array.isArray(value) ? value.map(stable) :
 const same = (a, b) => JSON.stringify(stable(a)) === JSON.stringify(stable(b));
 const safeId = (value, label) => {
   const id = String(value ?? "").trim();
-  if (!id || id.length > 180 || /[\u0000-\u001f]/.test(id)) {
+  if (!id || id.length > 180 || /[\\u0000-\\u001f]/.test(id)) {
     throw new Error("Legacy " + label + " has no safe stable identity; projection stopped without rewriting it.");
   }
   return id;
