@@ -1654,15 +1654,10 @@ function persist(){
   ?window.AureliaLocalOperationalLock(save):save();
 }
 function persistStrict(){
- if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
- const store=window.__aureliaStorage||localStorage;
- if(store.memoryOnly)throw new Error(window.AureliaStorageDiagnostics?.reason||'Persistent device storage is unavailable; refusing to confirm this operation.');
- const state={tab:S.tab,bk:S.bk};DK.forEach(k=>state[k]=S[k]);
- const serialized=JSON.stringify(state);
- store.setItem(SK,serialized);
- if(store.getItem(SK)!==serialized)throw new Error('Persistent storage read-back did not exactly match the committed state.');
- if(window.AureliaRepositoryCompatibility)window.AureliaRepositoryCompatibility.persist(state).catch(error=>console.error('[Aurelia Repository Mirror] Verified strict local save succeeded but repository mirror failed; local state remains authoritative.',error));
- return true;
+ // Synchronous Web Storage is never a valid durability boundary for the
+ // asynchronous IndexedDB/SQLite repository. Keep the legacy projector closed
+ // until it is migrated to an awaited canonical transaction.
+ throw new Error('Synchronous accounting persistence is disabled. Use the awaited canonical repository transaction; no local-only payment write was accepted.');
 }
 
 // Awaitable canonical commit for workflows that can participate in an async
