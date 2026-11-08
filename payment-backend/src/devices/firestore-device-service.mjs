@@ -33,6 +33,10 @@ export async function createDeviceEnrollmentChallenge({ db, tenantId, actorUid, 
     if (existing.exists && existing.data().ownerUid !== actorUid) {
       throw new Error("payment_device_owner_conflict");
     }
+    if (existing.exists && existing.data().status === "PENDING" &&
+        existing.data().publicKeySpkiBase64) {
+      throw new Error("payment_device_attestation_already_submitted_owner_activation_required");
+    }
     tx.create(challengeRef(db, tenantId, deviceId, challengeId), {
       tenantId, deviceId, actorUid, nonceSha256: sha256(Buffer.from(nonce, "base64url")),
       nonceBase64: nonce, playIntegrityRequestHash, issuedAt, expiresAt, consumedAt: null
