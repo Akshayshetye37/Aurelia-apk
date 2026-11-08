@@ -16,7 +16,7 @@ export class IndexedDbStorageAdapter extends StorageAdapter{
    put(store,key,value){ops.push({type:"put",store,key,value:clone(value)});},
    compareAndPut(store,key,expectedVersion,value){ops.push({type:"comparePut",store,key,expectedVersion,value:clone(value)});},
    meta:{put(key,value){ops.push({type:"put",store:"meta",key,value:clone(value)});}},
-   backup:{put(key,value){ops.push({type:"put",store:"legacy_backup",key,value:clone(value)});}}
+   backup:{put(key,value){ops.push({type:"put",store:"legacy_backup",key,value:clone(value)});},create:id=>this.createBackup(id),restore:snapshot=>this.restoreSnapshot(snapshot),list:()=>this.list("legacy_backup")}
   };
   Object.freeze(writer.meta);Object.freeze(writer.backup);Object.freeze(writer);
   const result=fn(writer);
@@ -33,6 +33,9 @@ export class IndexedDbStorageAdapter extends StorageAdapter{
  putMeta(key,value){return this.put("meta",key,{...value,key});}
  getBackup(id){return this.get("legacy_backup",id);}
  putBackup(id,value){return this.put("legacy_backup",id,{...value,id});}
+ async exportSnapshot(){const stores={};for(const name of [...STORES].filter(x=>x!=="legacy_backup"))stores[name]=await this.list(name);return{format:"aurelia-storage-backup-v1",createdAt:new Date().toISOString(),stores};}
+ async createBackup(id){if(typeof id!=="string"||!id.trim())throw new TypeError("Backup ID is required");const snapshot=await this.exportSnapshot();await this.putBackup(id,snapshot);return snapshot;}
+ async restoreSnapshot(snapshot){if(!snapshot||snapshot.format!=="aurelia-storage-backup-v1"||!snapshot.stores||typeof snapshot.stores!=="object")throw new TypeError("Invalid storage backup snapshot");const allowed=[...STORES].filter(x=>x!=="legacy_backup");for(const name of allowed)if(!Array.isArray(snapshot.stores[name]))throw new TypeError("Backup is missing store "+name);const db=await this.repository.database(),tx=db.transaction(allowed,"readwrite"),completion=done(tx);try{for(const name of allowed){const store=tx.objectStore(name);store.clear();for(const row of snapshot.stores[name]){const field={meta:"key",entities:"key",outbox:"eventId",migration_snapshots:"id"}[name];if(!row||typeof row!=="object"||!field||typeof row[field]!=="string")throw new TypeError("Invalid row in backup store "+name);store.put(clone(row));}}await completion;return{restored:true,stores:allowed.length};}catch(error){try{tx.abort()}catch{}await completion.catch(()=>{});throw storageError(error);}}
  async integrityCheck(){const db=await this.repository.database();const missing=[...STORES].filter(name=>!db.objectStoreNames.contains(name));if(missing.length)throw new Error("IndexedDB schema is missing stores: "+missing.join(", "));return{ok:true,engine:"indexeddb",version:db.version};}
  async authority(){return this.repository.getAuthority();}
  async authorityRecord(){return this.repository.getAuthorityRecord();}
