@@ -64,6 +64,8 @@ The current implementation contains substantial storage, payment and security fo
 
 **Payment limitation:** the client intent CAS and provider adapter tests do not constitute an exactly-once financial ledger. The canonical PMS folio, provider capture, webhook inbox, trusted device authorization, local posting/read-back, backend acknowledgement, refunds and reversals still need complete end-to-end integration and acceptance.
 
+**Staff payment-review UI (local-device scope):** incoming native UPI notification evidence is now saved with strict local persistence before it is presented for review. Staff can reject only after confirming the action and entering a reason; the rejected evidence remains attached to the selected guest folio, can be reopened, and retains its prior decision history. This is an operational recovery feature, not provider-authenticated payment proof or a cross-device server audit log. Native notification content is untrusted evidence; it must not authorize a gateway payment or folio credit. The trusted provider-status, staff identity/role authorization, backend decision audit, and canonical ledger integration remain release blockers.
+
 ### Android security
 
 - Native payment-device lease handling retains original signed policy and authorization envelopes.
