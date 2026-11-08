@@ -2,6 +2,8 @@
  * Web Storage compatibility adapter. Kept inside src/storage so application
  * screens never access browser key-value storage directly.
  */
+import { installPreferenceStorageGuard } from "./preference-storage-guard.mjs";
+
 export class StorageFullError extends Error {
   constructor(message = "Device storage is full. Export your PMS data and free space before continuing.", options = {}) {
     super(message, options);
@@ -13,9 +15,11 @@ export class StorageFullError extends Error {
 
 export function createWebStorageAdapter({
   windowRef = globalThis.window,
-  storage = windowRef?.localStorage
+  storage = windowRef?.localStorage,
+  mode = globalThis.__AURELIA_BUILD_MODE || (typeof process !== "undefined" && process.env?.NODE_ENV) || "production"
 } = {}) {
   const memory = new Map();
+  const durableSetItem = storage?.setItem?.bind(storage);
   let initializationError = null;
   let persistent = false;
   try {
@@ -31,6 +35,7 @@ export function createWebStorageAdapter({
   } catch (error) {
     initializationError = error;
   }
+  if (persistent) installPreferenceStorageGuard({ storage, mode });
   let embeddedPreview = false;
   try {
     embeddedPreview = String(windowRef?.location?.href || "").startsWith("about:srcdoc") ||
@@ -48,7 +53,7 @@ export function createWebStorageAdapter({
     },
     setItem(key, value) {
       if (persistent) {
-        try { storage.setItem(String(key), String(value)); return; }
+        try { durableSetItem(String(key), String(value)); return; }
         catch (error) {
           const failure = new Error("Device storage write failed: " + (error?.name || "StorageError"));
           if (error?.name === "QuotaExceededError") throw new StorageFullError(undefined, { cause: error });
