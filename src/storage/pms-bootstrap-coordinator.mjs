@@ -13,6 +13,7 @@ import { getOrCreateBrowserLocalIdentity } from "./pms-local-identity.mjs";
 import { settlePaymentToRepository } from "../payments/repository-settlement-service.mjs";
 import { PmsRepositoryBridge } from "./pms-repository-bridge.mjs";
 import { projectLegacyPmsDomains } from "./pms-domain-cutover.mjs";
+import { assertInvariants as assertBusinessInvariants } from "./business-actions.mjs";
 const canonicalJson = value => Array.isArray(value) ? "[" + value.map(canonicalJson).join(",") + "]" :
   value && typeof value === "object"
     ? "{" + Object.keys(value).sort().map(key => JSON.stringify(key) + ":" + canonicalJson(value[key])).join(",") + "}"
@@ -224,6 +225,8 @@ export class PmsBootstrapCoordinator {
         bridge, snapshot: source.parsed, migrationId: migration.migrationId
       });
     }
+
+    await assertBusinessInvariants(this.repository);
 
     return Object.freeze({
       success: true, environment: this.environment, storageEngine: this.storageEngine,
