@@ -8,6 +8,7 @@
  */
 import { IndexedDbPmsRepository, parseLegacyPmsSnapshot } from "./indexeddb-pms-repository.mjs";
 import { getOrCreateBrowserLocalIdentity } from "./pms-local-identity.mjs";
+import { createLocalFirstRuntimePolicy } from "./local-first-runtime-policy.mjs";
 
 export const AURELIA_LEGACY_STATE_KEY = "aurelia_lodge_v2";
 export const AURELIA_MIGRATION_STATUS_KEY = "aurelia_canonical_migration_status";
@@ -122,11 +123,22 @@ export class PmsBootstrapCoordinator {
     }
 
     const migration = await this.executeGuardedMigration();
+    // The local runtime policy is established before any operational UI script
+    // is released. No cloud, sync transport, analytics or payment backend is
+    // consulted to open the PMS or commit local feature data.
+    const runtimePolicy = createLocalFirstRuntimePolicy({
+      environment: this.environment,
+      storageEngine: this.storageEngine,
+      repository: this.repository
+    });
     this.status = migration.status;
     return Object.freeze({
       success: true,
       environment: this.environment,
       storageEngine: this.storageEngine,
+      runtimePolicy,
+      cloudSyncEnabled: false,
+      networkRequiredForStartup: false,
       uiCutover: false,
       migration,
       repository: this.repository,
