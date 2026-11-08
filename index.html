@@ -1888,7 +1888,8 @@ window.AureliaAccountingBoundary = Object.freeze({
  isEmergencyStopped:()=>false
 });
 function loadAll(){
- let raw=null;try{raw=(window.__aureliaStorage||localStorage).getItem(SK)}catch(e){LOCAL_STATE_STATUS='invalid';return}
+ let raw=window.__AURELIA_CANONICAL_BOOTSTRAP_RAW||null;
+ if(!raw){try{raw=(window.__aureliaStorage||localStorage).getItem(SK)}catch(e){LOCAL_STATE_STATUS='invalid';return}}
  if(!raw){LOCAL_STATE_STATUS='missing';return}
  try{
   const o=JSON.parse(raw);
@@ -5574,6 +5575,15 @@ try {
   if (!boot || boot.success !== true || !boot.repository) throw new Error("Canonical storage bootstrap did not return a verified repository");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "REPOSITORY_BINDING";
   storageBridge.bindActiveEngine(boot.repository, boot.identity);
+  // Hydrate the legacy UI projection from the verified canonical repository before
+  // replaying application scripts. Web Storage is only a recovery/cache fallback.
+  const canonicalAudit = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  if (canonicalAudit?.data?.snapshot) {
+    window.__AURELIA_CANONICAL_BOOTSTRAP_RAW = JSON.stringify(canonicalAudit.data.snapshot);
+  } else if (boot.migration?.migrationId && typeof boot.repository.readMigrationSnapshot === "function") {
+    const migrationSnapshot = await boot.repository.readMigrationSnapshot(boot.migration.migrationId);
+    if (migrationSnapshot?.raw) window.__AURELIA_CANONICAL_BOOTSTRAP_RAW = migrationSnapshot.raw;
+  }
   const localFirstWrites = new PmsLocalFirstWriteCoordinator({
     persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot),
     readBack: async () => {
