@@ -5,6 +5,7 @@ import { PaytmAdapter } from './paytm-adapter.mjs';
 import { PhonePeAdapter } from './phonepe-adapter.mjs';
 import { PayUAdapter } from './payu-adapter.mjs';
 import { assertAdapterCapabilities } from './adapter-contract.mjs';
+import { PROVIDERS } from './registry.mjs';
 
 // Provider capability means every operation below is implemented. It does not
 // mean the merchant account has passed UAT or that live collection is approved.
@@ -43,7 +44,7 @@ export function providerQualificationStatus(providerId) {
     implemented: true,
     testCheckout: true,
     liveCollection: false,
-    cloudCheckoutApiEnabled: true,
+    cloudCheckoutApiEnabled: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
     merchantUatRequired: true,
     canonicalFolioPostingRequired: true,
     physicalDeviceAcceptanceRequired: true
