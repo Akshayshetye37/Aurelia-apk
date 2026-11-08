@@ -40,7 +40,7 @@ test("payment, booking, folio and recovery snapshot commit atomically with exact
 
   const savedBooking = await bridge.fetchEntity("booking", "41");
   const savedFolio = await bridge.fetchEntity("folio", "folio-41");
-  const savedSnapshot = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  const savedSnapshot = await bridge.fetchLegacySnapshot();
   assert.deepEqual(savedBooking.data.pays, booking.pays);
   assert.equal(savedFolio.data.paidPaise, 25000);
   assert.equal(savedFolio.data.balanceDuePaise, 75000);
@@ -142,7 +142,7 @@ test("staff-reviewed UPI evidence and folio credit commit together and replay id
   assert.equal(state.sig[0].st, "matched");
   assert.equal(state.sig[0].b, booking.id);
   assert.equal(state.sig[0].reviewHistory.length, 1);
-  const snapshot = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  const snapshot = await bridge.fetchLegacySnapshot();
   assert.equal(snapshot.data.snapshot.sig[0].st, "matched");
   assert.equal(snapshot.data.snapshot.b[0].p, 250);
 
