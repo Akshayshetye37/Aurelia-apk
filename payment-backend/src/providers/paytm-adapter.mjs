@@ -14,12 +14,6 @@ const toMinor=v=>{
   return Number.isSafeInteger(n)?n:null;
 };
 const amount=v=>(v/100).toFixed(2);
-const json=async response=>{
-  const data=await response.json().catch(()=>({}));
-  if(!response.ok)throw Object.assign(new Error('paytm_request_failed'),{providerStatus:response.status});
-  return data;
-};
-
 export class PaytmAdapter extends PaymentProviderAdapter {
   constructor(options) {
     super(options);
@@ -41,10 +35,11 @@ export class PaytmAdapter extends PaymentProviderAdapter {
       const mutating = url.includes('/initiateTransaction') || url.endsWith('/refund/apply');
       throw Object.assign(new Error('paytm_network_error'), { outcomeUnknown: mutating, cause });
     }
-    const data=await json(response);
-    if (response.status >= 500 && (url.includes('/initiateTransaction') || url.endsWith('/refund/apply'))) {
-      throw Object.assign(new Error('paytm_request_outcome_unknown'), { providerStatus: response.status, outcomeUnknown: true });
-    }
+    const data=await response.json().catch(()=>({}));
+    const mutating = url.includes('/initiateTransaction') || url.endsWith('/refund/apply');
+    if(!response.ok) throw Object.assign(new Error('paytm_request_failed'), {
+      providerStatus:response.status, outcomeUnknown:mutating && response.status>=500
+    });
     if(!data?.body||typeof data?.head?.signature!=='string'||
       !(await this.checksum.verifySignature(JSON.stringify(data.body),this.credentials.merchantKey,data.head.signature)))
       throw new Error('paytm_response_signature_invalid');
