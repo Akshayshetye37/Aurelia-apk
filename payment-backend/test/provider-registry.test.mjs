@@ -12,15 +12,15 @@ test('cloud API route exposure is separate from adapter factory wiring', async (
   const registry = await import('../src/providers/registry.mjs');
   const catalogue = registry.publicProviderCatalogue();
   const exposed = catalogue.filter(item => item.cloudCheckoutApiEnabled).map(item => item.id);
-  assert.deepEqual(exposed, ['razorpay', 'cashfree']);
+  assert.deepEqual(exposed, ['razorpay', 'cashfree', 'ccavenue']);
   for (const item of catalogue.filter(item => !item.cloudCheckoutApiEnabled)) {
-    assert.ok(['payu', 'phonepe', 'paytm', 'jiopay', 'ccavenue'].includes(item.id));
+    assert.ok(['payu', 'phonepe', 'paytm', 'jiopay'].includes(item.id));
   }
   for (const provider of ['razorpay', 'cashfree', 'ccavenue']) assert.equal(registry.PROVIDERS[provider].cloudCheckoutApiEnabled, true);
   for (const provider of ['payu', 'phonepe', 'paytm', 'jiopay']) assert.equal(registry.PROVIDERS[provider].cloudCheckoutApiEnabled, false);
 });
 
-test('only providers with all seven concrete operations are registered', () => {
+test('six full lifecycle adapters and CCAvenue partial adapter are registered', () => {
   assert.deepEqual(implementedProviderAdapters(), ['razorpay','cashfree','payu','phonepe','paytm','jiopay','ccavenue']);
   assert.deepEqual(providerCapabilities('ccavenue'), ['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
   assert.equal(providerQualificationStatus('ccavenue').implemented, true);
@@ -81,7 +81,7 @@ test('CCAvenue is factory-wired for documented checkout/status/webhook operation
     environment: 'test'
   });
   for (const operation of providerCapabilities('ccavenue')) assert.equal(typeof adapter[operation], 'function');
-  assert.equal(providerQualificationStatus('ccavenue').cloudCheckoutApiEnabled, false);
+  assert.equal(providerQualificationStatus('ccavenue').cloudCheckoutApiEnabled, true);
   await assert.rejects(() => adapter.createRefund({ amountMinor: 100, refundId: 'refund-1' }),
     /ccavenue_standard_refund_requires_merchant_specific_api/);
   await assert.rejects(() => adapter.getRefundStatus({ refundId: 'refund-1' }),
