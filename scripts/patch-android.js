@@ -400,13 +400,13 @@ const proguardTarget = path.join(appModuleDir, 'proguard-rules.pro');
 const proguardRules = fs.readFileSync(proguardTemplate, 'utf8');
 if (!fs.existsSync(proguardTarget) || !fs.readFileSync(proguardTarget, 'utf8').includes('AURELIA_PAYMENT_SDK_KEEP_RULES')) {
   const existingRules = fs.existsSync(proguardTarget) ? fs.readFileSync(proguardTarget, 'utf8') : '';
-  fs.writeFileSync(proguardTarget, existingRules + '\\n' + proguardRules);
+  fs.writeFileSync(proguardTarget, existingRules + '\n' + proguardRules);
 }
 function wireReleaseProguard(contents) {
-  if (/proguardFiles[^\\n]*proguard-rules\\.pro/.test(contents)) return contents;
-  const releaseBlock = /(release\\s*\\{)/;
+  if (/proguardFiles[^\n]*proguard-rules\.pro/.test(contents)) return contents;
+  const releaseBlock = /(release\s*\{)/;
   if (!releaseBlock.test(contents)) return contents;
-  return contents.replace(releaseBlock, '$1\\n            proguardFiles getDefaultProguardFile(\'proguard-android-optimize.txt\'), \'proguard-rules.pro\'');
+  return contents.replace(releaseBlock, '$1\n            proguardFiles getDefaultProguardFile(\'proguard-android-optimize.txt\'), \'proguard-rules.pro\'');
 }
 if (fs.existsSync(appGradleGroovy)) {
   const gradle = wireReleaseProguard(fs.readFileSync(appGradleGroovy, 'utf8'));
