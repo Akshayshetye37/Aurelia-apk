@@ -356,3 +356,30 @@ Integrity token and challenge-bound Android Key Attestation chain to the
 backend enrollment endpoint. It preserves owner activation as a separate
 server action. Android Gradle compilation, device-side API compatibility and
 a real Play Console internal-test enrollment are still required.
+
+
+### Enrollment replay and approval freshness controls
+
+A device record now holds the single current `enrollmentChallengeId`.
+Issuing a newer challenge supersedes the prior one; enrollment checks this
+pointer both before external verification and again inside the final Firestore
+transaction. Successful enrollment consumes the challenge and clears the
+pointer. A stale concurrent verification therefore cannot overwrite the
+newer device identity.
+
+The owner activation transaction requires the Play Integrity proof to be no
+older than ten minutes, and still requires the independently verified Android
+Key Attestation state. If the owner does not activate within that window, the
+device must be re-enrolled. Once an attested key has been submitted, another
+challenge is not issued until the owner activates or revokes the pending
+device. A failed/ambiguous client submission may leave a locally generated
+attested key; do not silently delete or replace it. Recovery requires an
+explicit owner-controlled device reset procedure, which remains a separate
+UI/operational task.
+
+The current source head
+`8bad860a8d2fdca00595ba042f38f22b7eb065eb` passed all three GitHub workflows:
+PMS tests and production web packaging, settlement foundation CI, and payment
+backend CI including tests, syntax, container build, non-root verification
+and Terraform validation. Android Gradle compilation and real Play Console
+physical-device enrollment are still not part of those workflows.
