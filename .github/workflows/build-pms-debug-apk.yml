@@ -71,7 +71,18 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
+        shell: bash
         run: |
+          set -euo pipefail
+          # GitHub runners occasionally need longer than Gradle Wrapper's 10s
+          # default to fetch the pinned distribution. Keep the same version and
+          # checksum; only extend the download timeout.
+          wrapper_properties="gradle/wrapper/gradle-wrapper.properties"
+          if grep -q '^networkTimeout=' "$wrapper_properties"; then
+            sed -i 's/^networkTimeout=.*/networkTimeout=120000/' "$wrapper_properties"
+          else
+            printf '\\nnetworkTimeout=120000\\n' >> "$wrapper_properties"
+          fi
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace assembleDebug
 
