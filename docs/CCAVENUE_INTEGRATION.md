@@ -418,8 +418,8 @@ The following isolated backend components are now present:
 
 The merchant API v1.3 document is the *guide revision*, not the API request
 version value. The guide's request parameter section lists `version=1.1` as
-the current value; this implementation defaults to 1.1 and allows an explicit
-merchant-approved override. It sends status requests to
+the current value; this implementation accepts only 1.1 until a newer
+protocol version is confirmed in the merchant-issued integration kit. It sends status requests to
 `https://apitest.ccavenue.com/apis/servlet/DoWebTrans` or
 `https://api.ccavenue.com/apis/servlet/DoWebTrans`, not
 `https://ccavenue.com`.
