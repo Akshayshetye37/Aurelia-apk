@@ -72,6 +72,66 @@ test("retry after successful reservation commit is idempotent and does not dupli
   assert.equal((await bridge.fetchEntity("folio", "booking-61")).data.paidPaise, 20000);
 });
 
+test("reservation retry upgrades an exactly matching legacy folio schema and preserves its source evidence", async () => {
+  const { bridge, snapshot } = await fixture();
+  const { guest, booking } = createDraft(snapshot);
+  const input = {
+    bridge, snapshot, guestIndex: 0, bookingId: booking.id, roomId: "101",
+    balanceDueFor, legacyStorage: null
+  };
+  await commitReservationToRepository(input);
+  const existing = await bridge.fetchEntity("folio", "booking-61");
+  await bridge.mutateEntity({
+    entityType: "folio", entityId: "booking-61", expectedVersion: existing.version,
+    eventType: "folio.legacy_projection",
+    mutate: entity => {
+      delete entity.paidPaise;
+      delete entity.balanceDuePaise;
+      delete entity.paymentRows;
+      entity.legacyPaidTotal = booking.p;
+      entity.legacyPaymentRows = structuredClone(booking.pays);
+    }
+  });
+  const result = await commitReservationToRepository(input);
+  assert.equal(result.duplicate, true);
+  assert.equal(result.folio.data.paidPaise, 20000);
+  assert.equal(result.folio.data.balanceDuePaise, 180000);
+  assert.deepEqual(result.folio.data.paymentRows, booking.pays);
+  assert.deepEqual(result.folio.data.legacySourceEvidence, {
+    legacyPaidTotal: 200,
+    legacyPaymentRows: booking.pays
+  });
+  assert.equal(result.folio.data.legacyPaidTotal, undefined);
+  assert.equal(result.folio.data.legacyPaymentRows, undefined);
+});
+
+test("reservation retry refuses a legacy folio whose source payment rows diverge", async () => {
+  const { bridge, snapshot } = await fixture();
+  const { booking } = createDraft(snapshot);
+  const input = {
+    bridge, snapshot, guestIndex: 0, bookingId: booking.id, roomId: "101",
+    balanceDueFor, legacyStorage: null
+  };
+  await commitReservationToRepository(input);
+  const existing = await bridge.fetchEntity("folio", "booking-61");
+  await bridge.mutateEntity({
+    entityType: "folio", entityId: "booking-61", expectedVersion: existing.version,
+    eventType: "folio.legacy_projection",
+    mutate: entity => {
+      delete entity.paidPaise;
+      delete entity.balanceDuePaise;
+      delete entity.paymentRows;
+      entity.legacyPaidTotal = booking.p;
+      entity.legacyPaymentRows = [{ a: 999, m: "Cash" }];
+    }
+  });
+  await assert.rejects(commitReservationToRepository(input),
+    error => error.code === "FOLIO_LEGACY_SOURCE_DIVERGENCE");
+  const unchanged = await bridge.fetchEntity("folio", "booking-61");
+  assert.equal(unchanged.data.legacyPaidTotal, 200);
+  assert.deepEqual(unchanged.data.legacyPaymentRows, [{ a: 999, m: "Cash" }]);
+});
+
 test("reservation commit rejects a room entity that diverges from the canonical snapshot", async () => {
   const { bridge, snapshot } = await fixture();
   const { booking } = createDraft(snapshot);
