@@ -1649,7 +1649,15 @@ function cloneRuntimeState(value){
  if(value&&typeof value==='object'){const copy={};Object.keys(value).forEach(key=>copy[key]=cloneRuntimeState(value[key]));return copy}
  return value;
 }
+let LOCAL_OPERATIONAL_QUEUE=Promise.resolve();
+function withLocalOperationalLock(task){
+ const run=LOCAL_OPERATIONAL_QUEUE.then(task,task);
+ LOCAL_OPERATIONAL_QUEUE=run.then(()=>undefined,()=>undefined);
+ return run;
+}
+window.AureliaLocalOperationalLock=withLocalOperationalLock;
 async function commitStayMutation({booking,room,eventType,apply,auditAction,auditDetail}){
+ return withLocalOperationalLock(async()=>{
  if(RECOVERY_CHECK_PENDING)throw new Error('Operational writes are paused during recovery.');
  const before=cloneRuntimeState(S);
  try{
@@ -1670,8 +1678,10 @@ async function commitStayMutation({booking,room,eventType,apply,auditAction,audi
   Object.assign(S,before);
   throw error;
  }
+ });
 }
 async function commitRoomStatusMutation({room,apply,auditAction,auditDetail}){
+ return withLocalOperationalLock(async()=>{
  if(RECOVERY_CHECK_PENDING)throw new Error('Operational writes are paused during recovery.');
  const before=cloneRuntimeState(S);
  try{
@@ -1691,6 +1701,7 @@ async function commitRoomStatusMutation({room,apply,auditAction,auditDetail}){
   Object.assign(S,before);
   throw error;
  }
+ });
 }
 let LOCAL_STATE_STATUS='missing';
 window.AureliaAccountingBoundary = Object.freeze({
@@ -5397,7 +5408,10 @@ try {
        const row = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
        return row?.data || null;
      },
-     settlePayment: input => settlePaymentToRepository({ ...input, bridge: storageBridge }),
+     settlePayment: input => {
+       const commit = () => settlePaymentToRepository({ ...input, bridge: storageBridge });
+       return typeof window.AureliaLocalOperationalLock === "function" ? window.AureliaLocalOperationalLock(commit) : commit();
+     },
      commitOperationalMutation: input => commitOperationalStateMutation({ ...input, bridge: storageBridge }),
      commitRoomMutation: input => commitRoomStateMutation({ ...input, bridge: storageBridge })
    });
