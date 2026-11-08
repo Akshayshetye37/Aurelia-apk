@@ -99,12 +99,15 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
       throw new Error('phonepe_status_order_identity_mismatch');
     }
     const state = String(data.state || '').toUpperCase();
-    const payment = Array.isArray(data.paymentDetails) ? data.paymentDetails.find(p =>
-      !input.paymentId || String(p.transactionId) === String(input.paymentId)) : null;
+    const paymentList = Array.isArray(data.paymentDetails) ? data.paymentDetails : [];
+    const payment = input.paymentId
+      ? paymentList.find(p => String(p.transactionId) === String(input.paymentId))
+      : (paymentList.find(p => String(p.state || '').toUpperCase() === 'COMPLETED') || paymentList[0] || null);
     const txnId = payment?.transactionId ?? null;
     const amountMinor = input.paymentId ? payment?.amount : (payment?.amount ?? data.amount);
-    const captured = state === 'COMPLETED' && minor(amountMinor) &&
-      (!input.paymentId || (payment?.state === 'COMPLETED' && String(txnId) === String(input.paymentId)));
+    const captured = state === 'COMPLETED' && Boolean(payment) &&
+      String(payment.state || '').toUpperCase() === 'COMPLETED' && minor(amountMinor) &&
+      (!input.paymentId || String(txnId) === String(input.paymentId));
     return { provider: 'phonepe', orderId: input.orderId,
       paymentId: txnId == null ? null : String(txnId),
       paymentStatus: input.paymentId && !payment ? 'NOT_FOUND' : (payment?.state || state),
