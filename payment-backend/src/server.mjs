@@ -1172,7 +1172,8 @@ app.post('/v1/webhooks/ccavenue/:tenantId/:environment',
         providerSecretId(tenantId, 'ccavenue', environment, 'webhook'));
       let body;
       if (contentType === 'application/json') {
-        body = JSON.parse(req.body.toString('utf8'));
+        try { body = JSON.parse(req.body.toString('utf8')); }
+        catch { return fail(res, 400, 'invalid_ccavenue_notification_payload'); }
       } else {
         const form = new URLSearchParams(req.body.toString('utf8'));
         const values = form.getAll('encResp');
