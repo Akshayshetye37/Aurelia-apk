@@ -319,3 +319,42 @@ Official references:
 CCAvenue must be integrated as a peer adapter with these operations: credential validation; idempotent order/tracking-ID creation; order lookup by Aurelia reference; authoritative payment status; authenticated event ingestion followed by authoritative reconciliation; full/partial refund initiation when the merchant's Instant Refund entitlement/API is confirmed; and refund-status lookup. The Android handoff must use the merchant's current official SDK kit, with backend-generated requestHash and no merchant secrets in the APK.
 
 The implementation must not advertise full lifecycle capability until the merchant-issued kit supplies and the sandbox proves: AES request/response compatibility, SDK package/API, event authentication, status API contract, Instant Refund API contract and merchant eligibility. The adapter remains unregistered and all live financial switches remain OFF until then.
+## Official public integration document review (CCAvenue Integration v3.3, November 2021)
+
+CCAvenue's public Integration Document v3.3 was retrieved from its Avenues document host: https://links.avenues.info/downloads/CCAvenue_Integration_Ver_3_3.pdf . It is materially more useful than the public marketing pages and defines a classic hosted checkout path that can be implemented independently of the Mobile SDK.
+
+### Publicly documented hosted checkout contract
+
+- M.A.R.S. Settings > API Keys provides Merchant ID, Access Code and Working Key for the test/production integration (document pp. 4, 7). The sample transaction code passes the merchant secret as `enc_key` to `AesCryptUtil`, encrypts the assembled request string and posts `encRequest` plus `access_code` to `https://test.ccavenue.com/transaction/transaction.do?command=initiateTransaction` (pp. 7-8).
+- Production billing-page host in this document is `https://secure.ccavenue.com`; test host is `https://test.ccavenue.com` (p. 4). The Merchant API v1.3 status API uses its separate `api.ccavenue.com` / `apitest.ccavenue.com` hosts. These are different interfaces and must not be interchanged.
+- Required request fields include `merchant_id`, unique merchant-generated `order_id`, three-letter `currency`, decimal `amount`, `redirect_url`, `cancel_url` and `language` (pp. 8-9). CCAvenue explicitly warns that it does not enforce uniqueness of merchant `order_id`; Aurelia must enforce uniqueness itself.
+- The response contains `order_id`, CCAvenue `tracking_id` (numeric, up to 12 digits), `bank_ref_no`, `order_status`, `failure_message`, `payment_mode`, `status_code`, `status_message`, `currency` and `Amount` (pp. 51-52). Documented callback statuses are `Success`, `Failure`, `Aborted`, `Invalid` and `Timeout`.
+- The Integration Document explicitly instructs merchants to validate the returned `order_id`, `currency` and `Amount` before providing services (pp. 51-52). Aurelia must additionally bind tenant, payment intent, original amount/currency and unique order ID, then independently query provider status before treating capture as verified.
+- For iFrame checkout, the guide shows the encrypted request being posted through a server endpoint and the returned HTML/payment payload being loaded into an iframe (pp. 15-16, 39). This is an alternative web checkout integration, not the Android SDK.
+
+### Important credential-name reconciliation
+
+The 2021 v3.3 classic integration guide calls the M.A.R.S. credential `Working Key` in its API Keys list, while its sample code passes the same configured transaction secret into `AesCryptUtil` as `enc_key`. The later Mobile SDK guide uses a `working_key` in the SHA-512 requestHash formula. These labels are not sufficient to assume the two secrets are interchangeable across products. Keep the backend fields purpose-specific until the merchant's current M.A.R.S. account and activation kit confirm which credential belongs to each interface: classic hosted checkout encryption, Merchant API v1.3 encrypted API envelope, and Mobile SDK requestHash.
+
+### What the official public sources do and do not establish
+
+Confirmed by CCAvenue public material:
+- Hosted billing page and iFrame checkout request/response fields and environment hosts: Integration v3.3.
+- Server-side encrypted request construction using CCAvenue's `AesCryptUtil` class and merchant-specific secret: Integration v3.3.
+- Mobile SDKs exist for Android, iOS and Windows, but the public product page does not publish SDK classes, package coordinates or a downloadable SDK: https://www.ccavenue.com/inapp-payments.
+- Dynamic Event Notifications support order status, risk status, dispute status, reconciliation status and recurring-payment alerts; merchants configure event URLs in M.A.R.S. CCAvenue describes the event object as posted securely but does not publish a cryptographic signature/header contract in this article: https://www.ccavenue.com/article/Receive-real-time-updates-of-key-events-in-your-Merchant-Account-through-CCAvenues-Dynamic-Event-Notifications.
+- Instant Refund API exists, but CCAvenue says it is currently limited to specific BIN sets of leading card networks and businesses live on its platform. The public product article does not publish the technical API contract or confirm that a particular merchant is enabled: https://www.ccavenue.com/article/Enhance-Customer-Experience-and-Boost-Retention-Substantially-with-CCAvenue-Instant-Refunds.
+- CCAvenue says the merchant-specific Payment Gateway Integration Kit is sent in the auto-generated activation email after merchant account activation: https://www.ccavenue.com/compliance (Activation of the Merchant Account section).
+
+### Implementation decision
+
+Aurelia can now build a classic hosted checkout adapter path against the public v3.3 field contract, while keeping cryptographic compatibility dependent on the exact official `AesCryptUtil` implementation and test vectors. The request encryption primitive must not be reverse-engineered from sample ciphertext or guessed from unrelated GitHub libraries. The callback parser can be implemented against the published response fields, but a callback alone must not prove capture; use the documented Merchant API v1.3 `orderStatusTracker` for authoritative reconciliation and validate order ID, amount, currency and tracking/reference identity.
+
+Dynamic Event Notifications should be wired as a provider event intake that stores the raw event safely, deduplicates it, and schedules authoritative status lookup. Until CCAvenue supplies the notification authentication contract, the endpoint must not treat an incoming event as trusted evidence. Instant Refund must be an optional capability gated by confirmed merchant entitlement and the merchant-specific API contract; the adapter must not silently fall back to manual M.A.R.S. refunds or splitRefund.
+
+Official public document references:
+- CCAvenue Integration v3.3 (November 2021): https://links.avenues.info/downloads/CCAvenue_Integration_Ver_3_3.pdf
+- CCAvenue merchant activation and Integration Kit delivery: https://www.ccavenue.com/compliance
+- CCAvenue in-app SDK product: https://www.ccavenue.com/inapp-payments
+- CCAvenue Dynamic Event Notifications: https://www.ccavenue.com/article/Receive-real-time-updates-of-key-events-in-your-Merchant-Account-through-CCAvenues-Dynamic-Event-Notifications
+- CCAvenue Instant Refunds: https://www.ccavenue.com/article/Enhance-Customer-Experience-and-Boost-Retention-Substantially-with-CCAvenue-Instant-Refunds
