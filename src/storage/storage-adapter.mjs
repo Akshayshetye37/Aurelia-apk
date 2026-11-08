@@ -12,6 +12,9 @@ export class StorageAdapter {
   getBackup(){throw new Error("StorageAdapter.getBackup is not implemented");}
   putBackup(){throw new Error("StorageAdapter.putBackup is not implemented");}
   integrityCheck(){throw new Error("StorageAdapter.integrityCheck is not implemented");}
+  wipe(){throw new Error("StorageAdapter.wipe is not implemented");}
+  authorityRecord(){throw new Error("StorageAdapter.authorityRecord is not implemented");}
+  setAuthorityRecord(){throw new Error("StorageAdapter.setAuthorityRecord is not implemented");}
   authority(){throw new Error("StorageAdapter.authority is not implemented");}
 }
 export function assertStorageAdapter(adapter){for(const method of ["transaction","get","put","list","getMeta","putMeta","getBackup","putBackup","integrityCheck","authority"])if(typeof adapter?.[method]!=="function")throw new TypeError("StorageAdapter is missing "+method);for(const area of ["meta","backup"])for(const method of ["get","put","list"])if(typeof adapter?.[area]?.[method]!=="function")throw new TypeError("StorageAdapter is missing "+area+"."+method);return adapter;}
