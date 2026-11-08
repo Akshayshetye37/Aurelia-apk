@@ -13,7 +13,7 @@ import org.json.JSONObject;
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String NAME = "aurelia-pms.db";
-  private static final int VERSION = 3;
+  private static final int VERSION = 4;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   LocalPmsRepository(Context context) { super(context.getApplicationContext(), NAME, null, VERSION); setWriteAheadLoggingEnabled(true); }
@@ -25,12 +25,22 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     db.execSQL("CREATE INDEX pms_outbox_delivery_idx ON pms_outbox(status,retry_at,created_at)");
     db.execSQL("CREATE TABLE pms_migrations(migration_key TEXT PRIMARY KEY NOT NULL,migration_id TEXT NOT NULL,source_key TEXT NOT NULL,completed_at INTEGER NOT NULL,entity_count INTEGER NOT NULL)");
     db.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL,source_timestamp TEXT NOT NULL,created_at INTEGER NOT NULL,format_version INTEGER NOT NULL)");
+    db.execSQL("CREATE TABLE pms_meta(meta_key TEXT PRIMARY KEY NOT NULL,value_json TEXT NOT NULL,updated_at INTEGER NOT NULL)");
+    db.execSQL("CREATE TABLE pms_legacy_backup(backup_id TEXT PRIMARY KEY NOT NULL,raw_json TEXT NOT NULL,sha256 TEXT,created_at INTEGER NOT NULL)");
+    db.execSQL("CREATE TABLE pms_authority(singleton INTEGER PRIMARY KEY CHECK(singleton=1),state TEXT NOT NULL CHECK(state IN ('legacy','migrating','canonical')),migration_id TEXT,updated_at INTEGER NOT NULL)");
+    db.execSQL("INSERT OR IGNORE INTO pms_authority(singleton,state,migration_id,updated_at) VALUES(1,'legacy',NULL,0)");
   }
   @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {
     if(oldVersion<2) db.execSQL("ALTER TABLE pms_outbox ADD COLUMN acknowledged_at INTEGER");
     if(oldVersion<3) {
       db.execSQL("ALTER TABLE pms_migration_snapshots ADD COLUMN source_timestamp TEXT NOT NULL DEFAULT ''");
       db.execSQL("ALTER TABLE pms_migration_snapshots ADD COLUMN format_version INTEGER NOT NULL DEFAULT 1");
+    }
+    if(oldVersion<4) {
+      db.execSQL("CREATE TABLE IF NOT EXISTS pms_meta(meta_key TEXT PRIMARY KEY NOT NULL,value_json TEXT NOT NULL,updated_at INTEGER NOT NULL)");
+      db.execSQL("CREATE TABLE IF NOT EXISTS pms_legacy_backup(backup_id TEXT PRIMARY KEY NOT NULL,raw_json TEXT NOT NULL,sha256 TEXT,created_at INTEGER NOT NULL)");
+      db.execSQL("CREATE TABLE IF NOT EXISTS pms_authority(singleton INTEGER PRIMARY KEY CHECK(singleton=1),state TEXT NOT NULL CHECK(state IN ('legacy','migrating','canonical')),migration_id TEXT,updated_at INTEGER NOT NULL)");
+      db.execSQL("INSERT OR IGNORE INTO pms_authority(singleton,state,migration_id,updated_at) VALUES(1,'legacy',NULL,0)");
     }
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
@@ -171,6 +181,60 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static JSONObject outboxRow(Cursor c,String owner,long leaseUntil,int attempts) throws Exception {
     JSONObject x=new JSONObject();x.put("eventId",c.getString(0));x.put("tenantId",c.getString(1));x.put("propertyId",c.getString(2));x.put("deviceId",c.getString(3));x.put("entityType",c.getString(4));x.put("entityId",c.getString(5));x.put("sequence",c.getLong(6));x.put("eventType",c.getString(7));x.put("schemaVersion",c.getLong(8));x.put("occurredAt",c.getString(9));x.put("payload",new JSONTokener(c.getString(10)).nextValue());x.put("status","IN_FLIGHT");x.put("attempts",attempts);x.put("retryAt",c.isNull(13)?JSONObject.NULL:c.getString(13));x.put("leaseOwner",owner);x.put("leaseUntil",isoTimestamp(leaseUntil));x.put("acknowledgedAt",c.isNull(18)?JSONObject.NULL:isoTimestamp(c.getLong(18)));x.put("lastErrorCode",c.isNull(16)?JSONObject.NULL:c.getString(16));x.put("createdAt",isoTimestamp(c.getLong(17)));return x;
   }
+  synchronized JSONObject storageGet(String store,String key) {
+    validateIdentity(key,"storage key");
+    try {
+      if("meta".equals(store)) { try(Cursor c=getReadableDatabase().rawQuery("SELECT value_json FROM pms_meta WHERE meta_key=?",new String[]{key})){return c.moveToFirst()?new JSONObject(c.getString(0)):null;} }
+      if("legacy_backup".equals(store)) { try(Cursor c=getReadableDatabase().rawQuery("SELECT raw_json FROM pms_legacy_backup WHERE backup_id=?",new String[]{key})){return c.moveToFirst()?new JSONObject(c.getString(0)):null;} }
+      if("entities".equals(store)) { int split=key.indexOf(':');if(split<1)throw new IllegalArgumentException("invalid_entity_storage_key");return getEntity(key.substring(0,split),key.substring(split+1)); }
+      if("migration_snapshots".equals(store))return readMigrationSnapshot(key);
+      throw new IllegalArgumentException("unsupported_storage_store");
+    } catch(RuntimeException e){throw e;} catch(Exception e){throw failure("storage_get_failed",e);}
+  }
+
+  synchronized JSONArray storageList(String store) {
+    JSONArray rows=new JSONArray();
+    try {
+      if("meta".equals(store)){try(Cursor c=getReadableDatabase().rawQuery("SELECT meta_key,value_json FROM pms_meta ORDER BY meta_key",null)){while(c.moveToNext()){JSONObject row=new JSONObject(c.getString(1));row.put("key",c.getString(0));rows.put(row);}return rows;}}
+      if("legacy_backup".equals(store)){try(Cursor c=getReadableDatabase().rawQuery("SELECT backup_id,raw_json FROM pms_legacy_backup ORDER BY backup_id",null)){while(c.moveToNext()){JSONObject row=new JSONObject(c.getString(1));row.put("id",c.getString(0));rows.put(row);}return rows;}}
+      if("entities".equals(store)){try(Cursor c=getReadableDatabase().rawQuery("SELECT entity_type,entity_id,version,data_json,updated_at FROM pms_entities ORDER BY entity_type,entity_id",null)){while(c.moveToNext()){JSONObject row=new JSONObject();row.put("key",c.getString(0)+":"+c.getString(1));row.put("type",c.getString(0));row.put("id",c.getString(1));row.put("version",c.getLong(2));row.put("data",new JSONTokener(c.getString(3)).nextValue());row.put("updatedAt",isoTimestamp(c.getLong(4)));rows.put(row);}return rows;}}
+      if("migration_snapshots".equals(store)){try(Cursor c=getReadableDatabase().rawQuery("SELECT snapshot_id,source_key,raw_json,source_timestamp,created_at,format_version FROM pms_migration_snapshots ORDER BY snapshot_id",null)){while(c.moveToNext()){JSONObject row=new JSONObject();row.put("id",c.getString(0));row.put("sourceKey",c.getString(1));row.put("raw",c.getString(2));row.put("sourceTimestamp",c.getString(3));row.put("importedAt",isoTimestamp(c.getLong(4)));row.put("formatVersion",c.getLong(5));rows.put(row);}return rows;}}
+      throw new IllegalArgumentException("unsupported_storage_store");
+    } catch(RuntimeException e){throw e;} catch(Exception e){throw failure("storage_list_failed",e);}
+  }
+
+  synchronized void storageTransaction(JSONArray operations) {
+    if(operations==null||operations.length()<1||operations.length()>100)throw new IllegalArgumentException("invalid_storage_operations");
+    SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
+    try {
+      for(int i=0;i<operations.length();i++){
+        JSONObject op=operations.getJSONObject(i);if(!"put".equals(op.getString("type")))throw new IllegalArgumentException("unsupported_storage_operation");
+        String store=op.getString("store"),key=op.getString("key");validateIdentity(key,"storage key");JSONObject value=op.getJSONObject("value");long now=System.currentTimeMillis();
+        if("meta".equals(store)){ContentValues row=new ContentValues();row.put("meta_key",key);row.put("value_json",value.toString());row.put("updated_at",now);db.insertWithOnConflict("pms_meta",null,row,SQLiteDatabase.CONFLICT_REPLACE);}
+        else if("legacy_backup".equals(store)){ContentValues row=new ContentValues();row.put("backup_id",key);row.put("raw_json",value.toString());row.put("sha256",value.optString("sha256",null));row.put("created_at",now);db.insertWithOnConflict("pms_legacy_backup",null,row,SQLiteDatabase.CONFLICT_REPLACE);}
+        else if("entities".equals(store)){String type=value.optString("type",""),id=value.optString("id","");int split=key.indexOf(':');if(type.isEmpty()&&split>0)type=key.substring(0,split);if(id.isEmpty()&&split>0)id=key.substring(split+1);validateIdentity(type,"entity type");validateIdentity(id,"entity ID");Object data=value.has("data")?value.get("data"):value;ContentValues row=new ContentValues();row.put("entity_type",type);row.put("entity_id",id);row.put("version",Math.max(1,value.optLong("version",1)));row.put("data_json",serializeJsonValue(data));row.put("updated_at",now);db.insertWithOnConflict("pms_entities",null,row,SQLiteDatabase.CONFLICT_REPLACE);}
+        else if("migration_snapshots".equals(store)){ContentValues row=new ContentValues();row.put("snapshot_id",key);row.put("source_key",value.optString("sourceKey","storage-adapter"));row.put("raw_json",value.optString("raw",value.toString()));row.put("source_timestamp",value.optString("sourceTimestamp",isoTimestamp(now)));row.put("created_at",now);row.put("format_version",value.optInt("formatVersion",1));db.insertWithOnConflict("pms_migration_snapshots",null,row,SQLiteDatabase.CONFLICT_REPLACE);}
+        else throw new IllegalArgumentException("unsupported_storage_store");
+      }
+      db.setTransactionSuccessful();
+    } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("storage_transaction_failed",e);}
+    finally{db.endTransaction();}
+  }
+
+  synchronized JSONObject storageIntegrityCheck() {
+    try(Cursor c=getReadableDatabase().rawQuery("PRAGMA integrity_check",null)){if(!c.moveToFirst())throw new IllegalStateException("sqlite_integrity_check_empty");String result=c.getString(0);JSONObject out=new JSONObject();out.put("ok","ok".equalsIgnoreCase(result));out.put("engine","android-sqlite");out.put("result",result);return out;}catch(Exception e){throw failure("sqlite_integrity_check_failed",e);}
+  }
+
+  synchronized JSONObject storageAuthority() {
+    try(Cursor c=getReadableDatabase().rawQuery("SELECT state,migration_id FROM pms_authority WHERE singleton=1",null)){JSONObject out=new JSONObject();if(!c.moveToFirst()){out.put("state","legacy");return out;}out.put("state",c.getString(0));out.put("migrationId",c.isNull(1)?JSONObject.NULL:c.getString(1));return out;}catch(Exception e){throw failure("storage_authority_read_failed",e);}
+  }
+
+  synchronized JSONObject setStorageAuthority(String state,String migrationId) {
+    if(!"legacy".equals(state)&&!"migrating".equals(state)&&!"canonical".equals(state))throw new IllegalArgumentException("invalid_storage_authority");
+    SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
+    try {JSONObject current=storageAuthority();String prior=current.optString("state","legacy");if("canonical".equals(prior)&&!"canonical".equals(state))throw new IllegalStateException("canonical_authority_cannot_be_downgraded");if("canonical".equals(state)){try(Cursor c=db.rawQuery("SELECT value_json FROM pms_meta WHERE meta_key='migration_verified'",null)){if(!c.moveToFirst()||!new JSONObject(c.getString(0)).optBoolean("value",false))throw new IllegalStateException("migration_verification_required_before_canonical_authority");}}ContentValues row=new ContentValues();row.put("singleton",1);row.put("state",state);if(migrationId==null)row.putNull("migration_id");else row.put("migration_id",migrationId);row.put("updated_at",System.currentTimeMillis());db.insertWithOnConflict("pms_authority",null,row,SQLiteDatabase.CONFLICT_REPLACE);db.setTransactionSuccessful();return storageAuthority();}catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("storage_authority_update_failed",e);}finally{db.endTransaction();}
+  }
+
   private static String isoTimestamp(long value){java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",java.util.Locale.US);f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));return f.format(new java.util.Date(value));}
   private static long entityVersion(SQLiteDatabase db,String type,String id){try(Cursor c=db.rawQuery("SELECT version FROM pms_entities WHERE entity_type=? AND entity_id=?",new String[]{type,id})){return c.moveToFirst()?c.getLong(0):0;}}
   private static void validateEvent(JSONObject e,String type,String id,long sequence){try{for(String k:new String[]{"eventId","tenantId","propertyId","deviceId","eventType"})validateIdentity(e.getString(k),k);if(!type.equals(e.getString("entityType"))||!id.equals(e.getString("entityId"))||safeJsonInteger(e,"sequence",1)!=sequence||safeJsonInteger(e,"schemaVersion",1)<1||!Double.isFinite(parseDate(e.getString("occurredAt"))))throw new IllegalArgumentException("invalid_pms_outbox_event");if(e.has("payload")&&serializeJsonValue(e.get("payload"))==null)throw new IllegalArgumentException("invalid_payload");}catch(RuntimeException x){throw x;}catch(Exception x){throw new IllegalArgumentException("invalid_pms_outbox_event",x);}}
