@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { installPreferenceStorageGuard } from "../src/storage/preference-storage-guard.mjs";
+import { installPreferenceStorageGuard, PREFERENCE_STORAGE_KEYS } from "../src/storage/preference-storage-guard.mjs";
 
 function fakeStorage() {
   const values = new Map();
@@ -9,6 +9,7 @@ function fakeStorage() {
 
 test("preference guard permits only explicit UI preference keys",()=>{
  const storage=fakeStorage(),guard=installPreferenceStorageGuard({storage,mode:"test"});
+ assert.throws(()=>PREFERENCE_STORAGE_KEYS.push("payment_status"),TypeError);
  storage.setItem("theme","dark");storage.setItem("lang","en");
  assert.equal(storage.getItem("theme"),"dark");
  assert.throws(()=>storage.setItem(["aurelia","lodge","v2"].join("_"),"{}"),error=>error.name==="StorageAuthorityViolation");
