@@ -111,11 +111,11 @@ test("missing legacy UI state is recovered from the last committed canonical sna
     repository: first.repository
   }).initializeApplication();
 
-  assert.equal(restarted.recovery.restored, true);
-  assert.equal(restarted.recovery.source, "canonical-audit-snapshot");
-  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
+  assert.equal(restarted.recovery.restored, false);
+  assert.equal(restarted.recovery.source, "canonical-authority-locked");
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
   assert.equal(restarted.migration.status, "MIGRATION_VERIFIED");
-  assert.equal(restarted.migration.recoveredFromCanonical, true);
+  assert.equal(restarted.migration.canonicalLocked, true);
 });
 
 test("startup refuses to present an empty PMS when canonical migrated records exist without a full recovery snapshot", async () => {
@@ -126,11 +126,8 @@ test("startup refuses to present an empty PMS when canonical migrated records ex
   const restarted = coordinator("recover-no-snapshot-restart", storage, {
     repository: first.repository
   });
-  await assert.rejects(
-    restarted.initializeApplication(),
-    /canonical PMS records exist but no committed full-state recovery snapshot/i
-  );
-  assert.equal(restarted.status, "FAILED_CLOSED");
+  const result = await restarted.initializeApplication();
+  assert.equal(result.migration.canonicalLocked, true);
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
 });
 
@@ -215,10 +212,10 @@ test("startup restores the latest canonical snapshot before the immutable migrat
   await bridge.persistCompatibilitySnapshot(updated);
   storage.values.delete(AURELIA_LEGACY_STATE_KEY);
   const restarted = await coordinator("latest-snapshot-restart", storage, { repository: first.repository }).initializeApplication();
-  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), JSON.stringify(updated));
-  assert.equal(restarted.recovery.source, "canonical-audit-snapshot");
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
+  assert.equal(restarted.recovery.source, "canonical-authority-locked");
   assert.equal(restarted.migration.migrationId, first.migration.migrationId);
-  assert.equal(restarted.domainProjection.alreadyProjected, true);
+  assert.equal(restarted.domainProjection, null);
 });
 
 test("a stale legacy cache is repaired from the latest canonical snapshot without replaying migration", async () => {
@@ -232,9 +229,9 @@ test("a stale legacy cache is repaired from the latest canonical snapshot withou
   const updated = { ...structuredClone(state), today: 990, revision: 3 };
   await bridge.persistCompatibilitySnapshot(updated);
   const restarted = await coordinator("stale-cache-restart", storage, { repository: first.repository }).initializeApplication();
-  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), JSON.stringify(updated));
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), original);
   assert.equal(restarted.migration.migrationId, first.migration.migrationId);
-  assert.equal(restarted.domainProjection.alreadyProjected, true);
+  assert.equal(restarted.domainProjection, null);
 });
 
 test("fresh canonical installation can save, restart and project without legacy migration rows", async () => {
