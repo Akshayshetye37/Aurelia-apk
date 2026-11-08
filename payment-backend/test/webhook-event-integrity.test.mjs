@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertWebhookReplayIntegrity, webhookPayloadHash } from '../src/webhooks/provider-webhook-router.mjs';
+import { assertWebhookReplayIntegrity, webhookPayloadHash, safeProviderEventId } from '../src/webhooks/provider-webhook-router.mjs';
 
 const identity = rawBody => ({
   tenantId: 'tenant01', provider: 'razorpay', environment: 'test',
@@ -38,4 +38,19 @@ test('legacy inbox records without a payload fingerprint fail closed', () => {
 test('empty and non-buffer webhook payloads are rejected', () => {
   assert.throws(() => webhookPayloadHash('body'), /raw_body_required/);
   assert.throws(() => webhookPayloadHash(Buffer.alloc(0)), /raw_body_required/);
+});
+
+test('composite Paytm and JioPay event identifiers accept colon delimiters safely', () => {
+  assert.equal(safeProviderEventId('ORDER123:TXN456'), true);
+  assert.equal(safeProviderEventId('merchant_123:pg-456'), true);
+  assert.equal(safeProviderEventId('evt.123:part_2'), true);
+});
+
+test('provider event identifiers reject unsafe, empty and oversized values', () => {
+  assert.equal(safeProviderEventId(''), false);
+  assert.equal(safeProviderEventId(':leading'), false);
+  assert.equal(safeProviderEventId('trailing:'), false);
+  assert.equal(safeProviderEventId('double::delimiter'), false);
+  assert.equal(safeProviderEventId('bad/event'), false);
+  assert.equal(safeProviderEventId('x'.repeat(257)), false);
 });
