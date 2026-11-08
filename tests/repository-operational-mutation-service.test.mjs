@@ -352,3 +352,31 @@ test("restaurant folio posting rejects a sale whose amount differs from the new 
   }), error => error.code === "RESTAURANT_CHARGE_AMOUNT_MISMATCH");
   assert.equal((await bridge.fetchEntity("booking", "51")).data.ch.length, 0);
 });
+
+test("restaurant folio posting rejects sale lines that differ from the persisted table order", async () => {
+  const { bridge, snapshot, booking } = await fixture();
+  booking.st = "in";
+  booking.ch = [["Restaurant · Tea", 100, "din"], ["Restaurant · Snacks", 150, "din"]];
+  snapshot.t[0].o = [];
+  snapshot.sales.push({ id: "RP-mismatch", postedToHotel: true, room: booking.room, a: 250,
+    items: [["Tea", 250]] });
+  await assert.rejects(commitRestaurantFolioCharge({
+    bridge, snapshot, bookingId: booking.id, tableId: 1, saleId: "RP-mismatch",
+    saleIndex: 0, legacyStorage: null
+  }), error => error.code === "RESTAURANT_CHARGE_AMOUNT_MISMATCH");
+  assert.equal((await bridge.fetchEntity("booking", "51")).data.ch.length, 0);
+});
+
+test("restaurant folio posting cannot rewrite prior guest charges", async () => {
+  const { bridge, snapshot, booking } = await fixture();
+  booking.st = "in";
+  booking.ch = [["Existing room charge", 999, "room"], ["Restaurant · Tea", 100, "din"], ["Restaurant · Snacks", 150, "din"]];
+  snapshot.t[0].o = [];
+  snapshot.sales.push({ id: "RP-history", postedToHotel: true, room: booking.room, a: 250,
+    items: [["Tea", 100], ["Snacks", 150]] });
+  await assert.rejects(commitRestaurantFolioCharge({
+    bridge, snapshot, bookingId: booking.id, tableId: 1, saleId: "RP-history",
+    saleIndex: 0, legacyStorage: null
+  }), error => error.code === "RESTAURANT_FOLIO_HISTORY_CHANGED");
+  assert.equal((await bridge.fetchEntity("booking", "51")).data.ch.length, 0);
+});
