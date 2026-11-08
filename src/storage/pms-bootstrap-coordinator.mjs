@@ -147,6 +147,7 @@ export class PmsBootstrapCoordinator {
     const supportsAuthority = typeof this.repository.getAuthority === "function" &&
       typeof this.repository.beginMigrationAuthority === "function" &&
       typeof this.repository.completeMigrationAuthority === "function" &&
+      typeof this.repository.completeFreshCanonicalAuthority === "function" &&
       typeof this.repository.revertMigrationAuthority === "function";
     const priorAuthority = supportsAuthority ? await this.repository.getAuthority() : null;
     if (supportsAuthority && priorAuthority !== "canonical") {
@@ -166,6 +167,8 @@ export class PmsBootstrapCoordinator {
         : await this.executeGuardedMigration();
       if (supportsAuthority && migration.status === "MIGRATION_VERIFIED" && migration.migrationId) {
         await this.repository.completeMigrationAuthority(migration.migrationId);
+      } else if (supportsAuthority && migration.status === "READY_CANONICAL") {
+        await this.repository.completeFreshCanonicalAuthority();
       } else if (supportsAuthority && migration.status === "READY_EMPTY" && priorAuthority !== "canonical") {
         await this.repository.revertMigrationAuthority();
       }
