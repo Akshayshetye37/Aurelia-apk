@@ -144,6 +144,7 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 - [End-to-end remediation and release plan](./docs/END_TO_END_REMEDIATION_PLAN.md)
 - [Provider integration status](./docs/PROVIDER_INTEGRATION_STATUS.md)
+- [All-provider production hardening review](./docs/ALL_PROVIDER_PRODUCTION_HARDENING_REVIEW.md)
 - [Native security and recovery](./docs/NATIVE-SECURITY-AND-RECOVERY.md)
 - [Local-first sync architecture](./docs/LOCAL_FIRST_SYNC_ARCHITECTURE.md)
 - [PMS accounting schema](./docs/PMS_ACCOUNTING_SCHEMA.md)
