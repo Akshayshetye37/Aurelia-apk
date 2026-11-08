@@ -85,3 +85,16 @@ test('ordinary PMS persistence is canonical-first and has no localStorage fallba
   assert.ok(strictStart >= 0 && strictEnd > strictStart);
   assert.match(html.slice(strictStart, strictEnd), /coordinator\.save\(state\)/);
 });
+
+test('startup hydrates the UI projection from the verified canonical snapshot before script replay', () => {
+  const bootstrapAt = html.indexOf('id="aurelia-async-runtime-bootstrap"');
+  const canonicalHydrationAt = html.indexOf('window.__AURELIA_CANONICAL_BOOTSTRAP_RAW = JSON.stringify(canonicalAudit.data.snapshot)');
+  const replayAt = html.indexOf('await replayApplicationScripts()');
+  const loadAt = html.indexOf('function loadAll(){');
+  assert.ok(bootstrapAt >= 0 && canonicalHydrationAt > bootstrapAt && replayAt > canonicalHydrationAt);
+  assert.ok(loadAt >= 0);
+  const loadEnd = html.indexOf('\n }', loadAt);
+  const loadBody = html.slice(loadAt, loadEnd > loadAt ? loadEnd : loadAt + 700);
+  assert.match(loadBody, /window\.\_\_AURELIA_CANONICAL_BOOTSTRAP_RAW\|\|null/);
+  assert.match(loadBody, /if\(!raw\).*localStorage/s);
+});
