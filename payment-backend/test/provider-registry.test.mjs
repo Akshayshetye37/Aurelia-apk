@@ -165,3 +165,17 @@ test('CCAvenue encrypted callback is only an event trigger and requires a valid 
   assert.equal(verified.event.order_id, 'aur_test_order_1');
   assert.equal((await adapter.verifyWebhook(Buffer.from('encResp=not-hex'), {})).valid, false);
 });
+
+
+test('CCAvenue Dynamic Event Notification JSON is accepted only as a trigger for server-side status lookup', async () => {
+  const { createProviderAdapter } = await import('../src/providers/factory.mjs');
+  const adapter = createProviderAdapter('ccavenue', {
+    credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey: '0123456789ABCDEF0123456789ABCDEF' },
+    environment: 'test'
+  });
+  const event = { order_id: 'aur_test_order_1', tracking_id: '123456789012',
+    order_status: 'Successful', amount: '12.34', currency: 'INR' };
+  const verified = await adapter.verifyWebhook(Buffer.from(JSON.stringify(event)), {});
+  assert.equal(verified.valid, true);
+  assert.deepEqual(verified.event, event);
+});
