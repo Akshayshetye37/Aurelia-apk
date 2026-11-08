@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CapacitorPmsStorageClient } from "../src/storage/capacitor-pms-storage.mjs";
+import { assertStorageAdapter } from "../src/storage/storage-adapter.mjs";
 import { LEGACY_STATE_KEY } from "../src/storage/legacy-importer.mjs";
 
 function fakePlugin() {
@@ -52,6 +53,16 @@ function fakePlugin() {
 }
 const event=(id,entityType="booking",entityId="b-1",sequence=1)=>({eventId:id,tenantId:"tenant-1",propertyId:"property-1",deviceId:"device-1",entityType,entityId,sequence,eventType:"entity.updated",schemaVersion:1,occurredAt:new Date().toISOString(),payload:{status:"reserved"}});
 
+function fakeStoragePlugin(){const stores=new Map(["meta","entities","outbox","migration_snapshots","legacy_backup"].map(name=>[name,new Map()]));let authority="legacy";const clone=x=>x==null?x:structuredClone(x);return{
+ async storageGet({store,key}){return{value:clone(stores.get(store)?.get(key)??null)}},
+ async storageList({store}){return{rows:[...(stores.get(store)?.values()||[])].map(clone)}},
+ async storageTransaction({operations}){const staged=new Map([...stores].map(([name,rows])=>[name,new Map([...rows].map(([k,v])=>[k,clone(v)]))]));for(const op of operations){const rows=staged.get(op.store);if(!rows)throw Error("unsupported store");if(op.type==="comparePut"){const actual=rows.get(op.key)?.version||0;if(actual!==op.expectedVersion)throw Object.assign(Error("version conflict"),{code:"ENTITY_VERSION_CONFLICT"});}else if(op.type!=="put")throw Error("unsupported operation");const field={meta:"key",entities:"key",outbox:"eventId",migration_snapshots:"id",legacy_backup:"id"}[op.store];rows.set(op.key,{...clone(op.value),[field]:op.key});}for(const [name,rows] of staged)stores.set(name,rows);return{success:true}},
+ async storageIntegrityCheck(){return{ok:true,engine:"android-sqlite-test-double"}},
+ async storageGetAuthority(){return{state:authority}},
+ async storageSetAuthority({state}){authority=state;return{state}},
+ async storageWipe(){for(const rows of stores.values())rows.clear();authority="legacy";return{success:true}}
+};}
+
 test("native adapter requires explicit contract-version initialization",async()=>{
  const p=fakePlugin(),r=new CapacitorPmsStorageClient(p);assert.equal((await r.initializeStorage()).contractVersion,1);
 });
@@ -90,3 +101,5 @@ test("outbox lease, acknowledgement, retry schedule and conflict lifecycle enfor
 });
 
 test("native adapter resolves the registered Capacitor plugin without a bare package import",async()=>{const previous=globalThis.Capacitor,p=fakePlugin();let registered=null;globalThis.Capacitor={registerPlugin(name){registered=name;return p;}};try{const client=new CapacitorPmsStorageClient();assert.equal((await client.initializeStorage()).engine,"android-sqlite");assert.equal(registered,"CapacitorPmsStorage");}finally{if(previous===undefined)delete globalThis.Capacitor;else globalThis.Capacitor=previous;}});
+
+test("Capacitor native repository exposes the same StorageAdapter transaction, backup and authority surface",async()=>{const client=new CapacitorPmsStorageClient(fakeStoragePlugin());assertStorageAdapter(client);await client.transaction(tx=>{tx.meta.put("authority",{value:"canonical"});tx.compareAndPut("entities","folio:f1",0,{key:"folio:f1",type:"folio",id:"f1",version:1,data:{balancePaise:0}});});assert.equal((await client.get("entities","folio:f1")).version,1);assert.equal((await client.meta.get("authority")).value,"canonical");assert.equal(await client.authority(),"legacy");const backup=await client.backup.create("backup-1");assert.equal(backup.format,"aurelia-storage-backup-v1");const restored=new CapacitorPmsStorageClient(fakeStoragePlugin());await restored.backup.restore(backup);assert.equal((await restored.get("entities","folio:f1")).data.balancePaise,0);assert.equal((await restored.meta.get("authority")).value,"canonical");assert.equal((await restored.integrityCheck()).ok,true);});
