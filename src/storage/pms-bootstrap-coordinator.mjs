@@ -144,16 +144,37 @@ export class PmsBootstrapCoordinator {
     // last fully committed canonical snapshot before the UI is allowed to start.
     // This is a recovery bridge, not a claim that the synchronous UI has cut over.
     const recovery = await this.restoreLegacyStateFromCanonical();
-    const migration = recovery.migrationAlreadyVerified
-      ? Object.freeze({
-          status: recovery.freshInstallation ? "READY_CANONICAL" : "MIGRATION_VERIFIED",
-          migrated: false, alreadyMigrated: true,
-          recoveredFromCanonical: true, freshInstallation: Boolean(recovery.freshInstallation),
-          migrationId: recovery.migrationId || null,
-          entityCount: (await this.repository.listEntities("legacy")).length,
-          legacyKeyPreserved: true
-        })
-      : await this.executeGuardedMigration();
+    const supportsAuthority = typeof this.repository.getAuthority === "function" &&
+      typeof this.repository.beginMigrationAuthority === "function" &&
+      typeof this.repository.completeMigrationAuthority === "function" &&
+      typeof this.repository.revertMigrationAuthority === "function";
+    const priorAuthority = supportsAuthority ? await this.repository.getAuthority() : null;
+    if (supportsAuthority && priorAuthority !== "canonical") {
+      await this.repository.beginMigrationAuthority();
+    }
+    let migration;
+    try {
+      migration = recovery.migrationAlreadyVerified
+        ? Object.freeze({
+            status: recovery.freshInstallation ? "READY_CANONICAL" : "MIGRATION_VERIFIED",
+            migrated: false, alreadyMigrated: true,
+            recoveredFromCanonical: true, freshInstallation: Boolean(recovery.freshInstallation),
+            migrationId: recovery.migrationId || null,
+            entityCount: (await this.repository.listEntities("legacy")).length,
+            legacyKeyPreserved: true
+          })
+        : await this.executeGuardedMigration();
+      if (supportsAuthority && migration.status === "MIGRATION_VERIFIED" && migration.migrationId) {
+        await this.repository.completeMigrationAuthority(migration.migrationId);
+      } else if (supportsAuthority && migration.status === "READY_EMPTY" && priorAuthority !== "canonical") {
+        await this.repository.revertMigrationAuthority();
+      }
+    } catch (error) {
+      if (supportsAuthority && priorAuthority !== "canonical") {
+        await this.repository.revertMigrationAuthority().catch(() => {});
+      }
+      throw error;
+    }
     this.status = migration.status;
 
     // Project the verified source snapshot before releasing the UI. Projection
