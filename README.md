@@ -2,7 +2,10 @@
 
 Aurelia is a local-first property management system (PMS) for reservations, guests, rooms, folios and property operations, with a separately trusted backend for online payment-provider operations.
 
-NaN
+## Production safety status
+
+**LIVE GATEWAY COLLECTION OFF.** Automatic settlement and automatic refund posting remain OFF. CCAvenue remains catalogue-only. No gateway is production-qualified, and production deployment is not authorized by this branch.
+
 ## Architecture
 
 - **Local-first PMS:** ordinary property operations are designed to remain available without cloud connectivity.
