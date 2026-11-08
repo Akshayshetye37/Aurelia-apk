@@ -13,20 +13,22 @@ const REQUIRED_OPERATIONS = Object.freeze([
   'validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus',
   'verifyWebhook', 'createRefund', 'getRefundStatus'
 ]);
+const CCA_VENUE_OPERATIONS = Object.freeze(['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
 const FACTORIES = Object.freeze({
   razorpay: options => new RazorpayAdapter(options),
   cashfree: options => new CashfreeAdapter(options),
   payu: options => new PayUAdapter(options),
   phonepe: options => new PhonePeAdapter(options),
   paytm: options => new PaytmAdapter(options),
-  jiopay: options => new JioPayAdapter(options)
+  jiopay: options => new JioPayAdapter(options),
+  ccavenue: options => new CCAvenueAdapter(options)
 });
 
 export function createProviderAdapter(providerId, options) {
   const factory = FACTORIES[providerId];
   if (!factory) throw new Error('provider_adapter_unavailable');
   const adapter = factory(options);
-  assertAdapterCapabilities(adapter, REQUIRED_OPERATIONS);
+  assertAdapterCapabilities(adapter, providerId === 'ccavenue' ? CCA_VENUE_OPERATIONS : REQUIRED_OPERATIONS);
   return adapter;
 }
 
@@ -35,7 +37,7 @@ export function implementedProviderAdapters() {
 }
 
 export function providerCapabilities(providerId) {
-  return FACTORIES[providerId] ? [...REQUIRED_OPERATIONS] : null;
+  return FACTORIES[providerId] ? [...(providerId === 'ccavenue' ? CCA_VENUE_OPERATIONS : REQUIRED_OPERATIONS)] : null;
 }
 
 export function providerQualificationStatus(providerId) {
@@ -45,6 +47,8 @@ export function providerQualificationStatus(providerId) {
     testCheckout: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
     liveCollection: false,
     cloudCheckoutApiEnabled: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
+    refunds: providerId !== 'ccavenue',
+    refundStatus: providerId !== 'ccavenue',
     merchantUatRequired: true,
     canonicalFolioPostingRequired: true,
     physicalDeviceAcceptanceRequired: true
