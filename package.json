@@ -6,9 +6,10 @@
   "scripts": {
     "build": "node scripts/prepare-web.js",
     "test": "node --test tests/*.test.mjs",
-    "android:sync": "npx cap sync android",
+    "android:sync": "npm run android:build && npx cap sync android",
     "diagnose:accounting": "node scripts/diagnose-accounting.mjs",
-    "lint": "eslint \"src/**/*.{js,mjs,ts,tsx}\""
+    "lint": "eslint \"src/**/*.{js,mjs,ts,tsx}\"",
+    "android:build": "node scripts/prepare-web.js --android && node scripts/check-android-storage-boundary.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
