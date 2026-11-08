@@ -43,6 +43,7 @@ test("bootstrap migrates the actual Aurelia legacy key and preserves its exact r
   assert.ok(result.identity.installationId && result.identity.propertyId && result.identity.deviceId);
   assert.equal(result.storageEngine, "INDEXEDDB");
   assert.equal(result.migration.status, "MIGRATION_VERIFIED");
+  assert.equal(await result.repository.getAuthority(), "canonical");
   assert.equal(result.migration.entityCount, Object.keys(state).length);
   assert.equal(result.domainProjection.manifest.preservesLegacySnapshot, true);
   assert.equal(result.domainProjection.manifest.financialReconciliationPerformed, false);
@@ -222,6 +223,7 @@ test("fresh canonical installation can save, restart and project without legacy 
   storage.setItem(AURELIA_LEGACY_STATE_KEY, JSON.stringify(state));
   const restarted = await coordinator("fresh-canonical-restart", storage, { repository: first.repository }).initializeApplication();
   assert.equal(restarted.migration.status, "READY_CANONICAL");
+  assert.equal(await restarted.repository.getAuthority(), "canonical");
   assert.equal(restarted.migration.freshInstallation, true);
   assert.equal(restarted.migration.entityCount, 0);
   assert.equal(storage.getItem(AURELIA_MIGRATION_STATUS_KEY), "READY_CANONICAL:" + restarted.migration.migrationId);
