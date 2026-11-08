@@ -18,7 +18,8 @@ export const PROVIDERS = Object.freeze({
       { key: 'webhookSecret', label: 'Webhook Secret', type: 'password', secret: true, required: true }
     ],
     capabilities: ['orders', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'adapter_implemented_wired'
+    adapterStatus: 'adapter_implemented_wired',
+    cloudCheckoutApiEnabled: true
   },
   cashfree: {
     label: 'Cashfree Payments',
@@ -29,7 +30,8 @@ export const PROVIDERS = Object.freeze({
       { key: 'webhookSecret', label: 'Webhook Secret', type: 'password', secret: true, required: true }
     ],
     capabilities: ['orders', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'adapter_implemented_wired'
+    adapterStatus: 'adapter_implemented_wired',
+    cloudCheckoutApiEnabled: true
   },
   payu: {
     label: 'PayU India',
@@ -39,7 +41,9 @@ export const PROVIDERS = Object.freeze({
       { key: 'salt', label: 'Salt', type: 'password', secret: true, required: true }
     ],
     capabilities: ['hosted_checkout', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'adapter_implemented_wired'
+    adapterStatus: 'adapter_implemented_wired',
+    cloudCheckoutApiEnabled: false,
+    cloudCheckoutApiEnabled: false
   },
   phonepe: {
     label: 'PhonePe Payment Gateway',
@@ -52,7 +56,8 @@ export const PROVIDERS = Object.freeze({
       { key: 'webhookPassword', label: 'Webhook Password', type: 'password', secret: true, required: true }
     ],
     capabilities: ['checkout', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'adapter_implemented_wired'
+    adapterStatus: 'adapter_implemented_wired',
+    cloudCheckoutApiEnabled: false
   },
   paytm: {
     label: 'Paytm Payment Gateway',
@@ -63,7 +68,8 @@ export const PROVIDERS = Object.freeze({
       { key: 'websiteName', label: 'Website / Industry Type', type: 'text', secret: false, required: true }
     ],
     capabilities: ['initiate_transaction', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'adapter_implemented_wired'
+    adapterStatus: 'adapter_implemented_wired',
+    cloudCheckoutApiEnabled: false
   },
   ccavenue: {
     label: 'CCAvenue',
@@ -74,7 +80,8 @@ export const PROVIDERS = Object.freeze({
       { key: 'workingKey', label: 'Working Key', type: 'password', secret: true, required: true }
     ],
     capabilities: ['hosted_checkout', 'payment_verification', 'refunds'],
-    adapterStatus: 'not_implemented'
+    adapterStatus: 'not_implemented',
+    cloudCheckoutApiEnabled: false
   },
   jiopay: {
     label: 'Jio Payment Solutions',
@@ -85,7 +92,8 @@ export const PROVIDERS = Object.freeze({
       { key: 'aggregatorId', label: 'Aggregator ID (if assigned)', type: 'text', secret: false, required: false }
     ],
     capabilities: ['hosted_checkout', 'payment_status', 'webhooks', 'refunds'],
-    adapterStatus: 'adapter_implemented_wired'
+    adapterStatus: 'adapter_implemented_wired',
+    cloudCheckoutApiEnabled: false
   }
 });
 
@@ -102,6 +110,7 @@ export function publicProviderCatalogue() {
       key, label, type, secret, required
     })),
     capabilities: p.capabilities,
-    adapterStatus: p.adapterStatus
+    adapterStatus: p.adapterStatus,
+    cloudCheckoutApiEnabled: p.cloudCheckoutApiEnabled === true
   }));
 }
