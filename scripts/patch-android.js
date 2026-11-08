@@ -356,6 +356,7 @@ for (const file of [
   'SettlementEnvelopeVerifier.kt',
   'PaymentReleaseSafeguards.kt',
   'AureliaPlayIntegrityClient.kt',
+  'CloudPaymentDeviceEnrollmentClient.kt',
   'LockGateActivity.kt'
 ]) {
   const source = path.join(securityTemplateDir, file);
