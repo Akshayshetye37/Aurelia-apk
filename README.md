@@ -35,7 +35,7 @@ The current implementation contains substantial storage, payment and security fo
 - **Local-first PMS:** ordinary property operations are designed to remain available without cloud connectivity.
 - **Browser/PWA storage:** IndexedDB repository.
 - **Android storage:** native SQLite repository through the Capacitor storage bridge; native identity material is protected using Android Keystore-backed encryption.
-- **Migration safety:** legacy `aurelia_lodge_v2` data is retained as rollback material; guarded migration verifies the source snapshot and imported records.
+- **Migration safety:** legacy `legacy snapshot key` data is retained as rollback material; guarded migration verifies the source snapshot and imported records.
 - **Business mutation model:** version-checked entity changes and immutable outbox events are committed atomically by the repository transaction APIs.
 - **Payment trust boundary:** provider credentials, webhook secrets and signing operations belong in the trusted backend. A browser redirect or client callback is not proof of payment capture.
 - **Optional cloud sync:** OFF by default and separate from provider payment verification.
