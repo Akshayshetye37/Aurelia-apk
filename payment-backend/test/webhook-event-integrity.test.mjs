@@ -54,3 +54,14 @@ test('provider event identifiers reject unsafe, empty and oversized values', () 
   assert.equal(safeProviderEventId('bad/event'), false);
   assert.equal(safeProviderEventId('x'.repeat(257)), false);
 });
+
+test('provider event identifiers use the strict bounded grammar and reject secret-shaped values', () => {
+  assert.equal(safeProviderEventId('A1'), true);
+  assert.equal(safeProviderEventId('ORDER123:TXN456'), true);
+  assert.equal(safeProviderEventId('x'), false);
+  assert.equal(safeProviderEventId('sk_live_abcdef'), false);
+  assert.equal(safeProviderEventId('pk_test_abcdef'), false);
+  assert.equal(safeProviderEventId('whsec_abcdef'), false);
+  assert.equal(safeProviderEventId('Bearer token'), false);
+  assert.equal(safeProviderEventId('a'.repeat(181)), false);
+});

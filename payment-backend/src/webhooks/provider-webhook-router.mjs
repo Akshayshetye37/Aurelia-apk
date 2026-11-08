@@ -5,9 +5,12 @@ import { implementedProviderAdapters } from '../providers/factory.mjs';
 const safeId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 // Provider event identities may be composite (Paytm/JioPay use ORDER:TXN).
 // Keep them bounded and delimiter-safe; order references retain the stricter grammar.
+const PROVIDER_EVENT_ID_MAX = 180;
+const PROVIDER_EVENT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,178}[A-Za-z0-9]$/;
 export const safeProviderEventId = value => typeof value === 'string' &&
-  /^[A-Za-z0-9._:-]{1,256}$/.test(value) && !value.startsWith(':') && !value.endsWith(':') &&
-  !value.includes('::');
+  value.length >= 2 && value.length <= PROVIDER_EVENT_ID_MAX &&
+  PROVIDER_EVENT_ID_RE.test(value) &&
+  !/^(sk_|pk_|whsec_|Bearer\\s)/i.test(value);
 
 /**
  * Generic raw-body webhook ingress.
