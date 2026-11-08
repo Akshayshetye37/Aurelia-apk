@@ -28,6 +28,7 @@ const FACTORIES = Object.freeze({
 });
 
 export function createProviderAdapter(providerId, options) {
+  if (providerId === 'ccavenue') throw new Error('provider_adapter_unavailable');
   const factory = FACTORIES[providerId];
   if (!factory) throw new Error('provider_adapter_unavailable');
   const adapter = factory(options);
@@ -36,22 +37,22 @@ export function createProviderAdapter(providerId, options) {
 }
 
 export function implementedProviderAdapters() {
-  return Object.keys(FACTORIES);
+  return Object.keys(FACTORIES).filter(providerId => providerId !== 'ccavenue');
 }
 
 export function providerCapabilities(providerId) {
-  return FACTORIES[providerId] ? [...(providerId === 'ccavenue' ? CCA_VENUE_OPERATIONS : REQUIRED_OPERATIONS)] : null;
+  return FACTORIES[providerId] && providerId !== 'ccavenue' ? [...REQUIRED_OPERATIONS] : null;
 }
 
 export function providerQualificationStatus(providerId) {
-  if (!FACTORIES[providerId]) return { implemented: false, testCheckout: false, liveCollection: false };
+  if (!FACTORIES[providerId] || providerId === 'ccavenue') return { implemented: false, partial: providerId === 'ccavenue', testCheckout: false, liveCollection: false };
   return {
     implemented: true,
     testCheckout: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
     liveCollection: false,
     cloudCheckoutApiEnabled: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
-    refunds: providerId !== 'ccavenue',
-    refundStatus: providerId !== 'ccavenue',
+    refunds: true,
+    refundStatus: true,
     merchantUatRequired: true,
     canonicalFolioPostingRequired: true,
     physicalDeviceAcceptanceRequired: true
