@@ -174,6 +174,14 @@ export class CCAvenueAdapter extends PaymentProviderAdapter {
   async verifyWebhook(rawBody) {
     if (!Buffer.isBuffer(rawBody)) return { valid: false };
     try {
+      const text = rawBody.toString('utf8').trim();
+      if (text.startsWith('{')) {
+        const event = JSON.parse(text);
+        if (!event.order_id || !event.tracking_id || !event.order_status || !event.amount || !event.currency) return { valid: false };
+        // Dynamic Event Notifications are an untrusted trigger; the server
+        // always fetches the encrypted merchant Status API before capture.
+        return { valid: true, event };
+      }
       const encrypted = extractFormBody(rawBody);
       if (!encrypted) return { valid: false };
       const event = parsePairs(decryptCcaVenue(encrypted, this.credentials.workingKey));
