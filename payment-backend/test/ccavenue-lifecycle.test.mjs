@@ -144,7 +144,7 @@ import { CCAvenueHostedCheckout } from '../src/providers/ccavenue-hosted-checkou
 
 test('CCAvenue hosted checkout builds encrypted v3.3 POST fields without exposing merchant encryption key', () => {
   const checkout = new CCAvenueHostedCheckout({
-    merchantId: '123456', accessCode: ACCESS, encryptionKey: KEY, environment: 'test'
+    merchantId: '123456', accessCode: ACCESS, hostedCheckoutKey: KEY, environment: 'test'
   }).createCheckout({
     orderId: EXPECTED.orderId, amountMinor: EXPECTED.amountMinor, currency: 'INR',
     redirectUrl: 'https://pms.example.com/payment/ccavenue/return',
@@ -167,7 +167,7 @@ test('CCAvenue hosted checkout builds encrypted v3.3 POST fields without exposin
 
 test('CCAvenue hosted checkout rejects insecure URLs and malformed order amounts', () => {
   const checkout = new CCAvenueHostedCheckout({
-    merchantId: '123456', accessCode: ACCESS, encryptionKey: KEY, environment: 'live'
+    merchantId: '123456', accessCode: ACCESS, hostedCheckoutKey: KEY, environment: 'live'
   });
   const input = {
     orderId: EXPECTED.orderId, amountMinor: EXPECTED.amountMinor, currency: 'INR',
