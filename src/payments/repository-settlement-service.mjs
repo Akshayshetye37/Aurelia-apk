@@ -30,6 +30,19 @@ function sameJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function refreshLegacyCache(storage, snapshot) {
+  if (!storage) return null;
+  try {
+    if (storage.memoryOnly === true) return false;
+    const serialized = JSON.stringify(snapshot);
+    storage.setItem("aurelia_lodge_v2", serialized);
+    return storage.getItem("aurelia_lodge_v2") === serialized;
+  } catch (error) {
+    console.warn("[Aurelia Local Cache] Canonical state committed; compatibility cache refresh failed.", error);
+    return false;
+  }
+}
+
 /**
  * Posts a manually/staff-confirmed payment to canonical local storage.
  *
@@ -49,6 +62,7 @@ export async function settlePaymentToRepository({
   reference = "",
   source = "manual",
   idempotencyKey,
+  evidenceId = null,
   verificationConfirmed = false,
   legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
   now = () => new Date().toISOString()
@@ -63,9 +77,9 @@ export async function settlePaymentToRepository({
   if (typeof balanceDueFor !== "function") {
     throw new TypeError("A canonical folio balance calculator is required");
   }
-  if (source === "staff_review" || source === "verified_gateway" || source === "auto") {
+  if (source === "verified_gateway" || source === "auto") {
     throw fail("TRUSTED_SETTLEMENT_PATH_REQUIRED",
-      "Provider and staff-review settlements require the separately authorized trusted settlement projector.");
+      "Provider gateway settlement requires the separately authorized trusted settlement projector.");
   }
 
   const bookingId = bookingKey(booking);
@@ -104,6 +118,27 @@ export async function settlePaymentToRepository({
   const workingBooking = clone(bookingRow?.data || snapshotBooking);
   canonicalState.b[canonicalIndex] = workingBooking;
   if (!Array.isArray(canonicalState.aud)) canonicalState.aud = [];
+  let reviewEvidence = null;
+  if (source === "staff_review") {
+    if (!Array.isArray(canonicalState.sig) || !evidenceId) {
+      throw fail("PAYMENT_EVIDENCE_REQUIRED", "A durable payment-evidence record is required for staff review.");
+    }
+    reviewEvidence = canonicalState.sig.find(row => String(row?.id) === String(evidenceId));
+    if (!reviewEvidence) throw fail("PAYMENT_EVIDENCE_NOT_FOUND", "The selected payment evidence is not in the canonical local snapshot.");
+    if (!["open", "pending_review"].includes(reviewEvidence.st)) {
+      throw fail("PAYMENT_EVIDENCE_NOT_REVIEWABLE", "This payment evidence is no longer available for approval.");
+    }
+    if (String(method || "").toUpperCase() !== "UPI" ||
+        moneyToPaise(reviewEvidence.amt, "Evidence amount") !== amountPaise ||
+        String(reviewEvidence.ref || "").trim().replace(/\\s+/g, "").toUpperCase() !==
+          String(reference || "").trim().replace(/\\s+/g, "").toUpperCase()) {
+      throw fail("PAYMENT_EVIDENCE_BINDING_MISMATCH", "The payment amount, UPI reference and selected evidence do not match.");
+    }
+    const expectedKey = reviewEvidence.ref ? "utr:" + String(reviewEvidence.ref).trim() : "signal:" + String(reviewEvidence.id);
+    if (String(idempotencyKey || "") !== expectedKey) {
+      throw fail("PAYMENT_EVIDENCE_IDEMPOTENCY_MISMATCH", "The payment idempotency key is not bound to the selected evidence.");
+    }
+  }
   const auditRows = [];
   const result = settlePayment({
     state: canonicalState,
@@ -126,21 +161,39 @@ export async function settlePaymentToRepository({
 
   if (result.duplicate) {
     // A duplicate is safe only if the canonical record already contains it.
+    if (reviewEvidence && reviewEvidence.st !== "matched") {
+      throw fail("PAYMENT_EVIDENCE_STATE_DIVERGENCE",
+        "A matching payment exists but its evidence is not marked approved; reconcile the folio before proceeding.");
+    }
     Object.assign(booking, clone(workingBooking));
-    return Object.freeze({ ...result, duplicate: true, canonical: true,
+    const cacheRefreshed = refreshLegacyCache(legacyStorage, canonicalState);
+    return Object.freeze({ ...result, duplicate: true, canonical: true, cacheRefreshed,
       bookingVersion: bookingRow?.version ?? 0, folioVersion: folioRow?.version ?? 0 });
   }
 
   const paidPaise = moneyToPaise(workingBooking.p || 0, "Updated folio paid total", { allowZero: true });
   const balanceDuePaise = moneyToPaise(balanceDueFor(workingBooking), "Updated folio balance", { allowZero: true });
   const committedAt = now();
+  if (reviewEvidence) {
+    reviewEvidence.st = "matched";
+    reviewEvidence.b = workingBooking.id;
+    reviewEvidence.approvedAt = committedAt;
+    if (!Array.isArray(reviewEvidence.reviewHistory)) reviewEvidence.reviewHistory = [];
+    reviewEvidence.reviewHistory.push({
+      decision: "approved",
+      bookingId: workingBooking.id,
+      at: committedAt,
+      idempotencyKey: String(idempotencyKey)
+    });
+  }
   const snapshotPayload = {
     sourceKey: "aurelia_lodge_v2",
     operation: "payment_posted",
     bookingId,
     folioId,
     amountPaise,
-    idempotencyKey: String(idempotencyKey || "").trim() || null
+    idempotencyKey: String(idempotencyKey || "").trim() || null,
+    evidenceId: evidenceId == null ? null : String(evidenceId)
   };
 
   const committed = await bridge.mutateEntities([
@@ -200,19 +253,7 @@ export async function settlePaymentToRepository({
   // Refresh the old UI cache only after canonical commit. It is never the
   // authority for this operation; failure is reported separately so callers
   // do not retry and accidentally create a second payment.
-  let cacheRefreshed = null;
-  if (legacyStorage) {
-    cacheRefreshed = false;
-    try {
-      if (legacyStorage.memoryOnly !== true) {
-        const serialized = JSON.stringify(canonicalState);
-        legacyStorage.setItem("aurelia_lodge_v2", serialized);
-        cacheRefreshed = legacyStorage.getItem("aurelia_lodge_v2") === serialized;
-      }
-    } catch (error) {
-      console.warn("[Aurelia Local Cache] Canonical payment committed; compatibility cache refresh failed.", error);
-    }
-  }
+  const cacheRefreshed = refreshLegacyCache(legacyStorage, canonicalState);
 
   // Keep the active UI references coherent only after durable commit/read-back.
   const liveBookings = state.b;
@@ -227,6 +268,9 @@ export async function settlePaymentToRepository({
   liveBookings.splice(0, liveBookings.length, ...merged);
   state.today = canonicalState.today;
   if (Array.isArray(state.aud)) state.aud.splice(0, state.aud.length, ...clone(canonicalState.aud));
+  if (Array.isArray(state.sig) && Array.isArray(canonicalState.sig)) {
+    state.sig.splice(0, state.sig.length, ...clone(canonicalState.sig));
+  }
   Object.assign(booking, clone(workingBooking));
 
   return Object.freeze({
