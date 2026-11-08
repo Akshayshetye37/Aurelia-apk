@@ -4186,7 +4186,7 @@ window.setCancellationRefund=function(i){
  '<div class="grid g2"><label class="fld"><span>Refund date</span><input id="refund-date" type="date" value="'+esc(b.refund_date||new Date().toISOString().slice(0,10))+'"></label><label class="fld"><span>Payment method</span><select id="refund-method"><option value="bank">Bank transfer</option><option value="gpay">Google Pay / UPI</option><option value="pos">POS terminal</option><option value="cash">Cash</option><option value="other">Other</option></select></label></div><label class="fld"><span>Actual refund bank/provider transaction reference (required only when marking paid)</span><input id="refund-reference" type="text" maxlength="160" autocomplete="off" placeholder="Enter UTR / provider refund ID"></label><label class="fld"><span><input id="refund-confirmed" type="checkbox" style="width:auto;margin-right:8px">I confirm the refund transfer is completed and independently verified against the bank/provider record.</span></label><p class="lab">Pending refunds create a refund-payable liability, not a cash payment. A paid refund requires independent settlement confirmation and its external transaction reference.</p><div class="row"><button class="btn ghost" onclick="closeS()">Discard</button><button class="btn" onclick="commitCancellationRefund('+Number(i)+')">Commit journal</button></div>');
 };
 window.updateCancellationRetention=function(paid){const v=Math.max(0,Number($('#refund-value')?.value)||0),el=$('#refund-retention');if(el)el.value=Math.max(0,paid-v).toFixed(2)};
-window.commitCancellationRefund=function(i){
+window.commitCancellationRefund=async function(i){
  const b=(S.cancelled||[])[Number(i)];if(!b){toast('Cancelled booking not found');return}
  const paid=cancellationPaidAmount(b),action=$('#refund-action')?.value||'pending',rawRefund=Number($('#refund-value')?.value??0),date=$('#refund-date')?.value||new Date().toISOString().slice(0,10),method=$('#refund-method')?.value||'bank';
  const policy=window.AureliaCancellationPolicy;
@@ -4230,9 +4230,7 @@ window.commitCancellationRefund=function(i){
  if(action==='pending'&&refund>0)b.refundPayableJournalRecorded=true;
  b.original_amount_paid=paid;b.refund_amount=refund;b.refund_transaction_reference=validation.reference||b.refund_transaction_reference||'';b.refund_settlement_confirmed=(action==='partial'||action==='full');b.retention_fee_retained=retained;b.refund_date=date;b.payment_method=method;b.cancelledStatus=action==='no_refund'?'no_refund':action==='pending'?'refund_pending':action==='partial'?'partially_refunded':'refunded';b.refundStatus=action==='no_refund'?'No refund':action==='pending'?'Pending refund approval/payment':action==='partial'?'Partially refunded':'Refund marked as completed';b.cancellationAccountingCommitted=action!=='pending'&&lines.length>0;b.refundRecordedAt=(action==='partial'||action==='full')?new Date().toISOString():null;
  if(typeof aud==='function')aud('Cancellation accounting committed',String(b.g||'Guest')+' · Paid '+rk(paid)+' · Refund '+rk(refund)+' · Retained '+rk(retained));
- persist();
- const savedRaw=(window.__aureliaStorage||localStorage).getItem(SK);
- const saved=savedRaw?JSON.parse(savedRaw):null;
+ const saved=await persistCanonicalStrict();
  const savedBooking=saved&&Array.isArray(saved.cancelled)?saved.cancelled[Number(i)]:null;
  const committedFields=['original_amount_paid','refund_amount','refund_transaction_reference','refund_settlement_confirmed','retention_fee_retained','refund_date','payment_method','cancelledStatus','refundStatus','cancellationAccountingCommitted','refundPayableJournalRecorded','refundRecordedAt'];
  if(!saved||!savedBooking||JSON.stringify(saved.financialLedger||[])!==JSON.stringify(S.financialLedger)||committedFields.some(key=>JSON.stringify(savedBooking[key]??null)!==JSON.stringify(b[key]??null))||JSON.stringify(saved.aud||[])!==JSON.stringify(S.aud||[])) {
@@ -4244,7 +4242,7 @@ window.commitCancellationRefund=function(i){
   Object.keys(b).forEach(key=>delete b[key]);
   Object.assign(b,priorBooking);
   if(priorAudit)S.aud.splice(0,S.aud.length,...priorAudit);
-  try{persist()}catch(rollbackError){console.error('Cancellation rollback persistence failed',rollbackError)}
+  try{await persistCanonicalStrict()}catch(rollbackError){RECOVERY_CHECK_PENDING=true;console.error('Cancellation rollback could not be verified in canonical storage; writes are frozen.',rollbackError)}
   console.error('Cancellation journal commit failed',error);
   toast('Refund journal could not be verified in device storage. No completion was reported; check storage and backup before retrying.');
   return;
