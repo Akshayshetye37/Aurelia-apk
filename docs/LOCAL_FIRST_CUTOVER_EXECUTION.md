@@ -24,6 +24,26 @@ Each batch uses the repository's atomic entity-plus-outbox transaction and is re
 - Strict asynchronous snapshot commits now enter the same operational serialization lock as other PMS writes, so the state snapshot is captured after earlier queued operations complete.
 - The legacy synchronous accounting persistence adapter now fails closed. It cannot write the Web Storage key and claim durability while IndexedDB/SQLite persistence is still pending. The journaled gateway projector remains disabled until it is converted to an awaited canonical transaction.
 
+## Ordered architecture work — 2026-11-08
+
+The implementation sequence follows the requested dependency order: repository/migration → durable transactions → recovery qualification → optional outbox sync → payment authorization. No later layer is allowed to become a prerequisite for local operation.
+
+### Implemented in this increment
+
+- Browser IndexedDB schema advances from version 1 to version 2.
+- Before the v1→v2 upgrade completes, all existing rows in `meta`, `entities`, `outbox`, and `migration_snapshots` are copied into the new `migration_backups` object store in the same version-change transaction. The original stores remain intact.
+- A `schema-version` metadata row is written as part of the upgrade transaction.
+- A regression test seeds a real v1 database and verifies all four stores are backed up and the original entity/outbox/snapshot data remains readable after upgrade.
+- Browser/PWA bootstrap now requests persistent storage through `navigator.storage.persist()`. The result is exposed as `persistentStorage.requested/granted`; denial is reported as a capability limitation, not misrepresented as a guarantee and not used to fall back to Web Storage.
+
+### Still required before the next gates
+
+- Complete all screen and command migrations to repository-only reads and writes. Existing compatibility UI and legacy snapshot cache remain, so localStorage keys must not yet be deleted.
+- Finish atomic business transactions for every multi-entity workflow, including order + stock + ledger.
+- Add full crash, quota/full-disk, migration interruption, corruption/integrity, backup restore and multi-device conflict qualification.
+- Implement/qualify the sync worker and server idempotency only after recovery gates pass.
+- Keep payment provider confirmation, refund authorization and reconciliation separate from local transaction acceptance.
+
 ## Explicit limitations
 
 This is a migration primitive, not a completed application cutover:
