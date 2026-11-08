@@ -1630,12 +1630,14 @@ function persist(){
   if(!S.qw){S.qw=1;toast(error.message)}
   return Promise.resolve(false);
  }
- return coordinator.save(snapshot).catch(error=>{
+ const save=()=>coordinator.save(snapshot).catch(error=>{
   RECOVERY_CHECK_PENDING=true;
   console.error('[Aurelia Local First] Canonical commit/read-back failed; operational writes are frozen pending recovery.',error);
   if(!S.qw){S.qw=1;toast('CRITICAL: Device save failed. Writes are paused; keep the app open for recovery.')}
   return false;
  });
+ return typeof window.AureliaLocalOperationalLock==='function'
+  ?window.AureliaLocalOperationalLock(save):save();
 }
 function persistStrict(){
  if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
