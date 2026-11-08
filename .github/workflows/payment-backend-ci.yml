@@ -37,6 +37,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Scan repository history for leaked credentials
+        id: gitleaks
         run: |
           mkdir -p "$RUNNER_TEMP/gitleaks"
           set +e
@@ -51,7 +52,10 @@ jobs:
           if [ -f "$RUNNER_TEMP/gitleaks/findings.json" ]; then
             cat "$RUNNER_TEMP/gitleaks/findings.json"
           fi
-          exit "$scan_status"
+          echo "status=$scan_status" >> "$GITHUB_OUTPUT"
+          # Defer the failure until after contract tests/build so CI still
+          # reports code-validation results when the scanner detects a leak.
+          exit 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -80,3 +84,11 @@ jobs:
         run: terraform -chdir=infra/terraform init -backend=false -input=false
       - name: Validate Cloud Run infrastructure
         run: terraform -chdir=infra/terraform validate
+
+      - name: Enforce repository secret scan result
+        if: always()
+        run: |
+          if [ "${{ steps.gitleaks.outputs.status }}" != "0" ]; then
+            echo "Repository history secret scan failed; inspect the redacted findings above."
+            exit 1
+          fi
