@@ -68,3 +68,19 @@ test('all network endpoints use HTTPS; remaining HTTP URIs are XML namespace ide
       `non-HTTPS URL found at line ${html.slice(0, match.index).split('\n').length}: ${match[0]}`);
   }
 });
+
+test('ordinary PMS persistence is canonical-first and has no localStorage fallback', () => {
+  assert.match(html, /import \{ PmsLocalFirstWriteCoordinator \} from "\.\/src\/storage\/pms-local-first-write-coordinator\.mjs"/);
+  assert.match(html, /new PmsLocalFirstWriteCoordinator\(/);
+  const persistStart = html.indexOf('function persist(){');
+  const persistEnd = html.indexOf('\nfunction persistStrict(){', persistStart);
+  assert.ok(persistStart >= 0 && persistEnd > persistStart, 'ordinary persist() function must exist');
+  const persistBody = html.slice(persistStart, persistEnd);
+  assert.match(persistBody, /coordinator\.save\(snapshot\)/);
+  assert.doesNotMatch(persistBody, /localStorage|setItem\(|AureliaRepositoryCompatibility\.persist/);
+  assert.match(persistBody, /RECOVERY_CHECK_PENDING=true/);
+  const strictStart = html.indexOf('async function persistCanonicalStrict(){');
+  const strictEnd = html.indexOf('\nfunction cloneRuntimeState', strictStart);
+  assert.ok(strictStart >= 0 && strictEnd > strictStart);
+  assert.match(html.slice(strictStart, strictEnd), /coordinator\.save\(state\)/);
+});
