@@ -71,18 +71,72 @@ export async function commitReservationToRepository({
 
   // Safe retry after an acknowledged commit or a lost UI response.
   if (bookingRow || priorBooking) {
-    if (!bookingRow || !priorBooking || !folioRow || !sameJson(comparable(bookingRow.data), comparable(booking)) ||
+    if (!bookingRow || !priorBooking || !folioRow ||
+        !sameJson(comparable(bookingRow.data), comparable(booking)) ||
         !sameJson(comparable(priorBooking), comparable(booking)) ||
         !sameJson(comparable(guestRow?.data), comparable(guest)) ||
-        folioRow.data?.paidPaise !== moneyToPaise(booking.p || 0, "Paid total", { allowZero: true }) ||
-        folioRow.data?.balanceDuePaise !== moneyToPaise(balanceDueFor(booking), "Balance due", { allowZero: true }) ||
-        !sameJson(folioRow.data.paymentRows || [], booking.pays || []) ||
         !sameJson(prior, snapshot)) {
-      throw fail("RESERVATION_CANONICAL_DIVERGENCE", "A reservation with this ID already exists but its guest, booking, folio or snapshot does not exactly match. Reconcile before retrying.");
+      throw fail("RESERVATION_CANONICAL_DIVERGENCE", "A reservation with this ID already exists but its guest, booking or recovery snapshot does not exactly match. Reconcile before retrying.");
+    }
+
+    const paidPaise = moneyToPaise(booking.p || 0, "Paid total", { allowZero: true });
+    const balanceDuePaise = moneyToPaise(balanceDueFor(booking), "Balance due", { allowZero: true });
+    let canonicalFolio = folioRow;
+    const oldFolio = folioRow.data || {};
+    // Builds before the normalized folio schema projected legacy totals and
+    // payment rows directly. Upgrade only when those source values exactly
+    // match the booking and snapshot; preserve the original evidence verbatim.
+    if (oldFolio.paidPaise == null &&
+        ("legacyPaidTotal" in oldFolio || "legacyPaymentRows" in oldFolio)) {
+      const legacyPaidPaise = moneyToPaise(oldFolio.legacyPaidTotal ?? 0,
+        "Legacy folio paid total", { allowZero: true });
+      const legacyRows = Array.isArray(oldFolio.legacyPaymentRows) ? oldFolio.legacyPaymentRows : [];
+      if (legacyPaidPaise !== paidPaise || !sameJson(legacyRows, booking.pays || [])) {
+        throw fail("FOLIO_LEGACY_SOURCE_DIVERGENCE",
+          "The legacy folio totals or payment rows do not match the canonical booking. Preserve both records and reconcile before retrying.");
+      }
+      if (typeof bridge.mutateEntity !== "function") {
+        throw fail("FOLIO_LEGACY_UPGRADE_UNAVAILABLE",
+          "The repository cannot safely normalize the legacy folio record; retry is blocked.");
+      }
+      const sourceEvidence = {
+        legacyPaidTotal: clone(oldFolio.legacyPaidTotal ?? 0),
+        legacyPaymentRows: clone(legacyRows)
+      };
+      await bridge.mutateEntity({
+        entityType: "folio", entityId: folioId, expectedVersion: folioRow.version,
+        eventType: "folio.legacy_schema_normalized",
+        eventPayload: { operation: "legacy_folio_upgrade", bookingId: bookingKey },
+        mutate: entity => {
+          entity.id = folioId;
+          entity.bookingId = bookingKey;
+          entity.paymentRows = clone(booking.pays || []);
+          entity.paidPaise = paidPaise;
+          entity.balanceDuePaise = balanceDuePaise;
+          entity.legacySourceEvidence = sourceEvidence;
+          entity.updatedAt = now();
+          delete entity.legacyPaidTotal;
+          delete entity.legacyPaymentRows;
+        }
+      });
+      canonicalFolio = await bridge.fetchEntity("folio", folioId);
+      if (!canonicalFolio || canonicalFolio.data?.paidPaise !== paidPaise ||
+          canonicalFolio.data?.balanceDuePaise !== balanceDuePaise ||
+          !sameJson(canonicalFolio.data.paymentRows || [], booking.pays || []) ||
+          !sameJson(canonicalFolio.data.legacySourceEvidence, sourceEvidence)) {
+        throw fail("FOLIO_LEGACY_UPGRADE_READBACK_FAILED",
+          "Legacy folio normalization did not pass exact read-back verification. Stop edits and reconcile.");
+      }
+    }
+    if (canonicalFolio.data?.paidPaise !== paidPaise ||
+        canonicalFolio.data?.balanceDuePaise !== balanceDuePaise ||
+        !sameJson(canonicalFolio.data.paymentRows || [], booking.pays || [])) {
+      throw fail("RESERVATION_CANONICAL_DIVERGENCE",
+        "A reservation with this ID exists but its normalized folio does not exactly match the booking. Reconcile before retrying.");
     }
     return Object.freeze({
       canonical: true, duplicate: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
-      guest: guestRow, booking: bookingRow, folio: folioRow, snapshot: prior
+      guest: guestRow, booking: bookingRow, folio: canonicalFolio, snapshot: prior
     });
   }
 
