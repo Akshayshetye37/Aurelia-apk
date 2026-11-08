@@ -799,7 +799,7 @@ const itx=b=>`${S.set.name} invoice ${b.iv||''} for ${b.g}, room ${b.room}. Tota
 async function shr(i){const b=bk(i);if(!b){toast('Booking not found');return}const text=itx(b);if(nat({type:'shareText',title:'Invoice '+(b.iv||''),text}))return;try{if(navigator.share){await navigator.share({title:'Invoice '+(b.iv||''),text});return}if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(text);toast('Invoice summary copied')}else{toast('Sharing is not available in this browser')}}catch(e){if(e&&e.name!=='AbortError')toast('Invoice sharing failed. Try again.')}}
 function waS(i){const b=bk(i);if(!b){toast('Booking not found');return}const g=gOf(b.g),n=((g&&g.ph)||'').replace(/\D/g,'');if(!n){toast('Add the guest phone number before opening WhatsApp');return}const url='https://wa.me/'+n+'?text='+encodeURIComponent(itx(b));if(nat({type:'openUrl',url}))return;try{window.location.href=url}catch(e){toast('Could not open WhatsApp')}}
 /* UPI notification signals (read only) */
-function addSig(o){
+async function addSig(o){
  if(!o||typeof o!=='object'||Array.isArray(o))return;
  const app=String(o.app||'UPI app').trim(),payer=String(o.payer||'').trim();
  const ref=String(o.ref||o.utr||'').replace(/\s+/g,'').toUpperCase();
@@ -825,10 +825,10 @@ function addSig(o){
  if(match&&S.au.reconcile&&on('Automatic reconciliation')){
    signal.st='pending_review';signal.suggestedBookingId=match.id;
  }else if(match)signal.suggestedBookingId=match.id;
- try{persistStrict()}catch(error){S.sig=S.sig.filter(x=>x.id!==id);console.error('[Aurelia Payment Review] Could not durably save incoming evidence.',error);toast('Payment evidence was detected but could not be saved. Do not approve it; check device storage.');return}
+ try{await persistCanonicalStrict()}catch(error){S.sig=S.sig.filter(x=>x.id!==id);console.error('[Aurelia Payment Review] Could not durably save incoming evidence.',error);toast('Payment evidence was detected but could not be saved. Do not approve it; check device storage.');return}
  render();
 }
-window.aureliaNativePaymentSignal=j=>{try{addSig(typeof j==='string'?JSON.parse(j):j)}catch(e){}};
+window.aureliaNativePaymentSignal=j=>{try{const pending=addSig(typeof j==='string'?JSON.parse(j):j);pending?.catch(e=>console.error('[Aurelia Payment Review] Canonical evidence save failed.',e))}catch(e){console.error('[Aurelia Payment Review] Invalid native evidence payload.',e)}};
 function sigM(id){
  const s=S.sig.find(x=>x.id===id);if(!s){toast('Payment evidence not found');return}
  const linked=s.b==null?null:bk(s.b);
@@ -836,7 +836,7 @@ function sigM(id){
  const list=candidates.map(b=>row(b)+`<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" onclick="sigA('${id}',${b.id})">Approve payment</button><button class="btn sm ghost" onclick="sigReject('${id}',${b.id})">Reject</button></div></div>`).join('');
  openS(`<h2 class="foil">Payment review · ${K(s.amt)}</h2><div class="lab">${esc(s.app)} · ${esc(s.payer||'Unknown payer')}<br>Reference: ${esc(s.ref||'Not supplied')}<br>Detected: ${tmf(new Date(s.at))}</div>${s.st==='rejected'?'<p class="lab">This payment was rejected but its evidence is retained in the folio. Reopen it to review again.</p>':''}${linked?'<div class="card"><b>Linked folio</b><div class="lab">'+esc(linked.g)+' · Room '+esc(String(linked.room))+'</div></div>':''}<div class="list">${s.st==='rejected'?'<button class="btn" onclick="sigReopen(\''+id+'\')">Reopen for review</button>':list||'<div class="empty">No eligible folio found. The payment evidence remains saved.</div>'}</div>`);
 }
-function sigReject(id,bookingId){
+async function sigReject(id,bookingId){
  const s=S.sig.find(x=>x.id===id),b=bk(bookingId);if(!s||!b){toast('Payment or folio not found');return}
  if(!['open','pending_review','new'].includes(s.st)){toast('This payment is not awaiting a decision');return}
  const reason=window.prompt('Reason for rejecting this payment (required):','');
@@ -846,15 +846,15 @@ function sigReject(id,bookingId){
  const before={st:s.st,b:s.b,reviewHistory:Array.isArray(s.reviewHistory)?s.reviewHistory.slice():[]};
  s.st='rejected';s.b=b.id;s.rejectedAt=new Date().toISOString();s.rejectionReason=clean;
  s.reviewHistory.push({decision:'rejected',bookingId:b.id,reason:clean,at:s.rejectedAt});
- try{persistStrict()}catch(error){Object.assign(s,before);delete s.rejectedAt;delete s.rejectionReason;toast('Rejection was not saved. No decision was recorded.');console.error('[Aurelia Payment Review] Durable rejection save failed.',error);return}
+ try{await persistCanonicalStrict()}catch(error){Object.assign(s,before);delete s.rejectedAt;delete s.rejectionReason;toast('Rejection was not saved. No decision was recorded.');console.error('[Aurelia Payment Review] Durable rejection save failed.',error);return}
  closeS();render();toast('Payment rejection saved to the guest folio');
 }
-function sigReopen(id){
+async function sigReopen(id){
  const s=S.sig.find(x=>x.id===id);if(!s||s.st!=='rejected'){toast('Only rejected payments can be reopened');return}
  if(!window.confirm('Reopen this saved payment for staff review? The previous rejection will remain in its history.'))return;
  const before={st:s.st,reviewHistory:Array.isArray(s.reviewHistory)?s.reviewHistory.slice():[]};
  s.st='open';s.reopenedAt=new Date().toISOString();s.reviewHistory.push({decision:'reopened',bookingId:s.b??null,at:s.reopenedAt});
- try{persistStrict()}catch(error){Object.assign(s,before);delete s.reopenedAt;toast('Reopen action could not be saved. The payment remains rejected.');console.error('[Aurelia Payment Review] Durable reopen save failed.',error);return}
+ try{await persistCanonicalStrict()}catch(error){Object.assign(s,before);delete s.reopenedAt;toast('Reopen action could not be saved. The payment remains rejected.');console.error('[Aurelia Payment Review] Durable reopen save failed.',error);return}
  closeS();render();toast('Payment reopened; prior rejection retained');
 }
 function sigA(id,i){
@@ -1545,7 +1545,7 @@ async function restoreGo(){
   });
   (Array.isArray(d.aud)?d.aud:[]).forEach(x=>{if(x&&typeof x==='object'&&!S.aud.some(y=>JSON.stringify(y)===JSON.stringify(x)))S.aud.push(x)});
   // Persist once after all collections have been prepared, then verify durable read-back.
-  persistStrict();
+  await persistCanonicalStrict();
   const stored=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
   if(!stored||DK.some(k=>JSON.stringify(stored[k])!==JSON.stringify(S[k])))throw new Error('Imported records did not pass durable storage read-back verification.');
   S.rst=null;S.rstMode=null;render();closeS();
@@ -1556,7 +1556,7 @@ async function restoreGo(){
    DK.forEach(k=>{if(importBefore[k]!==undefined)S[k]=importBefore[k]});
    id=importOldId;
    try{
-    persistStrict();
+    await persistCanonicalStrict();
     const rollback=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
     if(!rollback||DK.some(k=>JSON.stringify(rollback[k])!==JSON.stringify(S[k])))throw new Error('Rollback read-back verification failed.');
    }catch(rollbackError){
@@ -1594,7 +1594,7 @@ async function restoreGo(){
   DK.forEach(k=>{if(restored[k]!==undefined)S[k]=restored[k]});
   ['rooms','b','g','t','exp','inv','aud'].forEach(k=>{if(!Array.isArray(S[k]))throw new Error('Restored '+k+' data is invalid')});
   id=Math.max(id,0,...S.b.map(b=>+b.id||0));
-  persistStrict();
+  await persistCanonicalStrict();
   const saved=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
   if(!saved||DK.some(k=>JSON.stringify(saved[k])!==JSON.stringify(S[k])))throw new Error('Saved application state did not pass read-back verification.');
   S.rst=null;S.rstMode=null;location.reload();return true;
@@ -1604,7 +1604,7 @@ async function restoreGo(){
   try{if(oldPhotos)await photoRestore(oldPhotos);else throw new Error('Original photo archive was not available')}catch(photoRollbackError){console.error('Photo rollback failed',photoRollbackError);rollbackFailures.push('photo archive')}
   DK.forEach(k=>{if(liveBefore[k]!==undefined)S[k]=liveBefore[k]});id=oldId;
   try{
-   persistStrict();
+   await persistCanonicalStrict();
    const rollbackSaved=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
    if(!rollbackSaved||DK.some(k=>JSON.stringify(rollbackSaved[k])!==JSON.stringify(S[k])))throw new Error('State rollback read-back verification failed');
   }catch(rollbackError){console.error('State rollback failed',rollbackError);rollbackFailures.push('application data')}
