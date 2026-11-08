@@ -114,3 +114,17 @@ test('manual folio payment UI commits through the canonical local repository bef
   assert.ok(manualCalls.length >= 4, 'all manual folio payment entry points remain connected');
   for (const call of manualCalls) assert.match(call[0], /^await\s+settlePayment/);
 });
+
+test('staff-reviewed UPI approval uses the canonical transaction and cannot mark evidence separately', () => {
+  const html = read('index.html');
+  const settlement = html.slice(html.indexOf('function settlePayment(input)'), html.indexOf('// Legacy unconfirmed addPay shortcut'));
+  assert.match(settlement, /input\.source===['"]staff_review['"]/);
+  const start = html.indexOf('async function sigA(');
+  const end = html.indexOf('/* money flow */', start);
+  assert.ok(start >= 0 && end > start);
+  const approve = html.slice(start, end);
+  assert.match(approve, /await settlePayment\(/);
+  assert.match(approve, /evidenceId:id/);
+  assert.doesNotMatch(approve, /s\.st='matched'/);
+  assert.doesNotMatch(approve, /persistCanonicalStrict/);
+});
