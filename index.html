@@ -975,14 +975,14 @@ async function dsave(){
  try{
   const gi=d.k==='guest'?d.gi:S.g.findIndex(x=>x.n.toLowerCase()===nm.toLowerCase());
   const old=gi!=null&&gi>=0?S.g[gi]:null;
-  const rec={...g,n:nm,occ:d.oc,veh:d.vh};
-  if(old&&old.n!==nm)S.b.forEach(b=>{if(b.g===old.n)b.g=nm});
+  if(old&&old.n!==nm&&[...S.b,...(S.cancelled||[])].some(b=>b.g===old.n)){toast('Guest name cannot be changed while booking history references it. Edit contact and ID details only.');return}
+  const rec={...g,n:nm,occ:d.oc,veh:d.vh,id:old?.id||createStableGuestId()};
   if(old)S.g[gi]=rec;else S.g.push(rec);
 
   if(d.k==='res'){
    const checkIn=d.checkInTime||defCheckInTime();
    const checkOut=d.checkOutTime||defCheckOutTime();
-   booking={id:++id,g:nm,room:d.room,in:arrival,out:departure,st:'res',rate:roomRate,ch:[],pays:[],
+   booking={id:++id,g:nm,room:d.room,in:arrival,out:departure,st:'res',rate:roomRate,folioId:'booking-'+String(id),ch:[],pays:[],
     checkInTime:checkIn,checkOutTime:checkOut,
     scheduledCheckIn:d.in+'T'+checkIn,scheduledCheckOut:d.out+'T'+checkOut};
    S.b.push(booking);
@@ -993,10 +993,16 @@ async function dsave(){
    aud('Guest saved',nm);
   }
 
-  // Commit the complete guest/reservation/advance snapshot to SQLite or
-  // IndexedDB first. localStorage is refreshed only as a compatibility cache.
-  const saved=await persistCanonicalStrict();
-  const savedGuest=saved&&Array.isArray(saved.g)?saved.g.find(x=>x.n===nm):null;
+  // Commit guest + booking + folio + full recovery snapshot as one local transaction.
+  const snapshot={tab:S.tab,bk:S.bk};DK.forEach(k=>snapshot[k]=S[k]);
+  const adapter=window.AureliaRepositoryCompatibility;
+  if(!adapter)throw new Error('Canonical local PMS repository is unavailable.');
+  const guestIndex=S.g.indexOf(rec);
+  const result=d.k==='res'
+   ?await adapter.commitReservation({snapshot,guestIndex,bookingId:booking.id,roomId:d.room,balanceDueFor:dueB})
+   :await adapter.commitGuestMutation({snapshot,guestId:rec.id,guestIndex,operation:old?'update':'create',expectedPreviousGuest:old?cloneRuntimeState(old):null});
+  const saved=result&&result.snapshot;
+  const savedGuest=saved&&Array.isArray(saved.g)?saved.g.find(x=>String(x.id)===String(rec.id)):null;
   const savedBooking=d.k==='res'&&saved&&Array.isArray(saved.b)?saved.b.find(x=>x.id===booking.id):null;
   if(!savedGuest||(d.k==='res'&&(!savedBooking||
     Number(savedBooking.p||0)!==Number(booking.p||0)||
@@ -1010,19 +1016,18 @@ async function dsave(){
   if(d.k==='res'){S.tab='stays';S.f='res';render();toast('Reservation confirmed for '+nm)}
   else{render();toast('Guest saved')}
  }catch(error){
+  if(error&&error.code==='OPERATIONAL_CANONICAL_READBACK_MISMATCH'){
+   RECOVERY_CHECK_PENDING=true;
+   console.error('[Aurelia Reservation] Canonical transaction may have committed but read-back failed. Writes are frozen.',error);
+   toast('CRITICAL: Reservation storage read-back failed. Do not retry or edit; keep the app open for recovery.');
+   return;
+  }
   S.g=priorGuests;
   S.b=priorBookings;
   priorBookingNames.forEach(([b,name])=>{b.g=name});
   if(Array.isArray(S.aud))S.aud.splice(0,S.aud.length,...priorAudit);
   S.today=priorToday;
   id=priorId;
-  try{
-   await persistCanonicalStrict();
-  }catch(rollbackError){
-   console.error('[Aurelia Reservation] Canonical rollback could not be verified.',rollbackError);
-   toast('CRITICAL: Reservation save failed and canonical rollback could not be verified. Stop editing; preserve the device and recover from backup.');
-   return;
-  }
   toast(error&&error.message||'Could not save guest or reservation; no payment was recorded');
  }
  });
@@ -5421,6 +5426,7 @@ import { bootstrapper } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
 import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation } from "./src/storage/repository-operational-mutation-service.mjs";
+import { commitReservationToRepository } from "./src/storage/repository-reservation-service.mjs";
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
 
@@ -5471,7 +5477,8 @@ try {
      commitOperationalMutation: input => commitOperationalStateMutation({ ...input, bridge: storageBridge }),
      commitRoomMutation: input => commitRoomStateMutation({ ...input, bridge: storageBridge }),
      commitRoomCatalogMutation: input => commitRoomCatalogMutation({ ...input, bridge: storageBridge }),
-     commitGuestMutation: input => commitGuestStateMutation({ ...input, bridge: storageBridge })
+     commitGuestMutation: input => commitGuestStateMutation({ ...input, bridge: storageBridge }),
+     commitReservation: input => commitReservationToRepository({ ...input, bridge: storageBridge })
    });
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "APPLICATION_MODULES";
