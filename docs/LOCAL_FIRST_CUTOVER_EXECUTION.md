@@ -18,6 +18,12 @@ Make the device repository the sole canonical read/write path for all PMS domain
 
 Each batch uses the repository's atomic entity-plus-outbox transaction and is read back before the next batch. A final manifest is committed only after all projected records have been verified. Replays are idempotent; divergent existing entities fail closed. The original legacy snapshot is not deleted or rewritten.
 
+## Additional hardening — 2026-11-08
+
+- Cancellation refund/accounting updates now await the canonical snapshot coordinator, validate the returned committed snapshot, and no longer treat an immediately-read Web Storage cache as proof of persistence.
+- Strict asynchronous snapshot commits now enter the same operational serialization lock as other PMS writes, so the state snapshot is captured after earlier queued operations complete.
+- The legacy synchronous accounting persistence adapter now fails closed. It cannot write the Web Storage key and claim durability while IndexedDB/SQLite persistence is still pending. The journaled gateway projector remains disabled until it is converted to an awaited canonical transaction.
+
 ## Explicit limitations
 
 This is a migration primitive, not a completed application cutover:
