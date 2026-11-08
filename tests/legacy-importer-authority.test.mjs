@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
-import { LegacyImporter } from "../src/storage/legacy-importer.mjs";
+import { LegacyImporter, LEGACY_STATE_KEY } from "../src/storage/legacy-importer.mjs";
 
 const snapshot = JSON.stringify({
   rooms: [], b: [], g: [], t: [], exp: [], inv: [], led: [], aud: [],
@@ -10,7 +10,7 @@ const snapshot = JSON.stringify({
 });
 
 test("legacy importer is the narrow read/write boundary for the legacy snapshot", () => {
-  const values = new Map([["aurelia_lodge_v2", snapshot]]);
+  const values = new Map([[LEGACY_STATE_KEY, snapshot]]);
   const storage = {
     getItem: key => values.has(key) ? values.get(key) : null,
     setItem: (key, value) => values.set(key, String(value))
@@ -41,7 +41,7 @@ test("database authority advances legacy -> migrating -> canonical only after a 
     parsed: JSON.parse(snapshot)
   }, {
     migrationId: "mig_authority_test",
-    sourceKey: "aurelia_lodge_v2"
+    sourceKey: LEGACY_STATE_KEY
   });
   assert.equal(
     await repository.completeMigrationAuthority("mig_authority_test"),
