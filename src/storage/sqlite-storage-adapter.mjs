@@ -7,6 +7,7 @@ export class SqliteStorageAdapter extends StorageAdapter{
   const operations=[];
   const writer={
    put(store,key,value){if(!STORES.has(store))throw new TypeError("Unsupported storage store: "+store);operations.push({type:"put",store,key,value});},
+   compareAndPut(store,key,expectedVersion,value){if(store!=="entities")throw new TypeError("compareAndPut is supported only for entities");operations.push({type:"comparePut",store,key,expectedVersion,value});},
    meta:{put(key,value){operations.push({type:"put",store:"meta",key,value});}},
    backup:{put(key,value){operations.push({type:"put",store:"legacy_backup",key,value});}}
   };
