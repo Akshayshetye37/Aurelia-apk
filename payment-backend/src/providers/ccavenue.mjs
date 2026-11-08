@@ -116,13 +116,13 @@ export class CCAvenueAdapter extends PaymentProviderAdapter {
     const orderId = input?.orderId || input?.receipt;
     if (!id(orderId) || !minor(input?.amountMinor) || input.currency !== 'INR' ||
         typeof input?.returnUrl !== 'string' || !input.returnUrl.startsWith('https://') ||
-        typeof input?.cancelUrl !== 'string' || !input.cancelUrl.startsWith('https://')) {
+        typeof (input?.cancelUrl || input?.returnUrl) !== 'string' || !(input.cancelUrl || input.returnUrl).startsWith('https://')) {
       throw new TypeError('invalid_ccavenue_order');
     }
     const fields = [
       ['merchant_id', this.credentials.merchantId], ['order_id', orderId],
       ['currency', 'INR'], ['amount', amountText(input.amountMinor)],
-      ['redirect_url', input.returnUrl], ['cancel_url', input.cancelUrl],
+      ['redirect_url', input.returnUrl], ['cancel_url', input.cancelUrl || input.returnUrl],
       ['language', 'EN']
     ];
     const customer = input.customer || {};
@@ -155,7 +155,7 @@ export class CCAvenueAdapter extends PaymentProviderAdapter {
     const orderId = input?.orderId || input?.reference;
     if (!id(orderId)) throw new TypeError('invalid_ccavenue_order_reference');
     const result = await this.apiRequest('orderStatusTracker', {
-      order_no: orderId, ...(input.referenceNo ? { reference_no: input.referenceNo } : {})
+      order_no: orderId, ...((input.referenceNo || input.paymentId) ? { reference_no: input.referenceNo || input.paymentId } : {})
     });
     const row = result.Order_Status_Result || result.order_status_result || result;
     if (String(row.order_no || '') !== orderId) throw new Error('ccavenue_order_identity_mismatch');
