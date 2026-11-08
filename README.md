@@ -208,12 +208,12 @@ Aurelia has one app-wide primary payment provider per tenant/account. All enroll
 The Payment Gateway screen lists all seven planned providers. Six adapters are currently registered and may be qualified for test activation. CCAvenue remains visible but unavailable until its complete adapter and merchant lifecycle are implemented and verified. Live collection remains OFF.
 
 
-### Current CCAvenue hardening revision (8 November 2026)
+### Historical CCAvenue hardening CI snapshot (8 November 2026)
 
-Current branch head: `00a6e07c71d1652723894e646a5bdea0871de52c`.
-- Payment backend CI: in progress — [run 42471552471](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552471).
-- Infrastructure validation: success — [run 42471552405](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552405).
-- Settlement foundation CI: success — [run 42471552584](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552584).
-- PMS source test / production packaging: pending — [run 42471548691](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471548691).
+The following run IDs belong to an earlier source revision (`00a6e07c71d1652723894e646a5bdea0871de52c`) and are retained as historical evidence only. They are superseded by the current status at the top of this README:
+- Earlier payment backend CI: [run 42471552471](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552471).
+- Earlier infrastructure validation: [run 42471552405](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552405).
+- Earlier settlement foundation CI: [run 42471552584](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552584).
+- Earlier PMS source test / production packaging: [run 42471548691](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471548691).
 
-Do not treat this revision as fully CI-verified until the backend and PMS source workflows complete. Android Gradle/device and merchant-specific CCAvenue UAT remain outside these workflows.
+Use the current project status section above for the latest verified commit and CI conclusions.
