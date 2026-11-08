@@ -142,11 +142,11 @@ The service snapshots the affected booking arrays/paid total, `state.today`, and
 
 The application wrapper used by the UI calls `persist()`, reads the saved JSON back, and verifies the booking paid total, payment rows/history, daily total and audit list. A failed read-back throws, allowing the settlement service to roll back in-memory state.
 
-This is **not a database transaction**. The booking state is persisted as one JSON value under local storage key `aurelia_lodge_v2`; there is no compare-and-swap or multi-device transaction. The rollback write is best-effort. A process termination/power loss between storage mutation and verified read-back can leave an uncertain result until the next load/backup inspection. The journaled settlement module is a separate IndexedDB journal, but its configured projector currently always throws and its trusted authorization callback is not installed; it does not currently bridge verified gateway capture into the local folio.
+This is **not a database transaction**. The booking state is persisted as one JSON value under local storage key `legacy snapshot key`; there is no compare-and-swap or multi-device transaction. The rollback write is best-effort. A process termination/power loss between storage mutation and verified read-back can leave an uncertain result until the next load/backup inspection. The journaled settlement module is a separate IndexedDB journal, but its configured projector currently always throws and its trusted authorization callback is not installed; it does not currently bridge verified gateway capture into the local folio.
 
 ## 4. Persistence, backup and restore
 
-- Main app state is serialized from the `DK` allow-list into JSON and saved under `aurelia_lodge_v2` using `localStorage` (or the Android-provided `window.__aureliaStorage` wrapper).
+- Main app state is serialized from the `DK` allow-list into JSON and saved under `legacy snapshot key` using `localStorage` (or the Android-provided `window.__aureliaStorage` wrapper).
 - The storage wrapper falls back to an in-memory map when browser local storage is unavailable. In that mode data is session-only and the UI warns that persistence is unavailable.
 - The app loads and validates required top-level arrays/objects, restores the state keys, and quarantines invalid saved JSON under a recovery key.
 - Full backup/restore uses a versioned encrypted backup payload and checksum validation in the backup flow. Restore normalizes booking aliases and fills missing arrays/defaults. The inspected import/restore path does not recompute `booking.p` from `booking.pays`; it preserves the imported paid total and rows.
