@@ -5552,7 +5552,6 @@ try {
       const row = await storageBridge.fetchLegacySnapshot();
       return row?.data || null;
     },
-    cache: window.__aureliaStorage || null,
     onFailure: error => {
       console.error("[Aurelia Local First] Canonical write failed; writes must remain frozen until startup recovery.", error);
     }
