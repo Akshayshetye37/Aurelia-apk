@@ -690,7 +690,7 @@ const offOf=s=>{const a=new Date();a.setHours(0,0,0,0);return Math.round((new Da
 const day0=()=>{const d=new Date();d.setHours(0,0,0,0);return Math.round(d/864e5)};
 const PHOTO_DB='aurelia_photo_archive_v1';
 const PHOTO_FALLBACK_PREFIX='aurelia_photo_fallback:';
-/* Some sandboxed HTML previews deny IndexedDB and localStorage. Keep a session-only fallback there; it is not a substitute for device storage or a persistent backup. */
+/* Unsupported previews use an explicitly session-only in-memory photo fallback. */
 const PHOTO_MEMORY_FALLBACK=new Map();
 function photoStorageSandboxed(){try{return String(location.href).startsWith('about:srcdoc')||!!(window.frameElement&&window.frameElement.hasAttribute('sandbox')&&!window.frameElement.sandbox.contains('allow-same-origin'))}catch(e){return String(location.href).startsWith('about:srcdoc')}}
 const PHOTO_NATIVE_PENDING=new Map();
@@ -702,14 +702,14 @@ async function photoPut(key,data){
  if(window.AureliaNative)return photoNative('photoStore',{key,data}).then(()=>true);
  if(photoStorageSandboxed()){PHOTO_MEMORY_FALLBACK.set(key,data);return true}
  try{const db=await photoDb();await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite');tx.objectStore('originals').put(data,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not store original photo'));tx.onabort=()=>reject(tx.error||new Error('Photo storage transaction aborted'))});db.close();return true}
- catch(e){try{localStorage.setItem(PHOTO_FALLBACK_PREFIX+key,data);return true}catch(f){PHOTO_MEMORY_FALLBACK.set(key,data);console.warn('Persistent photo storage unavailable in this preview; photo exists only for this session.',e);return true}}
+ catch(e){PHOTO_MEMORY_FALLBACK.set(key,data);console.warn('Persistent photo storage unavailable; photo exists only for this session.',e);return true}
 }
-async function photoGet(key){if(!key)return null;if(window.AureliaNative){try{return await photoNative('photoLoad',{key})}catch(e){return null}}if(PHOTO_MEMORY_FALLBACK.has(key))return PHOTO_MEMORY_FALLBACK.get(key);if(photoStorageSandboxed())return null;try{const db=await photoDb();const data=await new Promise((resolve,reject)=>{const q=db.transaction('originals').objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result||null);q.onerror=()=>reject(q.error||new Error('Could not read original photo'))});db.close();if(data)return data}catch(e){}try{const fallback=localStorage.getItem(PHOTO_FALLBACK_PREFIX+key);if(fallback)return fallback}catch(e){}return PHOTO_MEMORY_FALLBACK.get(key)||null}
+async function photoGet(key){if(!key)return null;if(window.AureliaNative){try{return await photoNative('photoLoad',{key})}catch(e){return null}}if(PHOTO_MEMORY_FALLBACK.has(key))return PHOTO_MEMORY_FALLBACK.get(key);if(photoStorageSandboxed())return null;try{const db=await photoDb();const data=await new Promise((resolve,reject)=>{const q=db.transaction('originals').objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result||null);q.onerror=()=>reject(q.error||new Error('Could not read original photo'))});db.close();if(data)return data}catch(e){}return PHOTO_MEMORY_FALLBACK.get(key)||null}
 async function photoArchive(){
  if(window.AureliaNative)return photoNative('photoArchive');
  const out={};
  try{const db=await photoDb();await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').getAllKeys(),v=tx.objectStore('originals').getAll();tx.oncomplete=()=>{q.result.forEach((k,i)=>out[k]=v.result[i]);resolve()};tx.onerror=()=>reject(tx.error||new Error('Could not prepare photo archive'))});db.close()}catch(e){}
- try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX))out[k.slice(PHOTO_FALLBACK_PREFIX.length)]=localStorage.getItem(k)}}catch(e){}
+
  PHOTO_MEMORY_FALLBACK.forEach((v,k)=>out[k]=v);
  if(Object.keys(out).length||!window.indexedDB)return out;
  try{await photoDb();return out}catch(e){return out}
@@ -721,10 +721,8 @@ async function photoRestore(archive){
  if(window.AureliaNative){await photoNative('photoRestore',{archive});return entries.length}
  let db;
  try{db=await photoDb()}catch(e){
-  const keep=new Set(entries.map(([k])=>PHOTO_FALLBACK_PREFIX+k));
-  try{for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX)&&!keep.has(k))localStorage.removeItem(k)}}catch(_){}
   PHOTO_MEMORY_FALLBACK.clear();
-  for(const [k,v] of entries){try{localStorage.setItem(PHOTO_FALLBACK_PREFIX+k,v)}catch(_){PHOTO_MEMORY_FALLBACK.set(k,v)}}
+  for(const [k,v] of entries)PHOTO_MEMORY_FALLBACK.set(k,v);
   return entries.length;
  }
  try{
@@ -734,7 +732,7 @@ async function photoRestore(archive){
    tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not restore original photos'));tx.onabort=()=>reject(tx.error||new Error('Photo restore was cancelled'));
   });
  }finally{db.close()}
- try{for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX))localStorage.removeItem(k)}}catch(_){}
+
  PHOTO_MEMORY_FALLBACK.clear();
  return entries.length;
 }
@@ -1139,41 +1137,15 @@ function backupVaultDb(){
   req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('Could not open encrypted backup key storage.'));
  });
 }
-let backupVaultMemory=null;
-const BACKUP_VAULT_FALLBACK_KEY='aurelia-pms-backup-vault-v1:wrapped';
-function readBackupVaultFallback(){
- try{
-  const raw=localStorage.getItem(BACKUP_VAULT_FALLBACK_KEY);
-  if(!raw)return null;
-  const saved=JSON.parse(raw);
-  if(!saved||saved.id!==BACKUP_VAULT_ID||saved.format!==1||typeof saved.wrappedKey!=='string')return null;
-  return {...saved,key:backupVaultMemory&&backupVaultMemory.salt===saved.salt?backupVaultMemory.key:null};
- }catch(_){throw new Error('This preview blocks both IndexedDB and local storage. Open the PMS in Chrome or the native Android app to use encrypted backups.')}
-}
 async function readBackupVault(){
- try{
-  const db=await backupVaultDb();
-  try{return await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readonly'),req=tx.objectStore('vault').get(BACKUP_VAULT_ID);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}
-  finally{db.close()}
- }catch(error){
-  const fallback=readBackupVaultFallback();
-  if(fallback)return fallback;
-  if(error&&/blocks both IndexedDB/.test(error.message))throw error;
-  return null;
- }
+ const db=await backupVaultDb();
+ try{return await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readonly'),req=tx.objectStore('vault').get(BACKUP_VAULT_ID);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}
+ finally{db.close()}
 }
 async function writeBackupVault(record){
- try{
-  const db=await backupVaultDb();
-  try{await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readwrite');tx.objectStore('vault').put(record);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('Could not save backup recovery key.'))})}
-  finally{db.close()}
- }catch(error){
-  try{
-   const {key,...wrappedOnly}=record;
-   localStorage.setItem(BACKUP_VAULT_FALLBACK_KEY,JSON.stringify(wrappedOnly));
-   backupVaultMemory={salt:record.salt,key:record.key};
-  }catch(_){throw new Error('Secure backup storage is blocked in this preview. Open the PMS in Chrome or the native Android app; no recovery key was saved.')}
- }
+ const db=await backupVaultDb();
+ try{await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readwrite');tx.objectStore('vault').put(record);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('Could not save backup recovery key.'))})}
+ finally{db.close()}
 }
 async function backupPasswordKey(password,salt,iterations){
  const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveKey']);
