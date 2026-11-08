@@ -56,10 +56,12 @@ test('duplicate and malformed records fail visibly', () => {
 });
 
 test('tenant mismatch and invalid snapshots are rejected', () => {
-  assert.throws(() => comparePaymentLedgerSnapshots({
+  const isolated = comparePaymentLedgerSnapshots({
     tenantId: 'tenant_123456', capturedPayments: [payment({ tenantId: 'tenant_other123' })],
     journalEntries: []
-  }));
+  });
+  assert.equal(isolated.matchedCount, 0);
+  assert.ok(isolated.issues.some(issue => issue.type === 'INVALID_CAPTURE_RECORD'));
   assert.throws(() => comparePaymentLedgerSnapshots({
     tenantId: '', capturedPayments: [], journalEntries: []
   }), /invalid_reconciliation_snapshot/);
