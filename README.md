@@ -8,7 +8,7 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 - **Project root:** repository root (`/`)
 - **Active engineering branch:** `feature/multi-provider-payment-backend`
 - **Active branch:** `feature/multi-provider-payment-backend` (resolve the current SHA from the branch ref; avoid hard-coded moving HEAD values).
-- **Latest verification:** GitHub Actions run [42486548554](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486548554) passed on commit `773d98443a361f9c26d736d977afa17a5b991f97`: 354/354 Node tests, production web bundle build, production asset privacy checks and Android release-gate check. This workflow did **not** build or qualify an APK.
+- **Latest verification:** GitHub Actions run [42487581657](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42487581657) passed on commit `70d28be9b82cb4101d2091e482e613797ab47660`: 362/362 Node tests, production web bundle build, production asset privacy checks and Android release-gate check. This workflow did **not** build or qualify an APK.
 - **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
 
 Useful project locations:
@@ -53,9 +53,10 @@ The current implementation contains substantial storage, payment and security fo
 - Room inventory command foundation for stable-ID room creation, scoped edits, paise-based rate validation and versioned housekeeping/maintenance state.
 - Manual payment and staff-reviewed UPI approval now use `settlePaymentToRepository`: booking entity, folio projection and complete recovery snapshot commit in one SQLite/IndexedDB batch, followed by exact read-back and post-commit legacy-cache refresh.
 - Guest/reservation creation in the primary reservation workflow now awaits canonical snapshot commit and exact read-back; failed writes restore the in-memory draft and attempt a verified canonical rollback.
+- Check-in, check-out and cancellation now commit the booking entity, room entity and full recovery snapshot in one version-checked local transaction; housekeeping room-status changes commit the room entity and recovery snapshot together. UI success is shown only after exact read-back.
 - Regression coverage verifies atomic booking/folio/snapshot commit, UPI evidence approval, idempotent replay, canonical divergence rejection, failed-write rollback and cache refresh.
 
-**Cutover limitation:** the full booking, room, guest, inventory, accounting and operational UI is not yet migrated to use the asynchronous repository as its sole canonical read/write path. Manual folio payment and staff-reviewed UPI approval use transactional repository entities; the primary guest/reservation creation workflow awaits a canonical full-state snapshot commit, but booking-advance creation is not yet a unified guest+booking+folio domain-entity transaction and many other mutations still use legacy synchronous state. `uiCutover` remains false. The room reassignment/stable room-reference migration is not complete.
+**Cutover limitation:** the full booking, room, guest, inventory, accounting and operational UI is not yet migrated to use the asynchronous repository as its sole canonical read/write path. The following paths now commit locally before reporting success: manual folio payments; staff-reviewed UPI approvals; primary guest/reservation creation snapshot; check-in and check-out (booking + room + recovery snapshot); reservation cancellation (cancelled booking + room + recovery snapshot); and standalone housekeeping room-status changes (room + recovery snapshot). Booking-advance creation is not yet a unified guest+booking+folio domain-entity transaction. Guest edits, room creation/reassignment, inventory, expenses, POS, charges, settings and many other mutations still use legacy synchronous state. `uiCutover` remains false; stable room-reference migration and complete domain-level cutover are outstanding.
 
 ### Payment and provider backend
 
@@ -160,5 +161,5 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 ---
 
 **Active branch:** `feature/multi-provider-payment-backend`  
-**Latest CI:** [run 42486548554 — passed](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486548554); 354 tests passed, web bundle and privacy checks passed. No APK/device qualification was performed.  
+**Latest CI:** [run 42487581657 — passed](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42487581657); 362 tests passed, web bundle and privacy checks passed. No APK/device qualification was performed.  
 **Status:** engineering foundations exist; production release not approved.
