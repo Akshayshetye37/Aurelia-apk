@@ -2,16 +2,16 @@
 
 **Architecture:** Hybrid production backend. Android remains the offline-first PMS client; the cloud backend owns provider credentials, payment verification and accounting orchestration.  
 **Working branch:** `feature/multi-provider-payment-backend`  
-**Release status:** Live payment collection is OFF. No provider is production-ready. The factory can instantiate six complete seven-operation adapters plus a CCAvenue adapter for hosted checkout, status lookup and encrypted callbacks. Test checkout routes expose Razorpay, Cashfree and CCAvenue; live collection remains disabled.
+**Release status:** Live payment collection is OFF. No provider is production-ready. The factory can instantiate six complete seven-operation adapters plus a CCAvenue adapter for hosted checkout, status lookup and encrypted callbacks. Test checkout routes expose all seven providers; live collection remains disabled.
 
 | Provider | Adapter/factory state | Cloud checkout API enabled | Remaining gates |
 |---|---|---:|---|
 | Razorpay | Implemented; seven-operation contract; factory-wired | Yes, test checkout only | Verify provider contract tests, webhook replay/concurrency, refund idempotency/status, canonical folio posting, Android integration and sandbox UAT |
 | Cashfree | Implemented; seven-operation contract; factory-wired | Yes, test checkout only | Verify current API/webhook/refund contracts, provider contract tests, replay/concurrency, canonical folio posting, Android integration and sandbox UAT |
-| PayU | Classic hosted checkout, payment verification, reverse-hash webhook and refund lifecycle implemented; factory-wired | No | Cloud checkout, webhook and recovery route qualification; merchant sandbox/UAT; canonical folio posting; physical-device acceptance |
-| PhonePe | Standard Checkout V2 OAuth, checkout, status, SHA256 webhook auth and refund lifecycle implemented; factory-wired | No | Integrate cloud routes and verify merchant-specific API version, webhook configuration, refund status, sandbox/UAT and physical-device acceptance |
-| Paytm | Official checksum-based initiate, status, callback and refund lifecycle implemented; factory-wired | No | Integrate cloud routes; verify merchant MID/website config, staging/UAT, callback and refund reconciliation |
-| JioPay | Hosted checkout, HMAC-SHA256, status, webhook and refund command lifecycle implemented; factory-wired | No | Confirm merchant/aggregator configuration, UAT status/refund responses, cloud routes and device acceptance |
+| PayU | Classic hosted checkout, payment verification, reverse-hash webhook and refund lifecycle implemented; factory-wired | Yes, test only | Merchant sandbox/UAT; canonical folio posting; physical-device acceptance |
+| PhonePe | Standard Checkout V2 OAuth, checkout, status, SHA256 webhook auth and refund lifecycle implemented; factory-wired | Yes, test only | Verify merchant-specific API version, webhook configuration, refund status, sandbox/UAT and physical-device acceptance |
+| Paytm | Official checksum-based initiate, status, callback and refund lifecycle implemented; factory-wired | Yes, test only | Verify merchant MID/website config, staging/UAT, callback and refund reconciliation |
+| JioPay | Hosted checkout, HMAC-SHA256, status, webhook and refund command lifecycle implemented; factory-wired | Yes, test only | Confirm merchant/aggregator configuration, UAT status/refund responses and device acceptance |
 | CCAvenue | Hosted checkout + encrypted callback + order-status API factory-wired; refund API partial (split-refund only) | Yes, test route only | Merchant IP allowlisting, merchant-specific API-key validation, callback/UAT evidence, standard refund API confirmation; live collection remains disabled |
 
 ## Dependency-ordered delivery sequence
