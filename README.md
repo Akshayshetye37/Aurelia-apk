@@ -217,3 +217,12 @@ The following run IDs belong to an earlier source revision (`00a6e07c71d16527238
 - Earlier PMS source test / production packaging: [run 42471548691](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471548691).
 
 Use the current project status section above for the latest verified commit and CI conclusions.
+
+
+### CCAvenue external sample review — 8 November 2026
+
+Reviewed the third-party Android sample at [senthilinfo62/ccavenue-payment-gateway-integration-in-android-sdk-master](https://github.com/senthilinfo62/ccavenue-payment-gateway-integration-in-android-sdk-master). It is a legacy RSA/GetRSA + WebView hosted-checkout example on an obsolete Android build stack. It is retained as protocol-comparison material only; no source, dependencies, WebView status parsing, random order generation or IDE module descriptor were imported.
+
+Important distinction: the sample's RSA flow is not the CCAvenue Mobile SDK v1.7 requestHash contract. Aurelia keeps classic hosted-checkout AES compatibility, Mobile SDK server-side SHA-512 requestHash, and Merchant API encryption as separate protocol/credential scopes. The Mobile SDK requestHash has a deterministic local formula test; this is not a CCAvenue merchant interoperability vector. Current merchant-issued SDK/AES vectors, tracking-ID API contract, notification authentication, refund contract and merchant UAT remain outstanding. CCAvenue remains unregistered, test-only and unavailable for live collection.
+
+Detailed findings and acceptance evidence checklist: [CCAvenue integration review](./docs/CCAVENUE_INTEGRATION.md#external-android-sample-review--senthilinfo62-ccavenue-integration-8-november-2026).
