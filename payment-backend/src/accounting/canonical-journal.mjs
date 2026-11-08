@@ -73,9 +73,10 @@ function balancedEntry({ tenantId, folioId, transactionId, provider, type, lines
     throw new Error('journal_unbalanced');
   }
 
+  const immutableLines = Object.freeze([...lines]);
   const canonical = {
     tenantId, folioId, transactionId, provider, type, parentJournalId,
-    evidenceId, currency: 'INR', lines
+    evidenceId, currency: 'INR', lines: immutableLines
   };
   const journalId = crypto.createHash('sha256')
     .update(JSON.stringify(canonical))
