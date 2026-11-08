@@ -554,10 +554,7 @@ const pre=(b.checkInTime||defCheckInTime()||new Date().toTimeString().slice(0,5)
 openS(`<h2 class="foil">Check in</h2><div class="lab">${esc(b.g)} · Room ${esc(String(b.room))} · planned ${esc(b.checkInTime||defCheckInTime())}</div>
 <label class="fld"><span>Actual check-in time (editable)</span><input id="actual-checkin-time" type="time" value="${pre}" required></label>
 <button class="btn" style="width:100%;margin-top:8px" onclick="completeCheckIn(${i})">Confirm check-in</button>`)}
-function completeCheckIn(i){const b=S.b.find(x=>x.id===i);if(!b)return;const t=$('#actual-checkin-time')?.value||b.checkInTime||defCheckInTime();if(!t){toast('Check-in time is mandatory');return}
-b.checkInTime=t;b.actualCheckInAt=new Date().toISOString();
-const d=new Date();b.actualCheckInDate=d.toISOString().slice(0,10);
-b.st='in';const r=rm(b.room);if(r)r.s='occ';persist();closeS();render();toast(b.g+' checked in at '+t);aud('Check-in',b.g+' · '+t)}
+async function completeCheckIn(i){const b=bk(i)||S.b.find(x=>x.id===i);if(!b)return;const t=$('#actual-checkin-time')?.value||b.checkInTime||defCheckInTime();if(!t){toast('Check-in time is mandatory');return}const r=rm(b.room);if(r&&r.s!=='ready'&&b.st!=='in'){toast('Room '+b.room+' is not ready yet');return}try{const result=await commitStayMutation({booking:b,room:r,eventType:'booking.checked_in',auditAction:'Check-in',auditDetail:b.g+' · Room '+b.room+' · '+t,apply:()=>{b.checkInTime=t;b.actualCheckInAt=new Date().toISOString();b.actualCheckInDate=new Date().toISOString().slice(0,10);b.st='in';if(r)r.s='occ'}});closeS();render();toast(result.cacheRefreshed===false?'Check-in saved to device storage; compatibility cache refresh failed.':b.g+' checked in at '+t)}catch(error){toast(error.message||'Check-in was not saved')}}
 function folio(i){const b=S.b.find(x=>x.id===i),r=rm(b.room),L=[[`Room ${b.room} · ${nts(b)} night${nts(b)>1?'s':''}`,r.r*nts(b)],...b.ch],T=L.reduce((a,x)=>a+x[1],0);S.pay='Cash';
 const paymentReviews=S.sig.filter(s=>s.b===b.id);
 openS(`<h2 class="foil">${esc(b.g)}</h2><div class="lab">Folio · Room ${b.room}<br>
@@ -643,12 +640,7 @@ const pre=(b.checkOutTime||defCheckOutTime()||new Date().toTimeString().slice(0,
 openS(`<h2 class="foil">Check out</h2><div class="lab">${esc(b.g)} · Room ${esc(String(b.room))} · planned ${esc(b.checkOutTime||defCheckOutTime())}</div>
 <label class="fld"><span>Actual check-out time (editable)</span><input id="actual-checkout-time" type="time" value="${pre}" required></label>
 <button class="btn" style="width:100%;margin-top:8px" onclick="completeCheckOut(${i})">Confirm check-out</button>`)}
-function completeCheckOut(i){const b=bk(i);if(!b)return;if(dueB(b)>0){toast('Settle '+K(dueB(b))+' before check-out');return}
-const t=$('#actual-checkout-time')?.value||b.checkOutTime||defCheckOutTime();if(!t){toast('Check-out time is mandatory');return}
-b.checkOutTime=t;b.actualCheckOutAt=new Date().toISOString();
-b.actualCheckOutDate=new Date().toISOString().slice(0,10);
-b.st='done';const r=rm(b.room);if(r)r.s='clean';
-aud('Check-out',b.g+' · Room '+b.room+' · '+t);persist();closeS();render();toast(b.g+' checked out at '+t)}
+async function completeCheckOut(i){const b=bk(i);if(!b)return;if(dueB(b)>0){toast('Settle '+K(dueB(b))+' before check-out');return}const t=$('#actual-checkout-time')?.value||b.checkOutTime||defCheckOutTime();if(!t){toast('Check-out time is mandatory');return}const r=rm(b.room);try{const result=await commitStayMutation({booking:b,room:r,eventType:'booking.checked_out',auditAction:'Check-out',auditDetail:b.g+' · Room '+b.room+' · '+t,apply:()=>{b.checkOutTime=t;b.actualCheckOutAt=new Date().toISOString();b.actualCheckOutDate=new Date().toISOString().slice(0,10);b.st='done';if(r)r.s='clean'}});closeS();render();toast(result.cacheRefreshed===false?'Check-out saved to device storage; compatibility cache refresh failed.':b.g+' checked out at '+t)}catch(error){toast(error.message||'Check-out was not saved')}}
 function inv(i){const b=bk(i),L=[[`Room ${b.room} · ${nts(b)} nights`,roomCharge(b)],...b.ch],s=S.set;openS(`<h2 class="foil">${esc(s.name)}</h2><div class="lab">${esc(s.addr)} · ${esc(s.phone)} · ${esc(s.tax)}</div><div style="margin:16px 0"><b>${esc(b.g)}</b><div class="lab">
 ${offsetDDMMYYYY(b.in)} ${esc(b.checkInTime||defCheckInTime())} → ${offsetDDMMYYYY(b.out)} ${esc(b.checkOutTime||defCheckOutTime())}<br>
 ${b.actualCheckInAt?'Checked in: '+dateDDMMYYYY(new Date(b.actualCheckInAt))+' '+new Date(b.actualCheckInAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+' · ':''}${b.actualCheckOutAt?'Checked out: '+dateDDMMYYYY(new Date(b.actualCheckOutAt))+' '+new Date(b.actualCheckOutAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):''}
@@ -798,7 +790,7 @@ Stay ${fd(b.in)} → ${fd(b.out)}
 function dcApply(i){const b=bk(i),v=+$('#dcv').value;if(!(v>=0)||!Number.isSafeInteger(Math.round(v*100))||Math.abs(v*100-Math.round(v*100))>1e-7||v>tt(b)+(b.dc||0)){toast('Enter a valid discount within the bill, with no more than two decimal places');return}b.dc=Math.round(v*100)/100;aud('Discount',K(b.dc)+' · Room '+b.room);folio(i)}
 async function pay(i){const b=bk(i);if(!b)return;const a=Number($('#pa')?.value),m=$('#pm .on')?.textContent||'Cash',r=$('#pr')?.value?.trim()||'';if(!(a>0)||!Number.isFinite(a)){toast('Enter an amount above zero');return}if(!$('#pc')?.checked){toast('Confirm that you received the money');return}try{await settlePayment({booking:b,amount:a,method:m,reference:r,source:'manual',verificationConfirmed:true,idempotencyKey:r?('ref:'+r):undefined});render();folio(i)}catch(e){toast(e.message||'Payment was not recorded')}}
 function outB(i){const b=bk(i),d=dueB(b);if(d>0){openS(`<h2 class="foil">Settle the balance first</h2><p>${esc(b.g)} still owes <b>${K(d)}</b>. Check-out stays locked until the folio is paid in full.</p><button class="btn" style="width:100%" onclick="folio(${i})">Record payment</button>`);return}if(!b.checkOutTime){openS(`<h2 class="foil">Record check-out time</h2><div class="lab">A check-out time is required before completing check-out.</div><label class="fld"><span>Check-out time</span><input id="actual-checkout-time" type="time" value="${new Date().toTimeString().slice(0,5)}" required></label><button class="btn" onclick="completeCheckOut(${i})">Confirm check-out</button>`);return}completeCheckOut(i)}
-function completeCheckOut(i){const b=bk(i);if(!b)return;const t=$('#actual-checkout-time')?.value||b.checkOutTime;if(!t){toast('Check-out time is mandatory');return}b.checkOutTime=t;b.actualCheckOutAt=new Date().toISOString();b.st='done';const r=rm(b.room);if(r)r.s='clean';persist();aud('Check-out',b.g+' · Room '+b.room+' · '+t);closeS();render();toast(b.g+' checked out at '+t)}
+async function completeCheckOut(i){const b=bk(i);if(!b)return;if(dueB(b)>0){toast('Settle '+K(dueB(b))+' before check-out');return}const t=$('#actual-checkout-time')?.value||b.checkOutTime||defCheckOutTime();if(!t){toast('Check-out time is mandatory');return}const r=rm(b.room);try{const result=await commitStayMutation({booking:b,room:r,eventType:'booking.checked_out',auditAction:'Check-out',auditDetail:b.g+' · Room '+b.room+' · '+t,apply:()=>{b.checkOutTime=t;b.actualCheckOutAt=new Date().toISOString();b.actualCheckOutDate=new Date().toISOString().slice(0,10);b.st='done';if(r)r.s='clean'}});closeS();render();toast(result.cacheRefreshed===false?'Check-out saved to device storage; compatibility cache refresh failed.':b.g+' checked out at '+t)}catch(error){toast(error.message||'Check-out was not saved')}}
 /* invoice */
 function inv(i){const b=bk(i),s=S.set,net=tt(b),pd=paid(b),d=dueB(b),r=rm(b.room)||{r:0},no=b.iv||(b.iv='INV-'+new Date().getFullYear()+'-'+String(++S.inN).padStart(4,'0')),L=lines(b),tx=s.gst>0?net*s.gst/(100+ +s.gst):0;
 openS(`<div class="invoice" id="invd"><div class="ih"><div>${s.logo?`<img src="${s.logo}" alt="">`:''}<h3>${esc(s.name)}</h3><small>${esc(s.addr)}<br>${esc(s.phone)} · ${esc(s.tax)}</small></div><div class="im"><b>Invoice</b><span>${no}</span><br><small>${dateDDMMYYYY(new Date())}</small></div></div><div style="margin-top:14px"><small>Billed to</small><div style="font:600 21px var(--serif)">${esc(b.g)}</div><small>Room ${b.room} · ${fd(b.in)} to ${fd(b.out)}</small></div><table class="it"><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>${L.map((x,k)=>`<tr><td>${esc(x[0].replace(/ · \d+ nights?/,''))}</td><td>${k?1:nts(b)}</td><td>${K(k?x[1]:r.r)}</td><td>${K(x[1])}</td></tr>`).join('')}</table><div class="itot">${b.dc?`<div><span>Discount</span><span>−${K(b.dc)}</span></div>`:''}${tx?`<div><small>Includes ${s.gst}% tax</small><small>${K(tx)}</small></div>`:''}<div class="g"><span>Total</span><span>${K(net)}</span></div>${(b.pays||[]).map(p=>`<div><span>${p.m} · ${fd(Math.round((new Date(p.at)-new Date().setHours(0,0,0,0))/864e5))}</span><span>−${K(p.a)}</span></div>`).join('')}<div class="g"><span>${d>0?'Balance due':'Balance'}</span><span>${K(d)}</span></div></div>${d<=0?'<div class="stamp">PAID</div>':''}<div class="row" style="align-items:flex-end;margin-top:18px">${s.qr?`<div style="text-align:center"><img src="${s.qr}" alt="" style="width:92px;border-radius:6px"><br><small>Payment QR · confirm balance before paying</small></div>`:'<span></span>'}<small style="max-width:60%">${esc(S.terms.slice(0,170))}…<br><br><i style="font:italic 18px var(--serif);color:#6b5322">Thank you for staying with us.</i></small></div></div><div class="row noprint" style="margin-top:14px;gap:6px"><button class="btn sm ghost" onclick="shr(${i})">Share</button><button class="btn sm ghost" onclick="waS(${i})">WhatsApp</button><button class="btn sm" onclick="nat({type:'printInvoice',html:$('#invd').outerHTML})||window.print()">Print or save PDF</button></div>`)}
@@ -1040,12 +1032,8 @@ const pre=(b.checkInTime||defCheckInTime()||new Date().toTimeString().slice(0,5)
 openS(`<h2 class="foil">Check in</h2><div class="lab">${esc(b.g)} · Room ${esc(String(b.room))}</div>
 <label class="fld"><span>Actual check-in time</span><input id="actual-checkin-time" type="time" value="${pre}" required></label>
 <button class="btn" style="width:100%;margin-top:8px" onclick="completeCheckIn(${i})">Confirm check-in</button>`)}
-function completeCheckIn(i){const b=bk(i)||S.b.find(x=>x.id===i);if(!b)return;
-const t=$('#actual-checkin-time')?.value||b.checkInTime||defCheckInTime();if(!t){toast('Check-in time is mandatory');return}
-const r=rm(b.room);if(r&&r.s!=='ready'&&b.st!=='in'){toast('Room '+b.room+' is not ready yet');return}
-b.checkInTime=t;b.actualCheckInAt=new Date().toISOString();b.actualCheckInDate=new Date().toISOString().slice(0,10);
-b.st='in';if(r)r.s='occ';persist();closeS();render();toast(b.g+' checked in at '+t);aud('Check-in',b.g+' · Room '+b.room+' · '+t)}
-function cxl(i){if(typeof window.cancelBookingById==='function'){window.cancelBookingById(i);return}const b=bk(i);if(!b)return;S.cancelled=Array.isArray(S.cancelled)?S.cancelled:[];S.cancelled.unshift({...b,cancelledAt:new Date().toISOString(),cancelledStatus:'no_refund',refundStatus:'No refund',cancelledFromStatus:b.st});S.b.splice(S.b.indexOf(b),1);aud('Reservation cancelled',b.g+' · Room '+b.room+' · No refund selected');persist();S.tab='more';S.sub='cancelbookings';render();toast('Reservation moved to Cancelled bookings')}
+async function completeCheckIn(i){const b=bk(i)||S.b.find(x=>x.id===i);if(!b)return;const t=$('#actual-checkin-time')?.value||b.checkInTime||defCheckInTime();if(!t){toast('Check-in time is mandatory');return}const r=rm(b.room);if(r&&r.s!=='ready'&&b.st!=='in'){toast('Room '+b.room+' is not ready yet');return}try{const result=await commitStayMutation({booking:b,room:r,eventType:'booking.checked_in',auditAction:'Check-in',auditDetail:b.g+' · Room '+b.room+' · '+t,apply:()=>{b.checkInTime=t;b.actualCheckInAt=new Date().toISOString();b.actualCheckInDate=new Date().toISOString().slice(0,10);b.st='in';if(r)r.s='occ'}});closeS();render();toast(result.cacheRefreshed===false?'Check-in saved to device storage; compatibility cache refresh failed.':b.g+' checked in at '+t)}catch(error){toast(error.message||'Check-in was not saved')}}
+async function cxl(i){const b=bk(i);if(!b)return;const r=rm(b.room);try{const result=await commitStayMutation({booking:b,room:r,eventType:'booking.cancelled',auditAction:'Reservation cancelled',auditDetail:b.g+' · Room '+b.room+' · No refund selected',apply:()=>{S.cancelled=Array.isArray(S.cancelled)?S.cancelled:[];S.cancelled.unshift({...b,cancelledAt:new Date().toISOString(),cancelledStatus:'no_refund',refundStatus:'No refund',cancelledFromStatus:b.st,st:'cancelled'});S.b.splice(S.b.indexOf(b),1);S.tab='more';S.sub='cancelbookings'}});render();toast(result.cacheRefreshed===false?'Cancellation saved to device storage; compatibility cache refresh failed.':'Reservation moved to Cancelled bookings')}catch(error){toast(error.message||'Reservation cancellation was not saved')}}
 V.stays=()=>{if(S.f==='cal')return cal();const F={all:'All',res:'Arriving',in:'In house',done:'Departed'},l=S.b.filter(b=>S.f==='all'||b.st===S.f);return`<h2 style="margin-top:6px;font-size:36px">Stays</h2><div class="chips">${Object.entries(F).map(([k,v])=>`<button class="chip ${S.f===k?'on':''}" onclick="S.f='${k}';render()">${v}</button>`).join('')}<button class="chip" onclick="S.f='cal';render()">Calendar</button></div><div class="grid">${l.map(b=>{const g=gOf(b.g),r=rm(b.room)||{t:''};return`<div class="card"><div class="row"><div><h3>${esc(b.g)}</h3><div class="lab">Room ${b.room} · ${r.t} · ${nts(b)} night${nts(b)>1?'s':''}</div></div><span class="tag ${b.st==='in'?'occ':b.st==='res'?'clean':'ready'}">${{in:'In house',res:'Arriving',done:'Departed'}[b.st]}</span></div><div class="row" style="margin-top:14px;flex-wrap:wrap"><span class="lab">${fd(b.in)} to ${fd(b.out)}${idMissing(g)?' · ID incomplete':''}</span>${guestContactActions(b.g,guestPhoneFor(b.g,g||b))}<span style="display:flex;gap:6px">${b.st==='res'?`<button class="btn sm ghost" onclick="ask('Cancel reservation','This frees the suite for ${esc(b.g)}’s dates.','Cancel it','cxl(${b.id})')">Cancel</button><button class="btn sm" onclick="cin(${b.id})">Check in</button>`:b.st==='in'?`<button class="btn sm ghost" onclick="folio(${b.id})">Folio</button><button class="btn sm" onclick="outB(${b.id})">Check out</button>`:`<button class="btn sm ghost" onclick="inv(${b.id})">Invoice</button>`}</span></div></div>`}).join('')||'<div class="empty">Nothing here yet. Add a reservation below.</div>'}</div><button class="btn fab" onclick="resv()">New reservation</button>`};
 /* rooms */
 V.rooms=()=>`<div class="row"><h2 style="margin-top:6px;font-size:36px">Rooms</h2><button class="btn sm" onclick="roomNew()">Add room</button></div>${S.rooms.length?`<div class="rooms">${S.rooms.map((r,i)=>{const b=S.b.find(b=>b.room===r.n&&b.st==='in');return`<div class="card room" onclick="roomS(${i})"><div class="row"><span class="n">${esc(r.n)}</span><span class="tag ${r.s}">${{ready:'Ready',occ:'Occupied',clean:'Cleaning',out:'Out of service'}[r.s]}</span></div><div class="lab">${esc(r.t)}</div><div style="margin-top:6px;color:var(--gold)">${K(r.r)} a night</div><div class="lab" style="margin-top:8px;min-height:22px">${b?esc(b.g):'&nbsp;'}</div></div>`}).join('')}</div>`:'<div class="empty">No rooms yet. Add your first room.</div>'}`;
@@ -1654,6 +1642,29 @@ async function persistCanonicalStrict(){
   if(!cache.memoryOnly){cache.setItem(SK,serialized);if(cache.getItem(SK)!==serialized)console.warn('[Aurelia Local Cache] Canonical state committed; cache read-back failed and will be recovered at startup.')}
  }catch(cacheError){console.warn('[Aurelia Local Cache] Canonical state committed; cache refresh failed and will be recovered at startup.',cacheError)}
  return committed.snapshot;
+}
+async function commitStayMutation({booking,room,eventType,apply,auditAction,auditDetail}){
+ if(RECOVERY_CHECK_PENDING)throw new Error('Operational writes are paused during recovery.');
+ const before=JSON.stringify(S);
+ try{
+  apply();
+  if(typeof aud==='function')aud(auditAction,auditDetail);
+  const snapshot={tab:S.tab,bk:S.bk};DK.forEach(k=>snapshot[k]=S[k]);
+  const commit=window.AureliaRepositoryCompatibility?.commitOperationalMutation;
+  if(typeof commit!=='function')throw new Error('Canonical local repository is unavailable; lifecycle change was not saved.');
+  const result=await commit({snapshot,bookingId:booking.id,roomId:String(room.n),eventType});
+  return result;
+ }catch(error){
+  if(error&&error.code==='OPERATIONAL_CANONICAL_READBACK_MISMATCH'){
+   RECOVERY_CHECK_PENDING=true;
+   console.error('[Aurelia Lifecycle] Repository read-back mismatch after a committed lifecycle transaction. Writes are frozen.',error);
+   throw new Error('CRITICAL: Device storage read-back is inconsistent. Do not retry or edit; keep the app open for recovery.');
+  }
+  const restored=JSON.parse(before);
+  Object.keys(S).forEach(key=>delete S[key]);
+  Object.assign(S,restored);
+  throw error;
+ }
 }
 let LOCAL_STATE_STATUS='missing';
 window.AureliaAccountingBoundary = Object.freeze({
@@ -5316,6 +5327,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 import { bootstrapper } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
+import { commitOperationalStateMutation } from "./src/storage/repository-operational-mutation-service.mjs";
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
 
@@ -5359,7 +5371,8 @@ try {
        const row = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
        return row?.data || null;
      },
-     settlePayment: input => settlePaymentToRepository({ ...input, bridge: storageBridge })
+     settlePayment: input => settlePaymentToRepository({ ...input, bridge: storageBridge }),
+     commitOperationalMutation: input => commitOperationalStateMutation({ ...input, bridge: storageBridge })
    });
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "APPLICATION_MODULES";
