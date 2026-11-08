@@ -24,6 +24,15 @@
 6. **Add providers independently.** Implement PayU, PhonePe, Paytm, JioPay and CCAvenue one at a time, each with product-version confirmation, adapter contract tests and merchant sandbox evidence.
 7. **Qualify and release.** Complete security review, deployment/IAM, webhook reachability, UAT, refund/reconciliation drills, operational runbooks and signed release authorization. Live collection remains blocked until every gate is evidenced.
 
+
+## Seven-provider merchant acceptance programme
+
+The executable evidence contract is `payment-backend/src/qualification/provider-acceptance.mjs`, with regression tests in `payment-backend/test/provider-acceptance.test.mjs`. It defines provider-specific test environments and scenario IDs, rejects missing/duplicate/failed/stale/malformed evidence, enforces complete seven-operation capability coverage and always returns `liveCollectionAuthorized: false`.
+
+The full execution procedure, common scenario suite, provider-specific security tests, evidence schema, production gates and official documentation entry points are in [Seven-provider Merchant Acceptance](./SEVEN_PROVIDER_ACCEPTANCE.md).
+
+**Important boundary:** this is an evidence validation primitive, not yet a persistent Firestore acceptance register or independent sign-off workflow. Its unit tests use synthetic evidence to verify the evaluator; they are not provider sandbox transactions. The six full-lifecycle adapters can qualify only after merchant UAT evidence. CCAvenue remains blocked because ordinary refund creation and authoritative refund-status operations are not implemented. No provider has merchant acceptance, production eligibility or live authorization at this time.
+
 ## Architecture invariants
 
 - Merchant secrets exist only in managed backend secret storage; never in HTML, JavaScript, local storage or the APK.
