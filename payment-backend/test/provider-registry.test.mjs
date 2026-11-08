@@ -25,6 +25,7 @@ test('six full lifecycle adapters and CCAvenue partial adapter are registered', 
   assert.deepEqual(providerCapabilities('ccavenue'), ['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
   assert.equal(providerQualificationStatus('ccavenue').implemented, true);
   assert.equal(providerQualificationStatus('ccavenue').cloudCheckoutApiEnabled, true);
+  assert.equal(providerQualificationStatus('ccavenue').testCheckout, true);
   assert.equal(providerQualificationStatus('ccavenue').refunds, false);
 });
 
