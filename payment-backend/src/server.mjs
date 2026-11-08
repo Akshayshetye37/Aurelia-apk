@@ -157,10 +157,11 @@ const playIntegrityAuth = new GoogleAuth({
 async function decodePlayIntegrityForEnrollment(integrityToken) {
   const client = await playIntegrityAuth.getClient();
   const tokenResponse = await client.getAccessToken();
+  const accessToken = typeof tokenResponse === 'string' ? tokenResponse : tokenResponse?.token;
   return decodeGooglePlayIntegrityToken({
     packageName: playIntegrityPackageName,
     integrityToken,
-    accessTokenProvider: async () => tokenResponse?.token
+    accessTokenProvider: async () => accessToken
   });
 }
 async function authenticateTenantMembership(req, res, next, allowedRoles, failureCode) {
@@ -290,8 +291,11 @@ app.post('/v1/admin/devices/enrollment/challenge', requireTenantAdmin,
 app.post('/v1/admin/devices/enroll', requireTenantAdmin,
   express.json({ limit: '512kb', strict: true }), async (req, res) => {
     const body = req.body || {};
-    if (Object.keys(body).some(key => !['deviceId','challengeId','publicKeyPem','certificateChainBase64'].includes(key)) ||
-        !['deviceId','challengeId','publicKeyPem','certificateChainBase64'].every(key => Object.hasOwn(body,key))) {
+    if (!playIntegrityPackageName || !playIntegrityCertificateDigests.length) {
+      return fail(res, 503, 'play_integrity_policy_not_configured');
+    }
+    if (Object.keys(body).some(key => !['deviceId','challengeId','publicKeyPem','certificateChainBase64','integrityToken'].includes(key)) ||
+        !['deviceId','challengeId','publicKeyPem','certificateChainBase64','integrityToken'].every(key => Object.hasOwn(body,key))) {
       return fail(res, 400, 'invalid_payment_device_enrollment_request');
     }
     try {
@@ -299,11 +303,14 @@ app.post('/v1/admin/devices/enroll', requireTenantAdmin,
         db, tenantId: req.tenant.id, actorUid: req.actor.uid,
         deviceId: body.deviceId, challengeId: body.challengeId,
         publicKeyPem: body.publicKeyPem, certificateChainBase64: body.certificateChainBase64,
-        attestationVerifierUrl
+        integrityToken: body.integrityToken, expectedPackageName: playIntegrityPackageName,
+        allowedCertificateSha256Digests: playIntegrityCertificateDigests,
+        decodeIntegrityToken: decodePlayIntegrityForEnrollment,
+        requireStrongIntegrity: playIntegrityRequireStrong, attestationVerifierUrl
       });
       return res.status(202).json(result);
     } catch (error) {
-      return fail(res, 422, String(error?.message || 'android_key_attestation_rejected').slice(0, 96));
+      return fail(res, 422, String(error?.message || 'android_device_integrity_rejected').slice(0, 96));
     }
   });
 
