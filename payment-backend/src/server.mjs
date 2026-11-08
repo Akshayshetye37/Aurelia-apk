@@ -1089,7 +1089,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
         orderSnap.data().providerOrderId && orderSnap.data().providerOrderId !== providerOrderId) {
       return fail(res, 409, 'payment_order_binding_mismatch');
     }
-    const status = await adapter.getPaymentStatus({ orderId: providerOrderId, paymentId, ...(provider === 'ccavenue' ? { referenceNo: paymentId } : {}) });
+    const status = await adapter.getPaymentStatus({ orderId: providerOrderId, paymentId });
     const sameOrder = status.orderId === providerOrderId;
     const samePayment = status.paymentId === paymentId;
     const sameCurrency = status.currency === orderSnap.data().currency;
