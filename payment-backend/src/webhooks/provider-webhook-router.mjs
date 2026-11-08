@@ -10,7 +10,7 @@ const PROVIDER_EVENT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,178}[A-Za-z0-9]$/;
 export const safeProviderEventId = value => typeof value === 'string' &&
   value.length >= 2 && value.length <= PROVIDER_EVENT_ID_MAX &&
   PROVIDER_EVENT_ID_RE.test(value) &&
-  !/^(sk_|pk_|whsec_|Bearer\\s)/i.test(value);
+  !/^(sk_|pk_|whsec_|Bearer\s)/i.test(value);
 
 /**
  * Generic raw-body webhook ingress.
