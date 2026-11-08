@@ -79,9 +79,9 @@ test("canonical booking divergence fails closed instead of overwriting either co
   assert.equal(await bridge.fetchEntity("folio", "folio-41"), null);
 });
 
-test("provider and staff-review postings cannot bypass the trusted settlement projector", async () => {
+test("unverified provider and automatic postings cannot bypass the trusted settlement projector", async () => {
   const { bridge, booking, state } = fixture();
-  for (const source of ["staff_review", "verified_gateway", "auto"]) {
+  for (const source of ["verified_gateway", "auto"]) {
     await assert.rejects(settlePaymentToRepository({
       bridge, state, booking, balanceDueFor, amount: 100, method: "UPI",
       source, verificationConfirmed: true
@@ -123,4 +123,44 @@ test("legacy UI cache is refreshed only after the canonical payment snapshot is 
   const cached = JSON.parse(values.get("aurelia_lodge_v2"));
   assert.equal(cached.b[0].p, 125);
   assert.equal(cached.b[0].pays.length, 1);
+});
+
+test("staff-reviewed UPI evidence and folio credit commit together and replay idempotently", async () => {
+  const { bridge, booking, state } = fixture();
+  state.sig = [{
+    id: "signal-41", amt: 250, ref: "UTR-41", payer: "Guest One",
+    st: "pending_review", reviewHistory: []
+  }];
+  const input = {
+    bridge, state, booking, balanceDueFor, amount: 250, method: "UPI",
+    reference: "UTR-41", source: "staff_review", evidenceId: "signal-41",
+    idempotencyKey: "utr:UTR-41", verificationConfirmed: true
+  };
+  const first = await settlePaymentToRepository(input);
+  assert.equal(first.duplicate, false);
+  assert.equal(booking.p, 250);
+  assert.equal(state.sig[0].st, "matched");
+  assert.equal(state.sig[0].b, booking.id);
+  assert.equal(state.sig[0].reviewHistory.length, 1);
+  const snapshot = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  assert.equal(snapshot.data.snapshot.sig[0].st, "matched");
+  assert.equal(snapshot.data.snapshot.b[0].p, 250);
+
+  const retry = await settlePaymentToRepository(input);
+  assert.equal(retry.duplicate, true);
+  assert.equal(booking.p, 250);
+  assert.equal(booking.pays.length, 1);
+  assert.equal(state.sig[0].reviewHistory.length, 1);
+});
+
+test("staff review rejects evidence amount, reference, identity or review-state mismatches", async () => {
+  const { bridge, booking, state } = fixture();
+  state.sig = [{ id: "signal-42", amt: 250, ref: "UTR-42", st: "rejected", reviewHistory: [] }];
+  await assert.rejects(settlePaymentToRepository({
+    bridge, state, booking, balanceDueFor, amount: 250, method: "UPI",
+    reference: "UTR-42", source: "staff_review", evidenceId: "signal-42",
+    idempotencyKey: "utr:UTR-42", verificationConfirmed: true
+  }), error => error.code === "PAYMENT_EVIDENCE_NOT_REVIEWABLE");
+  assert.equal(booking.p, 0);
+  assert.equal(await bridge.fetchEntity("folio", "folio-41"), null);
 });
