@@ -16,16 +16,16 @@ function asDate(value) {
   return null;
 }
 
-function validEvidence(value, now) {
+function validEvidence(value, now, approvedBy, approvedAt) {
   if (!value || typeof value !== 'object' || value.status !== 'PASSED' ||
       typeof value.evidenceRef !== 'string' || value.evidenceRef.trim().length < 8 ||
       value.evidenceRef.length > 500 || /[\u0000-\u001f\u007f]/.test(value.evidenceRef) ||
-      typeof value.verifiedBy !== 'string' || !value.verifiedBy.trim()) return false;
+      typeof value.verifiedBy !== 'string' || !value.verifiedBy.trim() || value.verifiedBy === approvedBy) return false;
   const verifiedAt = asDate(value.verifiedAt);
   const expiresAt = asDate(value.expiresAt);
   return verifiedAt instanceof Date && Number.isFinite(verifiedAt.getTime()) &&
     expiresAt instanceof Date && Number.isFinite(expiresAt.getTime()) &&
-    verifiedAt.getTime() <= now && expiresAt.getTime() > now &&
+    verifiedAt.getTime() <= now && verifiedAt.getTime() <= approvedAt.getTime() && expiresAt.getTime() > now &&
     expiresAt.getTime() > verifiedAt.getTime();
 }
 
@@ -56,7 +56,7 @@ export function evaluateProviderProductionQualification({
     return { ready: false, reason: 'provider_qualification_expired_or_invalid' };
   }
   const evidence = record.evidence;
-  const missing = REQUIRED_PROVIDER_RELEASE_EVIDENCE.filter(key => !validEvidence(evidence?.[key], now.getTime()));
+  const missing = REQUIRED_PROVIDER_RELEASE_EVIDENCE.filter(key => !validEvidence(evidence?.[key], now.getTime(), record.approvedBy, approvedAt));
   if (missing.length) return { ready: false, reason: 'provider_qualification_evidence_incomplete', missing };
   return { ready: true, reason: null, qualifiedAt: approvedAt.toISOString(), expiresAt: expiresAt.toISOString() };
 }
