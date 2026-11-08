@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
-import { commitOperationalStateMutation } from "../src/storage/repository-operational-mutation-service.mjs";
+import { commitOperationalStateMutation, commitRoomStateMutation } from "../src/storage/repository-operational-mutation-service.mjs";
 
 let sequence = 0;
 async function fixture() {
@@ -92,4 +92,29 @@ test("failed repository batch does not claim operational success", async () => {
   bridge.mutateEntities = original;
   assert.equal((await bridge.fetchEntity("booking", "51")).data.st, "res");
   assert.equal((await bridge.fetchEntity("room", "101")).data.s, "ready");
+});
+
+test("standalone housekeeping room status changes commit room entity and snapshot atomically", async () => {
+  const { bridge, snapshot, room } = await fixture();
+  room.s = "clean";
+  const result = await commitRoomStateMutation({
+    bridge, snapshot, roomId: room.n, legacyStorage: null
+  });
+  assert.equal(result.canonical, true);
+  assert.equal(result.room.data.s, "clean");
+  const saved = (await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot;
+  assert.equal(saved.rooms[0].s, "clean");
+});
+
+test("standalone room mutation rejects stale entity versions without overwriting", async () => {
+  const { bridge, snapshot, room } = await fixture();
+  await bridge.mutateEntity({
+    entityType: "room", entityId: "101", expectedVersion: 1, eventType: "room.external_change",
+    mutate: entity => { entity.s = "maintenance"; }
+  });
+  room.s = "clean";
+  await assert.rejects(commitRoomStateMutation({
+    bridge, snapshot, roomId: room.n, legacyStorage: null
+  }), error => error.code === "CANONICAL_ROOM_DIVERGENCE");
+  assert.equal((await bridge.fetchEntity("room", "101")).data.s, "maintenance");
 });
