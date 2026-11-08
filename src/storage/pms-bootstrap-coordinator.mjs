@@ -156,19 +156,34 @@ export class PmsBootstrapCoordinator {
     // If the legacy Web Storage copy was cleared or lost, recover it from the
     // last fully committed canonical snapshot before the UI is allowed to start.
     // This is a recovery bridge, not a claim that the synchronous UI has cut over.
-    const recovery = await this.restoreLegacyStateFromCanonical();
     const supportsAuthority = typeof this.repository.getAuthority === "function" &&
+      typeof this.repository.getAuthorityRecord === "function" &&
       typeof this.repository.beginMigrationAuthority === "function" &&
       typeof this.repository.completeMigrationAuthority === "function" &&
       typeof this.repository.completeFreshCanonicalAuthority === "function" &&
       typeof this.repository.revertMigrationAuthority === "function";
-    const priorAuthority = supportsAuthority ? await this.repository.getAuthority() : null;
+    const authorityRecord = supportsAuthority ? await this.repository.getAuthorityRecord() : null;
+    const priorAuthority = authorityRecord?.value || "legacy";
+    // Canonical is a hard lock: startup never invokes a legacy restore,
+    // refresh, or importer path after this point.
+    const recovery = priorAuthority === "canonical"
+      ? Object.freeze({ restored: false, source: "canonical-authority-locked", migrationAlreadyVerified: true,
+          migrationId: authorityRecord.migrationId || null, freshInstallation: Boolean(authorityRecord.freshInstallation) })
+      : await this.restoreLegacyStateFromCanonical();
     if (supportsAuthority && priorAuthority !== "canonical") {
       await this.repository.beginMigrationAuthority();
     }
     let migration;
     try {
-      migration = recovery.migrationAlreadyVerified
+      migration = priorAuthority === "canonical"
+        ? Object.freeze({
+            status: recovery.freshInstallation ? "READY_CANONICAL" : "MIGRATION_VERIFIED",
+            migrated: false, alreadyMigrated: true, canonicalLocked: true,
+            freshInstallation: Boolean(recovery.freshInstallation),
+            migrationId: recovery.migrationId,
+            entityCount: 0, legacyKeyPreserved: false
+          })
+        : recovery.migrationAlreadyVerified
         ? Object.freeze({
             status: recovery.freshInstallation ? "READY_CANONICAL" : "MIGRATION_VERIFIED",
             migrated: false, alreadyMigrated: true,
@@ -196,7 +211,7 @@ export class PmsBootstrapCoordinator {
     // Project the verified source snapshot before releasing the UI. Projection
     // is resumable and idempotent; it does not authorize synchronous UI cutover.
     let domainProjection = null;
-    if (["MIGRATION_VERIFIED", "READY_CANONICAL"].includes(migration.status) && migration.migrationId) {
+    if (priorAuthority !== "canonical" && ["MIGRATION_VERIFIED", "READY_CANONICAL"].includes(migration.status) && migration.migrationId) {
       const raw = this.legacyImporter.readLegacyState();
       const source = parseLegacyPmsSnapshot(raw);
       const bridge = new PmsRepositoryBridge({
@@ -218,6 +233,9 @@ export class PmsBootstrapCoordinator {
   }
 
   async restoreLegacyStateFromCanonical() {
+    if (await this.repository.getAuthority?.() === "canonical") {
+      throw new Error("Legacy restore is forbidden after canonical storage authority is committed");
+    }
     const existing = this.legacyImporter.readLegacyState();
     if (existing != null && existing !== "") {
       return Object.freeze({ restored: false, source: "legacy-store-present" });
@@ -292,6 +310,9 @@ export class PmsBootstrapCoordinator {
   }
 
   async executeGuardedMigration() {
+    if (await this.repository.getAuthority?.() === "canonical") {
+      throw new Error("Legacy migration/refresh is forbidden after canonical storage authority is committed");
+    }
     const rawAtStart = this.legacyImporter.readLegacyState();
     if (rawAtStart == null || rawAtStart === "") {
       return Object.freeze({ status: "READY_EMPTY", migrated: false, entityCount: 0 });
