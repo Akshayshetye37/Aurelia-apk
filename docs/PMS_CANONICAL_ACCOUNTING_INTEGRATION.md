@@ -34,7 +34,7 @@ The journal proposal's present debit/credit directions are internally balanced a
 
 ## Android release-chain work
 
-`scripts/patch-android.js` now copies \ `android/templates/security/proguard-rules.pro` into the generated app module and wires it into the release build type for Groovy and Kotlin Gradle DSL projects. The rules preserve the Razorpay, Cashfree and Paytm SDK package surfaces and suppress only their missing optional warning classes.
+`scripts/patch-android.js` now copies `android/templates/security/proguard-rules.pro` into the generated app module and wires it into the release build type for Groovy and Kotlin Gradle DSL projects. The rules preserve the Razorpay, Cashfree and Paytm SDK package surfaces and suppress only their missing optional warning classes.
 
 This is a source-generation change, not evidence of a successful Android build. It does not enable R8 minification, create a production keystore, expose signing passwords, extract a signing digest, configure Play Console, or grant IAM roles. Those steps require the actual generated Android project and owner-controlled credentials. The release keystore fingerprint must be extracted from the *Play App Signing certificate* for app-distributed builds (the upload key fingerprint can differ); it must not be copied from a debug key. The backend service identity should receive only the narrow Play Integrity decode permission required by the selected API setup; broad Project Viewer is not a substitute for API authorization and least-privilege IAM review.
 
