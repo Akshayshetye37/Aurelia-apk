@@ -881,6 +881,59 @@ app.get('/v1/admin/providers', requireTenantAdmin, async (req, res) => {
     activeProviderEnvironment: activeSelection.configured ? activeSelection.environment : null });
 });
 
+// CCAvenue credentials can be stored for sandbox integration without
+// registering or activating a provider adapter. This route intentionally
+// performs schema checks only; it does not mark credentials validated.
+app.put('/v1/admin/providers/ccavenue/credentials', requireTenantAdmin,
+  express.json({ limit: '8kb', strict: true }), async (req, res) => {
+    const body = req.body || {};
+    const environment = body.environment;
+    const allowed = new Set([
+      'environment', 'merchantId', 'regId', 'accessCode', 'encryptionKey',
+      'workingKey', 'notificationWorkingKey', 'apiVersion'
+    ]);
+    if (!['test', 'live'].includes(environment) ||
+        Object.keys(body).some(key => !allowed.has(key)) ||
+        typeof body.merchantId !== 'string' || !/^[A-Za-z0-9]{1,20}$/.test(body.merchantId) ||
+        typeof body.accessCode !== 'string' || !/^[A-Za-z0-9]{8,64}$/.test(body.accessCode) ||
+        typeof body.encryptionKey !== 'string' || body.encryptionKey.length < 16 || body.encryptionKey.length > 512 ||
+        typeof body.workingKey !== 'string' || body.workingKey.length < 16 || body.workingKey.length > 512 ||
+        typeof body.notificationWorkingKey !== 'string' || body.notificationWorkingKey.length < 16 ||
+        body.notificationWorkingKey.length > 512 ||
+        (body.regId !== undefined && (typeof body.regId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(body.regId))) ||
+        (body.apiVersion !== undefined && !['1.1', '1.2', '1.3'].includes(body.apiVersion))) {
+      return fail(res, 400, 'invalid_ccavenue_credential_schema');
+    }
+    try {
+      const apiCredentials = {
+        merchantId: body.merchantId,
+        ...(body.regId ? { regId: body.regId } : {}),
+        accessCode: body.accessCode,
+        encryptionKey: body.encryptionKey,
+        workingKey: body.workingKey,
+        apiVersion: body.apiVersion || '1.1'
+      };
+      await storeSecret(providerSecretId(req.tenant.id, 'ccavenue', environment, 'api'),
+        JSON.stringify(apiCredentials));
+      await storeSecret(providerSecretId(req.tenant.id, 'ccavenue', environment, 'webhook'),
+        body.notificationWorkingKey);
+      await providerTenantDoc(req.tenant.id, 'ccavenue', environment).set({
+        provider: 'ccavenue', environment, merchantId: body.merchantId,
+        configured: true, credentialsValidated: false, sandboxTestPassed: false,
+        webhookVerified: false, active: false,
+        credentialSchemaAcceptedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(), updatedBy: req.actor.uid
+      }, { merge: true });
+      return res.status(202).json({
+        accepted: true, provider: 'ccavenue', environment,
+        credentialsStored: true, credentialsValidated: false,
+        adapterRegistered: false, liveCollection: false
+      });
+    } catch {
+      return fail(res, 503, 'ccavenue_credential_storage_unavailable');
+    }
+  });
+
 app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express.json({ limit: '8kb', strict: true }), async (req, res) => {
   const { provider } = req.params, publicEnvironment = envOf(req), environment = adapterEnvironmentOf(provider, publicEnvironment), body = req.body || {};
   const definitions = {
