@@ -37,10 +37,19 @@ export async function createDeviceEnrollmentChallenge({ db, tenantId, actorUid, 
       tenantId, deviceId, actorUid, nonceSha256: sha256(Buffer.from(nonce, "base64url")),
       nonceBase64: nonce, playIntegrityRequestHash, issuedAt, expiresAt, consumedAt: null
     });
-    if (!existing.exists) tx.create(ref, {
-      tenantId, deviceId, ownerUid: actorUid, status: "ENROLLMENT_PENDING",
-      lastSequence: 0, lastAckedSequence: 0, createdAt: issuedAt
-    });
+    if (!existing.exists) {
+      tx.create(ref, {
+        tenantId, deviceId, ownerUid: actorUid, status: "ENROLLMENT_PENDING",
+        enrollmentChallengeId: challengeId,
+        lastSequence: 0, lastAckedSequence: 0, createdAt: issuedAt
+      });
+    } else {
+      tx.update(ref, {
+        enrollmentChallengeId: challengeId,
+        enrollmentChallengeIssuedAt: issuedAt,
+        updatedAt: issuedAt
+      });
+    }
   });
   return { challengeId, nonce, playIntegrityRequestHash, expiresAt: expiresAt.toISOString() };
 }
@@ -64,9 +73,17 @@ export async function verifyAndRegisterDevice({
     throw new TypeError("invalid_payment_device_enrollment");
   }
   const challengeDocument = challengeRef(db, tenantId, deviceId, challengeId);
-  const challengeSnap = await challengeDocument.get();
+  const deviceRef = paymentDeviceRef(db, tenantId, deviceId);
+  const [challengeSnap, deviceSnap] = await Promise.all([
+    challengeDocument.get(), deviceRef.get()
+  ]);
   if (!challengeSnap.exists) throw new Error("payment_device_challenge_not_found");
   const challenge = challengeSnap.data();
+  if (!deviceSnap.exists || deviceSnap.data().ownerUid !== actorUid ||
+      deviceSnap.data().enrollmentChallengeId !== challengeId ||
+      !["ENROLLMENT_PENDING", "PENDING"].includes(deviceSnap.data().status)) {
+    throw new Error("payment_device_enrollment_challenge_superseded");
+  }
   const current = now();
   if (challenge.actorUid !== actorUid || challenge.tenantId !== tenantId ||
       challenge.deviceId !== deviceId || challenge.consumedAt ||
@@ -108,6 +125,7 @@ export async function verifyAndRegisterDevice({
     const [deviceSnap, currentChallenge] = await Promise.all([tx.get(ref), tx.get(challengeDocument)]);
     const data = currentChallenge.exists ? currentChallenge.data() : null;
     if (!deviceSnap.exists || deviceSnap.data().ownerUid !== actorUid ||
+        deviceSnap.data().enrollmentChallengeId !== challengeId ||
         !["ENROLLMENT_PENDING", "PENDING"].includes(deviceSnap.data().status) ||
         !data || data.consumedAt || data.actorUid !== actorUid ||
         data.expiresAt.toDate().getTime() <= current.getTime()) {
@@ -115,7 +133,8 @@ export async function verifyAndRegisterDevice({
     }
     tx.update(challengeDocument, { consumedAt: current });
     tx.update(ref, {
-      status: "PENDING", publicKeySpkiBase64: verified.publicKeySpkiBase64,
+      status: "PENDING", enrollmentChallengeId: null,
+      publicKeySpkiBase64: verified.publicKeySpkiBase64,
       keyAlgorithm: "ECDSA_P256_SHA256",
       attestationVerifiedAt: current.toISOString(),
       attestationSecurityLevel: verified.securityLevel,
@@ -141,7 +160,11 @@ export async function activatePaymentDevice({ db, tenantId, actorUid, deviceId, 
   const ref = paymentDeviceRef(db, tenantId, deviceId);
   await db.runTransaction(async tx => {
     const snap = await tx.get(ref);
+    const currentTime = now();
+    const integrityVerifiedAt = Date.parse(snap.exists ? snap.data().playIntegrityVerifiedAt || "" : "");
     if (!snap.exists || snap.data().ownerUid !== actorUid || snap.data().status !== "PENDING" ||
+        !Number.isFinite(integrityVerifiedAt) || currentTime.getTime() - integrityVerifiedAt > 10 * 60_000 ||
+        currentTime.getTime() < integrityVerifiedAt ||
         !snap.data().publicKeySpkiBase64 || !snap.data().attestationVerifiedAt ||
         snap.data().attestationSecurityLevel !== "TRUSTED_ENVIRONMENT" &&
           snap.data().attestationSecurityLevel !== "STRONG_BOX" ||
@@ -156,7 +179,7 @@ export async function activatePaymentDevice({ db, tenantId, actorUid, deviceId, 
         !snap.data().playIntegrityVerifiedAt) {
       throw new Error("payment_device_attestation_not_ready");
     }
-    tx.update(ref, { status: "ACTIVE", activatedAt: now(), activatedBy: actorUid });
+    tx.update(ref, { status: "ACTIVE", activatedAt: currentTime, activatedBy: actorUid });
   });
   return { deviceId, status: "ACTIVE" };
 }
