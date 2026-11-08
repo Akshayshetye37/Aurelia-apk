@@ -5,8 +5,10 @@ Project root: /
 Active Phase 7 branch: feature/phase-7-pms-persistence
 Base branch: feature/multi-provider-payment-backend
 Audited implementation baseline: 7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301 (8 November 2026)
-Current branch CI: PMS source/build run 42403900585, settlement foundation run 42403905199, and payment backend/container/Terraform run 42403905213 all succeeded on 7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301. No Android release APK or physical-device qualification was performed.
+Current branch CI evidence recorded for this baseline: PMS source/build run 42403900585, settlement foundation run 42403905199, and payment backend/container/Terraform run 42403905213. These checks do not establish current-source Android APK compilation, physical-device acceptance, merchant UAT, production deployment or release signing.
 PHASE 7: tenant/property-scoped canonical list read and deterministic read-only legacy booking shadow planner are implemented. No real snapshot import, canonical UI cutover or financial migration has been performed. uiCutover=false.
+PRODUCTION WORK REMAINING: complete canonical PMS UI persistence cutover and legacy-data parity/import; stable room/booking identity migration; browser/Android repository contract and native instrumentation/device qualification; canonical folio ledger and atomic settlement/refund posting; trusted Pay Bridge authorization and recovery; merchant-specific UAT and full lifecycle reconciliation for each provider; implement CCAvenue only from its official merchant kit; deploy and harden cloud infrastructure, secrets, IAM, monitoring, backup/restore and incident response; complete security/accounting review, release signing and formal acceptance.
+GATEWAY STATUS: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay have backend adapters/routes and test/UAT checkout handoffs; CCAvenue remains catalogue-only. Zero of seven gateways are end-to-end production-qualified. Live gateway collection, automatic settlement, automatic refund posting and cloud sync remain OFF; production release is NOT AUTHORIZED.
 LOCAL IDENTITY: browser/PWA uses a cryptographically generated local identity in IndexedDB with a verified localStorage fallback. Android stores identity encrypted with AES-GCM using an Android Keystore key. Local identity is distinct from Firebase/cloud tenant identity.
 COMPATIBILITY PERSISTENCE: verified legacy saves are mirrored asynchronously to a versioned repository audit entity with an immutable outbox event. The legacy aurelia_lodge_v2 value is preserved. This is a compatibility/audit snapshot, not atomic dual-write of every domain entity.
 PAYMENTS: six backend adapters and cloud API routes are wired (Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay). Android checkout handoff covers all six backend-wired providers: Razorpay, Cashfree, PayU, PhonePe, JioPay and Paytm (test/UAT only). CCAvenue is catalogue-only with no concrete adapter. Zero of seven providers is production-ready; no merchant UAT or complete canonical folio settlement acceptance is recorded.
@@ -33,7 +35,7 @@ The application must never contain merchant credentials, webhook secrets, signin
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Aurelia PMS</title>
 <meta name="application-name" content="Aurelia PMS">
-<meta name="description" content="Aurelia PMS — local-first property management for reservations, guests, rooms and folios, with trusted online payment services.">
+<meta name="description" content="Aurelia PMS — local-first property management for reservations, guests, rooms and folios. Production release is gated on PMS cutover, accounting, provider UAT and device qualification. payment services.">
 <meta name="theme-color" content="#081711">
 <meta name="color-scheme" content="dark">
 <meta name="mobile-web-app-capable" content="yes">
