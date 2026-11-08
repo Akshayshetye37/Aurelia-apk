@@ -228,3 +228,17 @@ test("fresh canonical installation can save, restart and project without legacy 
   assert.equal(restarted.domainProjection.manifest.preservesLegacySnapshot, true);
   assert.ok(await restarted.repository.getEntity("room", "101"));
 });
+
+test("stale fresh-install marker without its canonical snapshot fails closed", async () => {
+  const storage = makeStorage({ [AURELIA_MIGRATION_STATUS_KEY]: "READY_CANONICAL:mig_legacy_00000000" });
+  const app = coordinator("stale-fresh-marker", storage);
+  await assert.rejects(app.initializeApplication(), /Fresh canonical installation marker has no committed full-state snapshot/i);
+  assert.equal(app.status, "FAILED_CLOSED");
+});
+
+test("verified legacy marker without its immutable migration snapshot fails closed", async () => {
+  const storage = makeStorage({ [AURELIA_MIGRATION_STATUS_KEY]: "VERIFIED:mig_legacy_00000000" });
+  const app = coordinator("missing-immutable-migration", storage);
+  await assert.rejects(app.initializeApplication(), /Verified migration marker has no matching immutable source snapshot/i);
+  assert.equal(app.status, "FAILED_CLOSED");
+});

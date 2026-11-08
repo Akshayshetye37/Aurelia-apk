@@ -119,3 +119,13 @@ test('fresh Android installations are not misclassified as failed recovery', asy
   const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /RECOVERY_CHECK_PENDING=!!window\.AureliaNative&&LOCAL_STATE_STATUS==='invalid'/);
 });
+
+test('room-domain bootstrap hydrates the UI from canonical room entities before script replay', async () => {
+  const fs = await import("node:fs");
+  const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const loaderAt = html.indexOf('id="aurelia-async-runtime-bootstrap"');
+  const loader = html.slice(loaderAt, html.indexOf("</script>", loaderAt));
+  assert.match(loader, /hydrateCanonicalRoomSnapshot/);
+  assert.match(loader, /await hydrateRoomRead\(canonicalAudit\.data\.snapshot\)/);
+  assert.ok(loader.indexOf("hydrateRoomRead(canonicalAudit.data.snapshot)") < loader.indexOf("await replayApplicationScripts()"));
+});

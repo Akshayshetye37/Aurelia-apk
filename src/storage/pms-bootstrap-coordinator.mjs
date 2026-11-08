@@ -213,17 +213,21 @@ export class PmsBootstrapCoordinator {
     // Only fall back to the immutable migration bytes if no newer snapshot exists.
     if (markerMatch) {
       const original = await this.repository.readMigrationSnapshot(markerMatch[1]);
-      if (original?.raw && original.sourceKey === AURELIA_LEGACY_STATE_KEY) {
-        parseLegacyPmsSnapshot(original.raw);
-        this.storage.setItem(AURELIA_LEGACY_STATE_KEY, original.raw);
-        if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== original.raw) {
-          throw new Error("Canonical migration recovery failed exact raw snapshot read-back verification");
-        }
-        return Object.freeze({
-          restored: true, source: "canonical-migration-snapshot",
-          migrationAlreadyVerified: false, migrationId: markerMatch[1]
-        });
+      if (!original?.raw || original.sourceKey !== AURELIA_LEGACY_STATE_KEY) {
+        throw new Error("Verified migration marker has no matching immutable source snapshot; startup stopped");
       }
+      parseLegacyPmsSnapshot(original.raw);
+      this.storage.setItem(AURELIA_LEGACY_STATE_KEY, original.raw);
+      if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== original.raw) {
+        throw new Error("Canonical migration recovery failed exact raw snapshot read-back verification");
+      }
+      return Object.freeze({
+        restored: true, source: "canonical-migration-snapshot",
+        migrationAlreadyVerified: false, migrationId: markerMatch[1]
+      });
+    }
+    if (freshMatch) {
+      throw new Error("Fresh canonical installation marker has no committed full-state snapshot; startup stopped");
     }
 
     const migrated = await this.repository.listEntities("legacy");
@@ -322,6 +326,9 @@ export class PmsBootstrapCoordinator {
     }
 
     const existingSnapshot = await this.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+    if (existingSnapshot && (!existingSnapshot.data?.snapshot || typeof existingSnapshot.data.snapshot !== "object" || Array.isArray(existingSnapshot.data.snapshot))) {
+      throw new Error("Canonical audit snapshot record exists without a valid full-state snapshot; startup stopped");
+    }
     if (existingSnapshot?.data?.snapshot && typeof existingSnapshot.data.snapshot === "object" && !Array.isArray(existingSnapshot.data.snapshot)) {
       const canonicalRaw = JSON.stringify(existingSnapshot.data.snapshot);
       parseLegacyPmsSnapshot(canonicalRaw);
