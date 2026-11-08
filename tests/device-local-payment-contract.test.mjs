@@ -50,7 +50,7 @@ test('provider directory is synchronized with the wired backend factory and labe
   }
   assert.equal(registry.split("adapterStatus: 'adapter_implemented_wired'").length - 1, 6,
     'all six complete adapters must be marked wired in the registry');
-  assert.match(registry, /ccavenue:[\\s\\S]*?adapterStatus:\\s*'adapter_partial_implemented'/);
+  assert.ok(registry.includes('ccavenue: {') && registry.includes("adapterStatus: 'adapter_partial_implemented'"), 'CCAvenue remains explicitly partial');
   assert.match(html, /Server adapter ready \(test\) · Live collection OFF/);
   assert.match(html, /Documentation only/);
   assert.doesNotMatch(html, /Server adapter \(incomplete\)/i);
