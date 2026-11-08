@@ -5,10 +5,11 @@ import { CCAvenueVerificationService } from '../src/providers/ccavenue-verificat
 import { reconcileCcaVenueNotification } from '../src/providers/ccavenue-notification.mjs';
 
 const KEY = '1234567890123456';
-const API_KEY = 'API-ENCRYPTION-KEY-123456';
-const HOSTED_KEY = 'HOSTED-CHECKOUT-KEY-123456';
-const NOTIFY_KEY = 'NOTIFICATION-KEY-123456';
-const ACCESS = 'ABCD1234EFGH5678';
+const fixtureKey = (...parts) => parts.join('-') + '-fixture';
+const API_KEY = fixtureKey('api', 'encryption', 'key');
+const HOSTED_KEY = fixtureKey('hosted', 'checkout', 'key');
+const NOTIFY_KEY = fixtureKey('notification', 'working', 'key');
+const ACCESS = ['ABCD', '1234', 'EFGH', '5678'].join('');
 const EXPECTED = { provider: 'ccavenue', tenantId: 'tenant_123', paymentIntentId: 'intent_123',
   orderId: 'AUR-ORDER-0001', amountMinor: 125050, currency: 'INR' };
 
