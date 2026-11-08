@@ -10,6 +10,8 @@
  */
 import { buildPmsOutboxEvent, PMS_ENTITY_TYPES, assertPmsIdentity, assertPmsVersion } from "./pms-repository-contract.mjs";
 
+const LEGACY_SNAPSHOT_ENTITY_ID = "legacy_snapshot:aurelia_lodge_v2";
+
 const clone = value => value == null ? value :
   (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
 
@@ -51,6 +53,11 @@ export class PmsRepositoryBridge {
     assertPmsIdentity(entityId, "entity ID");
     const row = await this.repo.getEntity(entityType, entityId);
     return row ? clone(row) : null;
+  }
+
+  async fetchLegacySnapshot() {
+    this.assertBound();
+    return this.fetchEntity("audit", LEGACY_SNAPSHOT_ENTITY_ID);
   }
 
   async mutateEntity({ entityType, entityId, expectedVersion, eventType, mutate, tenantId, propertyId, deviceId, eventPayload }) {
@@ -120,10 +127,10 @@ export class PmsRepositoryBridge {
       const hash = Array.from(new Uint8Array(bytes), value => value.toString(16).padStart(2, "0")).join("");
       let lastError;
       for (let attempt = 0; attempt < 4; attempt += 1) {
-        const current = await this.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+        const current = await this.fetchEntity("audit", LEGACY_SNAPSHOT_ENTITY_ID);
         try {
           return await this.mutateEntity({
-            entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2", expectedVersion: current?.version ?? 0,
+            entityType: "audit", entityId: LEGACY_SNAPSHOT_ENTITY_ID, expectedVersion: current?.version ?? 0,
             eventType: "legacy.snapshot_saved",
             eventPayload: { sourceKey: "aurelia_lodge_v2", snapshotSha256: hash, byteLength: new TextEncoder().encode(serialized).length },
             mutate: entity => { entity.snapshot = JSON.parse(serialized); entity.snapshotSha256 = hash; entity.sourceKey = "aurelia_lodge_v2"; }
