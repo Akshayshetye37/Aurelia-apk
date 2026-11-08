@@ -1,8 +1,9 @@
+import { StorageFullError } from "./web-storage-adapter.mjs";
 import { PmsRepository, assertPmsIdentity, assertPmsVersion } from "./pms-repository-contract.mjs";
 const DB="aurelia-pms-canonical", V=3, S={meta:"meta",entities:"entities",outbox:"outbox",snapshots:"migration_snapshots",backups:"migration_backups",legacyBackups:"legacy_backup"};
 const clone=x=>typeof structuredClone==="function"?structuredClone(x):JSON.parse(JSON.stringify(x));
-const req=r=>new Promise((ok,no)=>{r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error||new Error("IndexedDB request failed"));});
-const done=t=>new Promise((ok,no)=>{t.oncomplete=ok;t.onabort=t.onerror=()=>no(t.error||new Error("IndexedDB transaction failed"));});
+const req=r=>new Promise((ok,no)=>{r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error?.name==="QuotaExceededError"?new StorageFullError(undefined,{cause:r.error}):(r.error||new Error("IndexedDB request failed")));});
+const done=t=>new Promise((ok,no)=>{t.oncomplete=ok;t.onabort=t.onerror=()=>no(t.error?.name==="QuotaExceededError"?new StorageFullError(undefined,{cause:t.error}):(t.error||new Error("IndexedDB transaction failed")));});
 const obj=(x,n)=>{if(!x||typeof x!=="object"||Array.isArray(x))throw new TypeError(n+" must be object");return x;};
 const safeInt=(x,n,min=0)=>{assertPmsVersion(x,n);if(x<min)throw new TypeError("Invalid "+n);return x;};
 const ident=(x,n)=>assertPmsIdentity(x,n);
