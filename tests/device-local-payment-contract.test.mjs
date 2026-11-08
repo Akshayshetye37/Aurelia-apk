@@ -108,7 +108,9 @@ test('manual folio payment UI commits through the canonical local repository bef
 
   const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
   assert.match(runtime, /repository-settlement-service\.mjs/);
-  assert.match(runtime, /settlePayment: input => settlePaymentToRepository/);
+  assert.match(runtime, /settlePayment: input => \{/);
+  assert.match(runtime, /settlePaymentToRepository\(\{ \.\.\.input, bridge: storageBridge \}\)/);
+  assert.match(runtime, /window\.AureliaLocalOperationalLock\(commit\)/);
 
   const manualCalls = [...html.matchAll(/(?:await\s+)?settlePayment\(\{[^}]*source:'manual'/g)];
   assert.ok(manualCalls.length >= 4, 'all manual folio payment entry points remain connected');
