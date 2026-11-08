@@ -42,7 +42,7 @@ The backend now has **seven provider entries**: Razorpay, Cashfree, PayU, PhoneP
 
 This is backend test-mode availability, not merchant certification or production approval. Provider-specific credentials, real merchant sandbox transactions, webhook delivery, refund UAT, retry/recovery under provider outages and physical Android checkout acceptance must still be completed. Android checkout handoff is currently integrated only for Razorpay and Cashfree; no Android app build is in scope here. The published CCAvenue API v1.3 documents splitRefund only for split-payout transactions, so standard refunds and refund-status polling remain blocked pending the merchant-specific refund API contract. The capability API continues to report live collection, refunds, reconciliation and folio settlement as disabled. Contract tests use deterministic mock provider responses and are not merchant UAT.
 
-See [Hybrid Payment Architecture](../docs/HYBRID_PAYMENT_ARCHITECTURE.md) and [Provider Integration Status](../docs/PROVIDER_INTEGRATION_STATUS.md).
+See [Seven-provider Merchant Acceptance](../docs/SEVEN_PROVIDER_ACCEPTANCE.md), [Hybrid Payment Architecture](../docs/HYBRID_PAYMENT_ARCHITECTURE.md) and [Provider Integration Status](../docs/PROVIDER_INTEGRATION_STATUS.md). The fail-closed evidence evaluator is `src/qualification/provider-acceptance.mjs`; it requires provider/environment-bound, recent, uniquely identified HTTPS evidence for every required scenario and never authorizes live collection. Its acceptance record is not yet persisted or wired to the admin approval workflow.
 
 ## Financial safety
 
