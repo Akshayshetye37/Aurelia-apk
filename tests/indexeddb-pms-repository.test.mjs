@@ -89,3 +89,33 @@ test("schema v1 to v3 migration snapshots every existing store before advancing 
  assert.ok(backups.some(row=>row.sourceStore==="outbox"&&row.sourceKey==="evt-v1"));
  assert.ok(backups.some(row=>row.sourceStore==="migration_snapshots"&&row.sourceKey==="mig-v1"));
 });
+
+test("schema v2 upgrade backfills the dedicated legacy backup store from immutable migration snapshots",async()=>{
+ const name="pms-schema-v2-legacy-backup";
+ const opened=await new Promise((resolve,reject)=>{
+  const request=indexedDB.open(name,2);
+  request.onupgradeneeded=()=>{
+   const db=request.result;
+   db.createObjectStore("meta",{keyPath:"key"});
+   db.createObjectStore("entities",{keyPath:"key"}).createIndex("type","type");
+   const outbox=db.createObjectStore("outbox",{keyPath:"eventId"});
+   outbox.createIndex("status","status");
+   outbox.createIndex("sequenceKey","sequenceKey",{unique:true});
+   db.createObjectStore("migration_snapshots",{keyPath:"id"});
+   db.createObjectStore("migration_backups",{autoIncrement:true});
+  };
+  request.onsuccess=()=>resolve(request.result);
+  request.onerror=()=>reject(request.error);
+ });
+ const seed=opened.transaction("migration_snapshots","readwrite");
+ seed.objectStore("migration_snapshots").put({id:"mig-v2",sourceKey:"aurelia_lodge_v2",raw:snapshot,formatVersion:1});
+ await new Promise((resolve,reject)=>{seed.oncomplete=resolve;seed.onerror=()=>reject(seed.error);seed.onabort=()=>reject(seed.error);});
+ opened.close();
+ const repository=new IndexedDbPmsRepository({indexedDBImpl:indexedDB,databaseName:name});
+ const db=await repository.database();
+ const tx=db.transaction("legacy_backup","readonly");
+ const row=await new Promise((resolve,reject)=>{const q=tx.objectStore("legacy_backup").get("mig-v2");q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
+ await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});
+ assert.equal(db.version,3);
+ assert.equal(row.raw,snapshot);
+});
