@@ -3563,7 +3563,7 @@ pay=async function(i){
  try{
   const result=await settlePayment({booking:b,amount,method,reference,source:'manual',verificationConfirmed:true,idempotencyKey:reference?('ref:'+reference):($('#payment-request-id')?.value||('manual:'+b.id+':'+Date.now()))});
   if(!result||!result.ok){toast(result&&result.message||'Payment was not recorded');return}
-  render();inv(i);toast(result.duplicate?'This payment reference was already recorded':K(amount)+' payment recorded');
+  render();inv(i);toast(result.cacheRefreshed===false?'Payment committed to device storage; compatibility cache refresh failed. Keep the app open and export a backup.':result.duplicate?'This payment reference was already recorded':K(amount)+' payment recorded');
  }catch(e){toast(e&&e.message||'Payment was not recorded')}
 };
 
