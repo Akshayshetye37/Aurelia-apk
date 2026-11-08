@@ -38,3 +38,18 @@ test('UPI payment intent never sends guest or payment metadata to a third-party 
   assert.match(html, /Open UPI app/);
   assert.match(html, /QR display is temporarily disabled/);
 });
+
+
+test("cancellation accounting waits for canonical snapshot commit and verifies the committed snapshot, not the Web Storage cache", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const start = html.indexOf("window.commitCancellationRefund=async function(i){");
+  assert.notEqual(start, -1, "cancellation accounting handler must be async");
+  const end = html.indexOf("\\n};", start);
+  assert.notEqual(end, -1, "cancellation accounting handler must be closed");
+  const handler = html.slice(start, end);
+  assert.match(handler, /const saved=await persistCanonicalStrict\\(\\)/);
+  assert.match(handler, /const savedBooking=saved&&Array\\.isArray\\(saved\\.cancelled\\)/);
+  assert.doesNotMatch(handler, /__aureliaStorage|localStorage/);
+  assert.match(handler, /await persistCanonicalStrict\\(\\)/);
+  assert.match(handler, /RECOVERY_CHECK_PENDING=true/);
+});
