@@ -241,3 +241,5 @@ test('native device acknowledgement re-verifies immutable signed settlement enve
   assert.match(acknowledge, /canonicalJson\(lease\.command\.getJSONObject\("payload"\)\.getJSONObject\("settlement"\)\)/);
   assert.match(acknowledge, /Settlement authorization changed after lease verification/);
 });
+
+test("native SQLite StorageAdapter commits entity versions and outbox rows in one transaction",()=>{const repository=read("android/templates/LocalPmsRepository.java");const plugin=read("android/templates/CapacitorPmsStoragePlugin.java");assert.match(repository,/synchronized void storageTransaction\(JSONArray operations\)/);assert.match(repository,/beginTransactionNonExclusive\(\)/);assert.match(repository,/comparePut/);assert.match(repository,/else if\("outbox"\.equals\(store\)\)/);assert.match(repository,/db\.insertOrThrow\("pms_outbox"/);assert.match(repository,/synchronized JSONObject storageIntegrityCheck\(\)/);for(const method of ["storageGet","storageList","storageTransaction","storageIntegrityCheck","storageGetAuthority","storageSetAuthority"])assert.match(plugin,new RegExp("@PluginMethod public void "+method+"\\(PluginCall call\\)"));});
