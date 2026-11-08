@@ -4,7 +4,6 @@ import { JioPayAdapter } from './jiopay-adapter.mjs';
 import { PaytmAdapter } from './paytm-adapter.mjs';
 import { PhonePeAdapter } from './phonepe-adapter.mjs';
 import { PayUAdapter } from './payu-adapter.mjs';
-import { CCAvenueAdapter } from './ccavenue.mjs';
 import { assertAdapterCapabilities } from './adapter-contract.mjs';
 import { PROVIDERS } from './registry.mjs';
 
@@ -14,7 +13,6 @@ const REQUIRED_OPERATIONS = Object.freeze([
   'validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus',
   'verifyWebhook', 'createRefund', 'getRefundStatus'
 ]);
-const CCA_VENUE_OPERATIONS = Object.freeze(['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
 const FACTORIES = Object.freeze({
   razorpay: options => new RazorpayAdapter(options),
   cashfree: options => new CashfreeAdapter(options),
@@ -22,14 +20,12 @@ const FACTORIES = Object.freeze({
   phonepe: options => new PhonePeAdapter(options),
   paytm: options => new PaytmAdapter(options),
   jiopay: options => new JioPayAdapter(options),
-  ccavenue: options => new CCAvenueAdapter(options)
 });
 
 export function createProviderAdapter(providerId, options) {
   const factory = FACTORIES[providerId];
   if (!factory) throw new Error('provider_adapter_unavailable');
   const adapter = factory(options);
-  assertAdapterCapabilities(adapter, providerId === 'ccavenue' ? CCA_VENUE_OPERATIONS : REQUIRED_OPERATIONS);
   return adapter;
 }
 
@@ -38,7 +34,6 @@ export function implementedProviderAdapters() {
 }
 
 export function providerCapabilities(providerId) {
-  return FACTORIES[providerId] ? [...(providerId === 'ccavenue' ? CCA_VENUE_OPERATIONS : REQUIRED_OPERATIONS)] : null;
 }
 
 export function providerQualificationStatus(providerId) {
@@ -48,8 +43,8 @@ export function providerQualificationStatus(providerId) {
     testCheckout: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
     liveCollection: false,
     cloudCheckoutApiEnabled: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
-    refunds: providerId !== 'ccavenue',
-    refundStatus: providerId !== 'ccavenue',
+    refunds: true,
+    refundStatus: true,
     merchantUatRequired: true,
     canonicalFolioPostingRequired: true,
     physicalDeviceAcceptanceRequired: true
