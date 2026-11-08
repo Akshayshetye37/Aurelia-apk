@@ -162,6 +162,9 @@ test('housekeeping room status changes await a canonical room-plus-snapshot tran
   assert.ok(start >= 0 && end > start);
   const handler = html.slice(start, end);
   assert.match(handler, /await commitRoomStatusMutation/);
-  assert.match(handler, /eventType:'room\.status_changed'/);
   assert.doesNotMatch(handler, /persist\(\)/);
+  const helperStart = html.indexOf('async function commitRoomStatusMutation(');
+  const helperEnd = html.indexOf('\nlet LOCAL_STATE_STATUS', helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart);
+  assert.match(html.slice(helperStart, helperEnd), /eventType:'room\.status_changed'/);
 });
