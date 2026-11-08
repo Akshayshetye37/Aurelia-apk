@@ -11,6 +11,7 @@ export class IndexedDbStorageAdapter extends StorageAdapter{
   const ops=[];
   const writer={
    put(store,key,value){ops.push({type:"put",store,key,value:clone(value)});},
+   compareAndPut(store,key,expectedVersion,value){ops.push({type:"comparePut",store,key,expectedVersion,value:clone(value)});},
    meta:{put(key,value){ops.push({type:"put",store:"meta",key,value:clone(value)});}},
    backup:{put(key,value){ops.push({type:"put",store:"legacy_backup",key,value:clone(value)});}}
   };
@@ -19,7 +20,7 @@ export class IndexedDbStorageAdapter extends StorageAdapter{
   if(result&&typeof result.then==="function")throw new TypeError("StorageAdapter transaction callback must be synchronous; stage DB writes only");
   if(!ops.length)return result;
   const stores=[...new Set(ops.map(x=>x.store))],db=await this.repository.database(),tx=db.transaction(stores,"readwrite"),completion=done(tx);
-  try{for(const op of ops)tx.objectStore(op.store).put(rowFor(op.store,op.key,op.value));await completion;return result;}
+  try{for(const op of ops){if(op.type==="comparePut"){if(op.store!=="entities")throw new TypeError("compareAndPut is supported only for entities");const current=await req(tx.objectStore(op.store).get(op.key)),actual=current?.version||0;if(actual!==op.expectedVersion)throw Object.assign(new Error("Storage entity version conflict"),{code:"ENTITY_VERSION_CONFLICT",actualVersion:actual});}tx.objectStore(op.store).put(rowFor(op.store,op.key,op.value));}await completion;return result;}
   catch(e){try{tx.abort()}catch{}await completion.catch(()=>{});throw e;}
  }
  async get(store,key){if(!STORES.has(store))throw new TypeError("Unsupported storage store: "+store);const db=await this.repository.database(),tx=db.transaction(store,"readonly"),completion=done(tx),value=await req(tx.objectStore(store).get(key));await completion;return value==null?null:clone(value);}
