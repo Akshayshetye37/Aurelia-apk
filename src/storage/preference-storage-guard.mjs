@@ -2,9 +2,10 @@
  * Narrow Web Storage boundary for user-interface preferences only.
  * Business state, backups, photos, and migration data belong in repositories.
  */
-export const PREFERENCE_STORAGE_KEYS = Object.freeze(new Set([
+export const PREFERENCE_STORAGE_KEYS = Object.freeze([
   "theme", "lang", "language", "aurelia_theme", "aurelia_lang"
-]));
+]);
+const PREFERENCE_KEY_SET = new Set(PREFERENCE_STORAGE_KEYS);
 
 export function installPreferenceStorageGuard({
   storage = globalThis.localStorage,
@@ -15,7 +16,7 @@ export function installPreferenceStorageGuard({
   const original = storage.setItem.bind(storage);
   const guarded = function(key, value) {
     const name = String(key);
-    if (!PREFERENCE_STORAGE_KEYS.has(name)) {
+    if (!PREFERENCE_KEY_SET.has(name)) {
       const error = new Error("Non-preference localStorage write rejected: " + name);
       error.name = "StorageAuthorityViolation";
       if (mode === "development" || mode === "test") throw error;
