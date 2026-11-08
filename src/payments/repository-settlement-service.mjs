@@ -1,17 +1,44 @@
 /**
- * Async canonical folio settlement.
+ * Atomic local payment-to-folio settlement.
  *
- * The existing settlement service remains the policy/validation authority.
- * This adapter executes it against a repository-loaded folio snapshot and
- * commits the folio entity plus its immutable outbox event in one transaction.
- * It deliberately does not mirror the committed result into localStorage.
+ * A payment is not considered committed until the booking, folio projection,
+ * and complete recoverable PMS snapshot have been written in one repository
+ * transaction (SQLite on Android / IndexedDB in browser and PWA). No
+ * localStorage write participates in this transaction.
  */
 import { settlePayment, moneyToPaise } from "./settlement-service.mjs";
 
-const DUPLICATE_ABORT = "REPOSITORY_SETTLEMENT_DUPLICATE";
 const clone = value => value == null ? value :
   (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
+const SNAPSHOT_TYPE = "audit";
+const SNAPSHOT_ID = "legacy_snapshot:aurelia_lodge_v2";
 
+function fail(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+function bookingKey(booking) {
+  if (booking?.id == null || String(booking.id).trim() === "") {
+    throw new TypeError("A stable booking ID is required for canonical settlement");
+  }
+  return String(booking.id);
+}
+
+function sameJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/**
+ * Posts a manually/staff-confirmed payment to canonical local storage.
+ *
+ * The audit snapshot is part of the same multi-entity transaction. This is
+ * essential because startup recovery still needs a complete state image while
+ * the remaining legacy screens are being migrated. A crash can therefore
+ * leave neither a folio credit without its recovery snapshot nor a snapshot
+ * claiming a payment that was not committed.
+ */
 export async function settlePaymentToRepository({
   bridge,
   state,
@@ -26,8 +53,8 @@ export async function settlePaymentToRepository({
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" ||
-      typeof bridge.mutateFolioState !== "function") {
-    throw new TypeError("A bound PMS repository bridge is required");
+      typeof bridge.mutateEntities !== "function") {
+    throw new TypeError("A bound transactional PMS repository bridge is required");
   }
   if (!state || !Array.isArray(state.b) || !booking || !state.b.includes(booking)) {
     throw new TypeError("Booking must belong to the supplied live PMS state");
@@ -35,75 +62,159 @@ export async function settlePaymentToRepository({
   if (typeof balanceDueFor !== "function") {
     throw new TypeError("A canonical folio balance calculator is required");
   }
+  if (source === "staff_review" || source === "verified_gateway" || source === "auto") {
+    throw fail("TRUSTED_SETTLEMENT_PATH_REQUIRED",
+      "Provider and staff-review settlements require the separately authorized trusted settlement projector.");
+  }
 
-  const entityId = String(booking.folioId || "booking-" + String(booking.id));
-  const existing = await bridge.fetchEntity("folio", entityId);
-  const expectedVersion = existing?.version ?? 0;
+  const bookingId = bookingKey(booking);
+  const folioId = String(booking.folioId || "booking-" + bookingId);
   const amountPaise = moneyToPaise(amount, "Payment amount");
-  const eventPayload = {
-    bookingId: entityId,
-    amountPaise,
-    method: String(method || "").trim(),
-    reference: String(reference || "").trim(),
+  const [snapshotRow, bookingRow, folioRow] = await Promise.all([
+    bridge.fetchEntity(SNAPSHOT_TYPE, SNAPSHOT_ID),
+    bridge.fetchEntity("booking", bookingId),
+    bridge.fetchEntity("folio", folioId)
+  ]);
+
+  // The durable full-state snapshot, when present, is the recovery authority.
+  // Domain booking data must agree with it; silently choosing either divergent
+  // copy would conceal a lost update.
+  const canonicalState = snapshotRow?.data?.snapshot
+    ? clone(snapshotRow.data.snapshot)
+    : clone(state);
+  if (!Array.isArray(canonicalState.b)) {
+    throw fail("CANONICAL_SNAPSHOT_INVALID", "Canonical PMS snapshot has no booking collection");
+  }
+  const canonicalIndex = canonicalState.b.findIndex(row => String(row?.id) === bookingId);
+  if (canonicalIndex < 0) {
+    throw fail("BOOKING_NOT_FOUND", "Booking is missing from the canonical PMS snapshot");
+  }
+  const snapshotBooking = canonicalState.b[canonicalIndex];
+  if (bookingRow?.data && !sameJson(bookingRow.data, snapshotBooking)) {
+    throw fail("CANONICAL_BOOKING_DIVERGENCE",
+      "Canonical booking entity and recovery snapshot disagree; refresh the PMS before recording payment.");
+  }
+
+  const workingBooking = clone(bookingRow?.data || snapshotBooking);
+  canonicalState.b[canonicalIndex] = workingBooking;
+  if (!Array.isArray(canonicalState.aud)) canonicalState.aud = [];
+  const auditRows = [];
+  const result = settlePayment({
+    state: canonicalState,
+    booking: workingBooking,
+    amount,
+    method,
+    reference,
     source,
+    idempotencyKey,
+    balanceDue: balanceDueFor(workingBooking),
+    verificationConfirmed,
+    persist: () => {},
+    audit: (action, detail) => {
+      const row = { a: action, d: detail, at: new Date(now()) };
+      canonicalState.aud.unshift(row);
+      auditRows.push(row);
+    },
+    now
+  });
+
+  if (result.duplicate) {
+    // A duplicate is safe only if the canonical record already contains it.
+    Object.assign(booking, clone(workingBooking));
+    return Object.freeze({ ...result, duplicate: true, canonical: true,
+      bookingVersion: bookingRow?.version ?? 0, folioVersion: folioRow?.version ?? 0 });
+  }
+
+  const paidPaise = moneyToPaise(workingBooking.p || 0, "Updated folio paid total", { allowZero: true });
+  const balanceDuePaise = moneyToPaise(balanceDueFor(workingBooking), "Updated folio balance", { allowZero: true });
+  const committedAt = now();
+  const snapshotPayload = {
+    sourceKey: "aurelia_lodge_v2",
+    operation: "payment_posted",
+    bookingId,
+    folioId,
+    amountPaise,
     idempotencyKey: String(idempotencyKey || "").trim() || null
   };
 
-  let settlementResult = null;
-  let nextToday = Number(state.today || 0);
-  const auditRows = [];
-
-  try {
-    const committed = await bridge.mutateFolioState({
-      entityId,
-      expectedVersion,
+  const committed = await bridge.mutateEntities([
+    {
+      entityType: "booking",
+      entityId: bookingId,
+      expectedVersion: bookingRow?.version ?? 0,
+      eventType: "booking.payment_posted",
+      eventPayload: snapshotPayload,
+      mutate: entity => Object.assign(entity, clone(workingBooking))
+    },
+    {
+      entityType: "folio",
+      entityId: folioId,
+      expectedVersion: folioRow?.version ?? 0,
       eventType: "folio.payment_posted",
-      eventPayload,
-      mutate: folio => {
-        Object.assign(folio, clone(existing?.data ?? booking));
-        const workingState = { b: [folio], today: nextToday, aud: [] };
-        settlementResult = settlePayment({
-          state: workingState,
-          booking: folio,
-          amount,
-          method,
-          reference,
-          source,
-          idempotencyKey,
-          balanceDue: balanceDueFor(folio),
-          verificationConfirmed,
-          persist: () => {},
-          audit: (action, detail) => auditRows.push({ a: action, d: detail, at: new Date(now()) }),
-          now
-        });
-        if (settlementResult.duplicate) {
-          const error = new Error("Payment was already committed to this folio");
-          error.code = DUPLICATE_ABORT;
-          throw error;
-        }
-        nextToday = workingState.today;
-        if (auditRows.length) {
-          folio.auditEvents = [...(Array.isArray(folio.auditEvents) ? folio.auditEvents : []), ...auditRows.map(clone)];
-        }
-        return settlementResult;
+      eventPayload: snapshotPayload,
+      mutate: entity => Object.assign(entity, {
+        id: folioId,
+        bookingId,
+        paymentRows: clone(workingBooking.pays || []),
+        paidPaise,
+        balanceDuePaise,
+        updatedAt: committedAt
+      })
+    },
+    {
+      entityType: SNAPSHOT_TYPE,
+      entityId: SNAPSHOT_ID,
+      expectedVersion: snapshotRow?.version ?? 0,
+      eventType: "pms.snapshot_payment_committed",
+      eventPayload: snapshotPayload,
+      mutate: entity => {
+        entity.sourceKey = "aurelia_lodge_v2";
+        entity.snapshot = clone(canonicalState);
+        entity.updatedAt = committedAt;
       }
-    });
+    }
+  ]);
 
-    Object.assign(booking, clone(committed.entity.data));
-    state.today = nextToday;
-    if (Array.isArray(state.aud)) {
-      for (const row of auditRows.slice().reverse()) state.aud.unshift(clone(row));
-    }
-    return Object.freeze({
-      ...committed.result,
-      entity: committed.entity,
-      eventSequence: committed.entity.version
-    });
-  } catch (error) {
-    if (error?.code === DUPLICATE_ABORT && settlementResult) {
-      if (existing?.data) Object.assign(booking, clone(existing.data));
-      return Object.freeze({ ...settlementResult, entity: existing, eventSequence: existing?.version ?? 0 });
-    }
-    throw error;
+  // Exact read-back is mandatory before the UI is told the payment succeeded.
+  const [storedBooking, storedFolio, storedSnapshot] = await Promise.all([
+    bridge.fetchEntity("booking", bookingId),
+    bridge.fetchEntity("folio", folioId),
+    bridge.fetchEntity(SNAPSHOT_TYPE, SNAPSHOT_ID)
+  ]);
+  if (!storedBooking || !storedFolio || !storedSnapshot ||
+      !sameJson(storedBooking.data, workingBooking) ||
+      !sameJson(storedFolio.data.paymentRows, workingBooking.pays || []) ||
+      storedFolio.data.paidPaise !== paidPaise ||
+      storedFolio.data.balanceDuePaise !== balanceDuePaise ||
+      !sameJson(storedSnapshot.data.snapshot, canonicalState)) {
+    throw fail("PAYMENT_CANONICAL_READBACK_MISMATCH",
+      "Payment transaction committed but exact canonical read-back failed. Stop payment entry and reconcile before retrying.");
   }
+
+  // Keep the active UI references coherent only after durable commit/read-back.
+  const liveBookings = state.b;
+  const merged = canonicalState.b.map(saved => {
+    const live = liveBookings.find(row => String(row?.id) === String(saved?.id));
+    if (live) {
+      Object.assign(live, clone(saved));
+      return live;
+    }
+    return clone(saved);
+  });
+  liveBookings.splice(0, liveBookings.length, ...merged);
+  state.today = canonicalState.today;
+  if (Array.isArray(state.aud)) state.aud.splice(0, state.aud.length, ...clone(canonicalState.aud));
+  Object.assign(booking, clone(workingBooking));
+
+  return Object.freeze({
+    ...result,
+    duplicate: false,
+    canonical: true,
+    entity: storedBooking,
+    folio: storedFolio,
+    snapshotVersion: storedSnapshot.version,
+    bookingVersion: committed.entities[0].version,
+    folioVersion: committed.entities[1].version,
+    eventSequence: committed.entities[1].version
+  });
 }
