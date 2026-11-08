@@ -22,6 +22,9 @@ test('verified capture creates balanced clearing-to-receivable journal, not reve
     ...base, grossAmountMinor: 12500, providerPaymentId: 'pay_123456'
   });
   assert.equal(entry.type, JOURNAL_TYPES.CHARGE_CAPTURE);
+  assert.equal(entry.postingEligible, false);
+  assert.equal(entry.postingAuthorization, 'NOT_AUTHORIZED');
+  assert.equal(entry.chartOfAccountsStatus, 'PROPOSAL_ONLY');
   assert.equal(entry.debitTotalMinor, 12500);
   assert.equal(entry.creditTotalMinor, 12500);
   assert.deepEqual(entry.lines, [
