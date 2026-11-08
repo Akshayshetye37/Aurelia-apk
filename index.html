@@ -8,7 +8,7 @@ Latest verification: [GitHub Actions run 42492883511](https://github.com/Akshays
 Recovery point: backup/pre-local-first-cutover-2026-11-07 at 8b74f3d2cb723237b5f3a8901e22ef7370552812; backup/pre-release-html-update-2026-11-07 preserves the pre-documentation-update snapshot.
 CI evidence: source-tests-web and settlement-foundation passed on the exact verified commit above. The workflow does not build or qualify an Android APK.
 LOCAL IDENTITY: browser/PWA uses a cryptographically generated local identity in IndexedDB with a verified localStorage fallback. Android stores identity encrypted with AES-GCM using an Android Keystore key. Local identity is distinct from Firebase/cloud tenant identity.
-LOCAL-FIRST SNAPSHOT WRITES: ordinary persist() and persistCanonicalStrict() serialize complete PMS snapshots through PmsLocalFirstWriteCoordinator into the canonical local repository, verify exact read-back, and refresh aurelia_lodge_v2 only afterward as a compatibility cache. Snapshot writes are ordered with the operational mutation lock and fail closed on repository or read-back failure. Room and guest UI collections now hydrate from canonical entities; other domain collections remain snapshot-backed.
+LOCAL-FIRST SNAPSHOT WRITES: ordinary persist() and persistCanonicalStrict() serialize complete PMS snapshots through PmsLocalFirstWriteCoordinator into the canonical local repository, verify exact read-back, and refresh the in-memory canonical snapshot cache only after repository commit. Snapshot writes are ordered with the operational mutation lock and fail closed on repository or read-back failure. Room and guest UI collections now hydrate from canonical entities; other domain collections remain snapshot-backed.
 STRICT ASYNC WORKFLOWS: JSON import/rollback, full backup restore/rollback, manual folio payments, staff-reviewed UPI approval, guest profile create/update/retire and primary reservation creation await canonical repository commit and exact read-back before confirming success. Manual payment and UPI approval atomically commit booking, folio projection and full recovery snapshot. Reservation creation atomically commits guest, booking, folio projection and the full recovery snapshot. Legacy localStorage is refreshed only as a compatibility cache after commit; other operational UI mutations remain to be migrated.
 RECOVERY: startup prefers the latest committed canonical audit snapshot over the immutable first-migration bytes, validates the complete PMS schema and verifies exact read-back. The immutable migration snapshot is a fallback only when no newer committed snapshot exists. Missing or inconsistent recovery evidence fails closed.
 CUTOVER: uiCutover=false globally. Room status/catalogue commands and guest profile create/update/retire commands use transactional domain entities. Room and guest collections are hydrated from verified canonical entities before application scripts replay. Payment, reservation, lifecycle, inventory, expense and restaurant paths have varying levels of domain-entity transactions. Remaining synchronous accounting and domain mutation paths must be migrated before the repository becomes the sole operational source of truth.
@@ -772,7 +772,7 @@ function settlePayment(input){
   if(RECOVERY_CHECK_PENDING)throw new Error('Payment storage is paused during recovery');
   persist();
   let raw,saved;
-  try{raw=(window.__aureliaStorage||localStorage).getItem(SK);saved=raw?JSON.parse(raw):null}catch(e){throw new Error('Could not verify the saved payment record')}
+  try{raw=window.AureliaPmsSnapshotFacade.readCache();saved=raw?JSON.parse(raw):null}catch(e){throw new Error('Could not verify the saved payment record')}
   const savedBooking=saved&&Array.isArray(saved.b)?saved.b.find(x=>x.id===b.id):null;
   if(!savedBooking||Number(savedBooking.p)!==Number(b.p)||JSON.stringify(savedBooking.pays||[])!==JSON.stringify(b.pays||[])||JSON.stringify(savedBooking.payments||[])!==JSON.stringify(b.payments||[])||Number(saved.today||0)!==Number(S.today||0)||JSON.stringify(saved.aud||[])!==JSON.stringify(S.aud||[]))throw new Error('Payment could not be verified in device storage');
  };
@@ -1112,9 +1112,9 @@ function sv(){$$('[data-s]').forEach(e=>S.set[e.dataset.s]=e.value);S.set.name=S
 function demoRm(){ask('Remove demo data','Deletes the sample rooms, guests, bookings, stock, dishes, expenses and takings. Anything you added yourself stays.','Remove demo data','demoGo()')}
 function demoGo(){S.b=S.b.filter(x=>!x.demo);S.g=S.g.filter(x=>!x.demo);S.rooms=S.rooms.filter(x=>!x.demo);S.exp=S.exp.filter(x=>!x.demo);S.inv=S.inv.filter(x=>!x.demo);Object.keys(MENU).forEach(c=>{MENU[c]=MENU[c].filter(m=>!m[3]);if(!MENU[c].length)delete MENU[c]});S.t.forEach(t=>{if(t.demo){t.o=[];t.demo=0}});S.hist=[0,0,0,0,0,0];S.today=0;S.aud=[];aud('Demo data removed','');render();toast('Demo data removed')}
 function confirmResetAll(){if(!confirm('Erase all data on this device? A backup will be attempted first.'))return;try{if(typeof runBackup==='function')runBackup(true)}catch(e){}resetAll()}
-function resetAll(){try{(window.__aureliaStorage||localStorage).removeItem(SK)}catch(e){}location.reload()}
+function resetAll(){toast("Direct local reset is disabled. Use the verified backup and restore workflow.");}
 /* backup engine */
-const DK=['rooms','b','t','today','hist','g','exp','inv','led','aud','fe','set','terms','sig','sales','au','inN','menu','day','cancelled','tableGuests','tableRooms','restaurant','financialLedger'],SK='aurelia_lodge_v2',hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=(h*33^s.charCodeAt(i))>>>0;return h.toString(36)};let BKB=null;
+const DK=['rooms','b','t','today','hist','g','exp','inv','led','aud','fe','set','terms','sig','sales','au','inN','menu','day','cancelled','tableGuests','tableRooms','restaurant','financialLedger'],SK='__AURELIA_CANONICAL_MEMORY_CACHE__',hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=(h*33^s.charCodeAt(i))>>>0;return h.toString(36)};let BKB=null;
 const curHash=()=>hashS(JSON.stringify(DK.map(k=>S[k])));
 function photoKeysIn(value,out=new Set(),seen=new Set()){if(!value||typeof value!=='object'||seen.has(value))return out;seen.add(value);if(!Array.isArray(value)&&typeof value.imgKey==='string'&&value.imgKey)out.add(value.imgKey);for(const v of Object.values(value))photoKeysIn(v,out,seen);return out}
 function validatePhotoArchive(data,archive){const keys=photoKeysIn(data),missing=[];if(!archive||typeof archive!=='object'||Array.isArray(archive))archive={};for(const key of keys){if(typeof archive[key]!=='string'||!/^data:image\//i.test(archive[key]))missing.push(key)}if(missing.length)throw new Error(missing.length+' original ID photo(s) are missing from the archive. No backup/restore was completed.');return keys.size}
@@ -1562,7 +1562,7 @@ async function restoreGo(){
   (Array.isArray(d.aud)?d.aud:[]).forEach(x=>{if(x&&typeof x==='object'&&!S.aud.some(y=>JSON.stringify(y)===JSON.stringify(x)))S.aud.push(x)});
   // Persist once after all collections have been prepared, then verify durable read-back.
   await persistCanonicalStrict();
-  const stored=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
+  const stored=JSON.parse(window.AureliaPmsSnapshotFacade.readCache()||'null');
   if(!stored||DK.some(k=>JSON.stringify(stored[k])!==JSON.stringify(S[k])))throw new Error('Imported records did not pass durable storage read-back verification.');
   S.rst=null;S.rstMode=null;render();closeS();
   toast('JSON import: '+roomsAdded+' rooms, '+ga+' guests, '+ba+' bookings, '+expensesAdded+' expenses, '+inventoryAdded+' stock items; '+sk+' invalid/duplicate rows skipped.'+(roomsCreatedForBooking?' Created '+roomsCreatedForBooking+' placeholder room(s); review their room type and rate.':''));
@@ -1573,7 +1573,7 @@ async function restoreGo(){
    id=importOldId;
    try{
     await persistCanonicalStrict();
-    const rollback=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
+    const rollback=JSON.parse(window.AureliaPmsSnapshotFacade.readCache()||'null');
     if(!rollback||DK.some(k=>JSON.stringify(rollback[k])!==JSON.stringify(S[k])))throw new Error('Rollback read-back verification failed.');
    }catch(rollbackError){
     console.error('JSON import rollback failed',rollbackError);
@@ -1611,7 +1611,7 @@ async function restoreGo(){
   ['rooms','b','g','t','exp','inv','aud'].forEach(k=>{if(!Array.isArray(S[k]))throw new Error('Restored '+k+' data is invalid')});
   id=Math.max(id,0,...S.b.map(b=>+b.id||0));
   await persistCanonicalStrict();
-  const saved=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
+  const saved=JSON.parse(window.AureliaPmsSnapshotFacade.readCache()||'null');
   if(!saved||DK.some(k=>JSON.stringify(saved[k])!==JSON.stringify(S[k])))throw new Error('Saved application state did not pass read-back verification.');
   S.rst=null;S.rstMode=null;location.reload();return true;
  }catch(e){
@@ -1621,7 +1621,7 @@ async function restoreGo(){
   DK.forEach(k=>{if(liveBefore[k]!==undefined)S[k]=liveBefore[k]});id=oldId;
   try{
    await persistCanonicalStrict();
-   const rollbackSaved=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
+   const rollbackSaved=JSON.parse(window.AureliaPmsSnapshotFacade.readCache()||'null');
    if(!rollbackSaved||DK.some(k=>JSON.stringify(rollbackSaved[k])!==JSON.stringify(S[k])))throw new Error('State rollback read-back verification failed');
   }catch(rollbackError){console.error('State rollback failed',rollbackError);rollbackFailures.push('application data')}
   if(rollbackFailures.length){
@@ -1894,7 +1894,7 @@ window.AureliaAccountingBoundary = Object.freeze({
  getBalanceDue:booking=>dueB(booking),
  persistStrict:()=>persistStrict(),
  readBack:()=>{
-  const raw=(window.__aureliaStorage||localStorage).getItem(SK);
+  const raw=window.AureliaPmsSnapshotFacade.readCache();
   if(!raw)throw new Error('No durable PMS state is available for settlement read-back.');
   return JSON.parse(raw);
  },
@@ -1903,7 +1903,7 @@ window.AureliaAccountingBoundary = Object.freeze({
 });
 function loadAll(){
  let raw=window.__AURELIA_CANONICAL_BOOTSTRAP_RAW||null;
- if(!raw){try{raw=(window.__aureliaStorage||localStorage).getItem(SK)}catch(e){LOCAL_STATE_STATUS='invalid';return}}
+ if(!raw){LOCAL_STATE_STATUS='missing';return}
  if(!raw){LOCAL_STATE_STATUS='missing';return}
  try{
   const o=JSON.parse(raw);
@@ -1912,7 +1912,7 @@ function loadAll(){
   useMenu(S.menu);S.aud.forEach(a=>a.at=new Date(a.at));S.led.forEach(l=>l[3]=new Date(l[3]));id=Math.max(id,...S.b.map(b=>b.id));LOCAL_STATE_STATUS='valid';
  }catch(e){
   LOCAL_STATE_STATUS='invalid';
-  try{(window.__aureliaStorage||localStorage).setItem(SK+'_recovery_quarantine_'+Date.now(),raw)}catch(_){}
+  window.AURELIA_INVALID_SNAPSHOT_QUARANTINE = raw;
   console.warn('Saved application state failed validation; recovery will be attempted.',e);
  }
 }
@@ -5595,7 +5595,7 @@ try {
     const rooms = await hydrateCanonicalRoomSnapshot({ repository: boot.repository, snapshot, enabled });
     return hydrateCanonicalGuestSnapshot({ repository: boot.repository, snapshot: rooms, enabled });
   };
-  const canonicalAudit = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  const canonicalAudit = await storageBridge.fetchLegacySnapshot();
   if (canonicalAudit?.data?.snapshot) {
     const hydrated = await hydrateDomainRead(canonicalAudit.data.snapshot);
     window.__AURELIA_CANONICAL_BOOTSTRAP_RAW = JSON.stringify(hydrated);
@@ -5606,10 +5606,24 @@ try {
       window.__AURELIA_CANONICAL_BOOTSTRAP_RAW = JSON.stringify(hydrated);
     }
   }
+  window.AureliaPmsSnapshotFacade = Object.freeze({
+    readCache: () => window.__AURELIA_CANONICAL_BOOTSTRAP_RAW || null,
+    refresh: async () => {
+      const row = await storageBridge.fetchLegacySnapshot();
+      if (!row?.data?.snapshot) throw new Error("Canonical PMS snapshot is unavailable");
+      window.__AURELIA_CANONICAL_BOOTSTRAP_RAW = JSON.stringify(row.data.snapshot);
+      return window.__AURELIA_CANONICAL_BOOTSTRAP_RAW;
+    },
+    clearCache: () => { window.__AURELIA_CANONICAL_BOOTSTRAP_RAW = null; }
+  });
   const localFirstWrites = new PmsLocalFirstWriteCoordinator({
-    persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot),
+    persist: async snapshot => {
+      const result = await storageBridge.persistCompatibilitySnapshot(snapshot);
+      window.__AURELIA_CANONICAL_BOOTSTRAP_RAW = JSON.stringify(snapshot);
+      return result;
+    },
     readBack: async () => {
-      const row = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+      const row = await storageBridge.fetchLegacySnapshot();
       return row?.data || null;
     },
     cache: window.__aureliaStorage || null,
@@ -5624,7 +5638,7 @@ try {
   window.AureliaRepositoryCompatibility = Object.freeze({
      persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot),
      readBack: async () => {
-       const row = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+       const row = await storageBridge.fetchLegacySnapshot();
        return row?.data || null;
      },
      settlePayment: input => {
