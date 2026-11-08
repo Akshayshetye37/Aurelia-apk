@@ -583,7 +583,7 @@ async function updateRoomStatus(n,status){
   console.error('[Aurelia Room] Canonical room status commit failed.',error);
  }
 }
-function roomS(n){const r=rm(n);if(!r){toast('Room '+n+' was not found');return}if(r.s==='occ'){toast('Room '+n+' is occupied');return}openS(`<h2 class="foil">Room ${n}</h2><div class="lab">${r.t}. Set its status.</div><div style="display:grid;gap:10px;margin-top:16px">${[['ready','Ready for guests'],['clean','Needs cleaning'],['out','Out of service']].map(([k,l])=>`<button class="btn ${r.s===k?'':'ghost'}" onclick="updateRoomStatus('${String(n).replace(/'/g,"&#39;")}','${k}')">${l}</button>`).join('')}</div>`)}
+function roomS(n){const r=rm(n);if(!r){toast('Room '+n+' was not found');return}if(r.s==='occ'){toast('Room '+n+' is occupied');return}openS(`<h2 class="foil">Room ${esc(String(n))}</h2><div class="lab">${esc(String(r.t||''))}. Set its status.</div><div style="display:grid;gap:10px;margin-top:16px">${[['ready','Ready for guests'],['clean','Needs cleaning'],['out','Out of service']].map(([k,l])=>`<button class="btn ${r.s===k?'':'ghost'}" data-room-status="${esc(String(n))}" data-status="${k}" onclick="updateRoomStatus(this.dataset.roomStatus,this.dataset.status)">${l}</button>`).join('')}</div>`)}
 function addI(c,i){const m=MENU[c][i];S.t[S.tb-1].o.push([m[0],m[1]]);render();window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})}
 function toRoom(){
  const g=inh();
