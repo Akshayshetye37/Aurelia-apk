@@ -56,7 +56,8 @@ export async function verifyAndRegisterDevice({
   if (typeof actorUid !== "string" || !actorUid || !COMMAND_ID.test(challengeId || "") ||
       typeof publicKeyPem !== "string" || publicKeyPem.length > 4096 ||
       typeof integrityToken !== "string" || integrityToken.length < 100 || integrityToken.length > 20_000 ||
-      typeof decodeIntegrityToken !== "function" || typeof expectedPackageName !== "string" ||\n      !Array.isArray(allowedCertificateSha256Digests) || !allowedCertificateSha256Digests.length ||
+      typeof decodeIntegrityToken !== "function" || typeof expectedPackageName !== "string" ||
+      !Array.isArray(allowedCertificateSha256Digests) || !allowedCertificateSha256Digests.length ||
       !Array.isArray(certificateChainBase64) || certificateChainBase64.length < 2 ||
       certificateChainBase64.length > 8 || certificateChainBase64.some(v =>
         typeof v !== "string" || v.length < 128 || v.length > 90_000)) {
