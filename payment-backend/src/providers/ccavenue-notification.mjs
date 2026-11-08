@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { CCAvenueCrypto } from './ccavenue-crypto.mjs';
 
 const ORDER_ID = /^[A-Za-z0-9_-]{1,30}$/;
-const TRACKING_ID = /^[0-9]{1,25}$/;
+const TRACKING_ID = /^[0-9]{1,12}$/;
 
 /**
  * Decrypts a CCAvenue Dynamic Event Notification and reconciles it against
