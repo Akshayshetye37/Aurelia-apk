@@ -235,13 +235,15 @@ response envelope described in API v1.3:
 | merchantId | Merchant identifier passed to the Mobile SDK | Non-secret configuration |
 | regId | CCAvenue registration ID used in Tracking ID generation | Non-secret configuration |
 | accessCode | CCAvenue API access code | Secret Manager |
-| encryptionKey | API AES encryption/decryption key mapped to Access Code | Secret Manager; server only |
+| encryptionKey | Merchant API v1.3 AES request/response envelope key mapped to Access Code | Secret Manager; server only |
+| hostedCheckoutKey | Classic hosted billing-page AesCryptUtil key (`enc_key` in v3.3 sample) | Secret Manager; server only |
+| notificationWorkingKey | Primary-URL Dynamic Event Notification `encResp` decryption key | Secret Manager; server only |
 | workingKey | Mobile SDK SHA-512 requestHash key | Secret Manager; server only |
 
 The current Mobile SDK v1.7 guide does not establish a separate generic
 apiKey field. Do not add or request one unless the merchant's current
-CCAvenue-issued kit explicitly requires it. Access code, encryption key and
-working key must never be exposed to Android, browser responses, logs,
+CCAvenue-issued kit explicitly requires it. Access code, API encryption key, hosted-checkout key, notification key and
+Mobile SDK working key must never be exposed to Android, browser responses, logs,
 screenshots, or source control. Merchant API v1.3 also requires the merchant's
 server public IP to be registered by CCAvenue before API calls will work. These are intended future configuration fields only: the dedicated CCAvenue credential route now stores the merchant ID, Access
 Code, API Encryption Key and notification working key in Secret Manager, with
@@ -493,8 +495,8 @@ workflow or live financial switch is enabled by this change.
 
 A dedicated owner/admin endpoint is now available at
 `PUT /v1/admin/providers/ccavenue/credentials`. It accepts test/live
-configuration and stores API credentials separately from the notification
-working key in Secret Manager. Mobile SDK `regId` and `workingKey` are
+configuration and stores API credentials, hosted-checkout key and notification
+working key as separate Secret Manager values. Mobile SDK `regId` and `workingKey` are
 optional until the official SDK is integrated. The route is schema-only:
 it always leaves credential validation, sandbox qualification, webhook
 qualification and provider activation false.
