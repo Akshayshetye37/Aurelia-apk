@@ -38,7 +38,7 @@
 
 ## Current evidence and limitations
 
-- The provider factory wires Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay after all seven adapter operations pass capability checks. Only Razorpay and Cashfree are exposed by the current cloud payment-intent, credential, test-order and webhook routes. The four additional adapters are not yet enabled through the cloud API. CCAvenue remains catalogue-only because the current official public documentation does not establish the complete standard refund/status contract.
+- The provider factory wires Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay after all seven adapter operations pass capability checks. The registry is the source of truth for cloud checkout exposure: only Razorpay and Cashfree are enabled. The intent creation, sandbox test-order, webhook ingress and provider activation routes enforce this allowlist. PayU, PhonePe, Paytm and JioPay remain adapter-only; credential onboarding/validation does not grant checkout access. `providerQualificationStatus()` now reports `cloudCheckoutApiEnabled` and `testCheckout` from the registry rather than assuming every factory-wired adapter is exposed. CCAvenue remains catalogue-only because current merchant-specific checkout/status/refund contracts have not been verified.
 - The reconciliation endpoint is authenticated and batch-bounded, but currently invokes a manual sweep; it is not a scheduled service.
 - The worker and settlement helper still target `paymentFolios/{tenant+folio hash}` and `journalEntries/{intentId}`. The repository has not established that this matches the canonical deployed PMS schema.
 - Firestore indexes must be deployed with the backend. Concurrency, lease recovery and production query load remain to be verified.
