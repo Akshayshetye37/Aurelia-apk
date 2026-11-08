@@ -29,11 +29,21 @@ export class PayUAdapter extends PaymentProviderAdapter {
     if(typeof var1!=='string'||!var1)throw new TypeError('payu_command_reference_required');
     const hash=generatePayUCommandHash({key:this.key,command,var1},this.salt);
     const body=new URLSearchParams({key:this.key,command,var1,...extra,hash});
-    const response=await this.fetch(this.infoUrl+'/merchant/postservice.php?form=2',{
-      method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'},
-      body,signal:AbortSignal.timeout(15000)});
+    let response;
+    try {
+      response=await this.fetch(this.infoUrl+'/merchant/postservice.php?form=2',{
+        method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'},
+        body,signal:AbortSignal.timeout(15000)});
+    } catch (cause) {
+      throw Object.assign(new Error('payu_network_error'), {
+        outcomeUnknown: command === 'cancel_refund_transaction', cause
+      });
+    }
     const data=await response.json().catch(()=>({}));
-    if(!response.ok)throw Object.assign(new Error('payu_request_failed'),{providerStatus:response.status});
+    if(!response.ok)throw Object.assign(new Error('payu_request_failed'),{
+      providerStatus:response.status,
+      outcomeUnknown:command === 'cancel_refund_transaction' && response.status >= 500
+    });
     return data;
   }
   async validateCredentials() {
@@ -72,6 +82,7 @@ export class PayUAdapter extends PaymentProviderAdapter {
     const row=data?.transaction_details?.[input.orderId];
     if(!row)return {provider:'payu',orderId:input.orderId,paymentId:null,paymentStatus:'NOT_FOUND',
       amountMinor:null,currency:'INR',captured:false,found:false};
+    if (row.txnid != null && row.txnid !== input.orderId) throw new Error('payu_status_txnid_mismatch');
     const amountMinor=toMinor(row.amt??row.amount);
     const status=String(row.status||'').toLowerCase();
     const unmapped=String(row.unmappedstatus||row.unmappedStatus||'').toLowerCase();
@@ -98,7 +109,9 @@ export class PayUAdapter extends PaymentProviderAdapter {
       throw new TypeError('invalid_payu_refund');
     const data=await this.command('cancel_refund_transaction',input.paymentId,{
       var2:input.refundId,var3:money(input.amountMinor)});
-    if(Number(data.status)!==1)throw Object.assign(new Error('payu_refund_failed'),{providerCode:data.error_code||null});
+    if(Number(data.status)!==1)throw Object.assign(new Error('payu_refund_failed'),{
+      providerCode:data.error_code||null, outcomeUnknown:false
+    });
     return {provider:'payu',refundId:input.refundId,paymentId:input.paymentId,orderId:input.orderId,
       status:'PENDING',amountMinor:input.amountMinor,currency:'INR',
       providerRequestId:data.request_id==null?null:String(data.request_id)};
