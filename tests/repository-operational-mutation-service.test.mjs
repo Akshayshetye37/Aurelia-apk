@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
-import { commitOperationalStateMutation, commitRoomStateMutation } from "../src/storage/repository-operational-mutation-service.mjs";
+import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation } from "../src/storage/repository-operational-mutation-service.mjs";
 
 let sequence = 0;
 async function fixture() {
@@ -132,4 +132,36 @@ test("reservation cancellation moves the booking into the cancelled collection i
   assert.equal(saved.b.length, 0);
   assert.equal(saved.cancelled[0].id, booking.id);
   assert.equal(saved.cancelled[0].st, "cancelled");
+});
+
+test("new room creation commits its room entity and complete snapshot", async () => {
+  const { bridge, snapshot } = await fixture();
+  const room = { n: "102", t: "Suite", r: 1500, s: "ready" };
+  snapshot.rooms.push(room);
+  const result = await commitRoomCatalogMutation({
+    bridge, snapshot, roomId: "102", operation: "create", legacyStorage: null
+  });
+  assert.equal(result.canonical, true);
+  assert.equal((await bridge.fetchEntity("room", "102")).data.r, 1500);
+  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.rooms.length, 2);
+});
+
+test("room edits preserve the stable room-number key and update the room entity with snapshot", async () => {
+  const { bridge, snapshot, room } = await fixture();
+  room.t = "Premium Deluxe";
+  room.r = 1200;
+  const result = await commitRoomCatalogMutation({
+    bridge, snapshot, roomId: "101", operation: "update", legacyStorage: null
+  });
+  assert.equal(result.room.data.t, "Premium Deluxe");
+  assert.equal(result.room.data.r, 1200);
+  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.rooms[0].r, 1200);
+});
+
+test("room creation refuses an already-used stable room key", async () => {
+  const { bridge, snapshot } = await fixture();
+  snapshot.rooms.push({ n: "101", t: "Duplicate", r: 2000, s: "ready" });
+  await assert.rejects(commitRoomCatalogMutation({
+    bridge, snapshot, roomId: "101", operation: "create", legacyStorage: null
+  }), error => error.code === "ROOM_ID_ALREADY_EXISTS");
 });
