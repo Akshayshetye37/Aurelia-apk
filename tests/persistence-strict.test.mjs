@@ -6,7 +6,7 @@ const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 test("legacy synchronous accounting persistence fails closed instead of writing a compatibility cache", () => {
   const start = html.indexOf("function persistStrict(){");
-  const end = html.indexOf("\nlet LOCAL_STATE_STATUS", start);
+  const end = html.indexOf("\n}\n\n// Awaitable canonical commit", start);
   assert.ok(start >= 0 && end > start, "strict persistence function must exist");
   const fn = html.slice(start, end);
   assert.match(fn, /Synchronous accounting persistence is disabled/);
