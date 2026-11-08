@@ -37,3 +37,24 @@ test('Android safeguards cannot authorize settlement or refund posting', () => {
   assert.match(source, /fun isAutomaticRefundPostingAllowed\(\): Boolean = AUTOMATIC_REFUND_POSTING/);
   assert.match(source, /fun isLiveCollectionAllowed\(\): Boolean = LIVE_GATEWAY_COLLECTION/);
 });
+
+test('backend blocks external refund dispatch until owner-approved refund processing is enabled', () => {
+  const server = read('payment-backend/src/server.mjs');
+  const start = server.indexOf("app.post('/v1/payments/intents/:intentId/refunds'");
+  const end = server.indexOf("app.get('/v1/payments/intents/:intentId/refunds/:refundId'", start);
+  assert.ok(start >= 0 && end > start, 'refund create and read routes exist');
+  const route = server.slice(start, end);
+  const gate = route.indexOf("enforcePaymentControl(req, res, 'refund_processing')");
+  const reservation = route.indexOf('db.runTransaction');
+  const dispatch = route.indexOf('adapter.createRefund');
+  assert.ok(gate >= 0 && reservation > gate && dispatch > gate,
+    'refund gate must execute before reservation and external provider dispatch');
+});
+
+test('live collection requires tenant flags, evidence qualification and validated production credentials', () => {
+  const server = read('payment-backend/src/server.mjs');
+  assert.match(server, /evaluateProviderProductionQualification/);
+  assert.match(server, /paymentProviderQualifications\/' \+ tenantId \+ '\/providers\/' \+ provider/);
+  assert.match(server, /providerState\.data\(\)\.credentialsValidated !== true/);
+  assert.match(server, /controls\.live_collection_enabled !== true/);
+});
