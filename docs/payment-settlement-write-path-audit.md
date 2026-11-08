@@ -4,7 +4,7 @@
 **Inspected integration branch:** `feature/multi-provider-payment-backend`  
 **Phase A hotfix:** `0dcf0e319f0c6c0fa3bc16383482dcb479110b88`  
 **Phase B implementation commits:** `5433111`, `9a684ca`, `b0d9f28`, `233df47`, `bdaf590`, `d3a2948`, `418beb0`, `c8afa7f`, `fde1fd0`  
-**Status (2026-11-08):** Manual folio payments and staff-reviewed UPI approvals now use an asynchronous repository transaction that commits the booking entity, folio projection and full recovery snapshot in one IndexedDB/SQLite batch, followed by exact read-back. The source-only CI suite and production web bundle passed on commit `87babe6a008ce64469965ba6984e37969ad4a3be` (354 tests). Android APK/device qualification and provider UAT remain outstanding. Automatic gateway settlement remains disabled.
+**Status (2026-11-08):** Manual folio payments and staff-reviewed UPI approvals now use an asynchronous repository transaction that commits the booking entity, folio projection and full recovery snapshot in one IndexedDB/SQLite batch, followed by exact read-back. The source-only CI suite and production web bundle passed on commit `773d98443a361f9c26d736d977afa17a5b991f97` (354 tests). Android APK/device qualification and provider UAT remain outstanding. Automatic gateway settlement remains disabled.
 
 ## Deployment and connectivity policy
 
@@ -59,7 +59,7 @@ Tests: `tests/repository-settlement-service.test.mjs` covers atomic commit, exac
 
 `tests/settlement-service.test.mjs` covers manual success, staff-review success, idempotency/UTR dedupe, automatic-source rejection with the gate disabled, overpayment rejection, rollback after a thrown persistence error, evidence-only `addSig`, and manual/staff route wiring.
 
-**Verification:** GitHub Actions run [42486422774](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486422774) passed 354/354 tests, production web bundle build and asset privacy checks on the exact commit shown above. This was a web/source workflow, not an APK build or physical-device test. Android release and device qualification remain open.
+**Verification:** GitHub Actions run [42486548554](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486548554) passed 354/354 tests, production web bundle build and asset privacy checks on the exact commit shown above. This was a web/source workflow, not an APK build or physical-device test. Android release and device qualification remain open.
 
 ## Gate and product stance
 
