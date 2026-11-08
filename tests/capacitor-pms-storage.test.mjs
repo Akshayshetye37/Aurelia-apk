@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CapacitorPmsStorageClient } from "../src/storage/capacitor-pms-storage.mjs";
+import { LEGACY_STATE_KEY } from "../src/storage/legacy-importer.mjs";
 
 function fakePlugin() {
   const calls=[], entities=new Map(), outbox=new Map(), snapshots=new Map(), migrations=new Map();
@@ -65,14 +66,14 @@ test("native adapter rejects stale versions and async mutation callbacks",async(
 });
 test("legacy import is atomic, exact, read-back verifiable and idempotent",async()=>{
  const p=fakePlugin(),r=new CapacitorPmsStorageClient(p),raw=JSON.stringify({rooms:[{id:"r1"}],b:[],g:[],t:[],exp:[],inv:[],led:[],aud:[],set:{},menu:{}});
- const snapshot={raw,parsed:JSON.parse(raw)},args={migrationId:"migration-1",sourceKey:"aurelia_lodge_v2",sourceTimestamp:"2026-11-07T00:00:00.000Z"};
+ const snapshot={raw,parsed:JSON.parse(raw)},args={migrationId:"migration-1",sourceKey:LEGACY_STATE_KEY,sourceTimestamp:"2026-11-07T00:00:00.000Z"};
  assert.equal((await r.migrateLegacySnapshot(snapshot,args)).alreadyMigrated,false);
  const read=await r.readMigrationSnapshot("migration-1");assert.equal(read.raw,raw);assert.equal(read.sourceKey,args.sourceKey);assert.equal((await r.listEntities("legacy")).length,10);
  assert.equal((await r.migrateLegacySnapshot(snapshot,args)).alreadyMigrated,true);
  await assert.rejects(r.migrateLegacySnapshot({raw:raw+" "},args),/replay_payload_mismatch/);
 });
 test("interrupted migration leaves no partial import and can be replayed after restart",async()=>{
- const p=fakePlugin(),r=new CapacitorPmsStorageClient(p),raw=JSON.stringify({rooms:[],b:[],g:[],t:[],exp:[],inv:[],led:[],aud:[],set:{},menu:{}}),args={migrationId:"recover-1",sourceKey:"aurelia_lodge_v2"};
+ const p=fakePlugin(),r=new CapacitorPmsStorageClient(p),raw=JSON.stringify({rooms:[],b:[],g:[],t:[],exp:[],inv:[],led:[],aud:[],set:{},menu:{}}),args={migrationId:"recover-1",sourceKey:LEGACY_STATE_KEY};
  p.failMigrationOnce();await assert.rejects(r.migrateLegacySnapshot({raw},args),/interruption/);assert.equal((await r.listEntities("legacy")).length,0);
  assert.equal((await r.migrateLegacySnapshot({raw},args)).alreadyMigrated,false);assert.equal((await r.listEntities("legacy")).length,10);
 });
