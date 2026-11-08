@@ -355,6 +355,7 @@ for (const file of [
   'PaymentDeviceClient.kt',
   'SettlementEnvelopeVerifier.kt',
   'PaymentReleaseSafeguards.kt',
+  'AureliaPlayIntegrityClient.kt',
   'LockGateActivity.kt'
 ]) {
   const source = path.join(securityTemplateDir, file);
@@ -368,7 +369,8 @@ function addNativeSecurityDependencies(contents, kotlinDsl) {
   }
   const dependencies = [
     ['org.bouncycastle:bcprov-jdk18on:1.80', 'org.bouncycastle:bcprov-jdk18on'],
-    ['androidx.biometric:biometric:1.2.0-alpha05', 'androidx.biometric:biometric']
+    ['androidx.biometric:biometric:1.2.0-alpha05', 'androidx.biometric:biometric'],
+    ['com.google.android.play:integrity:1.5.0', 'com.google.android.play:integrity']
   ];
   for (const [coordinate, marker] of dependencies) {
     if (contents.includes(marker)) continue;
