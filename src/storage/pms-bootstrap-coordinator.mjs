@@ -8,6 +8,7 @@
  */
 import { IndexedDbPmsRepository, parseLegacyPmsSnapshot } from "./indexeddb-pms-repository.mjs";
 import { getOrCreateBrowserLocalIdentity } from "./pms-local-identity.mjs";
+import { settlePaymentToRepository } from "../payments/repository-settlement-service.mjs";
 
 export const AURELIA_LEGACY_STATE_KEY = "aurelia_lodge_v2";
 export const AURELIA_MIGRATION_STATUS_KEY = "aurelia_canonical_migration_status";
