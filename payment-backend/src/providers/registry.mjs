@@ -70,10 +70,10 @@ export const PROVIDERS = Object.freeze({
     environments: ['test', 'live'],
     credentials: [
       { key: 'merchantId', label: 'Merchant ID', type: 'text', secret: false, required: true },
-      { key: 'regId', label: 'CCAvenue Reg ID (Mobile SDK)', type: 'text', secret: false, required: true },
+      { key: 'regId', label: 'CCAvenue Reg ID (Mobile SDK)', type: 'text', secret: false, required: false },
       { key: 'accessCode', label: 'Access Code', type: 'password', secret: true, required: true },
       { key: 'encryptionKey', label: 'Merchant API Encryption Key (AES; server only)', type: 'password', secret: true, required: true },
-      { key: 'workingKey', label: 'Mobile SDK Working Key (requestHash; server only)', type: 'password', secret: true, required: true },
+      { key: 'workingKey', label: 'Mobile SDK Working Key (requestHash; server only)', type: 'password', secret: true, required: false },
       { key: 'notificationWorkingKey', label: 'Dynamic Event Notification Working Key (server only)', type: 'password', secret: true, required: true }
     ],
     capabilities: ['hosted_checkout', 'payment_verification'],
