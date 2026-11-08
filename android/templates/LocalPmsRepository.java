@@ -126,8 +126,9 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
         }
       }
       try(Cursor existing=db.rawQuery("SELECT raw_json FROM pms_migration_snapshots WHERE snapshot_id=?",new String[]{migrationId});Cursor backup=db.rawQuery("SELECT raw_json,sha256 FROM pms_legacy_backup WHERE backup_id=?",new String[]{migrationId})) {
-        if(existing.moveToFirst()||backup.moveToFirst()) {
-          if(!existing.isFirst()||!backup.isFirst()||!rawJson.equals(existing.getString(0))||!rawJson.equals(backup.getString(0))||!sha256Hex(rawJson).equals(backup.getString(1)))throw new IllegalStateException("legacy_migration_backup_mismatch");
+        boolean hasSnapshot=existing.moveToFirst(),hasBackup=backup.moveToFirst();
+        if(hasSnapshot||hasBackup) {
+          if(!hasSnapshot||!hasBackup||!rawJson.equals(existing.getString(0))||!rawJson.equals(backup.getString(0))||!sha256Hex(rawJson).equals(backup.getString(1)))throw new IllegalStateException("legacy_migration_backup_mismatch");
         } else {
           if(DatabaseUtils.longForQuery(db,"SELECT COUNT(*) FROM pms_entities",null)!=0)throw new IllegalStateException("canonical_repository_not_empty");
           long now=System.currentTimeMillis();
