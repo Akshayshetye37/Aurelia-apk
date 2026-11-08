@@ -5,7 +5,7 @@ const safeMoney=(x,label)=>{if(!Number.isSafeInteger(x)||x<=0)throw new TypeErro
 const fail=(code,message)=>Object.assign(new Error(message),{code});
 const key=(type,id)=>type+":"+id;
 async function get(adapter,type,id){return adapter.get("entities",key(type,id));}
-async function allEntities(adapter){if(typeof adapter.list==="function")return adapter.list("entities");if(typeof adapter.listEntities==="function"){const types=["folio","ledger","inventory","stock_movement","booking","payment","pos_sale","refund_request"];const groups=await Promise.all(types.map(type=>adapter.listEntities(type)));return groups.flat();}throw new TypeError("Invariant checker requires list or listEntities");}
+async function allEntities(adapter){if(typeof adapter.listEntities==="function"){const types=["folio","ledger","inventory","stock_movement","booking","payment","pos_sale","refund_request"];const groups=await Promise.all(types.map(type=>adapter.listEntities(type)));return groups.flat();}if(typeof adapter.list==="function")return adapter.list("entities");throw new TypeError("Invariant checker requires list or listEntities");}
 async function list(adapter,type){return (await allEntities(adapter)).filter(row=>row.type===type);}
 function row(type,id,version,data,now){return{key:key(type,id),type,id,version,data:clone(data),updatedAt:now(),deletedAt:null};}
 function makeEvent(context,primary,eventType,version,payload,now,eventId){return{eventId:eventId(),tenantId:context.tenantId,propertyId:context.propertyId,deviceId:context.deviceId,entityType:primary.type,entityId:primary.id,sequence:version+1,eventType,schemaVersion:1,occurredAt:now(),payload:clone(payload)};}
