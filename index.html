@@ -5536,6 +5536,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 <script type="module" id="aurelia-async-runtime-bootstrap">
 import { bootstrapper } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
+import { PmsLocalFirstWriteCoordinator } from "./src/storage/pms-local-first-write-coordinator.mjs";
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
 import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation, commitExpenseMutation, commitRestaurantFolioCharge, commitRestaurantTableSettlement } from "./src/storage/repository-operational-mutation-service.mjs";
 import { commitReservationToRepository } from "./src/storage/repository-reservation-service.mjs";
@@ -5576,6 +5577,21 @@ try {
   if (!boot || boot.success !== true || !boot.repository) throw new Error("Canonical storage bootstrap did not return a verified repository");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "REPOSITORY_BINDING";
   storageBridge.bindActiveEngine(boot.repository, boot.identity);
+  const localFirstWrites = new PmsLocalFirstWriteCoordinator({
+    persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot),
+    readBack: async () => {
+      const row = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+      return row?.data || null;
+    },
+    cache: window.__aureliaStorage || null,
+    onFailure: error => {
+      console.error("[Aurelia Local First] Canonical write failed; writes must remain frozen until startup recovery.", error);
+    }
+  });
+  window.AureliaLocalFirstWrites = Object.freeze({
+    save: snapshot => localFirstWrites.save(snapshot),
+    get status() { return localFirstWrites.status; }
+  });
   window.AureliaRepositoryCompatibility = Object.freeze({
      persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot),
      readBack: async () => {
