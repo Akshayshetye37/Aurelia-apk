@@ -7,9 +7,9 @@ Branch HEAD: resolve the current SHA from the active branch ref; do not hard-cod
 Latest verification: [GitHub Actions run 42492883511](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42492883511) passed 427/427 tests, production web build and client-asset privacy checks on commit 83d3ddfa41573fbbcca18efaf4bde73b8a9513cf. This is not APK or device qualification.
 Recovery point: backup/pre-local-first-cutover-2026-11-07 at 8b74f3d2cb723237b5f3a8901e22ef7370552812; backup/pre-release-html-update-2026-11-07 preserves the pre-documentation-update snapshot.
 CI evidence: source-tests-web and settlement-foundation passed on the exact verified commit above. The workflow does not build or qualify an Android APK.
-LOCAL IDENTITY: browser/PWA uses a cryptographically generated local identity in IndexedDB with a verified localStorage fallback. Android stores identity encrypted with AES-GCM using an Android Keystore key. Local identity is distinct from Firebase/cloud tenant identity.
+LOCAL IDENTITY: browser/PWA uses a cryptographically generated local identity in IndexedDB with a storage-owned compatibility adapter. Android stores identity encrypted with AES-GCM using an Android Keystore key. Local identity is distinct from Firebase/cloud tenant identity.
 LOCAL-FIRST SNAPSHOT WRITES: ordinary persist() and persistCanonicalStrict() serialize complete PMS snapshots through PmsLocalFirstWriteCoordinator into the canonical local repository, verify exact read-back, and refresh the in-memory canonical snapshot cache only after repository commit. Snapshot writes are ordered with the operational mutation lock and fail closed on repository or read-back failure. Room and guest UI collections now hydrate from canonical entities; other domain collections remain snapshot-backed.
-STRICT ASYNC WORKFLOWS: JSON import/rollback, full backup restore/rollback, manual folio payments, staff-reviewed UPI approval, guest profile create/update/retire and primary reservation creation await canonical repository commit and exact read-back before confirming success. Manual payment and UPI approval atomically commit booking, folio projection and full recovery snapshot. Reservation creation atomically commits guest, booking, folio projection and the full recovery snapshot. Legacy localStorage is refreshed only as a compatibility cache after commit; other operational UI mutations remain to be migrated.
+STRICT ASYNC WORKFLOWS: JSON import/rollback, full backup restore/rollback, manual folio payments, staff-reviewed UPI approval, guest profile create/update/retire and primary reservation creation await canonical repository commit and exact read-back before confirming success. Manual payment and UPI approval atomically commit booking, folio projection and full recovery snapshot. Reservation creation atomically commits guest, booking, folio projection and the full recovery snapshot. Legacy compatibility cache writes are disabled; other operational UI mutations remain to be migrated.
 RECOVERY: startup prefers the latest committed canonical audit snapshot over the immutable first-migration bytes, validates the complete PMS schema and verifies exact read-back. The immutable migration snapshot is a fallback only when no newer committed snapshot exists. Missing or inconsistent recovery evidence fails closed.
 CUTOVER: uiCutover=false globally. Room status/catalogue commands and guest profile create/update/retire commands use transactional domain entities. Room and guest collections are hydrated from verified canonical entities before application scripts replay. Payment, reservation, lifecycle, inventory, expense and restaurant paths have varying levels of domain-entity transactions. Remaining synchronous accounting and domain mutation paths must be migrated before the repository becomes the sole operational source of truth.
 RUNTIME: serve/package the complete project and ./src module tree. Startup must fail closed if durable storage bootstrap or exact snapshot verification fails. Embedded previews without durable storage are unsupported.
@@ -333,53 +333,7 @@ function guestContactActions(name,phone){
  return '<span class="guest-contact-actions"><button type="button" class="btn sm ghost" onclick="guestCallAction(\''+esc(p)+'\')">Call</button><button type="button" class="btn sm ghost" onclick="guestWhatsAppAction(\''+esc(p.replace(/\D/g,''))+'\',\''+esc(guestName).replace(/'/g,'&#39;')+'\')">WhatsApp</button></span>';
 }
 </script>
-<script id="aurelia-safe-storage">
-(function(){
-  var mem = {};
-  var storageInitError = null;
-  function canLS(){
-    try{
-      var k="__aurelia_ls_test__";
-      window.localStorage.setItem(k,"1");
-      window.localStorage.removeItem(k);
-      return true;
-    }catch(e){storageInitError=e;return false}
-  }
-  var ok = canLS();
-  var embeddedPreview = false;
-  try{embeddedPreview=String(location.href).startsWith('about:srcdoc') || !!(window.frameElement && window.frameElement.hasAttribute('sandbox') && !window.frameElement.sandbox.contains('allow-same-origin'))}catch(e){embeddedPreview=String(location.href).startsWith('about:srcdoc')}
-  window.__aureliaStorage = {
-    getItem: function(k){
-      try{ if(ok) return localStorage.getItem(k); }catch(e){}
-      return mem[k] != null ? mem[k] : null;
-    },
-    setItem: function(k,v){
-      if(ok){
-        try{ localStorage.setItem(k,String(v)); return; }
-        catch(e){
-          /* Never disguise a quota/security failure as a durable write. */
-          throw new Error('Device storage write failed: '+(e&&e.name||'StorageError'));
-        }
-      }
-      mem[k]=String(v);
-    },
-    removeItem: function(k){
-      try{ if(ok) localStorage.removeItem(k); }catch(e){}
-      delete mem[k];
-    },
-    memoryOnly: !ok,
-    memoryOnlyReason: !ok ? (embeddedPreview ? 'embedded-preview-sandbox' : (storageInitError&&storageInitError.name||'storage-unavailable')) : null,
-    persistent: ok
-  };
-  window.AureliaStorageDiagnostics = Object.freeze({
-    persistent: ok,
-    mode: ok ? 'browser-local-storage' : 'session-memory-only',
-    reason: !ok ? (embeddedPreview ? 'The embedded HTML preview uses an opaque sandbox origin and blocks durable browser storage.' : (storageInitError&&storageInitError.message||'Browser storage is unavailable.')) : null,
-    embeddedPreview: embeddedPreview
-  });
-  /* Memory fallback is explicit; failed durable writes are never silently downgraded. */
-})();
-</script>
+
 
 <script id="aurelia-ads-config">
 /**
@@ -1634,7 +1588,7 @@ function persistStrict(){
 
 // Awaitable canonical commit for workflows that can participate in an async
 // transaction. IndexedDB/SQLite commit and exact repository read-back are the
-// success boundary; localStorage is refreshed only as a legacy UI cache.
+// success boundary; the in-memory projection is refreshed only after canonical commit.
 async function persistCanonicalStrict(){
  if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
  const coordinator=window.AureliaLocalFirstWrites;
@@ -5481,13 +5435,13 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 <script id="aurelia-bootstrap-watchdog">
 /* Detect HTML sandbox previews before ES-module imports can fail silently. */
 (function () {
-  var diagnostics = window.AureliaStorageDiagnostics || {};
-  var embedded = diagnostics.embeddedPreview === true;
+  var embedded = false;
+  try { embedded = String(location.href).startsWith("about:srcdoc") || Boolean(window.frameElement && window.frameElement.hasAttribute("sandbox") && !window.frameElement.sandbox.contains("allow-same-origin")); } catch (_) { embedded = String(location.href).startsWith("about:srcdoc"); }
   var status = document.getElementById("aurelia-runtime-shield-status");
   var shield = document.getElementById("aurelia-runtime-shield");
   var inFrame = false;
   try { inFrame = window.top !== window; } catch (_) { inFrame = true; }
-  var previewBlocked = diagnostics.persistent !== true && (embedded || inFrame);
+  var previewBlocked = embedded || inFrame;
   window.__AURELIA_BOOTSTRAP_DIAGNOSTICS = {
     phase: previewBlocked ? "PREVIEW_SANDBOX_BLOCKED" : "MODULE_NOT_STARTED",
     startedAt: Date.now(),
