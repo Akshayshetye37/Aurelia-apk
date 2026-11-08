@@ -7,8 +7,8 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 - **GitHub repository:** https://github.com/Akshayshetye37/Aurelia-apk
 - **Project root:** repository root (`/`)
 - **Active engineering branch:** `feature/multi-provider-payment-backend`
-- **Current branch HEAD inspected:** `5f11451f52933c5c705a87cafe49970e0e6e1652` (7 November 2026)
-- **Current-head checks:** GitHub returned no workflow runs and no commit status checks for this exact SHA during the current audit. Treat this revision as not CI-verified until fresh checks complete.
+- **Current branch HEAD inspected:** `92791223146f8ae95b8c4007361c4f938c51b652` (8 November 2026)
+- **Current-head checks:** GitHub returned no workflow runs and no commit status checks for this exact SHA during the audit on 8 November 2026. Treat this revision as not CI-verified until fresh checks complete.
 - **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
 
 Useful project locations:
@@ -75,7 +75,7 @@ The current implementation contains substantial storage, payment and security fo
 
 ## CI evidence and verification boundary
 
-The current branch HEAD inspected for this audit is `5f11451f52933c5c705a87cafe49970e0e6e1652`. The source revision immediately before these documentation-only commits, `5f11451f52933c5c705a87cafe49970e0e6e1652`, has a successful [PMS workflow run 42380831922](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42380831922), which checked that exact SHA. It passed the full PMS test suite, production web build, asset privacy checks, Android project generation/Capacitor sync, debug APK build, APK identity/signature checks and merged-manifest permission checks. The two commits updating this README and `index.html` change documentation only; they have not themselves been re-run through CI.
+The current branch HEAD inspected for this audit is `92791223146f8ae95b8c4007361c4f938c51b652` (8 November 2026). GitHub returned no workflow runs and no commit status checks for this exact SHA. The older [PMS workflow run 42380831922](https://github.com/Akshayshety37/Aurelia-apk/actions/runs/42380831922) is historical evidence for its recorded SHA only and does not establish verification of the current branch head. No new Android build is authorized by this audit.
 
 Historical evidence is commit-scoped and must not be treated as an automatic pass for later revisions:
 
@@ -155,5 +155,6 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 ---
 
-**Current branch HEAD inspected:** `5f11451f52933c5c705a87cafe49970e0e6e1652`  
-**Status:** engineering foundations verified by CI; production release not approved.
+**Current branch HEAD inspected:** `92791223146f8ae95b8c4007361c4f938c51b652` (8 November 2026)  
+**Current-head CI:** not verified; no workflow runs or commit status checks were returned.  
+**Status:** engineering foundations exist; production release not approved.
