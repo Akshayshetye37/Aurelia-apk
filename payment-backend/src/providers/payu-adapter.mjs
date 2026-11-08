@@ -51,7 +51,7 @@ export class PayUAdapter extends PaymentProviderAdapter {
     // PayU's classic verify_payment API returns an explicit "Not Found" row
     // for an unknown transaction when the merchant key + command hash are valid.
     // A unique probe avoids creating a payment or mutating merchant state.
-    const probe='AURCRED'+crypto.randomUUID().replace(/-/g,'').slice(0,24);
+    const probe='AURCRED'+crypto.randomBytes(6).toString('hex');
     const data=await this.command('verify_payment',probe);
     const row=data?.transaction_details?.[probe];
     if(row?.status==='Not Found'&&row?.mihpayid==='Not Found') {
