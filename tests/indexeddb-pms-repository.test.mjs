@@ -50,3 +50,42 @@ test("multi-entity batch rejects duplicate entity keys before writing",async()=>
  ]),/Duplicate entity/);
  assert.equal(await r.getEntity("room","room-1"),null);
 });
+
+
+test("schema v1 to v2 migration snapshots every existing store before advancing schema version",async()=>{
+ const name="pms-schema-upgrade-backup";
+ const opened=await new Promise((resolve,reject)=>{
+  const request=indexedDB.open(name,1);
+  request.onupgradeneeded=()=>{
+   const db=request.result;
+   db.createObjectStore("meta",{keyPath:"key"});
+   db.createObjectStore("entities",{keyPath:"key"}).createIndex("type","type");
+   const outbox=db.createObjectStore("outbox",{keyPath:"eventId"});
+   outbox.createIndex("status","status");
+   outbox.createIndex("sequenceKey","sequenceKey",{unique:true});
+   db.createObjectStore("migration_snapshots",{keyPath:"id"});
+  };
+  request.onsuccess=()=>resolve(request.result);
+  request.onerror=()=>reject(request.error);
+ });
+ const seed=opened.transaction(["meta","entities","outbox","migration_snapshots"],"readwrite");
+ seed.objectStore("meta").put({key:"legacy-marker",migrationId:"mig-v1"});
+ seed.objectStore("entities").put({key:"room:101",type:"room",id:"101",version:1,data:{id:"101"},updatedAt:"2026-11-07T00:00:00Z"});
+ seed.objectStore("outbox").put({eventId:"evt-v1",sequenceKey:"room:101:0000000000000001",status:"PENDING",payload:{v:1}});
+ seed.objectStore("migration_snapshots").put({id:"mig-v1",raw:"{}"});
+ await new Promise((resolve,reject)=>{seed.oncomplete=resolve;seed.onerror=()=>reject(seed.error);seed.onabort=()=>reject(seed.error);});
+ opened.close();
+ const upgraded=new IndexedDbPmsRepository({indexedDBImpl:indexedDB,databaseName:name});
+ const db=await upgraded.database();
+ assert.equal(db.version,2);
+ assert.deepEqual((await upgraded.getEntity("room","101")).data,{id:"101"});
+ const tx=db.transaction(["meta","migration_backups"],"readonly");
+ const meta=await new Promise((resolve,reject)=>{const q=tx.objectStore("meta").get("schema-version");q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
+ const backups=await new Promise((resolve,reject)=>{const q=tx.objectStore("migration_backups").getAll();q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
+ await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});
+ assert.equal(meta.version,2);
+ assert.equal(backups.length,4);
+ assert.ok(backups.some(row=>row.sourceStore==="entities"&&row.sourceKey==="room:101"&&row.value.data.id==="101"));
+ assert.ok(backups.some(row=>row.sourceStore==="outbox"&&row.sourceKey==="evt-v1"));
+ assert.ok(backups.some(row=>row.sourceStore==="migration_snapshots"&&row.sourceKey==="mig-v1"));
+});
