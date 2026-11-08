@@ -14,6 +14,7 @@ const REQUIRED_OPERATIONS = Object.freeze([
   'verifyWebhook', 'createRefund', 'getRefundStatus'
 ]);
 const CCA_VENUE_OPERATIONS = Object.freeze(['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
+const CCA_VENUE_OPERATIONS = Object.freeze(['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
 const FACTORIES = Object.freeze({
   razorpay: options => new RazorpayAdapter(options),
   cashfree: options => new CashfreeAdapter(options),
@@ -21,12 +22,14 @@ const FACTORIES = Object.freeze({
   phonepe: options => new PhonePeAdapter(options),
   paytm: options => new PaytmAdapter(options),
   jiopay: options => new JioPayAdapter(options),
+  ccavenue: options => new CCAvenueAdapter(options)
 });
 
 export function createProviderAdapter(providerId, options) {
   const factory = FACTORIES[providerId];
   if (!factory) throw new Error('provider_adapter_unavailable');
   const adapter = factory(options);
+  assertAdapterCapabilities(adapter, providerId === 'ccavenue' ? CCA_VENUE_OPERATIONS : REQUIRED_OPERATIONS);
   return adapter;
 }
 
@@ -35,6 +38,7 @@ export function implementedProviderAdapters() {
 }
 
 export function providerCapabilities(providerId) {
+  return FACTORIES[providerId] ? [...(providerId === 'ccavenue' ? CCA_VENUE_OPERATIONS : REQUIRED_OPERATIONS)] : null;
 }
 
 export function providerQualificationStatus(providerId) {
