@@ -1,3 +1,4 @@
+import { StorageFullError } from "./web-storage-adapter.mjs";
 import { canonicalBytes, canonicalize } from "../payments/canonical.mjs";
 const DB_NAME = "aurelia-pms-settlement-journal";
 const DB_VERSION = 2;
@@ -7,8 +8,8 @@ function safeId(value, label, max = 128) {
   if (typeof value !== "string" || !value.trim() || value !== value.trim() || value.length > max || /[\u0000-\u001f\u007f]/.test(value)) throw new TypeError("Invalid " + label);
   return value;
 }
-function request(req) { return new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error || new Error("Settlement journal request failed")); }); }
-function transactionComplete(tx) { return new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = tx.onerror = () => reject(tx.error || new Error("Settlement journal transaction failed")); }); }
+function request(req) { return new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error?.name === "QuotaExceededError" ? new StorageFullError(undefined, { cause: req.error }) : (req.error || new Error("Settlement journal request failed"))); }); }
+function transactionComplete(tx) { return new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = tx.onerror = () => reject(tx.error?.name === "QuotaExceededError" ? new StorageFullError(undefined, { cause: tx.error }) : (tx.error || new Error("Settlement journal transaction failed"))); }); }
 async function sha256Hex(value, cryptoImpl) {
   if (!cryptoImpl?.subtle) throw new Error("Web Crypto is unavailable; durable settlement is disabled");
   const digest = await cryptoImpl.subtle.digest("SHA-256", canonicalBytes(value));
