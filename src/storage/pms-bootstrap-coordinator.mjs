@@ -125,7 +125,16 @@ export class PmsBootstrapCoordinator {
     // last fully committed canonical snapshot before the UI is allowed to start.
     // This is a recovery bridge, not a claim that the synchronous UI has cut over.
     const recovery = await this.restoreLegacyStateFromCanonical();
-    const migration = await this.executeGuardedMigration();
+    const migration = recovery.migrationAlreadyVerified
+      ? Object.freeze({
+          status: "MIGRATION_VERIFIED",
+          migrated: false,
+          alreadyMigrated: true,
+          recoveredFromCanonical: true,
+          entityCount: (await this.repository.listEntities("legacy")).length,
+          legacyKeyPreserved: true
+        })
+      : await this.executeGuardedMigration();
     this.status = migration.status;
     return Object.freeze({
       success: true,
@@ -145,12 +154,32 @@ export class PmsBootstrapCoordinator {
       return Object.freeze({ restored: false, source: "legacy-store-present" });
     }
 
+    // Prefer the exact original migration bytes whenever the small migration
+    // marker survived. This preserves the stable migration ID and byte identity.
+    const marker = this.storage.getItem(AURELIA_MIGRATION_STATUS_KEY);
+    const markerMatch = typeof marker === "string" && marker.match(/^VERIFIED:(mig_legacy_[a-f0-9]{8})$/);
+    if (markerMatch) {
+      const original = await this.repository.readMigrationSnapshot(markerMatch[1]);
+      if (original?.raw) {
+        parseLegacyPmsSnapshot(original.raw);
+        this.storage.setItem(AURELIA_LEGACY_STATE_KEY, original.raw);
+        if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== original.raw) {
+          throw new Error("Canonical migration recovery failed exact raw snapshot read-back verification");
+        }
+        return Object.freeze({ restored: true, source: "canonical-migration-snapshot", migrationAlreadyVerified: false });
+      }
+    }
+
     const canonical = await this.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
     const snapshot = canonical?.data?.snapshot;
     if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)) {
       const serialized = JSON.stringify(snapshot);
       // Validate the complete real PMS shape before writing anything back.
       parseLegacyPmsSnapshot(serialized);
+      const migrated = await this.repository.listEntities("legacy");
+      if (!migrated.length) {
+        throw new Error("Canonical audit snapshot exists without verified migrated PMS entities; startup stopped");
+      }
       this.storage.setItem(AURELIA_LEGACY_STATE_KEY, serialized);
       if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== serialized) {
         throw new Error("Canonical recovery rejected: restored legacy state failed exact read-back verification");
@@ -158,6 +187,7 @@ export class PmsBootstrapCoordinator {
       return Object.freeze({
         restored: true,
         source: "canonical-audit-snapshot",
+        migrationAlreadyVerified: true,
         version: canonical.version,
         snapshotSha256: canonical.data.snapshotSha256 || null
       });
