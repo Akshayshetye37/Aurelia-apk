@@ -140,12 +140,18 @@ export async function commitReservationToRepository({
     }
   ]);
 
-  const [storedGuest, storedBooking, storedFolio, storedSnapshot] = await Promise.all([
-    bridge.fetchEntity("guest", guestKey),
-    bridge.fetchEntity("booking", bookingKey),
-    bridge.fetchEntity("folio", folioId),
-    bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")
-  ]);
+  let storedGuest, storedBooking, storedFolio, storedSnapshot;
+  try {
+    [storedGuest, storedBooking, storedFolio, storedSnapshot] = await Promise.all([
+      bridge.fetchEntity("guest", guestKey),
+      bridge.fetchEntity("booking", bookingKey),
+      bridge.fetchEntity("folio", folioId),
+      bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")
+    ]);
+  } catch (error) {
+    throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH",
+      "Reservation transaction committed but repository read-back could not be completed: " + String(error?.message || error));
+  }
   if (!storedGuest || !storedBooking || !storedFolio || !storedSnapshot ||
       !sameJson(comparable(storedGuest.data), comparable(guest)) ||
       !sameJson(comparable(storedBooking.data), comparable(booking)) ||
