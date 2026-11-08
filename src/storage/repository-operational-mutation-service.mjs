@@ -161,3 +161,63 @@ export async function commitRoomStateMutation({
     roomVersion: committed.entities[0].version
   });
 }
+
+/** Creates or edits a room without changing its stable room-number key. */
+export async function commitRoomCatalogMutation({
+  bridge, snapshot, roomId, operation,
+  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
+  now = () => new Date().toISOString()
+} = {}) {
+  if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
+    throw new TypeError("A bound transactional PMS repository bridge is required");
+  }
+  if (!snapshot || !Array.isArray(snapshot.rooms) || roomId == null || String(roomId).trim() === "") {
+    throw new TypeError("A complete snapshot and stable room ID are required");
+  }
+  if (!["create", "update"].includes(operation)) throw new TypeError("Unsupported room catalog operation");
+  if (bridge.compatibilityWrite && typeof bridge.compatibilityWrite.then === "function") await bridge.compatibilityWrite;
+  const snapshotRow = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  if (!snapshotRow?.data?.snapshot) throw fail("CANONICAL_SNAPSHOT_MISSING", "The canonical recovery snapshot is missing; room catalog change was not committed.");
+  const priorRoom = findRoom(snapshotRow.data.snapshot, roomId);
+  const nextRoom = findRoom(snapshot, roomId);
+  const roomRow = await bridge.fetchEntity("room", String(roomId));
+  if (!nextRoom) throw fail("ROOM_NOT_FOUND", "The new room is missing from the requested snapshot.");
+  if (operation === "create" && (priorRoom || roomRow)) {
+    throw fail("ROOM_ID_ALREADY_EXISTS", "This room number already exists in canonical storage.");
+  }
+  if (operation === "update" && !priorRoom) {
+    throw fail("ROOM_NOT_FOUND", "The room is missing from the canonical recovery snapshot.");
+  }
+  if (roomRow?.data && priorRoom && !sameJson(comparableEntity(roomRow.data), comparableEntity(priorRoom))) {
+    throw fail("CANONICAL_ROOM_DIVERGENCE", "Canonical room entity differs from the recovery snapshot; refresh and reconcile first.");
+  }
+  if (operation === "create" && priorRoom) throw fail("ROOM_ID_ALREADY_EXISTS", "This room number already exists.");
+  const committedAt = now();
+  const payload = { operation: "room." + operation, roomId: String(roomId), roomNumber: nextRoom.n };
+  const committed = await bridge.mutateEntities([
+    {
+      entityType: "room", entityId: String(roomId), expectedVersion: roomRow?.version ?? 0,
+      eventType: "room." + operation, eventPayload: payload,
+      mutate: entity => { for (const key of Object.keys(entity)) delete entity[key]; Object.assign(entity, clone(nextRoom), { updatedAt: committedAt }); }
+    },
+    {
+      entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2", expectedVersion: snapshotRow.version,
+      eventType: "pms.snapshot_room_catalog_mutation", eventPayload: payload,
+      mutate: entity => { entity.sourceKey = "aurelia_lodge_v2"; entity.snapshot = clone(snapshot); entity.updatedAt = committedAt; }
+    }
+  ]);
+  const [storedRoom, storedSnapshot] = await Promise.all([
+    bridge.fetchEntity("room", String(roomId)),
+    bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")
+  ]);
+  if (!storedRoom || !storedSnapshot ||
+      !sameJson(comparableEntity(storedRoom.data), comparableEntity(nextRoom)) ||
+      !sameJson(storedSnapshot.data.snapshot, snapshot)) {
+    throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Room catalog transaction committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
+  }
+  return Object.freeze({
+    canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
+    room: storedRoom, snapshotVersion: storedSnapshot.version,
+    roomVersion: committed.entities[0].version
+  });
+}
