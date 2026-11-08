@@ -59,7 +59,7 @@ The current implementation contains substantial storage, payment and security fo
 - Pay Bridge callback handling validates transaction references, rejects binding changes and treats duplicate processing callbacks idempotently.
 - Provider checkout normalization binds amount and currency to the persisted intent rather than trusting provider-echoed values.
 - Provider-specific PayU and Paytm checkout response validation has been added without changing the established nested checkout response shape.
-- Backend provider adapters/factory foundations cover Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay. CCAvenue remains catalogue-only.
+- Six providers (Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay) have complete adapter-operation foundations. CCAvenue has a partial adapter and cloud checkout scaffolding, but its webhook environment routing and refund/status coverage remain incomplete; it is not production-qualified.
 - The provider integration document records which providers are exposed through cloud API routes and which still need route integration and merchant qualification.
 
 **Payment limitation:** the client intent CAS and provider adapter tests do not constitute an exactly-once financial ledger. The canonical PMS folio, provider capture, webhook inbox, trusted device authorization, local posting/read-back, backend acknowledgement, refunds and reversals still need complete end-to-end integration and acceptance.
