@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { canonicalBytes } from "../shared/canonical.mjs";
 import { SETTLEMENT_AUTH_TYPE, SETTLEMENT_LEASE_TYPE, SETTLEMENT_ISSUER, SETTLEMENT_AUDIENCE } from "../settlement/authorization-signer.mjs";
+import { createPlayIntegrityRequestHash, evaluatePlayIntegrityVerdict } from "./play-integrity-verifier.mjs";
 
 const DEVICE_ID = /^[A-Za-z0-9_-]{6,64}$/;
 const COMMAND_ID = /^[0-9a-f-]{36}$/i;
@@ -22,7 +23,7 @@ export async function createDeviceEnrollmentChallenge({ db, tenantId, actorUid, 
   const challengeId = crypto.randomUUID();
   const nonce = crypto.randomBytes(32).toString("base64url");
   const issuedAt = now();
-  const expiresAt = new Date(issuedAt.getTime() + 5 * 60_000);
+  const expiresAt = new Date(issuedAt.getTime() + 5 * 60_000);\n  const playIntegrityRequestHash = createPlayIntegrityRequestHash({ tenantId, deviceId, challengeId, nonce });
   await db.runTransaction(async tx => {
     const existing = await tx.get(ref);
     if (existing.exists && !["ENROLLMENT_PENDING", "PENDING"].includes(existing.data().status)) {
@@ -33,14 +34,14 @@ export async function createDeviceEnrollmentChallenge({ db, tenantId, actorUid, 
     }
     tx.create(challengeRef(db, tenantId, deviceId, challengeId), {
       tenantId, deviceId, actorUid, nonceSha256: sha256(Buffer.from(nonce, "base64url")),
-      nonceBase64: nonce, issuedAt, expiresAt, consumedAt: null
+      nonceBase64: nonce, playIntegrityRequestHash, issuedAt, expiresAt, consumedAt: null
     });
     if (!existing.exists) tx.create(ref, {
       tenantId, deviceId, ownerUid: actorUid, status: "ENROLLMENT_PENDING",
       lastSequence: 0, lastAckedSequence: 0, createdAt: issuedAt
     });
   });
-  return { challengeId, nonce, expiresAt: expiresAt.toISOString() };
+  return { challengeId, nonce, playIntegrityRequestHash, expiresAt: expiresAt.toISOString() };
 }
 
 export async function verifyAndRegisterDevice({
@@ -50,7 +51,7 @@ export async function verifyAndRegisterDevice({
 }) {
   requireId(tenantId, "tenant_id"); requireId(deviceId, "device_id");
   if (typeof actorUid !== "string" || !actorUid || !COMMAND_ID.test(challengeId || "") ||
-      typeof publicKeyPem !== "string" || publicKeyPem.length > 4096 ||
+      typeof publicKeyPem !== "string" || publicKeyPem.length > 4096 ||\n      typeof integrityToken !== "string" || integrityToken.length < 100 || integrityToken.length > 20_000 ||\n      typeof decodeIntegrityToken !== "function" || typeof expectedPackageName !== "string" ||\n      !Array.isArray(allowedCertificateSha256Digests) || !allowedCertificateSha256Digests.length ||
       !Array.isArray(certificateChainBase64) || certificateChainBase64.length < 2 ||
       certificateChainBase64.length > 8 || certificateChainBase64.some(v =>
         typeof v !== "string" || v.length < 128 || v.length > 90_000)) {
@@ -67,6 +68,17 @@ export async function verifyAndRegisterDevice({
       challenge.expiresAt.toDate().getTime() <= current.getTime()) {
     throw new Error("payment_device_challenge_expired_or_mismatched");
   }
+  const decodedIntegrity = await decodeIntegrityToken(integrityToken);
+  const integrity = evaluatePlayIntegrityVerdict({
+    payload: decodedIntegrity,
+    expectedPackageName,
+    expectedRequestHash: challenge.playIntegrityRequestHash,
+    allowedCertificateSha256Digests,
+    now: current.getTime(),
+    requireStrongIntegrity
+  });
+  if (!integrity.accepted) throw new Error(integrity.reason);
+
   const response = await fetchImpl(new URL("/verify", attestationVerifierUrl), {
     method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" },
     body: JSON.stringify({ challengeBase64: challenge.nonceBase64, certificateChainBase64 }),
