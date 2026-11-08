@@ -139,3 +139,41 @@ test('CCAvenue Dynamic Event Notification cannot choose tenant/folio/amount and 
   }), /provider_unavailable/);
   assert.equal(persisted, false);
 });
+
+import { CCAvenueHostedCheckout } from '../src/providers/ccavenue-hosted-checkout.mjs';
+
+test('CCAvenue hosted checkout builds encrypted v3.3 POST fields without exposing merchant encryption key', () => {
+  const checkout = new CCAvenueHostedCheckout({
+    merchantId: '123456', accessCode: ACCESS, encryptionKey: KEY, environment: 'test'
+  }).createCheckout({
+    orderId: EXPECTED.orderId, amountMinor: EXPECTED.amountMinor, currency: 'INR',
+    redirectUrl: 'https://pms.example.com/payment/ccavenue/return',
+    cancelUrl: 'https://pms.example.com/payment/ccavenue/cancel'
+  });
+  assert.equal(checkout.endpoint,
+    'https://test.ccavenue.com/transaction/transaction.do?command=initiateTransaction');
+  assert.equal(checkout.method, 'POST');
+  assert.equal(checkout.fields.access_code, ACCESS);
+  const plain = new CCAvenueCrypto(KEY).decrypt(checkout.fields.encRequest);
+  const fields = new URLSearchParams(plain);
+  assert.equal(fields.get('merchant_id'), '123456');
+  assert.equal(fields.get('order_id'), EXPECTED.orderId);
+  assert.equal(fields.get('amount'), '1250.50');
+  assert.equal(fields.get('currency'), 'INR');
+  assert.equal(fields.get('redirect_url'), 'https://pms.example.com/payment/ccavenue/return');
+  assert.equal(fields.get('cancel_url'), 'https://pms.example.com/payment/ccavenue/cancel');
+  assert.equal(JSON.stringify(checkout).includes(KEY), false);
+});
+
+test('CCAvenue hosted checkout rejects insecure URLs and malformed order amounts', () => {
+  const checkout = new CCAvenueHostedCheckout({
+    merchantId: '123456', accessCode: ACCESS, encryptionKey: KEY, environment: 'live'
+  });
+  const input = {
+    orderId: EXPECTED.orderId, amountMinor: EXPECTED.amountMinor, currency: 'INR',
+    redirectUrl: 'https://pms.example.com/return', cancelUrl: 'https://pms.example.com/cancel'
+  };
+  assert.throws(() => checkout.createCheckout({ ...input, redirectUrl: 'http://pms.example.com/return' }));
+  assert.throws(() => checkout.createCheckout({ ...input, amountMinor: 0 }));
+  assert.throws(() => checkout.createCheckout({ ...input, orderId: 'invalid order id' }));
+});
