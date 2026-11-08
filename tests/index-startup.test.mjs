@@ -50,7 +50,7 @@ test('sandboxed CodeShack preview is identified as session-only, never reported 
   assert.ok(html.includes("embedded-preview-sandbox"));
   assert.ok(html.includes("This is an embedded HTML preview, not the Aurelia app runtime."));
   assert.ok(html.includes("frame or sandbox blocks durable storage"));
-  assert.ok(html.includes('if(store.memoryOnly)throw new Error(window.AureliaStorageDiagnostics?.reason'));
+  assert.ok(html.includes('Synchronous accounting persistence is disabled'), 'synchronous persistence must fail closed instead of claiming durability');
 });
 
 test('room-type catalogue is derived from persisted inventory and refreshed before rendering', () => {
