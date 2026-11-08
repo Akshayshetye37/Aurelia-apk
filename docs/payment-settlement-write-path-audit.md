@@ -65,9 +65,11 @@ Tests: `tests/repository-settlement-service.test.mjs` covers atomic commit, exac
 
 The browser/PWA IndexedDB implementation is exercised by repository transaction tests. The Android SQLite adapter shares the repository contract and batch API, but a physical Android build/device qualification has not yet been performed.
 
+Inventory item creation and stock movements now use `commitInventoryItemMutation()`. The inventory entity and full recovery snapshot (including the stock movement ledger) commit together with optimistic version checks and exact read-back. Legacy items receive a stable inventory ID on their first transactional stock movement; new items receive secure generated IDs. Whole-unit stock quantities and paise-precision cost/sell prices are enforced at both the UI and repository boundary.
+
 Room catalog creation, same-number edits and retirement now use `commitRoomCatalogMutation()`. Room retirement leaves a tombstone in the room entity store while removing the room from the active snapshot. Room numbers are treated as stable entity keys: renumbering is blocked until stable room IDs and a transactional reassignment migration are implemented. Rate edits are blocked if a booking still depends on the mutable room-rate fallback; this avoids changing historical folio totals. The UI mutations, payment commits, stay lifecycle commits and reservation creation share a local serialization queue to reduce stale in-memory rollback under concurrent taps.
 
-**Remaining lifecycle work:** guest-to-booking foreign keys and safe guest renaming remain outstanding. Room renumbering/reassignment and stable room references, inventory, expenses, POS, charges, settings and the remaining legacy mutation paths are not yet cut over. Reservation creation now atomically includes the confirmed advance in the local folio projection; this does not complete the external gateway capture/webhook/refund lifecycle. `uiCutover` remains false; do not describe the PMS as fully device-primary until those paths and all read paths have been migrated and qualified.
+**Remaining lifecycle work:** guest-to-booking foreign keys and safe guest renaming remain outstanding. Room renumbering/reassignment and stable room references, expenses, POS, charges, settings and the remaining legacy mutation paths are not yet cut over. Inventory create and stock movement paths have been migrated, but inventory read paths, item editing/retirement and POS-linked stock decrement still require domain-level cutover and reconciliation. Reservation creation now atomically includes the confirmed advance in the local folio projection; this does not complete the external gateway capture/webhook/refund lifecycle. `uiCutover` remains false; do not describe the PMS as fully device-primary until those paths and all read paths have been migrated and qualified.
 
 ## Build integration
 
@@ -77,7 +79,7 @@ Room catalog creation, same-number edits and retirement now use `commitRoomCatal
 
 `tests/settlement-service.test.mjs` covers manual success, staff-review success, idempotency/UTR dedupe, automatic-source rejection with the gate disabled, overpayment rejection, rollback after a thrown persistence error, evidence-only `addSig`, and manual/staff route wiring.
 
-**Verification:** GitHub Actions run [42488911050](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42488911050) passed 378/378 tests, production web bundle build and asset privacy checks on commit `2c51de718681384ee8723ea7710d1955c7308e9f`. This was a web/source workflow, not an APK build or physical-device test. Android release and device qualification remain open.
+**Verification:** GitHub Actions run [42489595386](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42489595386) passed 385/385 tests, production web bundle build and asset privacy checks on commit `2f55282791067b6f1f9e52764430e01a7e972907`. This was a web/source workflow, not an APK build or physical-device test. Android release and device qualification remain open.
 
 ## Gate and product stance
 
