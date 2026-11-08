@@ -70,6 +70,11 @@ export async function settlePaymentToRepository({
   const bookingId = bookingKey(booking);
   const folioId = String(booking.folioId || "booking-" + bookingId);
   const amountPaise = moneyToPaise(amount, "Payment amount");
+  // Flush snapshots queued by the compatibility UI before taking entity
+  // versions; otherwise an older queued snapshot could race this transaction.
+  if (bridge.compatibilityWrite && typeof bridge.compatibilityWrite.then === "function") {
+    await bridge.compatibilityWrite;
+  }
   const [snapshotRow, bookingRow, folioRow] = await Promise.all([
     bridge.fetchEntity(SNAPSHOT_TYPE, SNAPSHOT_ID),
     bridge.fetchEntity("booking", bookingId),
@@ -144,7 +149,7 @@ export async function settlePaymentToRepository({
       expectedVersion: bookingRow?.version ?? 0,
       eventType: "booking.payment_posted",
       eventPayload: snapshotPayload,
-      mutate: entity => Object.assign(entity, clone(workingBooking))
+      mutate: entity => { for (const key of Object.keys(entity)) delete entity[key]; Object.assign(entity, clone(workingBooking)); }
     },
     {
       entityType: "folio",
