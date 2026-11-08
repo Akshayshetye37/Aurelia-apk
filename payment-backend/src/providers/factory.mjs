@@ -4,6 +4,7 @@ import { JioPayAdapter } from './jiopay-adapter.mjs';
 import { PaytmAdapter } from './paytm-adapter.mjs';
 import { PhonePeAdapter } from './phonepe-adapter.mjs';
 import { PayUAdapter } from './payu-adapter.mjs';
+import { CCAvenueAdapter } from './ccavenue.mjs';
 import { assertAdapterCapabilities } from './adapter-contract.mjs';
 import { PROVIDERS } from './registry.mjs';
 
