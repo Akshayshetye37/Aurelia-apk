@@ -44,6 +44,8 @@ test("bootstrap migrates the actual Aurelia legacy key and preserves its exact r
   assert.equal(result.runtimePolicy.mode, "DEVICE_PRIMARY");
   assert.equal(result.runtimePolicy.sourceOfTruth, "ON_DEVICE");
   assert.equal(result.runtimePolicy.cloudSyncEnabled, false);
+  assert.ok(result.featureContracts.length >= 20);
+  assert.ok(result.featureContracts.every(feature => feature.cloudDependency === false));
   assert.equal(result.networkRequiredForStartup, false);
   assert.equal(result.migration.status, "MIGRATION_VERIFIED");
   assert.equal(result.migration.entityCount, Object.keys(state).length);
