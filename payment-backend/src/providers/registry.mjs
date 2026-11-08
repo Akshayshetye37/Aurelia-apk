@@ -26,7 +26,7 @@ export const PROVIDERS = Object.freeze({
     credentials: [
       { key: 'appId', label: 'App ID', type: 'text', secret: false, required: true },
       { key: 'secretKey', label: 'Secret Key', type: 'password', secret: true, required: true },
-      { key: 'webhookSecret', label: 'Webhook Secret', type: 'password', secret: true, required: true }
+      { key: 'webhookSecret', label: 'Webhook Secret Override (optional)', type: 'password', secret: true, required: false }
     ],
     capabilities: ['orders', 'payment_status', 'webhooks', 'refunds'],
     adapterStatus: 'adapter_implemented_wired'
