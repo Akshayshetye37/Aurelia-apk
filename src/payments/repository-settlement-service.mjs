@@ -29,6 +29,14 @@ function bookingKey(booking) {
 function sameJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
+function comparableBooking(value) {
+  const copy = clone(value);
+  if (copy && typeof copy === "object") {
+    delete copy.updatedAt;
+    delete copy.legacySource;
+  }
+  return copy;
+}
 
 function refreshLegacyCache(storage, snapshot) {
   if (!storage) return null;
@@ -110,12 +118,12 @@ export async function settlePaymentToRepository({
     throw fail("BOOKING_NOT_FOUND", "Booking is missing from the canonical PMS snapshot");
   }
   const snapshotBooking = canonicalState.b[canonicalIndex];
-  if (bookingRow?.data && !sameJson(bookingRow.data, snapshotBooking)) {
+  if (bookingRow?.data && !sameJson(comparableBooking(bookingRow.data), comparableBooking(snapshotBooking))) {
     throw fail("CANONICAL_BOOKING_DIVERGENCE",
       "Canonical booking entity and recovery snapshot disagree; refresh the PMS before recording payment.");
   }
 
-  const workingBooking = clone(bookingRow?.data || snapshotBooking);
+  const workingBooking = clone(comparableBooking(bookingRow?.data || snapshotBooking));
   canonicalState.b[canonicalIndex] = workingBooking;
   if (!Array.isArray(canonicalState.aud)) canonicalState.aud = [];
   let reviewEvidence = null;

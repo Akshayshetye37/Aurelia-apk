@@ -164,3 +164,22 @@ test("staff review rejects evidence amount, reference, identity or review-state 
   assert.equal(booking.p, 0);
   assert.equal(await bridge.fetchEntity("folio", "folio-41"), null);
 });
+
+test("settlement normalizes legacy projection metadata before comparing booking and snapshot", async () => {
+  const { bridge, booking, state } = fixture();
+  await bridge.mutateEntity({
+    entityType: "booking", entityId: "41", expectedVersion: 0, eventType: "booking.legacy_projection_metadata",
+    mutate: entity => Object.assign(entity, booking, {
+      legacySource: "b", updatedAt: "2026-11-08T12:00:00.000Z"
+    })
+  });
+  const result = await settlePaymentToRepository({
+    bridge, state, booking, balanceDueFor, amount: 100, method: "Cash",
+    source: "manual", verificationConfirmed: true, idempotencyKey: "legacy-meta-payment-41"
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.canonical, true);
+  const saved = await bridge.fetchEntity("booking", "41");
+  assert.equal(saved.data.legacySource, undefined);
+  assert.equal(saved.data.p, 100);
+});

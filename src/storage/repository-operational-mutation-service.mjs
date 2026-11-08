@@ -6,7 +6,7 @@ const clone = value => value == null ? value :
   (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
 function fail(code, message) { const error = new Error(message); error.code = code; return error; }
 function sameJson(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
-function comparableEntity(value) { const copy = clone(value); if (copy && typeof copy === "object") { delete copy.id; delete copy.updatedAt; } return copy; }
+function comparableEntity(value) { const copy = clone(value); if (copy && typeof copy === "object") { delete copy.id; delete copy.updatedAt; delete copy.legacySource; } return copy; }
 function refreshCache(storage, snapshot) {
   if (!storage) return null;
   try {

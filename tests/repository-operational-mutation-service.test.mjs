@@ -420,3 +420,16 @@ test("restaurant table settlement rejects duplicate sale IDs", async () => {
     bridge, snapshot, tableId: 1, saleId: sale.id, saleIndex: 0, legacyStorage: null
   }), error => error.code === "RESTAURANT_SALE_ALREADY_SETTLED");
 });
+
+test("room housekeeping mutation accepts previously projected legacy-source metadata", async () => {
+  const { bridge, snapshot, room } = await fixture();
+  await bridge.mutateEntity({
+    entityType: "room", entityId: "101", expectedVersion: 1, eventType: "room.legacy_projection_metadata",
+    mutate: entity => { entity.legacySource = "rooms"; entity.updatedAt = "2026-11-08T12:00:00.000Z"; }
+  });
+  room.s = "clean";
+  const result = await commitRoomStateMutation({ bridge, snapshot, roomId: "101", legacyStorage: null });
+  assert.equal(result.canonical, true);
+  assert.equal(result.room.data.s, "clean");
+  assert.equal(result.room.data.legacySource, undefined);
+});

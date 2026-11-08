@@ -54,17 +54,17 @@ function records(snapshot, migrationId) {
   snapshot.rooms.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy room at index " + index);
     const id = safeId(row.id ?? row.n, "room identity");
-    add("room", id, { ...clone(row), id, legacySource: "rooms" }, "rooms");
+    add("room", id, { ...clone(row), id }, "rooms");
   });
   snapshot.g.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy guest at index " + index);
     const id = safeId(row.id ?? "legacy-guest-" + index, "guest identity");
-    add("guest", id, { ...clone(row), id, legacySource: "g" }, "g");
+    add("guest", id, { ...clone(row), id }, "g");
   });
   snapshot.b.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy booking at index " + index);
     const id = safeId(row.id, "booking identity");
-    add("booking", id, { ...clone(row), id, legacySource: "b" }, "b");
+    add("booking", id, { ...clone(row), id }, "b");
     const folioId = safeId(row.folioId ?? "booking-" + id, "folio identity");
     // Preserve source values verbatim. Do not reconcile p vs pays or infer
     // an opening balance during migration.
@@ -80,12 +80,12 @@ function records(snapshot, migrationId) {
   snapshot.inv.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy inventory item at index " + index);
     const id = safeId(row.id ?? "legacy-inventory-" + index, "inventory identity");
-    add("inventory", id, { ...clone(row), id, legacySource: "inv" }, "inv");
+    add("inventory", id, { ...clone(row), id }, "inv");
   });
   snapshot.exp.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy expense at index " + index);
     const id = safeId(row.id ?? "legacy-expense-" + index, "expense identity");
-    add("expense", id, { ...clone(row), id, legacySource: "exp" }, "exp");
+    add("expense", id, { ...clone(row), id }, "exp");
   });
   snapshot.led.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy ledger row at index " + index);

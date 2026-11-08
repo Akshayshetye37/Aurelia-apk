@@ -99,3 +99,30 @@ test("reservation commit refuses a booking ID already owned by another reservati
     balanceDueFor, legacyStorage: null
   }), error => error.code === "RESERVATION_CANONICAL_DIVERGENCE");
 });
+
+test("reservation commit accepts projected guest and room metadata from an earlier local-first build", async () => {
+  const { bridge, snapshot } = await fixture();
+  const guest = { id: "gst-reservation-metadata", n: "Guest Meta", ph: "9999999999", occ: [], veh: [] };
+  snapshot.g.push(guest);
+  await bridge.persistCompatibilitySnapshot(snapshot);
+  await bridge.mutateEntity({
+    entityType: "guest", entityId: guest.id, expectedVersion: 0, eventType: "guest.legacy_projection_metadata",
+    mutate: entity => Object.assign(entity, guest, { legacySource: "g", updatedAt: "2026-11-08T12:00:00.000Z" })
+  });
+  await bridge.mutateEntity({
+    entityType: "room", entityId: "101", expectedVersion: 0, eventType: "room.legacy_projection_metadata",
+    mutate: entity => Object.assign(entity, snapshot.rooms[0], { legacySource: "rooms", updatedAt: "2026-11-08T12:00:00.000Z" })
+  });
+  const booking = {
+    id: 62, folioId: "booking-62", g: guest.n, room: "101", in: 0, out: 2,
+    st: "res", rate: 1000, ch: [], p: 0, pays: [], payments: []
+  };
+  snapshot.b.push(booking);
+  const result = await commitReservationToRepository({
+    bridge, snapshot, guestIndex: 0, bookingId: booking.id, roomId: "101",
+    balanceDueFor, legacyStorage: null
+  });
+  assert.equal(result.canonical, true);
+  assert.equal(result.guest.data.n, guest.n);
+  assert.equal(result.booking.data.g, guest.n);
+});
