@@ -158,6 +158,14 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(html, /data-preview-blocked/);
   assert.match(html, /sandbox blocks durable storage/);
   assert.match(html, /state\.previewBlocked/);
+  assert.match(html, /async function persistCanonicalStrict\(\)/);
+  assert.match(html, /await window\.AureliaRepositoryCompatibility\.persist\(state\)/);
+  assert.match(html, /readBack: async \(\) =>/);
+  assert.match(html, /async function addSig\(o\)/);
+  assert.match(html, /async function sigReject\(id,bookingId\)/);
+  assert.match(html, /async function sigReopen\(id\)/);
+  assert.match(html, /async function sigA\(id,i\)/);
+  assert.match(html, /await persistCanonicalStrict\(\)/);
 });
 
 test("Android bootstrap selects the real native adapter contract and verifies migration before releasing startup",async()=>{const raw=JSON.stringify(state),storage=makeStorage({[AURELIA_LEGACY_STATE_KEY]:raw}),entities=new Map(),snapshots=new Map();let initialized=false;const plugin={async initializeStorage(){initialized=true;return{success:true,engine:"android-sqlite",contractVersion:1};},async migrateLegacySnapshot(args){const parsed=JSON.parse(args.raw);snapshots.set(args.migrationId,{id:args.migrationId,sourceKey:args.sourceKey,raw:args.raw,sourceTimestamp:args.sourceTimestamp});for(const [id,data] of Object.entries(parsed))entities.set(id,{key:"legacy:"+id,type:"legacy",id,version:1,data,updatedAt:"2026-11-07T00:00:00.000Z"});return{alreadyMigrated:false};},async readMigrationSnapshot({migrationId}){return{snapshot:snapshots.get(migrationId)||null};},async listEntities(){return{entities:Array.from(entities.values())};}};const nativeRepository=new CapacitorPmsStorageClient(plugin);const app=new PmsBootstrapCoordinator({storage,indexedDBImpl:undefined,databaseName:"unused-android-idb",platform:"ANDROID_WEBVIEW",nativeRepositoryFactory:async()=>nativeRepository,identityProvider:async()=>({schemaVersion:1,scope:"LOCAL_ONLY",installationId:"ins_native_test_000000000001",tenantId:"local_ins_native_test_000000000001",propertyId:"property_native_test_000000001",deviceId:"device_native_test_000000001",createdAt:"2026-11-07T00:00:00.000Z"}),now:()=>"2026-11-07T00:00:00.000Z"});const result=await app.initializeApplication();assert.equal(initialized,true);assert.equal(result.repository,nativeRepository);assert.equal(result.storageEngine,"ANDROID_SQLITE");assert.equal(result.uiCutover,false);assert.equal(result.migration.status,"MIGRATION_VERIFIED");assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY),raw);});
