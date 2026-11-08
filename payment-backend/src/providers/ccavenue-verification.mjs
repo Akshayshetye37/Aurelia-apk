@@ -5,7 +5,7 @@ const ENDPOINTS = Object.freeze({
   live: 'https://api.ccavenue.com/apis/servlet/DoWebTrans'
 });
 const ORDER_ID = /^[A-Za-z0-9_-]{1,30}$/;
-const TRACKING_ID = /^[0-9]{1,25}$/;
+const TRACKING_ID = /^[0-9]{1,12}$/;
 const CURRENCY = /^[A-Z]{3}$/;
 const DECIMAL = /^(0|[1-9][0-9]{0,9})(?:\.([0-9]{1,2}))?$/;
 const TIMEOUT_MS = 15000;
@@ -67,7 +67,7 @@ function parseFormResponse(body) {
 export class CCAvenueVerificationService {
   constructor({ encryptionKey, accessCode, environment, apiVersion = '1.1',
     fetchImpl = fetch, timeoutMs = TIMEOUT_MS }) {
-    if (!['test', 'live'].includes(environment)) throw new TypeError('ccavenue_environment_invalid');
+    if (environment !== 'test') throw new TypeError('ccavenue_unqualified_crypto_test_environment_only');
     if (typeof accessCode !== 'string' || !/^[A-Za-z0-9]{8,64}$/.test(accessCode)) {
       throw new TypeError('ccavenue_access_code_invalid');
     }
