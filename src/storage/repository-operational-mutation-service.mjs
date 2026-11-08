@@ -486,12 +486,21 @@ export async function commitRestaurantFolioCharge({
   if (nextBooking.st !== "in" || !Array.isArray(nextBooking.ch) || !Array.isArray(priorBooking.ch)) {
     throw fail("RESTAURANT_GUEST_NOT_IN_HOUSE", "Only a currently checked-in guest can receive a restaurant folio charge.");
   }
-  const addedCharges = nextBooking.ch.slice(priorBooking.ch.length);
+  const priorCharges = priorBooking.ch || [];
+  if (!sameJson(nextBooking.ch.slice(0, priorCharges.length), priorCharges)) {
+    throw fail("RESTAURANT_FOLIO_HISTORY_CHANGED", "Existing folio charges cannot be changed by a restaurant posting.");
+  }
+  const addedCharges = nextBooking.ch.slice(priorCharges.length);
+  const saleItems = Array.isArray(nextSale.items) ? nextSale.items : [];
+  const priorTableItems = Array.isArray(priorTable.o) ? priorTable.o : [];
+  const normalizedItems = rows => rows.map(row => [String(row?.[0] || ""), Math.round((Number(row?.[1]) || 0) * 100)]);
   const saleAmount = Number(nextSale.a);
   const addedAmount = addedCharges.reduce((sum, row) => sum + (Number(row?.[1]) || 0), 0);
   if (!addedCharges.length || !Number.isFinite(saleAmount) || saleAmount <= 0 ||
-      Math.abs(Math.round(saleAmount * 100) - Math.round(addedAmount * 100)) > 0) {
-    throw fail("RESTAURANT_CHARGE_AMOUNT_MISMATCH", "The posted folio charges do not equal the restaurant sale total.");
+      !Number.isSafeInteger(Math.round(saleAmount * 100)) || Math.abs(saleAmount * 100 - Math.round(saleAmount * 100)) > 1e-7 ||
+      Math.abs(Math.round(saleAmount * 100) - Math.round(addedAmount * 100)) > 0 ||
+      !sameJson(normalizedItems(saleItems), normalizedItems(priorTableItems))) {
+    throw fail("RESTAURANT_CHARGE_AMOUNT_MISMATCH", "The restaurant sale items and total must exactly match the table order and newly posted folio charges.");
   }
   const [bookingRow, tableRow, saleRow] = await Promise.all([
     bridge.fetchEntity("booking", String(bookingId)),
