@@ -80,6 +80,8 @@ export const PROVIDERS = Object.freeze({
     ],
     capabilities: ['hosted_checkout', 'payment_status', 'webhooks'],
     adapterStatus: 'adapter_partial_implemented',
+    // Test checkout and server-side status reconciliation are enabled. Live
+    // collection and all refund operations remain explicitly unavailable.
     cloudCheckoutApiEnabled: true
   },
   jiopay: {
