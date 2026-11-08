@@ -23,7 +23,8 @@ export async function createDeviceEnrollmentChallenge({ db, tenantId, actorUid, 
   const challengeId = crypto.randomUUID();
   const nonce = crypto.randomBytes(32).toString("base64url");
   const issuedAt = now();
-  const expiresAt = new Date(issuedAt.getTime() + 5 * 60_000);\n  const playIntegrityRequestHash = createPlayIntegrityRequestHash({ tenantId, deviceId, challengeId, nonce });
+  const expiresAt = new Date(issuedAt.getTime() + 5 * 60_000);
+  const playIntegrityRequestHash = createPlayIntegrityRequestHash({ tenantId, deviceId, challengeId, nonce });
   await db.runTransaction(async tx => {
     const existing = await tx.get(ref);
     if (existing.exists && !["ENROLLMENT_PENDING", "PENDING"].includes(existing.data().status)) {
@@ -53,7 +54,9 @@ export async function verifyAndRegisterDevice({
 }) {
   requireId(tenantId, "tenant_id"); requireId(deviceId, "device_id");
   if (typeof actorUid !== "string" || !actorUid || !COMMAND_ID.test(challengeId || "") ||
-      typeof publicKeyPem !== "string" || publicKeyPem.length > 4096 ||\n      typeof integrityToken !== "string" || integrityToken.length < 100 || integrityToken.length > 20_000 ||\n      typeof decodeIntegrityToken !== "function" || typeof expectedPackageName !== "string" ||\n      !Array.isArray(allowedCertificateSha256Digests) || !allowedCertificateSha256Digests.length ||
+      typeof publicKeyPem !== "string" || publicKeyPem.length > 4096 ||
+      typeof integrityToken !== "string" || integrityToken.length < 100 || integrityToken.length > 20_000 ||
+      typeof decodeIntegrityToken !== "function" || typeof expectedPackageName !== "string" ||\n      !Array.isArray(allowedCertificateSha256Digests) || !allowedCertificateSha256Digests.length ||
       !Array.isArray(certificateChainBase64) || certificateChainBase64.length < 2 ||
       certificateChainBase64.length > 8 || certificateChainBase64.some(v =>
         typeof v !== "string" || v.length < 128 || v.length > 90_000)) {
