@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
+import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
 import { CapacitorPmsStorageClient } from "../src/storage/capacitor-pms-storage.mjs";
 import {
   PmsBootstrapCoordinator,
@@ -58,6 +59,45 @@ test("bootstrap replay is idempotent and verifies the original snapshot", async 
   assert.equal(second.migration.status, "MIGRATION_VERIFIED");
   assert.equal(second.migration.alreadyMigrated, true);
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
+});
+
+test("missing legacy UI state is recovered from the last committed canonical snapshot", async () => {
+  const raw = JSON.stringify(state);
+  const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: raw });
+  const first = await coordinator("recover-snapshot", storage).initializeApplication();
+  const bridge = new PmsRepositoryBridge({
+    tenantId: first.identity.tenantId,
+    propertyId: first.identity.propertyId,
+    deviceId: first.identity.deviceId,
+    eventId: (() => { let n = 0; return () => "recovery-event-" + (++n); })()
+  });
+  bridge.bindActiveEngine(first.repository, first.identity);
+  await bridge.persistCompatibilitySnapshot(state);
+
+  storage.values.delete(AURELIA_LEGACY_STATE_KEY);
+  const restarted = await coordinator("recover-snapshot-restart", storage, {
+    repository: first.repository
+  }).initializeApplication();
+
+  assert.equal(restarted.recovery.restored, true);
+  assert.equal(restarted.recovery.source, "canonical-audit-snapshot");
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
+  assert.equal(restarted.migration.status, "MIGRATION_VERIFIED");
+});
+
+test("startup refuses to present an empty PMS when canonical migrated records exist without a full recovery snapshot", async () => {
+  const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: JSON.stringify(state) });
+  const first = await coordinator("recover-no-snapshot", storage).initializeApplication();
+  storage.values.delete(AURELIA_LEGACY_STATE_KEY);
+  const restarted = coordinator("recover-no-snapshot-restart", storage, {
+    repository: first.repository
+  });
+  await assert.rejects(
+    restarted.initializeApplication(),
+    /canonical PMS records exist but no committed full-state recovery snapshot/i
+  );
+  assert.equal(restarted.status, "FAILED_CLOSED");
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), null);
 });
 
 test("malformed legacy data fails closed without modifying the legacy value", async () => {
