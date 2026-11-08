@@ -77,6 +77,7 @@ test('ordinary PMS persistence is canonical-first and has no localStorage fallba
   assert.ok(persistStart >= 0 && persistEnd > persistStart, 'ordinary persist() function must exist');
   const persistBody = html.slice(persistStart, persistEnd);
   assert.match(persistBody, /coordinator\.save\(snapshot\)/);
+  assert.match(persistBody, /AureliaLocalOperationalLock/);
   assert.doesNotMatch(persistBody, /localStorage|setItem\(|AureliaRepositoryCompatibility\.persist/);
   assert.match(persistBody, /RECOVERY_CHECK_PENDING=true/);
   const strictStart = html.indexOf('async function persistCanonicalStrict(){');
