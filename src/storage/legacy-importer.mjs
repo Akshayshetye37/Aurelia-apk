@@ -7,19 +7,24 @@ export const LEGACY_MIGRATION_STATUS_KEY = "aurelia_canonical_migration_status";
 
 export class LegacyImporter {
   constructor(storage = globalThis.window?.__aureliaStorage || globalThis.localStorage) {
-    if (!storage || storage.memoryOnly === true ||
-        typeof storage.getItem !== "function" ||
-        typeof storage.setItem !== "function") {
-      throw new TypeError("A durable Storage-compatible legacy store is required");
-    }
     this.storage = storage;
   }
 
+  assertStorage() {
+    if (!this.storage || this.storage.memoryOnly === true ||
+        typeof this.storage.getItem !== "function" ||
+        typeof this.storage.setItem !== "function") {
+      throw new TypeError("A durable Storage-compatible legacy store is required");
+    }
+  }
+
   readLegacyState() {
+    this.assertStorage();
     return this.storage.getItem(LEGACY_STATE_KEY);
   }
 
   writeLegacyState(raw) {
+    this.assertStorage();
     if (typeof raw !== "string" || raw.length === 0) {
       throw new TypeError("Legacy state must be a non-empty raw JSON string");
     }
@@ -30,10 +35,12 @@ export class LegacyImporter {
   }
 
   readMigrationStatus() {
+    this.assertStorage();
     return this.storage.getItem(LEGACY_MIGRATION_STATUS_KEY);
   }
 
   writeMigrationStatus(value) {
+    this.assertStorage();
     if (typeof value !== "string" || !value) {
       throw new TypeError("Migration status must be a non-empty string");
     }
