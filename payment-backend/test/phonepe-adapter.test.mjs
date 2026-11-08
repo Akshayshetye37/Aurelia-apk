@@ -88,3 +88,15 @@ test('PhonePe rejects sub-rupee refund requests before network dispatch',async()
   await assert.rejects(adapter.createRefund({refundId:'refund_123',orderId:'order_123',amountMinor:99}),/invalid_phonepe_refund/);
   assert.equal(mock.calls.length,0);
 });
+
+
+test('PhonePe does not treat a completed order with only failed payment attempts as captured',async()=>{
+  const mock=mockFetch(async(url)=>url.endsWith('/v1/oauth/token')
+    ?{status:200,body:tokenBody()}
+    :{status:200,body:{orderId:'pg_order_123',state:'COMPLETED',amount:12500,
+      paymentDetails:[{transactionId:'txn_failed',state:'FAILED',amount:12500}] }});
+  const adapter=new PhonePeAdapter({credentials,environment:'test',fetchImpl:mock.fetchImpl});
+  const result=await adapter.getPaymentStatus({orderId:'order_123'});
+  assert.equal(result.captured,false);
+  assert.equal(result.paymentStatus,'FAILED');
+});
