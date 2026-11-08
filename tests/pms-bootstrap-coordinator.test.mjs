@@ -182,12 +182,12 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(loader, /await replayApplicationScripts\(\)/);
   assert.match(loader, /PMS startup stopped safely/);
   assert.match(html, /type="application\/x-aurelia-deferred"/);
-  assert.match(html, /diagnostics\.embeddedPreview === true/);
+  assert.match(html, /var embedded = false/);
   assert.match(html, /data-preview-blocked/);
   assert.match(html, /sandbox blocks durable storage/);
   assert.match(html, /state\.previewBlocked/);
   assert.match(html, /async function persistCanonicalStrict\(\)/);
-  assert.match(html, /persist: snapshot => storageBridge\.persistCompatibilitySnapshot\(snapshot\)/);
+  assert.match(html, /persist: async snapshot =>/);
   assert.match(html, /coordinator\.save\(state\)/);
   assert.match(html, /readBack: async \(\) =>/);
   assert.match(html, /async function addSig\(o\)/);
