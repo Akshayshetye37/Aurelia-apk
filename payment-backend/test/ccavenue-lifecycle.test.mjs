@@ -187,7 +187,7 @@ test('CCAvenue hosted checkout builds encrypted v3.3 POST fields without exposin
 
 test('CCAvenue hosted checkout rejects insecure URLs and malformed order amounts', () => {
   const checkout = new CCAvenueHostedCheckout({
-    merchantId: '123456', accessCode: ACCESS, hostedCheckoutKey: HOSTED_KEY, environment: 'live'
+    merchantId: '123456', accessCode: ACCESS, hostedCheckoutKey: HOSTED_KEY, environment: 'test'
   });
   const input = {
     orderId: EXPECTED.orderId, amountMinor: EXPECTED.amountMinor, currency: 'INR',
