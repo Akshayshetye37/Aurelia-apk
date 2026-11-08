@@ -104,14 +104,37 @@ export function transitionIntent(current, evidence) {
 
 export function assertIntentBinding(expected, observed) {
   const fields = ['tenantId', 'folioId', 'provider', 'environment', 'amountMinor', 'currency', 'idempotencyKey'];
-  if (!expected || !observed || fields.some(field => expected[field] !== observed[field])) {
+  if (!expected || typeof expected !== 'object' || !observed || typeof observed !== 'object' ||
+      fields.some(field => expected[field] !== observed[field])) {
     throw new Error('payment_intent_binding_mismatch');
   }
-  if (!Number.isSafeInteger(observed.amountMinor) || observed.amountMinor <= 0 ||
-      observed.currency !== 'INR' || !['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay'].includes(observed.provider) ||
-      !({ razorpay: ['test', 'live'], cashfree: ['test', 'live'], payu: ['test', 'live'],
-        phonepe: ['test', 'live'], paytm: ['staging', 'production'], jiopay: ['uat', 'production'] }[observed.provider] || []).includes(observed.environment)) {
+
+  // Equality alone is insufficient: two malformed records with the same
+  // missing tenant/folio/idempotency fields must never validate as a binding.
+  const validId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(value);
+  const validIdempotencyKey = value => typeof value === 'string' &&
+    /^[A-Za-z0-9._:-]{12,100}$/.test(value);
+  const environments = {
+    razorpay: ['test', 'live'], cashfree: ['test', 'live'], payu: ['test', 'live'],
+    phonepe: ['test', 'live'], paytm: ['staging', 'production'], jiopay: ['uat', 'production']
+  };
+  if (!validId(expected.tenantId) || !validId(expected.folioId) ||
+      !validIdempotencyKey(expected.idempotencyKey) ||
+      !Number.isSafeInteger(expected.amountMinor) || expected.amountMinor <= 0 ||
+      expected.currency !== 'INR' ||
+      !Object.hasOwn(environments, expected.provider) ||
+      !environments[expected.provider].includes(expected.environment)) {
     throw new TypeError('invalid_payment_intent_binding');
+  }
+
+  // Carry optional immutable identifiers through the comparison whenever
+  // either side supplies them; omission on one side is a binding conflict.
+  for (const field of ['bookingId', 'propertyId', 'requestId', 'sessionId',
+    'providerOrderId', 'providerPaymentId']) {
+    if ((Object.hasOwn(expected, field) || Object.hasOwn(observed, field)) &&
+        expected[field] !== observed[field]) {
+      throw new Error('payment_intent_binding_mismatch');
+    }
   }
   return true;
 }
