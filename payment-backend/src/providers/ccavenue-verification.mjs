@@ -7,7 +7,7 @@ const ENDPOINTS = Object.freeze({
 const ORDER_ID = /^[A-Za-z0-9_-]{1,30}$/;
 const TRACKING_ID = /^[0-9]{1,25}$/;
 const CURRENCY = /^[A-Z]{3}$/;
-const DECIMAL = /^(0|[1-9][0-9]{0,9})(?:\\.([0-9]{1,2}))?$/;
+const DECIMAL = /^(0|[1-9][0-9]{0,9})(?:\.([0-9]{1,2}))?$/;
 const TIMEOUT_MS = 15000;
 const RESPONSE_LIMIT = 128 * 1024;
 
