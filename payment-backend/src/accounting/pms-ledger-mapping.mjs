@@ -29,7 +29,7 @@ function legacyPaymentAmountPaise(row) {
   const raw = row.a ?? row.amount;
   const decimal = typeof raw === 'number' && Number.isFinite(raw) ? String(raw)
     : typeof raw === 'string' ? raw.trim() : '';
-  const match = /^(0|[1-9][0-9]*)(?:\\.([0-9]{1,2}))?$/.exec(decimal);
+  const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,2}))?$/.exec(decimal);
   if (!match) throw new TypeError('legacy_payment_amount_must_be_exact_rupee_decimal_or_integer_paise');
   const whole = BigInt(match[1]);
   const fraction = BigInt((match[2] || '').padEnd(2, '0') || '0');
