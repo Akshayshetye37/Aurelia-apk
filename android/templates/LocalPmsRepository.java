@@ -9,14 +9,18 @@ import android.database.sqlite.SQLiteOpenHelper;
 import org.json.JSONArray;
 import org.json.JSONTokener;
 import org.json.JSONObject;
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
 
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String NAME = "aurelia-pms.db";
-  private static final int VERSION = 4;
+  private static final int VERSION = 5;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   LocalPmsRepository(Context context) { super(context.getApplicationContext(), NAME, null, VERSION); setWriteAheadLoggingEnabled(true); }
+
+  @Override public void onConfigure(SQLiteDatabase db) { super.onConfigure(db); db.setForeignKeyConstraintsEnabled(true); db.execSQL("PRAGMA synchronous=FULL"); }
 
   @Override public void onCreate(SQLiteDatabase db) {
     db.execSQL("PRAGMA foreign_keys=ON");
@@ -27,6 +31,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     db.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL,source_timestamp TEXT NOT NULL,created_at INTEGER NOT NULL,format_version INTEGER NOT NULL)");
     db.execSQL("CREATE TABLE pms_meta(meta_key TEXT PRIMARY KEY NOT NULL,value_json TEXT NOT NULL,updated_at INTEGER NOT NULL)");
     db.execSQL("CREATE TABLE pms_legacy_backup(backup_id TEXT PRIMARY KEY NOT NULL,raw_json TEXT NOT NULL,sha256 TEXT,created_at INTEGER NOT NULL)");
+    db.execSQL("CREATE TABLE pms_migration_checkpoints(migration_id TEXT PRIMARY KEY NOT NULL,table_name TEXT NOT NULL,last_id TEXT NOT NULL,updated_at INTEGER NOT NULL)");
     db.execSQL("CREATE TABLE pms_authority(singleton INTEGER PRIMARY KEY CHECK(singleton=1),state TEXT NOT NULL CHECK(state IN ('legacy','migrating','canonical')),migration_id TEXT,updated_at INTEGER NOT NULL)");
     db.execSQL("INSERT OR IGNORE INTO pms_authority(singleton,state,migration_id,updated_at) VALUES(1,'legacy',NULL,0)");
   }
@@ -42,6 +47,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       db.execSQL("CREATE TABLE IF NOT EXISTS pms_authority(singleton INTEGER PRIMARY KEY CHECK(singleton=1),state TEXT NOT NULL CHECK(state IN ('legacy','migrating','canonical')),migration_id TEXT,updated_at INTEGER NOT NULL)");
       db.execSQL("INSERT OR IGNORE INTO pms_authority(singleton,state,migration_id,updated_at) VALUES(1,'legacy',NULL,0)");
     }
+    if(oldVersion<5) db.execSQL("CREATE TABLE IF NOT EXISTS pms_migration_checkpoints(migration_id TEXT PRIMARY KEY NOT NULL,table_name TEXT NOT NULL,last_id TEXT NOT NULL,updated_at INTEGER NOT NULL)");
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
 
@@ -121,7 +127,8 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       if(DatabaseUtils.longForQuery(db,"SELECT COUNT(*) FROM pms_entities",null)!=0)throw new IllegalStateException("canonical_repository_not_empty");
       java.util.Iterator<String> keys=parsed.keys();int imported=0;long now=System.currentTimeMillis();
       while(keys.hasNext()){String key=keys.next();validateIdentity(key,"legacy entity key");ContentValues row=new ContentValues();row.put("entity_type","legacy");row.put("entity_id",key);row.put("version",1);Object value=parsed.opt(key);
-        row.put("data_json",serializeJsonValue(value));row.put("updated_at",now);db.insertOrThrow("pms_entities",null,row);imported++;}
+        row.put("data_json",serializeJsonValue(value));row.put("updated_at",now);db.insertOrThrow("pms_entities",null,row);ContentValues checkpoint=new ContentValues();checkpoint.put("migration_id",migrationId);checkpoint.put("table_name",key);checkpoint.put("last_id",key);checkpoint.put("updated_at",System.currentTimeMillis());db.insertWithOnConflict("pms_migration_checkpoints",null,checkpoint,SQLiteDatabase.CONFLICT_REPLACE);imported++;}
+      ContentValues backup=new ContentValues();backup.put("backup_id",migrationId);backup.put("raw_json",rawJson);backup.put("sha256",sha256Hex(rawJson));backup.put("created_at",now);db.insertOrThrow("pms_legacy_backup",null,backup);
       ContentValues snap=new ContentValues();snap.put("snapshot_id",migrationId);snap.put("source_key",sourceKey);snap.put("raw_json",rawJson);snap.put("source_timestamp",sourceTimestamp);snap.put("created_at",now);snap.put("format_version",1);db.insertOrThrow("pms_migration_snapshots",null,snap);
       ContentValues marker=new ContentValues();marker.put("migration_key",MIGRATION_KEY);marker.put("migration_id",migrationId);marker.put("source_key",sourceKey);marker.put("completed_at",now);marker.put("entity_count",imported);db.insertOrThrow("pms_migrations",null,marker);
       db.setTransactionSuccessful();return migrationResult(false,migrationId,imported);
@@ -243,6 +250,8 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
     try {JSONObject current=storageAuthority();String prior=current.optString("state","legacy");if("canonical".equals(prior)&&!"canonical".equals(state))throw new IllegalStateException("canonical_authority_cannot_be_downgraded");if("canonical".equals(state)){try(Cursor c=db.rawQuery("SELECT value_json FROM pms_meta WHERE meta_key='migration_verified'",null)){if(!c.moveToFirst()||!new JSONObject(c.getString(0)).optBoolean("value",false))throw new IllegalStateException("migration_verification_required_before_canonical_authority");}}ContentValues row=new ContentValues();row.put("singleton",1);row.put("state",state);if(migrationId==null)row.putNull("migration_id");else row.put("migration_id",migrationId);row.put("updated_at",System.currentTimeMillis());db.insertWithOnConflict("pms_authority",null,row,SQLiteDatabase.CONFLICT_REPLACE);db.setTransactionSuccessful();return storageAuthority();}catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("storage_authority_update_failed",e);}finally{db.endTransaction();}
   }
+
+  private static String sha256Hex(String value) { try { byte[] digest=MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));StringBuilder out=new StringBuilder(digest.length*2);for(byte b:digest)out.append(String.format(java.util.Locale.ROOT,"%02x",b&0xff));return out.toString(); } catch(Exception e){throw new IllegalStateException("sha256_unavailable",e);} }
 
   private static String isoTimestamp(long value){java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",java.util.Locale.US);f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));return f.format(new java.util.Date(value));}
   private static long entityVersion(SQLiteDatabase db,String type,String id){try(Cursor c=db.rawQuery("SELECT version FROM pms_entities WHERE entity_type=? AND entity_id=?",new String[]{type,id})){return c.moveToFirst()?c.getLong(0):0;}}
