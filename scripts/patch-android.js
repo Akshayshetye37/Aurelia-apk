@@ -405,7 +405,7 @@ if (!fs.existsSync(proguardTarget) || !fs.readFileSync(proguardTarget, 'utf8').i
 function wireReleaseProguard(contents, kotlinDsl) {
   if (/proguardFiles[^\n]*proguard-rules\.pro/.test(contents)) return contents;
   const releaseBlock = /(release\s*\{)/;
-  if (!releaseBlock.test(contents)) return contents;
+  if (!releaseBlock.test(contents)) throw new Error('Generated Gradle release build type is missing; cannot wire payment SDK R8 rules.');
   const statement = kotlinDsl
     ? '$1\n            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")'
     : '$1\n            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"';
