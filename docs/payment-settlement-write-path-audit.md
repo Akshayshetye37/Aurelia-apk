@@ -4,7 +4,7 @@
 **Inspected integration branch:** `feature/multi-provider-payment-backend`  
 **Phase A hotfix:** `0dcf0e319f0c6c0fa3bc16383482dcb479110b88`  
 **Phase B implementation commits:** `5433111`, `9a684ca`, `b0d9f28`, `233df47`, `bdaf590`, `d3a2948`, `418beb0`, `c8afa7f`, `fde1fd0`  
-**Status (2026-11-08):** Manual folio payments and staff-reviewed UPI approvals now use an asynchronous repository transaction that commits the booking entity, folio projection and full recovery snapshot in one IndexedDB/SQLite batch, followed by exact read-back. The source-only CI suite and production web bundle passed on commit `ae259d34d7551ca2961956bc85b5bba48c2c5927` (353 tests). Android APK/device qualification and provider UAT remain outstanding. Automatic gateway settlement remains disabled.
+**Status (2026-11-08):** Manual folio payments and staff-reviewed UPI approvals now use an asynchronous repository transaction that commits the booking entity, folio projection and full recovery snapshot in one IndexedDB/SQLite batch, followed by exact read-back. The source-only CI suite and production web bundle passed on commit `87babe6a008ce64469965ba6984e37969ad4a3be` (354 tests). Android APK/device qualification and provider UAT remain outstanding. Automatic gateway settlement remains disabled.
 
 ## Deployment and connectivity policy
 
@@ -24,7 +24,7 @@ The settlement policy service validates booking membership, amount, method, bala
 | `index.html` — `addPay(b,a,m,r,auto)` | Compatibility alias | Thin adapter to `settlePayment()`. `auto=true` routes to source `auto`, which fails closed while the gate is false. Current search found no remaining call sites beyond the adapter definition. |
 | Manual folio payment handlers, including the final `pay(i)` assignment | Canonical local settlement | Await `settlePaymentToRepository` through the UI adapter. Booking, folio projection and full recovery snapshot commit atomically; exact read-back precedes success. Duplicate requests are idempotent. |
 | `sigA(id,i)` | Canonical staff-reviewed settlement | Validates evidence ID, review state, UPI amount, reference and evidence-bound idempotency key; atomically commits evidence approval, booking payment, folio projection and recovery snapshot. Replay is idempotent. |
-| Reservation creation / booking advance | Legacy synchronous path (not yet cut over) | Calls `settlePayment({source:'reservation_advance'})` with `booking-advance:<booking id>` idempotency key; still needs a single repository transaction with guest and booking creation. |
+| Primary guest/reservation creation / booking advance | Canonical snapshot commit; domain transaction incomplete | `dsave()` now awaits `persistCanonicalStrict()` and exact full-state snapshot read-back after preparing guest, booking and any advance; rollback is attempted through the same canonical path. The advance is still applied in memory before the snapshot commit and guest/booking/folio are not yet separate entities in the same batch. Other reservation entry points remain to be migrated. |
 | `addSig(o)` and `window.aureliaNativePaymentSignal` | Evidence / suggestion only | Creates a signal, deduplicates repeated notifications, and may set `pending_review` plus `suggestedBookingId`. Does not call `addPay()` or `settlePayment()`. |
 | `src/payments/reconciliation-service.mjs`, `payment-engine.mjs`, `evidence-store.mjs` | Evidence ingestion, matching and persistence | No folio writes. Reconciliation service returns match suggestions and rejects staff decisions marked posted/settled. |
 | Demo/bootstrap initialization (`index.html`, around original lines 493 and 625–626) | Seed data, not runtime settlement | Seeds demo paid totals/payment rows. Keep these values consistent; they are the remaining direct field assignments outside the runtime settlement service. |
@@ -59,7 +59,7 @@ Tests: `tests/repository-settlement-service.test.mjs` covers atomic commit, exac
 
 `tests/settlement-service.test.mjs` covers manual success, staff-review success, idempotency/UTR dedupe, automatic-source rejection with the gate disabled, overpayment rejection, rollback after a thrown persistence error, evidence-only `addSig`, and manual/staff route wiring.
 
-**Verification:** GitHub Actions run [42486201213](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486201213) passed 353/353 tests, production web bundle build and asset privacy checks on the exact commit shown above. This was a web/source workflow, not an APK build or physical-device test. Android release and device qualification remain open.
+**Verification:** GitHub Actions run [42486422774](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486422774) passed 354/354 tests, production web bundle build and asset privacy checks on the exact commit shown above. This was a web/source workflow, not an APK build or physical-device test. Android release and device qualification remain open.
 
 ## Gate and product stance
 
