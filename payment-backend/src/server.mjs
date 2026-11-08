@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import express from 'express';
+import { GoogleAuth } from 'google-auth-library';
 import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -31,6 +32,7 @@ import {
 } from './payment-controls/firestore-controls.mjs';
 import { activateSingleProvider, deactivateSingleProvider, readActiveProvider } from './payment-controls/active-provider-selection.mjs';
 import { evaluateProviderProductionQualification } from './payment-controls/provider-production-qualification.mjs';
+import { decodeGooglePlayIntegrityToken } from './devices/play-integrity-verifier.mjs';
 // No folio settlement writer is imported: this service records provider evidence
 // only until a trusted local accounting bridge passes its separate release gates.
 
@@ -145,6 +147,22 @@ async function getSettlementSigner() {
   return settlementSignerPromise;
 }
 const attestationVerifierUrl = process.env.ATTESTATION_VERIFIER_URL || 'http://127.0.0.1:8091';
+const playIntegrityPackageName = process.env.AURELIA_ANDROID_PACKAGE_NAME || '';
+const playIntegrityCertificateDigests = (process.env.AURELIA_ANDROID_CERT_SHA256_DIGESTS || '')
+  .split(',').map(value => value.trim()).filter(Boolean);
+const playIntegrityRequireStrong = process.env.AURELIA_REQUIRE_STRONG_INTEGRITY === 'true';
+const playIntegrityAuth = new GoogleAuth({
+  scopes: ['https://www.googleapis.com/auth/playintegrity']
+});
+async function decodePlayIntegrityForEnrollment(integrityToken) {
+  const client = await playIntegrityAuth.getClient();
+  const tokenResponse = await client.getAccessToken();
+  return decodeGooglePlayIntegrityToken({
+    packageName: playIntegrityPackageName,
+    integrityToken,
+    accessTokenProvider: async () => tokenResponse?.token
+  });
+}
 async function authenticateTenantMembership(req, res, next, allowedRoles, failureCode) {
   const header = req.get('authorization') || '';
   if (!/^Bearer\s+[^\s]+$/i.test(header)) return fail(res, 401, 'authentication_required');
