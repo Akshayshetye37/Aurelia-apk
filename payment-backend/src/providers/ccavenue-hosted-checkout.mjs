@@ -27,7 +27,7 @@ function requireHttpsUrl(value, field) {
  * gate; this module does not register or activate the provider.
  */
 export class CCAvenueHostedCheckout {
-  constructor({ merchantId, accessCode, encryptionKey, environment }) {
+  constructor({ merchantId, accessCode, hostedCheckoutKey, environment }) {
     if (typeof merchantId !== 'string' || !/^[A-Za-z0-9]{1,20}$/.test(merchantId) ||
         typeof accessCode !== 'string' || !/^[A-Za-z0-9]{8,64}$/.test(accessCode) ||
         !['test', 'live'].includes(environment)) {
@@ -35,7 +35,7 @@ export class CCAvenueHostedCheckout {
     }
     this.merchantId = merchantId;
     this.accessCode = accessCode;
-    this.crypto = new CCAvenueCrypto(encryptionKey);
+    this.crypto = new CCAvenueCrypto(hostedCheckoutKey);
     this.environment = environment;
     this.endpoint = HOSTS[environment];
   }
