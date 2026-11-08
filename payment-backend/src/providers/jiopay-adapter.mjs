@@ -49,11 +49,21 @@ export class JioPayAdapter extends PaymentProviderAdapter {
     this.baseUrl=BASE[this.environment];
   }
   async post(path, body, form=false) {
-    const r=await this.fetch(this.baseUrl+path,{method:'POST',
-      headers:{'Content-Type':form?'application/x-www-form-urlencoded':'application/json',Accept:'application/json'},
-      body:form?new URLSearchParams(body):JSON.stringify(body),signal:AbortSignal.timeout(15000)});
+    let r;
+    try {
+      r=await this.fetch(this.baseUrl+path,{method:'POST',
+        headers:{'Content-Type':form?'application/x-www-form-urlencoded':'application/json',Accept:'application/json'},
+        body:form?new URLSearchParams(body):JSON.stringify(body),signal:AbortSignal.timeout(15000)});
+    } catch (cause) {
+      const mutating = path.includes('initiateSale') ||
+        (body && body.transactionType === 'REFUND');
+      throw Object.assign(new Error('jiopay_network_error'), { outcomeUnknown: mutating, cause });
+    }
     const d=await r.json().catch(()=>({}));
-    if(!r.ok) throw Object.assign(new Error('jiopay_request_failed'),{providerStatus:r.status});
+    if(!r.ok) throw Object.assign(new Error('jiopay_request_failed'),{
+      providerStatus:r.status,
+      outcomeUnknown:r.status>=500 && (path.includes('initiateSale') || body?.transactionType==='REFUND')
+    });
     return d;
   }
   async command(fields) {
@@ -63,14 +73,16 @@ export class JioPayAdapter extends PaymentProviderAdapter {
     return d;
   }
   async validateCredentials() {
-    const ref='AURELIA-CREDENTIAL-CHECK';
+    const ref='AURCRED'+crypto.randomBytes(6).toString('hex');
     await this.command({merchantId:this.credentials.merchantId,merchantTxnNo:ref,originalTxnNo:ref,
       amount:'0.00',transactionType:'STATUS',addlParam1:'',addlParam2:''});
     return {valid:true,validation:'authenticated_status_command'};
   }
   async createOrder(input) {
+    let returnUrl;
+    try { returnUrl = new URL(input?.returnUrl); } catch { returnUrl = null; }
     if(!validId(input?.orderId)||input.orderId.length>20||!validMinor(input?.amountMinor)||input.currency!=='INR'||
-      typeof input.returnUrl!=='string'||!input.returnUrl.startsWith('https://')||
+      !returnUrl||returnUrl.protocol!=='https:'||input.returnUrl.length>64||
       (input.customer?.email!=null&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.customer.email)))
       throw new TypeError('invalid_jiopay_order');
     const fields={amount:money(input.amountMinor),currencyCode:'356',customerEmailID:input.customer?.email||'guest@jiopay.in',
@@ -120,18 +132,27 @@ export class JioPayAdapter extends PaymentProviderAdapter {
     const d=await this.command({merchantId:this.credentials.merchantId,aggregatorID:this.credentials.aggregatorId||'',
       merchantTxnNo:input.refundId,originalTxnNo:input.orderId,amount:money(input.amountMinor),
       transactionType:'REFUND',addlParam1:'',addlParam2:''});
+    const refundAmount=toMinor(d.amount??d.refundAmount);
     if(d.merchantId!==this.credentials.merchantId||d.merchantTxnNo!==input.refundId||
-      (d.originalTxnNo&&d.originalTxnNo!==input.orderId)) throw new Error('jiopay_refund_identity_mismatch');
+      d.originalTxnNo!==input.orderId||refundAmount!==input.amountMinor)
+      throw new Error('jiopay_refund_identity_mismatch');
+    const refundStatus=statusOf(d);
+    if(!refundStatus) throw new Error('jiopay_refund_status_missing');
     return {provider:'jiopay',refundId:input.refundId,paymentId:d.pgTransactionId==null?null:String(d.pgTransactionId),
-      status:statusOf(d)||'PENDING',amountMinor:toMinor(d.amount??d.refundAmount)??input.amountMinor,currency:'INR'};
+      status:refundStatus,amountMinor:refundAmount,currency:'INR'};
   }
   async getRefundStatus(input) {
-    if(!validId(input?.refundId)) throw new TypeError('invalid_jiopay_refund_id');
+    if(!validId(input?.refundId)||!validId(input?.orderId))
+      throw new TypeError('invalid_jiopay_refund_id');
     const d=await this.command({merchantId:this.credentials.merchantId,merchantTxnNo:input.refundId,
       originalTxnNo:input.refundId,amount:'0.00',transactionType:'STATUS',addlParam1:'',addlParam2:''});
-    if(d.merchantId!==this.credentials.merchantId||d.merchantTxnNo!==input.refundId)
+    if(d.merchantId!==this.credentials.merchantId||d.merchantTxnNo!==input.refundId||
+      (d.originalTxnNo!=null&&d.originalTxnNo!==input.orderId))
       throw new Error('jiopay_refund_status_identity_mismatch');
+    const state=statusOf(d);
+    const amountMinor=toMinor(d.amount??d.refundAmount);
+    if(!state) throw new Error('jiopay_refund_status_missing');
     return {provider:'jiopay',refundId:input.refundId,paymentId:d.pgTransactionId==null?null:String(d.pgTransactionId),
-      status:statusOf(d)||'UNKNOWN',amountMinor:toMinor(d.amount??d.refundAmount),currency:'INR'};
+      status:state,amountMinor,currency:'INR'};
   }
 }
