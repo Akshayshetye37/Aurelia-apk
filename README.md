@@ -8,7 +8,7 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 - **Project root:** repository root (`/`)
 - **Active engineering branch:** `feature/multi-provider-payment-backend`
 - **Active branch:** `feature/multi-provider-payment-backend` (resolve the current SHA from the branch ref; avoid hard-coded moving HEAD values).
-- **Latest verification:** GitHub Actions run [42486201213](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486201213) passed on commit `ae259d34d7551ca2961956bc85b5bba48c2c5927`: 353/353 Node tests, production web bundle build, production asset privacy checks and Android release-gate check. This workflow did **not** build or qualify an APK.
+- **Latest verification:** GitHub Actions run [42486422774](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486422774) passed on commit `87babe6a008ce64469965ba6984e37969ad4a3be`: 354/354 Node tests, production web bundle build, production asset privacy checks and Android release-gate check. This workflow did **not** build or qualify an APK.
 - **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
 
 Useful project locations:
@@ -52,9 +52,10 @@ The current implementation contains substantial storage, payment and security fo
 - Multi-entity batch transaction support in the browser and native repository layers.
 - Room inventory command foundation for stable-ID room creation, scoped edits, paise-based rate validation and versioned housekeeping/maintenance state.
 - Manual payment and staff-reviewed UPI approval now use `settlePaymentToRepository`: booking entity, folio projection and complete recovery snapshot commit in one SQLite/IndexedDB batch, followed by exact read-back and post-commit legacy-cache refresh.
+- Guest/reservation creation in the primary reservation workflow now awaits canonical snapshot commit and exact read-back; failed writes restore the in-memory draft and attempt a verified canonical rollback.
 - Regression coverage verifies atomic booking/folio/snapshot commit, UPI evidence approval, idempotent replay, canonical divergence rejection, failed-write rollback and cache refresh.
 
-**Cutover limitation:** the full booking, room, guest, inventory, accounting and operational UI is not yet migrated to use the asynchronous repository as its sole canonical read/write path. Manual folio payment and staff-reviewed UPI approval are now on the transactional repository path, but reservation-advance creation and many non-payment mutations still use legacy synchronous state. `uiCutover` remains false. The room reassignment/stable room-reference migration is not complete.
+**Cutover limitation:** the full booking, room, guest, inventory, accounting and operational UI is not yet migrated to use the asynchronous repository as its sole canonical read/write path. Manual folio payment and staff-reviewed UPI approval use transactional repository entities; the primary guest/reservation creation workflow awaits a canonical full-state snapshot commit, but booking-advance creation is not yet a unified guest+booking+folio domain-entity transaction and many other mutations still use legacy synchronous state. `uiCutover` remains false. The room reassignment/stable room-reference migration is not complete.
 
 ### Payment and provider backend
 
@@ -159,5 +160,5 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 ---
 
 **Active branch:** `feature/multi-provider-payment-backend`  
-**Latest CI:** [run 42486201213 — passed](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486201213); 353 tests passed, web bundle and privacy checks passed. No APK/device qualification was performed.  
+**Latest CI:** [run 42486422774 — passed](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486422774); 354 tests passed, web bundle and privacy checks passed. No APK/device qualification was performed.  
 **Status:** engineering foundations exist; production release not approved.
