@@ -825,7 +825,7 @@ async function addSig(o){
  if(match&&S.au.reconcile&&on('Automatic reconciliation')){
    signal.st='pending_review';signal.suggestedBookingId=match.id;
  }else if(match)signal.suggestedBookingId=match.id;
- try{await persistCanonicalStrict()}catch(error){S.sig=S.sig.filter(x=>x.id!==id);console.error('[Aurelia Payment Review] Could not durably save incoming evidence.',error);toast('Payment evidence was detected but could not be saved. Do not approve it; check device storage.');return}
+ try{await persistCanonicalStrict()}catch(error){S.sig=S.sig.filter(x=>x.id!==id);try{await persistCanonicalStrict()}catch(rollbackError){console.error('[Aurelia Payment Review] Evidence rollback could not be committed to canonical storage.',rollbackError);toast('CRITICAL: Evidence save failed and canonical rollback could not be verified. Stop payment review and preserve the device.')}console.error('[Aurelia Payment Review] Could not durably save incoming evidence.',error);toast('Payment evidence was detected but could not be saved. Do not approve it; check device storage.');return}
  render();
 }
 window.aureliaNativePaymentSignal=j=>{try{const pending=addSig(typeof j==='string'?JSON.parse(j):j);pending?.catch(e=>console.error('[Aurelia Payment Review] Canonical evidence save failed.',e))}catch(e){console.error('[Aurelia Payment Review] Invalid native evidence payload.',e)}};
@@ -846,7 +846,7 @@ async function sigReject(id,bookingId){
  const before={st:s.st,b:s.b,reviewHistory:Array.isArray(s.reviewHistory)?s.reviewHistory.slice():[]};
  s.st='rejected';s.b=b.id;s.rejectedAt=new Date().toISOString();s.rejectionReason=clean;
  s.reviewHistory.push({decision:'rejected',bookingId:b.id,reason:clean,at:s.rejectedAt});
- try{await persistCanonicalStrict()}catch(error){Object.assign(s,before);delete s.rejectedAt;delete s.rejectionReason;toast('Rejection was not saved. No decision was recorded.');console.error('[Aurelia Payment Review] Durable rejection save failed.',error);return}
+ try{await persistCanonicalStrict()}catch(error){Object.assign(s,before);delete s.rejectedAt;delete s.rejectionReason;try{await persistCanonicalStrict()}catch(rollbackError){console.error('[Aurelia Payment Review] Rejection rollback could not be committed.',rollbackError);toast('CRITICAL: Rejection failed and prior review state could not be restored in canonical storage. Preserve the device and reconcile before retrying.')}toast('Rejection was not saved. No decision was recorded.');console.error('[Aurelia Payment Review] Durable rejection save failed.',error);return}
  closeS();render();toast('Payment rejection saved to the guest folio');
 }
 async function sigReopen(id){
@@ -854,7 +854,7 @@ async function sigReopen(id){
  if(!window.confirm('Reopen this saved payment for staff review? The previous rejection will remain in its history.'))return;
  const before={st:s.st,reviewHistory:Array.isArray(s.reviewHistory)?s.reviewHistory.slice():[]};
  s.st='open';s.reopenedAt=new Date().toISOString();s.reviewHistory.push({decision:'reopened',bookingId:s.b??null,at:s.reopenedAt});
- try{await persistCanonicalStrict()}catch(error){Object.assign(s,before);delete s.reopenedAt;toast('Reopen action could not be saved. The payment remains rejected.');console.error('[Aurelia Payment Review] Durable reopen save failed.',error);return}
+ try{await persistCanonicalStrict()}catch(error){Object.assign(s,before);delete s.reopenedAt;try{await persistCanonicalStrict()}catch(rollbackError){console.error('[Aurelia Payment Review] Reopen rollback could not be committed.',rollbackError);toast('CRITICAL: Reopen failed and prior review state could not be restored in canonical storage. Preserve the device and reconcile before retrying.')}toast('Reopen action could not be saved. The payment remains rejected.');console.error('[Aurelia Payment Review] Durable reopen save failed.',error);return}
  closeS();render();toast('Payment reopened; prior rejection retained');
 }
 async function sigA(id,i){
