@@ -257,7 +257,7 @@ export async function commitGuestStateMutation({
     throw fail("GUEST_NOT_FOUND", "The updated guest with its stable ID is missing from the requested snapshot.");
   }
   const priorGuest = priorGuests.find(row => String(row?.id) === String(guestId)) || priorGuests[guestIndex] || null;
-  if (!priorGuest) throw fail("GUEST_NOT_FOUND", "The guest is missing from the canonical recovery snapshot.");
+  if (!priorGuest && operation !== "create") throw fail("GUEST_NOT_FOUND", "The guest is missing from the canonical recovery snapshot.");
   if (operation === "retire" && snapshot.g.some(row => String(row?.id || "") === String(guestId))) {
     throw fail("GUEST_STILL_IN_SNAPSHOT", "The retired guest is still present in the requested snapshot.");
   }

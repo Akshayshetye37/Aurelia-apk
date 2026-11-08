@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hydrateCanonicalRoomSnapshot } from "../src/storage/pms-room-read-cutover.mjs";
+import { hydrateCanonicalRoomSnapshot, hydrateCanonicalGuestSnapshot } from "../src/storage/pms-room-read-cutover.mjs";
 
 const snapshot = () => ({
   rooms: [{ n: "101", t: "Deluxe", r: 1500, s: "ready" }, { n: "102", t: "Standard", r: 900, s: "clean" }],
