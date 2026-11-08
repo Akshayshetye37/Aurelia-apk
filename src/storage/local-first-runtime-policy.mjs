@@ -71,3 +71,23 @@ export function assertLocalFirstFeatureContract(feature) {
     cloudDependency: false
   });
 }
+/** Product feature inventory: all of these must remain locally operable. */
+export const AURELIA_FEATURE_CONTRACTS = Object.freeze([
+  "dashboard", "reservations", "booking-changes", "booking-cancellations",
+  "guest-management", "room-management", "room-occupancy", "housekeeping",
+  "maintenance", "folios", "manual-payments", "gateway-payment-intents",
+  "refunds-and-reversals", "inventory", "expenses", "menu-management",
+  "tax-and-rate-settings", "property-settings", "staff-workflows",
+  "staff-payment-review", "reports-and-analytics", "invoices-and-receipts",
+  "exports-and-sharing", "notifications", "audit-and-recovery",
+  "payment-provider-selection"
+].map(id => Object.freeze({
+  id,
+  requiresNetworkForRead: false,
+  requiresNetworkForWrite: false,
+  requiresCloudForStartup: false
+})));
+
+export function validateAureliaFeatureContracts() {
+  return Object.freeze(AURELIA_FEATURE_CONTRACTS.map(assertLocalFirstFeatureContract));
+}
