@@ -38,11 +38,20 @@ jobs:
           fetch-depth: 0
       - name: Scan repository history for leaked credentials
         run: |
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          set +e
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/repo" \
+            -v "$RUNNER_TEMP/gitleaks:/report" \
             -w /repo \
             zricethezav/gitleaks:v8.24.3 \
-            detect --source=/repo --redact --no-banner --exit-code 1
+            detect --source=/repo --redact --no-banner --report-format json \
+              --report-path=/report/findings.json --exit-code 1
+          scan_status=$?
+          if [ -f "$RUNNER_TEMP/gitleaks/findings.json" ]; then
+            cat "$RUNNER_TEMP/gitleaks/findings.json"
+          fi
+          exit "$scan_status"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
