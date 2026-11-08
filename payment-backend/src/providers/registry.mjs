@@ -80,7 +80,7 @@ export const PROVIDERS = Object.freeze({
     ],
     capabilities: ['hosted_checkout', 'payment_status', 'webhooks'],
     adapterStatus: 'adapter_partial_implemented',
-    cloudCheckoutApiEnabled: false
+    cloudCheckoutApiEnabled: true
   },
   jiopay: {
     label: 'Jio Payment Solutions',
