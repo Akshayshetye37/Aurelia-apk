@@ -123,3 +123,93 @@ New automated coverage is in
 before this implementation is considered CI-verified. Android Gradle
 compilation, instrumentation and physical-device acceptance are separate
 release requirements.
+
+
+## Accounting and reconciliation hardening (8 November 2026)
+
+The first accounting/reconciliation implementation is intentionally **proposal
+and audit only**. It does not write to Firestore, alter folio balances, or
+authorize settlement.
+
+### Double-entry journal contract
+
+- `payment-backend/src/accounting/canonical-journal.mjs` creates immutable,
+  deterministic journal proposals in integer INR minor units.
+- Payment initiation is a non-posting audit event. It must not move money or
+  create a financial journal.
+- Provider-verified capture proposes Dr 2020 Gateway Clearing / Cr 1010 Guest
+  Receivable. It does not credit 4010 revenue: room/service revenue must be
+  recognized by the PMS charge/invoice lifecycle, not merely because a guest
+  paid.
+- Actual provider fees are separate Dr 5010 Processing Fees / Cr 2020 Gateway
+  Clearing entries. Estimated fees are not accepted as posted expense.
+- A successful refund requires independently verified provider evidence and a
+  parent capture journal. It proposes Dr 1010 / Cr 2020, carries the parent
+  journal ID, and rejects cumulative refunds above the original captured
+  amount. The eventual Firestore writer must enforce the cumulative cap and
+  uniqueness transactionally.
+- Every proposal validates safe integer amounts, tenant/folio/provider
+  identity, evidence identity and debit-credit equality. Deterministic IDs
+  make identical proposals stable across retries.
+
+**Important chart-of-accounts assumption:** account 2020 is treated here as a
+gateway clearing asset, not a liability. The supplied label "undistributed
+gateway collections / suspense" is not enough to settle its normal balance or
+reconciliation treatment. Finance/accounting owner approval of account
+definitions and opening balances is required before any writer or migration.
+Account 4010 is deliberately not used by payment capture/refund proposals.
+
+### Read-only reconciliation
+
+- `payment-backend/src/accounting/reconciliation-audit.mjs` compares
+  tenant-scoped, provider-verified captures against a supplied canonical
+  journal snapshot.
+- It reports missing, orphaned, duplicate, malformed and field-mismatched
+  records and returns a deterministic snapshot digest.
+- It is pure and read-only: no repair, settlement, status mutation, or
+  ledger write occurs.
+- It is not yet exposed as an API or scheduled worker. A trusted server-side
+  data source and confirmed canonical PMS ledger are prerequisites. An Android
+  WorkManager job is not treated as an accounting authority; Android can be
+  offline, untrusted, uninstalled, or delayed by OS scheduling. The eventual
+  authoritative cadence should be a backend scheduler with tenant isolation,
+  bounded batches, lease/idempotency controls, alert delivery and observable
+  run history. The mobile app may display audit results only.
+
+### Refund and provider acceptance
+
+The existing refund dispatch interlock remains in force. No refund journal is
+written from a client callback or from a refund-create response alone. The
+provider refund must be independently status-verified, then linked to its
+original capture and checked against cumulative refunded amount.
+
+The six provider qualification checklists remain evidence requirements, not
+automatic green checkmarks. Sandbox contract tests can validate adapter
+behaviour, but cannot create merchant UAT, production credentials, webhook
+registration, settlement statements, or physical-device acceptance evidence.
+No in-repository boolean registry is allowed to qualify a gateway for live
+traffic. Qualification remains tenant-scoped, owner-approved, independently
+reviewed and time-bounded.
+
+### Physical device integrity
+
+A Kotlin check for API level, emulator build strings or a handful of `su`
+paths is not hardware attestation. It is bypassable and can misclassify
+custom-ROM devices. Android API level does not prove a hardware-backed key.
+Production device acceptance requires a server-verified Play Integrity
+verdict (where applicable), hardware-backed key attestation with certificate
+chain/challenge validation, app-signing identity/version checks, root/debug/
+hook risk signals, and a documented policy for unsupported devices. No
+single local Boolean is accepted as proof. The current native safeguard
+continues to block live checkout.
+
+### Verification status
+
+New tests:
+- `payment-backend/test/canonical-journal.test.mjs`
+- `payment-backend/test/reconciliation-audit.test.mjs`
+
+These tests validate the pure accounting contract and read-only discrepancy
+detection. They do not establish a canonical production ledger, run merchant
+UAT, compile Android, or qualify any provider. Live collection, automatic
+settlement and automatic refund posting remain OFF; CCAvenue remains disabled.
