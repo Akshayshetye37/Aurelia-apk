@@ -28,7 +28,6 @@ const FACTORIES = Object.freeze({
 });
 
 export function createProviderAdapter(providerId, options) {
-  if (providerId === 'ccavenue') throw new Error('provider_adapter_unavailable');
   const factory = FACTORIES[providerId];
   if (!factory) throw new Error('provider_adapter_unavailable');
   const adapter = factory(options);
@@ -41,18 +40,19 @@ export function implementedProviderAdapters() {
 }
 
 export function providerCapabilities(providerId) {
-  return FACTORIES[providerId] && providerId !== 'ccavenue' ? [...REQUIRED_OPERATIONS] : null;
+  return FACTORIES[providerId] ? [...(providerId === 'ccavenue' ? CCA_VENUE_OPERATIONS : REQUIRED_OPERATIONS)] : null;
 }
 
 export function providerQualificationStatus(providerId) {
-  if (!FACTORIES[providerId] || providerId === 'ccavenue') return { implemented: false, partial: providerId === 'ccavenue', testCheckout: false, liveCollection: false };
+  if (!FACTORIES[providerId]) return { implemented: false, testCheckout: false, liveCollection: false };
   return {
     implemented: true,
+    partial: providerId === 'ccavenue',
     testCheckout: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
     liveCollection: false,
     cloudCheckoutApiEnabled: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
-    refunds: true,
-    refundStatus: true,
+    refunds: providerId !== 'ccavenue',
+    refundStatus: providerId !== 'ccavenue',
     merchantUatRequired: true,
     canonicalFolioPostingRequired: true,
     physicalDeviceAcceptanceRequired: true
