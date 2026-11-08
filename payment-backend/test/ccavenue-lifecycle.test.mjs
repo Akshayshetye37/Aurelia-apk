@@ -131,11 +131,11 @@ test('CCAvenue Dynamic Event Notification only records status after independent 
 });
 
 test('CCAvenue Dynamic Event Notification cannot choose tenant/folio/amount and cannot bypass status lookup', async () => {
-  const body = { encResp: new CCAvenueCrypto(KEY).encrypt(
+  const body = { encResp: new CCAvenueCrypto(NOTIFY_KEY).encrypt(
     'order_id=' + EXPECTED.orderId + '&tracking_id=212016048802&merchant_param1=attackerTenant&amount=0.01') };
   let persisted = false;
   await assert.rejects(reconcileCcaVenueNotification({
-    body, notificationWorkingKey: KEY,
+    body, notificationWorkingKey: NOTIFY_KEY,
     resolveExpectedPayment: async () => ({ ...EXPECTED, amountMinor: 1 }),
     createVerificationService: async () => ({ verifyOrderStatus: async () => { throw new Error('provider_unavailable'); } }),
     recordVerifiedEvidence: async () => { persisted = true; }
@@ -170,7 +170,7 @@ test('CCAvenue hosted checkout builds encrypted v3.3 POST fields without exposin
 
 test('CCAvenue hosted checkout rejects insecure URLs and malformed order amounts', () => {
   const checkout = new CCAvenueHostedCheckout({
-    merchantId: '123456', accessCode: ACCESS, hostedCheckoutKey: KEY, environment: 'live'
+    merchantId: '123456', accessCode: ACCESS, hostedCheckoutKey: HOSTED_KEY, environment: 'live'
   });
   const input = {
     orderId: EXPECTED.orderId, amountMinor: EXPECTED.amountMinor, currency: 'INR',
@@ -195,7 +195,7 @@ import { createCcaVenueWebhookHandler } from '../src/webhooks/ccavenue-webhook-r
 test('CCAvenue webhook handler acknowledges only after verified evidence persistence', async () => {
   const plaintext = 'order_id=' + EXPECTED.orderId + '&tracking_id=212016048802&order_status=Success';
   const handler = createCcaVenueWebhookHandler({
-    notificationWorkingKey: KEY,
+    notificationWorkingKey: NOTIFY_KEY,
     resolveExpectedPayment: async () => EXPECTED,
     createVerificationService: async () => ({
       verifyOrderStatus: async () => ({
@@ -209,7 +209,7 @@ test('CCAvenue webhook handler acknowledges only after verified evidence persist
   });
   const response = { statusCode: 0, body: null, status(code) { this.statusCode = code; return this; },
     json(value) { this.body = value; return this; } };
-  await handler({ body: { encResp: new CCAvenueCrypto(KEY).encrypt(plaintext) } }, response);
+  await handler({ body: { encResp: new CCAvenueCrypto(NOTIFY_KEY).encrypt(plaintext) } }, response);
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.reconciled, true);
   assert.equal(response.body.ledgerPosted, false);
