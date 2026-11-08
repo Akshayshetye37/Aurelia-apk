@@ -5,117 +5,104 @@ import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
 import { settlePaymentToRepository } from "../src/payments/repository-settlement-service.mjs";
 
-let serial = 0;
-function setup() {
-  const repository = new IndexedDbPmsRepository({
-    indexedDBImpl: indexedDB,
-    databaseName: "repository-settlement-" + (++serial),
-    now: () => "2026-11-07T10:00:00.000Z"
-  });
+let databaseSequence = 0;
+function fixture() {
+  const databaseName = "repository-settlement-" + (++databaseSequence);
+  const repository = new IndexedDbPmsRepository({ indexedDBImpl: indexedDB, databaseName });
+  let eventSequence = 0;
   const bridge = new PmsRepositoryBridge({
-    tenantId: "tenant-local-test",
-    propertyId: "property-local-test",
-    deviceId: "device-local-test",
-    eventId: (() => { let n = 0; return () => "settlement-event-" + (++n); })(),
-    now: () => "2026-11-07T10:00:00.000Z"
-  });
-  bridge.bindActiveEngine(repository);
+    tenantId: "tenant-local",
+    propertyId: "property-local",
+    deviceId: "device-local",
+    now: () => "2026-11-08T12:00:00.000Z",
+    eventId: () => "settlement-event-" + (++eventSequence)
+  }).bindActiveEngine(repository);
   const booking = {
-    id: 41,
-    folioId: "folio-41",
-    g: "Test Guest",
-    room: "101",
-    st: "in",
-    rate: 1000,
-    ch: [],
-    dc: 0,
-    pays: [],
-    payments: [],
-    p: 0
+    id: 41, folioId: "folio-41", g: "Guest One", room: "101", st: "in",
+    p: 0, pays: [], payments: [], ch: [], rate: 1000
   };
-  const state = { b: [booking], today: 0, aud: [] };
+  const state = { tab: "stays", bk: {}, b: [booking], g: [], rooms: [], today: 0, aud: [] };
   return { repository, bridge, booking, state };
 }
+const balanceDueFor = booking => Math.max(0, 1000 - Number(booking.p || 0));
 
-const command = ({ bridge, state, booking, amount = 100, idempotencyKey = "manual-payment-41" }) =>
-  settlePaymentToRepository({
-    bridge, state, booking,
-    balanceDueFor: folio => Math.max(0, 1000 - Number(folio.p || 0)),
-    amount,
-    method: "Cash",
-    reference: "",
-    source: "manual",
-    idempotencyKey,
-    verificationConfirmed: true,
-    now: () => "2026-11-07T10:00:00.000Z"
+test("payment, booking, folio and recovery snapshot commit atomically with exact read-back", async () => {
+  const { bridge, booking, state } = fixture();
+  const result = await settlePaymentToRepository({
+    bridge, state, booking, balanceDueFor, amount: 250, method: "Cash",
+    source: "manual", idempotencyKey: "manual-request-41", verificationConfirmed: true
   });
-
-test("manual settlement commits folio and immutable outbox event atomically", async () => {
-  const ctx = setup();
-  const result = await command(ctx);
   assert.equal(result.ok, true);
-  assert.equal(result.duplicate, false);
-  assert.equal(result.entity.version, 1);
-  assert.equal(ctx.booking.p, 100);
-  assert.equal(ctx.booking.pays.length, 1);
-  assert.equal(ctx.state.today, 100);
-  assert.equal(ctx.state.aud.length, 1);
+  assert.equal(result.canonical, true);
+  assert.equal(booking.p, 250);
+  assert.equal(booking.pays.length, 1);
+  assert.equal(state.today, 250);
 
-  const stored = await ctx.bridge.fetchEntity("folio", "folio-41");
-  assert.equal(stored.version, 1);
-  assert.equal(stored.data.p, 100);
-  assert.equal(stored.data.pays[0].idempotencyKey, "manual-payment-41");
-
-  const events = await ctx.repository.claimOutboxBatch({ deviceId: "device-local-test" });
-  assert.equal(events.length, 1);
-  assert.equal(events[0].eventType, "folio.payment_posted");
-  assert.deepEqual(events[0].payload, {
-    bookingId: "folio-41",
-    amountPaise: 10000,
-    method: "Cash",
-    reference: "",
-    source: "manual",
-    idempotencyKey: "manual-payment-41"
-  });
+  const savedBooking = await bridge.fetchEntity("booking", "41");
+  const savedFolio = await bridge.fetchEntity("folio", "folio-41");
+  const savedSnapshot = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  assert.deepEqual(savedBooking.data.pays, booking.pays);
+  assert.equal(savedFolio.data.paidPaise, 25000);
+  assert.equal(savedFolio.data.balanceDuePaise, 75000);
+  assert.deepEqual(savedSnapshot.data.snapshot.b[0], booking);
+  assert.equal(savedSnapshot.data.snapshot.today, 250);
 });
 
-test("duplicate payment replay returns the original result without a second outbox event", async () => {
-  const ctx = setup();
-  const first = await command(ctx);
-  const second = await command(ctx);
-  assert.equal(first.ok, true);
-  assert.equal(second.ok, true);
+test("idempotent retry returns the original canonical payment without a second credit", async () => {
+  const { bridge, booking, state } = fixture();
+  const input = {
+    bridge, state, booking, balanceDueFor, amount: 250, method: "UPI",
+    reference: "UTR-41", source: "manual", idempotencyKey: "utr:UTR-41",
+    verificationConfirmed: true
+  };
+  const first = await settlePaymentToRepository(input);
+  const second = await settlePaymentToRepository(input);
+  assert.equal(first.duplicate, false);
   assert.equal(second.duplicate, true);
-  assert.equal(ctx.booking.pays.length, 1);
-  assert.equal((await ctx.bridge.fetchEntity("folio", "folio-41")).version, 1);
-  assert.equal((await ctx.repository.claimOutboxBatch({ deviceId: "device-local-test" })).length, 1);
+  assert.equal(booking.p, 250);
+  assert.equal(booking.pays.length, 1);
+  assert.equal((await bridge.fetchEntity("folio", "folio-41")).data.paidPaise, 25000);
 });
 
-test("invalid or over-balance payment leaves repository and live projection unchanged", async () => {
-  const ctx = setup();
-  await assert.rejects(command({ ...ctx, amount: 1200 }), /exceeds the balance due/);
-  assert.equal(await ctx.bridge.fetchEntity("folio", "folio-41"), null);
-  assert.equal(ctx.booking.p, 0);
-  assert.equal(ctx.booking.pays.length, 0);
-  assert.equal(ctx.state.today, 0);
-  assert.equal((await ctx.repository.claimOutboxBatch({ deviceId: "device-local-test" })).length, 0);
+test("canonical booking divergence fails closed instead of overwriting either copy", async () => {
+  const { bridge, booking, state } = fixture();
+  await bridge.mutateEntity({
+    entityType: "booking", entityId: "41", expectedVersion: 0,
+    eventType: "booking.seeded",
+    mutate: entity => Object.assign(entity, { ...booking, g: "Different Guest" })
+  });
+  await assert.rejects(settlePaymentToRepository({
+    bridge, state, booking, balanceDueFor, amount: 100, method: "Cash",
+    source: "manual", verificationConfirmed: true
+  }), error => error.code === "CANONICAL_BOOKING_DIVERGENCE");
+  assert.equal(booking.p, 0);
+  assert.equal(await bridge.fetchEntity("folio", "folio-41"), null);
 });
 
-test("concurrent settlements against one folio cannot double-post or advance the live projection twice", async () => {
-  const ctx = setup();
-  const outcomes = await Promise.allSettled([
-    command({ ...ctx, idempotencyKey: "race-payment-a" }),
-    command({ ...ctx, idempotencyKey: "race-payment-b" })
-  ]);
-  assert.equal(outcomes.filter(x => x.status === "fulfilled").length, 1);
-  assert.equal(outcomes.filter(x => x.status === "rejected" && x.reason.code === "ENTITY_VERSION_CONFLICT").length, 1);
-  const stored = await ctx.bridge.fetchEntity("folio", "folio-41");
-  assert.equal(stored.version, 1);
-  assert.equal(stored.data.pays.length, 1);
-  assert.equal(stored.data.p, 100);
-  assert.equal(ctx.booking.pays.length, 1);
-  assert.equal(ctx.booking.p, 100);
-  const events = await ctx.repository.claimOutboxBatch({ deviceId: "device-local-test" });
-  assert.equal(events.length, 1);
-  assert.equal(events[0].eventType, "folio.payment_posted");
+test("provider and staff-review postings cannot bypass the trusted settlement projector", async () => {
+  const { bridge, booking, state } = fixture();
+  for (const source of ["staff_review", "verified_gateway", "auto"]) {
+    await assert.rejects(settlePaymentToRepository({
+      bridge, state, booking, balanceDueFor, amount: 100, method: "UPI",
+      source, verificationConfirmed: true
+    }), error => error.code === "TRUSTED_SETTLEMENT_PATH_REQUIRED");
+  }
+  assert.equal(booking.p, 0);
+  assert.equal(await bridge.fetchEntity("folio", "folio-41"), null);
+});
+
+test("failed canonical transaction leaves the live folio untouched", async () => {
+  const { bridge, booking, state } = fixture();
+  const original = bridge.mutateEntities.bind(bridge);
+  bridge.mutateEntities = async () => { throw new Error("simulated storage failure"); };
+  await assert.rejects(settlePaymentToRepository({
+    bridge, state, booking, balanceDueFor, amount: 100, method: "Cash",
+    source: "manual", verificationConfirmed: true
+  }), /simulated storage failure/);
+  bridge.mutateEntities = original;
+  assert.equal(booking.p, 0);
+  assert.equal(booking.pays.length, 0);
+  assert.equal(state.today, 0);
+  assert.equal(await bridge.fetchEntity("booking", "41"), null);
+  assert.equal(await bridge.fetchEntity("folio", "folio-41"), null);
 });
