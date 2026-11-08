@@ -358,3 +358,32 @@ Official public document references:
 - CCAvenue in-app SDK product: https://www.ccavenue.com/inapp-payments
 - CCAvenue Dynamic Event Notifications: https://www.ccavenue.com/article/Receive-real-time-updates-of-key-events-in-your-Merchant-Account-through-CCAvenues-Dynamic-Event-Notifications
 - CCAvenue Instant Refunds: https://www.ccavenue.com/article/Enhance-Customer-Experience-and-Boost-Retention-Substantially-with-CCAvenue-Instant-Refunds
+
+
+## Hosted-checkout response boundary added (8 November 2026)
+
+The backend now contains `payment-backend/src/providers/ccavenue-hosted-response.mjs`
+and a dedicated regression suite at
+`payment-backend/test/ccavenue-hosted-response.test.mjs`.
+
+The parser accepts only the documented plaintext response fields and enforces:
+- exact merchant order ID binding;
+- numeric CCAvenue tracking ID format (up to 12 digits);
+- exact three-letter currency binding;
+- canonical two-decimal amount parsing and exact minor-unit binding;
+- one occurrence of each recognized response field (duplicate fields fail closed);
+- the documented response status vocabulary: Success, Failure, Aborted,
+  Invalid and Timeout.
+
+It returns a frozen, explicitly unverified candidate result. Even
+`order_status=Success` is labelled `success_candidate` and
+`verified=false`; it is not payment evidence and must not trigger fulfilment.
+The parser expects plaintext only after the actual CCAvenue-compatible
+`encResp` decryption has been supplied by a separately verified codec.
+It does not implement or imply encryption, authoritative status lookup,
+webhook authentication, or refunds.
+
+This is a useful isolated implementation boundary, not a complete CCAvenue
+provider adapter. The factory intentionally remains unchanged and CCAvenue
+remains unavailable until all required operations pass the merchant sandbox
+contract tests.
