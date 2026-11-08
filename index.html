@@ -936,6 +936,7 @@ function dsheet(){
   openS(html);
 }
 async function dsave(){
+ return withLocalOperationalLock(async()=>{
  rdD();
  const d=S.dr,g=d.g,nm=String(g.n||'').trim();
  if(!nm){toast('Enter the guest’s name');return}
@@ -1024,6 +1025,7 @@ async function dsave(){
   }
   toast(error&&error.message||'Could not save guest or reservation; no payment was recorded');
  }
+ });
 }
 function cin(i){const b=bk(i);if(!b)return;const g=gOf(b.g),m=idMissing(g);
 if(m){openS(`<h2 class="foil">ID details needed</h2><p class="lab">${esc(b.g)}: ${m}. Every guest needs an ID photo and number before check-in.</p>${g?`<button class="btn" style="width:100%" onclick="dopen(${S.g.indexOf(g)})">Add ID details</button>`:''}`);return}
