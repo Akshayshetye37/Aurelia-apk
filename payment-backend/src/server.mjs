@@ -1070,6 +1070,107 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
   }
 });
 
+// CCAvenue Dynamic Event Notifications use an encrypted encResp payload.
+// This endpoint records only independently reconciled provider evidence; it
+// never writes a folio journal or issues a settlement command.
+app.post('/v1/webhooks/ccavenue/:tenantId/:environment',
+  express.raw({ type: '*/*', limit: '128kb' }), async (req, res) => {
+    const { tenantId, environment } = req.params;
+    if (!tenantIdPattern.test(tenantId || '') || !['test', 'live'].includes(environment) ||
+        !Buffer.isBuffer(req.body)) return fail(res, 400, 'invalid_ccavenue_notification_request');
+    const contentType = (req.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
+    if (!['application/json', 'application/x-www-form-urlencoded'].includes(contentType)) {
+      return fail(res, 415, 'unsupported_ccavenue_notification_content_type');
+    }
+    try {
+      const stateSnap = await providerTenantDoc(tenantId, 'ccavenue', environment).get();
+      if (!stateSnap.exists || stateSnap.data().configured !== true) {
+        return fail(res, 404, 'ccavenue_provider_not_configured');
+      }
+      const apiCredentials = JSON.parse(await loadSecret(
+        providerSecretId(tenantId, 'ccavenue', environment, 'api')));
+      const notificationWorkingKey = await loadSecret(
+        providerSecretId(tenantId, 'ccavenue', environment, 'webhook'));
+      let body;
+      if (contentType === 'application/json') {
+        body = JSON.parse(req.body.toString('utf8'));
+      } else {
+        const form = new URLSearchParams(req.body.toString('utf8'));
+        const values = form.getAll('encResp');
+        if (values.length !== 1) return fail(res, 400, 'invalid_ccavenue_notification_payload');
+        body = { encResp: values[0] };
+      }
+      const { CCAvenueVerificationService } = await import('./providers/ccavenue-verification.mjs');
+      const { createCcaVenueWebhookHandler } = await import('./webhooks/ccavenue-webhook-router.mjs');
+      const handler = createCcaVenueWebhookHandler({
+        notificationWorkingKey,
+        resolveExpectedPayment: async orderId => {
+          const matches = await db.collection('paymentProviderOrders')
+            .where('tenantId', '==', tenantId)
+            .where('provider', '==', 'ccavenue')
+            .where('environment', '==', environment)
+            .where('providerOrderId', '==', orderId)
+            .limit(2).get();
+          if (matches.size !== 1) return null;
+          const order = matches.docs[0].data();
+          if (order.tenantId !== tenantId || order.provider !== 'ccavenue' ||
+              order.environment !== environment || order.providerOrderId !== orderId ||
+              typeof order.intentId !== 'string') return null;
+          return {
+            provider: 'ccavenue', tenantId, paymentIntentId: order.intentId,
+            orderId, amountMinor: order.amountMinor, currency: order.currency
+          };
+        },
+        createVerificationService: async () => new CCAvenueVerificationService({
+          encryptionKey: apiCredentials.encryptionKey,
+          accessCode: apiCredentials.accessCode,
+          environment,
+          apiVersion: apiCredentials.apiVersion || '1.1'
+        }),
+        recordVerifiedEvidence: async evidence => {
+          const inboxRef = db.collection('ccavenueNotificationInbox').doc(evidence.eventId);
+          const intentRef = db.collection('paymentIntents').doc(evidence.paymentIntentId);
+          const verified = evidence.verifiedStatus;
+          const payloadHash = crypto.createHash('sha256').update(canonicalBytes({
+            tenantId, paymentIntentId: evidence.paymentIntentId, orderId: verified.orderId,
+            trackingId: verified.trackingId, paymentStatus: verified.paymentStatus,
+            providerStatus: verified.providerStatus, amountMinor: verified.amountMinor,
+            currency: verified.currency
+          })).digest('hex');
+          await db.runTransaction(async tx => {
+            const [prior, intent] = await Promise.all([tx.get(inboxRef), tx.get(intentRef)]);
+            if (!intent.exists || intent.data().tenantId !== tenantId ||
+                intent.data().provider !== 'ccavenue' || intent.data().environment !== environment ||
+                intent.data().providerOrderId !== verified.orderId ||
+                intent.data().amountMinor !== verified.amountMinor ||
+                intent.data().currency !== verified.currency) {
+              throw new Error('ccavenue_notification_intent_binding_changed');
+            }
+            if (prior.exists) {
+              if (prior.data().payloadHash !== payloadHash) {
+                throw new Error('ccavenue_notification_event_identity_conflict');
+              }
+              return;
+            }
+            tx.create(inboxRef, {
+              tenantId, paymentIntentId: evidence.paymentIntentId,
+              provider: 'ccavenue', environment, eventId: evidence.eventId,
+              providerOrderId: verified.orderId, trackingId: verified.trackingId,
+              providerStatus: verified.providerStatus, paymentStatus: verified.paymentStatus,
+              amountMinor: verified.amountMinor, currency: verified.currency,
+              providerFetchVerified: true, notificationSignatureVerified: false,
+              accountingStatus: 'PENDING', processingStatus: 'PROVIDER_STATUS_VERIFIED_PENDING_ACCOUNTING',
+              payloadHash, receivedAt: FieldValue.serverTimestamp()
+            });
+          });
+        }
+      });
+      return handler({ body }, res);
+    } catch {
+      return fail(res, 503, 'ccavenue_notification_processing_unavailable');
+    }
+  });
+
 app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
   const { provider, tenantId, environment: publicEnvironment } = req.params;
   const environment = adapterEnvironmentOf(provider, publicEnvironment);
