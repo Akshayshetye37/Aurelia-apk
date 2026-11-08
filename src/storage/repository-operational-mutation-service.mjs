@@ -301,3 +301,71 @@ export async function commitGuestStateMutation({
     guestVersion: committed.entities[0].version
   });
 }
+
+/** Atomically persists an inventory item and the complete snapshot/stock ledger. */
+export async function commitInventoryItemMutation({
+  bridge, snapshot, inventoryId, inventoryIndex, operation, expectedPreviousItem = null,
+  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
+  now = () => new Date().toISOString()
+} = {}) {
+  if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
+    throw new TypeError("A bound transactional PMS repository bridge is required");
+  }
+  if (!snapshot || !Array.isArray(snapshot.inv) || !Number.isInteger(inventoryIndex) ||
+      inventoryIndex < 0 || inventoryId == null || String(inventoryId).trim() === "") {
+    throw new TypeError("A complete snapshot, inventory index and stable item ID are required");
+  }
+  if (!["create", "update"].includes(operation)) throw new TypeError("Unsupported inventory mutation");
+  if (bridge.compatibilityWrite && typeof bridge.compatibilityWrite.then === "function") await bridge.compatibilityWrite;
+  const snapshotRow = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  if (!snapshotRow?.data?.snapshot) throw fail("CANONICAL_SNAPSHOT_MISSING", "The canonical recovery snapshot is missing; inventory change was not committed.");
+  const priorItems = Array.isArray(snapshotRow.data.snapshot.inv) ? snapshotRow.data.snapshot.inv : [];
+  const priorItem = priorItems.find(row => String(row?.id || "") === String(inventoryId)) || priorItems[inventoryIndex] || null;
+  const nextItem = snapshot.inv[inventoryIndex];
+  if (!nextItem || String(nextItem.id) !== String(inventoryId)) {
+    throw fail("INVENTORY_ITEM_NOT_FOUND", "The updated inventory item with its stable ID is missing from the requested snapshot.");
+  }
+  const itemRow = await bridge.fetchEntity("inventory", String(inventoryId));
+  if (operation === "create" && (priorItem || itemRow)) {
+    throw fail("INVENTORY_ID_ALREADY_EXISTS", "The inventory item ID already exists in canonical storage.");
+  }
+  if (operation === "update" && !priorItem && !expectedPreviousItem) {
+    throw fail("INVENTORY_ITEM_NOT_FOUND", "The inventory item is missing from the canonical recovery snapshot.");
+  }
+  const expectedPrior = expectedPreviousItem || priorItem;
+  if (itemRow?.data && expectedPrior && !sameJson(comparableEntity(itemRow.data), comparableEntity(expectedPrior))) {
+    throw fail("CANONICAL_INVENTORY_DIVERGENCE", "Canonical inventory item differs from the recovery snapshot; reload and reconcile first.");
+  }
+  if (operation === "update" && priorItem && expectedPreviousItem &&
+      !sameJson(comparableEntity(priorItem), comparableEntity(expectedPreviousItem))) {
+    throw fail("CANONICAL_INVENTORY_DIVERGENCE", "Inventory item changed in another session; reload before editing.");
+  }
+  const committedAt = now();
+  const payload = { operation: "inventory." + operation, inventoryId: String(inventoryId), itemName: String(nextItem.n || "") };
+  const committed = await bridge.mutateEntities([
+    {
+      entityType: "inventory", entityId: String(inventoryId), expectedVersion: itemRow?.version ?? 0,
+      eventType: "inventory." + operation, eventPayload: payload,
+      mutate: entity => { for (const key of Object.keys(entity)) delete entity[key]; Object.assign(entity, clone(nextItem), { updatedAt: committedAt }); }
+    },
+    {
+      entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2", expectedVersion: snapshotRow.version,
+      eventType: "pms.snapshot_inventory_mutation", eventPayload: payload,
+      mutate: entity => { entity.sourceKey = "aurelia_lodge_v2"; entity.snapshot = clone(snapshot); entity.updatedAt = committedAt; }
+    }
+  ]);
+  const [storedItem, storedSnapshot] = await Promise.all([
+    bridge.fetchEntity("inventory", String(inventoryId)),
+    bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")
+  ]);
+  if (!storedItem || !storedSnapshot ||
+      !sameJson(comparableEntity(storedItem.data), comparableEntity(nextItem)) ||
+      !sameJson(storedSnapshot.data.snapshot, snapshot)) {
+    throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Inventory transaction committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
+  }
+  return Object.freeze({
+    canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
+    item: storedItem, snapshotVersion: storedSnapshot.version,
+    inventoryVersion: committed.entities[0].version
+  });
+}
