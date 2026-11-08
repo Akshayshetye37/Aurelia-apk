@@ -213,3 +213,114 @@ These tests validate the pure accounting contract and read-only discrepancy
 detection. They do not establish a canonical production ledger, run merchant
 UAT, compile Android, or qualify any provider. Live collection, automatic
 settlement and automatic refund posting remain OFF; CCAvenue remains disabled.
+
+
+## Server-verified Android integrity (8 November 2026)
+
+Device enrollment now layers Google Play Integrity over the existing Android
+hardware-backed signing-key attestation. The Play token is not decoded on the
+client. The backend uses a service-account OAuth token with the
+`https://www.googleapis.com/auth/playintegrity` scope and calls Google's
+`decodeIntegrityToken` endpoint. It validates the decoded request binding,
+freshness, package name, Play-recognized app verdict, licensed app verdict,
+configured signing-certificate SHA-256 digest and
+`MEETS_DEVICE_INTEGRITY` device verdict. A stricter
+`MEETS_STRONG_INTEGRITY` requirement can be selected by policy.
+
+The one-time server enrollment challenge now includes a standard-request
+`playIntegrityRequestHash` bound to tenant, device, challenge ID and a digest
+of the random challenge nonce. The decoded verdict must match that exact
+request hash and be no older than two minutes (with a bounded future clock
+skew). Only then does the existing independent Android Key Attestation
+verifier validate the certificate chain, verified boot state, device lock
+state and attested public key. Both proof layers are persisted on the
+tenant-scoped device record and required at owner activation.
+
+Android integration:
+- `android/templates/security/AureliaPlayIntegrityClient.kt` prepares the
+  Standard Integrity token provider and requests a token for the server-issued
+  request hash.
+- `scripts/patch-android.js` copies the helper and adds
+  `com.google.android.play:integrity:1.5.0`.
+- The helper is a client capability, not a trust authority. It does not yet
+  connect to a production device-enrollment UI or submit the token by itself.
+
+Backend deployment configuration:
+- `AURELIA_ANDROID_PACKAGE_NAME`: exact Play Console package name.
+- `AURELIA_ANDROID_CERT_SHA256_DIGESTS`: comma-separated expected
+  Base64URL SHA-256 signing-certificate digests from the Play app signing
+  configuration.
+- `AURELIA_REQUIRE_STRONG_INTEGRITY=true`: optional stricter device policy.
+- Enable/link Play Integrity API in Play Console and the linked Google Cloud
+  project; grant the Cloud Run service identity permission to call the API.
+  No service-account private key is placed in the APK or source repository.
+
+No production verdict has been collected. Package name, signing digest,
+Play Console project linkage, IAM, Android SDK build and physical-device
+enrollment must be configured and verified before the feature can be treated
+as operational. Standard Play Integrity is currently checked at device
+enrollment; high-risk payment actions will require fresh, action-bound
+integrity tokens before any future live authorization.
+
+## PMS ledger source mapping — read-only findings
+
+The actual PMS sources are not yet a unified, server-authoritative accounting
+bookwriter:
+
+- `booking.pays` is identified by
+  `src/payments/accounting-consistency-diagnostic.mjs` as the canonical
+  payment-row collection. `booking.p` and `booking.payments` are
+  compatibility representations.
+- `financialLedger` is a separate journal array in the local PMS snapshot.
+  Existing journal writers found in `index.html` are focused on cancellation
+  accounting and use named accounts such as `Guest Advances Liability`,
+  `Refunds Payable Liability`, `Cancellation Revenue` and `Cash & Bank`.
+- The current revenue/receivable reports derive much of their totals from
+  booking and payment data. They do not establish that a complete general
+  ledger already exists for every room, dining, expense, gateway collection
+  and fee lifecycle.
+- The newer canonical repository exposes a `ledger` entity and
+  `addLedgerLine` bridge method, but that generic entity interface is not yet
+  proven to be the same book as `financialLedger` or the payment rows.
+
+Consequently, no payment writer has been connected to `financialLedger`,
+`booking.pays`, or the repository `ledger` entity. Doing so before
+establishing the canonical book would create a second ledger or double-post
+existing cancellation entries.
+
+| Proposed account | Current PMS evidence | Mapping decision |
+|---|---|---|
+| 1010 Guest Receivable | Booking balances and payment rows; no complete AR journal mapping verified | Unapproved |
+| 2020 Gateway Clearing | No gateway-clearing subledger or float-cycle normal balance verified | **Finance sign-off required** |
+| 4010 Operational Guest Revenue | Room/dining revenue is derived from PMS booking and sales data | No journal mapping approved |
+| 5010 Merchant Processing Fees | No authoritative provider fee settlement record mapped to PMS expense ledger | Unmapped |
+
+Account 2020 must have its legal/economic nature, normal balance, float
+recognition, settlement timing, chargeback treatment and reconciliation
+ownership explicitly approved by the accounting owner. The current label
+"undistributed gateway collections / suspense" does not resolve whether the
+account is a clearing asset or a liability throughout the settlement cycle.
+No opening balance, migration, or journal writer is authorized.
+
+## Reconciliation scheduling boundary
+
+The pure comparator and existing bounded provider-recovery worker are not
+equivalent to a deployed read-only audit scheduler. A durable scheduled audit
+must load both sides from the verified canonical PMS ledger, persist run
+history, use tenant-scoped leases and bounded batches, alert on discrepancies,
+and remain read-only. That source adapter is not yet available. Scheduling
+the current comparator against the incomplete `paymentFolios` writer would
+institutionalize the wrong ledger. The scheduler is therefore intentionally
+not deployed until the PMS ledger source mapping is approved.
+
+### Verification for this update
+
+The Play Integrity verifier has automated tests for request-hash binding,
+freshness, app/package recognition, licensing, signing-certificate matching,
+device-integrity labels, optional strong-integrity policy, authenticated
+Google decode and fail-closed API responses. The backend CI run on commit
+`a4324df34b6a14b1003b08e734100f1445e184a5` passed all backend tests, syntax,
+container build, non-root image and Terraform validation. The application
+workflow exposed one integration-contract assertion because the cloud
+enrollment route had not yet been updated to accept the token; that route has
+since been corrected and its current-head workflow must pass before acceptance.
