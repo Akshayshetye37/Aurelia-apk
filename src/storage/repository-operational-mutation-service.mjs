@@ -6,6 +6,7 @@ const clone = value => value == null ? value :
   (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
 function fail(code, message) { const error = new Error(message); error.code = code; return error; }
 function sameJson(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+function comparableEntity(value) { const copy = clone(value); if (copy && typeof copy === "object") { delete copy.id; delete copy.updatedAt; } return copy; }
 function refreshCache(storage, snapshot) {
   if (!storage) return null;
   try {
@@ -61,10 +62,10 @@ export async function commitOperationalStateMutation({
     bridge.fetchEntity("booking", String(bookingId)),
     bridge.fetchEntity("room", String(roomId))
   ]);
-  if (bookingRow?.data && !sameJson(bookingRow.data, priorBooking)) {
+  if (bookingRow?.data && !sameJson(comparableEntity(bookingRow.data), comparableEntity(priorBooking))) {
     throw fail("CANONICAL_BOOKING_DIVERGENCE", "Canonical booking entity differs from the recovery snapshot; refresh and reconcile first.");
   }
-  if (roomRow?.data && !sameJson(roomRow.data, priorRoom)) {
+  if (roomRow?.data && !sameJson(comparableEntity(roomRow.data), comparableEntity(priorRoom))) {
     throw fail("CANONICAL_ROOM_DIVERGENCE", "Canonical room entity differs from the recovery snapshot; refresh and reconcile first.");
   }
 
@@ -96,10 +97,9 @@ export async function commitOperationalStateMutation({
     bridge.fetchEntity("room", String(roomId)),
     bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")
   ]);
-  const withoutTimestamp = value => { const copy = clone(value); delete copy.updatedAt; return copy; };
   if (!storedBooking || !storedRoom || !storedSnapshot ||
-      !sameJson(withoutTimestamp(storedBooking.data), withoutTimestamp(nextBooking)) ||
-      !sameJson(withoutTimestamp(storedRoom.data), withoutTimestamp(nextRoom)) ||
+      !sameJson(comparableEntity(storedBooking.data), comparableEntity(nextBooking)) ||
+      !sameJson(comparableEntity(storedRoom.data), comparableEntity(nextRoom)) ||
       !sameJson(storedSnapshot.data.snapshot, snapshot)) {
     throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Lifecycle transaction committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
   }
