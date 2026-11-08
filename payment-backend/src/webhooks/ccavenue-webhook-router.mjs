@@ -37,6 +37,9 @@ export function createCcaVenueWebhookHandler(dependencies) {
           code.includes('duplicate_field') || code.includes('decryption_failed')) {
         return res.status(400).json({ error: 'invalid_provider_notification' });
       }
+      if (code.includes('_mismatch') || code.includes('_order_mismatch') || code.includes('_tracking_mismatch')) {
+        return res.status(409).json({ error: 'provider_notification_binding_conflict' });
+      }
       // Do not acknowledge an event when evidence persistence fails. CCAvenue
       // can retry; the persistence callback must be idempotent by eventId.
       return res.status(503).json({ error: 'provider_notification_processing_unavailable' });
