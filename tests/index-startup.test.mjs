@@ -130,7 +130,7 @@ test('room-domain bootstrap hydrates the UI from canonical room entities before 
   assert.match(loader, /hydrateCanonicalRoomSnapshot/);
   assert.match(loader, /hydrateCanonicalGuestSnapshot/);
   assert.match(loader, /await hydrateDomainRead\(canonicalAudit\.data\.snapshot\)/);
-  assert.ok(loader.indexOf("hydrateRoomRead(canonicalAudit.data.snapshot)") < loader.indexOf("await replayApplicationScripts()"));
+  assert.ok(loader.indexOf("hydrateDomainRead(canonicalAudit.data.snapshot)") < loader.indexOf("await replayApplicationScripts()"));
 });
 
 test('guest profile removal uses a canonical retirement transaction', async () => {
