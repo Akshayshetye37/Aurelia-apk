@@ -59,4 +59,9 @@ test("cancellation accounting waits for canonical snapshot commit and verifies t
   const strictWriter = html.slice(strictStart, strictEnd);
   assert.match(strictWriter, /AureliaLocalOperationalLock/);
   assert.match(strictWriter, /await coordinator\.save\(state\)/);
+  const strictSyncStart = html.indexOf("function persistStrict(){");
+  const strictSyncEnd = html.indexOf("\n}", strictSyncStart);
+  const strictSync = html.slice(strictSyncStart, strictSyncEnd);
+  assert.match(strictSync, /Synchronous accounting persistence is disabled/);
+  assert.doesNotMatch(strictSync, /localStorage|setItem\\(SK/);
 });
