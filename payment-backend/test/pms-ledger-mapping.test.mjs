@@ -45,8 +45,10 @@ test('legacy decimal rupees are converted with integer arithmetic, not float mul
 });
 
 test('legacy decimal amount and local-only row cannot become a journal', () => {
+  const malformedRow = { ...payment, amountPaise: undefined, amount: '125.001' };
+  const malformedBooking = { ...booking, pays: [malformedRow] };
   assert.throws(() => mapLegacyPaymentCapture({
-    ...base, booking, paymentRow: { ...payment, amountPaise: undefined, amount: '125.001' },
+    ...base, booking: malformedBooking, paymentRow: malformedRow,
     providerPaymentId: 'pay_123456', verifiedCapture: captureEvidence
   }), /legacy_payment_amount_must_be_exact_rupee_decimal_or_integer_paise/);
   assert.throws(() => mapLegacyPaymentCapture({
