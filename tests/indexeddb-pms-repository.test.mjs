@@ -6,7 +6,7 @@ test("legacy parser validates required shape and retains exact source",()=>{cons
 test("business entity and outbox event share atomic transaction",async()=>{const r=repo("atomic");await assert.rejects(r.transactBusinessChange({entityType:"folio",entityId:"f1",expectedVersion:0,event:event(1)},()=>{throw Error("crash");}));assert.equal(await r.getEntity("folio","f1"),null);assert.deepEqual(await r.claimOutboxBatch({deviceId:"d1"}),[]);await r.transactBusinessChange({entityType:"folio",entityId:"f1",expectedVersion:0,event:event(1)},()=>({balancePaise:100}));assert.equal((await r.claimOutboxBatch({deviceId:"d1"})).length,1);});
 test("stale entity versions fail without adding outbox events",async()=>{const r=repo("stale");await r.transactBusinessChange({entityType:"folio",entityId:"f1",expectedVersion:0,event:event(1)},()=>({v:1}));await assert.rejects(r.transactBusinessChange({entityType:"folio",entityId:"f1",expectedVersion:0,event:event(1)},()=>({v:2})),e=>e.code==="ENTITY_VERSION_CONFLICT");assert.equal((await r.claimOutboxBatch({deviceId:"d1"})).length,1);});
 test("acknowledgements are lease, device and sequence bound",async()=>{const r=repo("ack");await r.transactBusinessChange({entityType:"folio",entityId:"f1",expectedVersion:0,event:event(1)},()=>({v:1}));await r.claimOutboxBatch({deviceId:"d1"});await assert.rejects(r.acknowledgeOutbox({deviceId:"d2",acknowledgements:[{eventId:"event-1",sequence:1}]}));await assert.rejects(r.acknowledgeOutbox({deviceId:"d1",acknowledgements:[{eventId:"event-1",sequence:2}]}));assert.deepEqual(await r.acknowledgeOutbox({deviceId:"d1",acknowledgements:[{eventId:"event-1",sequence:1}]}),{acknowledged:1});});
-test("legacy migration is atomic, one-time and retains exact raw backup",async()=>{const r=repo("migration"),raw=JSON.stringify(state),snap=parseLegacyPmsSnapshot(raw);const a=await r.migrateLegacySnapshot(snap,{migrationId:"mig1",sourceKey:"aurelia-state"});assert.equal(a.entityCount,Object.keys(state).length);assert.deepEqual((await r.getEntity("legacy","b")).data,[]);assert.equal((await r.readMigrationSnapshot("mig1")).raw,raw);assert.deepEqual(await r.migrateLegacySnapshot(snap,{migrationId:"mig1",sourceKey:"aurelia-state"}),{alreadyMigrated:true,migrationId:"mig1"});await assert.rejects(r.migrateLegacySnapshot(snap,{migrationId:"mig2",sourceKey:"aurelia-state"}),/marker already exists/);});
+test("legacy migration is atomic, one-time and retains exact raw backup",async()=>{const r=repo("migration"),raw=JSON.stringify(state),snap=parseLegacyPmsSnapshot(raw);const a=await r.migrateLegacySnapshot(snap,{migrationId:"mig1",sourceKey:"aurelia-state"});assert.equal(a.entityCount,Object.keys(state).length);assert.deepEqual((await r.getEntity("legacy","b")).data,[]);assert.equal((await r.readMigrationSnapshot("mig1")).raw,raw);const db=await r.database(),tx=db.transaction("legacy_backup","readonly"),backup=await new Promise((resolve,reject)=>{const q=tx.objectStore("legacy_backup").get("mig1");q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});assert.equal(backup.raw,raw);assert.deepEqual(await r.migrateLegacySnapshot(snap,{migrationId:"mig1",sourceKey:"aurelia-state"}),{alreadyMigrated:true,migrationId:"mig1"});await assert.rejects(r.migrateLegacySnapshot(snap,{migrationId:"mig2",sourceKey:"aurelia-state"}),/marker already exists/);});
 test("migration refuses a non-empty canonical store",async()=>{const r=repo("nonempty");await r.transactBusinessChange({entityType:"folio",entityId:"f1",expectedVersion:0,event:event(1)},()=>({v:1}));await assert.rejects(r.migrateLegacySnapshot(parseLegacyPmsSnapshot(JSON.stringify(state)),{migrationId:"mig1",sourceKey:"aurelia-state"}),/not empty/);});
 test("retry scheduling is enforced and conflict transitions remain lease protected",async()=>{const r=repo("delivery");await r.transactBusinessChange({entityType:"folio",entityId:"f1",expectedVersion:0,event:event(1)},()=>({v:1}));await r.claimOutboxBatch({deviceId:"d1"});assert.equal(await r.retryOutbox({deviceId:"d1",eventId:"event-1",retryAt:"2999-11-07T00:01:00Z",errorCode:"NETWORK"}),true);assert.deepEqual(await r.claimOutboxBatch({deviceId:"d1"}),[]);const r2=repo("conflict");await r2.transactBusinessChange({entityType:"folio",entityId:"f1",expectedVersion:0,event:event(1)},()=>({v:1}));await r2.claimOutboxBatch({deviceId:"d1"});assert.equal(await r2.markOutboxConflict({deviceId:"d1",eventId:"event-1",conflictCode:"VERSION_CONFLICT"}),true);});
 
@@ -52,7 +52,7 @@ test("multi-entity batch rejects duplicate entity keys before writing",async()=>
 });
 
 
-test("schema v1 to v2 migration snapshots every existing store before advancing schema version",async()=>{
+test("schema v1 to v3 migration snapshots every existing store before advancing schema version",async()=>{
  const name="pms-schema-upgrade-backup";
  const opened=await new Promise((resolve,reject)=>{
   const request=indexedDB.open(name,1);
@@ -77,13 +77,13 @@ test("schema v1 to v2 migration snapshots every existing store before advancing 
  opened.close();
  const upgraded=new IndexedDbPmsRepository({indexedDBImpl:indexedDB,databaseName:name});
  const db=await upgraded.database();
- assert.equal(db.version,2);
+ assert.equal(db.version,3);
  assert.deepEqual((await upgraded.getEntity("room","101")).data,{id:"101"});
  const tx=db.transaction(["meta","migration_backups"],"readonly");
  const meta=await new Promise((resolve,reject)=>{const q=tx.objectStore("meta").get("schema-version");q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
  const backups=await new Promise((resolve,reject)=>{const q=tx.objectStore("migration_backups").getAll();q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
  await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});
- assert.equal(meta.version,2);
+ assert.equal(meta.version,3);
  assert.equal(backups.length,4);
  assert.ok(backups.some(row=>row.sourceStore==="entities"&&row.sourceKey==="room:101"&&row.value.data.id==="101"));
  assert.ok(backups.some(row=>row.sourceStore==="outbox"&&row.sourceKey==="evt-v1"));
