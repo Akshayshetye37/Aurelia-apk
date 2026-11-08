@@ -127,6 +127,7 @@ export async function verifyAndRegisterDevice({
       playIntegrityCertificateSha256Digest: [...integrity.certificateSha256Digest],
       playIntegrityTimestampMillis: integrity.timestampMillis,
       playIntegrityRequestHash: integrity.requestHash,
+      playIntegrityStrongIntegrityRequired: requireStrongIntegrity,
       attestationChainSha256: sha256(certificateChainBase64.join(".")),
       updatedAt: current
     });
@@ -149,6 +150,8 @@ export async function activatePaymentDevice({ db, tenantId, actorUid, deviceId, 
         snap.data().playIntegrityAppLicensingVerdict !== "LICENSED" ||
         !Array.isArray(snap.data().playIntegrityDeviceRecognitionVerdicts) ||
         !snap.data().playIntegrityDeviceRecognitionVerdicts.includes("MEETS_DEVICE_INTEGRITY") ||
+        snap.data().playIntegrityStrongIntegrityRequired === true &&
+          !snap.data().playIntegrityDeviceRecognitionVerdicts.includes("MEETS_STRONG_INTEGRITY") ||
         !snap.data().playIntegrityVerifiedAt) {
       throw new Error("payment_device_attestation_not_ready");
     }
