@@ -1672,10 +1672,15 @@ async function persistCanonicalStrict(){
  if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
  const coordinator=window.AureliaLocalFirstWrites;
  if(!coordinator||typeof coordinator.save!=='function')throw new Error('Canonical local PMS write coordinator is unavailable.');
- const state={tab:S.tab,bk:S.bk};DK.forEach(k=>state[k]=S[k]);
- const result=await coordinator.save(state);
- if(!result?.committed||!result.snapshot)throw new Error('Canonical local PMS commit was not verified.');
- return result.snapshot;
+ const commit=async()=>{
+  if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
+  const state={tab:S.tab,bk:S.bk};DK.forEach(k=>state[k]=S[k]);
+  const result=await coordinator.save(state);
+  if(!result?.committed||!result.snapshot)throw new Error('Canonical local PMS commit was not verified.');
+  return result.snapshot;
+ };
+ return typeof window.AureliaLocalOperationalLock==='function'
+  ?await window.AureliaLocalOperationalLock(commit):await commit();
 }
 function cloneRuntimeState(value){
  if(value instanceof Date)return new Date(value.getTime());
