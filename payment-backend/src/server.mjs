@@ -417,6 +417,7 @@ app.patch('/v1/admin/payment-controls', requireTenantAdmin,
     }
   });
 
+const cloudCheckoutApiEnabled = provider => PROVIDERS[provider]?.cloudCheckoutApiEnabled === true;
 const envOf = req => {
   const value = req.body?.environment || req.query?.environment;
   return value === 'test' || value === 'live' ? value : null;
@@ -529,7 +530,7 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
   const idempotencyKey = idempotencyOf(req) || body.idempotencyKey;
   if (!idempotencyKey || !/^[A-Za-z0-9._:-]{12,100}$/.test(idempotencyKey)) return fail(res, 400, 'idempotency_key_required');
   const adapterEnvironment = adapterEnvironmentOf(body.provider, body.environment);
-  if (!implementedProviderAdapters().includes(body.provider) || !adapterEnvironment) return fail(res, 400, 'provider_not_supported');
+  if (!implementedProviderAdapters().includes(body.provider) || !cloudCheckoutApiEnabled(body.provider) || !adapterEnvironment) return fail(res, 400, 'provider_not_supported');
   if (body.environment === 'live') {
     const liveBlock = await liveCollectionBlockReason(req.tenant.id, body.provider);
     if (liveBlock) return fail(res, liveBlock === 'payment_controls_unavailable' ? 503 : 403, liveBlock);
@@ -968,7 +969,7 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
   if (blocked) return blocked;
   const { provider } = req.params, publicEnvironment = envOf(req), environment = adapterEnvironmentOf(provider, publicEnvironment),
     amountMinor = req.body?.amountMinor, idem = idempotencyOf(req);
-  if (!implementedProviderAdapters().includes(provider) || publicEnvironment !== 'test' || !environment ||
+  if (!implementedProviderAdapters().includes(provider) || !cloudCheckoutApiEnabled(provider) || publicEnvironment !== 'test' || !environment ||
       !Number.isSafeInteger(amountMinor) || amountMinor < 100 || amountMinor > 10000000 || !idem) return fail(res, 400, 'invalid_test_order_request');
   const providerState = await providerTenantDoc(req.tenant.id, provider, environment).get();
   if (!providerState.exists || providerState.data().configured !== true ||
@@ -1036,7 +1037,7 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
 app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
   const { provider, tenantId, environment: publicEnvironment } = req.params;
   const environment = adapterEnvironmentOf(provider, publicEnvironment);
-  if (!implementedProviderAdapters().includes(provider) || !tenantIdPattern.test(tenantId || '') ||
+  if (!implementedProviderAdapters().includes(provider) || !cloudCheckoutApiEnabled(provider) || !tenantIdPattern.test(tenantId || '') ||
       !environment || !Buffer.isBuffer(req.body)) return fail(res, 400, 'invalid_webhook_request');
   const webhookContentType = (req.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
   const allowedWebhookTypes = provider === 'payu'
@@ -1258,7 +1259,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
 });
 app.post('/v1/admin/providers/:provider/activate', requireTenantAdmin, express.json({ limit: '2kb', strict: true }), async (req, res) => {
   const { provider } = req.params, publicEnvironment = envOf(req), environment = adapterEnvironmentOf(provider, publicEnvironment);
-  if (!implementedProviderAdapters().includes(provider) || !environment || req.body?.confirm !== true) {
+  if (!implementedProviderAdapters().includes(provider) || !cloudCheckoutApiEnabled(provider) || !environment || req.body?.confirm !== true) {
     return fail(res, 400, 'explicit_activation_confirmation_required');
   }
   if (publicEnvironment === 'live' && providerQualificationStatus(provider).liveCollection !== true) {
