@@ -354,6 +354,7 @@ for (const file of [
   'PaymentDeviceKeyStore.kt',
   'PaymentDeviceClient.kt',
   'SettlementEnvelopeVerifier.kt',
+  'PaymentReleaseSafeguards.kt',
   'LockGateActivity.kt'
 ]) {
   const source = path.join(securityTemplateDir, file);
@@ -1440,6 +1441,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
             }
             String provider = obj.optString("provider", "");
             String environment = obj.optString("environment", "");
+            com.aurelia.pms.security.PaymentReleaseSafeguards.assertSandboxCheckoutAllowed(provider, environment);
             String orderId = obj.optString("providerOrderId", "");
             long amountMinor = obj.optLong("amountMinor", -1L);
             String currency = obj.optString("currency", "");
