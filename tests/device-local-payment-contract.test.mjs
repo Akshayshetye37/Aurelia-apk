@@ -39,14 +39,18 @@ test('provider directory is synchronized with the wired backend factory and labe
   assert.ok(catalogue, 'frontend provider catalogue exists');
   assert.ok(factoryBlock, 'backend provider factory exists');
   const uiProviders = [...catalogue[1].matchAll(/["']([a-z0-9_]+)["']/g)].map(match => match[1]);
-  const serverProviders = [...factoryBlock[1].matchAll(/^\s*([a-z0-9_]+):/gm)].map(match => match[1]);
-  assert.deepEqual(uiProviders, serverProviders, 'frontend directory and backend factory must have the same six providers');
+  const allFactoryProviders = [...factoryBlock[1].matchAll(/^\\s*([a-z0-9_]+):/gm)].map(match => match[1]);
+  // CCAvenue is present as a partial adapter, not one of the six complete adapters
+  // exposed by the current checkout catalogue. Do not promote it to checkout-ready.
+  const serverProviders = allFactoryProviders.filter(provider => provider !== 'ccavenue');
+  assert.deepEqual(uiProviders, serverProviders, 'frontend directory and six complete backend adapters must match');
+  assert.ok(allFactoryProviders.includes('ccavenue'), 'CCAvenue partial adapter remains discoverable in the backend factory');
   for (const provider of serverProviders) {
-    assert.match(registry, new RegExp('^\\s*' + provider + ':\\s*\\{', 'm'), provider + ' registry entry exists');
+    assert.match(registry, new RegExp('^\\\\s*' + provider + ':\\\\s*\\\\{', 'm'), provider + ' registry entry exists');
   }
-  assert.equal((registry.match(/adapterStatus:\s*'adapter_implemented_wired'/g) || []).length, 6,
-    'all six factory providers must be marked wired in the registry');
-  assert.match(registry, /ccavenue:[\s\S]*?adapterStatus:\s*'not_implemented'/);
+  assert.equal((registry.match(/adapterStatus:\\s*'adapter_implemented_wired'/g) || []).length, 6,
+    'all six complete adapters must be marked wired in the registry');
+  assert.match(registry, /ccavenue:[\\s\\S]*?adapterStatus:\\s*'adapter_partial_implemented'/);
   assert.match(html, /Server adapter ready \(test\) · Live collection OFF/);
   assert.match(html, /Documentation only/);
   assert.doesNotMatch(html, /Server adapter \(incomplete\)/i);
