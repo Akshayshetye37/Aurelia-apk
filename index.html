@@ -5315,6 +5315,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 <script type="module" id="aurelia-async-runtime-bootstrap">
 import { bootstrapper } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
+import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
 
@@ -5357,7 +5358,8 @@ try {
      readBack: async () => {
        const row = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
        return row?.data || null;
-     }
+     },
+     settlePayment: input => settlePaymentToRepository({ ...input, bridge: storageBridge })
    });
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "APPLICATION_MODULES";
