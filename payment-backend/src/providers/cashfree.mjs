@@ -97,11 +97,11 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
         !id(input?.customer?.id) || typeof input?.customer?.phone !== 'string' ||
         !/^\+?\d{10,15}$/.test(input.customer.phone) ||
         (input.customer.email != null && typeof input.customer.email !== 'string') ||
-        !returnUrl || returnUrl.protocol !== 'https:' || !id(input?.idempotencyKey)) {
+        !returnUrl || returnUrl.protocol !== 'https:' || !cleanText(input?.idempotencyKey, 12, 100)) {
       throw new TypeError('invalid_cashfree_order');
     }
     const data = await this.request('POST', '/orders', {
-      order_id: input.orderId, order_amount: input.amountMinor / 100, order_currency: 'INR',
+      order_id: input.orderId, order_amount: Number((input.amountMinor / 100).toFixed(2)), order_currency: 'INR',
       customer_details: { customer_id: input.customer.id, customer_phone: input.customer.phone,
         ...(input.customer.email ? { customer_email: input.customer.email } : {}) },
       order_meta: { return_url: input.returnUrl }
@@ -176,7 +176,7 @@ export class CashfreeAdapter extends PaymentProviderAdapter {
       throw new TypeError('invalid_cashfree_refund');
     }
     const response = await this.request('POST', '/orders/' + encodeURIComponent(input.orderId) + '/refunds', {
-      refund_id: input.refundId, refund_amount: input.amountMinor / 100, refund_note: note
+      refund_id: input.refundId, refund_amount: Number((input.amountMinor / 100).toFixed(2)), refund_note: note
     }, crypto.randomUUID(), uuidFrom(requestKey));
     const data = Array.isArray(response) ? (response.length === 1 ? response[0] : null) : response;
     if (!plain(data)) throw new Error('cashfree_refund_response_invalid');
