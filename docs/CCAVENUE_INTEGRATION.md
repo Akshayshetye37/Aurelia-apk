@@ -495,7 +495,9 @@ workflow or live financial switch is enabled by this change.
 ### Tenant-scoped notification endpoint and credential storage
 
 A dedicated owner/admin endpoint is now available at
-`PUT /v1/admin/providers/ccavenue/credentials`. It accepts test/live
+`PUT /v1/admin/providers/ccavenue/credentials` (with matching
+`DELETE /v1/admin/providers/ccavenue/credentials?environment=test|live` for
+revocation). It accepts test/live
 configuration and stores API credentials, hosted-checkout key and notification
 working key as separate Secret Manager values. Mobile SDK `regId` and `workingKey` are
 optional until the official SDK is integrated. The route is schema-only:
