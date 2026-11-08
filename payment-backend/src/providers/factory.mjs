@@ -42,7 +42,7 @@ export function providerQualificationStatus(providerId) {
   if (!FACTORIES[providerId]) return { implemented: false, testCheckout: false, liveCollection: false };
   return {
     implemented: true,
-    testCheckout: true,
+    testCheckout: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
     liveCollection: false,
     cloudCheckoutApiEnabled: PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true,
     merchantUatRequired: true,
