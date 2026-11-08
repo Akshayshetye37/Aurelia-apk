@@ -8,6 +8,7 @@
  */
 import { IndexedDbPmsRepository, parseLegacyPmsSnapshot } from "./indexeddb-pms-repository.mjs";
 import { LegacyImporter, LEGACY_STATE_KEY, LEGACY_MIGRATION_STATUS_KEY } from "./legacy-importer.mjs";
+import { createWebStorageAdapter } from "./web-storage-adapter.mjs";
 import { getOrCreateBrowserLocalIdentity } from "./pms-local-identity.mjs";
 import { settlePaymentToRepository } from "../payments/repository-settlement-service.mjs";
 import { PmsRepositoryBridge } from "./pms-repository-bridge.mjs";
@@ -55,7 +56,7 @@ function assertStorage(storage) {
 
 export class PmsBootstrapCoordinator {
   constructor({
-    storage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
+    storage = globalThis.window?.__aureliaStorage || createWebStorageAdapter(),
     indexedDBImpl = globalThis.indexedDB,
     databaseName = "aurelia-pms-canonical",
     repository = null,
