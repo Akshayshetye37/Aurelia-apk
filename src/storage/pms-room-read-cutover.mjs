@@ -66,3 +66,46 @@ export async function hydrateCanonicalRoomSnapshot({ repository, snapshot, enabl
   hydrated.rooms = rooms;
   return hydrated;
 }
+
+/** Hydrate guest profiles from stable canonical guest IDs, including IDs assigned during legacy projection. */
+export async function hydrateCanonicalGuestSnapshot({ repository, snapshot, enabled = true } = {}) {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) || !Array.isArray(snapshot.g)) {
+    throw new TypeError("A complete PMS snapshot with a guest collection is required.");
+  }
+  const hydrated = clone(snapshot);
+  if (!enabled) return hydrated;
+  if (!repository || typeof repository.listEntities !== "function") {
+    throw new TypeError("Canonical guest repository is unavailable; guest read cutover cannot proceed.");
+  }
+  const rows = await repository.listEntities("guest");
+  if (!Array.isArray(rows)) throw new Error("Canonical guest repository returned an invalid entity list.");
+  const active = rows.filter(row => row?.data?.retired !== true && row?.data?.status !== "retired");
+  const byId = new Map();
+  for (const row of active) {
+    if (!row || row.type !== "guest" || typeof row.id !== "string" ||
+        !Number.isSafeInteger(row.version) || row.version < 1 || byId.has(row.id)) {
+      throw new Error("Canonical guest inventory contains an invalid or duplicate guest entity.");
+    }
+    byId.set(row.id, row);
+  }
+  const expectedIds = new Set();
+  hydrated.g = hydrated.g.map((source, index) => {
+    if (!source || typeof source !== "object" || Array.isArray(source)) {
+      throw new Error("Guest snapshot contains a malformed row at index " + index + ".");
+    }
+    const id = String(source.id ?? "legacy-guest-" + index).trim();
+    if (!id || expectedIds.has(id)) throw new Error("Guest snapshot has a missing or duplicate stable guest identity.");
+    expectedIds.add(id);
+    const row = byId.get(id);
+    if (!row) throw new Error("Canonical guest entity is missing for active guest " + id + ".");
+    const canonical = withoutRepositoryMetadata(row.data);
+    if (!same(canonical, withoutRepositoryMetadata(source))) {
+      throw new Error("Canonical guest entity diverges from the committed recovery snapshot for guest " + id + ".");
+    }
+    return { ...canonical, id: row.id };
+  });
+  if (byId.size !== expectedIds.size) {
+    throw new Error("Canonical guest inventory contains an active guest that is absent from the recovery snapshot.");
+  }
+  return hydrated;
+}

@@ -247,16 +247,20 @@ export async function commitGuestStateMutation({
       guestId == null || String(guestId).trim() === "") {
     throw new TypeError("A complete snapshot, guest index and stable guest ID are required");
   }
-  if (!["create", "update"].includes(operation)) throw new TypeError("Unsupported guest mutation operation");
+  if (!["create", "update", "retire"].includes(operation)) throw new TypeError("Unsupported guest mutation operation");
   if (bridge.compatibilityWrite && typeof bridge.compatibilityWrite.then === "function") await bridge.compatibilityWrite;
   const snapshotRow = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
   if (!snapshotRow?.data?.snapshot) throw fail("CANONICAL_SNAPSHOT_MISSING", "The canonical recovery snapshot is missing; guest change was not committed.");
   const priorGuests = Array.isArray(snapshotRow.data.snapshot.g) ? snapshotRow.data.snapshot.g : [];
-  const nextGuest = snapshot.g[guestIndex];
-  if (!nextGuest || String(nextGuest.id) !== String(guestId)) {
+  const nextGuest = operation === "retire" ? null : snapshot.g[guestIndex];
+  if (operation !== "retire" && (!nextGuest || String(nextGuest.id) !== String(guestId))) {
     throw fail("GUEST_NOT_FOUND", "The updated guest with its stable ID is missing from the requested snapshot.");
   }
   const priorGuest = priorGuests.find(row => String(row?.id) === String(guestId)) || priorGuests[guestIndex] || null;
+  if (!priorGuest) throw fail("GUEST_NOT_FOUND", "The guest is missing from the canonical recovery snapshot.");
+  if (operation === "retire" && snapshot.g.some(row => String(row?.id || "") === String(guestId))) {
+    throw fail("GUEST_STILL_IN_SNAPSHOT", "The retired guest is still present in the requested snapshot.");
+  }
   const guestRow = await bridge.fetchEntity("guest", String(guestId));
   if (operation === "create" && (priorGuest || guestRow)) {
     throw fail("GUEST_ID_ALREADY_EXISTS", "The guest ID already exists in canonical storage.");
@@ -273,12 +277,22 @@ export async function commitGuestStateMutation({
     throw fail("CANONICAL_GUEST_DIVERGENCE", "The guest profile changed in another session; reload before editing.");
   }
   const committedAt = now();
-  const payload = { operation: "guest." + operation, guestId: String(guestId), guestName: String(nextGuest.n || "") };
+  const payload = { operation: "guest." + operation, guestId: String(guestId), guestName: String((nextGuest || priorGuest).n || "") };
   const committed = await bridge.mutateEntities([
     {
       entityType: "guest", entityId: String(guestId), expectedVersion: guestRow?.version ?? 0,
       eventType: "guest." + operation, eventPayload: payload,
-      mutate: entity => { for (const key of Object.keys(entity)) delete entity[key]; Object.assign(entity, clone(nextGuest), { updatedAt: committedAt }); }
+      mutate: entity => {
+        for (const key of Object.keys(entity)) delete entity[key];
+        if (operation === "retire") {
+          Object.assign(entity, {
+            id: String(guestId), retired: true, retiredAt: committedAt,
+            formerName: String(priorGuest.n || ""), updatedAt: committedAt
+          });
+        } else {
+          Object.assign(entity, clone(nextGuest), { updatedAt: committedAt });
+        }
+      }
     },
     {
       entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2", expectedVersion: snapshotRow.version,
@@ -290,8 +304,10 @@ export async function commitGuestStateMutation({
     bridge.fetchEntity("guest", String(guestId)),
     bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")
   ]);
-  if (!storedGuest || !storedSnapshot ||
-      !sameJson(comparableEntity(storedGuest.data), comparableEntity(nextGuest)) ||
+  const guestVerified = operation === "retire"
+    ? storedGuest?.data?.retired === true && String(storedGuest.data.id) === String(guestId)
+    : storedGuest && sameJson(comparableEntity(storedGuest.data), comparableEntity(nextGuest));
+  if (!storedGuest || !storedSnapshot || !guestVerified ||
       !sameJson(storedSnapshot.data.snapshot, snapshot)) {
     throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Guest transaction committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
   }

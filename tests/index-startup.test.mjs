@@ -128,6 +128,20 @@ test('room-domain bootstrap hydrates the UI from canonical room entities before 
   const loaderAt = html.indexOf('id="aurelia-async-runtime-bootstrap"');
   const loader = html.slice(loaderAt, html.indexOf("</script>", loaderAt));
   assert.match(loader, /hydrateCanonicalRoomSnapshot/);
+  assert.match(loader, /hydrateCanonicalGuestSnapshot/);
   assert.match(loader, /await hydrateRoomRead\(canonicalAudit\.data\.snapshot\)/);
   assert.ok(loader.indexOf("hydrateRoomRead(canonicalAudit.data.snapshot)") < loader.indexOf("await replayApplicationScripts()"));
+});
+
+test('guest profile removal uses a canonical retirement transaction', async () => {
+  const fs = await import("node:fs");
+  const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const start = html.indexOf('async function gdel(i)');
+  const end = html.indexOf('\nconst _inv=', start);
+  assert.ok(start >= 0 && end > start);
+  const body = html.slice(start, end);
+  assert.match(body, /operation:'retire'/);
+  assert.match(body, /await commitGuestCatalogState\(/);
+  assert.match(body, /expectedPreviousGuest:cloneRuntimeState\(g\)/);
+  assert.doesNotMatch(body, /S\.g\.splice\(i,1\);aud\(/);
 });

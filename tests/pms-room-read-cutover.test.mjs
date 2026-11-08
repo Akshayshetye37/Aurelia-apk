@@ -53,3 +53,34 @@ test("room read cutover does not query canonical entities when the projection ma
   const result = await hydrateCanonicalRoomSnapshot({ repository: null, snapshot: source, enabled: false });
   assert.deepEqual(result, source);
 });
+
+test("guest read cutover hydrates stable IDs for legacy profiles", async () => {
+  const snapshot = {
+    rooms: [], g: [{ n: "Legacy guest", ph: "9999999999" }, { id: "gst-new", n: "New guest" }],
+    b: [], t: [], exp: [], inv: [], led: [], aud: [], set: {}, menu: {}
+  };
+  const repository = { async listEntities(type) {
+    assert.equal(type, "guest");
+    return [
+      { type: "guest", id: "legacy-guest-0", version: 1, data: { ...snapshot.g[0], id: "legacy-guest-0", updatedAt: "2026-11-08T00:00:00Z" } },
+      { type: "guest", id: "gst-new", version: 2, data: { ...snapshot.g[1], updatedAt: "2026-11-08T00:00:00Z" } }
+    ];
+  }};
+  const result = await hydrateCanonicalGuestSnapshot({ repository, snapshot });
+  assert.equal(result.g[0].id, "legacy-guest-0");
+  assert.equal(result.g[1].id, "gst-new");
+  assert.equal(snapshot.g[0].id, undefined, "input snapshot must not be mutated");
+});
+
+test("guest read cutover excludes retired entities and rejects divergent active profiles", async () => {
+  const snapshot = { rooms: [], g: [{ id: "gst-1", n: "Guest" }], b: [], t: [], exp: [], inv: [], led: [], aud: [], set: {}, menu: {} };
+  const repository = { async listEntities() { return [
+    { type: "guest", id: "gst-1", version: 2, data: { id: "gst-1", n: "Guest", updatedAt: "2026-11-08T00:00:00Z" } },
+    { type: "guest", id: "gst-old", version: 3, data: { id: "gst-old", retired: true, formerName: "Old", status: "retired" } }
+  ]; }};
+  assert.equal((await hydrateCanonicalGuestSnapshot({ repository, snapshot })).g.length, 1);
+  const divergent = { async listEntities() { return [
+    { type: "guest", id: "gst-1", version: 2, data: { id: "gst-1", n: "Changed" } }
+  ]; }};
+  await assert.rejects(hydrateCanonicalGuestSnapshot({ repository: divergent, snapshot }), /diverges from the committed recovery snapshot/);
+});

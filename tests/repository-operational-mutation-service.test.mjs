@@ -433,3 +433,26 @@ test("room housekeeping mutation accepts previously projected legacy-source meta
   assert.equal(result.room.data.s, "clean");
   assert.equal(result.room.data.legacySource, undefined);
 });
+
+test("guest retirement removes the active profile and commits a minimal tombstone with the snapshot", async () => {
+  const { bridge, snapshot } = await fixture();
+  const guest = { id: "gst-retire-1", n: "Retired Guest", ph: "9999999999", idn: "ID-123", img: "data:image/png;base64,secret", occ: [], veh: [] };
+  snapshot.g.push(guest);
+  await bridge.persistCompatibilitySnapshot(snapshot);
+  await bridge.mutateEntity({
+    entityType: "guest", entityId: guest.id, expectedVersion: 0, eventType: "guest.seeded",
+    mutate: entity => Object.assign(entity, guest)
+  });
+  snapshot.g.splice(0, 1);
+  const result = await commitGuestStateMutation({
+    bridge, snapshot, guestId: guest.id, guestIndex: 0, operation: "retire",
+    expectedPreviousGuest: guest, legacyStorage: null
+  });
+  assert.equal(result.canonical, true);
+  const retired = await bridge.fetchEntity("guest", guest.id);
+  assert.equal(retired.data.retired, true);
+  assert.equal(retired.data.formerName, "Retired Guest");
+  assert.equal(retired.data.idn, undefined);
+  assert.equal(retired.data.img, undefined);
+  assert.deepEqual((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.g, []);
+});
