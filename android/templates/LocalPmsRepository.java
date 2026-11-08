@@ -228,6 +228,8 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     finally{db.endTransaction();}
   }
 
+  synchronized void storageWipe() { SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();try{for(String table:new String[]{"pms_outbox","pms_entities","pms_meta","pms_legacy_backup","pms_migration_snapshots","pms_migrations","pms_authority"})db.delete(table,null,null);db.setTransactionSuccessful();}finally{db.endTransaction();} }
+
   synchronized JSONObject storageIntegrityCheck() {
     try(Cursor c=getReadableDatabase().rawQuery("PRAGMA integrity_check",null)){if(!c.moveToFirst())throw new IllegalStateException("sqlite_integrity_check_empty");String result=c.getString(0);JSONObject out=new JSONObject();out.put("ok","ok".equalsIgnoreCase(result));out.put("engine","android-sqlite");out.put("result",result);return out;}catch(Exception e){throw failure("sqlite_integrity_check_failed",e);}
   }
