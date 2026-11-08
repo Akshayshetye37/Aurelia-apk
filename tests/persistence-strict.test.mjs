@@ -4,15 +4,14 @@ import { readFileSync } from "node:fs";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
-test("strict PMS persistence rejects recovery-pending and memory-only storage", () => {
+test("legacy synchronous accounting persistence fails closed instead of writing a compatibility cache", () => {
   const start = html.indexOf("function persistStrict(){");
   const end = html.indexOf("\nlet LOCAL_STATE_STATUS", start);
   assert.ok(start >= 0 && end > start, "strict persistence function must exist");
   const fn = html.slice(start, end);
-  assert.match(fn, /if\(RECOVERY_CHECK_PENDING\)throw/);
-  assert.match(fn, /if\(store\.memoryOnly\)throw/);
-  assert.match(fn, /store\.setItem\(SK,serialized\)/);
-  assert.match(fn, /store\.getItem\(SK\)!==serialized/);
+  assert.match(fn, /Synchronous accounting persistence is disabled/);
+  assert.equal(fn.includes("setItem(SK"), false);
+  assert.equal(fn.includes("localStorage"), false);
 });
 
 test("transactional JSON import uses strict persistence for commit and rollback", () => {
