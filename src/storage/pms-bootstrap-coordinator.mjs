@@ -7,13 +7,14 @@
  * routed through the repository.
  */
 import { IndexedDbPmsRepository, parseLegacyPmsSnapshot } from "./indexeddb-pms-repository.mjs";
+import { LegacyImporter, LEGACY_STATE_KEY, LEGACY_MIGRATION_STATUS_KEY } from "./legacy-importer.mjs";
 import { getOrCreateBrowserLocalIdentity } from "./pms-local-identity.mjs";
 import { settlePaymentToRepository } from "../payments/repository-settlement-service.mjs";
 import { PmsRepositoryBridge } from "./pms-repository-bridge.mjs";
 import { projectLegacyPmsDomains } from "./pms-domain-cutover.mjs";
 
-export const AURELIA_LEGACY_STATE_KEY = "aurelia_lodge_v2";
-export const AURELIA_MIGRATION_STATUS_KEY = "aurelia_canonical_migration_status";
+export const AURELIA_LEGACY_STATE_KEY = LEGACY_STATE_KEY;
+export const AURELIA_MIGRATION_STATUS_KEY = LEGACY_MIGRATION_STATUS_KEY;
 
 async function createNativeRepository() {
   const { capacitorPmsStorage } = await import("./capacitor-pms-storage.mjs");
@@ -51,6 +52,7 @@ export class PmsBootstrapCoordinator {
     identityProvider = null
   } = {}) {
     this.storage = storage;
+    this.legacyImporter = new LegacyImporter(storage);
     this.indexedDBImpl = indexedDBImpl;
     this.databaseName = databaseName;
     this.repository = repository;
@@ -158,7 +160,7 @@ export class PmsBootstrapCoordinator {
     // is resumable and idempotent; it does not authorize synchronous UI cutover.
     let domainProjection = null;
     if (["MIGRATION_VERIFIED", "READY_CANONICAL"].includes(migration.status) && migration.migrationId) {
-      const raw = this.storage.getItem(AURELIA_LEGACY_STATE_KEY);
+      const raw = this.legacyImporter.readLegacyState();
       const source = parseLegacyPmsSnapshot(raw);
       const bridge = new PmsRepositoryBridge({
         tenantId: identity.tenantId, propertyId: identity.propertyId,
@@ -179,12 +181,12 @@ export class PmsBootstrapCoordinator {
   }
 
   async restoreLegacyStateFromCanonical() {
-    const existing = this.storage.getItem(AURELIA_LEGACY_STATE_KEY);
+    const existing = this.legacyImporter.readLegacyState();
     if (existing != null && existing !== "") {
       return Object.freeze({ restored: false, source: "legacy-store-present" });
     }
 
-    const marker = this.storage.getItem(AURELIA_MIGRATION_STATUS_KEY);
+    const marker = this.legacyImporter.readMigrationStatus();
     const markerMatch = typeof marker === "string" && marker.match(/^VERIFIED:(mig_legacy_[a-f0-9]{8})$/);
     const freshMatch = typeof marker === "string" && marker.match(/^READY_CANONICAL:(mig_legacy_[a-f0-9]{8})$/);
     // A later canonical snapshot is newer than the immutable first-migration
@@ -199,12 +201,12 @@ export class PmsBootstrapCoordinator {
       if (markerMatch && !existingLegacy.length) throw new Error("Verified migration marker has no migrated legacy entities; startup stopped");
       if (!markerMatch && !freshMatch && !existingLegacy.length) {
         const freshId = stableMigrationId(serialized);
-        this.storage.setItem(AURELIA_MIGRATION_STATUS_KEY, "READY_CANONICAL:" + freshId);
-        if (this.storage.getItem(AURELIA_MIGRATION_STATUS_KEY) !== "READY_CANONICAL:" + freshId) {
+        this.legacyImporter.writeMigrationStatus("READY_CANONICAL:" + freshId);
+        if (this.legacyImporter.readMigrationStatus() !== "READY_CANONICAL:" + freshId) {
           throw new Error("Fresh canonical installation marker failed exact read-back verification");
         }
-        this.storage.setItem(AURELIA_LEGACY_STATE_KEY, serialized);
-        if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== serialized) {
+        this.legacyImporter.writeLegacyState(serialized);
+        if (this.legacyImporter.readLegacyState() !== serialized) {
           throw new Error("Canonical recovery rejected: restored fresh snapshot failed exact read-back verification");
         }
         return Object.freeze({
@@ -212,8 +214,8 @@ export class PmsBootstrapCoordinator {
           freshInstallation: true, migrationId: freshId, version: canonical.version
         });
       }
-      this.storage.setItem(AURELIA_LEGACY_STATE_KEY, serialized);
-      if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== serialized) {
+      this.legacyImporter.writeLegacyState(serialized);
+      if (this.legacyImporter.readLegacyState() !== serialized) {
         throw new Error("Canonical recovery rejected: restored latest snapshot failed exact read-back verification");
       }
       return Object.freeze({
@@ -232,8 +234,8 @@ export class PmsBootstrapCoordinator {
         throw new Error("Verified migration marker has no matching immutable source snapshot; startup stopped");
       }
       parseLegacyPmsSnapshot(original.raw);
-      this.storage.setItem(AURELIA_LEGACY_STATE_KEY, original.raw);
-      if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== original.raw) {
+      this.legacyImporter.writeLegacyState(original.raw);
+      if (this.legacyImporter.readLegacyState() !== original.raw) {
         throw new Error("Canonical migration recovery failed exact raw snapshot read-back verification");
       }
       return Object.freeze({
@@ -253,12 +255,12 @@ export class PmsBootstrapCoordinator {
   }
 
   async executeGuardedMigration() {
-    const rawAtStart = this.storage.getItem(AURELIA_LEGACY_STATE_KEY);
+    const rawAtStart = this.legacyImporter.readLegacyState();
     if (rawAtStart == null || rawAtStart === "") {
       return Object.freeze({ status: "READY_EMPTY", migrated: false, entityCount: 0 });
     }
 
-    const marker = this.storage.getItem(AURELIA_MIGRATION_STATUS_KEY);
+    const marker = this.legacyImporter.readMigrationStatus();
     const freshMatch = typeof marker === "string" && marker.match(/^READY_CANONICAL:(mig_legacy_[a-f0-9]{8})$/);
     if (freshMatch) {
       const legacyRows = await this.repository.listEntities("legacy");
@@ -269,9 +271,9 @@ export class PmsBootstrapCoordinator {
       }
       const canonicalRaw = JSON.stringify(latest.data.snapshot);
       parseLegacyPmsSnapshot(canonicalRaw);
-      if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== canonicalRaw) {
-        this.storage.setItem(AURELIA_LEGACY_STATE_KEY, canonicalRaw);
-        if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== canonicalRaw) {
+      if (this.legacyImporter.readLegacyState() !== canonicalRaw) {
+        this.legacyImporter.writeLegacyState(canonicalRaw);
+        if (this.legacyImporter.readLegacyState() !== canonicalRaw) {
           throw new Error("Fresh canonical snapshot could not repair the compatibility cache");
         }
       }
@@ -304,9 +306,9 @@ export class PmsBootstrapCoordinator {
       if (latest?.data?.snapshot && typeof latest.data.snapshot === "object" && !Array.isArray(latest.data.snapshot)) {
         const canonicalRaw = JSON.stringify(latest.data.snapshot);
         parseLegacyPmsSnapshot(canonicalRaw);
-        if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== canonicalRaw) {
-          this.storage.setItem(AURELIA_LEGACY_STATE_KEY, canonicalRaw);
-          if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== canonicalRaw) {
+        if (this.legacyImporter.readLegacyState() !== canonicalRaw) {
+          this.legacyImporter.writeLegacyState(canonicalRaw);
+          if (this.legacyImporter.readLegacyState() !== canonicalRaw) {
             throw new Error("Latest canonical PMS snapshot could not refresh the compatibility cache");
           }
         }
@@ -327,9 +329,9 @@ export class PmsBootstrapCoordinator {
       }
       const canonicalRaw = JSON.stringify(latest.data.snapshot);
       parseLegacyPmsSnapshot(canonicalRaw);
-      if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== canonicalRaw) {
-        this.storage.setItem(AURELIA_LEGACY_STATE_KEY, canonicalRaw);
-        if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== canonicalRaw) {
+      if (this.legacyImporter.readLegacyState() !== canonicalRaw) {
+        this.legacyImporter.writeLegacyState(canonicalRaw);
+        if (this.legacyImporter.readLegacyState() !== canonicalRaw) {
           throw new Error("Canonical snapshot could not repair the legacy compatibility cache");
         }
       }
@@ -347,15 +349,15 @@ export class PmsBootstrapCoordinator {
     if (existingSnapshot?.data?.snapshot && typeof existingSnapshot.data.snapshot === "object" && !Array.isArray(existingSnapshot.data.snapshot)) {
       const canonicalRaw = JSON.stringify(existingSnapshot.data.snapshot);
       parseLegacyPmsSnapshot(canonicalRaw);
-      if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== canonicalRaw) {
-        this.storage.setItem(AURELIA_LEGACY_STATE_KEY, canonicalRaw);
-        if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== canonicalRaw) {
+      if (this.legacyImporter.readLegacyState() !== canonicalRaw) {
+        this.legacyImporter.writeLegacyState(canonicalRaw);
+        if (this.legacyImporter.readLegacyState() !== canonicalRaw) {
           throw new Error("Fresh canonical snapshot could not repair the compatibility cache");
         }
       }
       const migrationId = stableMigrationId(canonicalRaw);
-      this.storage.setItem(AURELIA_MIGRATION_STATUS_KEY, "READY_CANONICAL:" + migrationId);
-      if (this.storage.getItem(AURELIA_MIGRATION_STATUS_KEY) !== "READY_CANONICAL:" + migrationId) {
+      this.legacyImporter.writeMigrationStatus("READY_CANONICAL:" + migrationId);
+      if (this.legacyImporter.readMigrationStatus() !== "READY_CANONICAL:" + migrationId) {
         throw new Error("Fresh canonical installation marker failed exact read-back verification");
       }
       return Object.freeze({
@@ -384,8 +386,8 @@ export class PmsBootstrapCoordinator {
         throw new Error("Legacy migration rejected: read-back mismatch for " + key);
       }
     }
-    this.storage.setItem(AURELIA_MIGRATION_STATUS_KEY, "VERIFIED:" + migrationId);
-    if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== rawAtStart) {
+    this.legacyImporter.writeMigrationStatus("VERIFIED:" + migrationId);
+    if (this.legacyImporter.readLegacyState() !== rawAtStart) {
       throw new Error("Legacy migration source changed during verification; startup stopped");
     }
     return Object.freeze({
