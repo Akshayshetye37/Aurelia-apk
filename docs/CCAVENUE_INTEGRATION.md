@@ -195,3 +195,49 @@ CCAvenue may only be registered after all of the following are complete:
 Until those gates are evidenced, `ccavenue` must remain absent from the
 adapter factory. Live collection, automatic settlement and automatic refund
 posting remain OFF.
+
+## Public CCAvenue documentation review (8 November 2026)
+
+The following public CCAvenue pages were reviewed:
+
+- In-App Payments: https://www.ccavenue.com/inapp-payments
+  CCAvenue publicly confirms mobile SDK support for Android, iOS and Windows.
+  The public product page does not publish the full SDK API contract or the
+  merchant-specific SDK download.
+- Merchant Registration & On-boarding: https://www.ccavenue.com/compliance
+  CCAvenue describes its underwriting, operations, legal and risk review and
+  states that the Payment Gateway Integration Kit is sent in the activation
+  email after merchant approval/activation.
+- Technical FAQ: https://www.ccavenue.com/faq
+  CCAvenue describes website payment interfaces and merchant onboarding
+  requirements. It is not a replacement for the merchant's integration kit.
+- MARS API key navigation is referenced by CCAvenue's public Zoho integration
+  instructions: https://www.ccavenue.com/zoho (Settings > API Keys).
+
+### Credential configuration — deliberately deferred until merchant setup
+
+The provider catalogue already defines the following merchant-entered fields;
+no real values are required in source control now:
+
+| Field | Purpose | Storage |
+|---|---|---|
+| merchantId | Merchant identifier passed to the Mobile SDK | Non-secret configuration |
+| regId | CCAvenue registration ID used in Tracking ID generation | Non-secret configuration |
+| accessCode | Merchant/domain access code for CCAvenue requests | Secret Manager |
+| workingKey | Server-side requestHash key and merchant-kit crypto input | Secret Manager; server only |
+
+The current Mobile SDK v1.7 guide does not establish a separate generic
+apiKey field. Do not add or request one unless the merchant's current
+CCAvenue-issued kit explicitly requires it. Access code and working key must
+never be exposed to Android, browser responses, logs, screenshots, or source
+control. The admin user can populate the fields after merchant activation;
+credential validation remains unavailable until the actual kit's server API
+and merchant account are integrated.
+
+The public website is sufficient to confirm product availability and the
+onboarding/kit-delivery process, but it does not publish enough technical
+material to safely implement the AES-128 Tracking ID request/response codec,
+status API, general refund lifecycle, or current private Android package
+coordinates. Those must be taken from the merchant activation kit. No values
+from third-party document mirrors or leaked examples are used as credentials
+or implementation authority.
