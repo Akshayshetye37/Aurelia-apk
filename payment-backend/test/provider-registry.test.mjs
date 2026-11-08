@@ -111,3 +111,57 @@ test('CCAvenue encryption round-trips and creates a server-encrypted hosted chec
   assert.match(decoded, /merchant_id=123456/);
   assert.match(decoded, /amount=12\.34/);
 });
+
+
+test('CCAvenue status is reconciled through the encrypted merchant Status API', async () => {
+  const { createProviderAdapter } = await import('../src/providers/factory.mjs');
+  const { encryptCcaVenue, decryptCcaVenue } = await import('../src/providers/ccavenue.mjs');
+  const workingKey = '0123456789ABCDEF0123456789ABCDEF';
+  const adapter = createProviderAdapter('ccavenue', {
+    credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey },
+    environment: 'test',
+    fetchImpl: async (_url, init) => {
+      const request = new URLSearchParams(init.body);
+      assert.equal(request.get('command'), 'orderStatusTracker');
+      assert.equal(request.get('request_type'), 'JSON');
+      assert.deepEqual(JSON.parse(decryptCcaVenue(request.get('enc_request'), workingKey)),
+        { order_no: 'aur_test_order_1', reference_no: '123456789012' });
+      const response = {
+        Order_Status_Result: {
+          order_no: 'aur_test_order_1', reference_no: '123456789012',
+          order_amt: '12.34', order_currncy: 'INR',
+          order_status: 'Successful', order_fraud_status: 'NA'
+        }
+      };
+      return new Response(new URLSearchParams({
+        status: '0', enc_response: encryptCcaVenue(JSON.stringify(response), workingKey)
+      }).toString(), { status: 200 });
+    }
+  });
+  const status = await adapter.getPaymentStatus({
+    orderId: 'aur_test_order_1', paymentId: '123456789012'
+  });
+  assert.equal(status.orderId, 'aur_test_order_1');
+  assert.equal(status.paymentId, '123456789012');
+  assert.equal(status.amountMinor, 1234);
+  assert.equal(status.currency, 'INR');
+  assert.equal(status.captured, true);
+});
+
+test('CCAvenue encrypted callback is only an event trigger and requires a valid encrypted payload', async () => {
+  const { createProviderAdapter } = await import('../src/providers/factory.mjs');
+  const { encryptCcaVenue } = await import('../src/providers/ccavenue.mjs');
+  const workingKey = '0123456789ABCDEF0123456789ABCDEF';
+  const adapter = createProviderAdapter('ccavenue', {
+    credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey },
+    environment: 'test'
+  });
+  const event = 'order_id=aur_test_order_1&tracking_id=123456789012&order_status=Successful&amount=12.34&currency=INR';
+  const rawBody = Buffer.from(new URLSearchParams({
+    encResp: encryptCcaVenue(event, workingKey)
+  }).toString());
+  const verified = await adapter.verifyWebhook(rawBody, {});
+  assert.equal(verified.valid, true);
+  assert.equal(verified.event.order_id, 'aur_test_order_1');
+  assert.equal((await adapter.verifyWebhook(Buffer.from('encResp=not-hex'), {})).valid, false);
+});
