@@ -105,6 +105,7 @@ export class CCAvenueVerificationService {
     try {
       response = await this.fetch(this.endpoint, {
         method: 'POST',
+        redirect: 'error',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/x-www-form-urlencoded' },
         body: form.toString(),
         signal: AbortSignal.timeout(this.timeoutMs)
