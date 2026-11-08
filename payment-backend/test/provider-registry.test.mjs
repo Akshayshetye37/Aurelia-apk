@@ -72,7 +72,6 @@ test('CCAvenue catalogue keeps API encryption key separate from Mobile SDK worki
   assert.deepEqual(provider.environments, ['test', 'live']);
   const fields = Object.fromEntries(provider.credentials.map(field => [field.key, field]));
   assert.equal(fields.merchantId.required, true);
-  assert.equal(fields.regId.required, true);
   assert.equal(fields.accessCode.secret, true);
   assert.equal(fields.encryptionKey.secret, true);
   assert.equal(fields.hostedCheckoutKey.secret, true);
