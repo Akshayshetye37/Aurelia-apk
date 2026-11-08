@@ -16,7 +16,7 @@ test('PayU credential validation authenticates through verify_payment without cr
   const mock=mockFetch(async(url,options)=>{
     const form=Object.fromEntries(new URLSearchParams(options.body));
     assert.equal(form.command,'verify_payment');
-    assert.match(form.var1,/^AURCRED[A-Fa-f0-9]{24}$/);
+    assert.match(form.var1,/^AURCRED[A-Fa-f0-9]{12}$/);
     assert.equal(form.hash,generatePayUCommandHash({key:credentials.merchantKey,command:'verify_payment',var1:form.var1},credentials.salt));
     return {status:200,body:{status:0,msg:'0 out of 1 Transactions Fetched Successfully',
       transaction_details:{[form.var1]:{mihpayid:'Not Found',status:'Not Found'}}}};
