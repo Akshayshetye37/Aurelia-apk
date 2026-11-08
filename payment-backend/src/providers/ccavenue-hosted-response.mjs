@@ -11,7 +11,7 @@
 const TRACKING_ID = /^[0-9]{1,12}$/;
 const ORDER_ID = /^[A-Za-z0-9_-]{1,50}$/;
 const CURRENCY = /^[A-Z]{3}$/;
-const AMOUNT = /^(?:0|[1-9][0-9]{0,9})\\.[0-9]{2}$/;
+const AMOUNT = /^(?:0|[1-9][0-9]{0,9})\.[0-9]{2}$/;
 const ALLOWED_FIELDS = new Set([
   'order_id', 'tracking_id', 'bank_ref_no', 'order_status',
   'failure_message', 'payment_mode', 'status_code', 'status_message',
