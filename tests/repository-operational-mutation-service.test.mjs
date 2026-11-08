@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
-import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation } from "../src/storage/repository-operational-mutation-service.mjs";
+import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation, commitExpenseMutation } from "../src/storage/repository-operational-mutation-service.mjs";
 
 let sequence = 0;
 async function fixture() {
@@ -18,7 +18,7 @@ async function fixture() {
   }).bindActiveEngine(repository);
   const booking = { id: 51, g: "Guest", room: "101", st: "res", p: 0, pays: [], ch: [] };
   const room = { n: "101", s: "ready", r: 1000, t: "Deluxe" };
-  const snapshot = { tab: "stays", bk: {}, b: [booking], cancelled: [], rooms: [room], g: [], inv: [], led: [], aud: [] };
+  const snapshot = { tab: "stays", bk: {}, b: [booking], cancelled: [], rooms: [room], g: [], inv: [], led: [], exp: [], aud: [] };
   await bridge.persistCompatibilitySnapshot(snapshot);
   await bridge.mutateEntity({
     entityType: "booking", entityId: "51", expectedVersion: 0, eventType: "booking.seeded",
@@ -281,4 +281,41 @@ test("inventory rejects sub-paise cost precision before writing", async () => {
     bridge, snapshot, inventoryId: item.id, inventoryIndex: 0, operation: "create", legacyStorage: null
   }), error => error.code === "INVALID_INVENTORY_PRICE");
   assert.equal(await bridge.fetchEntity("inventory", item.id), null);
+});
+
+test("expense creation commits stable expense entity and complete snapshot", async () => {
+  const { bridge, snapshot } = await fixture();
+  const expense = { id: "exp-1", t: "Electricity", c: "Utilities", a: 1250.5, v: 0 };
+  snapshot.exp.unshift(expense);
+  const result = await commitExpenseMutation({
+    bridge, snapshot, expenseId: expense.id, expenseIndex: 0, operation: "create", legacyStorage: null
+  });
+  assert.equal(result.canonical, true);
+  assert.equal((await bridge.fetchEntity("expense", "exp-1")).data.a, 1250.5);
+  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.exp[0].id, "exp-1");
+});
+
+test("expense void commits its durable entity and recovery snapshot together", async () => {
+  const { bridge, snapshot } = await fixture();
+  const prior = { id: "exp-2", t: "Water", c: "Utilities", a: 500, v: 0 };
+  snapshot.exp = [prior];
+  await bridge.persistCompatibilitySnapshot(snapshot);
+  const next = { ...prior, v: 1 };
+  snapshot.exp[0] = next;
+  const result = await commitExpenseMutation({
+    bridge, snapshot, expenseId: prior.id, expenseIndex: 0, operation: "update",
+    expectedPreviousExpense: prior, legacyStorage: null
+  });
+  assert.equal(result.expense.data.v, 1);
+  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.exp[0].v, 1);
+});
+
+test("expense creation rejects amounts smaller than one paise precision", async () => {
+  const { bridge, snapshot } = await fixture();
+  const expense = { id: "exp-bad", t: "Invalid", c: "Other", a: 10.001, v: 0 };
+  snapshot.exp.unshift(expense);
+  await assert.rejects(commitExpenseMutation({
+    bridge, snapshot, expenseId: expense.id, expenseIndex: 0, operation: "create", legacyStorage: null
+  }), error => error.code === "INVALID_EXPENSE_AMOUNT");
+  assert.equal(await bridge.fetchEntity("expense", expense.id), null);
 });
