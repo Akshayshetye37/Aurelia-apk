@@ -205,3 +205,19 @@ test('room creation, editing and retirement use canonical room entities and stab
   assert.match(remove, /await commitRoomCatalogState/);
   assert.doesNotMatch(remove, /S\.b=S\.b\.filter/);
 });
+
+test('guest profile create and edit commit stable guest entities with the canonical snapshot', () => {
+  const html = read('index.html');
+  const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
+  assert.match(runtime, /commitGuestStateMutation/);
+  assert.match(runtime, /commitGuestMutation: input => commitGuestStateMutation/);
+  const start = html.indexOf('async function gsave()');
+  const end = html.indexOf('\nfunction invOp(', start);
+  assert.ok(start >= 0 && end > start);
+  const handler = html.slice(start, end);
+  assert.match(handler, /await commitGuestCatalogState/);
+  assert.match(handler, /createStableGuestId/);
+  assert.match(handler, /operation:old\?'update':'create'/);
+  assert.match(handler, /booking history references it/);
+  assert.doesNotMatch(handler, /persist\(\)/);
+});
