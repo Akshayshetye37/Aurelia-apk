@@ -242,8 +242,11 @@ Android integration:
   request hash.
 - `scripts/patch-android.js` copies the helper and adds
   `com.google.android.play:integrity:1.5.0`.
-- The helper is a client capability, not a trust authority. It does not yet
-  connect to a production device-enrollment UI or submit the token by itself.
+- The helper is a client capability, not a trust authority. The new
+  `CloudPaymentDeviceEnrollmentClient.kt` coordinates the server challenge,
+  Play token, Android attested key and enrollment submission. It does not
+  activate the device. The native coordinator is not yet connected to a
+  user-facing owner enrollment screen.
 
 Backend deployment configuration:
 - `AURELIA_ANDROID_PACKAGE_NAME`: exact Play Console package name.
@@ -346,3 +349,10 @@ The current head includes the additional non-postable proposal metadata and
 its regression assertion. Its workflows are running separately; do not
 transfer the previous commit's green status to the newer head until those
 runs finish.
+
+
+The native cloud enrollment coordinator now submits both the Standard
+Integrity token and challenge-bound Android Key Attestation chain to the
+backend enrollment endpoint. It preserves owner activation as a separate
+server action. Android Gradle compilation, device-side API compatibility and
+a real Play Console internal-test enrollment are still required.
