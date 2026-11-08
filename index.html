@@ -4,15 +4,13 @@ Repository: https://github.com/Akshayshetye37/Aurelia-apk
 Project root: /
 Active branch: feature/phase-7-pms-persistence
 Pull request: https://github.com/Akshayshetye37/Aurelia-apk/pull/11 (DRAFT; UNMERGED)
-Latest verified code commit: a0c5d2eb0c56a004f49e8807d48bf05a920b857d (8 November 2026)
+Current source head: 00a6e07c71d1652723894e646a5bdea0871de52c (8 November 2026; backend CI in progress)
 
-LATEST VERIFIED CI — all three workflows passed for the verified code revision:
-- Payment backend CI #952: https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288914
-  306/306 backend contract/security tests; 2/2 explicit CCAvenue Mobile SDK request-hash vector checks; Gitleaks history scan; JavaScript syntax; Cloud Run image build and non-root verification; Terraform format/init/validate.
-- Infrastructure validation #50: https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288923
-  Terraform formatting, initialization without remote backend and validation.
-- Settlement foundation CI #385: https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288972
-  Settlement syntax, full application test suite and production web asset build.
+LATEST CI FOR CURRENT SOURCE HEAD — infrastructure and settlement passed; backend and PMS packaging remain pending:
+- Payment backend CI: IN PROGRESS — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552471
+- Infrastructure validation: SUCCESS — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552405
+- Settlement foundation CI: SUCCESS — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552584
+- PMS source tests / production packaging: PENDING — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471548691
 These are CI results only. They do not prove Android Gradle/R8 compilation, physical-device acceptance, merchant UAT, production deployment or release signing.
 
 IMPLEMENTED PMS FOUNDATIONS:
