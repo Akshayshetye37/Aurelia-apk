@@ -34,11 +34,21 @@ test('legacy canonical booking.pays row maps only with independently bound captu
   assert.equal(proposal.creditTotalMinor, 12500);
 });
 
+test('legacy decimal rupees are converted with integer arithmetic, not float multiplication', () => {
+  const legacyRow = { amount: '125.50', bookingId: booking.id };
+  const legacyBooking = { ...booking, pays: [legacyRow] };
+  const proposal = mapLegacyPaymentCapture({
+    ...base, booking: legacyBooking, paymentRow: legacyRow, providerPaymentId: 'pay_123456',
+    verifiedCapture: { ...captureEvidence, amountMinor: 12550 }
+  });
+  assert.equal(proposal.debitTotalMinor, 12550);
+});
+
 test('legacy decimal amount and local-only row cannot become a journal', () => {
   assert.throws(() => mapLegacyPaymentCapture({
-    ...base, booking, paymentRow: { ...payment, amountPaise: undefined, amount: 125 },
+    ...base, booking, paymentRow: { ...payment, amountPaise: undefined, amount: '125.001' },
     providerPaymentId: 'pay_123456', verifiedCapture: captureEvidence
-  }), /legacy_payment_amount_must_be_positive_safe_integer_paise/);
+  }), /legacy_payment_amount_must_be_exact_rupee_decimal_or_integer_paise/);
   assert.throws(() => mapLegacyPaymentCapture({
     ...base, booking, paymentRow: payment, providerPaymentId: 'pay_123456'
   }), /independent_provider_capture_evidence_required/);
