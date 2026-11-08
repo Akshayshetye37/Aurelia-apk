@@ -13,7 +13,7 @@ function collect(directory, files = []) {
     if (entry.isDirectory()) {
       if (ignoredDirectories.has(entry.name)) continue;
       const relative = path.relative(root, path.join(directory, entry.name)).split(path.sep).join("/");
-      if (relative === "src/storage" || relative.startsWith("src/storage/")) continue;
+      if (relative === "src/storage" || relative.startsWith("src/storage/") || relative === "www/src/storage" || relative.startsWith("www/src/storage/")) continue;
       collect(path.join(directory, entry.name), files);
     } else if (textExtensions.has(path.extname(entry.name))) {
       files.push(path.join(directory, entry.name));
