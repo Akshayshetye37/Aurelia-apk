@@ -16,6 +16,8 @@ test('cloud API route exposure is separate from adapter factory wiring', async (
   for (const item of catalogue.filter(item => !item.cloudCheckoutApiEnabled)) {
     assert.ok(['payu', 'phonepe', 'paytm', 'jiopay', 'ccavenue'].includes(item.id));
   }
+  for (const provider of ['razorpay', 'cashfree']) assert.equal(registry.PROVIDERS[provider].cloudCheckoutApiEnabled, true);
+  for (const provider of ['payu', 'phonepe', 'paytm', 'jiopay', 'ccavenue']) assert.equal(registry.PROVIDERS[provider].cloudCheckoutApiEnabled, false);
 });
 
 test('only providers with all seven concrete operations are registered', () => {
@@ -46,7 +48,7 @@ test('all wired adapters expose every lifecycle operation but remain release-gat
     assert.equal(status.implemented,true);
     assert.equal(status.liveCollection,false);
     assert.equal(status.testCheckout,true);
-    assert.equal(status.cloudCheckoutApiEnabled,true);
+    assert.equal(status.cloudCheckoutApiEnabled,['razorpay','cashfree'].includes(provider));
     assert.equal(status.merchantUatRequired,true);
     assert.equal(status.canonicalFolioPostingRequired,true);
     assert.equal(status.physicalDeviceAcceptanceRequired,true);
