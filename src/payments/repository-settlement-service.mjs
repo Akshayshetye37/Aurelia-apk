@@ -4,14 +4,15 @@
  * A payment is not considered committed until the booking, folio projection,
  * and complete recoverable PMS snapshot have been written in one repository
  * transaction (SQLite on Android / IndexedDB in browser and PWA). No
- * localStorage write participates in this transaction.
+ * no browser key-value storage participates in this transaction.
  */
 import { settlePayment, moneyToPaise } from "./settlement-service.mjs";
+import { LEGACY_SNAPSHOT_ENTITY_ID } from "../storage/pms-repository-bridge.mjs";
 
 const clone = value => value == null ? value :
   (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
 const SNAPSHOT_TYPE = "audit";
-const SNAPSHOT_ID = "legacy_snapshot:aurelia_lodge_v2";
+const SNAPSHOT_ID = LEGACY_SNAPSHOT_ENTITY_ID;
 
 function fail(code, message) {
   const error = new Error(message);
@@ -38,19 +39,6 @@ function comparableBooking(value) {
   return copy;
 }
 
-function refreshLegacyCache(storage, snapshot) {
-  if (!storage) return null;
-  try {
-    if (storage.memoryOnly === true) return false;
-    const serialized = JSON.stringify(snapshot);
-    storage.setItem("aurelia_lodge_v2", serialized);
-    return storage.getItem("aurelia_lodge_v2") === serialized;
-  } catch (error) {
-    console.warn("[Aurelia Local Cache] Canonical state committed; compatibility cache refresh failed.", error);
-    return false;
-  }
-}
-
 /**
  * Posts a manually/staff-confirmed payment to canonical local storage.
  *
@@ -72,7 +60,6 @@ export async function settlePaymentToRepository({
   idempotencyKey,
   evidenceId = null,
   verificationConfirmed = false,
-  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" ||
@@ -99,7 +86,7 @@ export async function settlePaymentToRepository({
     await bridge.compatibilityWrite;
   }
   const [snapshotRow, bookingRow, folioRow] = await Promise.all([
-    bridge.fetchEntity(SNAPSHOT_TYPE, SNAPSHOT_ID),
+    bridge.fetchLegacySnapshot(),
     bridge.fetchEntity("booking", bookingId),
     bridge.fetchEntity("folio", folioId)
   ]);
@@ -178,7 +165,7 @@ export async function settlePaymentToRepository({
         "A matching payment exists but its evidence is not marked approved; reconcile the folio before proceeding.");
     }
     Object.assign(booking, clone(workingBooking));
-    const cacheRefreshed = refreshLegacyCache(legacyStorage, canonicalState);
+    const cacheRefreshed = false;
     return Object.freeze({ ...result, duplicate: true, canonical: true, cacheRefreshed,
       bookingVersion: bookingRow?.version ?? 0, folioVersion: folioRow?.version ?? 0 });
   }
@@ -199,7 +186,7 @@ export async function settlePaymentToRepository({
     });
   }
   const snapshotPayload = {
-    sourceKey: "aurelia_lodge_v2",
+    sourceKey: "canonical_snapshot",
     operation: "payment_posted",
     bookingId,
     folioId,
@@ -239,7 +226,7 @@ export async function settlePaymentToRepository({
       eventType: "pms.snapshot_payment_committed",
       eventPayload: snapshotPayload,
       mutate: entity => {
-        entity.sourceKey = "aurelia_lodge_v2";
+        entity.sourceKey = "canonical_snapshot";
         entity.snapshot = clone(canonicalState);
         entity.updatedAt = committedAt;
       }
@@ -250,7 +237,7 @@ export async function settlePaymentToRepository({
   const [storedBooking, storedFolio, storedSnapshot] = await Promise.all([
     bridge.fetchEntity("booking", bookingId),
     bridge.fetchEntity("folio", folioId),
-    bridge.fetchEntity(SNAPSHOT_TYPE, SNAPSHOT_ID)
+    bridge.fetchLegacySnapshot()
   ]);
   if (!storedBooking || !storedFolio || !storedSnapshot ||
       !sameJson(storedBooking.data, workingBooking) ||
@@ -265,7 +252,7 @@ export async function settlePaymentToRepository({
   // Refresh the old UI cache only after canonical commit. It is never the
   // authority for this operation; failure is reported separately so callers
   // do not retry and accidentally create a second payment.
-  const cacheRefreshed = refreshLegacyCache(legacyStorage, canonicalState);
+  const cacheRefreshed = false;
 
   // Keep the active UI references coherent only after durable commit/read-back.
   const liveBookings = state.b;
