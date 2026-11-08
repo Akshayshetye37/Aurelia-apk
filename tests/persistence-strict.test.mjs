@@ -30,7 +30,7 @@ test("full backup restore uses strict commit and verifies both data and photo ro
   const end = html.indexOf("const useMenu=", start);
   assert.ok(start >= 0 && end > start, "restore transaction must exist");
   const restore = html.slice(start, end);
-  assert.match(restore, /persistStrict\(\);/);
+  assert.match(restore, /await persistCanonicalStrict\(\);/);
   assert.match(restore, /rollbackSaved/);
   assert.match(restore, /State rollback read-back verification failed/);
   assert.match(restore, /CRITICAL: Restore failed and rollback could not be verified/);
