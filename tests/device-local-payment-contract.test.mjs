@@ -168,3 +168,17 @@ test('housekeeping room status changes await a canonical room-plus-snapshot tran
   assert.ok(helperStart >= 0 && helperEnd > helperStart);
   assert.match(html.slice(helperStart, helperEnd), /eventType:'room\.status_changed'/);
 });
+
+test('local payment, stay and room mutations share a serialization lock', () => {
+  const html = read('index.html');
+  assert.match(html, /window\.AureliaLocalOperationalLock=withLocalOperationalLock/);
+  const stayStart = html.indexOf('async function commitStayMutation(');
+  const stayEnd = html.indexOf('async function commitRoomStatusMutation(', stayStart);
+  assert.ok(stayStart >= 0 && stayEnd > stayStart);
+  assert.match(html.slice(stayStart, stayEnd), /return withLocalOperationalLock\(async\(\)=>/);
+  const roomStart = html.indexOf('async function commitRoomStatusMutation(');
+  const roomEnd = html.indexOf('let LOCAL_STATE_STATUS', roomStart);
+  assert.match(html.slice(roomStart, roomEnd), /return withLocalOperationalLock\(async\(\)=>/);
+  const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
+  assert.match(runtime, /window\.AureliaLocalOperationalLock\(commit\)/);
+});
