@@ -97,3 +97,20 @@ test('project documentation preserves the selected hybrid production architectur
   assert.match(readme, /Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available/);
   assert.match(readme, /Razorpay[\s\S]*Cashfree[\s\S]*PayU[\s\S]*PhonePe[\s\S]*Paytm[\s\S]*JioPay[\s\S]*CCAvenue/);
 });
+
+
+test('manual folio payment UI commits through the canonical local repository before reporting success', () => {
+  const html = read('index.html');
+  const settlement = html.slice(html.indexOf('function settlePayment(input)'), html.indexOf('// Legacy unconfirmed addPay shortcut'));
+  assert.match(settlement, /input\.source===['"]manual['"]/);
+  assert.match(settlement, /AureliaRepositoryCompatibility\?\.settlePayment/);
+  assert.doesNotMatch(settlement, /persist\(\);[\s\S]*?return commit/);
+
+  const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
+  assert.match(runtime, /repository-settlement-service\.mjs/);
+  assert.match(runtime, /settlePayment: input => settlePaymentToRepository/);
+
+  const manualCalls = [...html.matchAll(/(?:await\s+)?settlePayment\(\{[^}]*source:'manual'/g)];
+  assert.ok(manualCalls.length >= 4, 'all manual folio payment entry points remain connected');
+  for (const call of manualCalls) assert.match(call[0], /^await\s+settlePayment/);
+});
