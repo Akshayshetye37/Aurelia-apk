@@ -165,3 +165,14 @@ test("room creation refuses an already-used stable room key", async () => {
     bridge, snapshot, roomId: "101", operation: "create", legacyStorage: null
   }), error => error.code === "ROOM_ID_ALREADY_EXISTS");
 });
+
+test("unused room removal leaves a durable tombstone and removes it from the recovery snapshot", async () => {
+  const { bridge, snapshot, room } = await fixture();
+  snapshot.rooms.splice(0, 1);
+  const result = await commitRoomCatalogMutation({
+    bridge, snapshot, roomId: "101", operation: "remove", legacyStorage: null
+  });
+  assert.equal(result.room.data.retired, true);
+  assert.equal(result.room.data.status, "retired");
+  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.rooms.length, 0);
+});
