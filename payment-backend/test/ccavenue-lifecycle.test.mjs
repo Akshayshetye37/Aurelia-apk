@@ -186,3 +186,44 @@ test('CCAvenue status verifier accepts the flat JSON response shape shown in API
   assert.equal(result.paymentStatus, 'CAPTURED');
   assert.equal(result.orderId, EXPECTED.orderId);
 });
+
+import { createCcaVenueWebhookHandler } from '../src/webhooks/ccavenue-webhook-router.mjs';
+
+test('CCAvenue webhook handler acknowledges only after verified evidence persistence', async () => {
+  const plaintext = 'order_id=' + EXPECTED.orderId + '&tracking_id=212016048802&order_status=Success';
+  const handler = createCcaVenueWebhookHandler({
+    notificationWorkingKey: KEY,
+    resolveExpectedPayment: async () => EXPECTED,
+    createVerificationService: async () => ({
+      verifyOrderStatus: async () => ({
+        provider: 'ccavenue', orderId: EXPECTED.orderId, trackingId: '212016048802',
+        paymentStatus: 'CAPTURED', providerStatus: 'Successful',
+        amountMinor: EXPECTED.amountMinor, currency: EXPECTED.currency, verified: true
+      })
+    }),
+    recordVerifiedEvidence: async () => {}
+  });
+  const response = { statusCode: 0, body: null, status(code) { this.statusCode = code; return this; },
+    json(value) { this.body = value; return this; } };
+  await handler({ body: { encResp: new CCAvenueCrypto(KEY).encrypt(plaintext) } }, response);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.reconciled, true);
+  assert.equal(response.body.ledgerPosted, false);
+});
+
+test('CCAvenue webhook handler does not acknowledge when authoritative status is unavailable', async () => {
+  const handler = createCcaVenueWebhookHandler({
+    notificationWorkingKey: KEY,
+    resolveExpectedPayment: async () => EXPECTED,
+    createVerificationService: async () => ({
+      verifyOrderStatus: async () => { throw new Error('ccavenue_status_transport_error'); }
+    }),
+    recordVerifiedEvidence: async () => {}
+  });
+  const response = { statusCode: 0, body: null, status(code) { this.statusCode = code; return this; },
+    json(value) { this.body = value; return this; } };
+  const plaintext = 'order_id=' + EXPECTED.orderId + '&tracking_id=212016048802';
+  await handler({ body: { encResp: new CCAvenueCrypto(KEY).encrypt(plaintext) } }, response);
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.body.error, 'provider_reconciliation_unavailable');
+});
