@@ -39,8 +39,12 @@ test('tenant activation switches atomically and leaves exactly one provider acti
     now: () => new Date('2026-11-07T00:00:00.000Z') });
   assert.equal(result.switchedFrom, 'razorpay');
   assert.equal(docs.get('paymentTenants/tenant_123/providers/razorpay_test').active, false);
+  assert.equal(docs.get('paymentTenants/tenant_123/providers/razorpay_test').configured, true);
+  assert.equal(docs.get('paymentTenants/tenant_123/providers/razorpay_test').credentialsValidated, true);
   assert.equal(docs.get('paymentTenants/tenant_123/providers/payu_test').active, true);
   assert.equal((await readActiveProvider({ db, tenantId: 'tenant_123' })).activeProviderId, 'payu');
+  assert.equal(docs.get('paymentProviderSelection/tenant_123').activeProviderId, 'payu');
+  assert.equal(docs.get('paymentProviderSelection/tenant_123').schemaVersion, 1);
 });
 
 test('activation refuses an unqualified provider without changing selection', async () => {
