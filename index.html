@@ -4413,7 +4413,7 @@ window.activateAureliaPaymentProvider=async function(provider){
  if(provider===aureliaProviderAdminActiveId){toast('This provider is already the app-wide primary gateway.');return true;}
  const label=({razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay'})[provider]||provider;
  const previous=({razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay'})[aureliaProviderAdminActiveId]||aureliaProviderAdminActiveId||'no provider';
- if(!window.confirm('Switch the primary payment provider for the entire Aurelia app from '+previous+' to '+label+'? All new online payments across enrolled devices will use '+label+'. '+previous+' will stop receiving new payments, but existing transactions remain available for status checks, webhooks, refunds and reconciliation. No automatic fallback will occur.'))return false;
+ if(!window.confirm('Switch the primary payment provider for the entire Aurelia app from '+previous+' to '+label+'? All new online payments across enrolled devices will use '+label+'. '+previous+' will stop receiving new payments, but existing transactions remain available for webhooks, payment verification, refunds and reconciliation. No automatic fallback will occur.'))return false;
  try{
   await window.aureliaPaymentAdminRequest('/v1/admin/providers/'+encodeURIComponent(provider)+'/activate','POST',{environment:'test',confirm:true});
   toast(label+' is now the primary provider for the entire Aurelia app. Existing transactions remain with their original provider.');
