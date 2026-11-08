@@ -287,9 +287,9 @@ or implementation authority.
   confirm its availability/version with CCAvenue before production use.
 
 These API documents materially improve the status-lookup specification, but
-they still do not provide a verified AES implementation/test vector for the
+they still do not provide a CCAvenue-issued AES interoperability vector for the
 merchant's account, a signed webhook contract, or an ordinary refund-create
-operation. The API v1.3 guide also requires CCAvenue to register the server's
+operation. The local compatibility codec is regression-tested but not merchant-qualified. The API v1.3 guide also requires CCAvenue to register the server's
 public IP before API calls are accepted. These account-side prerequisites
 cannot be completed from source code or by inventing credentials.
 ## Additional official CCAvenue capabilities verified (8 November 2026)
@@ -351,7 +351,7 @@ Confirmed by CCAvenue public material:
 
 ### Implementation decision
 
-Aurelia can now build a classic hosted checkout adapter path against the public v3.3 field contract, while keeping cryptographic compatibility dependent on the exact official `AesCryptUtil` implementation and test vectors. The request encryption primitive must not be reverse-engineered from sample ciphertext or guessed from unrelated GitHub libraries. The callback parser can be implemented against the published response fields, but a callback alone must not prove capture; use the documented Merchant API v1.3 `orderStatusTracker` for authoritative reconciliation and validate order ID, amount, currency and tracking/reference identity.
+Aurelia now has an isolated classic hosted checkout request builder against the public v3.3 field contract, while keeping cryptographic compatibility dependent on the exact official `AesCryptUtil` implementation and merchant test vectors. The request encryption primitive must not be reverse-engineered from sample ciphertext or guessed from unrelated GitHub libraries. The callback parser can be implemented against the published response fields, but a callback alone must not prove capture; use the documented Merchant API v1.3 `orderStatusTracker` for authoritative reconciliation and validate order ID, amount, currency and tracking/reference identity.
 
 Dynamic Event Notifications should be wired as a provider event intake that stores the raw event safely, deduplicates it, and schedules authoritative status lookup. Until CCAvenue supplies the notification authentication contract, the endpoint must not treat an incoming event as trusted evidence. Instant Refund must be an optional capability gated by confirmed merchant entitlement and the merchant-specific API contract; the adapter must not silently fall back to manual M.A.R.S. refunds or splitRefund.
 
@@ -471,9 +471,10 @@ posting remains separately gated.
 ### Not activated
 
 These components are not yet registered in `providers/factory.mjs`. The
-admin credential route still rejects CCAvenue, no merchant credentials or
-official merchant-issued SDK are present, and the Instant Refund API contract
-is still unavailable publicly. The components above are code-level
+generic provider credential/validation route rejects CCAvenue; a separate
+schema-only route stores keys but never marks them validated or active. No
+merchant credentials or official merchant-issued SDK are present, and the
+Instant Refund API contract is still unavailable publicly. The components above are code-level
 foundations; they do not prove merchant sandbox compatibility or end-to-end
 production readiness. The existing six-provider factory and all production
 financial controls remain unchanged.
