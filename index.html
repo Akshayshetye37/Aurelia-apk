@@ -1643,9 +1643,15 @@ async function persistCanonicalStrict(){
  }catch(cacheError){console.warn('[Aurelia Local Cache] Canonical state committed; cache refresh failed and will be recovered at startup.',cacheError)}
  return committed.snapshot;
 }
+function cloneRuntimeState(value){
+ if(value instanceof Date)return new Date(value.getTime());
+ if(Array.isArray(value))return value.map(cloneRuntimeState);
+ if(value&&typeof value==='object'){const copy={};Object.keys(value).forEach(key=>copy[key]=cloneRuntimeState(value[key]));return copy}
+ return value;
+}
 async function commitStayMutation({booking,room,eventType,apply,auditAction,auditDetail}){
  if(RECOVERY_CHECK_PENDING)throw new Error('Operational writes are paused during recovery.');
- const before=JSON.stringify(S);
+ const before=cloneRuntimeState(S);
  try{
   apply();
   if(typeof aud==='function')aud(auditAction,auditDetail);
@@ -1660,9 +1666,8 @@ async function commitStayMutation({booking,room,eventType,apply,auditAction,audi
    console.error('[Aurelia Lifecycle] Repository read-back mismatch after a committed lifecycle transaction. Writes are frozen.',error);
    throw new Error('CRITICAL: Device storage read-back is inconsistent. Do not retry or edit; keep the app open for recovery.');
   }
-  const restored=JSON.parse(before);
   Object.keys(S).forEach(key=>delete S[key]);
-  Object.assign(S,restored);
+  Object.assign(S,before);
   throw error;
  }
 }
