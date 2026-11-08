@@ -103,7 +103,10 @@ test("manual UI and staff apply use the single guarded settlement boundary", asy
   const staffStart = html.indexOf("function sigA(");
   const staffEnd = html.indexOf("\n/* money flow */", staffStart);
   assert.ok(staffStart >= 0 && staffEnd > staffStart);
-  assert.match(html.slice(staffStart, staffEnd), /settlePayment\(/);
+  const staffReview = html.slice(staffStart, staffEnd);
+  assert.match(staffReview, /await settlePayment\(/);
+  assert.match(staffReview, /evidenceId:id/);
+  assert.doesNotMatch(staffReview, /await persistCanonicalStrict\(\)/);
   assert.match(html, /source:'manual'/);
   assert.match(html, /source:'staff_review'/);
 });
