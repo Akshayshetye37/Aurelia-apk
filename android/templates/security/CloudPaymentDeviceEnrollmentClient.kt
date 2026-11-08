@@ -139,7 +139,7 @@ class CloudPaymentDeviceEnrollmentClient(
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Accept", "application/json")
             val bytes = body.toString().toByteArray(Charsets.UTF_8)
-            require(bytes.size <= 600 * 1024) { "payment_device_enrollment_payload_too_large" }
+            require(bytes.size <= 500 * 1024) { "payment_device_enrollment_payload_too_large" }
             connection.outputStream.use { it.write(bytes) }
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
