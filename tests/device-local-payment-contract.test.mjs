@@ -151,3 +151,17 @@ test('check-in, check-out and cancellation commit booking, room and snapshot ato
   assert.match(cancel, /await commitStayMutation/);
   assert.doesNotMatch(cancel, /persist\(\)/);
 });
+
+test('housekeeping room status changes await a canonical room-plus-snapshot transaction', () => {
+  const html = read('index.html');
+  const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
+  assert.match(runtime, /commitRoomStateMutation/);
+  assert.match(runtime, /commitRoomMutation: input => commitRoomStateMutation/);
+  const start = html.indexOf('async function rs(n,s)');
+  const end = html.indexOf('\nfunction tg(', start);
+  assert.ok(start >= 0 && end > start);
+  const handler = html.slice(start, end);
+  assert.match(handler, /await commitRoomStatusMutation/);
+  assert.match(handler, /eventType:'room\.status_changed'/);
+  assert.doesNotMatch(handler, /persist\(\)/);
+});
