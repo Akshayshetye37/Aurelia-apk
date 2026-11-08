@@ -86,3 +86,12 @@ test('provider selection is app-wide, explicitly confirmed, and historical trans
   assert.ok(html.includes('CCAvenue · in development, not activatable'));
   assert.ok(html.includes('complete adapter, credential validation, authenticated webhook, authoritative status, refund lifecycle'));
 });
+
+test('CCAvenue can be selected for sandbox credential onboarding but cannot be activated', () => {
+  assert.ok(html.includes('CCAvenue · configure sandbox credentials'));
+  assert.ok(html.includes('provider===\'ccavenue\''));
+  assert.ok(html.includes('CCAvenue credential schema accepted and secrets stored in Secret Manager'));
+  assert.ok(html.includes('supported.includes(p.provider)'));
+  assert.ok(html.includes('complete seven-operation adapter and merchant acceptance evidence are not available'));
+  assert.ok(!html.includes('<option value="ccavenue" disabled>'));
+});
