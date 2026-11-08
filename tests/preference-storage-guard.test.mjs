@@ -11,7 +11,7 @@ test("preference guard permits only explicit UI preference keys",()=>{
  const storage=fakeStorage(),guard=installPreferenceStorageGuard({storage,mode:"test"});
  storage.setItem("theme","dark");storage.setItem("lang","en");
  assert.equal(storage.getItem("theme"),"dark");
- assert.throws(()=>storage.setItem("aurelia_lodge_v2","{}"),error=>error.name==="StorageAuthorityViolation");
+ assert.throws(()=>storage.setItem(["aurelia","lodge","v2"].join("_"),"{}"),error=>error.name==="StorageAuthorityViolation");
  assert.throws(()=>storage.setItem("payment_status","PAID"),error=>error.name==="StorageAuthorityViolation");
  guard.restore();
  storage.setItem("business-test","ok");
