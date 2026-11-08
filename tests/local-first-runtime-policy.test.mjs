@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   AURELIA_LOCAL_FIRST_POLICY,
   createLocalFirstRuntimePolicy,
-  assertLocalFirstFeatureContract
+  assertLocalFirstFeatureContract,
+  AURELIA_FEATURE_CONTRACTS,
+  validateAureliaFeatureContracts
 } from "../src/storage/local-first-runtime-policy.mjs";
 
 const repository = {
@@ -57,4 +59,15 @@ test("feature contract accepts local-first operation and rejects remote prerequi
   for (const key of ["requiresNetworkForRead", "requiresNetworkForWrite", "requiresCloudForStartup"]) {
     assert.throws(() => assertLocalFirstFeatureContract({ id: "folio", [key]: true }), /violates device-primary architecture/);
   }
+});
+
+test("the complete declared PMS feature inventory has no network or cloud prerequisites", () => {
+  const validated = validateAureliaFeatureContracts();
+  assert.equal(validated.length, AURELIA_FEATURE_CONTRACTS.length);
+  assert.ok(validated.length >= 20);
+  assert.ok(validated.every(feature =>
+    feature.localReadFirst === true &&
+    feature.localWriteFirst === true &&
+    feature.cloudDependency === false
+  ));
 });
