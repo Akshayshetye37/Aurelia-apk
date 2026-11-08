@@ -76,11 +76,15 @@ provider status/refund semantics are implemented and verified.
 
 Aurelia's shared adapter contract requires credential validation, order
 creation, lookup by reference, authoritative payment status, webhook
-verification, refund creation and refund status. The current CCAvenue material
-in this repository does not establish a complete, merchant-approved contract
-for all seven operations. In particular, the previously reviewed API v1.3
-material describes split-refund in a split-payout context; that is not evidence
-of a general refund lifecycle suitable for this adapter contract.
+verification, refund creation and refund status. CCAvenue Merchant API v1.3
+(29 April 2020) documents `orderStatusTracker` for authoritative order status,
+but its refund operation is `splitRefund` for funds split to sub-account IDs;
+that is not a general merchant refund operation. A separate older API v1.1
+document (28 November 2016) documents `getRefundDetails` for querying refunds
+by CCAvenue reference number, not creating them. These sources establish
+status lookup and refund-detail lookup, but do not establish a complete
+ordinary refund lifecycle or a webhook-signature contract. Therefore the
+seven-operation adapter contract is still not met.
 
 The mobile guide also points to a merchant-specific Android SDK package and
 private package access. The exact SDK binary, current package coordinates,
@@ -98,8 +102,10 @@ channel, with all credentials and tokens removed:
   encryption/decryption and response parsing.
 - Current Android Mobile SDK AAR or official package instructions, sample app,
   exact dependency coordinates and supported Android/Gradle versions.
-- Current API specification for order status, transaction lookup, webhook or
-  redirect authentication, and general full/partial refund creation/status.
+- Current merchant-confirmed API specification and access for order status,
+  callback authentication, and general full/partial refund creation/status.
+  Public Merchant API v1.3 does document `orderStatusTracker`; use the
+  merchant-confirmed current version and registered server IP.
 - Merchant-specific environment names, endpoint base URLs, `regId`,
   merchant ID, access-code configuration and approved callback/redirect URLs.
 - CCAvenue sandbox account and test cases for success, decline, pending,
@@ -123,8 +129,11 @@ following corrections apply before any implementation is connected:
 - Do not use `Number(amountPaise) / 100` to create payment amounts. Amounts
   must come from the persisted Aurelia payment intent, be represented in
   integer paise internally, and be formatted once as a two-decimal string.
-- The proposed MD5-derived key/IV is not accepted. The Mobile SDK AES
-  implementation must match the merchant-issued kit and its test vectors.
+- The proposed MD5-derived key/IV is not accepted. Merchant API v1.3 describes
+  an Encryption Key mapped to the Access Code, while Mobile SDK v1.7 separately
+  uses the Working Key for requestHash. The AES mode, key encoding, IV,
+  padding and transport encoding must match the merchant-issued kit and its
+  test vectors; these values must not be conflated.
 - Tracking ID creation is not the classic `initiateTransaction` URL. It is a
   separate server-to-server API call with `access_code` and `encRequest`;
   the response `encResp` must be decrypted and checked for `status === 0`
@@ -216,28 +225,34 @@ The following public CCAvenue pages were reviewed:
 
 ### Credential configuration — deliberately deferred until merchant setup
 
-The provider catalogue already defines the following merchant-entered fields;
-no real values are required in source control now:
+The provider catalogue defines the merchant-entered fields below; no real
+values are required in source control now. The Encryption Key is distinct from
+the Mobile SDK Working Key and is required for the Merchant API AES request /
+response envelope described in API v1.3:
 
 | Field | Purpose | Storage |
 |---|---|---|
 | merchantId | Merchant identifier passed to the Mobile SDK | Non-secret configuration |
 | regId | CCAvenue registration ID used in Tracking ID generation | Non-secret configuration |
-| accessCode | Merchant/domain access code for CCAvenue requests | Secret Manager |
-| workingKey | Server-side requestHash key and merchant-kit crypto input | Secret Manager; server only |
+| accessCode | CCAvenue API access code | Secret Manager |
+| encryptionKey | API AES encryption/decryption key mapped to Access Code | Secret Manager; server only |
+| workingKey | Mobile SDK SHA-512 requestHash key | Secret Manager; server only |
 
 The current Mobile SDK v1.7 guide does not establish a separate generic
 apiKey field. Do not add or request one unless the merchant's current
-CCAvenue-issued kit explicitly requires it. Access code and working key must
-never be exposed to Android, browser responses, logs, screenshots, or source
-control. The admin user can populate the fields after merchant activation;
+CCAvenue-issued kit explicitly requires it. Access code, encryption key and
+working key must never be exposed to Android, browser responses, logs,
+screenshots, or source control. Merchant API v1.3 also requires the merchant's
+server public IP to be registered by CCAvenue before API calls will work. The admin user can populate the fields after merchant activation;
 credential validation remains unavailable until the actual kit's server API
 and merchant account are integrated.
 
-The public website is sufficient to confirm product availability and the
-onboarding/kit-delivery process, but it does not publish enough technical
-material to safely implement the AES-128 Tracking ID request/response codec,
-status API, general refund lifecycle, or current private Android package
-coordinates. Those must be taken from the merchant activation kit. No values
+The public website confirms product availability and onboarding/kit delivery.
+The published Merchant API v1.3 guide provides the orderStatusTracker API and
+the API envelope contract; the older API v1.1 guide provides getRefundDetails.
+However, the public material does not provide enough authoritative evidence
+to safely implement the AES-128 Tracking ID request/response codec, prove a
+general refund-creation operation, establish signed webhooks, or verify the
+current private Android package coordinates. Those must be taken from the merchant activation kit. No values
 from third-party document mirrors or leaked examples are used as credentials
 or implementation authority.
