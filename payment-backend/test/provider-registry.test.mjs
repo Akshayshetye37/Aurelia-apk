@@ -75,6 +75,8 @@ test('CCAvenue catalogue keeps API encryption key separate from Mobile SDK worki
   assert.equal(fields.regId.required, true);
   assert.equal(fields.accessCode.secret, true);
   assert.equal(fields.encryptionKey.secret, true);
+  assert.equal(fields.hostedCheckoutKey.secret, true);
+  assert.match(fields.hostedCheckoutKey.label, /AesCryptUtil/);
   assert.equal(fields.workingKey.secret, true);
   assert.equal(fields.notificationWorkingKey.secret, true);
   assert.equal(fields.regId.required, false);
