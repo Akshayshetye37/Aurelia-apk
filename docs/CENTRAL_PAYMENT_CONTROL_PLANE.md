@@ -383,3 +383,14 @@ PMS tests and production web packaging, settlement foundation CI, and payment
 backend CI including tests, syntax, container build, non-root verification
 and Terraform validation. Android Gradle compilation and real Play Console
 physical-device enrollment are still not part of those workflows.
+
+
+## App-wide primary provider selection
+
+The primary payment provider is selected at the Aurelia app/account boundary (tenantId), not independently per device. The authoritative record is paymentProviderSelection/{tenantId}; every enrolled device installation for that app reads the same selection. A device ID identifies an installation and does not create a separate provider choice.
+
+An authorized tenant administrator must explicitly confirm a switch. The backend transaction atomically deactivates the previous provider for new checkout and activates the newly qualified provider. Payment-intent creation independently checks the tenant's active provider, environment and provider activation state, so a stale or manipulated client selection cannot route a new payment through another gateway. There is no automatic fallback.
+
+Deactivation only prevents new payment initiation. Historical intents remain bound to the provider that created them. Webhook ingress, intent status/reconciliation and refund operations continue to resolve against the provider recorded on the historical transaction; they must not be rejected merely because that provider is no longer primary.
+
+The admin UI lists all seven planned gateways. The six factory-registered adapters can be configured and qualified for test activation. CCAvenue is displayed as in development and cannot be configured or activated through the generic provider form until its complete adapter, credential validation, webhook authentication, authoritative status/refund lifecycle and merchant acceptance requirements are met. Live collection remains disabled.
