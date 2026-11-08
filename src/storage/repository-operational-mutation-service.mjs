@@ -297,7 +297,7 @@ export async function commitGuestStateMutation({
   }
   return Object.freeze({
     canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
-    guest: storedGuest, snapshotVersion: storedSnapshot.version,
+    guest: storedGuest, snapshot: storedSnapshot.data.snapshot, snapshotVersion: storedSnapshot.version,
     guestVersion: committed.entities[0].version
   });
 }
