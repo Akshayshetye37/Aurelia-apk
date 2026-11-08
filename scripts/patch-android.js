@@ -406,7 +406,10 @@ function wireReleaseProguard(contents, kotlinDsl) {
   if (/proguardFiles[^\n]*proguard-rules\.pro/.test(contents)) return contents;
   const releaseBlock = /(release\s*\{)/;
   if (!releaseBlock.test(contents)) return contents;
-  return contents.replace(releaseBlock, '$1\n            proguardFiles getDefaultProguardFile(\'proguard-android-optimize.txt\'), \'proguard-rules.pro\'');
+  const statement = kotlinDsl
+    ? '$1\n            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")'
+    : '$1\n            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"';
+  return contents.replace(releaseBlock, statement);
 }
 if (fs.existsSync(appGradleGroovy)) {
   const gradle = wireReleaseProguard(fs.readFileSync(appGradleGroovy, 'utf8'), false);
