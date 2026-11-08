@@ -370,7 +370,14 @@ test("restaurant folio posting rejects sale lines that differ from the persisted
 test("restaurant folio posting cannot rewrite prior guest charges", async () => {
   const { bridge, snapshot, booking } = await fixture();
   booking.st = "in";
-  booking.ch = [["Existing room charge", 999, "room"], ["Restaurant · Tea", 100, "din"], ["Restaurant · Snacks", 150, "din"]];
+  booking.ch = [["Existing room charge", 999, "room"]];
+  await bridge.persistCompatibilitySnapshot(snapshot);
+  await bridge.mutateEntity({
+    entityType: "booking", entityId: "51", expectedVersion: 1, eventType: "booking.seed_prior_charge",
+    mutate: entity => Object.assign(entity, booking)
+  });
+  booking.ch[0] = ["Existing room charge", 1, "room"];
+  booking.ch.push(["Restaurant · Tea", 100, "din"], ["Restaurant · Snacks", 150, "din"]);
   snapshot.t[0].o = [];
   snapshot.sales.push({ id: "RP-history", postedToHotel: true, room: booking.room, a: 250,
     items: [["Tea", 100], ["Snacks", 150]] });
@@ -378,5 +385,5 @@ test("restaurant folio posting cannot rewrite prior guest charges", async () => 
     bridge, snapshot, bookingId: booking.id, tableId: 1, saleId: "RP-history",
     saleIndex: 0, legacyStorage: null
   }), error => error.code === "RESTAURANT_FOLIO_HISTORY_CHANGED");
-  assert.equal((await bridge.fetchEntity("booking", "51")).data.ch.length, 0);
+  assert.equal((await bridge.fetchEntity("booking", "51")).data.ch[0][1], 999);
 });
