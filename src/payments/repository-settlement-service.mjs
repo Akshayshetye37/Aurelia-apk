@@ -125,7 +125,7 @@ export async function settlePaymentToRepository({
     }
     reviewEvidence = canonicalState.sig.find(row => String(row?.id) === String(evidenceId));
     if (!reviewEvidence) throw fail("PAYMENT_EVIDENCE_NOT_FOUND", "The selected payment evidence is not in the canonical local snapshot.");
-    if (!["open", "pending_review"].includes(reviewEvidence.st)) {
+    if (!["open", "pending_review", "matched"].includes(reviewEvidence.st)) {
       throw fail("PAYMENT_EVIDENCE_NOT_REVIEWABLE", "This payment evidence is no longer available for approval.");
     }
     if (String(method || "").toUpperCase() !== "UPI" ||
@@ -159,6 +159,10 @@ export async function settlePaymentToRepository({
     now
   });
 
+  if (reviewEvidence?.st === "matched" && !result.duplicate) {
+    throw fail("PAYMENT_EVIDENCE_STATE_DIVERGENCE",
+      "Evidence is marked approved but no matching canonical payment exists; reconcile before posting.");
+  }
   if (result.duplicate) {
     // A duplicate is safe only if the canonical record already contains it.
     if (reviewEvidence && reviewEvidence.st !== "matched") {
