@@ -76,3 +76,18 @@ test('invalid selection reads fail closed', async () => {
   });
   assert.equal((await readActiveProvider({ db, tenantId: 'tenant_123' })).configured, false);
 });
+
+
+test('CCAvenue is accepted by the tenant-wide single-provider activation control', async () => {
+  const { db, docs } = fakeFirestore({
+    'paymentTenants/tenant_123/providers/ccavenue_test': { ...qualified, active: false }
+  });
+  const result = await activateSingleProvider({
+    db, tenantId: 'tenant_123', provider: 'ccavenue', environment: 'test',
+    adapterEnvironment: 'test', actorUid: 'owner-1',
+    now: () => new Date('2026-11-08T00:00:00.000Z')
+  });
+  assert.equal(result.activeProviderId, 'ccavenue');
+  assert.equal(docs.get('paymentTenants/tenant_123/providers/ccavenue_test').active, true);
+  assert.equal((await readActiveProvider({ db, tenantId: 'tenant_123' })).activeProviderId, 'ccavenue');
+});
