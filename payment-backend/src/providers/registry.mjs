@@ -42,7 +42,6 @@ export const PROVIDERS = Object.freeze({
     ],
     capabilities: ['hosted_checkout', 'payment_status', 'webhooks', 'refunds'],
     adapterStatus: 'adapter_implemented_wired',
-    cloudCheckoutApiEnabled: false,
     cloudCheckoutApiEnabled: false
   },
   phonepe: {
