@@ -146,8 +146,10 @@ export class JioPayAdapter extends PaymentProviderAdapter {
       throw new TypeError('invalid_jiopay_refund_id');
     const d=await this.command({merchantId:this.credentials.merchantId,merchantTxnNo:input.refundId,
       originalTxnNo:input.refundId,amount:'0.00',transactionType:'STATUS',addlParam1:'',addlParam2:''});
-    if(d.merchantId!==this.credentials.merchantId||d.merchantTxnNo!==input.refundId||
-      (d.originalTxnNo!=null&&d.originalTxnNo!==input.orderId))
+    // STATUS requests identify the refund by its own merchantTxnNo; the
+    // provider echoes the queried refund reference, not necessarily the
+    // original sale reference. The local refund record binds both IDs.
+    if(d.merchantId!==this.credentials.merchantId||d.merchantTxnNo!==input.refundId)
       throw new Error('jiopay_refund_status_identity_mismatch');
     const state=statusOf(d);
     const amountMinor=toMinor(d.amount??d.refundAmount);
