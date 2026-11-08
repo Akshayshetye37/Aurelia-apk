@@ -69,7 +69,7 @@ All six factory-wired adapters expose seven lifecycle operations and have determ
 
 ## CI evidence and verification boundary
 
-The latest verified code commit `a0c5d2eb0c56a004f49e8807d48bf05a920b857d` passed all three workflows: [payment backend CI — run 42467288914](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288914), [infrastructure validation — run 42467288923](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288923), and [settlement foundation CI — run 42467288972](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288972). Backend CI passed 306/306 tests, the explicit CCAvenue Mobile SDK request-hash vector (2/2), JavaScript syntax, Gitleaks history scan, Cloud Run image build/non-root verification and Terraform validation. Infrastructure formatting/validation and the full application test suite/web build also passed. These results do not prove Android Gradle/R8 compilation, physical-device acceptance, CCAvenue merchant sandbox interoperability, static egress/IP registration, production deployment or release signing.
+Historical verification for code commit `a0c5d2eb0c56a004f49e8807d48bf05a920b857d` passed all three workflows: [payment backend CI — run 42467288914](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288914), [infrastructure validation — run 42467288923](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288923), and [settlement foundation CI — run 42467288972](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288972). Backend CI passed 306/306 tests, the explicit CCAvenue Mobile SDK request-hash vector (2/2), JavaScript syntax, Gitleaks history scan, Cloud Run image build/non-root verification and Terraform validation. Infrastructure formatting/validation and the full application test suite/web build also passed. These results do not prove Android Gradle/R8 compilation, physical-device acceptance, CCAvenue merchant sandbox interoperability, static egress/IP registration, production deployment or release signing.
 
 Historical evidence is commit-scoped and must not be treated as an automatic pass for later revisions:
 
@@ -175,3 +175,14 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 Aurelia has one app-wide primary payment provider per tenant/account. All enrolled device installations for the same app use the same primary selection; Device IDs identify installations and do not create separate provider selections. An authorized administrator explicitly confirms a switch, after which the newly qualified provider becomes primary for all new online payments. The previous provider is frozen for new checkout, with no automatic fallback. Existing transactions remain bound to their original provider for delayed webhooks, status verification, refunds and reconciliation.
 
 The Payment Gateway screen lists all seven planned providers. Six adapters are currently registered and may be qualified for test activation. CCAvenue remains visible but unavailable until its complete adapter and merchant lifecycle are implemented and verified. Live collection remains OFF.
+
+
+### Current CCAvenue hardening revision (8 November 2026)
+
+Current branch head: `00a6e07c71d1652723894e646a5bdea0871de52c`.
+- Payment backend CI: in progress — [run 42471552471](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552471).
+- Infrastructure validation: success — [run 42471552405](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552405).
+- Settlement foundation CI: success — [run 42471552584](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552584).
+- PMS source test / production packaging: pending — [run 42471548691](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471548691).
+
+Do not treat this revision as fully CI-verified until the backend and PMS source workflows complete. Android Gradle/device and merchant-specific CCAvenue UAT remain outside these workflows.
