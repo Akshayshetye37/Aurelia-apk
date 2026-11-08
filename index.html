@@ -1836,6 +1836,30 @@ async function commitRestaurantFolioState({bookingId,tableId,saleId,saleIndex,ap
  });
 }
 
+async function commitRestaurantSettlementState({tableId,saleId,saleIndex,apply}){
+ return withLocalOperationalLock(async()=>{
+  if(RECOVERY_CHECK_PENDING)throw new Error('Operational writes are paused during recovery.');
+  const before=cloneRuntimeState(S);
+  try{
+   apply();
+   if(typeof aud==='function')aud('Restaurant bill settled','Table '+tableId+' · '+K(S.sales[saleIndex]?.a||0)+' · '+(S.sales[saleIndex]?.m||''));
+   const snapshot={tab:S.tab,bk:S.b};DK.forEach(k=>snapshot[k]=S[k]);
+   const commit=window.AureliaRepositoryCompatibility?.commitRestaurantTableSettlement;
+   if(typeof commit!=='function')throw new Error('Canonical local repository is unavailable; restaurant payment was not recorded.');
+   return await commit({snapshot,tableId,saleId,saleIndex});
+  }catch(error){
+   if(error&&error.code==='OPERATIONAL_CANONICAL_READBACK_MISMATCH'){
+    RECOVERY_CHECK_PENDING=true;
+    console.error('[Aurelia Restaurant] Repository read-back mismatch after table settlement. Writes are frozen.',error);
+    throw new Error('CRITICAL: Device storage read-back is inconsistent. Do not retry or edit; keep the app open for recovery.');
+   }
+   Object.keys(S).forEach(key=>delete S[key]);
+   Object.assign(S,before);
+   throw error;
+  }
+ });
+}
+
 let LOCAL_STATE_STATUS='missing';
 window.AureliaAccountingBoundary = Object.freeze({
  getState:()=>S,
@@ -1941,7 +1965,7 @@ V.dining=()=>{cleanTableOrders();const html=oldDining();const t=S.t.find(x=>Numb
 };
 // Replace table settlement with clear separate restaurant billing, named guest/phone, invoice and PNG bill.
 function settle(){cleanTableOrders();const t=S.t[S.tb-1],a=t.o.reduce((s,x)=>s+(Number(x[1])||0),0),m=tableMeta(t.n);if(!(a>0)){toast('Add at least one item before settling');return}openS(`<h2 class="foil">Restaurant bill · Table ${t.n}</h2><div class="tot">${rk(a)}</div><div class="lab">This is a restaurant sale, not a hotel payment.</div><label class="fld"><span>Customer name</span><input id="st-name" value="${esc(m.name||'')}" placeholder="Customer name for printed bill"></label><label class="fld"><span>Customer phone</span><input id="st-phone" value="${esc(m.phone||'')}" type="tel" placeholder="Customer phone"></label>${mchips('sm')}<button class="btn" style="width:100%;margin-top:12px" onclick="settleGo()">Record restaurant payment</button>`)}
-function settleGo(){cleanTableOrders();const t=S.t[S.tb-1],a=t.o.reduce((s,x)=>s+(Number(x[1])||0),0);if(!(a>0)){toast('No items on this bill');return}const m=$('#sm .on')?.textContent||'Cash',name=$('#st-name')?.value?.trim()||tableMeta(t.n).name||'Walk-in customer',phone=$('#st-phone')?.value?.trim()||tableMeta(t.n).phone||'';S.tableGuests[t.n]={name,phone};S.sales.push({id:'RS-'+Date.now(),entity:'restaurant',t:t.n,guest:name,phone,items:t.o.map(x=>[x[0],Number(x[1])||0]),a,m,at:new Date().toISOString()});t.o=[];t.demo=0;S.today+=a;aud('Restaurant bill settled',name+' · Table '+t.n+' · '+rk(a)+' · '+m);closeS();render();openRestaurantReceipt(S.sales[S.sales.length-1]);toast(rk(a)+' recorded in restaurant ledger')}
+async function settleGo(){const t=S.t[S.tb-1];if(!t){toast('Restaurant table not found');return}const a=t.o.reduce((sum,x)=>sum+(Number(x[1])||0),0);if(!(a>0)){toast('No items on this bill');return}const m=$('#sm .on')?.textContent||'Cash',name=$('#st-name')?.value?.trim()||tableMeta(t.n).name||'Walk-in customer',phone=$('#st-phone')?.value?.trim()||tableMeta(t.n).phone||'',saleId='RS-'+createStableGuestId().slice(4),items=t.o.map(x=>[x[0],Number(x[1])||0]),sale={id:saleId,entity:'restaurant',t:t.n,guest:name,phone,items,a,m,at:new Date().toISOString()},saleIndex=S.sales.length;try{const result=await commitRestaurantSettlementState({tableId:t.n,saleId,saleIndex,apply:()=>{cleanTableOrders();const live=S.t[S.tb-1];if(!live||!live.o.length)throw new Error('The table order changed. Reload before recording payment.');const liveAmount=live.o.reduce((sum,x)=>sum+(Number(x[1])||0),0);if(Math.round(liveAmount*100)!==Math.round(a*100))throw new Error('The table total changed. Reload before recording payment.');S.tableGuests[live.n]={name,phone};S.sales.push(sale);live.o=[];live.demo=0;S.today+=a}});closeS();render();openRestaurantReceipt(S.sales.find(x=>x.id===saleId));toast(result.cacheRefreshed===false?'Restaurant payment saved to device storage; compatibility cache refresh failed.':rk(a)+' recorded in restaurant ledger')}catch(error){toast(error.message||'Restaurant payment was not recorded')}}
 function addI(c,i){cleanTableOrders();const m=(MENU[c]||[])[i];if(!m){toast('That menu item is no longer available');return}const item=S.inv.find(x=>x.n.toLowerCase()===String(m[0]).toLowerCase());if(item&&item.q<1){toast(m[0]+' is out of stock');return}if(item){item.q--;S.led.unshift([item.n,-1,'restaurant-sale',new Date()]);if(item.q<=item.ro)toast(item.n+' is running low')}S.t[S.tb-1].o.push([m[0],Number(m[1])||0,'din']);render();window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})}
 const _diningForStock=V.dining;V.dining=()=>{let out=_diningForStock();const sell=S.inv.filter(x=>x.sellable&&Number(x.price)>0&&Number(x.q)>0);if(sell.length){const block=`<div class="card" style="margin-top:14px"><h3>Retail stock for sale</h3><div class="lab">Sold items reduce inventory automatically.</div>${sell.map(x=>`<button class="mi" onclick="sellStockItem('${encodeURIComponent(String(x.n))}',${Number(x.price)})"><div><b>${esc(x.n)}</b><div class="lab">${x.q} in stock</div></div><span>${K(x.price)}</span></button>`).join('')}</div>`;out+=block}return out};
 function sellStockItem(name,price){name=decodeURIComponent(name);cleanTableOrders();const x=S.inv.find(y=>y.n===name);if(!x||x.q<1){toast('This item is out of stock');return}x.q--;S.led.unshift([x.n,-1,'retail-sale',new Date()]);S.t[S.tb-1].o.push([x.n,Number(price)||0,'retail']);aud('Retail item added to restaurant bill',x.n+' · '+K(price));if(x.q<=x.ro)toast(x.n+' is running low');render()}
@@ -5497,7 +5521,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 import { bootstrapper } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
-import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation, commitExpenseMutation, commitRestaurantFolioCharge } from "./src/storage/repository-operational-mutation-service.mjs";
+import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation, commitExpenseMutation, commitRestaurantFolioCharge, commitRestaurantTableSettlement } from "./src/storage/repository-operational-mutation-service.mjs";
 import { commitReservationToRepository } from "./src/storage/repository-reservation-service.mjs";
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
@@ -5553,6 +5577,7 @@ try {
      commitInventoryMutation: input => commitInventoryItemMutation({ ...input, bridge: storageBridge }),
      commitExpenseMutation: input => commitExpenseMutation({ ...input, bridge: storageBridge }),
      commitRestaurantFolioCharge: input => commitRestaurantFolioCharge({ ...input, bridge: storageBridge }),
+     commitRestaurantTableSettlement: input => commitRestaurantTableSettlement({ ...input, bridge: storageBridge }),
      commitReservation: input => commitReservationToRepository({ ...input, bridge: storageBridge })
    });
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
