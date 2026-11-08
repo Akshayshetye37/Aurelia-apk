@@ -10,6 +10,8 @@ import { PROVIDERS } from './registry.mjs';
 
 // Provider capability means every operation below is implemented. It does not
 // mean the merchant account has passed UAT or that live collection is approved.
+// CCAvenue is intentionally registered with its narrower partial capability
+// contract; standard refunds and refund-status polling are not falsely advertised.
 const REQUIRED_OPERATIONS = Object.freeze([
   'validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus',
   'verifyWebhook', 'createRefund', 'getRefundStatus'
