@@ -238,3 +238,16 @@ test('primary reservation creation commits guest, booking, folio advance and sna
   assert.doesNotMatch(handler, /persistCanonicalStrict/);
   assert.match(handler, /CRITICAL: Reservation storage read-back failed/);
 });
+
+test('final check-in and check-out wrappers await the canonical lifecycle transaction without legacy writes', () => {
+  const html = read('index.html');
+  const start = html.indexOf('const _completeCheckInFinal=completeCheckIn;');
+  const end = html.indexOf('</script>', start);
+  assert.ok(start >= 0 && end > start);
+  const wrappers = html.slice(start, end);
+  assert.match(wrappers, /completeCheckIn=async function\(i\)/);
+  assert.match(wrappers, /await _completeCheckInFinal\(i\)/);
+  assert.match(wrappers, /completeCheckOut=async function\(i\)/);
+  assert.match(wrappers, /await _completeCheckOutFinal\(i\)/);
+  assert.doesNotMatch(wrappers, /persist\(\)/);
+});
