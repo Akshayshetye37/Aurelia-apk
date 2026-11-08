@@ -42,7 +42,60 @@ export class IndexedDbPmsRepository extends PmsRepository{
  async retryOutbox({deviceId,eventId,retryAt,errorCode}){return this.#delivery(deviceId,eventId,x=>{x.status="RETRY";x.retryAt=retryAt;x.lastErrorCode=errorCode;});}
  async markOutboxConflict({deviceId,eventId,conflictCode}){return this.#delivery(deviceId,eventId,x=>{x.status="CONFLICT";x.lastErrorCode=conflictCode;});}
  async #delivery(deviceId,eventId,change){ident(deviceId,"device ID");ident(eventId,"event ID");const d=await this.database(),t=d.transaction(S.outbox,"readwrite"),p=done(t),s=t.objectStore(S.outbox);try{const x=await req(s.get(eventId));if(!x||x.leaseOwner!==deviceId||x.status!=="IN_FLIGHT"||!Number.isFinite(Date.parse(x.leaseUntil||""))||Date.parse(x.leaseUntil)<=Date.now())throw new Error("Event is not held by an unexpired lease for this device");change(x);x.leaseOwner=null;x.leaseUntil=null;s.put(x);await p;return true;}catch(e){try{t.abort()}catch{}await p.catch(()=>{});throw e;}}
- async migrateLegacySnapshot(snapshot,{migrationId,sourceKey,sourceTimestamp=this.now()}={}){obj(snapshot,"Snapshot");ident(migrationId,"migration ID");ident(sourceKey,"source key");if(typeof snapshot.raw!=="string"||!snapshot.raw)throw new TypeError("Exact raw legacy JSON snapshot is required");const parsed=snapshot.parsed||parseLegacyPmsSnapshot(snapshot.raw).parsed;obj(parsed,"Legacy state");for(const k of required)if(!Array.isArray(parsed[k]))throw new Error("Legacy state missing "+k);const d=await this.database(),t=d.transaction([S.meta,S.entities,S.snapshots,S.legacyBackups],"readwrite"),p=done(t),m=t.objectStore(S.meta),e=t.objectStore(S.entities),b=t.objectStore(S.snapshots),legacyBackup=t.objectStore(S.legacyBackups);try{const marker=await req(m.get("legacy-migration"));if(marker){if(marker.migrationId===migrationId&&marker.sourceKey===sourceKey){await p;return{alreadyMigrated:true,migrationId};}throw new Error("Legacy migration marker already exists");}if(await req(e.count()))throw new Error("Canonical repository is not empty");b.add({id:migrationId,sourceKey,sourceTimestamp,raw:snapshot.raw,importedAt:this.now(),formatVersion:1});legacyBackup.add({id:migrationId,sourceKey,sourceTimestamp,raw:snapshot.raw,importedAt:this.now(),formatVersion:1});for(const [field,value] of Object.entries(parsed))e.add({key:"legacy:"+field,type:"legacy",id:field,version:1,data:clone(value),updatedAt:this.now()});m.add({key:"legacy-migration",migrationId,sourceKey,completedAt:this.now(),formatVersion:1,entityCount:Object.keys(parsed).length});await p;return{alreadyMigrated:false,migrationId,entityCount:Object.keys(parsed).length};}catch(x){try{t.abort()}catch{}await p.catch(()=>{});throw x;}}
+ async migrateLegacySnapshot(snapshot,{migrationId,sourceKey,sourceTimestamp=this.now()}={}){
+  obj(snapshot,"Snapshot");ident(migrationId,"migration ID");ident(sourceKey,"source key");
+  if(typeof snapshot.raw!=="string"||!snapshot.raw)throw new TypeError("Exact raw legacy JSON snapshot is required");
+  const parsed=snapshot.parsed||parseLegacyPmsSnapshot(snapshot.raw).parsed;
+  obj(parsed,"Legacy state");for(const k of required)if(!Array.isArray(parsed[k]))throw new Error("Legacy state missing "+k);
+  const d=await this.database();
+  // Phase 1: persist the exact source bytes before importing any table.
+  {
+   const t=d.transaction([S.meta,S.entities,S.snapshots,S.legacyBackups],"readwrite"),p=done(t),m=t.objectStore(S.meta),e=t.objectStore(S.entities),s=t.objectStore(S.snapshots),backup=t.objectStore(S.legacyBackups);
+   try{
+    const completed=await req(m.get("legacy-migration"));
+    if(completed){if(completed.migrationId===migrationId&&completed.sourceKey===sourceKey){await p;return{alreadyMigrated:true,migrationId};}throw new Error("Legacy migration marker already exists");}
+    const started=await req(m.get("legacy-migration-started"));
+    if(started&&(started.migrationId!==migrationId||started.sourceKey!==sourceKey))throw new Error("A different legacy migration is already in progress");
+    const saved=await req(backup.get(migrationId));
+    if(started){if(!saved||saved.raw!==snapshot.raw)throw new Error("Resumable migration backup differs from the supplied source bytes");}
+    else{
+     if(await req(e.count()))throw new Error("Canonical repository is not empty");
+     const row={id:migrationId,sourceKey,sourceTimestamp,raw:snapshot.raw,importedAt:this.now(),formatVersion:1};
+     s.add(row);backup.add(row);
+     m.put({key:"legacy-migration-started",migrationId,sourceKey,startedAt:this.now(),formatVersion:1});
+    }
+    await p;
+   }catch(error){try{t.abort()}catch{}await p.catch(()=>{});throw error;}
+  }
+  // Phase 2: import one legacy table at a time. Each row and its checkpoint
+  // commit in the same IndexedDB transaction, so a restart resumes safely.
+  for(const [field,value] of Object.entries(parsed)){
+   const t=d.transaction([S.meta,S.entities],"readwrite"),p=done(t),m=t.objectStore(S.meta),e=t.objectStore(S.entities);
+   try{
+    const key=ek("legacy",field),existing=await req(e.get(key));
+    if(existing){
+     const stable=x=>Array.isArray(x)?x.map(stable):x&&typeof x==="object"?Object.fromEntries(Object.keys(x).sort().map(k=>[k,stable(x[k])])):x;
+     if(existing.version!==1||JSON.stringify(stable(existing.data))!==JSON.stringify(stable(value)))throw new Error("Resumable migration found a divergent imported table: "+field);
+    }else{
+     e.put({key,type:"legacy",id:field,version:1,data:clone(value),updatedAt:this.now()});
+    }
+    m.put({key:"migration-checkpoint:"+migrationId, migrationId, table:field, lastId:field, updatedAt:this.now()});
+    await p;
+   }catch(error){try{t.abort()}catch{}await p.catch(()=>{});throw error;}
+  }
+  // Phase 3: publish completion only after every table checkpoint committed.
+  {
+   const t=d.transaction(S.meta,"readwrite"),p=done(t),m=t.objectStore(S.meta);
+   try{
+    const started=await req(m.get("legacy-migration-started"));
+    if(!started||started.migrationId!==migrationId)throw new Error("Resumable migration start marker disappeared");
+    m.put({key:"legacy-migration",migrationId,sourceKey,completedAt:this.now(),formatVersion:1,entityCount:Object.keys(parsed).length});
+    m.delete("legacy-migration-started");
+    await p;
+   }catch(error){try{t.abort()}catch{}await p.catch(()=>{});throw error;}
+  }
+  return{alreadyMigrated:false,migrationId,entityCount:Object.keys(parsed).length};
+ }
  async getAuthority(){const d=await this.database(),t=d.transaction(S.meta,"readonly"),p=done(t),row=await req(t.objectStore(S.meta).get("authority"));await p;return row?.value||"legacy";}
  async beginMigrationAuthority(){const d=await this.database(),t=d.transaction(S.meta,"readwrite"),p=done(t),m=t.objectStore(S.meta);try{const row=await req(m.get("authority")),current=row?.value||"legacy";if(current==="canonical"){await p;return current;}if(current!=="legacy"&&current!=="migrating")throw new Error("Invalid storage authority state: "+current);m.put({key:"authority",value:"migrating",updatedAt:this.now()});await p;return"migrating";}catch(e){try{t.abort()}catch{}await p.catch(()=>{});throw e;}}
  async completeMigrationAuthority(migrationId){ident(migrationId,"migration ID");const d=await this.database(),t=d.transaction([S.meta,S.snapshots,S.legacyBackups],"readwrite"),p=done(t),m=t.objectStore(S.meta),s=t.objectStore(S.snapshots),legacyBackup=t.objectStore(S.legacyBackups);try{const authority=await req(m.get("authority")),marker=await req(m.get("legacy-migration")),snapshot=await req(s.get(migrationId)),rawBackup=await req(legacyBackup.get(migrationId));if((authority?.value||"legacy")!=="migrating"&&(authority?.value||"legacy")!=="canonical")throw new Error("Storage authority must be migrating before canonical commit");if(!marker||marker.migrationId!==migrationId||!snapshot||snapshot.raw==null||!rawBackup||rawBackup.raw!==snapshot.raw)throw new Error("Cannot establish canonical authority without a matching committed legacy backup");m.put({key:"migration_verified",value:true,migrationId,verifiedAt:this.now()});m.put({key:"authority",value:"canonical",migrationId,updatedAt:this.now()});await p;return"canonical";}catch(e){try{t.abort()}catch{}await p.catch(()=>{});throw e;}}
