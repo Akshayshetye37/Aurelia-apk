@@ -6,7 +6,7 @@
  * unrelated payment-control updates. All changes are serialized in Firestore.
  */
 const TENANT_ID = /^[A-Za-z0-9_-]{6,64}$/;
-const PROVIDERS = new Set(['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay']);
+const PROVIDERS = new Set(['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay', 'ccavenue']);
 const ENVIRONMENTS = new Set(['test', 'live', 'staging', 'production', 'uat']);
 
 export function providerSelectionRef(db, tenantId) {
