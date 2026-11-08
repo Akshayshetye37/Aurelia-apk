@@ -64,6 +64,7 @@ test('Android Play Integrity client is copied and SDK dependency is installed', 
   const patcher = read('scripts/patch-android.js');
   const client = read('android/templates/security/AureliaPlayIntegrityClient.kt');
   assert.match(patcher, /'AureliaPlayIntegrityClient\.kt'/);
+  assert.match(patcher, /'CloudPaymentDeviceEnrollmentClient\.kt'/);
   assert.match(patcher, /com\.google\.android\.play:integrity:1\.5\.0/);
   assert.match(client, /setRequestHash\(serverRequestHash\)/);
   assert.match(client, /play_integrity_provider_not_prepared/);
@@ -85,4 +86,18 @@ test('cloud device enrollment requires Google-decoded Play Integrity and hardwar
   assert.match(verifier, /LICENSED/);
   assert.match(verifier, /MEETS_DEVICE_INTEGRITY/);
   assert.match(verifier, /requestHash !== expectedRequestHash/);
+});
+
+
+test('native cloud enrollment binds server challenge, Play token and attested key before owner activation', () => {
+  const client = read('android/templates/security/CloudPaymentDeviceEnrollmentClient.kt');
+  assert.match(client, /playIntegrity\.prepare/);
+  assert.match(client, /playIntegrity\.requestToken/);
+  assert.match(client, /createAttestedIdentity\(challengeBytes\)/);
+  assert.match(client, /playIntegrityRequestHash/);
+  assert.match(client, /certificateChainBase64/);
+  assert.match(client, /integrityToken/);
+  assert.match(client, /expectedStatus = 202/);
+  assert.match(client, /status == "PENDING"/);
+  assert.doesNotMatch(client, /\/activate/);
 });
