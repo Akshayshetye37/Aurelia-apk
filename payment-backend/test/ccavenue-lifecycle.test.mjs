@@ -227,3 +227,22 @@ test('CCAvenue webhook handler does not acknowledge when authoritative status is
   assert.equal(response.statusCode, 503);
   assert.equal(response.body.error, 'provider_reconciliation_unavailable');
 });
+
+test('CCAvenue partial capture and high-risk flag do not become full captured payment', async () => {
+  const partial = await service(async () => apiResponse(jsonStatus('Successful', {
+    order_capt_amt: '500.00'
+  }))).verifyOrderStatus({
+    orderId: EXPECTED.orderId, trackingId: '212016048802',
+    expectedAmountMinor: EXPECTED.amountMinor, expectedCurrency: 'INR'
+  });
+  assert.equal(partial.paymentStatus, 'PARTIALLY_CAPTURED');
+  assert.equal(partial.capturedAmountMinor, 50000);
+
+  const highRisk = await service(async () => apiResponse(jsonStatus('Successful', {
+    order_fraud_status: 'High'
+  }))).verifyOrderStatus({
+    orderId: EXPECTED.orderId, trackingId: '212016048802',
+    expectedAmountMinor: EXPECTED.amountMinor, expectedCurrency: 'INR'
+  });
+  assert.equal(highRisk.paymentStatus, 'REVIEW');
+});
