@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
-import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation, commitExpenseMutation, commitRestaurantFolioCharge } from "../src/storage/repository-operational-mutation-service.mjs";
+import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation, commitExpenseMutation, commitRestaurantFolioCharge, commitRestaurantTableSettlement } from "../src/storage/repository-operational-mutation-service.mjs";
 
 let sequence = 0;
 async function fixture() {
@@ -386,4 +386,37 @@ test("restaurant folio posting cannot rewrite prior guest charges", async () => 
     saleIndex: 0, legacyStorage: null
   }), error => error.code === "RESTAURANT_FOLIO_HISTORY_CHANGED");
   assert.equal((await bridge.fetchEntity("booking", "51")).data.ch[0][1], 999);
+});
+
+test("restaurant table settlement commits sale, cleared table and daily snapshot atomically", async () => {
+  const { bridge, snapshot } = await fixture();
+  const sale = { id: "RS-settle-1", entity: "restaurant", t: 1, guest: "Walk-in",
+    items: [["Tea", 100], ["Snacks", 150]], a: 250, m: "Cash", at: "2026-11-08T12:00:00.000Z" };
+  snapshot.sales.push(sale);
+  snapshot.t[0].o = [];
+  snapshot.today = 250;
+  const result = await commitRestaurantTableSettlement({
+    bridge, snapshot, tableId: 1, saleId: sale.id, saleIndex: 0, legacyStorage: null
+  });
+  assert.equal(result.canonical, true);
+  assert.equal(result.sale.data.a, 250);
+  assert.equal(result.table.data.o.length, 0);
+  const saved = (await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot;
+  assert.equal(saved.today, 250);
+  assert.equal(saved.sales[0].id, sale.id);
+});
+
+test("restaurant table settlement rejects duplicate sale IDs", async () => {
+  const { bridge, snapshot } = await fixture();
+  const sale = { id: "RS-duplicate", entity: "restaurant", t: 1, guest: "Walk-in",
+    items: [["Tea", 100], ["Snacks", 150]], a: 250, m: "Cash" };
+  await bridge.mutateEntity({
+    entityType: "restaurant_sale", entityId: sale.id, expectedVersion: 0, eventType: "restaurant.seed_sale",
+    mutate: entity => Object.assign(entity, sale)
+  });
+  snapshot.sales.push(sale);
+  snapshot.t[0].o = [];
+  await assert.rejects(commitRestaurantTableSettlement({
+    bridge, snapshot, tableId: 1, saleId: sale.id, saleIndex: 0, legacyStorage: null
+  }), error => error.code === "RESTAURANT_SALE_ALREADY_SETTLED");
 });
