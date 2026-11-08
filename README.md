@@ -231,3 +231,11 @@ Detailed findings and acceptance evidence checklist: [CCAvenue integration revie
 ## Public Indian payment-provider GitHub research
 
 Reviewed vendor-maintained public SDKs and samples for Razorpay, Cashfree, PhonePe, Paytm and PayU, plus public third-party references for CCAvenue and multi-gateway architecture. The audit records useful implementation evidence, source limitations and patterns Aurelia intentionally does not copy: [Public GitHub provider reference audit](./docs/PUBLIC_GITHUB_PROVIDER_REFERENCE_AUDIT.md).
+
+## Mandatory device-primary architecture
+
+Aurelia's primary data plane is the device. Every PMS feature must read and commit its working state locally first; cloud sync, remote backup, analytics and backend services are supporting integrations and are never prerequisites for local startup or ordinary local workflows. Android uses native SQLite; browser/PWA uses IndexedDB. Cloud sync remains OFF by default.
+
+The runtime policy is enforced during bootstrap by `src/storage/local-first-runtime-policy.mjs`. It validates the platform's durable local repository and reports `sourceOfTruth: ON_DEVICE`, `cloudSyncEnabled: false` and `networkRequiredForStartup: false`. See [the complete device-primary contract](./docs/LOCAL_DEVICE_PRIMARY_ARCHITECTURE.md).
+
+**Important implementation boundary:** the runtime policy is in place, but the legacy operational UI has not completed repository cutover (`uiCutover: false`). Do not claim every feature is fully migrated until all screens and mutation paths use the canonical on-device repository and pass offline, restart, migration, transaction and recovery tests. This does not change gateway trust: actual provider authorization/capture still requires provider connectivity and authoritative verification; its local intent and recovery state remain on-device.
