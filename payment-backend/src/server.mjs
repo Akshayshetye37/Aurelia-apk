@@ -471,8 +471,17 @@ const paymentRepository = new FirestorePaymentRepository({
 const providerCatalogue = implementedProviderAdapters().map(id => ({
   id, label: PROVIDERS[id].label, environments: ['test', 'live'],
   credentials: PROVIDERS[id].credentials.map(({ key, label, type, secret, required }) => ({ key, label, type, secret, required })),
-  capabilities: { testCheckout: true, liveCollection: false, verifiedWebhook: true,
-    providerStatusLookup: true, folioSettlement: false, refunds: false, reconciliation: false },
+  capabilities: {
+    adapterOperations: true,
+    cloudCheckoutApi: PROVIDERS[id].cloudCheckoutApiEnabled === true,
+    testCheckout: PROVIDERS[id].cloudCheckoutApiEnabled === true,
+    liveCollection: false,
+    verifiedWebhook: PROVIDERS[id].cloudCheckoutApiEnabled === true,
+    providerStatusLookup: PROVIDERS[id].cloudCheckoutApiEnabled === true,
+    folioSettlement: false,
+    refunds: false,
+    reconciliation: false
+  },
   productionReady: false
 }));
 function providerTenantDoc(tenantId, provider, environment) {
@@ -772,6 +781,8 @@ app.get('/v1/payments/capabilities', requireTenantPaymentActor, async (req, res)
       const state = snap.exists ? snap.data() : {};
       return {
         provider: provider.id, label: provider.label, environment, adapterEnvironment,
+        adapterWired: provider.capabilities.adapterOperations === true,
+        cloudCheckoutApiEnabled: provider.capabilities.cloudCheckoutApi === true,
         capabilities: provider.capabilities, productionReady: provider.productionReady,
         configured: state.configured === true,
         credentialsValidated: state.credentialsValidated === true,
