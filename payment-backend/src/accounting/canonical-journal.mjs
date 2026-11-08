@@ -83,6 +83,9 @@ function balancedEntry({ tenantId, folioId, transactionId, provider, type, lines
     .digest('hex');
   return Object.freeze({
     schemaVersion: 1,
+    postingEligible: false,
+    postingAuthorization: "NOT_AUTHORIZED",
+    chartOfAccountsStatus: "PROPOSAL_ONLY",
     journalId,
     ...canonical,
     debitTotalMinor: debits,
