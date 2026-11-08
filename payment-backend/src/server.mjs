@@ -651,6 +651,11 @@ async function updateRefundEvidence(refundRef, intentRef, remote, record) {
 
 app.post('/v1/payments/intents/:intentId/refunds', requireTenantAdmin,
   express.json({ limit: '2kb', strict: true }), async (req, res) => {
+    // Provider refund dispatch is a financial side effect. Require the explicit,
+    // owner-approved refund-processing capability before reserving or dispatching.
+    // Status lookup remains available through the GET route for safe recovery.
+    const refundBlocked = await enforcePaymentControl(req, res, 'refund_processing');
+    if (refundBlocked) return refundBlocked;
     const { intentId } = req.params, amountMinor = req.body?.amountMinor;
     const idempotencyKey = idempotencyOf(req) || req.body?.idempotencyKey;
     const reason = req.body?.reason == null ? 'Customer refund' : req.body.reason;
