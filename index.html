@@ -1,53 +1,37 @@
 <!--
-AURELIA PMS — PROJECT LOCATION, IMPLEMENTATION STATUS AND RELEASE BOUNDARY
+AURELIA PMS — PROJECT LOCATION, VERIFIED STATUS AND RELEASE BOUNDARY
 Repository: https://github.com/Akshayshetye37/Aurelia-apk
 Project root: /
 Active branch: feature/phase-7-pms-persistence
-Pull request: https://github.com/Akshayshetye37/Aurelia-apk/pull/11 (DRAFT; UNMERGED)
-Current source head: 00a6e07c71d1652723894e646a5bdea0871de52c (8 November 2026; backend CI in progress)
+Pull request: https://github.com/Akshayshetye37/Aurelia-apk/pull/11 (OPEN; DRAFT; UNMERGED)
+Source commit reviewed: dce2ecca07072e7aba8b8ebe06c40cac007119b6 (8 November 2026)
 
-LATEST CI FOR CURRENT SOURCE HEAD — infrastructure and settlement passed; backend and PMS packaging remain pending:
-- Payment backend CI: IN PROGRESS — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552471
-- Infrastructure validation: SUCCESS — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552405
-- Settlement foundation CI: SUCCESS — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552584
-- PMS source tests / production packaging: PENDING — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471548691
-These are CI results only. They do not prove Android Gradle/R8 compilation, physical-device acceptance, merchant UAT, production deployment or release signing.
+LATEST CI:
+- Payment backend CI: PASSED — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177493
+- Infrastructure validation: PASSED — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177384
+- Settlement foundation CI: PASSED — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177596
+- Android PMS debug build: FAILED during Kotlin compilation — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177382
+  Exact error: AureliaPlayIntegrityClient.kt:58 — unresolved reference IntegrityTokenRequest.
+  Capacitor generation, native patching and sync passed. APK signature/package verification and artifact upload were skipped.
+- Gradle wrapper download timeout was increased to 120 seconds; the next run reached compilation.
 
-IMPLEMENTED PMS FOUNDATIONS:
-- Local-first browser IndexedDB and Android native SQLite repositories; separate Firestore payment backend.
-- Tenant/property-scoped canonical repository reads and deterministic read-only legacy booking shadow planning.
-- Full operational UI repository cutover is incomplete; uiCutover=false. No full historical snapshot import or canonical parity acceptance has occurred.
-- Canonical payment-row source identified as booking.pays[]; accounting mapper emits immutable, evidence-gated journal proposals only.
-- Android Play Integrity and hardware key-attestation server foundations; release R8 preservation rules are wired for Razorpay, Cashfree and Paytm, but Android build/device qualification is outstanding.
+IMPLEMENTED FOUNDATIONS:
+- Local-first PMS: IndexedDB, Android SQLite/Capacitor bridge, tenant/property-scoped repository reads and read-only legacy booking shadow planner.
+- Six backend-registered payment providers and six test/UAT Android checkout handoffs: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay.
+- CCAvenue hosted checkout/status/notification modules exist but are unqualified and test-only; it is not registered or activatable.
+- Accounting journal and booking.pays[] mapping produce evidence-gated proposals only; no production ledger writer or scheduled reconciliation.
+- Play Integrity/hardware key-attestation foundations and Android R8 configuration exist; Android compilation/device acceptance is not proven.
 
-PAYMENT / ACCOUNTING:
-- Six gateways have backend adapters/routes and test/UAT Android checkout handoffs: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay.
-- CCAvenue hosted-checkout/status/notification modules are unqualified and hard-restricted to test only. The backend rejects live CCAvenue credential onboarding and live notifications; CCAvenue remains absent from the provider factory and cannot be activated. Its AES compatibility codec still requires official merchant-kit vectors and sandbox interoperability.
-- CCAvenue release blockers: merchant-issued AES interoperability vector; account-confirmed notification authentication contract; registered static egress IP for Merchant API; current official Android SDK package/API; general refund API and merchant sandbox UAT.
-- 0 of 7 catalogue gateways are end-to-end production-qualified.
-- Canonical journal mapping remains PROPOSAL_ONLY / NOT_AUTHORIZED. Capture Dr 2020 / Cr 1010; actual processor fee Dr 5010 / Cr 2020; verified refund Dr 1010 / Cr 2020 are provisional only. Finance must approve Account 2020 normal balance and chart treatment. No production journal writer, historical backfill or automated reconciliation scheduler is connected.
+BLOCKERS:
+- Fix Kotlin IntegrityTokenRequest compilation and pass generated Android build, R8 and artifact verification.
+- Complete merchant UAT and lifecycle qualification for all providers; obtain official CCAvenue merchant kit, crypto vectors, notification contract, Android SDK and general refund API.
+- Finance approval for Account 2020 and canonical accounting; implement and verify posting writer/reconciliation only after approval.
+- Complete PMS UI cutover, migration parity, security/operational acceptance and physical-device tests.
 
-REMAINING FOR PRODUCTION:
-1. Finance/data-owner approval of chart of accounts, Account 2020 normal balance and canonical PMS ledger/source mapping.
-2. Read-only historical PMS inventory, cancellation/refund joins, reconciliation parity report, migration replay and rollback acceptance.
-3. Complete IndexedDB/native repository parity and migrate every booking, room, guest, folio and payment UI read/write; only then enable uiCutover.
-4. Implement and test the authorized transactional journal writer, idempotent settlement/refund posting, durable read-back and reconciliation after accounting approval.
-5. Complete Android Gradle/R8 build, instrumentation, Play Console/App Signing linkage and physical-device security/recovery tests.
-6. Complete merchant-specific sandbox/UAT for each intended gateway, including webhook authenticity, authoritative status, timeout/duplicate recovery and refund lifecycle. CCAvenue remains disabled until its merchant kit and all gates are verified.
-7. Verify deployed IAM, Secret Manager, Firestore rules, HTTPS/load balancer and webhook reachability, static egress, observability, alerting, backup/restore, disaster recovery and incident runbooks.
-8. Complete security/accounting/product approvals and sign a release candidate from the exact approved commit.
-
-LOCKED SAFEGUARDS:
-- Live gateway collection: OFF.
-- Automatic settlement: OFF.
-- Automatic refund-to-folio posting: OFF.
-- Optional cloud sync: OFF by default.
-- CCAvenue adapter registration: DISABLED.
-- Android production release authorization: NOT GRANTED.
-- Production deployment: NOT AUTHORIZED.
-Never embed merchant credentials, webhook secrets, signing keys or backend secrets in the client. Client callbacks and device-supplied hardware metadata are not payment or enrollment authorization.
-See README.md, docs/CCAVENUE_INTEGRATION.md and docs/PMS_CANONICAL_ACCOUNTING_INTEGRATION.md for detailed boundaries.
+RELEASE SAFETY:
+Live collection OFF; automatic settlement OFF; automatic refund posting OFF; production deployment/release signing NOT AUTHORIZED. PR #11 is draft and unmerged. Backend CI success is not an APK build or production acceptance.
 -->
+
 
 
 
