@@ -338,6 +338,16 @@ export async function commitInventoryItemMutation({
   }
   if (operation === "update" && priorItem && expectedPreviousItem &&
       !sameJson(comparableEntity(priorItem), comparableEntity(expectedPreviousItem))) {
+    throw fail("CANONICAL_INVENTORY_DIVERGENCE", "The inventory snapshot changed in another session; reload before editing.");
+  }
+  if (!Number.isSafeInteger(Number(nextItem.q)) || Number(nextItem.q) < 0 ||
+      !Number.isSafeInteger(Number(nextItem.ro)) || Number(nextItem.ro) < 0) {
+    throw fail("INVALID_INVENTORY_QUANTITY", "Inventory quantity and reorder level must be non-negative whole units.");
+  }
+  if (![nextItem.u, nextItem.price].every(value => value == null ||
+      (Number.isFinite(Number(value)) && Number(value) >= 0 && Number.isSafeInteger(Math.round(Number(value) * 100)) && Math.abs(Number(value) * 100 - Math.round(Number(value) * 100)) < 1e-7))) {
+    throw fail("INVALID_INVENTORY_PRICE", "Inventory unit cost and sell price must be non-negative values with at most two decimal places.");
+  }
     throw fail("CANONICAL_INVENTORY_DIVERGENCE", "Inventory item changed in another session; reload before editing.");
   }
   const committedAt = now();
