@@ -19,12 +19,14 @@
 ## Dependency-ordered delivery sequence
 
 1. **Freeze the financial domain contract.** Inspect the real PMS reservation, folio, currency, balance, journal and version/concurrency model. Map it explicitly to payment intents. Do not create a parallel authoritative ledger or migrate records by assumption.
-2. **Harden the payment core.** Define state transitions, idempotency, order identity, immutable provider evidence, webhook inbox and outbox semantics. Add race, duplicate, timeout and process-restart tests.
-3. **Complete the reference providers.** Make Razorpay and Cashfree pass one shared adapter contract, including authoritative status, raw-body webhook verification, refund creation and refund status. Keep test/live environment separation strict.
-4. **Complete accounting and recovery.** Post capture/refund entries atomically to the confirmed PMS folio schema; implement bounded reconciliation, lease/claim semantics, retry policy, observability and operator controls.
-5. **Integrate the app.** Wire the HTTPS client to the actual Firebase session provider, derive provider UI from backend capabilities, handle pending/unknown states, and test Android lifecycle/offline recovery.
-6. **Add providers independently.** Implement PayU, PhonePe, Paytm, JioPay and CCAvenue one at a time, each with product-version confirmation, adapter contract tests and merchant sandbox evidence.
-7. **Qualify and release.** Complete security review, deployment/IAM, webhook reachability, UAT, refund/reconciliation drills, operational runbooks and signed release authorization. Live collection remains blocked until every gate is evidenced.
+2. **Preserve and verify the shared payment core.** Keep the persisted intent, provider-order binding, amount/currency checks, durable webhook inbox, idempotent state transitions and settlement authorization as shared controls. Extend them only through provider-neutral contracts and regression tests.
+3. **Qualify all six registered providers independently.** Run merchant-specific checkout, callback/webhook, authoritative status, timeout recovery and full/partial refund scenarios for Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay. Keep each provider's signature, event identity, API version and retry semantics provider-specific.
+4. **Complete accounting and recovery.** Post capture/refund entries atomically to the confirmed canonical PMS folio schema; implement bounded reconciliation, lease/claim semantics, retry policy, observability and operator controls.
+5. **Integrate and qualify the app.** Verify the HTTPS client against the actual Firebase session provider, derive provider UI from backend capabilities, handle pending/unknown states, and test Android lifecycle/offline recovery on physical devices for all six checkout handoffs.
+6. **Keep CCAvenue isolated.** Do not register it by analogy. Require the merchant kit, AES interoperability vectors, callback authentication, authoritative status, general refund contract and Android acceptance before implementing its complete adapter.
+7. **Release only on evidence.** Complete security review, deployment/IAM, webhook reachability, UAT, refund/reconciliation drills, operational runbooks and signed release authorization. Live collection remains blocked until every gate is evidenced.
+
+**Detailed cross-provider controls and acceptance matrix:** [All-provider production hardening review](./ALL_PROVIDER_PRODUCTION_HARDENING_REVIEW.md).
 
 ## Architecture invariants
 
