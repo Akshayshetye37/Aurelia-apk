@@ -16,15 +16,15 @@ test('cloud API route exposure is separate from adapter factory wiring', async (
   for (const item of catalogue.filter(item => !item.cloudCheckoutApiEnabled)) {
     assert.ok(['payu', 'phonepe', 'paytm', 'jiopay', 'ccavenue'].includes(item.id));
   }
-  for (const provider of ['razorpay', 'cashfree']) assert.equal(registry.PROVIDERS[provider].cloudCheckoutApiEnabled, true);
-  for (const provider of ['payu', 'phonepe', 'paytm', 'jiopay', 'ccavenue']) assert.equal(registry.PROVIDERS[provider].cloudCheckoutApiEnabled, false);
+  for (const provider of ['razorpay', 'cashfree', 'ccavenue']) assert.equal(registry.PROVIDERS[provider].cloudCheckoutApiEnabled, true);
+  for (const provider of ['payu', 'phonepe', 'paytm', 'jiopay']) assert.equal(registry.PROVIDERS[provider].cloudCheckoutApiEnabled, false);
 });
 
 test('only providers with all seven concrete operations are registered', () => {
   assert.deepEqual(implementedProviderAdapters(), ['razorpay','cashfree','payu','phonepe','paytm','jiopay','ccavenue']);
   assert.deepEqual(providerCapabilities('ccavenue'), ['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
   assert.equal(providerQualificationStatus('ccavenue').implemented, true);
-  assert.equal(providerQualificationStatus('ccavenue').cloudCheckoutApiEnabled, false);
+  assert.equal(providerQualificationStatus('ccavenue').cloudCheckoutApiEnabled, true);
   assert.equal(providerQualificationStatus('ccavenue').refunds, false);
 });
 
@@ -86,4 +86,28 @@ test('CCAvenue is factory-wired for documented checkout/status/webhook operation
     /ccavenue_standard_refund_requires_merchant_specific_api/);
   await assert.rejects(() => adapter.getRefundStatus({ refundId: 'refund-1' }),
     /ccavenue_refund_status_requires_merchant_specific_api/);
+});
+
+
+test('CCAvenue encryption round-trips and creates a server-encrypted hosted checkout request', async () => {
+  const { createProviderAdapter } = await import('../src/providers/factory.mjs');
+  const { encryptCcaVenue, decryptCcaVenue } = await import('../src/providers/ccavenue.mjs');
+  const workingKey = '0123456789ABCDEF0123456789ABCDEF';
+  const plain = 'merchant_id=123456&order_id=aur_test_order_1&currency=INR&amount=12.34';
+  assert.equal(decryptCcaVenue(encryptCcaVenue(plain, workingKey), workingKey), plain);
+  const adapter = createProviderAdapter('ccavenue', {
+    credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey },
+    environment: 'test'
+  });
+  const order = await adapter.createOrder({
+    orderId: 'aur_test_order_1', amountMinor: 1234, currency: 'INR',
+    returnUrl: 'https://merchant.example/payment-return'
+  });
+  assert.equal(order.orderId, 'aur_test_order_1');
+  assert.equal(order.amountMinor, 1234);
+  assert.equal(order.checkout.method, 'POST');
+  assert.equal(order.checkout.fields.access_code, 'ACCESSCODE123');
+  const decoded = decryptCcaVenue(order.checkout.fields.encRequest, workingKey);
+  assert.match(decoded, /merchant_id=123456/);
+  assert.match(decoded, /amount=12\.34/);
 });
