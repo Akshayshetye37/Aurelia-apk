@@ -1,18 +1,22 @@
 # CCAvenue integration decision and implementation boundary
 
-**Status: NOT IMPLEMENTED / NOT ENABLED.** CCAvenue remains catalogue-only. Do not advertise it as an implemented adapter, do not expose checkout routes, and do not enable live collection, settlement or refund posting.
+**Status: ADAPTER NOT REGISTERED / NOT PRODUCTION-ENABLED.** Isolated hosted-checkout, AES envelope, status-verification and notification-reconciliation modules now exist, with schema-only credential storage. CCAvenue is not an implemented seven-operation adapter. Do not expose a customer checkout route or enable live collection, settlement or refund posting.
 
 ## Correct integration model
 
-## Important distinction: Web Integration v3.1 is not the Mobile SDK flow
+## Important distinction: Hosted Web Integration v3.3 is not the Mobile SDK flow
 
-The supplied Integration Document v3.1 describes the classic hosted billing-page
+The public Integration Document v3.3 (November 2021) describes the classic hosted billing-page
 flow. It posts `encRequest` and `access_code` to
 `/transaction/transaction.do?command=initiateTransaction`; the request is
 encrypted using the merchant integration kit's `AesCryptUtil` and the
 merchant's encryption key. The guide's sample calls that value `enc_key`.
-It does not specify the MD5(working_key) key-and-IV construction in the
-submitted Node.js snippet. That construction is therefore not adopted.
+The public guide does not specify the MD5 key derivation, fixed IV, AES mode
+or padding. The repository now contains an isolated legacy-compatibility codec
+using MD5-derived AES-128-CBC and the fixed 00..0f IV pattern corroborated by
+public integration code. This is not an official CCAvenue source-code release
+or a merchant-approved test vector; it remains unqualified until checked
+against the merchant's current AesCryptUtil utility and sandbox vectors.
 
 The v3.1 guide also describes a different merchant parameter contract:
 `merchant_id`, `order_id`, `currency`, `amount`, `redirect_url`,
@@ -35,7 +39,7 @@ The Mobile SDK v1.7 flow is distinct:
   It does not receive a classic `encRequest` token and does not launch an
   invented Activity class.
 
-The public v3.1 PDF is not a substitute for the current merchant-specific
+The public v3.3 PDF is not a substitute for the current merchant-specific
 Mobile SDK kit. Neither guide provides enough evidence to safely implement
 the precise AES key derivation/padding/encoding in this project without the
 official server sample or known-answer test vectors. Do not infer an IV from
@@ -90,8 +94,9 @@ The mobile guide also points to a merchant-specific Android SDK package and
 private package access. The exact SDK binary, current package coordinates,
 dependency credentials, Android initialization API, callback API, encryption
 utility/key derivation and merchant endpoint configuration must come from the
-merchant's current official kit. No guessed class name, dependency, AES mode,
-IV, key derivation or endpoint is accepted.
+merchant's current official kit. No unverified class name, dependency or SDK API is enabled. The legacy AES
+compatibility primitive remains a qualification candidate, not a production
+protocol assertion.
 
 ## Required merchant integration material
 
