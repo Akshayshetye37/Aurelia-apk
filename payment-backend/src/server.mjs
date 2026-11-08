@@ -1069,12 +1069,12 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
       : provider === 'cashfree' ? event?.data?.order?.order_id
       : provider === 'payu' ? event?.txnid
       : provider === 'phonepe' ? paymentEntity?.merchantOrderId
-      : provider === 'paytm' ? event?.ORDERID : event?.merchantTxnNo;
+      : provider === 'paytm' ? event?.ORDERID : provider === 'ccavenue' ? event?.order_id : event?.merchantTxnNo;
     const paymentId = provider === 'razorpay' ? paymentEntity?.id
       : provider === 'cashfree' ? paymentEntity?.cf_payment_id
       : provider === 'payu' ? event?.mihpayid
       : provider === 'phonepe' ? (paymentEntity?.transactionId || paymentEntity?.paymentDetails?.[0]?.transactionId)
-      : provider === 'paytm' ? event?.TXNID : event?.pgTransactionId;
+      : provider === 'paytm' ? event?.TXNID : provider === 'ccavenue' ? event?.tracking_id : event?.pgTransactionId;
     if (!providerOrderId || !paymentId) return res.status(200).json({ received: true, ignored: true });
     const providerOrderHash = crypto.createHash('sha256')
       .update(tenantId + ':' + provider + ':' + environment + ':' + providerOrderId).digest('hex');
