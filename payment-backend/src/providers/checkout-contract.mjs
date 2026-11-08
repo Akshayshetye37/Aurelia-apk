@@ -11,7 +11,8 @@ const ENVIRONMENTS = Object.freeze({
   payu: ["test", "live"],
   phonepe: ["test", "live"],
   paytm: ["staging", "production"],
-  jiopay: ["uat", "production"]
+  jiopay: ["uat", "production"],
+  ccavenue: ["test", "live"]
 });
 const PROVIDERS = new Set(Object.keys(ENVIRONMENTS));
 
@@ -59,6 +60,11 @@ function checkoutPayload(provider, result) {
           !nonEmpty(result.checkout.fields.key) || !nonEmpty(result.checkout.fields.hash)) {
         throw new Error("payu_checkout_payload_invalid");
       }
+      return { action: result.checkout.action, method: "POST", fields: { ...result.checkout.fields } };
+    case "ccavenue":
+      if (!result.checkout || !secureUrl(result.checkout.action) || result.checkout.method !== "POST" ||
+          !result.checkout.fields || !nonEmpty(result.checkout.fields.encRequest) ||
+          !nonEmpty(result.checkout.fields.access_code)) throw new Error("ccavenue_checkout_payload_invalid");
       return { action: result.checkout.action, method: "POST", fields: { ...result.checkout.fields } };
     case "paytm":
       if (!result.checkout || !nonEmpty(result.checkout.mid) ||
