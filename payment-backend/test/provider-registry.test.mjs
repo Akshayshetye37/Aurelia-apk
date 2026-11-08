@@ -12,12 +12,11 @@ test('cloud API route exposure is separate from adapter factory wiring', async (
   const registry = await import('../src/providers/registry.mjs');
   const catalogue = registry.publicProviderCatalogue();
   const exposed = catalogue.filter(item => item.cloudCheckoutApiEnabled).map(item => item.id);
-  assert.deepEqual(exposed, ['razorpay', 'cashfree', 'ccavenue']);
-  for (const item of catalogue.filter(item => !item.cloudCheckoutApiEnabled)) {
-    assert.ok(['payu', 'phonepe', 'paytm', 'jiopay'].includes(item.id));
+  assert.deepEqual(exposed, ['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'ccavenue', 'jiopay']);
+  assert.equal(catalogue.filter(item => item.cloudCheckoutApiEnabled).length, 7);
+  for (const provider of ['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'ccavenue', 'jiopay']) {
+    assert.equal(registry.PROVIDERS[provider].cloudCheckoutApiEnabled, true);
   }
-  for (const provider of ['razorpay', 'cashfree', 'ccavenue']) assert.equal(registry.PROVIDERS[provider].cloudCheckoutApiEnabled, true);
-  for (const provider of ['payu', 'phonepe', 'paytm', 'jiopay']) assert.equal(registry.PROVIDERS[provider].cloudCheckoutApiEnabled, false);
 });
 
 test('six full lifecycle adapters and CCAvenue partial adapter are registered', () => {
@@ -45,8 +44,8 @@ test('all wired adapters expose every lifecycle operation but remain release-gat
     const status = providerQualificationStatus(provider);
     assert.equal(status.implemented,true);
     assert.equal(status.liveCollection,false);
-    assert.equal(status.testCheckout,['razorpay','cashfree'].includes(provider));
-    assert.equal(status.cloudCheckoutApiEnabled,['razorpay','cashfree'].includes(provider));
+    assert.equal(status.testCheckout,true);
+    assert.equal(status.cloudCheckoutApiEnabled,true);
     assert.equal(status.merchantUatRequired,true);
     assert.equal(status.canonicalFolioPostingRequired,true);
     assert.equal(status.physicalDeviceAcceptanceRequired,true);
