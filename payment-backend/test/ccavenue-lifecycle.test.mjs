@@ -47,6 +47,22 @@ test('CCAvenue AES codec rejects malformed ciphertext, invalid keys and oversize
   assert.throws(() => codec.encrypt(''));
 });
 
+test('CCAvenue unqualified crypto cannot target live status or checkout endpoints', () => {
+  assert.throws(() => new CCAvenueVerificationService({
+    encryptionKey: API_KEY, accessCode: ACCESS, environment: 'live'
+  }), /test_environment_only/);
+  assert.throws(() => new CCAvenueHostedCheckout({
+    merchantId: '123456', accessCode: ACCESS, hostedCheckoutKey: HOSTED_KEY, environment: 'live'
+  }), /checkout_credentials_invalid/);
+});
+
+test('CCAvenue status verifier rejects tracking references longer than the documented 12 digits', async () => {
+  await assert.rejects(service(async () => apiResponse(jsonStatus())).verifyOrderStatus({
+    orderId: EXPECTED.orderId, trackingId: '1234567890123',
+    expectedAmountMinor: EXPECTED.amountMinor, expectedCurrency: 'INR'
+  }), /binding_invalid/);
+});
+
 test('CCAvenue status verifier sends encrypted API v1.1 orderStatusTracker request to sandbox endpoint', async () => {
   let request;
   const verifier = service(async (url, options) => {
