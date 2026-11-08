@@ -452,3 +452,99 @@ export async function commitExpenseMutation({
     expenseVersion: committed.entities[0].version
   });
 }
+
+/** Atomically posts a restaurant table bill to an occupied guest folio. */
+export async function commitRestaurantFolioCharge({
+  bridge, snapshot, bookingId, tableId, saleId, saleIndex,
+  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
+  now = () => new Date().toISOString()
+} = {}) {
+  if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
+    throw new TypeError("A bound transactional PMS repository bridge is required");
+  }
+  if (!snapshot || !Array.isArray(snapshot.b) || !Array.isArray(snapshot.t) ||
+      !Array.isArray(snapshot.sales) || !Number.isInteger(saleIndex) || saleIndex < 0 ||
+      bookingId == null || tableId == null || saleId == null) {
+    throw new TypeError("A complete PMS snapshot and stable booking, table and sale IDs are required");
+  }
+  if (bridge.compatibilityWrite && typeof bridge.compatibilityWrite.then === "function") await bridge.compatibilityWrite;
+  const snapshotRow = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  if (!snapshotRow?.data?.snapshot) throw fail("CANONICAL_SNAPSHOT_MISSING", "The canonical recovery snapshot is missing; restaurant bill was not posted.");
+  const priorSnapshot = snapshotRow.data.snapshot;
+  const priorBooking = findBooking(priorSnapshot, bookingId);
+  const nextBooking = findBooking(snapshot, bookingId);
+  const priorTable = (priorSnapshot.t || []).find(row => String(row?.n) === String(tableId));
+  const nextTable = (snapshot.t || []).find(row => String(row?.n) === String(tableId));
+  const nextSale = snapshot.sales[saleIndex];
+  if (!priorBooking || !nextBooking || !priorTable || !nextTable) {
+    throw fail("RESTAURANT_FOLIO_ENTITY_MISSING", "The booking or restaurant table is missing from the canonical snapshot.");
+  }
+  if (!nextSale || String(nextSale.id) !== String(saleId) || nextSale.postedToHotel !== true ||
+      String(nextSale.room) !== String(nextBooking.room)) {
+    throw fail("RESTAURANT_SALE_INVALID", "The restaurant sale does not match the target guest folio.");
+  }
+  if (nextBooking.st !== "in" || !Array.isArray(nextBooking.ch) || !Array.isArray(priorBooking.ch)) {
+    throw fail("RESTAURANT_GUEST_NOT_IN_HOUSE", "Only a currently checked-in guest can receive a restaurant folio charge.");
+  }
+  const addedCharges = nextBooking.ch.slice(priorBooking.ch.length);
+  const saleAmount = Number(nextSale.a);
+  const addedAmount = addedCharges.reduce((sum, row) => sum + (Number(row?.[1]) || 0), 0);
+  if (!addedCharges.length || !Number.isFinite(saleAmount) || saleAmount <= 0 ||
+      Math.abs(Math.round(saleAmount * 100) - Math.round(addedAmount * 100)) > 0) {
+    throw fail("RESTAURANT_CHARGE_AMOUNT_MISMATCH", "The posted folio charges do not equal the restaurant sale total.");
+  }
+  const [bookingRow, tableRow, saleRow] = await Promise.all([
+    bridge.fetchEntity("booking", String(bookingId)),
+    bridge.fetchEntity("restaurant_table", String(tableId)),
+    bridge.fetchEntity("restaurant_sale", String(saleId))
+  ]);
+  if (bookingRow?.data && !sameJson(comparableEntity(bookingRow.data), comparableEntity(priorBooking))) {
+    throw fail("CANONICAL_BOOKING_DIVERGENCE", "Guest folio changed in canonical storage; reload before posting.");
+  }
+  if (tableRow?.data && !sameJson(comparableEntity(tableRow.data), comparableEntity(priorTable))) {
+    throw fail("CANONICAL_RESTAURANT_TABLE_DIVERGENCE", "Restaurant table changed in canonical storage; reload before posting.");
+  }
+  if (saleRow) throw fail("RESTAURANT_SALE_ALREADY_POSTED", "This restaurant sale ID already exists; duplicate folio posting was blocked.");
+  const committedAt = now();
+  const payload = { bookingId: String(bookingId), tableId: String(tableId), saleId: String(saleId), amountPaise: Math.round(saleAmount * 100) };
+  const committed = await bridge.mutateEntities([
+    {
+      entityType: "booking", entityId: String(bookingId), expectedVersion: bookingRow?.version ?? 0,
+      eventType: "booking.restaurant_charge_posted", eventPayload: payload,
+      mutate: entity => { for (const key of Object.keys(entity)) delete entity[key]; Object.assign(entity, clone(nextBooking), { updatedAt: committedAt }); }
+    },
+    {
+      entityType: "restaurant_table", entityId: String(tableId), expectedVersion: tableRow?.version ?? 0,
+      eventType: "restaurant.table_order_cleared", eventPayload: payload,
+      mutate: entity => { for (const key of Object.keys(entity)) delete entity[key]; Object.assign(entity, clone(nextTable), { updatedAt: committedAt }); }
+    },
+    {
+      entityType: "restaurant_sale", entityId: String(saleId), expectedVersion: 0,
+      eventType: "restaurant.sale_posted_to_folio", eventPayload: payload,
+      mutate: entity => Object.assign(entity, clone(nextSale), { updatedAt: committedAt })
+    },
+    {
+      entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2", expectedVersion: snapshotRow.version,
+      eventType: "pms.snapshot_restaurant_folio_charge", eventPayload: payload,
+      mutate: entity => { entity.sourceKey = "aurelia_lodge_v2"; entity.snapshot = clone(snapshot); entity.updatedAt = committedAt; }
+    }
+  ]);
+  const [storedBooking, storedTable, storedSale, storedSnapshot] = await Promise.all([
+    bridge.fetchEntity("booking", String(bookingId)),
+    bridge.fetchEntity("restaurant_table", String(tableId)),
+    bridge.fetchEntity("restaurant_sale", String(saleId)),
+    bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")
+  ]);
+  if (!storedBooking || !storedTable || !storedSale || !storedSnapshot ||
+      !sameJson(comparableEntity(storedBooking.data), comparableEntity(nextBooking)) ||
+      !sameJson(comparableEntity(storedTable.data), comparableEntity(nextTable)) ||
+      !sameJson(comparableEntity(storedSale.data), comparableEntity(nextSale)) ||
+      !sameJson(storedSnapshot.data.snapshot, snapshot)) {
+    throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Restaurant folio transaction committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
+  }
+  return Object.freeze({
+    canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
+    booking: storedBooking, table: storedTable, sale: storedSale,
+    snapshotVersion: storedSnapshot.version, versions: committed.entities.map(row => row.version)
+  });
+}
