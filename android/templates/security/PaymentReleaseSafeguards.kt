@@ -25,6 +25,7 @@ internal object PaymentReleaseSafeguards {
         "ccavenue" to PaymentImplementationStatus.NOT_IMPLEMENTED
     )
 
+    @JvmStatic
     fun assertSandboxCheckoutAllowed(providerInput: String, environmentInput: String) {
         val provider = providerInput.trim().lowercase()
         val environment = environmentInput.trim().lowercase()
@@ -47,11 +48,15 @@ internal object PaymentReleaseSafeguards {
         }
     }
 
+    @JvmStatic
     fun isAutomaticSettlementAllowed(): Boolean = AUTOMATIC_SETTLEMENT
 
+    @JvmStatic
     fun isAutomaticRefundPostingAllowed(): Boolean = AUTOMATIC_REFUND_POSTING
 
+    @JvmStatic
     fun isLiveCollectionAllowed(): Boolean = LIVE_GATEWAY_COLLECTION
 
+    @JvmStatic
     fun publicStatus(): Map<String, String> = providers.mapValues { (_, status) -> status.name }
 }
