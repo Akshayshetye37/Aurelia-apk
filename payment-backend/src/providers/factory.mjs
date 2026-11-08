@@ -36,7 +36,20 @@ export function createProviderAdapter(providerId, options) {
 }
 
 export function implementedProviderAdapters() {
+  // This list is consumed by checkout routes, not by the catalogue. Include
+  // only providers whose complete lifecycle is implemented; partial adapters
+  // may still be constructed for isolated tests and qualification work.
   return Object.keys(FACTORIES).filter(providerId => providerId !== 'ccavenue');
+}
+
+export function checkoutEnabledProviderAdapters() {
+  // CCAvenue currently has working test checkout/status/webhook operations but
+  // no standard refund lifecycle. Its cloud checkout is test-only and remains
+  // live-collection blocked by providerQualificationStatus().
+  return Object.keys(FACTORIES).filter(providerId =>
+    PROVIDERS[providerId]?.cloudCheckoutApiEnabled === true &&
+    (providerId !== 'ccavenue' || PROVIDERS[providerId].environments.includes('test'))
+  );
 }
 
 export function providerCapabilities(providerId) {
