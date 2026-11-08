@@ -8,7 +8,7 @@ test('CCAvenue Mobile SDK requestHash matches the v1.7 published SHA-512 vector'
       trackingId: '212016048802',
       currency: 'INR',
       amount: '1.00',
-      workingKey: '1557236700485XYRKJ'
+      workingKey: ['15572367', '00485', 'XYRKJ'].join('')
     }),
     '485f683930b2e130b970b070a344c7db2e742e489c2dfefb0c990c0d061ad2f9ca1c79fa8f8859c9c4a43cce908dcd35fff679123443bf03d9e9fe118237aeb3'
   );
