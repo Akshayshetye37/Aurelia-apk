@@ -91,6 +91,7 @@ test("schema v1 to v3 migration snapshots every existing store before advancing 
 });
 
 test("schema v2 upgrade backfills the dedicated legacy backup store from immutable migration snapshots",async()=>{
+ const snapshot=JSON.stringify(state);
  const name="pms-schema-v2-legacy-backup";
  const opened=await new Promise((resolve,reject)=>{
   const request=indexedDB.open(name,2);
