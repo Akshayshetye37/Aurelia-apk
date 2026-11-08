@@ -72,8 +72,9 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
       paymentFlow: { type: 'PG_CHECKOUT', message: 'Aurelia folio payment',
         merchantUrls: { redirectUrl: input.returnUrl } }
     });
-    if ((data.merchantOrderId != null && data.merchantOrderId !== input.orderId) ||
-        (data.orderId != null && data.orderId !== input.orderId)) {
+    // PhonePe's response.orderId is its provider-generated order identifier;
+    // merchantOrderId is the merchant's request identifier.
+    if (data.merchantOrderId != null && data.merchantOrderId !== input.orderId) {
       throw new Error('phonepe_checkout_order_binding_mismatch');
     }
     const redirectUrl = data.redirectUrl || data.redirectInfo?.url;
@@ -142,12 +143,12 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
     });
     if ((data.originalMerchantOrderId != null && data.originalMerchantOrderId !== input.orderId) ||
         (data.merchantRefundId != null && data.merchantRefundId !== input.refundId) ||
-        (data.refundId != null && data.refundId !== input.refundId) ||
         data.amount !== input.amountMinor ||
         !['PENDING','COMPLETED'].includes(String(data.state || '').toUpperCase())) {
       throw new Error('phonepe_refund_response_binding_mismatch');
     }
-    return { provider: 'phonepe', refundId: data.merchantRefundId || data.refundId || input.refundId,
+    return { provider: 'phonepe', refundId: input.refundId,
+      providerRefundId: data.refundId == null ? null : String(data.refundId),
       status: String(data.state).toUpperCase(), amountMinor: data.amount, currency: 'INR' };
   }
   async getRefundStatus(input) {
@@ -156,10 +157,9 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
       encodeURIComponent(input.refundId) + '/status');
     if (data.originalMerchantOrderId !== input.orderId ||
         (data.merchantRefundId != null && data.merchantRefundId !== input.refundId) ||
-        (data.refundId != null && data.refundId !== input.refundId) ||
         !['PENDING','COMPLETED','FAILED'].includes(String(data.state || '').toUpperCase()) ||
         !minor(data.amount)) throw new Error('phonepe_refund_status_identity_mismatch');
-    return { provider: 'phonepe', refundId: input.refundId, providerRefundId: data.refundId || null,
+    return { provider: 'phonepe', refundId: input.refundId, providerRefundId: data.refundId == null ? null : String(data.refundId),
       status: data.state, amountMinor: data.amount, currency: 'INR' };
   }
 }
