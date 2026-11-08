@@ -854,7 +854,7 @@ app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express
     phonepe: { publicKey: 'clientId', secretKeys: ['clientSecret', 'webhookPassword'], extra: ['clientVersion', 'webhookUsername'], valid: x => typeof x.clientId === 'string' && /^\d{1,8}$/.test(String(x.clientVersion || '')) && typeof x.webhookUsername === 'string' && x.webhookUsername.length > 0 },
     paytm: { publicKey: 'mid', secretKeys: ['merchantKey'], extra: ['websiteName'], valid: x => typeof x.mid === 'string' && /^[A-Za-z0-9._@-]{6,50}$/.test(x.mid) && Buffer.byteLength(x.merchantKey || '', 'utf8') === 16 && typeof x.websiteName === 'string' && /^[A-Za-z0-9_-]{1,50}$/.test(x.websiteName) },
     jiopay: { publicKey: 'merchantId', secretKeys: ['saltOrHashKey'], extra: ['aggregatorId'], valid: x => typeof x.merchantId === 'string' && /^[A-Za-z0-9_-]{6,50}$/.test(x.merchantId) && (x.aggregatorId === undefined || typeof x.aggregatorId === 'string') },
-    ccavenue: { publicKey: 'merchantId', secretKeys: ['accessCode', 'workingKey'], valid: x => /^\\d{1,12}$/.test(String(x.merchantId || '')) && /^[A-Za-z0-9]{8,64}$/.test(x.accessCode || '') && typeof x.workingKey === 'string' && x.workingKey.length >= 16 && x.workingKey.length <= 128 }
+    ccavenue: { publicKey: 'merchantId', secretKeys: ['accessCode', 'workingKey'], valid: x => /^\d{1,12}$/.test(String(x.merchantId || '')) && /^[A-Za-z0-9]{8,64}$/.test(x.accessCode || '') && typeof x.workingKey === 'string' && x.workingKey.length >= 16 && x.workingKey.length <= 128 }
   };
   const def = definitions[provider], allowed = new Set(['environment', def?.publicKey, ...(def?.secretKeys || []), ...(def?.extra || [])].filter(Boolean));
   if (!def || !environment || !providerQualificationStatus(provider).implemented ||
@@ -1010,12 +1010,14 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
       : provider === 'cashfree' ? { paymentSessionId: order.paymentSessionId, checkoutUrl: order.checkoutUrl || null }
       : (provider === 'payu' || provider === 'paytm') ? { checkout: order.checkout }
       : provider === 'phonepe' ? { checkoutUrl: order.checkoutUrl }
+      : provider === 'ccavenue' ? { checkout: order.checkout }
       : { checkoutUrl: order.checkoutUrl, transactionContext: order.transactionContext };
     const checkoutValid = provider === 'razorpay' ? typeof checkoutData.keyId === 'string'
       : provider === 'cashfree' ? typeof checkoutData.paymentSessionId === 'string'
       : provider === 'payu' ? typeof checkoutData.checkout?.action === 'string' && checkoutData.checkout.action.startsWith('https://')
       : provider === 'paytm' ? typeof checkoutData.checkout?.txnToken === 'string'
       : provider === 'phonepe' ? typeof checkoutData.checkoutUrl === 'string' && checkoutData.checkoutUrl.startsWith('https://')
+      : provider === 'ccavenue' ? typeof checkoutData.checkout?.action === 'string' && checkoutData.checkout.action.startsWith('https://') && checkoutData.checkout.method === 'POST' && typeof checkoutData.checkout.fields?.encRequest === 'string'
       : typeof checkoutData.checkoutUrl === 'string' && checkoutData.checkoutUrl.startsWith('https://') && typeof checkoutData.transactionContext === 'string';
     if (!checkoutValid) throw new Error('provider_test_order_checkout_invalid');
     const response = { provider, environment: publicEnvironment, adapterEnvironment: environment,
@@ -1087,7 +1089,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
         orderSnap.data().providerOrderId && orderSnap.data().providerOrderId !== providerOrderId) {
       return fail(res, 409, 'payment_order_binding_mismatch');
     }
-    const status = await adapter.getPaymentStatus({ orderId: providerOrderId, paymentId });
+    const status = await adapter.getPaymentStatus({ orderId: providerOrderId, paymentId, ...(provider === 'ccavenue' ? { referenceNo: paymentId } : {}) });
     const sameOrder = status.orderId === providerOrderId;
     const samePayment = status.paymentId === paymentId;
     const sameCurrency = status.currency === orderSnap.data().currency;
@@ -1098,6 +1100,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
       : provider === 'phonepe' ? String(event.eventId || event.id || crypto.createHash('sha256').update(req.body).digest('hex'))
       : provider === 'payu' ? String(event.mihpayid || event.txnid || '')
       : provider === 'paytm' ? String(event.ORDERID || '') + ':' + String(event.TXNID || 'event')
+      : provider === 'ccavenue' ? String(event.order_id || '') + ':' + String(event.tracking_id || 'event')
       : String(event.merchantTxnNo || '') + ':' + String(event.pgTransactionId || 'event');
     if (typeof eventId !== 'string' || !webhookEventIdPattern.test(eventId)) return fail(res, 400, 'invalid_event_id');
     const inboxId = crypto.createHash('sha256').update(tenantId + ':' + provider + ':' + environment + ':' + eventId).digest('hex');
