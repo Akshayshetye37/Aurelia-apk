@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
-import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation } from "../src/storage/repository-operational-mutation-service.mjs";
+import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation } from "../src/storage/repository-operational-mutation-service.mjs";
 
 let sequence = 0;
 async function fixture() {
@@ -175,4 +175,46 @@ test("unused room removal leaves a durable tombstone and removes it from the rec
   assert.equal(result.room.data.retired, true);
   assert.equal(result.room.data.status, "retired");
   assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.rooms.length, 0);
+});
+
+test("guest profile creation assigns a stable ID and commits the guest entity with the snapshot", async () => {
+  const { bridge, snapshot } = await fixture();
+  snapshot.g = [{ id: "guest-1", n: "New Guest", ph: "9999999999", occ: [], veh: [] }];
+  const result = await commitGuestStateMutation({
+    bridge, snapshot, guestId: "guest-1", guestIndex: 0, operation: "create", legacyStorage: null
+  });
+  assert.equal(result.canonical, true);
+  assert.equal((await bridge.fetchEntity("guest", "guest-1")).data.n, "New Guest");
+  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.g[0].id, "guest-1");
+});
+
+test("legacy guest edit creates its first canonical entity without losing the expected prior profile", async () => {
+  const { bridge, snapshot } = await fixture();
+  const prior = { n: "Legacy Guest", ph: "12345", occ: [], veh: [] };
+  snapshot.g = [{ ...prior }];
+  await bridge.persistCompatibilitySnapshot(snapshot);
+  const next = { ...prior, id: "guest-legacy-1", ph: "54321" };
+  snapshot.g[0] = next;
+  const result = await commitGuestStateMutation({
+    bridge, snapshot, guestId: next.id, guestIndex: 0, operation: "update",
+    expectedPreviousGuest: prior, legacyStorage: null
+  });
+  assert.equal(result.guest.data.ph, "54321");
+  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.g[0].id, next.id);
+});
+
+test("guest edit rejects a divergent canonical profile", async () => {
+  const { bridge, snapshot } = await fixture();
+  const prior = { id: "guest-2", n: "Guest Two", ph: "111", occ: [], veh: [] };
+  snapshot.g = [prior];
+  await bridge.persistCompatibilitySnapshot(snapshot);
+  await bridge.mutateEntity({
+    entityType: "guest", entityId: "guest-2", expectedVersion: 0, eventType: "guest.seeded",
+    mutate: entity => Object.assign(entity, { ...prior, ph: "conflict" })
+  });
+  snapshot.g[0] = { ...prior, ph: "222" };
+  await assert.rejects(commitGuestStateMutation({
+    bridge, snapshot, guestId: "guest-2", guestIndex: 0, operation: "update",
+    expectedPreviousGuest: prior, legacyStorage: null
+  }), error => error.code === "CANONICAL_GUEST_DIVERGENCE");
 });
