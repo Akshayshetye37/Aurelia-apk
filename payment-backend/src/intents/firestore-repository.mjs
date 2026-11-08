@@ -295,7 +295,7 @@ export class FirestorePaymentRepository {
       );
       const lockRef = this.db.collection('paymentFolioLocks').doc(digest(tenantId + ':' + payload.folioId));
       const orderRef = this.db.collection('paymentProviderOrders').doc(
-        digest(tenantId + ':' + payload.provider + ':' + payload.environment + ':' + providerAccountId + ':' + remote.orderId)
+        digest(tenantId + ':' + payload.provider + ':' + payload.environment + ':' + remote.orderId)
       );
       const recoveredAt = this.clock().toISOString();
       const committed = await this.db.runTransaction(async tx => {
