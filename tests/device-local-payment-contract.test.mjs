@@ -221,3 +221,20 @@ test('guest profile create and edit commit stable guest entities with the canoni
   assert.match(handler, /booking history references it/);
   assert.doesNotMatch(handler, /persist\(\)/);
 });
+
+test('primary reservation creation commits guest, booking, folio advance and snapshot in one repository batch', () => {
+  const html = read('index.html');
+  const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
+  assert.match(runtime, /repository-reservation-service\.mjs/);
+  assert.match(runtime, /commitReservation: input => commitReservationToRepository/);
+  const start = html.indexOf('async function dsave()');
+  const end = html.indexOf('\nfunction cin(i)', start);
+  assert.ok(start >= 0 && end > start);
+  const handler = html.slice(start, end);
+  assert.match(handler, /await adapter\.commitReservation\(/);
+  assert.match(handler, /folioId:'booking-'/);
+  assert.match(handler, /deferPersistence:true/);
+  assert.match(handler, /await adapter\.commitGuestMutation\(/);
+  assert.doesNotMatch(handler, /persistCanonicalStrict/);
+  assert.match(handler, /CRITICAL: Reservation storage read-back failed/);
+});
