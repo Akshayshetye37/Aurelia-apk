@@ -243,11 +243,12 @@ apiKey field. Do not add or request one unless the merchant's current
 CCAvenue-issued kit explicitly requires it. Access code, encryption key and
 working key must never be exposed to Android, browser responses, logs,
 screenshots, or source control. Merchant API v1.3 also requires the merchant's
-server public IP to be registered by CCAvenue before API calls will work. These are intended future configuration fields only: the current admin
-credential-save/validation route deliberately rejects CCAvenue while no
-complete adapter is registered. Do not present the fields as currently
-configurable in the live admin UI. Enable that route only alongside the
-verified adapter, secure secret handling and merchant-kit crypto implementation.
+server public IP to be registered by CCAvenue before API calls will work. These are intended future configuration fields only: the dedicated CCAvenue credential route now stores the merchant ID, Access
+Code, API Encryption Key and notification working key in Secret Manager, with
+Mobile SDK fields optional. This route performs schema checks only and always
+sets credentialsValidated=false, sandboxTestPassed=false, webhookVerified=false
+and active=false. It does not validate credentials or enable checkout. The
+existing generic provider credential/validation route still rejects CCAvenue.
 
 The public website confirms product availability and onboarding/kit delivery.
 The published Merchant API v1.3 guide provides the orderStatusTracker API and
@@ -486,3 +487,27 @@ real GitHub Environment approvals, real WIF/IAM resources, the repository's
 actual Cloud Run/Terraform configuration, a reachable protected health-check
 path and an explicit traffic rollback operation. No production deployment
 workflow or live financial switch is enabled by this change.
+
+
+### Tenant-scoped notification endpoint and credential storage
+
+A dedicated owner/admin endpoint is now available at
+`PUT /v1/admin/providers/ccavenue/credentials`. It accepts test/live
+configuration and stores API credentials separately from the notification
+working key in Secret Manager. Mobile SDK `regId` and `workingKey` are
+optional until the official SDK is integrated. The route is schema-only:
+it always leaves credential validation, sandbox qualification, webhook
+qualification and provider activation false.
+
+The notification receiver is mounted at
+`POST /v1/webhooks/ccavenue/:tenantId/:environment`. It accepts JSON or
+URL-encoded `encResp`, resolves the order against the tenant-scoped
+`paymentProviderOrders` record, independently calls `orderStatusTracker`,
+then writes an idempotent record to `ccavenueNotificationInbox` only if the
+corresponding payment intent still matches tenant, provider, environment,
+order, amount and currency. It records
+`notificationSignatureVerified=false` because the public notification
+article does not publish a MAC/signature contract. It never writes the PMS
+ledger or issues a settlement command. The endpoint requires credentials to
+have been provisioned through the dedicated route and a corresponding
+CCAvenue provider-order/payment-intent binding to exist.
