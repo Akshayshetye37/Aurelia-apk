@@ -184,3 +184,24 @@ test('local payment, stay and room mutations share a serialization lock', () => 
   const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
   assert.match(runtime, /window\.AureliaLocalOperationalLock\(commit\)/);
 });
+
+test('room creation, editing and retirement use canonical room entities and stable room keys', () => {
+  const html = read('index.html');
+  const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
+  assert.match(runtime, /commitRoomCatalogMutation/);
+  assert.match(runtime, /commitRoomCatalogMutation: input => commitRoomCatalogMutation/);
+  const saveStart = html.indexOf('async function roomSave(i)');
+  const saveEnd = html.indexOf('\nfunction roomS(', saveStart);
+  assert.ok(saveStart >= 0 && saveEnd > saveStart);
+  const save = html.slice(saveStart, saveEnd);
+  assert.match(save, /await commitRoomCatalogState/);
+  assert.match(save, /existing\.n!==n/);
+  assert.match(save, /immutable rate snapshots/);
+  const deleteStart = html.indexOf('async function rdel(i)');
+  const deleteEnd = html.indexOf('\n/\* dining and menu \*/', deleteStart);
+  assert.ok(deleteStart >= 0 && deleteEnd > deleteStart);
+  const remove = html.slice(deleteStart, deleteEnd);
+  assert.match(remove, /operation:'remove'/);
+  assert.match(remove, /await commitRoomCatalogState/);
+  assert.doesNotMatch(remove, /S\.b=S\.b\.filter/);
+});
