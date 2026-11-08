@@ -118,3 +118,18 @@ test("standalone room mutation rejects stale entity versions without overwriting
   }), error => error.code === "CANONICAL_ROOM_DIVERGENCE");
   assert.equal((await bridge.fetchEntity("room", "101")).data.s, "maintenance");
 });
+
+test("reservation cancellation moves the booking into the cancelled collection in the same batch", async () => {
+  const { bridge, snapshot, booking, room } = await fixture();
+  snapshot.cancelled.unshift({ ...booking, st: "cancelled", cancelledStatus: "no_refund" });
+  snapshot.b.splice(0, snapshot.b.length);
+  const result = await commitOperationalStateMutation({
+    bridge, snapshot, bookingId: booking.id, roomId: room.n, eventType: "booking.cancelled",
+    legacyStorage: null
+  });
+  assert.equal(result.booking.data.st, "cancelled");
+  const saved = (await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot;
+  assert.equal(saved.b.length, 0);
+  assert.equal(saved.cancelled[0].id, booking.id);
+  assert.equal(saved.cancelled[0].st, "cancelled");
+});
