@@ -58,3 +58,31 @@ test('live collection requires tenant flags, evidence qualification and validate
   assert.match(server, /providerState\.data\(\)\.credentialsValidated !== true/);
   assert.match(server, /controls\.live_collection_enabled !== true/);
 });
+
+
+test('Android Play Integrity client is copied and SDK dependency is installed', () => {
+  const patcher = read('scripts/patch-android.js');
+  const client = read('android/templates/security/AureliaPlayIntegrityClient.kt');
+  assert.match(patcher, /'AureliaPlayIntegrityClient\.kt'/);
+  assert.match(patcher, /com\.google\.android\.play:integrity:1\.5\.0/);
+  assert.match(client, /setRequestHash\(serverRequestHash\)/);
+  assert.match(client, /play_integrity_provider_not_prepared/);
+});
+
+test('cloud device enrollment requires Google-decoded Play Integrity and hardware key attestation', () => {
+  const server = read('payment-backend/src/server.mjs');
+  const service = read('payment-backend/src/devices/firestore-device-service.mjs');
+  const verifier = read('payment-backend/src/devices/play-integrity-verifier.mjs');
+  assert.match(server, /scopes: \['https:\/\/www\.googleapis\.com\/auth\/playintegrity'\]/);
+  assert.match(server, /decodeGooglePlayIntegrityToken/);
+  assert.match(server, /integrityToken: body\.integrityToken/);
+  assert.match(service, /evaluatePlayIntegrityVerdict/);
+  assert.match(service, /playIntegrityAppRecognitionVerdict: integrity\.appRecognitionVerdict/);
+  assert.match(service, /playIntegrityAppLicensingVerdict: integrity\.appLicensingVerdict/);
+  assert.match(service, /playIntegrityDeviceRecognitionVerdicts/);
+  assert.match(service, /attestationSecurityLevel: verified\.securityLevel/);
+  assert.match(verifier, /PLAY_RECOGNIZED/);
+  assert.match(verifier, /LICENSED/);
+  assert.match(verifier, /MEETS_DEVICE_INTEGRITY/);
+  assert.match(verifier, /requestHash !== expectedRequestHash/);
+});
