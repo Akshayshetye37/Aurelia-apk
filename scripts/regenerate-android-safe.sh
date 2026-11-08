@@ -6,7 +6,7 @@ cd "$ROOT"
 
 echo "== 1/5: Verify application source =="
 npm test
-npm run build
+npm run android:build
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP="$ROOT/../Aurelia-apk-android-backup-$STAMP"
