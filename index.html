@@ -1,21 +1,22 @@
 <!--
-AURELIA PMS — CURRENT SOURCE AND RELEASE BOUNDARY
+AURELIA PMS — PROJECT LOCATION, IMPLEMENTATION STATUS AND RELEASE BOUNDARY
 Repository: https://github.com/Akshayshetye37/Aurelia-apk
 Project root: /
-Active Phase 7 branch: feature/phase-7-pms-persistence
-Base branch: feature/multi-provider-payment-backend
-Audited implementation baseline: 7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301 (8 November 2026)
-Current branch CI evidence recorded for this baseline: PMS source/build run 42403900585, settlement foundation run 42403905199, and payment backend/container/Terraform run 42403905213. These checks do not establish current-source Android APK compilation, physical-device acceptance, merchant UAT, production deployment or release signing.
-PHASE 7: tenant/property-scoped canonical list read and deterministic read-only legacy booking shadow planner are implemented. No real snapshot import, canonical UI cutover or financial migration has been performed. uiCutover=false.
-PRODUCTION WORK REMAINING: complete canonical PMS UI persistence cutover and legacy-data parity/import; stable room/booking identity migration; browser/Android repository contract and native instrumentation/device qualification; canonical folio ledger and atomic settlement/refund posting; trusted Pay Bridge authorization and recovery; merchant-specific UAT and full lifecycle reconciliation for each provider; implement CCAvenue only from its official merchant kit; deploy and harden cloud infrastructure, secrets, IAM, monitoring, backup/restore and incident response; complete security/accounting review, release signing and formal acceptance.
-GATEWAY STATUS: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay have backend adapters/routes and test/UAT checkout handoffs; CCAvenue remains catalogue-only. Zero of seven gateways are end-to-end production-qualified. Live gateway collection, automatic settlement, automatic refund posting and cloud sync remain OFF; production release is NOT AUTHORIZED.
-LOCAL IDENTITY: browser/PWA uses a cryptographically generated local identity in IndexedDB with a verified localStorage fallback. Android stores identity encrypted with AES-GCM using an Android Keystore key. Local identity is distinct from Firebase/cloud tenant identity.
-COMPATIBILITY PERSISTENCE: verified legacy saves are mirrored asynchronously to a versioned repository audit entity with an immutable outbox event. The legacy aurelia_lodge_v2 value is preserved. This is a compatibility/audit snapshot, not atomic dual-write of every domain entity.
-PAYMENTS: six backend adapters and cloud API routes are wired (Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay). Android checkout handoff covers all six backend-wired providers: Razorpay, Cashfree, PayU, PhonePe, JioPay and Paytm (test/UAT only). CCAvenue is catalogue-only with no concrete adapter. Zero of seven providers is production-ready; no merchant UAT or complete canonical folio settlement acceptance is recorded.
-ANDROID: Capacitor appId com.aurelia.pms; webDir www. Historical CI records a debug APK build, not production signing or physical-device qualification. Native process-death recovery and device acceptance remain open.
-RELEASE: cloud sync OFF; live gateway collection OFF; automatic gateway settlement OFF; automatic refund posting OFF; production release NOT AUTHORIZED.
-The application must never contain merchant credentials, webhook secrets, signing keys or backend secrets.
+Active branch: feature/phase-7-pms-persistence
+Pull request: https://github.com/Akshayshetye37/Aurelia-apk/pull/11 (DRAFT; UNMERGED)
+Latest verified source commit: 0331d145dc50d056d98404f751f1ec04ea04ec96 (8 November 2026)
+CURRENT CI: settlement foundation run 42453640895 PASSED (full app tests and production web build); payment backend run 42453640768 PASSED (272/272 tests, JS syntax, Cloud Run container/non-root and Terraform validation). These do NOT establish Android Gradle/R8 compilation, physical-device acceptance, merchant UAT, production deployment or release signing.
+IMPLEMENTED IN THIS UPDATE: evidence-gated mapper from canonical booking.pays[] payment rows to non-postable canonical journal proposals; exact decimal-to-paise conversion using BigInt arithmetic; verified capture, actual settlement fee and parent-linked refund evidence checks; regression tests; Android release R8 preservation rules for Razorpay/Cashfree/Paytm wired by scripts/patch-android.js for Groovy and Kotlin Gradle DSL; README and accounting integration documentation.
+ACCOUNTING PROPOSALS ONLY: capture Dr 2020 / Cr 1010; actual processor fee Dr 5010 / Cr 2020; verified refund Dr 1010 / Cr 2020. All remain PROPOSAL_ONLY / NOT_AUTHORIZED. Account 2020 normal balance and chart treatment require Finance approval. No journal writer, PostgreSQL schema, historical backfill, scheduler or automated posting has been connected.
+PMS: local-first browser IndexedDB and Android native SQLite repositories, with separate Firestore payment backend. Full operational UI repository cutover remains incomplete; uiCutover=false. booking.pays[] is the identified canonical legacy payment row collection; compatibility mirrors are not separate payment sources.
+PROVIDER MATRIX: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay have backend adapters/routes and test/UAT checkout handoffs; CCAvenue remains catalogue-only/disabled. 0 of 6 implemented providers are end-to-end production-qualified (0 of 7 catalogue gateways).
+ANDROID: Play Integrity and hardware key-attestation server foundations exist; R8 source rules are wired into generated release build config. Android Gradle compilation, R8 runtime verification, Play Console linkage, Play App Signing certificate verification, enrollment UI and physical-device acceptance remain outstanding.
+REMAINING FOR PRODUCTION: (1) Finance approval of Account 2020 and authoritative chart/source mapping; (2) read-only historical PMS data inventory, cancellation/refund joins and parity report; (3) canonical PMS persistence/UI cutover and rollback acceptance; (4) transactional journal writer only after accounting approval, then atomic settlement/refund and durable read-back; (5) Android compile/instrumentation/device/Play Console qualification; (6) merchant-specific UAT for each provider including webhook, status, timeout and refund lifecycle; (7) deployed IAM/Secret Manager/Firestore/network controls, monitoring, alerting, backup/restore, DR and incident runbooks; (8) security/accounting review, signed release candidate and formal approvals.
+LOCKED SAFEGUARDS: live gateway collection OFF; automatic settlement OFF; automatic refund posting OFF; cloud sync OFF by default; CCAvenue disabled; production release NOT AUTHORIZED.
+Never embed merchant credentials, webhook secrets, signing keys or backend secrets in the client. Client callbacks and device-supplied hardware metadata are not payment or enrollment authorization.
+See README.md and docs/PMS_CANONICAL_ACCOUNTING_INTEGRATION.md for full status and constraints.
 -->
+
 
 <!-- Application metadata
      Fresh-install posture: no fabricated rooms, guests, bookings, tables or revenue.
@@ -35,7 +36,7 @@ The application must never contain merchant credentials, webhook secrets, signin
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Aurelia PMS</title>
 <meta name="application-name" content="Aurelia PMS">
-<meta name="description" content="Aurelia PMS — local-first property management for reservations, guests, rooms and folios. Production release is gated on PMS cutover, accounting, provider UAT and device qualification. payment services.">
+<meta name="description" content="Aurelia PMS — local-first property management for reservations, guests, rooms and folios. Production release is not authorized; payment collection and automated settlement remain disabled pending accounting, provider and device qualification.">
 <meta name="theme-color" content="#081711">
 <meta name="color-scheme" content="dark">
 <meta name="mobile-web-app-capable" content="yes">
