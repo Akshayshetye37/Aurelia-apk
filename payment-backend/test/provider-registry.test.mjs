@@ -8,6 +8,16 @@ import {
 const REQUIRED = ['validateCredentials','createOrder','findOrderByReference','getPaymentStatus',
   'verifyWebhook','createRefund','getRefundStatus'];
 
+test('cloud API route exposure is separate from adapter factory wiring', async () => {
+  const registry = await import('../src/providers/registry.mjs');
+  const catalogue = registry.publicProviderCatalogue();
+  const exposed = catalogue.filter(item => item.cloudCheckoutApiEnabled).map(item => item.id);
+  assert.deepEqual(exposed, ['razorpay', 'cashfree']);
+  for (const item of catalogue.filter(item => !item.cloudCheckoutApiEnabled)) {
+    assert.ok(['payu', 'phonepe', 'paytm', 'jiopay', 'ccavenue'].includes(item.id));
+  }
+});
+
 test('only providers with all seven concrete operations are registered', () => {
   assert.deepEqual(implementedProviderAdapters(), ['razorpay','cashfree','payu','phonepe','paytm','jiopay']);
   for (const provider of ['ccavenue']) {
