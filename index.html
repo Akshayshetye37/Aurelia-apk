@@ -3300,9 +3300,9 @@ dsave=function(){
 const _cinFinal=cin;
 cin=function(i){const b=bk(i);if(!b)return;_cinFinal(i)};
 const _completeCheckInFinal=completeCheckIn;
-completeCheckIn=function(i){const t=$('#actual-checkin-time')?.value;if(!t){toast('Check-in time is required');return}_completeCheckInFinal(i);persist()};
+completeCheckIn=async function(i){const t=$('#actual-checkin-time')?.value;if(!t){toast('Check-in time is required');return}await _completeCheckInFinal(i)};
 const _completeCheckOutFinal=completeCheckOut;
-completeCheckOut=function(i){const t=$('#actual-checkout-time')?.value;if(!t){toast('Check-out time is required');return}_completeCheckOutFinal(i);persist()};
+completeCheckOut=async function(i){const t=$('#actual-checkout-time')?.value;if(!t){toast('Check-out time is required');return}await _completeCheckOutFinal(i)};
 
 </script>
 
