@@ -4,18 +4,21 @@ on:
   push:
     branches:
       - feature/multi-provider-payment-backend
+      - feature/phase-7-pms-persistence
     paths:
       - "payment-backend/**"
       - ".github/workflows/payment-backend-ci.yml"
   pull_request:
     branches:
       - feature/multi-provider-payment-backend
+      - feature/phase-7-pms-persistence
     paths:
       - "payment-backend/**"
       - ".github/workflows/payment-backend-ci.yml"
 
 permissions:
   contents: read
+  security-events: write
 
 concurrency:
   group: aurelia-payment-backend-${{ github.ref }}
@@ -31,6 +34,29 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan repository history for leaked credentials
+        id: gitleaks
+        run: |
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          set +e
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo" \
+            -v "$RUNNER_TEMP/gitleaks:/report" \
+            -w /repo \
+            zricethezav/gitleaks:v8.24.3 \
+            detect --source=/repo --redact --no-banner --report-format json \
+              --report-path=/report/findings.json --exit-code 1
+          scan_status=$?
+          if [ -f "$RUNNER_TEMP/gitleaks/findings.json" ]; then
+            cat "$RUNNER_TEMP/gitleaks/findings.json"
+          fi
+          echo "status=$scan_status" >> "$GITHUB_OUTPUT"
+          # Defer the failure until after contract tests/build so CI still
+          # reports code-validation results when the scanner detects a leak.
+          exit 0
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -39,6 +65,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Run payment backend contract and security tests
         run: npm test
+      - name: Run CCAvenue Mobile SDK request-hash known-answer test explicitly
+        run: node --test test/ccavenue-mobile-crypto.test.mjs
       - name: Verify payment backend JavaScript syntax
         run: |
           find src test -type f -name '*.mjs' -print0 | xargs -0 -n1 node --check
@@ -56,3 +84,11 @@ jobs:
         run: terraform -chdir=infra/terraform init -backend=false -input=false
       - name: Validate Cloud Run infrastructure
         run: terraform -chdir=infra/terraform validate
+
+      - name: Enforce repository secret scan result
+        if: always()
+        run: |
+          if [ "${{ steps.gitleaks.outputs.status }}" != "0" ]; then
+            echo "Repository history secret scan failed; inspect the redacted findings above."
+            exit 1
+          fi

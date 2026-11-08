@@ -354,6 +354,9 @@ for (const file of [
   'PaymentDeviceKeyStore.kt',
   'PaymentDeviceClient.kt',
   'SettlementEnvelopeVerifier.kt',
+  'PaymentReleaseSafeguards.kt',
+  'AureliaPlayIntegrityClient.kt',
+  'CloudPaymentDeviceEnrollmentClient.kt',
   'LockGateActivity.kt'
 ]) {
   const source = path.join(securityTemplateDir, file);
@@ -367,7 +370,8 @@ function addNativeSecurityDependencies(contents, kotlinDsl) {
   }
   const dependencies = [
     ['org.bouncycastle:bcprov-jdk18on:1.80', 'org.bouncycastle:bcprov-jdk18on'],
-    ['androidx.biometric:biometric:1.2.0-alpha05', 'androidx.biometric:biometric']
+    ['androidx.biometric:biometric:1.2.0-alpha05', 'androidx.biometric:biometric'],
+    ['com.google.android.play:integrity:1.5.0', 'com.google.android.play:integrity']
   ];
   for (const [coordinate, marker] of dependencies) {
     if (contents.includes(marker)) continue;
@@ -388,6 +392,33 @@ if (fs.existsSync(appGradleGroovy)) {
   throw new Error('Generated Android app Gradle file was not found; native security dependencies cannot be wired.');
 }
 
+// Install narrowly scoped R8 rules for SDK reflection/serialization entry points.
+// These rules are inert unless the generated release build enables minification.
+const proguardTemplate = path.join(securityTemplateDir, 'proguard-rules.pro');
+if (!fs.existsSync(proguardTemplate)) throw new Error('Payment SDK ProGuard template is missing.');
+const proguardTarget = path.join(appModuleDir, 'proguard-rules.pro');
+const proguardRules = fs.readFileSync(proguardTemplate, 'utf8');
+if (!fs.existsSync(proguardTarget) || !fs.readFileSync(proguardTarget, 'utf8').includes('AURELIA_PAYMENT_SDK_KEEP_RULES')) {
+  const existingRules = fs.existsSync(proguardTarget) ? fs.readFileSync(proguardTarget, 'utf8') : '';
+  fs.writeFileSync(proguardTarget, existingRules + '\n' + proguardRules);
+}
+function wireReleaseProguard(contents, kotlinDsl) {
+  if (/proguardFiles[^\n]*proguard-rules\.pro/.test(contents)) return contents;
+  const releaseBlock = /(release\s*\{)/;
+  if (!releaseBlock.test(contents)) throw new Error('Generated Gradle release build type is missing; cannot wire payment SDK R8 rules.');
+  const statement = kotlinDsl
+    ? '$1\n            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")'
+    : '$1\n            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"';
+  return contents.replace(releaseBlock, statement);
+}
+if (fs.existsSync(appGradleGroovy)) {
+  const gradle = wireReleaseProguard(fs.readFileSync(appGradleGroovy, 'utf8'), false);
+  fs.writeFileSync(appGradleGroovy, gradle);
+} else if (fs.existsSync(appGradleKts)) {
+  const gradle = wireReleaseProguard(fs.readFileSync(appGradleKts, 'utf8'), true);
+  fs.writeFileSync(appGradleKts, gradle);
+}
+
 const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
 
 function addFirebaseDependencies(contents, kotlinDsl) {
@@ -395,7 +426,8 @@ function addFirebaseDependencies(contents, kotlinDsl) {
   const auth = 'com.google.firebase:firebase-auth';
   const paymentDependencies = [
     'com.razorpay:checkout:1.6.41',
-    'com.cashfree.pg:api:2.6.1'
+    'com.cashfree.pg:api:2.6.1',
+    'com.paytmpayments.appinvokesdk:appinvokesdk:1.0.3'
   ];
   if (!/dependencies\s*\{/.test(contents)) {
     throw new Error('App Gradle file has no dependencies block; refusing an incomplete native payment integration.');
@@ -553,6 +585,13 @@ import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.SslErrorHandler;
+import android.net.http.SslError;
+import android.app.Dialog;
+import android.view.ViewGroup;
 import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
 import com.aurelia.pms.security.PaymentDeviceKeyStore;
@@ -563,6 +602,9 @@ import com.razorpay.Checkout;
 import com.razorpay.PaymentData;
 import com.razorpay.PaymentResultWithDataListener;
 import com.cashfree.pg.api.CFPaymentGatewayService;
+import com.paytm.pgsdk.PaytmOrder;
+import com.paytm.pgsdk.PaytmPaymentTransactionCallback;
+import com.paytm.pgsdk.TransactionManager;
 import com.cashfree.pg.core.api.CFSession;
 import com.cashfree.pg.core.api.callback.CFCheckoutResponseCallback;
 import com.cashfree.pg.core.api.exception.CFException;
@@ -581,6 +623,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   private static final int PICK_BACKUP_FOLDER = 7101;
   private static final int CREATE_BACKUP_FILE = 7102;
   private static final int PICK_IMAGE_FILE = 7103;
+  private static final int PAYTM_REQUEST_CODE = 7104;
   private String folderRequestId = "";
   private String folderPurpose = "drive";
   private String pendingFileRequestId = "";
@@ -597,6 +640,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   private final java.util.concurrent.ConcurrentHashMap<String, PaymentDeviceClient.Lease> paymentDeviceLeases = new java.util.concurrent.ConcurrentHashMap<>();
   private String pendingCheckoutTransactionId = "";
   private String pendingCheckoutProvider = "";
+  private boolean hostedCheckoutBackgrounded = false;
   private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor();
 
   @Override public void onCreate(Bundle savedInstanceState) {
@@ -681,6 +725,174 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     pendingCheckoutProvider = "";
   }
 
+  private void startPayUCheckout(String transactionId, String orderId, JSONObject checkoutData) throws Exception {
+    JSONObject data = checkoutData.optJSONObject("checkout");
+    JSONObject fields = data == null ? null : data.optJSONObject("fields");
+    String action = data == null ? "" : data.optString("action", "");
+    Uri actionUri = Uri.parse(action);
+    if (fields == null || !"POST".equals(data.optString("method", "")) ||
+        !"https".equalsIgnoreCase(actionUri.getScheme()) ||
+        !"test.payu.in".equalsIgnoreCase(actionUri.getHost()) ||
+        (actionUri.getPort() != -1 && actionUri.getPort() != 443) ||
+        !"/_payment".equals(actionUri.getPath()) || actionUri.getUserInfo() != null) {
+      throw new IllegalArgumentException("PayU sandbox checkout payload is invalid.");
+    }
+    String successUrl = fields.optString("surl", "");
+    String failureUrl = fields.optString("furl", "");
+    Uri successUri = Uri.parse(successUrl);
+    Uri failureUri = Uri.parse(failureUrl);
+    if (!"https".equalsIgnoreCase(successUri.getScheme()) ||
+        !"https".equalsIgnoreCase(failureUri.getScheme()) ||
+        successUri.getHost() == null || failureUri.getHost() == null ||
+        successUri.getUserInfo() != null || failureUri.getUserInfo() != null) {
+      throw new IllegalArgumentException("PayU return URLs must be HTTPS.");
+    }
+    StringBuilder form = new StringBuilder();
+    java.util.Iterator<String> keys = fields.keys();
+    while (keys.hasNext()) {
+      String key = keys.next();
+      String value = fields.optString(key, "");
+      if (key.isEmpty() || value.length() > 4096 ||
+          key.matches(".*[\\r\\n].*") || value.matches(".*[\\r\\n].*")) {
+        throw new IllegalArgumentException("PayU checkout form contains an invalid field.");
+      }
+      if (form.length() > 0) form.append('&');
+      form.append(java.net.URLEncoder.encode(key, "UTF-8"));
+      form.append('=').append(java.net.URLEncoder.encode(value, "UTF-8"));
+    }
+    Dialog dialog = new Dialog(MainActivity.this);
+    WebView webView = new WebView(MainActivity.this);
+    WebView.setWebContentsDebuggingEnabled(false);
+    android.webkit.WebSettings settings = webView.getSettings();
+    settings.setJavaScriptEnabled(true);
+    settings.setDomStorageEnabled(true);
+    settings.setAllowFileAccess(false);
+    settings.setAllowContentAccess(false);
+    settings.setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+    webView.setWebViewClient(new WebViewClient() {
+      private boolean isReturn(Uri target) {
+        return "https".equalsIgnoreCase(target.getScheme()) &&
+            ((successUri.getHost().equalsIgnoreCase(target.getHost()) &&
+              java.util.Objects.equals(successUri.getPath(), target.getPath())) ||
+             (failureUri.getHost().equalsIgnoreCase(target.getHost()) &&
+              java.util.Objects.equals(failureUri.getPath(), target.getPath())));
+      }
+      @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+        Uri target = request.getUrl();
+        if (isReturn(target)) {
+          emitNativePaymentEvent("PAYU_CALLBACK", "");
+          pendingCheckoutTransactionId = "";
+          pendingCheckoutProvider = "";
+          dialog.dismiss();
+          return true;
+        }
+        String scheme = target.getScheme() == null ? "" : target.getScheme().toLowerCase(java.util.Locale.ROOT);
+        if ("upi".equals(scheme) || "intent".equals(scheme) ||
+            "phonepe".equals(scheme) || "paytmmp".equals(scheme) || "tez".equals(scheme)) {
+          try {
+            Intent external = "intent".equals(scheme)
+                ? Intent.parseUri(target.toString(), Intent.URI_INTENT_SCHEME)
+                : new Intent(Intent.ACTION_VIEW, target);
+            Uri externalData = external.getData();
+            String externalPackage = external.getPackage();
+            boolean allowedUpiPackage = externalPackage == null ||
+                java.util.Arrays.asList("com.phonepe.app", "net.one97.paytm",
+                    "com.google.android.apps.nbu.paisa.user", "in.org.npci.upiapp")
+                    .contains(externalPackage);
+            String externalScheme = externalData == null ? "" : externalData.getScheme();
+            boolean allowedPaymentScheme = "upi".equalsIgnoreCase(externalScheme) ||
+                "phonepe".equalsIgnoreCase(externalScheme) ||
+                "paytmmp".equalsIgnoreCase(externalScheme) ||
+                "tez".equalsIgnoreCase(externalScheme);
+            if (allowedPaymentScheme && allowedUpiPackage &&
+                external.resolveActivity(getPackageManager()) != null) {
+              startActivity(external);
+            }
+          } catch (Exception ignored) { }
+          return true;
+        }
+        return !"https".equalsIgnoreCase(scheme);
+      }
+      @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+        handler.cancel();
+      }
+      @Override public void onReceivedError(WebView view, WebResourceRequest request,
+          android.webkit.WebResourceError error) {
+        if (request.isForMainFrame() && transactionId.equals(pendingCheckoutTransactionId)) {
+          emitNativePaymentEvent("PAYU_NETWORK_UNKNOWN", "");
+        }
+      }
+    });
+    dialog.setContentView(webView, new ViewGroup.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    dialog.setOnDismissListener(ignored -> {
+      if (transactionId.equals(pendingCheckoutTransactionId) && "payu".equals(pendingCheckoutProvider)) {
+        emitNativePaymentEvent("PAYU_CANCEL_HINT", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+    });
+    dialog.show();
+    if (dialog.getWindow() != null) dialog.getWindow().setLayout(
+        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+    webView.postUrl(action, form.toString().getBytes(StandardCharsets.UTF_8));
+  }
+
+  private void startPaytmCheckout(String orderId, long amountMinor, JSONObject checkoutData) throws Exception {
+    JSONObject data = checkoutData.optJSONObject("checkout");
+    if (data == null) throw new IllegalArgumentException("Paytm checkout payload is missing.");
+    String mid = data.optString("mid", "");
+    String token = data.optString("txnToken", "");
+    String host = data.optString("checkoutHost", "");
+    String callbackUrl = data.optString("callbackUrl", "");
+    if (mid.isEmpty() || token.isEmpty() || !callbackUrl.startsWith("https://") ||
+        !"https://securestage.paytmpayments.com".equals(host)) {
+      throw new IllegalArgumentException("Paytm staging checkout binding is invalid.");
+    }
+    String amount = String.format(java.util.Locale.US, "%.2f", amountMinor / 100.0d);
+    PaytmOrder order = new PaytmOrder(orderId, mid, token, amount, callbackUrl);
+    TransactionManager manager = new TransactionManager(order, new PaytmPaymentTransactionCallback() {
+      @Override public void onTransactionResponse(Bundle response) {
+        String paymentId = response == null ? "" : response.getString("TXNID", "");
+        emitNativePaymentEvent("PAYTM_CALLBACK", paymentId);
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void networkNotAvailable() {
+        emitNativePaymentEvent("PAYTM_NETWORK_UNKNOWN", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void onErrorProceed(String error) {
+        emitNativePaymentEvent("PAYTM_ERROR_CALLBACK", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void clientAuthenticationFailed(String error) {
+        emitNativePaymentEvent("PAYTM_ERROR_CALLBACK", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void someUIErrorOccurred(String error) {
+        emitNativePaymentEvent("PAYTM_ERROR_CALLBACK", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void onErrorLoadingWebPage(int code, String message, String url) {
+        emitNativePaymentEvent("PAYTM_NETWORK_UNKNOWN", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+      @Override public void onTransactionCancel(String message, Bundle response) {
+        emitNativePaymentEvent("PAYTM_CANCEL_HINT", "");
+        pendingCheckoutTransactionId = "";
+        pendingCheckoutProvider = "";
+      }
+    });
+    manager.setShowPaymentUrl(host + "/theia/api/v1/showPaymentPage");
+    manager.startTransaction(MainActivity.this, PAYTM_REQUEST_CODE);
+  }
+
   private void initializePaymentDeviceClient() {
     paymentDeviceClient = null;
     paymentDeviceLeases.clear();
@@ -701,10 +913,20 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       return;
     }
     super.onResume();
+    if (hostedCheckoutBackgrounded && !pendingCheckoutTransactionId.isEmpty()) {
+      hostedCheckoutBackgrounded = false;
+      emitNativePaymentEvent("HOSTED_CHECKOUT_RETURNED", "");
+      pendingCheckoutTransactionId = "";
+      pendingCheckoutProvider = "";
+    }
     if (payBridgeClient != null) payBridgeClient.connect();
   }
 
   @Override public void onPause() {
+    if (!pendingCheckoutTransactionId.isEmpty() &&
+        ("phonepe".equals(pendingCheckoutProvider) || "jiopay".equals(pendingCheckoutProvider))) {
+      hostedCheckoutBackgrounded = true;
+    }
     com.aurelia.pms.security.AureliaSecurityRuntime.INSTANCE.manager(this).onBackground();
     super.onPause();
   }
@@ -1249,15 +1471,19 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
             }
             String provider = obj.optString("provider", "");
             String environment = obj.optString("environment", "");
+            com.aurelia.pms.security.PaymentReleaseSafeguards.assertSandboxCheckoutAllowed(provider, environment);
             String orderId = obj.optString("providerOrderId", "");
             long amountMinor = obj.optLong("amountMinor", -1L);
             String currency = obj.optString("currency", "");
             JSONObject checkoutData = obj.optJSONObject("checkoutData");
-            if (!transactionId.matches("[0-9a-fA-F-]{36}") ||
-                !("razorpay".equals(provider) || "cashfree".equals(provider)) ||
-                !"test".equals(environment) || orderId.isEmpty() || amountMinor <= 0 ||
-                !"INR".equals(currency) || checkoutData == null) {
-              throw new IllegalArgumentException("Native checkout request is invalid or outside the test environment.");
+            boolean supportedEnvironment =
+                (("razorpay".equals(provider) || "cashfree".equals(provider) ||
+                  "payu".equals(provider) || "phonepe".equals(provider)) && "test".equals(environment)) ||
+                ("jiopay".equals(provider) && "uat".equals(environment)) ||
+                ("paytm".equals(provider) && "staging".equals(environment));
+            if (!transactionId.matches("[0-9a-fA-F-]{36}") || !supportedEnvironment ||
+                orderId.isEmpty() || amountMinor <= 0 || !"INR".equals(currency) || checkoutData == null) {
+              throw new IllegalArgumentException("Native checkout request is invalid or outside the provider test environment.");
             }
             pendingCheckoutTransactionId = transactionId;
             pendingCheckoutProvider = provider;
@@ -1278,7 +1504,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
               Checkout checkout = new Checkout();
               checkout.setKeyID(keyId);
               checkout.open(MainActivity.this, options);
-            } else {
+            } else if ("cashfree".equals(provider)) {
               String paymentSessionId = checkoutData.optString("paymentSessionId", "");
               if (paymentSessionId.isEmpty()) throw new IllegalArgumentException("Cashfree payment session is missing.");
               CFSession session = new CFSession.CFSessionBuilder()
@@ -1295,6 +1521,25 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
                   .setCFWebCheckoutUITheme(theme)
                   .build();
               CFPaymentGatewayService.getInstance().doPayment(MainActivity.this, payment);
+            } else if ("payu".equals(provider)) {
+              startPayUCheckout(transactionId, orderId, checkoutData);
+            } else if ("paytm".equals(provider)) {
+              startPaytmCheckout(orderId, amountMinor, checkoutData);
+            } else if ("phonepe".equals(provider) || "jiopay".equals(provider)) {
+              String checkoutUrl = checkoutData.optString("checkoutUrl", "");
+              Uri checkoutUri = Uri.parse(checkoutUrl);
+              if (!"https".equalsIgnoreCase(checkoutUri.getScheme()) ||
+                  checkoutUri.getHost() == null || checkoutUri.getUserInfo() != null ||
+                  checkoutUrl.length() > 4096) {
+                throw new IllegalArgumentException("Provider checkout URL is invalid.");
+              }
+              Intent checkoutIntent = new Intent(Intent.ACTION_VIEW, checkoutUri);
+              if (checkoutIntent.resolveActivity(getPackageManager()) == null) {
+                throw new IllegalStateException("No secure browser is available for provider checkout.");
+              }
+              startActivity(checkoutIntent);
+            } else {
+              throw new IllegalArgumentException("This provider's native checkout contract is not yet qualified.");
             }
             JSONObject result = new JSONObject().put("opened", true).put("status", "PENDING")
                 .put("providerOrderId", orderId);
@@ -1632,6 +1877,13 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
 
   @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode == PAYTM_REQUEST_CODE && !pendingCheckoutTransactionId.isEmpty() &&
+        "paytm".equals(pendingCheckoutProvider)) {
+      emitNativePaymentEvent("PAYTM_CALLBACK", "");
+      pendingCheckoutTransactionId = "";
+      pendingCheckoutProvider = "";
+      return;
+    }
     if (requestCode == PICK_BACKUP_FOLDER) {
       if (resultCode == RESULT_OK && data != null && data.getData() != null) {
         Uri uri = data.getData();

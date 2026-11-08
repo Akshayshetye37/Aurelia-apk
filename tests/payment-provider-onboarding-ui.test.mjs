@@ -70,11 +70,28 @@ test('tenant live-collection switch is server-backed, double-gated and MFA prote
   assert.ok(html.includes('internal release gate'));
 });
 
-test('providers without Android hosted-checkout handoff fail before creating an intent', () => {
+test('CCAvenue remains the only provider excluded from the Android checkout path', () => {
   assert.ok(html.includes('Android hosted-checkout handoff is not yet integrated'));
   assert.ok(html.includes('No cloud payment intent was created.'));
-  assert.ok(html.includes('PayU'));
-  assert.ok(html.includes('PhonePe'));
-  assert.ok(html.includes('Paytm'));
-  assert.ok(html.includes('JioPay'));
+  assert.ok(!html.includes('PayU is not yet available in the Android checkout handoff.'));
+  assert.ok(html.includes('CCAvenue'));
+});
+
+test('provider selection is app-wide, explicitly confirmed, and historical transactions are retained', () => {
+  assert.ok(html.includes('primary provider is selected once for the whole Aurelia app (tenant)'));
+  assert.ok(html.includes('primary for every enrolled device'));
+  assert.ok(html.includes('No automatic fallback'));
+  assert.ok(html.includes('window.confirm(\'Switch the primary payment provider for the entire Aurelia app'));
+  assert.ok(html.includes('existing transactions remain available for webhooks, payment verification, refunds and reconciliation'));
+  assert.ok(html.includes('CCAvenue · configure sandbox credentials'));
+  assert.ok(html.includes('complete adapter, merchant-approved cryptography, notification authentication, authoritative status, general refund lifecycle'));
+});
+
+test('CCAvenue can be selected for sandbox credential onboarding but cannot be activated', () => {
+  assert.ok(html.includes('CCAvenue · configure sandbox credentials'));
+  assert.ok(html.includes('provider===\'ccavenue\''));
+  assert.ok(html.includes('CCAvenue credential schema accepted and secrets stored in Secret Manager'));
+  assert.ok(html.includes('supported.includes(p.provider)'));
+  assert.ok(html.includes('complete seven-operation adapter and merchant acceptance evidence are not available'));
+  assert.ok(!html.includes('<option value="ccavenue" disabled>'));
 });

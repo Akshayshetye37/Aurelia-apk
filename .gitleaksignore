@@ -1,0 +1,23 @@
+# Audited false positives from deterministic test fixtures and documented placeholders.
+# These exact historical fingerprints contain no merchant credentials or production secrets.
+81fe673d09872c2e796b602692aa1f7208c22421:payment-backend/test/ccavenue-lifecycle.test.mjs:generic-api-key:8
+81fe673d09872c2e796b602692aa1f7208c22421:payment-backend/test/ccavenue-lifecycle.test.mjs:generic-api-key:10
+446868a97cd558a5b75fa7c978a1e1d1439f59e5:payment-backend/test/ccavenue-lifecycle.test.mjs:generic-api-key:8
+8e96edaf2286b5f40d0ba047035032d393ab55ff:payment-backend/test/ccavenue-mobile-crypto.test.mjs:generic-api-key:11
+f46642a2afe575ef9fc657f35dbca025ac8ce3be:payment-backend/test/intent-state-machine.test.mjs:generic-api-key:72
+f46642a2afe575ef9fc657f35dbca025ac8ce3be:payment-backend/test/intent-state-machine.test.mjs:generic-api-key:83
+014032b3f9655038e892841e8cfaa320bcc821d1:tests/services/payment-api.test.mjs:generic-api-key:77
+014032b3f9655038e892841e8cfaa320bcc821d1:tests/services/payment-api.test.mjs:generic-api-key:84
+cc095baba3d52eff6d5713ecf5d1f7718262198a:payment-backend/test/refund-status.test.mjs:generic-api-key:106
+81f28baa35a70ae2b520a09139e2b80514c5ab56:payment-backend/test/refund-status.test.mjs:generic-api-key:144
+1b2c42cb1318730a2fefbf4ca34181ffbc9a593d:payment-backend/test/refund-status.test.mjs:generic-api-key:95
+1b2c42cb1318730a2fefbf4ca34181ffbc9a593d:payment-backend/test/refund-status.test.mjs:generic-api-key:115
+b6baa4292b861e3384c4fe53eef921e508730bc0:tests/services/payment-api.test.mjs:generic-api-key:77
+8c7b7d9e6bbe0f19e2ce2e8bde7dcffe25c3a3f0:tests/services/payment-api.test.mjs:generic-api-key:23
+8c7b7d9e6bbe0f19e2ce2e8bde7dcffe25c3a3f0:tests/services/payment-api.test.mjs:generic-api-key:28
+8c7b7d9e6bbe0f19e2ce2e8bde7dcffe25c3a3f0:tests/services/payment-api.test.mjs:generic-api-key:41
+43c3c3d4890188f6591d88a85dd0e4476260b4a3:docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md:generic-api-key:12
+210a75ea44252a9769c9804f9215f4a29219f2bf:payment-backend/.env.example:generic-api-key:4
+808fe703c51f0ecaac37d79276872b8d2ce1bccf:index.html:generic-api-key:3948
+c0b075f1e725f4fb4af37c35d06020df9ad7624c:payment-backend/test/intent-state-machine.test.mjs:generic-api-key:55
+e9d300f4b210712d7d356f6206f58eeea285be99:payment-backend/test/provider-adapters.test.mjs:generic-api-key:109

@@ -65,3 +65,25 @@ test('UNKNOWN and FAILED are not accounting terminal states', () => {
   assert.equal(isIntentAccountingTerminal('FAILED_TO_INITIATE'), true);
   assert.equal(isIntentAccountingTerminal('CAPTURED'), true);
 });
+
+test('binding rejects matching-but-missing tenant, folio and idempotency identities', () => {
+  const valid = {
+    tenantId: 'hotel_123', folioId: 'folio_123', provider: 'razorpay',
+    environment: 'test', amountMinor: 12500, currency: 'INR', idempotencyKey: 'idem-key-123456'
+  };
+  for (const field of ['tenantId', 'folioId', 'idempotencyKey']) {
+    const malformed = { ...valid, [field]: undefined };
+    assert.throws(() => assertIntentBinding(malformed, { ...malformed }), /invalid_payment_intent_binding/);
+  }
+});
+
+test('optional immutable booking, property, request and session identifiers cannot be omitted or changed', () => {
+  const valid = {
+    tenantId: 'hotel_123', folioId: 'folio_123', provider: 'razorpay',
+    environment: 'test', amountMinor: 12500, currency: 'INR', idempotencyKey: 'idem-key-123456',
+    bookingId: 'booking_123', propertyId: 'property_123', requestId: 'request_123', sessionId: 'session_123'
+  };
+  assert.equal(assertIntentBinding(valid, { ...valid }), true);
+  assert.throws(() => assertIntentBinding(valid, { ...valid, sessionId: undefined }), /binding_mismatch/);
+  assert.throws(() => assertIntentBinding(valid, { ...valid, bookingId: 'booking_999' }), /binding_mismatch/);
+});

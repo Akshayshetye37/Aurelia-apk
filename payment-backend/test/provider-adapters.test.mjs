@@ -16,7 +16,7 @@ function mockFetch(handler) {
 }
 
 test('Razorpay adapter validates key environment and creates INR order in paise', async () => {
-  const mock = mockFetch(async () => ({ status: 200, body: { id: 'order_123', amount: 12500, currency: 'INR', status: 'created' } }));
+  const mock = mockFetch(async () => ({ status: 200, body: { id: 'order_123', amount: 12500, currency: 'INR', receipt: 'receipt_123', status: 'created' } }));
   const adapter = new RazorpayAdapter({ credentials: { keyId: 'rzp_test_12345678', keySecret: 'secret', webhookSecret: 'hook' }, environment: 'test', fetchImpl: mock.fetchImpl });
   const order = await adapter.createOrder({ amountMinor: 12500, currency: 'INR', receipt: 'receipt_123' });
   assert.equal(order.orderId, 'order_123');
@@ -77,7 +77,7 @@ test('Cashfree creates hosted checkout session and sends required API version he
   const result = await adapter.createOrder({ orderId: 'order_123', amountMinor: 12500, currency: 'INR', customer: { id: 'guest_123', phone: '9999999999' }, returnUrl: 'https://pms.example/return', idempotencyKey: 'request-123456' });
   assert.equal(result.paymentSessionId, 'session_123');
   assert.equal(JSON.parse(mock.calls[0].options.body).order_amount, 125);
-  assert.equal(mock.calls[0].options.headers['x-api-version'], '2026-01-01');
+  assert.equal(mock.calls[0].options.headers['x-api-version'], '2025-01-01');
 });
 
 test('Cashfree status lookup prefers the payment ID associated with the webhook', async () => {
@@ -154,6 +154,7 @@ test('Razorpay refund reference is stored as a note, not an unsupported refund f
   assert.equal(body.receipt, undefined);
   assert.equal(body.notes.aurelia_refund_reference, 'refund_123');
   assert.deepEqual(JSON.parse(mock.calls[0].options.body), { amount: 500, notes: { aurelia_refund_reference: 'refund_123' } });
+  assert.equal(mock.calls[0].options.headers['X-Refund-Idempotency'], 'refund_123');
 });
 
 
@@ -348,7 +349,7 @@ test('provider-neutral checkout contract normalizes all six implemented adapter 
     ['phonepe', 'live', { orderId:'pp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'https://checkout.phonepe.com/session_1' }, { checkoutUrl:'https://checkout.phonepe.com/session_1' }],
     ['jiopay', 'uat', { orderId:'jp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'https://checkout.jiopay.co.in/session_1', transactionContext:'ctx_1' }, { checkoutUrl:'https://checkout.jiopay.co.in/session_1', transactionContext:'ctx_1' }],
     ['payu', 'test', { orderId:'pu_order_1', amountMinor:12500, currency:'INR', checkout:{ action:'https://test.payu.in/_payment', method:'POST', fields:{ key:'merchant-key', hash:'signed-hash', txnid:'pu_order_1' } } }, { action:'https://test.payu.in/_payment', method:'POST', fields:{ key:'merchant-key', hash:'signed-hash', txnid:'pu_order_1' } }],
-    ['paytm', 'staging', { orderId:'pt_order_1', amountMinor:12500, currency:'INR', checkout:{ mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com' } }, { mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com' }]
+    ['paytm', 'staging', { orderId:'pt_order_1', amountMinor:12500, currency:'INR', checkout:{ mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com', callbackUrl:'https://pms.example/payment-return' } }, { mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com', callbackUrl:'https://pms.example/payment-return' }]
   ];
   for (const [provider, environment, result, checkout] of fixtures) {
     const request = { provider, environment, amountMinor:12500, currency:'INR', idempotencyKey:'checkout-idem-12345' };
@@ -366,7 +367,7 @@ test('provider-neutral checkout contract rejects environment drift and unbound n
   }, { ...base, provider:'phonepe', environment:'test' }), /phonepe_checkout_url_invalid/);
   assert.throws(() => normalizeCheckoutSession('paytm', {
     orderId:'pt_order_1', amountMinor:12500, currency:'INR',
-    checkout:{ mid:'merchant-mid', orderId:'other-order', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com' }
+    checkout:{ mid:'merchant-mid', orderId:'other-order', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com', callbackUrl:'https://pms.example/payment-return' }
   }, base), /paytm_checkout_order_binding_mismatch/);
   assert.throws(() => normalizeCheckoutSession('jiopay', {
     orderId:'jp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'https://checkout.jiopay.co.in/session'

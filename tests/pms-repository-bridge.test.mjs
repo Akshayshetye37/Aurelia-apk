@@ -72,3 +72,38 @@ test("bridge requires a verified contract-compatible engine and tenant context",
 test("bridge persists a caller-supplied event payload with the entity transaction",async()=>{const {repository,bridge}=setup();await bridge.mutateFolioState({entityId:"folio-event-payload",expectedVersion:0,eventType:"folio.payment_posted",eventPayload:{bookingId:"booking-9",amountPaise:12500,source:"manual"},mutate:folio=>{folio.paid=125;}});const events=await repository.claimOutboxBatch({deviceId:"device-test"});assert.deepEqual(events[0].payload,{bookingId:"booking-9",amountPaise:12500,source:"manual"});});
 
 test("compatibility snapshot writes are serialized, versioned, and emit immutable outbox records",async()=>{const {repository,bridge}=setup();const first={rooms:[{n:"101"}],b:[],g:[]};const [a,b]=await Promise.all([bridge.persistCompatibilitySnapshot(first),bridge.persistCompatibilitySnapshot({...first,tab:"rooms"})]);assert.equal(a.entity.version,1);assert.equal(b.entity.version,2);const stored=await repository.getEntity("audit","legacy_snapshot:aurelia_lodge_v2");assert.deepEqual(stored.data.snapshot,{...first,tab:"rooms"});const events=await repository.claimOutboxBatch({deviceId:"device-test",limit:10});assert.equal(events.length,2);assert.equal(events[0].eventType,"legacy.snapshot_saved");});
+
+
+test("bridge lists only valid canonical entities belonging to its tenant and property", async () => {
+  const { repository, bridge } = setup();
+  await bridge.saveBooking({
+    entityId: "booking-local-b", expectedVersion: 0,
+    mutate: booking => Object.assign(booking, { tenantId: "tenant-test", propertyId: "property-test", guestName: "Local B" })
+  });
+  await bridge.saveBooking({
+    entityId: "booking-local-a", expectedVersion: 0,
+    mutate: booking => Object.assign(booking, { tenantId: "tenant-test", propertyId: "property-test", guestName: "Local A" })
+  });
+  await repository.transactBusinessChange({
+    entityType: "booking", entityId: "booking-foreign", expectedVersion: 0,
+    event: {
+      eventId: "foreign-booking-event", tenantId: "tenant-other", propertyId: "property-other",
+      deviceId: "device-other", entityType: "booking", entityId: "booking-foreign",
+      sequence: 1, eventType: "booking.saved", schemaVersion: 1,
+      occurredAt: "2026-11-07T00:00:00.000Z", payload: { operation: "test" }
+    }
+  }, () => ({ id: "booking-foreign", tenantId: "tenant-other", propertyId: "property-other", guestName: "Foreign" }));
+
+  const rows = await bridge.listEntities("booking");
+  assert.deepEqual(rows.map(row => row.id), ["booking-local-a", "booking-local-b"]);
+  assert.ok(rows.every(row => row.data.tenantId === "tenant-test" && row.data.propertyId === "property-test"));
+  await assert.rejects(bridge.listEntities("legacy"), /Unsupported canonical PMS entity type/);
+});
+
+test("bridge entity listing fails closed on an invalid repository collection", async () => {
+  const { bridge } = setup();
+  const original = bridge.repo.listEntities.bind(bridge.repo);
+  bridge.repo.listEntities = async () => [{ type: "booking", id: "broken", version: 0, data: {} }];
+  await assert.rejects(bridge.listEntities("booking"), /invalid canonical entity row/);
+  bridge.repo.listEntities = original;
+});

@@ -1,8 +1,12 @@
 name: Validate Aurelia PMS Debug Build (not for Pay Bridge pairing)
 
-# Manual QA-only workflow. Do not run until the documented PMS release gates authorize device-build validation.
-# The resulting debug APK is not a signed production release and is not compatible with the Pay Bridge pairing.
+# Pull-request Android compile gate plus manual QA build.
+# The resulting debug APK is unsigned/debug-signed, not a production release,
+# and is not compatible with the signature-protected Pay Bridge pairing.
 on:
+  pull_request:
+    branches:
+      - feature/multi-provider-payment-backend
   workflow_dispatch:
 
 permissions:
@@ -67,7 +71,18 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
+        shell: bash
         run: |
+          set -euo pipefail
+          # GitHub runners occasionally need longer than Gradle Wrapper's 10s
+          # default to fetch the pinned distribution. Keep the same version and
+          # checksum; only extend the download timeout.
+          wrapper_properties="gradle/wrapper/gradle-wrapper.properties"
+          if grep -q '^networkTimeout=' "$wrapper_properties"; then
+            sed -i 's/^networkTimeout=.*/networkTimeout=120000/' "$wrapper_properties"
+          else
+            echo 'networkTimeout=120000' >> "$wrapper_properties"
+          fi
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace assembleDebug
 

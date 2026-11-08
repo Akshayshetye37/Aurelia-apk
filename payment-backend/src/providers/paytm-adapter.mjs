@@ -14,12 +14,6 @@ const toMinor=v=>{
   return Number.isSafeInteger(n)?n:null;
 };
 const amount=v=>(v/100).toFixed(2);
-const json=async response=>{
-  const data=await response.json().catch(()=>({}));
-  if(!response.ok)throw Object.assign(new Error('paytm_request_failed'),{providerStatus:response.status});
-  return data;
-};
-
 export class PaytmAdapter extends PaymentProviderAdapter {
   constructor(options) {
     super(options);
@@ -33,9 +27,19 @@ export class PaytmAdapter extends PaymentProviderAdapter {
     const bodyText=JSON.stringify(body);
     const signature=await this.checksum.generateSignature(bodyText,this.credentials.merchantKey);
     const payload=JSON.stringify({body,head:{signature}});
-    const response=await this.fetch(url,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},
-      body:payload,signal:AbortSignal.timeout(15000)});
-    const data=await json(response);
+    let response;
+    try {
+      response=await this.fetch(url,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},
+        body:payload,signal:AbortSignal.timeout(15000)});
+    } catch (cause) {
+      const mutating = url.includes('/initiateTransaction') || url.endsWith('/refund/apply');
+      throw Object.assign(new Error('paytm_network_error'), { outcomeUnknown: mutating, cause });
+    }
+    const data=await response.json().catch(()=>({}));
+    const mutating = url.includes('/initiateTransaction') || url.endsWith('/refund/apply');
+    if(!response.ok) throw Object.assign(new Error('paytm_request_failed'), {
+      providerStatus:response.status, outcomeUnknown:mutating && response.status>=500
+    });
     if(!data?.body||typeof data?.head?.signature!=='string'||
       !(await this.checksum.verifySignature(JSON.stringify(data.body),this.credentials.merchantKey,data.head.signature)))
       throw new Error('paytm_response_signature_invalid');
@@ -47,8 +51,10 @@ export class PaytmAdapter extends PaymentProviderAdapter {
   }
   async createOrder(input) {
     const callbackUrl=input?.callbackUrl||input?.returnUrl;
+    let callback;
+    try { callback = new URL(callbackUrl); } catch { callback = null; }
     if(!id(input?.orderId)||!minor(input?.amountMinor)||input.currency!=='INR'||
-      typeof callbackUrl!=='string'||!callbackUrl.startsWith('https://')||
+      !callback||callback.protocol!=='https:'||
       (input.customer?.id!=null&&!id(input.customer.id)))
       throw new TypeError('invalid_paytm_order');
     const body={requestType:'Payment',mid:this.credentials.mid,websiteName:this.credentials.websiteName,
@@ -64,7 +70,7 @@ export class PaytmAdapter extends PaymentProviderAdapter {
       throw new Error('paytm_transaction_token_missing_or_invalid');
     return {provider:'paytm',orderId:input.orderId,amountMinor:input.amountMinor,currency:'INR',
       status:'PENDING',checkout:{mid:this.credentials.mid,orderId:input.orderId,txnToken:token,
-        checkoutHost:this.hosts.checkout}};
+        checkoutHost:this.hosts.checkout,callbackUrl}};
   }
   async getPaymentStatus(input) {
     if(!id(input?.orderId))throw new TypeError('invalid_paytm_order_id');
@@ -117,7 +123,8 @@ export class PaytmAdapter extends PaymentProviderAdapter {
     if(!id(input?.orderId)||!id(input?.refundId))throw new TypeError('invalid_paytm_refund_lookup');
     const data=await this.signedRequest(this.hosts.api+'/v2/refund/status',
       {mid:this.credentials.mid,orderId:input.orderId,refId:input.refundId});
-    if(data.mid!==this.credentials.mid||data.orderId!==input.orderId||data.refId!==input.refundId)
+    if(data.mid!==this.credentials.mid||data.orderId!==input.orderId||data.refId!==input.refundId||
+      (input.paymentId && data.txnId != null && String(data.txnId)!==String(input.paymentId)))
       throw new Error('paytm_refund_status_identity_mismatch');
     const refundProgress=String(data.resultInfo?.resultStatus||data.userCreditInitiateStatus||data.acceptRefundStatus||'').toUpperCase();
     const finalStatus=['SUCCESS','TXN_SUCCESS','COMPLETED'].includes(refundProgress)?'SUCCESS':

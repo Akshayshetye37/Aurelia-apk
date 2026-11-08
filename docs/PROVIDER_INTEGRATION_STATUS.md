@@ -1,28 +1,32 @@
 # Aurelia PMS — Seven-provider integration status
 
 **Architecture:** Hybrid production backend. Android remains the offline-first PMS client; the cloud backend owns provider credentials, payment verification and accounting orchestration.  
-**Working branch:** `feature/multi-provider-payment-backend`  
-**Release status:** Live payment collection is OFF. No provider is production-ready. The factory can instantiate six complete seven-operation adapters; the cloud payment-intent/API routes still expose only Razorpay and Cashfree.
+**Working branch:** `feature/phase-7-pms-persistence` (base: `feature/multi-provider-payment-backend`)  
+**Release status:** Live payment collection is OFF. No provider is production-ready. Six complete seven-operation adapters are factory-wired and exposed through the cloud checkout/onboarding/webhook/status/refund API surface. Android checkout handoff covers Razorpay, Cashfree and Paytm native SDKs plus PayU hosted POST WebView and PhonePe/JioPay HTTPS hosted redirects in test/UAT.
 
-| Provider | Adapter/factory state | Cloud checkout API enabled | Remaining gates |
-|---|---|---:|---|
-| Razorpay | Implemented; seven-operation contract; factory-wired | Yes, test checkout only | Verify provider contract tests, webhook replay/concurrency, refund idempotency/status, canonical folio posting, Android integration and sandbox UAT |
-| Cashfree | Implemented; seven-operation contract; factory-wired | Yes, test checkout only | Verify current API/webhook/refund contracts, provider contract tests, replay/concurrency, canonical folio posting, Android integration and sandbox UAT |
-| PayU | Classic hosted checkout, payment verification, reverse-hash webhook and refund lifecycle implemented; factory-wired | No | Integrate credential/onboarding, checkout, webhook and recovery routes; merchant sandbox/UAT; canonical folio posting; physical-device acceptance |
-| PhonePe | Standard Checkout V2 OAuth, checkout, status, SHA256 webhook auth and refund lifecycle implemented; factory-wired | No | Integrate cloud routes and verify merchant-specific API version, webhook configuration, refund status, sandbox/UAT and physical-device acceptance |
-| Paytm | Official checksum-based initiate, status, callback and refund lifecycle implemented; factory-wired | No | Integrate cloud routes; verify merchant MID/website config, staging/UAT, callback and refund reconciliation |
-| JioPay | Hosted checkout, HMAC-SHA256, status, webhook and refund command lifecycle implemented; factory-wired | No | Confirm merchant/aggregator configuration, UAT status/refund responses, cloud routes and device acceptance |
-| CCAvenue | Catalogue-only; deliberately not wired | No | Obtain current merchant-specific integration kit and authoritative checkout/status/standard-refund contracts; implement and test before factory registration |
+| Provider | Adapter/factory | Cloud backend routes | Android checkout handoff | End-to-end / production ready |
+|---|---|---:|---:|---:|
+| Razorpay | Seven lifecycle operations; wired | Yes — test path; live blocked | Yes | **No** — merchant UAT, canonical folio posting, device acceptance and release gates open |
+| Cashfree | Seven lifecycle operations; wired | Yes — test path; live blocked | Yes | **No** — merchant UAT, canonical folio posting, device acceptance and release gates open |
+| PayU | Classic hosted checkout, status, reverse-hash webhook and refund lifecycle; wired | Yes — test path; live blocked | Yes — hosted POST WebView (test) | **No** — credential validation now uses a non-mutating authenticated classic Verify Payment API probe; merchant UAT, route/device acceptance and folio posting open |
+| PhonePe | Standard Checkout V2 OAuth, status, webhook auth and refund lifecycle; wired | Yes — test path; live blocked | Yes — HTTPS hosted redirect (test) | **No** — merchant UAT, route/device acceptance and folio posting open |
+| Paytm | Checksum-based initiate, status, callback and refund lifecycle; wired | Yes — test path; live blocked | Yes — All-in-One SDK (staging) | **No** — staging/UAT, merchant config, device acceptance and folio posting open |
+| JioPay | Hosted checkout, HMAC-SHA256, status, webhook and refund command lifecycle; wired | Yes — test path; live blocked | Yes — HTTPS hosted redirect (UAT) | **No** — merchant/aggregator UAT, device acceptance and folio posting open |
+| CCAvenue | Catalogue-only; no concrete adapter/factory (request-hash primitive only) | No | No | **No** — merchant kit, AES tracking-ID flow, authoritative status and general refund contract required |
+
+**Count:** six backend adapters/cloud API integrations; six Android checkout handoffs; one catalogue-only provider; zero production-qualified gateways. Cloud adapter refund endpoints do not mean refund-to-folio posting is enabled.
 
 ## Dependency-ordered delivery sequence
 
 1. **Freeze the financial domain contract.** Inspect the real PMS reservation, folio, currency, balance, journal and version/concurrency model. Map it explicitly to payment intents. Do not create a parallel authoritative ledger or migrate records by assumption.
-2. **Harden the payment core.** Define state transitions, idempotency, order identity, immutable provider evidence, webhook inbox and outbox semantics. Add race, duplicate, timeout and process-restart tests.
-3. **Complete the reference providers.** Make Razorpay and Cashfree pass one shared adapter contract, including authoritative status, raw-body webhook verification, refund creation and refund status. Keep test/live environment separation strict.
-4. **Complete accounting and recovery.** Post capture/refund entries atomically to the confirmed PMS folio schema; implement bounded reconciliation, lease/claim semantics, retry policy, observability and operator controls.
-5. **Integrate the app.** Wire the HTTPS client to the actual Firebase session provider, derive provider UI from backend capabilities, handle pending/unknown states, and test Android lifecycle/offline recovery.
-6. **Add providers independently.** Implement PayU, PhonePe, Paytm, JioPay and CCAvenue one at a time, each with product-version confirmation, adapter contract tests and merchant sandbox evidence.
-7. **Qualify and release.** Complete security review, deployment/IAM, webhook reachability, UAT, refund/reconciliation drills, operational runbooks and signed release authorization. Live collection remains blocked until every gate is evidenced.
+2. **Preserve and verify the shared payment core.** Keep the persisted intent, provider-order binding, amount/currency checks, durable webhook inbox, idempotent state transitions and settlement authorization as shared controls. Extend them only through provider-neutral contracts and regression tests.
+3. **Qualify all six registered providers independently.** Run merchant-specific checkout, callback/webhook, authoritative status, timeout recovery and full/partial refund scenarios for Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay. Keep each provider's signature, event identity, API version and retry semantics provider-specific.
+4. **Complete accounting and recovery.** Post capture/refund entries atomically to the confirmed canonical PMS folio schema; implement bounded reconciliation, lease/claim semantics, retry policy, observability and operator controls.
+5. **Integrate and qualify the app.** Verify the HTTPS client against the actual Firebase session provider, derive provider UI from backend capabilities, handle pending/unknown states, and test Android lifecycle/offline recovery on physical devices for all six checkout handoffs.
+6. **Keep CCAvenue isolated.** Do not register it by analogy. Require the merchant kit, AES interoperability vectors, callback authentication, authoritative status, general refund contract and Android acceptance before implementing its complete adapter.
+7. **Release only on evidence.** Complete security review, deployment/IAM, webhook reachability, UAT, refund/reconciliation drills, operational runbooks and signed release authorization. Live collection remains blocked until every gate is evidenced.
+
+**Detailed cross-provider controls and acceptance matrix:** [All-provider production hardening review](./ALL_PROVIDER_PRODUCTION_HARDENING_REVIEW.md).
 
 ## Architecture invariants
 
@@ -38,8 +42,8 @@
 
 ## Current evidence and limitations
 
-- The provider factory wires Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay after all seven adapter operations pass capability checks. Only Razorpay and Cashfree are exposed by the current cloud payment-intent, credential, test-order and webhook routes. The four additional adapters are not yet enabled through the cloud API. CCAvenue remains catalogue-only because the current official public documentation does not establish the complete standard refund/status contract.
+- The provider factory wires Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay after all seven adapter operations pass capability checks. CCAvenue's v1.7 mobile request-hash primitive is implemented and regression-tested, but no checkout or provider adapter is registered: merchant-specific AES tracking-ID exchange, official Android SDK, authoritative status and a general refund lifecycle remain unverified. See [CCAvenue integration decision](./CCAVENUE_INTEGRATION.md). The cloud server's provider catalogue, tenant-scoped credential onboarding/validation, test-order creation, webhook verification, authoritative status lookup and refund request/status endpoints accept all six factory-wired providers. The public Android checkout handoff covers all six wired providers: Razorpay, Cashfree, PayU, PhonePe, JioPay and Paytm. CCAvenue remains catalogue-only because a complete merchant-specific checkout/status/refund contract has not been supplied.
 - The reconciliation endpoint is authenticated and batch-bounded, but currently invokes a manual sweep; it is not a scheduled service.
 - The worker and settlement helper still target `paymentFolios/{tenant+folio hash}` and `journalEntries/{intentId}`. The repository has not established that this matches the canonical deployed PMS schema.
 - Firestore indexes must be deployed with the backend. Concurrency, lease recovery and production query load remain to be verified.
-- Unit/contract tests and backend CI cover the six factory-wired adapters. These tests use deterministic mock provider responses; they are not merchant sandbox/UAT evidence. No provider-specific live merchant UAT, cloud deployment, physical-device acceptance or live collection is asserted.
+- The repository contains deterministic mock-based contract tests for all six factory-wired adapters. These tests are not merchant sandbox/UAT evidence. PayU credential validation now performs a non-mutating classic Verify Payment API probe and accepts only the provider's explicit Not Found response; merchant sandbox/UAT remains required. No provider-specific live merchant UAT, cloud deployment, physical-device acceptance or live collection is asserted.

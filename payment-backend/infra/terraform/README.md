@@ -62,3 +62,37 @@ Terraform creates the external HTTPS-only load balancer and serverless NEG. The 
 - Cloud Run readiness is managed by the platform; the `/readyz` endpoint remains available for external monitoring and deployment verification, not as a Terraform readiness probe.
 - Review the custom Secret Manager role against any future backend code changes. If code starts using additional Secret Manager APIs, update IAM deliberately rather than granting project Owner/Editor.
 - This deployment does not make the payment backend production-ready. The documented folio settlement, reconciliation and PMS integration blockers remain.
+
+
+## Production CD is intentionally not enabled yet
+
+Do not copy a direct `gcloud run deploy` workflow into this repository. The
+actual deployment contract is this Terraform module:
+
+- Build from `payment-backend/Dockerfile.cloud`, not the attestation/LAN
+  `Dockerfile`.
+- Publish to the actual Artifact Registry repository, then pass the immutable
+  `image@sha256:<digest>` to Terraform. The `container_image` variable rejects
+  mutable tags.
+- Deploy the existing service name/region from Terraform variables. The
+  service disables its default `run.app` URL and accepts traffic through the
+  external HTTPS load balancer only.
+- Verify `https://<domain_name>/readyz` through the configured load balancer.
+  The service's readiness path is `/readyz`; accepting HTTP 401 is not a
+  readiness check.
+- Preserve Cloud Run traffic and Terraform state deliberately. Listing
+  revisions is not a rollback; a rollback must restore the previously captured
+  healthy revision/traffic allocation and verify it.
+
+A production workflow is not committed because this Terraform configuration
+currently has no remote backend block or state bucket/locking contract, and
+the repository has not supplied the real production project ID, Artifact
+Registry repository, DNS hostname, Workload Identity Federation provider,
+deployer service account, or GitHub production Environment approval rules.
+The example identifiers in an unconfigured workflow would be placeholders,
+not deployable infrastructure. Creating a CI job that runs `terraform apply`
+with ephemeral local state would risk infrastructure drift and destructive
+reconciliation. Configure and review remote state, WIF/IAM, Artifact Registry,
+DNS/managed certificate and protected Environment approval before enabling
+CD. Until then, CI may build and validate; production deployment remains
+manual and unauthorized.

@@ -1,9 +1,11 @@
 /**
- * Tenant-wide single-active-provider selection.
+ * App-wide single-primary-provider selection (tenant scope).
  *
- * Selection is stored separately from provider credential documents so it is
- * authoritative across test/live environments and cannot be overwritten by
- * unrelated payment-control updates. All changes are serialized in Firestore.
+ * tenantId identifies the Aurelia app/account. Every enrolled device installation
+ * belonging to that tenant reads the same paymentProviderSelection/{tenantId}
+ * record; deviceId never creates a competing provider selection. Selection is
+ * separate from provider credentials, authoritative across environments, and
+ * switched atomically in Firestore. Historical intents retain their own provider.
  */
 const TENANT_ID = /^[A-Za-z0-9_-]{6,64}$/;
 const PROVIDERS = new Set(['razorpay', 'cashfree', 'payu', 'phonepe', 'paytm', 'jiopay']);

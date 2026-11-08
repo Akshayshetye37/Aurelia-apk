@@ -63,3 +63,25 @@ test('enabled adapters do not inherit abstract lifecycle methods', () => {
     for (const operation of REQUIRED) assert.equal(typeof adapter[operation],'function');
   }
 });
+
+
+test('CCAvenue catalogue keeps API encryption key separate from Mobile SDK working key', async () => {
+  const { getProvider, publicProviderCatalogue } = await import('../src/providers/registry.mjs');
+  const provider = getProvider('ccavenue');
+  assert.equal(provider.adapterStatus, 'not_implemented');
+  assert.deepEqual(provider.environments, ['test', 'live']);
+  const fields = Object.fromEntries(provider.credentials.map(field => [field.key, field]));
+  assert.equal(fields.merchantId.required, true);
+  assert.equal(fields.accessCode.secret, true);
+  assert.equal(fields.encryptionKey.secret, true);
+  assert.equal(fields.hostedCheckoutKey.secret, true);
+  assert.match(fields.hostedCheckoutKey.label, /AesCryptUtil/);
+  assert.equal(fields.workingKey.secret, true);
+  assert.equal(fields.notificationWorkingKey.secret, true);
+  assert.equal(fields.regId.required, false);
+  assert.equal(fields.workingKey.required, false);
+  assert.match(fields.encryptionKey.label, /AES/);
+  assert.match(fields.workingKey.label, /requestHash/);
+  const catalogue = publicProviderCatalogue().find(item => item.id === 'ccavenue');
+  assert.ok(catalogue.credentials.some(field => field.key === 'encryptionKey' && field.secret));
+});

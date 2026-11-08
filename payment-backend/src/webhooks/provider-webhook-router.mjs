@@ -3,6 +3,14 @@ import crypto from 'node:crypto';
 import { implementedProviderAdapters } from '../providers/factory.mjs';
 
 const safeId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+// Provider event identities may be composite (Paytm/JioPay use ORDER:TXN).
+// Keep them bounded and delimiter-safe; order references retain the stricter grammar.
+const PROVIDER_EVENT_ID_MAX = 180;
+const PROVIDER_EVENT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,178}[A-Za-z0-9]$/;
+export const safeProviderEventId = value => typeof value === 'string' &&
+  value.length >= 2 && value.length <= PROVIDER_EVENT_ID_MAX &&
+  PROVIDER_EVENT_ID_RE.test(value) &&
+  !value.includes('::') && !/^(sk_|pk_|whsec_|Bearer\s)/i.test(value);
 
 /**
  * Generic raw-body webhook ingress.
@@ -74,7 +82,7 @@ export function createProviderWebhookRouter({
             : provider === 'payu' ? String(verification.event.mihpayid || verification.event.txnid || '')
             : provider === 'paytm' ? String(verification.event.ORDERID || '') + ':' + String(verification.event.TXNID || 'event')
             : String(verification.event.merchantTxnNo || '') + ':' + String(verification.event.pgTransactionId || 'event');
-          if (!safeId(eventId)) return res.status(400).json({ error: 'invalid_event_id' });
+          if (!safeProviderEventId(eventId)) return res.status(400).json({ error: 'invalid_event_id' });
           const eventKey = crypto.createHash('sha256')
             .update(provider + ':' + binding.tenantId + ':' + environment + ':' + eventId)
             .digest('hex');

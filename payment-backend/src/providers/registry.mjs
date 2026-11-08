@@ -26,7 +26,7 @@ export const PROVIDERS = Object.freeze({
     credentials: [
       { key: 'appId', label: 'App ID', type: 'text', secret: false, required: true },
       { key: 'secretKey', label: 'Secret Key', type: 'password', secret: true, required: true },
-      { key: 'webhookSecret', label: 'Webhook Secret', type: 'password', secret: true, required: true }
+      { key: 'webhookSecret', label: 'Webhook Secret Override (optional)', type: 'password', secret: true, required: false }
     ],
     capabilities: ['orders', 'payment_status', 'webhooks', 'refunds'],
     adapterStatus: 'adapter_implemented_wired'
@@ -70,10 +70,14 @@ export const PROVIDERS = Object.freeze({
     environments: ['test', 'live'],
     credentials: [
       { key: 'merchantId', label: 'Merchant ID', type: 'text', secret: false, required: true },
+      { key: 'regId', label: 'CCAvenue Reg ID (Mobile SDK)', type: 'text', secret: false, required: false },
       { key: 'accessCode', label: 'Access Code', type: 'password', secret: true, required: true },
-      { key: 'workingKey', label: 'Working Key', type: 'password', secret: true, required: true }
+      { key: 'encryptionKey', label: 'Merchant API AES Encryption Key (API v1.3; server only)', type: 'password', secret: true, required: true },
+      { key: 'hostedCheckoutKey', label: 'Hosted Checkout Working Key (AesCryptUtil; server only)', type: 'password', secret: true, required: true },
+      { key: 'workingKey', label: 'Mobile SDK Working Key (requestHash; server only)', type: 'password', secret: true, required: false },
+      { key: 'notificationWorkingKey', label: 'Dynamic Event Notification Working Key (server only)', type: 'password', secret: true, required: true }
     ],
-    capabilities: ['hosted_checkout', 'payment_verification', 'refunds'],
+    capabilities: ['hosted_checkout', 'payment_verification'],
     adapterStatus: 'not_implemented'
   },
   jiopay: {

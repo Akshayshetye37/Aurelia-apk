@@ -1,34 +1,41 @@
+## Current project status — 8 November 2026 (verified against PR #11)
+
+**Repository:** [Akshayshetye37/Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)  
+**Project root:** repository root `/`  
+**Active branch:** `feature/phase-7-pms-persistence`  
+**Pull request:** [#11 — Phase 7 canonical repository read path](https://github.com/Akshayshetye37/Aurelia-apk/pull/11) — open, draft, unmerged  
+**Source commit reviewed:** `dce2ecca07072e7aba8b8ebe06c40cac007119b6`
+
+### Latest verification
+
+- Payment backend CI: **PASSED** — [run 42472177493](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177493). Backend contract/security tests, explicit CCAvenue request-hash test, JavaScript syntax, Cloud Run image/non-root checks, Terraform validation and secret scan passed.
+- Infrastructure validation: **PASSED** — [run 42472177384](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177384).
+- Settlement foundation CI: **PASSED** — [run 42472177596](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177596).
+- PMS Android debug build: **FAILED at Kotlin compilation** — [run 42472177382](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177382). The generated Capacitor project, native patching and sync completed; `AureliaPlayIntegrityClient.kt:58` has an unresolved `IntegrityTokenRequest` reference. APK verification and artifact upload were skipped. This is a source compilation blocker, not a successful APK build.
+- Gradle distribution timeout was mitigated by increasing the wrapper download timeout to 120 seconds; the subsequent build progressed to Kotlin compilation.
+
+### Implemented foundations and verified boundaries
+
+- Local-first PMS foundations: browser IndexedDB, Android SQLite/Capacitor bridge, tenant/property-scoped repository reads and read-only legacy booking shadow planning.
+- Payment backend integrations: six registered providers — Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay — with test/UAT checkout handoffs. No provider is end-to-end production-qualified.
+- CCAvenue: hosted checkout, unqualified AES compatibility codec, Merchant API order-status verification and notification reconciliation modules exist, but are hard-restricted to test. It is not factory-registered or activatable. Official merchant-kit cryptographic vectors, notification authentication contract, current Android SDK, general refund-create contract and merchant UAT remain unverified.
+- Accounting: evidence-gated journal proposal engine and PMS `booking.pays[]` mapping exist. They are proposal-only; no production ledger writer or scheduled reconciliation is connected. Account 2020 normal-balance semantics still require Finance approval.
+- Android: Play Integrity and hardware key-attestation foundations and R8 preservation configuration exist. Kotlin compilation, R8 execution, Play Console linkage, instrumentation and physical-device acceptance are not yet proven.
+- PMS migration: full operational UI cutover remains false; no complete historical import/parity acceptance has occurred.
+
+### Production/release controls — remain closed
+
+Live gateway collection, automatic settlement, automatic refund-to-folio posting and production deployment remain OFF / unauthorized. PR #11 remains draft and unmerged. Do not treat backend/container CI as Android build or production acceptance. Build and sign a production release only after the source-level Android blocker, provider merchant UAT, canonical accounting approval and writer/reconciliation acceptance, PMS cutover, security review, physical-device acceptance and explicit release authorization have passed.
+
+---
+
 # Aurelia PMS
 
 Aurelia is a local-first property management system (PMS) for reservations, guests, rooms, folios and property operations, with a separately trusted backend for online payment-provider operations.
 
-## Project location
+## Production safety status
 
-- **GitHub repository:** https://github.com/Akshayshetye37/Aurelia-apk
-- **Project root:** repository root (`/`)
-- **Active engineering branch:** `feature/multi-provider-payment-backend`
-- **Current branch HEAD inspected:** `5f11451f52933c5c705a87cafe49970e0e6e1652` (7 November 2026)
-- **Current-head checks:** GitHub returned no workflow runs and no commit status checks for this exact SHA during the current audit. Treat this revision as not CI-verified until fresh checks complete.
-- **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
-
-Useful project locations:
-
-| Path | Purpose |
-|---|---|
-| `index.html` | PMS application UI and startup/runtime gate |
-| `src/storage/` | Repository contract, IndexedDB/native storage clients, bootstrap and domain storage services |
-| `src/payments/` | Client payment intent and Pay Bridge orchestration |
-| `payment-backend/` | Trusted payment API, provider adapters, Firestore persistence and backend tests |
-| `android/` | Capacitor Android project and native source templates |
-| `tests/` | PMS, storage, payment and native-template regression tests |
-| `docs/` | Architecture, security, accounting and release qualification documents |
-| `.github/workflows/` | Automated source, backend and packaging checks |
-
-## Current release decision
-
-**NOT PRODUCTION READY — LIVE GATEWAY COLLECTION OFF; production release and automatic settlement remain disabled.**
-
-The current implementation contains substantial storage, payment and security foundations. It is not yet an accepted end-to-end hotel operations and payment product. In particular, operational UI cutover, canonical accounting integration, provider UAT, Android device qualification and formal release acceptance remain open.
+**LIVE GATEWAY COLLECTION OFF.** Automatic settlement and automatic refund posting remain OFF. CCAvenue has isolated hosted-checkout construction, an unqualified legacy AES compatibility codec, Merchant API order-status verification and tenant-scoped notification reconciliation. These paths are now hard-restricted to the test environment; live credential onboarding and live notifications are rejected. The codec has not passed merchant-kit interoperability vectors, notification authentication is not established, static API egress registration is absent, and the Android SDK and general refund lifecycle remain unverified. CCAvenue is not factory-registered or activatable. No gateway is production-qualified, and production deployment is not authorized by this branch.
 
 ## Architecture
 
@@ -53,14 +60,34 @@ The current implementation contains substantial storage, payment and security fo
 
 **Cutover limitation:** the full booking, room, guest, folio and manual-payment UI is not yet migrated to use the asynchronous repository as its sole canonical read/write path. `uiCutover` remains false. Some operational UI state still uses the legacy synchronous application state. The room reassignment/stable room-reference migration is not complete.
 
+**Phase 7 progress:** `PmsRepositoryBridge.listEntities()` now provides tenant/property-scoped canonical reads with validation and deterministic ordering. `buildLegacyBookingShadowPlan()` generates a deterministic, read-only booking projection for active and cancelled records, preserving original fields and blocking ambiguous IDs. This is a planner only: no real snapshot was imported, no canonical parity report exists yet, and no operational UI has switched.
+
 ### Payment and provider backend
 
 - Payment intent state persistence uses optimistic compare-and-set version checks across orchestrator transitions.
 - Pay Bridge callback handling validates transaction references, rejects binding changes and treats duplicate processing callbacks idempotently.
 - Provider checkout normalization binds amount and currency to the persisted intent rather than trusting provider-echoed values.
 - Provider-specific PayU and Paytm checkout response validation has been added without changing the established nested checkout response shape.
-- Backend provider adapters/factory foundations cover Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay. CCAvenue remains catalogue-only.
+- Backend adapter and cloud API paths are wired for six providers: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay. The cloud catalogue, tenant-scoped credential onboarding, test-order creation, webhook verification, status lookup and refund request/status routes cover those six. CCAvenue now has unregistered hosted-checkout construction, AES envelope compatibility code, API v1.3 order-status verification and notification-to-status-reconciliation modules with regression tests. It now has a dedicated schema-only Secret Manager credential route and a tenant-scoped notification endpoint that reconciles status before recording evidence. It still has no complete seven-operation adapter, credential validation/activation, merchant SDK integration or production qualification.
+- Android checkout handoff now covers all six backend-wired providers: Razorpay, Cashfree and Paytm native SDKs; PayU hosted POST in WebView; PhonePe and JioPay HTTPS hosted checkout. All remain test/UAT only.
 - The provider integration document records which providers are exposed through cloud API routes and which still need route integration and merchant qualification.
+
+
+### Seven-gateway end-to-end qualification snapshot
+
+| Gateway | Concrete adapter | Cloud backend routes | Android checkout handoff | Production / E2E ready |
+|---|---:|---:|---:|---:|
+| Razorpay | Yes | Yes | Yes | **No** |
+| Cashfree | Yes | Yes | Yes | **No** |
+| PayU | Yes | Yes | Yes — hosted POST (test) | **No** |
+| PhonePe | Yes | Yes | Yes — hosted HTTPS (test) | **No** |
+| Paytm | Yes | Yes | Yes — All-in-One SDK (staging) | **No** |
+| JioPay | Yes | Yes | Yes — hosted HTTPS (UAT) | **No** |
+| CCAvenue | No — lifecycle foundation only; factory disabled | No | No | **No** |
+
+All six factory-wired adapters expose seven lifecycle operations and have deterministic mocked contract tests. The cloud capability response deliberately reports folio settlement, refund-to-folio posting and reconciliation as unavailable; live collection is disabled for every provider. PayU credential validation now uses a non-mutating classic Verify Payment API probe; merchant sandbox/UAT remains required. None of the six has been demonstrated with merchant-specific UAT evidence in this repository. CCAvenue requires merchant-issued AesCryptUtil interoperability vectors, account-specific notification key confirmation, current Android SDK kit and Instant Refund API contract before adapter registration.
+
+**Conclusion:** zero of seven gateways are qualified as end-to-end production-ready. Six have backend integration foundations; six have Android checkout handoff (three native SDKs and three hosted flows). Provider adapters and cloud endpoints are not equivalent to a completed PMS payment lifecycle.
 
 **Payment limitation:** the client intent CAS and provider adapter tests do not constitute an exactly-once financial ledger. The canonical PMS folio, provider capture, webhook inbox, trusted device authorization, local posting/read-back, backend acknowledgement, refunds and reversals still need complete end-to-end integration and acceptance.
 
@@ -73,13 +100,14 @@ The current implementation contains substantial storage, payment and security fo
 
 ## CI evidence and verification boundary
 
-The current branch HEAD inspected for this audit is `5f11451f52933c5c705a87cafe49970e0e6e1652`. The source revision immediately before these documentation-only commits, `5f11451f52933c5c705a87cafe49970e0e6e1652`, has a successful [PMS workflow run 42380831922](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42380831922), which checked that exact SHA. It passed the full PMS test suite, production web build, asset privacy checks, Android project generation/Capacitor sync, debug APK build, APK identity/signature checks and merged-manifest permission checks. The two commits updating this README and `index.html` change documentation only; they have not themselves been re-run through CI.
+Historical verification for code commit `a0c5d2eb0c56a004f49e8807d48bf05a920b857d` passed all three workflows: [payment backend CI — run 42467288914](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288914), [infrastructure validation — run 42467288923](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288923), and [settlement foundation CI — run 42467288972](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42467288972). Backend CI passed 306/306 tests, the explicit CCAvenue Mobile SDK request-hash vector (2/2), JavaScript syntax, Gitleaks history scan, Cloud Run image build/non-root verification and Terraform validation. Infrastructure formatting/validation and the full application test suite/web build also passed. These results do not prove Android Gradle/R8 compilation, physical-device acceptance, CCAvenue merchant sandbox interoperability, static egress/IP registration, production deployment or release signing.
 
 Historical evidence is commit-scoped and must not be treated as an automatic pass for later revisions:
 
 | Workflow evidence | Recorded scope | Boundary |
 |---|---|---|
-| [PMS source tests, production web packaging and Android debug build — run 42380831922](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42380831922) | Exact SHA `5f11451f52933c5c705a87cafe49970e0e6e1652`; conclusion `success`. | Full PMS suite, web build/privacy checks, Android generation/sync, debug APK build, APK identity/signature and manifest permission checks; validation artifact uploaded. |
+| [Phase 7 source tests and production web build — run 42400767973](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42400767973) | Exact Phase 7 baseline `5010f5e2a3a3c239a721b514f19d8435e0b8f852`; conclusion `success`. | Full application test suite, settlement syntax checks and production web build; no APK or deployment. |
+| [Historical PMS/Android debug validation — run 42380831922](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42380831922) | Earlier source revision; conclusion `success`. | PMS suite, web build/privacy checks, Android generation/sync, debug APK build, identity/signature and manifest checks; historical only. |
 | [Other historical workflow runs](https://github.com/Akshayshetye37/Aurelia-apk/actions) | Earlier commits | Historical only; not current-head CI evidence. |
 
 Even a successful debug APK build does not establish physical-device acceptance, Android transaction/process-death recovery, production signing, merchant sandbox acceptance or production readiness.
@@ -147,11 +175,59 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 - [End-to-end remediation and release plan](./docs/END_TO_END_REMEDIATION_PLAN.md)
 - [Provider integration status](./docs/PROVIDER_INTEGRATION_STATUS.md)
+- [All-provider production hardening review](./docs/ALL_PROVIDER_PRODUCTION_HARDENING_REVIEW.md)
 - [Native security and recovery](./docs/NATIVE-SECURITY-AND-RECOVERY.md)
 - [Local-first sync architecture](./docs/LOCAL_FIRST_SYNC_ARCHITECTURE.md)
 - [PMS accounting schema](./docs/PMS_ACCOUNTING_SCHEMA.md)
 
 ---
 
-**Current branch HEAD inspected:** `5f11451f52933c5c705a87cafe49970e0e6e1652`  
-**Status:** engineering foundations verified by CI; production release not approved.
+**Latest source commit reviewed:** `dce2ecca07072e7aba8b8ebe06c40cac007119b6`  
+**Active work branch:** `feature/phase-7-pms-persistence`  
+**Status:** backend CI passed; Android debug build currently fails at Kotlin compilation; production release not approved.
+
+
+## Canonical accounting integration — current phase
+
+- Added `payment-backend/src/accounting/pms-ledger-mapping.mjs`: a pure evidence-gated adapter from the actual `booking.pays[]` legacy payment row to canonical non-postable journal proposals.
+- Capture, processor fee and cancellation/refund mappings require independent provider evidence and exact integer-paise amounts. Legacy rupee decimals are parsed with decimal-string validation and BigInt arithmetic; binary floating-point multiplication is not used. The latest verified backend CI passed 306/306 contract/security tests (plus 2/2 explicit CCAvenue Mobile SDK hash-vector checks) after correcting the decimal separator parser.
+- Mapping directions remain provisional: capture Dr 2020 / Cr 1010; actual processor fee Dr 5010 / Cr 2020; verified refund Dr 1010 / Cr 2020.
+- Added regression tests in `payment-backend/test/pms-ledger-mapping.test.mjs`.
+- Added `android/templates/security/proguard-rules.pro` and Android generation wiring for Razorpay, Cashfree and Paytm R8 preservation rules. This is source-level configuration only; Android Gradle compilation and release shrinker verification remain outstanding.
+- Detailed boundary and migration decision: [PMS canonical accounting integration](docs/PMS_CANONICAL_ACCOUNTING_INTEGRATION.md).
+
+**Not implemented by design:** no PostgreSQL schema, no parallel `payment_records` database, no legacy backfill, no accounting writer, no scheduled reconciliation. Aurelia's actual PMS storage is local IndexedDB/native SQLite with a Firestore payment backend; the proposed PostgreSQL tables do not exist in this repository. Account 2020 normal balance still requires Finance approval.
+
+**Release safeguards remain locked:** live collection OFF, automatic settlement OFF, automatic refund posting OFF, CCAvenue adapter disabled, and 0/6 registered providers production-qualified. These source changes do not constitute production readiness.
+
+
+## Payment provider selection policy
+
+Aurelia has one app-wide primary payment provider per tenant/account. All enrolled device installations for the same app use the same primary selection; Device IDs identify installations and do not create separate provider selections. An authorized administrator explicitly confirms a switch, after which the newly qualified provider becomes primary for all new online payments. The previous provider is frozen for new checkout, with no automatic fallback. Existing transactions remain bound to their original provider for delayed webhooks, status verification, refunds and reconciliation.
+
+The Payment Gateway screen lists all seven planned providers. Six adapters are currently registered and may be qualified for test activation. CCAvenue remains visible but unavailable until its complete adapter and merchant lifecycle are implemented and verified. Live collection remains OFF.
+
+
+### Historical CCAvenue hardening CI snapshot (8 November 2026)
+
+The following run IDs belong to an earlier source revision (`00a6e07c71d1652723894e646a5bdea0871de52c`) and are retained as historical evidence only. They are superseded by the current status at the top of this README:
+- Earlier payment backend CI: [run 42471552471](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552471).
+- Earlier infrastructure validation: [run 42471552405](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552405).
+- Earlier settlement foundation CI: [run 42471552584](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471552584).
+- Earlier PMS source test / production packaging: [run 42471548691](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42471548691).
+
+Use the current project status section above for the latest verified commit and CI conclusions.
+
+
+### CCAvenue external sample review — 8 November 2026
+
+Reviewed the third-party Android sample at [senthilinfo62/ccavenue-payment-gateway-integration-in-android-sdk-master](https://github.com/senthilinfo62/ccavenue-payment-gateway-integration-in-android-sdk-master). It is a legacy RSA/GetRSA + WebView hosted-checkout example on an obsolete Android build stack. It is retained as protocol-comparison material only; no source, dependencies, WebView status parsing, random order generation or IDE module descriptor were imported.
+
+Important distinction: the sample's RSA flow is not the CCAvenue Mobile SDK v1.7 requestHash contract. Aurelia keeps classic hosted-checkout AES compatibility, Mobile SDK server-side SHA-512 requestHash, and Merchant API encryption as separate protocol/credential scopes. The Mobile SDK requestHash has a deterministic local formula test; this is not a CCAvenue merchant interoperability vector. Current merchant-issued SDK/AES vectors, tracking-ID API contract, notification authentication, refund contract and merchant UAT remain outstanding. CCAvenue remains unregistered, test-only and unavailable for live collection.
+
+Detailed findings and acceptance evidence checklist: [CCAvenue integration review](./docs/CCAVENUE_INTEGRATION.md#external-android-sample-review--senthilinfo62-ccavenue-integration-8-november-2026).
+
+
+## Public Indian payment-provider GitHub research
+
+Reviewed vendor-maintained public SDKs and samples for Razorpay, Cashfree, PhonePe, Paytm and PayU, plus public third-party references for CCAvenue and multi-gateway architecture. The audit records useful implementation evidence, source limitations and patterns Aurelia intentionally does not copy: [Public GitHub provider reference audit](./docs/PUBLIC_GITHUB_PROVIDER_REFERENCE_AUDIT.md).

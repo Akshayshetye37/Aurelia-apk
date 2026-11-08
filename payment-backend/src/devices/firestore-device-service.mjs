@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { canonicalBytes } from "../shared/canonical.mjs";
 import { SETTLEMENT_AUTH_TYPE, SETTLEMENT_LEASE_TYPE, SETTLEMENT_ISSUER, SETTLEMENT_AUDIENCE } from "../settlement/authorization-signer.mjs";
+import { createPlayIntegrityRequestHash, evaluatePlayIntegrityVerdict } from "./play-integrity-verifier.mjs";
 
 const DEVICE_ID = /^[A-Za-z0-9_-]{6,64}$/;
 const COMMAND_ID = /^[0-9a-f-]{36}$/i;
@@ -23,6 +24,7 @@ export async function createDeviceEnrollmentChallenge({ db, tenantId, actorUid, 
   const nonce = crypto.randomBytes(32).toString("base64url");
   const issuedAt = now();
   const expiresAt = new Date(issuedAt.getTime() + 5 * 60_000);
+  const playIntegrityRequestHash = createPlayIntegrityRequestHash({ tenantId, deviceId, challengeId, nonce });
   await db.runTransaction(async tx => {
     const existing = await tx.get(ref);
     if (existing.exists && !["ENROLLMENT_PENDING", "PENDING"].includes(existing.data().status)) {
@@ -31,35 +33,61 @@ export async function createDeviceEnrollmentChallenge({ db, tenantId, actorUid, 
     if (existing.exists && existing.data().ownerUid !== actorUid) {
       throw new Error("payment_device_owner_conflict");
     }
+    if (existing.exists && existing.data().status === "PENDING" &&
+        existing.data().publicKeySpkiBase64) {
+      throw new Error("payment_device_attestation_already_submitted_owner_activation_required");
+    }
     tx.create(challengeRef(db, tenantId, deviceId, challengeId), {
       tenantId, deviceId, actorUid, nonceSha256: sha256(Buffer.from(nonce, "base64url")),
-      nonceBase64: nonce, issuedAt, expiresAt, consumedAt: null
+      nonceBase64: nonce, playIntegrityRequestHash, issuedAt, expiresAt, consumedAt: null
     });
-    if (!existing.exists) tx.create(ref, {
-      tenantId, deviceId, ownerUid: actorUid, status: "ENROLLMENT_PENDING",
-      lastSequence: 0, lastAckedSequence: 0, createdAt: issuedAt
-    });
+    if (!existing.exists) {
+      tx.create(ref, {
+        tenantId, deviceId, ownerUid: actorUid, status: "ENROLLMENT_PENDING",
+        enrollmentChallengeId: challengeId,
+        lastSequence: 0, lastAckedSequence: 0, createdAt: issuedAt
+      });
+    } else {
+      tx.update(ref, {
+        enrollmentChallengeId: challengeId,
+        enrollmentChallengeIssuedAt: issuedAt,
+        updatedAt: issuedAt
+      });
+    }
   });
-  return { challengeId, nonce, expiresAt: expiresAt.toISOString() };
+  return { challengeId, nonce, playIntegrityRequestHash, expiresAt: expiresAt.toISOString() };
 }
 
 export async function verifyAndRegisterDevice({
   db, tenantId, actorUid, deviceId, challengeId, publicKeyPem,
-  certificateChainBase64, attestationVerifierUrl = "http://127.0.0.1:8091",
+  certificateChainBase64, integrityToken, expectedPackageName,
+  allowedCertificateSha256Digests, decodeIntegrityToken, requireStrongIntegrity = false,
+  attestationVerifierUrl = "http://127.0.0.1:8091",
   fetchImpl = globalThis.fetch, now = () => new Date()
 }) {
   requireId(tenantId, "tenant_id"); requireId(deviceId, "device_id");
   if (typeof actorUid !== "string" || !actorUid || !COMMAND_ID.test(challengeId || "") ||
       typeof publicKeyPem !== "string" || publicKeyPem.length > 4096 ||
+      typeof integrityToken !== "string" || integrityToken.length < 100 || integrityToken.length > 20_000 ||
+      typeof decodeIntegrityToken !== "function" || typeof expectedPackageName !== "string" ||
+      !Array.isArray(allowedCertificateSha256Digests) || !allowedCertificateSha256Digests.length ||
       !Array.isArray(certificateChainBase64) || certificateChainBase64.length < 2 ||
       certificateChainBase64.length > 8 || certificateChainBase64.some(v =>
         typeof v !== "string" || v.length < 128 || v.length > 90_000)) {
     throw new TypeError("invalid_payment_device_enrollment");
   }
   const challengeDocument = challengeRef(db, tenantId, deviceId, challengeId);
-  const challengeSnap = await challengeDocument.get();
+  const deviceRef = paymentDeviceRef(db, tenantId, deviceId);
+  const [challengeSnap, deviceSnap] = await Promise.all([
+    challengeDocument.get(), deviceRef.get()
+  ]);
   if (!challengeSnap.exists) throw new Error("payment_device_challenge_not_found");
   const challenge = challengeSnap.data();
+  if (!deviceSnap.exists || deviceSnap.data().ownerUid !== actorUid ||
+      deviceSnap.data().enrollmentChallengeId !== challengeId ||
+      !["ENROLLMENT_PENDING", "PENDING"].includes(deviceSnap.data().status)) {
+    throw new Error("payment_device_enrollment_challenge_superseded");
+  }
   const current = now();
   if (challenge.actorUid !== actorUid || challenge.tenantId !== tenantId ||
       challenge.deviceId !== deviceId || challenge.consumedAt ||
@@ -67,6 +95,17 @@ export async function verifyAndRegisterDevice({
       challenge.expiresAt.toDate().getTime() <= current.getTime()) {
     throw new Error("payment_device_challenge_expired_or_mismatched");
   }
+  const decodedIntegrity = await decodeIntegrityToken(integrityToken);
+  const integrity = evaluatePlayIntegrityVerdict({
+    payload: decodedIntegrity,
+    expectedPackageName,
+    expectedRequestHash: challenge.playIntegrityRequestHash,
+    allowedCertificateSha256Digests,
+    now: current.getTime(),
+    requireStrongIntegrity
+  });
+  if (!integrity.accepted) throw new Error(integrity.reason);
+
   const response = await fetchImpl(new URL("/verify", attestationVerifierUrl), {
     method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" },
     body: JSON.stringify({ challengeBase64: challenge.nonceBase64, certificateChainBase64 }),
@@ -90,6 +129,7 @@ export async function verifyAndRegisterDevice({
     const [deviceSnap, currentChallenge] = await Promise.all([tx.get(ref), tx.get(challengeDocument)]);
     const data = currentChallenge.exists ? currentChallenge.data() : null;
     if (!deviceSnap.exists || deviceSnap.data().ownerUid !== actorUid ||
+        deviceSnap.data().enrollmentChallengeId !== challengeId ||
         !["ENROLLMENT_PENDING", "PENDING"].includes(deviceSnap.data().status) ||
         !data || data.consumedAt || data.actorUid !== actorUid ||
         data.expiresAt.toDate().getTime() <= current.getTime()) {
@@ -97,12 +137,21 @@ export async function verifyAndRegisterDevice({
     }
     tx.update(challengeDocument, { consumedAt: current });
     tx.update(ref, {
-      status: "PENDING", publicKeySpkiBase64: verified.publicKeySpkiBase64,
+      status: "PENDING", enrollmentChallengeId: null,
+      publicKeySpkiBase64: verified.publicKeySpkiBase64,
       keyAlgorithm: "ECDSA_P256_SHA256",
       attestationVerifiedAt: current.toISOString(),
       attestationSecurityLevel: verified.securityLevel,
       attestationVerifiedBootState: verified.verifiedBootState,
       attestationDeviceLocked: true,
+      playIntegrityVerifiedAt: current.toISOString(),
+      playIntegrityAppRecognitionVerdict: integrity.appRecognitionVerdict,
+      playIntegrityAppLicensingVerdict: integrity.appLicensingVerdict,
+      playIntegrityDeviceRecognitionVerdicts: [...integrity.deviceRecognitionVerdicts],
+      playIntegrityCertificateSha256Digest: [...integrity.certificateSha256Digest],
+      playIntegrityTimestampMillis: integrity.timestampMillis,
+      playIntegrityRequestHash: integrity.requestHash,
+      playIntegrityStrongIntegrityRequired: requireStrongIntegrity,
       attestationChainSha256: sha256(certificateChainBase64.join(".")),
       updatedAt: current
     });
@@ -115,15 +164,26 @@ export async function activatePaymentDevice({ db, tenantId, actorUid, deviceId, 
   const ref = paymentDeviceRef(db, tenantId, deviceId);
   await db.runTransaction(async tx => {
     const snap = await tx.get(ref);
+    const currentTime = now();
+    const integrityVerifiedAt = Date.parse(snap.exists ? snap.data().playIntegrityVerifiedAt || "" : "");
     if (!snap.exists || snap.data().ownerUid !== actorUid || snap.data().status !== "PENDING" ||
+        !Number.isFinite(integrityVerifiedAt) || currentTime.getTime() - integrityVerifiedAt > 10 * 60_000 ||
+        currentTime.getTime() < integrityVerifiedAt ||
         !snap.data().publicKeySpkiBase64 || !snap.data().attestationVerifiedAt ||
         snap.data().attestationSecurityLevel !== "TRUSTED_ENVIRONMENT" &&
           snap.data().attestationSecurityLevel !== "STRONG_BOX" ||
         snap.data().attestationVerifiedBootState !== "VERIFIED" ||
-        snap.data().attestationDeviceLocked !== true) {
+        snap.data().attestationDeviceLocked !== true ||
+        snap.data().playIntegrityAppRecognitionVerdict !== "PLAY_RECOGNIZED" ||
+        snap.data().playIntegrityAppLicensingVerdict !== "LICENSED" ||
+        !Array.isArray(snap.data().playIntegrityDeviceRecognitionVerdicts) ||
+        !snap.data().playIntegrityDeviceRecognitionVerdicts.includes("MEETS_DEVICE_INTEGRITY") ||
+        snap.data().playIntegrityStrongIntegrityRequired === true &&
+          !snap.data().playIntegrityDeviceRecognitionVerdicts.includes("MEETS_STRONG_INTEGRITY") ||
+        !snap.data().playIntegrityVerifiedAt) {
       throw new Error("payment_device_attestation_not_ready");
     }
-    tx.update(ref, { status: "ACTIVE", activatedAt: now(), activatedBy: actorUid });
+    tx.update(ref, { status: "ACTIVE", activatedAt: currentTime, activatedBy: actorUid });
   });
   return { deviceId, status: "ACTIVE" };
 }

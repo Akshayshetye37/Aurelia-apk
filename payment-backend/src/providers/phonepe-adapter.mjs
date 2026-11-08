@@ -39,13 +39,20 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
   }
   async request(method, path, body) {
     const token = await this.accessToken();
-    const response = await this.fetch(this.baseUrl + path, {
-      method, headers: { Authorization: 'O-Bearer ' + token, 'Content-Type': 'application/json',
-        Accept: 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000)
-    });
+    let response;
+    try {
+      response = await this.fetch(this.baseUrl + path, {
+        method, headers: { Authorization: 'O-Bearer ' + token, 'Content-Type': 'application/json',
+          Accept: 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000)
+      });
+    } catch (cause) {
+      throw Object.assign(new Error('phonepe_network_error'), { outcomeUnknown: method !== 'GET', cause });
+    }
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw Object.assign(new Error('phonepe_request_failed'), { providerStatus: response.status });
+    if (!response.ok) throw Object.assign(new Error('phonepe_request_failed'), {
+      providerStatus: response.status, outcomeUnknown: method !== 'GET' && response.status >= 500
+    });
     return data;
   }
   async validateCredentials() {
@@ -53,8 +60,10 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
     return { valid: true };
   }
   async createOrder(input) {
+    let returnUrl;
+    try { returnUrl = new URL(input?.returnUrl); } catch { returnUrl = null; }
     if (!id(input?.orderId) || !minor(input?.amountMinor) || input.currency !== 'INR' ||
-        typeof input.returnUrl !== 'string' || !input.returnUrl.startsWith('https://')) {
+        !returnUrl || returnUrl.protocol !== 'https:') {
       throw new TypeError('invalid_phonepe_order');
     }
     const data = await this.request('POST', '/checkout/v2/pay', {
@@ -63,8 +72,15 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
       paymentFlow: { type: 'PG_CHECKOUT', message: 'Aurelia folio payment',
         merchantUrls: { redirectUrl: input.returnUrl } }
     });
+    // PhonePe's response.orderId is its provider-generated order identifier;
+    // merchantOrderId is the merchant's request identifier.
+    if (data.merchantOrderId != null && data.merchantOrderId !== input.orderId) {
+      throw new Error('phonepe_checkout_order_binding_mismatch');
+    }
     const redirectUrl = data.redirectUrl || data.redirectInfo?.url;
-    if (typeof redirectUrl !== 'string' || !redirectUrl.startsWith('https://')) {
+    let checkoutUrl;
+    try { checkoutUrl = new URL(redirectUrl); } catch { checkoutUrl = null; }
+    if (!checkoutUrl || checkoutUrl.protocol !== 'https:') {
       throw new Error('phonepe_checkout_url_missing');
     }
     return { provider: 'phonepe', orderId: input.orderId, amountMinor: input.amountMinor,
@@ -76,21 +92,29 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
       currency: status.currency, status: status.paymentStatus } : { found: false };
   }
   async getPaymentStatus(input) {
-    if (!id(input?.orderId)) throw new TypeError('invalid_phonepe_order_id');
+    if (!id(input?.orderId) || (input.paymentId != null && !id(String(input.paymentId)))) {
+      throw new TypeError('invalid_phonepe_order_id');
+    }
     const data = await this.request('GET', '/checkout/v2/order/' +
       encodeURIComponent(input.orderId) + '/status?details=false');
+    if (data.merchantOrderId != null && data.merchantOrderId !== input.orderId) {
+      throw new Error('phonepe_status_order_identity_mismatch');
+    }
     const state = String(data.state || '').toUpperCase();
-    const payment = Array.isArray(data.paymentDetails) ? data.paymentDetails.find(p =>
-      !input.paymentId || String(p.transactionId) === String(input.paymentId)) : null;
-    const txnId = input.paymentId ? (payment?.transactionId || null)
-      : (payment?.transactionId || data.paymentDetails?.[0]?.transactionId || null);
-    const amountMinor = payment?.amount ?? data.amount;
-    const captured = state === 'COMPLETED' && minor(amountMinor) &&
-      (!input.paymentId || (payment?.state === 'COMPLETED' && String(txnId) === String(input.paymentId)));
-    return { provider: 'phonepe', orderId: data.merchantOrderId || input.orderId,
-      paymentId: txnId == null ? null : String(txnId), paymentStatus: state,
+    const paymentList = Array.isArray(data.paymentDetails) ? data.paymentDetails : [];
+    const payment = input.paymentId
+      ? paymentList.find(p => String(p.transactionId) === String(input.paymentId))
+      : (paymentList.find(p => String(p.state || '').toUpperCase() === 'COMPLETED') || paymentList[0] || null);
+    const txnId = payment?.transactionId ?? null;
+    const amountMinor = input.paymentId ? payment?.amount : (payment?.amount ?? data.amount);
+    const captured = state === 'COMPLETED' && Boolean(payment) &&
+      String(payment.state || '').toUpperCase() === 'COMPLETED' && minor(amountMinor) &&
+      (!input.paymentId || String(txnId) === String(input.paymentId));
+    return { provider: 'phonepe', orderId: input.orderId,
+      paymentId: txnId == null ? null : String(txnId),
+      paymentStatus: input.paymentId && !payment ? 'NOT_FOUND' : (payment?.state || state),
       amountMinor: minor(amountMinor) ? amountMinor : null, currency: 'INR',
-      captured, found: true };
+      captured, found: !input.paymentId || Boolean(payment) };
   }
   async verifyWebhook(rawBody, headers = {}) {
     if (!Buffer.isBuffer(rawBody) || !this.credentials.webhookUsername || !this.credentials.webhookPassword) {
@@ -107,7 +131,7 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
     try {
       const event = JSON.parse(rawBody.toString('utf8'));
       if (!event || typeof event !== 'object' || !event.payload ||
-          typeof event.event !== 'string' || typeof event.payload.merchantOrderId !== 'string') {
+          typeof event.event !== 'string' || !id(event.payload.merchantOrderId)) {
         return { valid: false };
       }
       return { valid: true, event };
@@ -122,19 +146,25 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
       merchantRefundId: input.refundId, originalMerchantOrderId: input.orderId,
       amount: input.amountMinor
     });
-    if (data.amount !== input.amountMinor || !['PENDING','COMPLETED'].includes(String(data.state || '').toUpperCase())) {
+    if ((data.originalMerchantOrderId != null && data.originalMerchantOrderId !== input.orderId) ||
+        (data.merchantRefundId != null && data.merchantRefundId !== input.refundId) ||
+        data.amount !== input.amountMinor ||
+        !['PENDING','COMPLETED'].includes(String(data.state || '').toUpperCase())) {
       throw new Error('phonepe_refund_response_binding_mismatch');
     }
-    return { provider: 'phonepe', refundId: data.refundId || input.refundId,
-      status: data.state, amountMinor: data.amount, currency: 'INR' };
+    return { provider: 'phonepe', refundId: input.refundId,
+      providerRefundId: data.refundId == null ? null : String(data.refundId),
+      status: String(data.state).toUpperCase(), amountMinor: data.amount, currency: 'INR' };
   }
   async getRefundStatus(input) {
     if (!id(input?.refundId) || !id(input?.orderId)) throw new TypeError('invalid_phonepe_refund_id');
     const data = await this.request('GET', '/payments/v2/refund/' +
       encodeURIComponent(input.refundId) + '/status');
-    if (data.originalMerchantOrderId !== input.orderId || !['PENDING','COMPLETED','FAILED'].includes(String(data.state || '').toUpperCase()) ||
+    if (data.originalMerchantOrderId !== input.orderId ||
+        (data.merchantRefundId != null && data.merchantRefundId !== input.refundId) ||
+        !['PENDING','COMPLETED','FAILED'].includes(String(data.state || '').toUpperCase()) ||
         !minor(data.amount)) throw new Error('phonepe_refund_status_identity_mismatch');
-    return { provider: 'phonepe', refundId: input.refundId, providerRefundId: data.refundId || null,
+    return { provider: 'phonepe', refundId: input.refundId, providerRefundId: data.refundId == null ? null : String(data.refundId),
       status: data.state, amountMinor: data.amount, currency: 'INR' };
   }
 }

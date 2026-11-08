@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/multi-provider-payment-backend
+      - feature/phase-7-pms-persistence
   pull_request:
     branches:
       - main

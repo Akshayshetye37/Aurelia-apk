@@ -1,21 +1,39 @@
 <!--
-AURELIA PMS — CURRENT SOURCE AND RELEASE BOUNDARY
+AURELIA PMS — PROJECT LOCATION, VERIFIED STATUS AND RELEASE BOUNDARY
 Repository: https://github.com/Akshayshetye37/Aurelia-apk
 Project root: /
-Active branch: feature/multi-provider-payment-backend
-Current branch HEAD inspected before documentation commit: 5f11451f52933c5c705a87cafe49970e0e6e1652
-Documentation-only README update: 743b9f99a4572c46791c2e427fa2db858789e642
-Recovery point: backup/pre-local-first-cutover-2026-11-07 at 8b74f3d2cb723237b5f3a8901e22ef7370552812; backup/pre-release-html-update-2026-11-07 preserves the pre-documentation-update snapshot.
-CI evidence: run 42380831922 is associated with the above source revision in existing repository notes. The current audit queried commit-scoped workflow/status endpoints and received no records; confirm the Actions run's exact SHA, conclusion and steps before using it as acceptance evidence.
-LOCAL IDENTITY: browser/PWA uses a cryptographically generated local identity in IndexedDB with a verified localStorage fallback. Android stores identity encrypted with AES-GCM using an Android Keystore key. Local identity is distinct from Firebase/cloud tenant identity.
-COMPATIBILITY PERSISTENCE: verified legacy saves are mirrored asynchronously to a versioned repository audit entity with an immutable outbox event. The legacy aurelia_lodge_v2 value is preserved. This is a compatibility/audit snapshot, not atomic dual-write of every domain entity.
-CUTOVER: uiCutover=false. Existing PMS screens still use legacy synchronous state; the asynchronous repository is not yet the sole operational source of truth.
-RUNTIME: serve/package the complete project and ./src module tree. Startup must fail closed if durable storage bootstrap or exact snapshot verification fails. Embedded previews without durable storage are unsupported.
-PAYMENTS: six adapter/factory foundations exist. The provider integration matrix states only Razorpay and Cashfree currently have cloud checkout API routes; PayU, PhonePe, Paytm and JioPay cloud route integration remains outstanding. CCAvenue is catalogue-only. Adapter tests do not prove merchant UAT or production support.
-ANDROID: Capacitor appId com.aurelia.pms; webDir www. Previous CI notes report a debug APK build, not production signing or physical-device qualification. Native process-death recovery and device acceptance remain open.
-RELEASE: cloud sync OFF; live gateway collection OFF; automatic gateway settlement OFF; automatic refund posting OFF; production release NOT AUTHORIZED.
-The application must never contain merchant credentials, webhook secrets, signing keys or backend secrets.
+Active branch: feature/phase-7-pms-persistence
+Pull request: https://github.com/Akshayshetye37/Aurelia-apk/pull/11 (OPEN; DRAFT; UNMERGED)
+Source commit reviewed: dce2ecca07072e7aba8b8ebe06c40cac007119b6 (8 November 2026)
+
+LATEST CI:
+- Payment backend CI: PASSED — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177493
+- Infrastructure validation: PASSED — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177384
+- Settlement foundation CI: PASSED — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177596
+- Android PMS debug build: FAILED during Kotlin compilation — https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42472177382
+  Exact error: AureliaPlayIntegrityClient.kt:58 — unresolved reference IntegrityTokenRequest.
+  Capacitor generation, native patching and sync passed. APK signature/package verification and artifact upload were skipped.
+- Gradle wrapper download timeout was increased to 120 seconds; the next run reached compilation.
+
+IMPLEMENTED FOUNDATIONS:
+- Local-first PMS: IndexedDB, Android SQLite/Capacitor bridge, tenant/property-scoped repository reads and read-only legacy booking shadow planner.
+- Six backend-registered payment providers and six test/UAT Android checkout handoffs: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay.
+- CCAvenue hosted checkout/status/notification modules exist but are unqualified and test-only; it is not registered or activatable.
+- Accounting journal and booking.pays[] mapping produce evidence-gated proposals only; no production ledger writer or scheduled reconciliation.
+- Play Integrity/hardware key-attestation foundations and Android R8 configuration exist; Android compilation/device acceptance is not proven.
+
+BLOCKERS:
+- Fix Kotlin IntegrityTokenRequest compilation and pass generated Android build, R8 and artifact verification.
+- Complete merchant UAT and lifecycle qualification for all providers; obtain official CCAvenue merchant kit, crypto vectors, notification contract, Android SDK and general refund API.
+- Finance approval for Account 2020 and canonical accounting; implement and verify posting writer/reconciliation only after approval.
+- Complete PMS UI cutover, migration parity, security/operational acceptance and physical-device tests.
+
+RELEASE SAFETY:
+Live collection OFF; automatic settlement OFF; automatic refund posting OFF; production deployment/release signing NOT AUTHORIZED. PR #11 is draft and unmerged. Backend CI success is not an APK build or production acceptance.
 -->
+
+
+
 
 <!-- Application metadata
      Fresh-install posture: no fabricated rooms, guests, bookings, tables or revenue.
@@ -35,7 +53,7 @@ The application must never contain merchant credentials, webhook secrets, signin
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Aurelia PMS</title>
 <meta name="application-name" content="Aurelia PMS">
-<meta name="description" content="Aurelia PMS — local-first property management for reservations, guests, rooms and folios, with trusted online payment services.">
+<meta name="description" content="Aurelia PMS — local-first property management for reservations, guests, rooms and folios. Gateway collection, automated settlement and refund posting remain disabled pending accounting, provider and Android device qualification.">
 <meta name="theme-color" content="#081711">
 <meta name="color-scheme" content="dark">
 <meta name="mobile-web-app-capable" content="yes">
@@ -3522,16 +3540,16 @@ function loadAureliaCheckoutScript(provider){
 window.aureliaGatewayFolioHtml=function(i){
  const a=window.AureliaPaymentProviderState||{},providers=(a.providers||[]).filter(x=>x.environment==='test'&&x.active);
  const activeProviderId=a.activeProviderId||null;
-  const supported=providers.filter(x=>x.provider===activeProviderId&&['razorpay','cashfree'].includes(x.provider)&&x.capabilities?.testCheckout===true&&x.capabilities?.liveCollection===false&&x.productionReady===false);
+  const supported=providers.filter(x=>x.provider===activeProviderId&&['razorpay','cashfree','payu','phonepe','jiopay','paytm'].includes(x.provider)&&x.capabilities?.testCheckout===true&&x.capabilities?.liveCollection===false&&x.productionReady===false);
  const booking=bk(i),pending=(booking?.gatewayPayments||[]).filter(x=>x.status!=='POSTED_TO_FOLIO');
  const pendingHtml=pending.length?'<div class="card" style="margin:10px 0"><b>Unresolved online transactions</b>'+pending.map(x=>'<div class="ln"><span>'+esc(x.provider)+' · '+esc(x.status)+'<br><small>'+esc(x.transactionId)+'</small></span><button class="btn sm ghost" onclick="reconcileAureliaGatewayPayment('+Number(i)+',\''+esc(x.transactionId)+'\')">Reconcile</button></div>').join('')+'</div>':'';
  const setup='<button class="btn sm ghost" onclick="S.tab=&quot;more&quot;;S.sub=&quot;set&quot;;render()">Open Payment Gateway settings</button>';
  if(!S.set.backendConnection?.reachable||!a.authenticated)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">Online checkout is unavailable until this device is enrolled with the optional trusted HTTPS payment backend. Bookings, folios and cash/manual payments continue to work offline.</p>'+setup;
- if(!supported.length)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">No qualified, supported sandbox provider is selected as this tenant\'s active provider. Select one qualified provider in the trusted backend; merchant credentials remain in Google Secret Manager. PayU, PhonePe, Paytm and JioPay are not yet available in the Android checkout handoff.</p>'+setup;
- const options=supported.map(x=>'<option value="'+esc(x.provider)+'">'+(x.provider==='razorpay'?'Razorpay':'Cashfree')+' · Sandbox</option>').join('');
- return '<h3>Online payment · Sandbox</h3>'+pendingHtml+'<p class="lab">The backend has selected '+esc(supported[0].provider)+' as this tenant\'s single active provider. Only that backend-selected provider is selectable. This local app uses the provider checkout over the device internet connection; the trusted backend verifies payment independently. Live collection remains disabled; provider success alone never posts a PMS receipt. Gateway-to-folio posting is not released.</p><label class="fld"><span>Payment provider</span><select id="aurelia-online-provider">'+options+'</select></label><label class="fld"><span>Amount (INR)</span><input id="aurelia-online-amount" type="number" min="0.01" step="0.01" value="'+Math.max(0,Number(dueB(booking))||0).toFixed(2)+'"></label><div id="aurelia-cashfree-details" hidden><label class="fld"><span>Guest mobile number (Cashfree)</span><input id="aurelia-cashfree-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number"></label><label class="fld"><span>Public HTTPS return URL (Cashfree)</span><input id="aurelia-cashfree-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><button class="btn" style="width:100%" onclick="startAureliaGatewayCheckout('+Number(i)+')">Create secure checkout</button><div id="aurelia-gateway-checkout-status" class="lab" role="status" style="margin-top:8px"></div>';
+ if(!supported.length)return '<h3>Online payment</h3>'+pendingHtml+'<p class="lab">No qualified, supported sandbox provider is selected as this tenant\'s active provider. Select one qualified provider in the trusted backend; merchant credentials remain in Google Secret Manager. All six wired providers have a sandbox checkout handoff; merchant-specific acceptance remains required.</p>'+setup;
+ const options=supported.map(x=>'<option value="'+esc(x.provider)+'">'+({razorpay:'Razorpay',cashfree:'Cashfree',payu:'PayU',phonepe:'PhonePe',jiopay:'JioPay',paytm:'Paytm'}[x.provider]||x.provider)+' · Sandbox / UAT</option>').join('');
+ return '<h3>Online payment · Sandbox</h3>'+pendingHtml+'<p class="lab">The backend has selected '+esc(supported[0].provider)+' as this tenant\'s single active provider. Only that backend-selected provider is selectable. This local app uses the provider checkout over the device internet connection; the trusted backend verifies payment independently. Live collection remains disabled; provider success alone never posts a PMS receipt. Gateway-to-folio posting is not released.</p><label class="fld"><span>Payment provider</span><select id="aurelia-online-provider">'+options+'</select></label><label class="fld"><span>Amount (INR)</span><input id="aurelia-online-amount" type="number" min="0.01" step="0.01" value="'+Math.max(0,Number(dueB(booking))||0).toFixed(2)+'"></label><div id="aurelia-cashfree-details" hidden><label class="fld"><span>Guest mobile number (Cashfree)</span><input id="aurelia-cashfree-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number"></label><label class="fld"><span>Public HTTPS return URL (Cashfree)</span><input id="aurelia-cashfree-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><div id="aurelia-payu-details" hidden><label class="fld"><span>Guest first name (PayU)</span><input id="aurelia-payu-firstname" autocomplete="given-name"></label><label class="fld"><span>Guest email (PayU)</span><input id="aurelia-payu-email" type="email" autocomplete="email"></label><label class="fld"><span>Public HTTPS return URL (PayU)</span><input id="aurelia-payu-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><div id="aurelia-paytm-details" hidden><label class="fld"><span>Public HTTPS return URL (Paytm)</span><input id="aurelia-paytm-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><div id="aurelia-hosted-provider-details" hidden><label class="fld"><span>Guest mobile number (PhonePe / JioPay)</span><input id="aurelia-hosted-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number"></label><label class="fld"><span>Public HTTPS return URL</span><input id="aurelia-hosted-return" type="url" placeholder="https://your-domain.example/payment-return"></label></div><button class="btn" style="width:100%" onclick="startAureliaGatewayCheckout('+Number(i)+')">Create secure checkout</button><div id="aurelia-gateway-checkout-status" class="lab" role="status" style="margin-top:8px"></div>';
 };
-document.addEventListener('change',e=>{if(e.target?.id==='aurelia-online-provider'){const box=document.getElementById('aurelia-cashfree-details');if(box)box.hidden=e.target.value!=='cashfree';}});
+document.addEventListener('change',e=>{if(e.target?.id==='aurelia-online-provider'){const box=document.getElementById('aurelia-cashfree-details');if(box)box.hidden=e.target.value!=='cashfree';const hosted=document.getElementById('aurelia-hosted-provider-details');if(hosted)hosted.hidden=!['phonepe','jiopay'].includes(e.target.value);const payu=document.getElementById('aurelia-payu-details');if(payu)payu.hidden=e.target.value!=='payu';const paytm=document.getElementById('aurelia-paytm-details');if(paytm)paytm.hidden=e.target.value!=='paytm';}});
 window.startAureliaGatewayCheckout=async function(i){
  const b=bk(i);if(!b){toast('Booking not found');return}
  const status=document.getElementById('aurelia-gateway-checkout-status');
@@ -3555,7 +3573,7 @@ window.startAureliaGatewayCheckout=async function(i){
  const amount=Number(document.getElementById('aurelia-online-amount')?.value);
  const amountMinor=Math.round(amount*100);
  const due=Math.round(Math.max(0,Number(dueB(b))||0)*100);
- if(!['razorpay','cashfree'].includes(provider)||provider!==(window.AureliaPaymentProviderState?.activeProviderId||'')||!Number.isSafeInteger(amountMinor)||
+ if(!['razorpay','cashfree','payu','phonepe','jiopay','paytm'].includes(provider)||provider!==(window.AureliaPaymentProviderState?.activeProviderId||'')||!Number.isSafeInteger(amountMinor)||
     amountMinor<=0||Math.abs(amount*100-amountMinor)>1e-7||amountMinor>due){
   return stop('Enter a valid payment amount up to the current folio balance.');
  }
@@ -3571,6 +3589,30 @@ window.startAureliaGatewayCheckout=async function(i){
   const returnUrl=document.getElementById('aurelia-cashfree-return')?.value?.trim()||'';
   if(!/^\+?[0-9]{10,15}$/.test(phone)||!/^https:\/\//i.test(returnUrl))
    return stop('Enter a valid guest mobile number and an approved HTTPS return URL for Cashfree.');
+  payload.customer={id:'guest-'+String(b.id),phone};
+  payload.returnUrl=returnUrl;
+ }
+ if(provider==='payu'){
+  const firstName=document.getElementById('aurelia-payu-firstname')?.value?.trim()||'';
+  const email=document.getElementById('aurelia-payu-email')?.value?.trim()||'';
+  const returnUrl=document.getElementById('aurelia-payu-return')?.value?.trim()||'';
+  if(!firstName||firstName.length>60||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^https:\/\//i.test(returnUrl))
+   return stop('Enter a valid guest name, email and approved HTTPS return URL for PayU.');
+  payload.customer={firstName,email};
+  payload.returnUrl=returnUrl;
+ }
+ if(provider==='paytm'){
+  const returnUrl=document.getElementById('aurelia-paytm-return')?.value?.trim()||'';
+  if(!/^https:\/\//i.test(returnUrl))
+   return stop('Enter an approved HTTPS return URL for Paytm.');
+  payload.customer={id:'guest-'+String(b.id)};
+  payload.returnUrl=returnUrl;
+ }
+ if(provider==='phonepe'||provider==='jiopay'){
+  const phone=document.getElementById('aurelia-hosted-phone')?.value?.trim()||'';
+  const returnUrl=document.getElementById('aurelia-hosted-return')?.value?.trim()||'';
+  if(!/^\+?[0-9]{10,15}$/.test(phone)||!/^https:\/\//i.test(returnUrl))
+   return stop('Enter a valid guest mobile number and an approved HTTPS return URL.');
   payload.customer={id:'guest-'+String(b.id),phone};
   payload.returnUrl=returnUrl;
  }
@@ -4273,7 +4315,7 @@ if (typeof window.render === "function") window.render();
    const docs=(guide?.docs||definition.docs||[]).map(link=>'<li><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">'+esc(link.label)+'</a></li>').join('');
    const guideHtml='<p class="lab">'+esc(definition.category)+' · '+esc(definition.integration)+'<br>Methods: '+esc(definition.methods.join(', '))+'<br>'+esc(definition.verification)+'</p><ul>'+docs+'</ul>';
    if(id==='ccavenue')return '<details><summary>'+esc(name)+' · Documentation only</summary>'+guideHtml+'<div class="tag out">Documentation only</div><p class="lab">CCAvenue is not included in the active provider factory. No checkout, webhook, recovery, refund or settlement capability is exposed.</p></details>';
-   const nativeHandoff=['razorpay','cashfree'].includes(id)?'Android native checkout handoff is integrated; provider merchant sandbox acceptance is still required.':'The server adapter is wired, but Android hosted-checkout handoff is not yet integrated. This provider is not selectable from the Android checkout flow yet; no payment intent will be dispatched from this device.';
+   const nativeHandoff=['razorpay','cashfree','payu','phonepe','jiopay','paytm'].includes(id)?'Android native checkout handoff is integrated; provider merchant sandbox acceptance is still required.':'The server adapter is wired, but Android hosted-checkout handoff is not yet integrated. This provider is not selectable from the Android checkout flow yet; no payment intent will be dispatched from this device.';
    const availability='<div class="tag out">Server adapter ready (test) · Live collection OFF</div><p class="lab">The server adapter is wired for test/UAT use. '+nativeHandoff+' Merchant credentials remain on the trusted backend. Provider sandbox acceptance and the complete payment-to-folio release proof are separate gates; live collection is unavailable.</p>';
    return '<details><summary>'+esc(name)+' · Server adapter ready (test) · Live collection OFF</summary>'+guideHtml+availability+'</details>';
   }).join('');
@@ -4282,44 +4324,49 @@ if (typeof window.render === "function") window.render();
 function providerConfigPanelHtml(){
  return '<section class="provider-config-panel" style="margin:14px 0;padding:16px;border:1px solid var(--ln);border-radius:16px;min-width:0;width:100%;overflow:hidden">'+
   '<h3 style="margin:0 0 8px">Connect a payment gateway (optional)</h3>'+
-  '<p class="lab">Aurelia runs locally on this device and can use online gateways whenever this device has internet access and is enrolled with the trusted HTTPS payment backend. Gateway setup remains optional: without a qualified active provider, cash/manual payments, receipts and local folios continue to work offline. Merchant credentials stay on the backend; never enter provider secret keys into the device app.</p>'+
+  '<p class="lab">Aurelia runs locally on this device and can use online gateways whenever this device has internet access and is enrolled with the trusted HTTPS payment backend. Gateway setup remains optional: without a qualified active provider, cash/manual payments, receipts and local folios continue to work offline. The primary provider is selected once for the whole Aurelia app (tenant) and applies across its enrolled device installations. Merchant credentials stay on the backend; never enter provider secret keys into the device app.</p>'+
   '<div id="aurelia-provider-config-content"><button class="btn sm" type="button" onclick="loadAureliaProviderConfiguration()">Load secure gateway setup</button><p class="lab">Sign in as the property owner or administrator with MFA to load the supported gateway credential fields.</p></div>'+
-  '<p class="lab">Only one qualified gateway can be active for new online payments at a time. Switching does not erase pending transactions from the previous gateway. The device app launches supported checkout over the internet; provider verification remains server-side. Refund API client support exists, but refund UI/folio accounting and payment-link workflows are not released. Live collection remains disabled.</p></section>';
+  '<p class="lab">Exactly one qualified gateway is primary for the whole Aurelia app at a time. An authorized user must explicitly confirm a provider switch; the newly activated provider becomes primary for every enrolled device and all new online payments. The previous provider is frozen for new checkout, but its historical transactions remain available for webhooks, verification, refunds and reconciliation. There is no automatic fallback. The device app launches checkout through the app-wide primary provider; provider verification remains server-side. Refund API client support exists, but refund UI/folio accounting and payment-link workflows are not released. Live collection remains disabled.</p></section>';
 }
 let aureliaProviderAdminCatalogue=[];
 let aureliaProviderAdminActiveId=null;
+let aureliaProviderAdminActiveEnvironment=null;
 window.loadAureliaProviderConfiguration=async function(){
  const host=document.getElementById('aurelia-provider-config-content');if(host)host.innerHTML='<p class="lab">Loading protected provider configuration…</p>';
  try{
   const result=await window.aureliaPaymentAdminRequest('/v1/admin/providers','GET');
   aureliaProviderAdminCatalogue=Array.isArray(result.providers)?result.providers.filter(x=>x.environment==='test'):[];
   aureliaProviderAdminActiveId=result.activeProviderId||null;
+  aureliaProviderAdminActiveEnvironment=result.activeProviderEnvironment||null;
   window.renderAureliaProviderCredentialForm();
  }catch(error){if(host)host.innerHTML='<p class="lab" role="alert">'+esc(error.message||'Could not load provider configuration.')+'</p><button class="btn sm" type="button" onclick="loadAureliaProviderConfiguration()">Retry</button>';}
 };
 window.renderAureliaProviderCredentialForm=function(selectedProvider){
  const host=document.getElementById('aurelia-provider-config-content');if(!host)return;
  const supported=['razorpay','cashfree','payu','phonepe','paytm','jiopay'];
+ const names={razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay',ccavenue:'CCAvenue'};
  const byId=new Map(aureliaProviderAdminCatalogue.map(x=>[x.provider,x]));
- const names={razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay'};
  const currentSelect=document.getElementById('aurelia-provider-config-select');
  const selected=selectedProvider||currentSelect?.value||'razorpay';
  const p=byId.get(selected)||byId.get('razorpay')||null;
- const options=supported.map(id=>'<option value="'+id+'"'+(p?.provider===id?' selected':'')+'>'+names[id]+'</option>').join('')+'<option value="ccavenue" disabled>CCAvenue · not implemented</option>';
+ const options=supported.map(id=>'<option value="'+id+'"'+(p?.provider===id?' selected':'')+'>'+names[id]+'</option>').join('')+
+  '<option value="ccavenue"'+(p?.provider==='ccavenue'?' selected':'')+'>CCAvenue · configure sandbox credentials</option>';
  const fields=(p?.credentials||[]).map(field=>'<label class="fld"><span>'+esc(field.label)+(field.required?' *':'')+'</span><input id="aurelia-provider-field-'+esc(field.key)+'" name="'+esc(field.key)+'" type="'+(field.secret?'password':'text')+'" autocomplete="'+(field.secret?'new-password':'off')+'" '+(field.required?'required':'')+' maxlength="512" spellcheck="false" placeholder="'+(field.secret?'Enter merchant secret':'Enter '+esc(field.label))+'"></label>').join('');
  const status=p?'<div class="provider-config-status lab" role="status">Configuration: '+(p.configured?'saved':'not configured')+' · Credential validation: '+(p.credentialsValidated?'passed':'not passed')+' · Sandbox acceptance: '+(p.sandboxTestPassed?'passed':'pending')+' · Webhook verification: '+(p.webhookVerified?'verified':'pending')+'</div>':'<p class="lab" role="status">No configuration record was returned for this gateway. Save is unavailable until the backend exposes this provider.</p>';
- const active=aureliaProviderAdminActiveId?'<div class="tag ready">Active gateway: '+esc(names[aureliaProviderAdminActiveId]||aureliaProviderAdminActiveId)+'</div>':'<div class="tag out">No online gateway selected · default local payments remain active</div>';
- const activate=p&&p.configured&&p.credentialsValidated&&p.sandboxTestPassed&&p.webhookVerified
+ const active=aureliaProviderAdminActiveId?'<div class="tag ready">App-wide primary provider: '+esc(names[aureliaProviderAdminActiveId]||aureliaProviderAdminActiveId)+(aureliaProviderAdminActiveEnvironment?' · '+esc(aureliaProviderAdminActiveEnvironment):'')+'</div><p class="lab">This selection applies to the entire Aurelia app and all enrolled device installations.</p>':'<div class="tag out">No app-wide online provider selected · gateway checkout is unavailable; local payments remain active</div>';
+ const activate=p&&supported.includes(p.provider)&&p.configured&&p.credentialsValidated&&p.sandboxTestPassed&&p.webhookVerified
   ?'<button class="btn sm" type="button" onclick="activateAureliaPaymentProvider(\''+esc(p.provider)+'\')">Make this the active gateway</button>'
-  :'<p class="lab">Activation unlocks only after credentials, sandbox acceptance and a real verified webhook have all passed.</p>';
+  :p?.provider==='ccavenue'
+   ?'<p class="lab" role="status">CCAvenue sandbox credentials can be stored securely here, but activation remains blocked: the complete adapter, merchant-approved AES/Tracking ID flow, authenticated notification contract, authoritative status and general refund lifecycle are not yet qualified.</p>'
+   :'<p class="lab">Activation unlocks only after credentials, sandbox acceptance and a real verified webhook have all passed.</p>';
  host.innerHTML='<div class="provider-config-layout">'+active+
   '<label class="fld provider-select-field" for="aurelia-provider-config-select"><span>Choose one gateway</span><select id="aurelia-provider-config-select" name="paymentProvider" aria-label="Choose payment gateway" onchange="renderAureliaProviderCredentialForm(this.value)">'+options+'</select></label>'+
   '<div class="tag out provider-env-tag">Test / Sandbox configuration only · Live collection OFF</div>'+
   '<form id="aurelia-provider-credential-form" onsubmit="event.preventDefault();saveAureliaProviderCredentials()">'+
   '<div class="lab" style="margin:10px 0">Enter the exact merchant values supplied by '+esc(names[p?.provider]||'your provider')+'. Secret fields are write-only and are sent directly to the trusted backend.</div>'+
-  fields+'<button class="btn provider-save-button" type="submit" '+(!p?'disabled':'')+'>Save and validate credentials</button></form>'+
+  fields+'<button class="btn provider-save-button" type="submit" '+(!p?'disabled':'')+'>'+(p?.provider==='ccavenue'?'Store sandbox credentials (not validated)':'Save and validate credentials')+'</button></form>'+
   status+activate+
-  '<p class="lab">CCAvenue is intentionally unavailable: no CCAvenue adapter or end-to-end payment flow is implemented. Do not enter CCAvenue credentials here.</p></div>';
+  '<p class="lab">CCAvenue is available for sandbox credential onboarding, but cannot be activated or used for checkout until its complete adapter, merchant-approved cryptography, notification authentication, authoritative status, general refund lifecycle and merchant acceptance tests are implemented.</p></div>';
 };
 window.saveAureliaProviderCredentials=async function(){
  const select=document.getElementById('aurelia-provider-config-select'),provider=select?.value||'';
@@ -4336,7 +4383,9 @@ window.saveAureliaProviderCredentials=async function(){
  try{
   await window.aureliaPaymentAdminRequest('/v1/admin/providers/'+encodeURIComponent(provider)+'/credentials','PUT',body);
   document.querySelectorAll('#aurelia-provider-credential-form input').forEach(input=>{input.value='';});
-  toast('Credentials validated and stored securely. Complete sandbox and webhook acceptance before activation.');
+  toast(provider==='ccavenue'
+   ?'CCAvenue credential schema accepted and secrets stored in Secret Manager. Credentials are not validated; checkout and activation remain disabled.'
+   :'Credentials validated and stored securely. Complete sandbox and webhook acceptance before activation.');
   await window.loadAureliaProviderConfiguration();
  }catch(error){toast(error.message||'Credential save failed.');}
  finally{
@@ -4345,9 +4394,18 @@ window.saveAureliaProviderCredentials=async function(){
  }
 };
 window.activateAureliaPaymentProvider=async function(provider){
+ if(!['razorpay','cashfree','payu','phonepe','paytm','jiopay'].includes(provider)){
+  toast(provider==='ccavenue'
+   ?'CCAvenue cannot be activated yet: its complete seven-operation adapter and merchant acceptance evidence are not available.'
+   :'This provider is not available for activation.');return false;
+ }
+ if(provider===aureliaProviderAdminActiveId){toast('This provider is already the app-wide primary gateway.');return true;}
+ const label=({razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay'})[provider]||provider;
+ const previous=({razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay'})[aureliaProviderAdminActiveId]||aureliaProviderAdminActiveId||'no provider';
+ if(!window.confirm('Switch the primary payment provider for the entire Aurelia app from '+previous+' to '+label+'? All new online payments across enrolled devices will use '+label+'. '+previous+' will stop receiving new payments, but existing transactions remain available for webhooks, payment verification, refunds and reconciliation. No automatic fallback will occur.'))return false;
  try{
   await window.aureliaPaymentAdminRequest('/v1/admin/providers/'+encodeURIComponent(provider)+'/activate','POST',{environment:'test',confirm:true});
-  toast('Active online gateway updated. Default local payment methods remain available.');
+  toast(label+' is now the primary provider for the entire Aurelia app. Existing transactions remain with their original provider.');
   await window.loadAureliaProviderConfiguration();
  }catch(error){toast(error.message||'Gateway activation was rejected.');}
 };
@@ -4380,7 +4438,7 @@ window.AureliaLocalPaymentLedger=Object.freeze({
 window.AureliaLocalPaymentJournalState={pending:[],loading:false,error:null};
 window.updateAureliaLocalLedgerEnvironments=function(provider){
  const select=document.getElementById('local-ledger-environment');if(!select)return;
- const map={razorpay:[['test','Test / Sandbox'],['live','Live · journal only']],cashfree:[['test','Test / Sandbox'],['live','Live · journal only']],payu:[['test','Test / Sandbox'],['live','Live · journal only']],phonepe:[['uat','UAT'],['production','Production · journal only']],paytm:[['staging','Staging'],['production','Production · journal only']],jiopay:[['uat','UAT'],['production','Production · journal only']]};
+ const map={razorpay:[['test','Test / Sandbox'],['live','Live · journal only']],cashfree:[['test','Test / Sandbox'],['live','Live · journal only']],payu:[['test','Test / Sandbox'],['live','Live · journal only']],phonepe:[['test','Test / Sandbox'],['live','Live · journal only']],paytm:[['staging','Staging'],['production','Production · journal only']],jiopay:[['uat','UAT'],['production','Production · journal only']]};
  select.innerHTML=(map[provider]||[]).map(([value,label])=>'<option value="'+value+'">'+label+'</option>').join('');
 };
 window.createAureliaLocalPaymentIntent=async function(){
@@ -4389,7 +4447,7 @@ window.createAureliaLocalPaymentIntent=async function(){
  const folioId=document.getElementById('local-ledger-folio')?.value?.trim()||'';
  const amount=Number(document.getElementById('local-ledger-amount')?.value);
  const amountMinor=Math.round(amount*100);
- const validEnvironments={razorpay:['test','live'],cashfree:['test','live'],payu:['test','live'],phonepe:['uat','production'],paytm:['staging','production'],jiopay:['uat','production']};
+ const validEnvironments={razorpay:['test','live'],cashfree:['test','live'],payu:['test','live'],phonepe:['test','live'],paytm:['staging','production'],jiopay:['uat','production']};
   if(!validEnvironments[provider]?.includes(environment)||!/^[A-Za-z0-9._:-]{8,128}$/.test(folioId)||!Number.isFinite(amount)||amount<=0||!Number.isSafeInteger(amountMinor)||Math.abs(amount*100-amountMinor)>1e-7){toast('Enter a supported provider environment, valid folio reference and INR amount with up to 2 decimals.');return;}
  const transactionId=globalThis.crypto?.randomUUID?.();if(!transactionId){toast('Secure transaction ID generation is unavailable.');return;}
  try{
@@ -4837,7 +4895,7 @@ window.AndroidPaymentEngine = Object.freeze({
  async createPaymentIntent(payload) {
   if(!payload || !/^[0-9a-f-]{36}$/i.test(payload.transactionId || '') ||
      !window.AureliaPaymentDeviceId) throw new Error('A verified payment device is required.');
-  if(!['razorpay','cashfree'].includes(payload.provider)) {
+  if(!['razorpay','cashfree','payu','phonepe','jiopay','paytm'].includes(payload.provider)) {
    throw new Error('Android hosted-checkout handoff is not yet integrated for this provider. No cloud payment intent was created.');
   }
   const { transactionId, idempotencyKey, ...intentInput } = payload;

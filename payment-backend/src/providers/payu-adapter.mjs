@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { PaymentProviderAdapter } from './adapter-contract.mjs';
 import { generatePayUPaymentHash, generatePayUCommandHash, verifyPayUResponseHash } from './payu-crypto.mjs';
 
@@ -28,16 +29,37 @@ export class PayUAdapter extends PaymentProviderAdapter {
     if(typeof var1!=='string'||!var1)throw new TypeError('payu_command_reference_required');
     const hash=generatePayUCommandHash({key:this.key,command,var1},this.salt);
     const body=new URLSearchParams({key:this.key,command,var1,...extra,hash});
-    const response=await this.fetch(this.infoUrl+'/merchant/postservice.php?form=2',{
-      method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'},
-      body,signal:AbortSignal.timeout(15000)});
+    let response;
+    try {
+      response=await this.fetch(this.infoUrl+'/merchant/postservice.php?form=2',{
+        method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'},
+        body,signal:AbortSignal.timeout(15000)});
+    } catch (cause) {
+      throw Object.assign(new Error('payu_network_error'), {
+        outcomeUnknown: command === 'cancel_refund_transaction', cause
+      });
+    }
     const data=await response.json().catch(()=>({}));
-    if(!response.ok)throw Object.assign(new Error('payu_request_failed'),{providerStatus:response.status});
+    if(!response.ok)throw Object.assign(new Error('payu_request_failed'),{
+      providerStatus:response.status,
+      outcomeUnknown:command === 'cancel_refund_transaction' && response.status >= 500
+    });
     return data;
   }
   async validateCredentials() {
     if(this.key.length<4||this.key.length>50||this.salt.length<8)throw new Error('payu_credentials_invalid');
-    return {valid:true,validation:'format_only'};
+    // PayU's classic verify_payment API returns an explicit "Not Found" row
+    // for an unknown transaction when the merchant key + command hash are valid.
+    // A unique probe avoids creating a payment or mutating merchant state.
+    const probe='AURCRED'+crypto.randomBytes(6).toString('hex');
+    const data=await this.command('verify_payment',probe);
+    const row=data?.transaction_details?.[probe];
+    if(row?.status==='Not Found'&&row?.mihpayid==='Not Found') {
+      return {valid:true,validation:'authenticated_verify_payment_api'};
+    }
+    throw Object.assign(new Error('payu_credentials_not_authenticated'),{
+      providerCode:String(data?.error_code||data?.status||'unexpected_probe_response')
+    });
   }
   async createOrder(input) {
     const customer=input?.customer||{};
@@ -60,6 +82,7 @@ export class PayUAdapter extends PaymentProviderAdapter {
     const row=data?.transaction_details?.[input.orderId];
     if(!row)return {provider:'payu',orderId:input.orderId,paymentId:null,paymentStatus:'NOT_FOUND',
       amountMinor:null,currency:'INR',captured:false,found:false};
+    if (row.txnid != null && row.txnid !== input.orderId) throw new Error('payu_status_txnid_mismatch');
     const amountMinor=toMinor(row.amt??row.amount);
     const status=String(row.status||'').toLowerCase();
     const unmapped=String(row.unmappedstatus||row.unmappedStatus||'').toLowerCase();
@@ -86,7 +109,9 @@ export class PayUAdapter extends PaymentProviderAdapter {
       throw new TypeError('invalid_payu_refund');
     const data=await this.command('cancel_refund_transaction',input.paymentId,{
       var2:input.refundId,var3:money(input.amountMinor)});
-    if(Number(data.status)!==1)throw Object.assign(new Error('payu_refund_failed'),{providerCode:data.error_code||null});
+    if(Number(data.status)!==1)throw Object.assign(new Error('payu_refund_failed'),{
+      providerCode:data.error_code||null, outcomeUnknown:false
+    });
     return {provider:'payu',refundId:input.refundId,paymentId:input.paymentId,orderId:input.orderId,
       status:'PENDING',amountMinor:input.amountMinor,currency:'INR',
       providerRequestId:data.request_id==null?null:String(data.request_id)};

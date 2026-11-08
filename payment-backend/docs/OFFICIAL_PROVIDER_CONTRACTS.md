@@ -73,12 +73,15 @@ Server SDK API operations: https://business.paytm.com/docs/server-sdk/php/
 - Use staging and production gateway hosts and credentials separately; merchant staging/UAT is still required.
 
 ### CCAvenue
-Official merchant site and technical FAQ: https://www.ccavenue.com/faq
+Official merchant technical FAQ: https://www.ccavenue.com/faq  
+Published Merchant API v1.3 guide: https://links.avenues.info/downloads/CCAvenues_API_Vers-1_3.pdf  
+Merchant activation and integration-kit process: https://www.ccavenue.com/compliance
 
-- CCAvenue merchant integrations are product/account-specific; merchant ID, access code and working key alone do not fully define the integration contract.
-- Public documentation available in this research pass did not expose a current, authoritative API reference for checkout encryption/decryption, status and refund endpoints.
-- Do not implement guessed encryption, endpoints, field names or signature rules. Obtain the current CCAvenue integration kit/specification from the merchant dashboard or CCAvenue onboarding/support, record its version, then implement and test that exact contract.
-- Keep access code and working key in Secret Manager. Validate encrypted response integrity and independently query transaction status before folio posting.
+- The published Merchant API v1.3 guide documents `orderStatusTracker`, encrypted API requests/responses, staging and production API hosts, and requires the merchant's public egress IP to be registered with CCAvenue.
+- The guide says encryption must follow the real-time transaction integration kit, but does not specify the complete key derivation, IV, padding, callback authentication or general refund contract needed to implement safely.
+- Its documented `splitRefund` is specifically for split-payout transactions and is limited to one refund; it is not a general refund lifecycle.
+- CCAvenue remains catalogue-only and is intentionally not factory-wired. Do not guess encryption parameters, treat encrypted callbacks as authenticated webhooks, or map split refunds to ordinary refunds.
+- Obtain the current merchant-specific integration kit and API entitlement, record its version, registered egress IP, callback specification and refund capability, then implement against that exact contract. Keep access code and working key in Secret Manager.
 
 ### Jio Payment Solutions Limited (JioPay)
 Official docs: https://docs.jiopay.in/
@@ -91,7 +94,7 @@ Status/refund command: https://docs.jiopay.in/reference/command
 - Requests and responses use merchant-secret HMAC-SHA256 `secureHash`: sort parameter keys alphabetically, concatenate parameter values without delimiters, then HMAC-SHA256 the message and encode lowercase hex. Null response values must follow the provider's exact string canonicalization.
 - Hosted checkout uses `/pg/api/v2/initiateSale` (UAT `/tsp/pg/api/v2/initiateSale`), `currencyCode: 356`, `payType: 0`, a 20-character maximum merchant transaction reference and a valid customer email (use the documented guest address when unavailable).
 - The command API uses `/pg/api/command` (UAT `/tsp/pg/api/command`) with `STATUS` and `REFUND`; for STATUS, `merchantTxnNo` is the same as `originalTxnNo`.
-- Server-to-server callbacks are recommended, but must be hash-verified and reconciled against the status API. Merchant/aggregator configuration and UAT are still required.
+- Server-to-server callbacks are recommended, but must be hash-verified and reconciled against the status API. Published callback/status examples use `merchantTxnNo`, `txnID`, and (for status) `txnStatus: SUC`; the status example omits `currencyCode`. Aurelia therefore binds the webhook/payment lookup to `txnID` first and normalizes a missing currency to INR only because this adapter accepts and submits INR (currencyCode `356`) exclusively. An explicit non-INR currency is rejected. Merchant/aggregator configuration and UAT are still required.
 - Hosted checkout, QR/intent and seamless flows are distinct. Do not implement a card-data seamless flow unless the merchant has the required PCI-DSS certification and explicitly enabled product.
 
 ## Deployment gates

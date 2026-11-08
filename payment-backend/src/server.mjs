@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import express from 'express';
+import { GoogleAuth } from 'google-auth-library';
 import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -7,7 +8,7 @@ import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
 import { implementedProviderAdapters, providerQualificationStatus, createProviderAdapter } from './providers/factory.mjs';
 import { PROVIDERS } from './providers/registry.mjs';
-import { assertWebhookReplayIntegrity } from './webhooks/provider-webhook-router.mjs';
+import { assertWebhookReplayIntegrity, safeProviderEventId } from './webhooks/provider-webhook-router.mjs';
 import { installAsyncRouteErrorHandling } from './http/async-route-errors.mjs';
 import { createGracefulShutdown } from './http/graceful-shutdown.mjs';
 import { configureHttpServerTimeouts } from './http/server-timeouts.mjs';
@@ -23,11 +24,15 @@ import {
   acknowledgeSettlementCommand, paymentDeviceRef
 } from './devices/firestore-device-service.mjs';
 import { verifiedWebhookProviderPatch } from './webhooks/provider-webhook-state.mjs';
+import { mayIssueSettlementCommand } from './webhooks/settlement-command-gate.mjs';
+import { deriveProviderEventId } from './webhooks/provider-event-identity.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
   paymentControlAllows, updatePaymentControls
 } from './payment-controls/firestore-controls.mjs';
 import { activateSingleProvider, deactivateSingleProvider, readActiveProvider } from './payment-controls/active-provider-selection.mjs';
+import { evaluateProviderProductionQualification } from './payment-controls/provider-production-qualification.mjs';
+import { decodeGooglePlayIntegrityToken } from './devices/play-integrity-verifier.mjs';
 // No folio settlement writer is imported: this service records provider evidence
 // only until a trusted local accounting bridge passes its separate release gates.
 
@@ -110,7 +115,6 @@ app.use((req, res, next) => {
 });
 
 const tenantIdPattern = /^[A-Za-z0-9_-]{6,64}$/;
-const webhookEventIdPattern = /^[A-Za-z0-9._:-]{1,200}$/;
 const secretName = id => 'projects/' + projectId + '/secrets/' + id;
 const membershipDoc = uid => db.doc('paymentMemberships/' + uid);
 const fail = (res, status, error) => res.status(status).json({ error });
@@ -143,6 +147,23 @@ async function getSettlementSigner() {
   return settlementSignerPromise;
 }
 const attestationVerifierUrl = process.env.ATTESTATION_VERIFIER_URL || 'http://127.0.0.1:8091';
+const playIntegrityPackageName = process.env.AURELIA_ANDROID_PACKAGE_NAME || '';
+const playIntegrityCertificateDigests = (process.env.AURELIA_ANDROID_CERT_SHA256_DIGESTS || '')
+  .split(',').map(value => value.trim()).filter(Boolean);
+const playIntegrityRequireStrong = process.env.AURELIA_REQUIRE_STRONG_INTEGRITY === 'true';
+const playIntegrityAuth = new GoogleAuth({
+  scopes: ['https://www.googleapis.com/auth/playintegrity']
+});
+async function decodePlayIntegrityForEnrollment(integrityToken) {
+  const client = await playIntegrityAuth.getClient();
+  const tokenResponse = await client.getAccessToken();
+  const accessToken = typeof tokenResponse === 'string' ? tokenResponse : tokenResponse?.token;
+  return decodeGooglePlayIntegrityToken({
+    packageName: playIntegrityPackageName,
+    integrityToken,
+    accessTokenProvider: async () => accessToken
+  });
+}
 async function authenticateTenantMembership(req, res, next, allowedRoles, failureCode) {
   const header = req.get('authorization') || '';
   if (!/^Bearer\s+[^\s]+$/i.test(header)) return fail(res, 401, 'authentication_required');
@@ -188,11 +209,25 @@ async function liveCollectionBlockReason(tenantId, provider) {
   if (controls.emergency_stop !== false) return 'payment_emergency_stop';
   if (controls.live_collection !== true) return 'live_collection_not_authorised';
   if (controls.live_collection_enabled !== true) return 'live_collection_disabled_by_admin';
-  const qualification = providerQualificationStatus(provider);
-  if (!qualification.implemented || qualification.liveCollection !== true) {
-    return 'provider_live_collection_not_enabled';
+  if (!implementedProviderAdapters().includes(provider)) return 'provider_not_implemented';
+  try {
+    const qualificationRef = db.doc('paymentProviderQualifications/' + tenantId + '/providers/' + provider);
+    const qualificationSnap = await qualificationRef.get();
+    const qualification = evaluateProviderProductionQualification({
+      provider,
+      record: qualificationSnap.exists ? qualificationSnap.data() : null
+    });
+    if (!qualification.ready) return qualification.reason;
+    const adapterEnvironment = adapterEnvironmentOf(provider, 'live');
+    const providerState = await providerTenantDoc(tenantId, provider, adapterEnvironment).get();
+    if (!providerState.exists || providerState.data().active !== true ||
+        providerState.data().configured !== true || providerState.data().credentialsValidated !== true) {
+      return 'production_provider_credentials_not_validated';
+    }
+    return null;
+  } catch {
+    return 'provider_qualification_unavailable';
   }
-  return null;
 }
 function requireTenantAdmin(req, res, next) {
   return authenticateTenantMembership(req, res, next, ['owner', 'admin'], 'active_tenant_admin_membership_required');
@@ -256,8 +291,11 @@ app.post('/v1/admin/devices/enrollment/challenge', requireTenantAdmin,
 app.post('/v1/admin/devices/enroll', requireTenantAdmin,
   express.json({ limit: '512kb', strict: true }), async (req, res) => {
     const body = req.body || {};
-    if (Object.keys(body).some(key => !['deviceId','challengeId','publicKeyPem','certificateChainBase64'].includes(key)) ||
-        !['deviceId','challengeId','publicKeyPem','certificateChainBase64'].every(key => Object.hasOwn(body,key))) {
+    if (!playIntegrityPackageName || !playIntegrityCertificateDigests.length) {
+      return fail(res, 503, 'play_integrity_policy_not_configured');
+    }
+    if (Object.keys(body).some(key => !['deviceId','challengeId','publicKeyPem','certificateChainBase64','integrityToken'].includes(key)) ||
+        !['deviceId','challengeId','publicKeyPem','certificateChainBase64','integrityToken'].every(key => Object.hasOwn(body,key))) {
       return fail(res, 400, 'invalid_payment_device_enrollment_request');
     }
     try {
@@ -265,11 +303,14 @@ app.post('/v1/admin/devices/enroll', requireTenantAdmin,
         db, tenantId: req.tenant.id, actorUid: req.actor.uid,
         deviceId: body.deviceId, challengeId: body.challengeId,
         publicKeyPem: body.publicKeyPem, certificateChainBase64: body.certificateChainBase64,
-        attestationVerifierUrl
+        integrityToken: body.integrityToken, expectedPackageName: playIntegrityPackageName,
+        allowedCertificateSha256Digests: playIntegrityCertificateDigests,
+        decodeIntegrityToken: decodePlayIntegrityForEnrollment,
+        requireStrongIntegrity: playIntegrityRequireStrong, attestationVerifierUrl
       });
       return res.status(202).json(result);
     } catch (error) {
-      return fail(res, 422, String(error?.message || 'android_key_attestation_rejected').slice(0, 96));
+      return fail(res, 422, String(error?.message || 'android_device_integrity_rejected').slice(0, 96));
     }
   });
 
@@ -612,20 +653,21 @@ function refundLookupInput(record) {
     case 'cashfree': return { orderId: record.providerOrderId, paymentId: record.providerPaymentId, refundId: record.refundId };
     case 'payu': return { refundId: record.refundId, paymentId: record.providerPaymentId, requestId: record.providerRequestId || undefined };
     case 'phonepe': case 'paytm': return { orderId: record.providerOrderId, refundId: record.refundId };
-    case 'jiopay': return { refundId: record.refundId };
+    case 'jiopay': return { orderId: record.providerOrderId, refundId: record.refundId };
     default: throw new TypeError('provider_not_supported');
   }
 }
 async function updateRefundEvidence(refundRef, intentRef, remote, record) {
+  const next = remote ? refundState(record.provider, remote.status) : 'UNKNOWN';
   if (!remote || (remote.refundId && record.provider !== 'razorpay' && remote.refundId !== record.refundId) ||
       (remote.amountMinor != null && remote.amountMinor !== record.amountMinor) ||
+      (next === 'SUCCEEDED' && remote.amountMinor !== record.amountMinor) ||
       (remote.currency != null && remote.currency !== 'INR') ||
       (remote.paymentId != null && ['razorpay', 'cashfree', 'payu'].includes(record.provider) &&
         String(remote.paymentId) !== record.providerPaymentId) ||
       (remote.orderId != null && remote.orderId !== record.providerOrderId)) {
     throw new Error('provider_refund_binding_mismatch');
   }
-  const next = refundState(record.provider, remote.status);
   await db.runTransaction(async tx => {
     const [refundSnap, intentSnap] = await Promise.all([tx.get(refundRef), tx.get(intentRef)]);
     if (!refundSnap.exists || !intentSnap.exists ||
@@ -635,7 +677,8 @@ async function updateRefundEvidence(refundRef, intentRef, remote, record) {
     const current = refundSnap.data(), intent = intentSnap.data();
     if (current.state === 'FAILED' || current.state === 'SUCCEEDED') return;
     const patch = { state: next, providerStatus: String(remote.status || 'UNKNOWN'),
-      providerRefundId: remote.refundId || current.providerRefundId || null,
+      providerRefundId: (record.provider === 'razorpay' ? remote.refundId : remote.providerRefundId) ||
+        current.providerRefundId || null,
       providerRequestId: remote.providerRequestId || current.providerRequestId || null,
       updatedAt: FieldValue.serverTimestamp() };
     tx.update(refundRef, patch);
@@ -650,6 +693,11 @@ async function updateRefundEvidence(refundRef, intentRef, remote, record) {
 
 app.post('/v1/payments/intents/:intentId/refunds', requireTenantAdmin,
   express.json({ limit: '2kb', strict: true }), async (req, res) => {
+    // Provider refund dispatch is a financial side effect. Require the explicit,
+    // owner-approved refund-processing capability before reserving or dispatching.
+    // Status lookup remains available through the GET route for safe recovery.
+    const refundBlocked = await enforcePaymentControl(req, res, 'refund_processing');
+    if (refundBlocked) return refundBlocked;
     const { intentId } = req.params, amountMinor = req.body?.amountMinor;
     const idempotencyKey = idempotencyOf(req) || req.body?.idempotencyKey;
     const reason = req.body?.reason == null ? 'Customer refund' : req.body.reason;
@@ -831,6 +879,85 @@ app.get('/v1/admin/providers', requireTenantAdmin, async (req, res) => {
   const activeSelection = await readActiveProvider({ db, tenantId: req.tenant.id });
   res.json({ providers, activeProviderId: activeSelection.configured ? activeSelection.activeProviderId : null,
     activeProviderEnvironment: activeSelection.configured ? activeSelection.environment : null });
+});
+
+// CCAvenue credentials can be stored for sandbox integration without
+// registering or activating a provider adapter. This route intentionally
+// performs schema checks only; it does not mark credentials validated.
+app.put('/v1/admin/providers/ccavenue/credentials', requireTenantAdmin,
+  express.json({ limit: '8kb', strict: true }), async (req, res) => {
+    const body = req.body || {};
+    const environment = body.environment;
+    const allowed = new Set([
+      'environment', 'merchantId', 'regId', 'accessCode', 'encryptionKey', 'hostedCheckoutKey',
+      'workingKey', 'notificationWorkingKey', 'apiVersion'
+    ]);
+    if (environment !== 'test' ||
+        Object.keys(body).some(key => !allowed.has(key)) ||
+        typeof body.merchantId !== 'string' || !/^[A-Za-z0-9]{1,20}$/.test(body.merchantId) ||
+        typeof body.accessCode !== 'string' || !/^[A-Za-z0-9]{8,64}$/.test(body.accessCode) ||
+        typeof body.encryptionKey !== 'string' || body.encryptionKey.length < 16 || body.encryptionKey.length > 512 ||
+        typeof body.hostedCheckoutKey !== 'string' || body.hostedCheckoutKey.length < 16 || body.hostedCheckoutKey.length > 512 ||
+        (body.workingKey !== undefined && (typeof body.workingKey !== 'string' || body.workingKey.length < 16 || body.workingKey.length > 512)) ||
+        typeof body.notificationWorkingKey !== 'string' || body.notificationWorkingKey.length < 16 ||
+        body.notificationWorkingKey.length > 512 ||
+        (body.regId !== undefined && (typeof body.regId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(body.regId))) ||
+        (body.apiVersion !== undefined && body.apiVersion !== '1.1')) {
+      return fail(res, 400, 'invalid_ccavenue_credential_schema');
+    }
+    try {
+      const apiCredentials = {
+        merchantId: body.merchantId,
+        ...(body.regId ? { regId: body.regId } : {}),
+        accessCode: body.accessCode,
+        encryptionKey: body.encryptionKey,
+        hostedCheckoutKey: body.hostedCheckoutKey,
+        ...(body.workingKey ? { workingKey: body.workingKey } : {}),
+        apiVersion: body.apiVersion || '1.1'
+      };
+      const stateRef = providerTenantDoc(req.tenant.id, 'ccavenue', environment);
+      await stateRef.set({ configured: false, credentialsValidated: false, sandboxTestPassed: false,
+        webhookVerified: false, active: false, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      await storeSecret(providerSecretId(req.tenant.id, 'ccavenue', environment, 'api'),
+        JSON.stringify(apiCredentials));
+      await storeSecret(providerSecretId(req.tenant.id, 'ccavenue', environment, 'webhook'),
+        body.notificationWorkingKey);
+      await stateRef.set({
+        provider: 'ccavenue', environment, merchantId: body.merchantId,
+        configured: true, credentialsValidated: false, sandboxTestPassed: false,
+        webhookVerified: false, active: false,
+        credentialSchemaAcceptedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(), updatedBy: req.actor.uid
+      }, { merge: true });
+      return res.status(202).json({
+        accepted: true, provider: 'ccavenue', environment,
+        credentialsStored: true, credentialsValidated: false,
+        adapterRegistered: false, liveCollection: false
+      });
+    } catch {
+      return fail(res, 503, 'ccavenue_credential_storage_unavailable');
+    }
+  });
+
+app.delete('/v1/admin/providers/ccavenue/credentials', requireTenantAdmin, async (req, res) => {
+  const environment = req.query?.environment;
+  if (!['test', 'live'].includes(environment)) return fail(res, 400, 'invalid_provider_environment');
+  try {
+    const stateRef = providerTenantDoc(req.tenant.id, 'ccavenue', environment);
+    await stateRef.set({
+      configured: false, credentialsValidated: false, sandboxTestPassed: false,
+      webhookVerified: false, active: false, updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: req.actor.uid
+    }, { merge: true });
+    for (const purpose of ['api', 'webhook']) {
+      const id = providerSecretId(req.tenant.id, 'ccavenue', environment, purpose);
+      await disableAllEnabledSecretVersions(sm, secretName(id));
+    }
+    await stateRef.delete();
+    return res.json({ removed: true, provider: 'ccavenue', environment, active: false });
+  } catch {
+    return fail(res, 503, 'ccavenue_credential_removal_unavailable');
+  }
 });
 
 app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express.json({ limit: '8kb', strict: true }), async (req, res) => {
@@ -1022,6 +1149,108 @@ app.post('/v1/admin/providers/:provider/test-orders', requireTenantAdmin, expres
   }
 });
 
+// CCAvenue Dynamic Event Notifications use an encrypted encResp payload.
+// This endpoint records only independently reconciled provider evidence; it
+// never writes a folio journal or issues a settlement command.
+app.post('/v1/webhooks/ccavenue/:tenantId/:environment',
+  express.raw({ type: '*/*', limit: '128kb' }), async (req, res) => {
+    const { tenantId, environment } = req.params;
+    if (!tenantIdPattern.test(tenantId || '') || environment !== 'test' ||
+        !Buffer.isBuffer(req.body)) return fail(res, 400, 'invalid_ccavenue_notification_request');
+    const contentType = (req.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
+    if (!['application/json', 'application/x-www-form-urlencoded'].includes(contentType)) {
+      return fail(res, 415, 'unsupported_ccavenue_notification_content_type');
+    }
+    try {
+      const stateSnap = await providerTenantDoc(tenantId, 'ccavenue', environment).get();
+      if (!stateSnap.exists || stateSnap.data().configured !== true) {
+        return fail(res, 404, 'ccavenue_provider_not_configured');
+      }
+      const apiCredentials = JSON.parse(await loadSecret(
+        providerSecretId(tenantId, 'ccavenue', environment, 'api')));
+      const notificationWorkingKey = await loadSecret(
+        providerSecretId(tenantId, 'ccavenue', environment, 'webhook'));
+      let body;
+      if (contentType === 'application/json') {
+        try { body = JSON.parse(req.body.toString('utf8')); }
+        catch { return fail(res, 400, 'invalid_ccavenue_notification_payload'); }
+      } else {
+        const form = new URLSearchParams(req.body.toString('utf8'));
+        const values = form.getAll('encResp');
+        if (values.length !== 1) return fail(res, 400, 'invalid_ccavenue_notification_payload');
+        body = { encResp: values[0] };
+      }
+      const { CCAvenueVerificationService } = await import('./providers/ccavenue-verification.mjs');
+      const { createCcaVenueWebhookHandler } = await import('./webhooks/ccavenue-webhook-router.mjs');
+      const handler = createCcaVenueWebhookHandler({
+        notificationWorkingKey,
+        resolveExpectedPayment: async orderId => {
+          const matches = await db.collection('paymentProviderOrders')
+            .where('tenantId', '==', tenantId)
+            .where('provider', '==', 'ccavenue')
+            .where('environment', '==', environment)
+            .where('providerOrderId', '==', orderId)
+            .limit(2).get();
+          if (matches.size !== 1) return null;
+          const order = matches.docs[0].data();
+          if (order.tenantId !== tenantId || order.provider !== 'ccavenue' ||
+              order.environment !== environment || order.providerOrderId !== orderId ||
+              typeof order.intentId !== 'string') return null;
+          return {
+            provider: 'ccavenue', tenantId, paymentIntentId: order.intentId,
+            orderId, amountMinor: order.amountMinor, currency: order.currency
+          };
+        },
+        createVerificationService: async () => new CCAvenueVerificationService({
+          encryptionKey: apiCredentials.encryptionKey,
+          accessCode: apiCredentials.accessCode,
+          environment,
+          apiVersion: apiCredentials.apiVersion || '1.1'
+        }),
+        recordVerifiedEvidence: async evidence => {
+          const inboxRef = db.collection('ccavenueNotificationInbox').doc(evidence.eventId);
+          const intentRef = db.collection('paymentIntents').doc(evidence.paymentIntentId);
+          const verified = evidence.verifiedStatus;
+          const payloadHash = crypto.createHash('sha256').update(canonicalBytes({
+            tenantId, paymentIntentId: evidence.paymentIntentId, orderId: verified.orderId,
+            trackingId: verified.trackingId, paymentStatus: verified.paymentStatus,
+            providerStatus: verified.providerStatus, amountMinor: verified.amountMinor,
+            currency: verified.currency
+          })).digest('hex');
+          await db.runTransaction(async tx => {
+            const [prior, intent] = await Promise.all([tx.get(inboxRef), tx.get(intentRef)]);
+            if (!intent.exists || intent.data().tenantId !== tenantId ||
+                intent.data().provider !== 'ccavenue' || intent.data().environment !== environment ||
+                intent.data().providerOrderId !== verified.orderId ||
+                intent.data().amountMinor !== verified.amountMinor ||
+                intent.data().currency !== verified.currency) {
+              throw new Error('ccavenue_notification_intent_binding_changed');
+            }
+            if (prior.exists) {
+              if (prior.data().payloadHash !== payloadHash) {
+                throw new Error('ccavenue_notification_event_identity_conflict');
+              }
+              return;
+            }
+            tx.create(inboxRef, {
+              tenantId, paymentIntentId: evidence.paymentIntentId,
+              provider: 'ccavenue', environment, eventId: evidence.eventId,
+              providerOrderId: verified.orderId, trackingId: verified.trackingId,
+              providerStatus: verified.providerStatus, paymentStatus: verified.paymentStatus,
+              amountMinor: verified.amountMinor, currency: verified.currency,
+              providerFetchVerified: true, notificationSignatureVerified: false,
+              accountingStatus: 'PENDING', processingStatus: 'PROVIDER_STATUS_VERIFIED_PENDING_ACCOUNTING',
+              payloadHash, receivedAt: FieldValue.serverTimestamp()
+            });
+          });
+        }
+      });
+      return handler({ body }, res);
+    } catch {
+      return fail(res, 503, 'ccavenue_notification_processing_unavailable');
+    }
+  });
+
 app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
   const { provider, tenantId, environment: publicEnvironment } = req.params;
   const environment = adapterEnvironmentOf(provider, publicEnvironment);
@@ -1059,7 +1288,8 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
       : provider === 'cashfree' ? paymentEntity?.cf_payment_id
       : provider === 'payu' ? event?.mihpayid
       : provider === 'phonepe' ? (paymentEntity?.transactionId || paymentEntity?.paymentDetails?.[0]?.transactionId)
-      : provider === 'paytm' ? event?.TXNID : event?.pgTransactionId;
+      : provider === 'paytm' ? event?.TXNID
+      : (event?.txnID || event?.pgTransactionId || event?.paymentID || event?.txnAuthID);
     if (!providerOrderId || !paymentId) return res.status(200).json({ received: true, ignored: true });
     const providerOrderHash = crypto.createHash('sha256')
       .update(tenantId + ':' + provider + ':' + environment + ':' + providerOrderId).digest('hex');
@@ -1080,13 +1310,10 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
     const sameCurrency = status.currency === orderSnap.data().currency;
     const sameAmount = status.amountMinor === orderSnap.data().amountMinor;
     const verified = sameOrder && samePayment && sameCurrency && sameAmount && status.captured === true;
-    const eventId = provider === 'razorpay' ? req.get('x-razorpay-event-id')
-      : provider === 'cashfree' ? (req.get('x-webhook-id') || crypto.createHash('sha256').update(req.body).digest('hex'))
-      : provider === 'phonepe' ? String(event.eventId || event.id || crypto.createHash('sha256').update(req.body).digest('hex'))
-      : provider === 'payu' ? String(event.mihpayid || event.txnid || '')
-      : provider === 'paytm' ? String(event.ORDERID || '') + ':' + String(event.TXNID || 'event')
-      : String(event.merchantTxnNo || '') + ':' + String(event.pgTransactionId || 'event');
-    if (typeof eventId !== 'string' || !webhookEventIdPattern.test(eventId)) return fail(res, 400, 'invalid_event_id');
+    const eventId = deriveProviderEventId({
+      provider, event, headers: req.headers, rawBody: req.body
+    });
+    if (!safeProviderEventId(eventId)) return fail(res, 400, 'invalid_event_id');
     const inboxId = crypto.createHash('sha256').update(tenantId + ':' + provider + ':' + environment + ':' + eventId).digest('hex');
     const payloadHash = crypto.createHash('sha256').update(req.body).digest('hex');
     const inbox = db.doc('paymentWebhookInbox/' + inboxId);
@@ -1097,10 +1324,21 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
     const deviceId = orderData.deviceId || null;
     const deviceRef = deviceId ? paymentDeviceRef(db, tenantId, deviceId) : null;
     const outcome = await db.runTransaction(async tx => {
-      const refs = [tx.get(inbox), tx.get(orderRef)];
-      if (intentRef) refs.push(tx.get(intentRef));
-      if (deviceRef) refs.push(tx.get(deviceRef));
-      const [seen, currentOrder, currentIntent, currentDevice] = await Promise.all(refs);
+      // Read the release-control document in the same transaction as the inbox,
+      // order, intent and device. A concurrent control change therefore conflicts
+      // with this transaction instead of leaving a stale authorisation window.
+      const controlRef = db.doc('paymentControls/' + tenantId);
+      const refs = [inbox, orderRef];
+      if (intentRef) refs.push(intentRef);
+      if (deviceRef) refs.push(deviceRef);
+      refs.push(controlRef);
+      const snapshots = await Promise.all(refs.map(ref => tx.get(ref)));
+      const seen = snapshots[0];
+      const currentOrder = snapshots[1];
+      let snapshotIndex = 2;
+      const currentIntent = intentRef ? snapshots[snapshotIndex++] : null;
+      const currentDevice = deviceRef ? snapshots[snapshotIndex++] : null;
+      const currentControls = snapshots[snapshotIndex];
       if (!currentOrder.exists || currentOrder.data().tenantId !== tenantId ||
           currentOrder.data().provider !== provider || currentOrder.data().environment !== environment ||
           currentOrder.data().providerOrderId !== providerOrderId) {
@@ -1139,8 +1377,15 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
         ['TRUSTED_ENVIRONMENT','STRONG_BOX'].includes(deviceData.attestationSecurityLevel) &&
         deviceData.attestationVerifiedBootState === 'VERIFIED' &&
         deviceData.attestationDeviceLocked === true;
-      if (captureVerified && intentRef && intentData && deviceReady && providerAccountId &&
-          intentData.deviceId === deviceId && !settlementCommandId) {
+      const settlementCommandAllowed = mayIssueSettlementCommand({
+        controlExists: currentControls.exists,
+        controlData: currentControls.exists ? currentControls.data() : null,
+        publicEnvironment,
+        settlementIssuerEnabled
+      });
+      if (captureVerified && settlementCommandAllowed && intentRef && intentData &&
+          deviceReady && providerAccountId && intentData.deviceId === deviceId &&
+          !settlementCommandId) {
         const sequenceId = (Number.isSafeInteger(deviceData.lastSequence) ? deviceData.lastSequence : 0) + 1;
         const commandId = crypto.randomUUID();
         const authorizationId = crypto.randomUUID();
