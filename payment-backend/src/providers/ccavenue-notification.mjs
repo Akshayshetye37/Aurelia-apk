@@ -48,6 +48,8 @@ export async function reconcileCcaVenueNotification({
   // amount or currency from merchant_param fields in an inbound event.
   const expected = await resolveExpectedPayment(event.order_id);
   if (!expected || expected.provider !== 'ccavenue' ||
+      typeof expected.tenantId !== 'string' || !/^[A-Za-z0-9_-]{6,64}$/.test(expected.tenantId) ||
+      typeof expected.paymentIntentId !== 'string' || !/^[A-Za-z0-9_-]{6,128}$/.test(expected.paymentIntentId) ||
       expected.orderId !== event.order_id ||
       !Number.isSafeInteger(expected.amountMinor) || expected.amountMinor <= 0 ||
       typeof expected.currency !== 'string' || !/^[A-Z]{3}$/.test(expected.currency)) {
