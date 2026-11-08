@@ -901,7 +901,7 @@ app.put('/v1/admin/providers/ccavenue/credentials', requireTenantAdmin,
         typeof body.notificationWorkingKey !== 'string' || body.notificationWorkingKey.length < 16 ||
         body.notificationWorkingKey.length > 512 ||
         (body.regId !== undefined && (typeof body.regId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(body.regId))) ||
-        (body.apiVersion !== undefined && !['1.1', '1.2', '1.3'].includes(body.apiVersion))) {
+        (body.apiVersion !== undefined && body.apiVersion !== '1.1')) {
       return fail(res, 400, 'invalid_ccavenue_credential_schema');
     }
     try {
