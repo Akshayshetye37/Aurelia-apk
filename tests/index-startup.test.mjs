@@ -44,13 +44,15 @@ test('empty booking and dining inventories cannot abort startup on sample-data m
     'guarded optional demo mutation must execute before SUB is declared');
 });
 
-test('sandboxed CodeShack preview is identified as session-only, never reported as durable storage', () => {
-  assert.ok(html.includes("String(location.href).startsWith('about:srcdoc')"));
-  assert.ok(html.includes("mode: ok ? 'browser-local-storage' : 'session-memory-only'"));
-  assert.ok(html.includes("embedded-preview-sandbox"));
+test('sandboxed preview detection and storage diagnostics are implemented inside the storage adapter', async () => {
+  const fs = await import("node:fs");
+  const adapter = fs.readFileSync(new URL("../src/storage/web-storage-adapter.mjs", import.meta.url), "utf8");
+  assert.match(adapter, /about:srcdoc/);
+  assert.match(adapter, /embedded-preview-sandbox/);
+  assert.match(adapter, /session-memory-only/);
   assert.ok(html.includes("This is an embedded HTML preview, not the Aurelia app runtime."));
   assert.ok(html.includes("frame or sandbox blocks durable storage"));
-  assert.ok(html.includes('Synchronous accounting persistence is disabled'), 'synchronous persistence must fail closed instead of claiming durability');
+  assert.ok(html.includes('Synchronous accounting persistence is disabled'));
 });
 
 test('room-type catalogue is derived from persisted inventory and refreshed before rendering', () => {
