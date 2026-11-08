@@ -92,7 +92,9 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
       currency: status.currency, status: status.paymentStatus } : { found: false };
   }
   async getPaymentStatus(input) {
-    if (!id(input?.orderId)) throw new TypeError('invalid_phonepe_order_id');
+    if (!id(input?.orderId) || (input.paymentId != null && !id(String(input.paymentId)))) {
+      throw new TypeError('invalid_phonepe_order_id');
+    }
     const data = await this.request('GET', '/checkout/v2/order/' +
       encodeURIComponent(input.orderId) + '/status?details=false');
     if (data.merchantOrderId != null && data.merchantOrderId !== input.orderId) {
@@ -129,7 +131,7 @@ export class PhonePeAdapter extends PaymentProviderAdapter {
     try {
       const event = JSON.parse(rawBody.toString('utf8'));
       if (!event || typeof event !== 'object' || !event.payload ||
-          typeof event.event !== 'string' || typeof event.payload.merchantOrderId !== 'string') {
+          typeof event.event !== 'string' || !id(event.payload.merchantOrderId)) {
         return { valid: false };
       }
       return { valid: true, event };
