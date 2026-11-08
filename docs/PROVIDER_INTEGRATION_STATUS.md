@@ -12,7 +12,7 @@
 | PhonePe | Standard Checkout V2 OAuth, status, webhook auth and refund lifecycle; wired | Yes — test path; live blocked | Yes — HTTPS hosted redirect (test) | **No** — merchant UAT, route/device acceptance and folio posting open |
 | Paytm | Checksum-based initiate, status, callback and refund lifecycle; wired | Yes — test path; live blocked | Yes — All-in-One SDK (staging) | **No** — staging/UAT, merchant config, device acceptance and folio posting open |
 | JioPay | Hosted checkout, HMAC-SHA256, status, webhook and refund command lifecycle; wired | Yes — test path; live blocked | Yes — HTTPS hosted redirect (UAT) | **No** — merchant/aggregator UAT, device acceptance and folio posting open |
-| CCAvenue | Catalogue-only; no concrete adapter/factory | No | No | **No** — obtain merchant integration kit, implement and test before registration |
+| CCAvenue | Catalogue-only; no concrete adapter/factory (request-hash primitive only) | No | No | **No** — merchant kit, AES tracking-ID flow, authoritative status and general refund contract required |
 
 **Count:** six backend adapters/cloud API integrations; six Android checkout handoffs; one catalogue-only provider; zero production-qualified gateways. Cloud adapter refund endpoints do not mean refund-to-folio posting is enabled.
 
@@ -40,7 +40,7 @@
 
 ## Current evidence and limitations
 
-- The provider factory wires Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay after all seven adapter operations pass capability checks. The cloud server's provider catalogue, tenant-scoped credential onboarding/validation, test-order creation, webhook verification, authoritative status lookup and refund request/status endpoints accept all six factory-wired providers. The public Android checkout handoff covers all six wired providers: Razorpay, Cashfree, PayU, PhonePe, JioPay and Paytm. CCAvenue remains catalogue-only because a complete merchant-specific checkout/status/refund contract has not been supplied.
+- The provider factory wires Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay after all seven adapter operations pass capability checks. CCAvenue's v1.7 mobile request-hash primitive is implemented and regression-tested, but no checkout or provider adapter is registered: merchant-specific AES tracking-ID exchange, official Android SDK, authoritative status and a general refund lifecycle remain unverified. See [CCAvenue integration decision](./CCAVENUE_INTEGRATION.md). The cloud server's provider catalogue, tenant-scoped credential onboarding/validation, test-order creation, webhook verification, authoritative status lookup and refund request/status endpoints accept all six factory-wired providers. The public Android checkout handoff covers all six wired providers: Razorpay, Cashfree, PayU, PhonePe, JioPay and Paytm. CCAvenue remains catalogue-only because a complete merchant-specific checkout/status/refund contract has not been supplied.
 - The reconciliation endpoint is authenticated and batch-bounded, but currently invokes a manual sweep; it is not a scheduled service.
 - The worker and settlement helper still target `paymentFolios/{tenant+folio hash}` and `journalEntries/{intentId}`. The repository has not established that this matches the canonical deployed PMS schema.
 - Firestore indexes must be deployed with the backend. Concurrency, lease recovery and production query load remain to be verified.
