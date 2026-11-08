@@ -2,6 +2,15 @@
  * Web Storage compatibility adapter. Kept inside src/storage so application
  * screens never access browser key-value storage directly.
  */
+export class StorageFullError extends Error {
+  constructor(message = "Device storage is full. Export your PMS data and free space before continuing.", options = {}) {
+    super(message, options);
+    this.name = "StorageFullError";
+    this.code = "STORAGE_FULL";
+    this.action = "EXPORT_DATA";
+  }
+}
+
 export function createWebStorageAdapter({
   windowRef = globalThis.window,
   storage = windowRef?.localStorage
@@ -42,7 +51,8 @@ export function createWebStorageAdapter({
         try { storage.setItem(String(key), String(value)); return; }
         catch (error) {
           const failure = new Error("Device storage write failed: " + (error?.name || "StorageError"));
-          failure.name = error?.name === "QuotaExceededError" ? "QuotaExceededError" : "StorageWriteError";
+          if (error?.name === "QuotaExceededError") throw new StorageFullError(undefined, { cause: error });
+          failure.name = "StorageWriteError";
           throw failure;
         }
       }
