@@ -160,9 +160,6 @@ export class CCAvenueVerificationService {
 
     const providerStatus = typeof result.order_status === 'string' ? result.order_status.trim() : '';
     if (!providerStatus) throw new Error('ccavenue_status_order_state_missing');
-    if (result.status !== 0 && result.status !== '0') {
-      throw new Error('ccavenue_status_result_not_successful');
-    }
     const captureAmountMinor = result.order_capt_amt == null
       ? null : amountToMinor(result.order_capt_amt);
     if (captureAmountMinor != null && captureAmountMinor > amountMinor) {
