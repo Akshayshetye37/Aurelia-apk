@@ -125,6 +125,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
           db.setTransactionSuccessful();return migrationResult(true,migrationId,parsed.length());
         }
       }
+      try(Cursor authorityRow=db.rawQuery("SELECT state,migration_id FROM pms_authority WHERE singleton=1",null)){if(authorityRow.moveToFirst()){String state=authorityRow.getString(0),activeMigration=authorityRow.isNull(1)?null:authorityRow.getString(1);if("canonical".equals(state))throw new IllegalStateException("canonical_authority_cannot_be_downgraded");if("migrating".equals(state)&&!migrationId.equals(activeMigration))throw new IllegalStateException("different_migration_already_in_progress");}}
       try(Cursor existing=db.rawQuery("SELECT raw_json FROM pms_migration_snapshots WHERE snapshot_id=?",new String[]{migrationId});Cursor backup=db.rawQuery("SELECT raw_json,sha256 FROM pms_legacy_backup WHERE backup_id=?",new String[]{migrationId})) {
         boolean hasSnapshot=existing.moveToFirst(),hasBackup=backup.moveToFirst();
         if(hasSnapshot||hasBackup) {
