@@ -4,6 +4,11 @@
  */
 import { installPreferenceStorageGuard } from "./preference-storage-guard.mjs";
 
+const DETECTED_BUILD_MODE = globalThis.__AURELIA_BUILD_MODE ||
+  (import.meta.env?.DEV ? "development" : import.meta.env?.MODE) ||
+  (typeof process !== "undefined" && process.env?.NODE_ENV) ||
+  (typeof process !== "undefined" && process.argv?.includes("--test") ? "test" : "production");
+
 export class StorageFullError extends Error {
   constructor(message = "Device storage is full. Export your PMS data and free space before continuing.", options = {}) {
     super(message, options);
@@ -16,7 +21,7 @@ export class StorageFullError extends Error {
 export function createWebStorageAdapter({
   windowRef = globalThis.window,
   storage = windowRef?.localStorage,
-  mode = globalThis.__AURELIA_BUILD_MODE || (typeof process !== "undefined" && process.env?.NODE_ENV) || "production"
+  mode = DETECTED_BUILD_MODE
 } = {}) {
   const memory = new Map();
   const durableSetItem = storage?.setItem?.bind(storage);
