@@ -44,7 +44,7 @@ test("cancellation accounting waits for canonical snapshot commit and verifies t
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const start = html.indexOf("window.commitCancellationRefund=async function(i){");
   assert.notEqual(start, -1, "cancellation accounting handler must be async");
-  const end = html.indexOf("\\n};", start);
+  const end = html.indexOf("\n};", start);
   assert.notEqual(end, -1, "cancellation accounting handler must be closed");
   const handler = html.slice(start, end);
   assert.match(handler, /const saved=await persistCanonicalStrict\\(\\)/);
