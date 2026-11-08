@@ -95,21 +95,21 @@ test('startup hydrates the UI projection from the verified canonical snapshot be
   assert.match(html, /function loadAll\(\)\{\s*let raw=window\.__AURELIA_CANONICAL_BOOTSTRAP_RAW\|\|null;\s*if\(!raw\)\{try\{raw=/);
 });
 
-test('room housekeeping status changes commit through the canonical room transaction', async () => {
+test('active room management commands use canonical room mutations', async () => {
   const fs = await import("node:fs");
   const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
-  const start = html.indexOf('async function updateRoomStatus(n,status)');
-  const end = html.indexOf('\nfunction roomS(', start);
-  assert.ok(start >= 0 && end > start, 'canonical room status handler must exist');
-  const body = html.slice(start, end);
-  assert.match(body, /await commitRoomStatusMutation\(/);
-  assert.match(body, /apply:\(\)=>\{room\.s=status\}/);
-  assert.match(body, /catch\(error\)/);
-  assert.doesNotMatch(body, /localStorage|persist\(\)/);
-  const roomModalStart = html.indexOf('function roomS(');
-  const roomModalEnd = html.indexOf('\nfunction addI(', roomModalStart);
-  assert.ok(roomModalStart >= 0 && roomModalEnd > roomModalStart);
-  assert.match(html.slice(roomModalStart, roomModalEnd), /updateRoomStatus\(/);
-  assert.match(html.slice(roomModalStart, roomModalEnd), /data-room-status=/);
-  assert.doesNotMatch(html.slice(roomModalStart, roomModalEnd), /rm\('\$\{n\}'\)\.s=/);
+  const rsStart = html.indexOf('async function rs(n,s)');
+  const rsEnd = html.indexOf('\nfunction tg(', rsStart);
+  assert.ok(rsStart >= 0 && rsEnd > rsStart, 'room status command must exist');
+  assert.match(html.slice(rsStart, rsEnd), /await commitRoomStatusMutation\(/);
+  const roomSaveStart = html.indexOf('async function roomSave(');
+  const roomSaveEnd = html.indexOf('\nfunction roomS(', roomSaveStart);
+  assert.ok(roomSaveStart >= 0 && roomSaveEnd > roomSaveStart);
+  assert.match(html.slice(roomSaveStart, roomSaveEnd), /commitRoomCatalogState\(/);
+  const activeRoomS = html.lastIndexOf('function roomS(');
+  const activeRoomEnd = html.indexOf('\nasync function rdel(', activeRoomS);
+  assert.ok(activeRoomS >= 0 && activeRoomEnd > activeRoomS);
+  assert.match(html.slice(activeRoomS, activeRoomEnd), /rs\('\$\{r\.n\}','\$\{k\}'\)/);
+  assert.doesNotMatch(html.slice(activeRoomS, activeRoomEnd), /\.s='\$\{k\}'/);
+  assert.match(html.slice(activeRoomEnd), /commitRoomCatalogState\(\{roomId:r\.n,operation:'remove'/);
 });
