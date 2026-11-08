@@ -897,7 +897,7 @@ app.put('/v1/admin/providers/ccavenue/credentials', requireTenantAdmin,
         typeof body.merchantId !== 'string' || !/^[A-Za-z0-9]{1,20}$/.test(body.merchantId) ||
         typeof body.accessCode !== 'string' || !/^[A-Za-z0-9]{8,64}$/.test(body.accessCode) ||
         typeof body.encryptionKey !== 'string' || body.encryptionKey.length < 16 || body.encryptionKey.length > 512 ||
-        typeof body.workingKey !== 'string' || body.workingKey.length < 16 || body.workingKey.length > 512 ||
+        (body.workingKey !== undefined && (typeof body.workingKey !== 'string' || body.workingKey.length < 16 || body.workingKey.length > 512)) ||
         typeof body.notificationWorkingKey !== 'string' || body.notificationWorkingKey.length < 16 ||
         body.notificationWorkingKey.length > 512 ||
         (body.regId !== undefined && (typeof body.regId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(body.regId))) ||
@@ -910,14 +910,17 @@ app.put('/v1/admin/providers/ccavenue/credentials', requireTenantAdmin,
         ...(body.regId ? { regId: body.regId } : {}),
         accessCode: body.accessCode,
         encryptionKey: body.encryptionKey,
-        workingKey: body.workingKey,
+        ...(body.workingKey ? { workingKey: body.workingKey } : {}),
         apiVersion: body.apiVersion || '1.1'
       };
+      const stateRef = providerTenantDoc(req.tenant.id, 'ccavenue', environment);
+      await stateRef.set({ configured: false, credentialsValidated: false, sandboxTestPassed: false,
+        webhookVerified: false, active: false, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       await storeSecret(providerSecretId(req.tenant.id, 'ccavenue', environment, 'api'),
         JSON.stringify(apiCredentials));
       await storeSecret(providerSecretId(req.tenant.id, 'ccavenue', environment, 'webhook'),
         body.notificationWorkingKey);
-      await providerTenantDoc(req.tenant.id, 'ccavenue', environment).set({
+      await stateRef.set({
         provider: 'ccavenue', environment, merchantId: body.merchantId,
         configured: true, credentialsValidated: false, sandboxTestPassed: false,
         webhookVerified: false, active: false,
