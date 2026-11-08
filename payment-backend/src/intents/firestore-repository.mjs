@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { createProviderAdapter } from '../providers/factory.mjs';
 import { normalizeCheckoutSession } from '../providers/checkout-contract.mjs';
-import { transitionIntent, mapVerifiedProviderStatus } from './intent-state-machine.mjs';
+import { transitionIntent, mapVerifiedProviderStatus, assertIntentBinding } from './intent-state-machine.mjs';
 
 const ID = /^[A-Za-z0-9_-]{6,64}$/;
 const IDEM = /^[A-Za-z0-9._:-]{12,100}$/;
@@ -142,6 +142,10 @@ export class FirestorePaymentRepository {
       const error = new Error('payment_intent_not_found'); error.statusCode = 404; throw error;
     }
     let record = snapshot.data();
+    // Validate the persisted immutable binding before any provider lookup.
+    // This rejects legacy/corrupt records with missing tenant, folio or
+    // idempotency identity instead of reconciling them against a remote order.
+    assertIntentBinding(record, record);
     if (['CAPTURED', 'FAILED_TO_INITIATE'].includes(record.state)) {
       return this.getPaymentIntent(authUid, intentId);
     }
@@ -218,9 +222,13 @@ export class FirestorePaymentRepository {
         throw new Error('payment_intent_not_found');
       }
       const current = currentSnap.data();
+      // Compare the entire immutable intent binding, not only amount and
+      // provider order. The transaction must not apply a stale status result
+      // after tenant, folio, booking, property, request or session identity
+      // has changed.
+      assertIntentBinding(record, current);
       if (current.providerOrderId !== record.providerOrderId ||
-          current.providerAccountId !== record.providerAccountId ||
-          current.amountMinor !== record.amountMinor || current.currency !== record.currency) {
+          current.providerAccountId !== record.providerAccountId) {
         throw new Error('payment_intent_changed_during_reconciliation');
       }
       if (['CAPTURED', 'FAILED_TO_INITIATE'].includes(current.state)) {

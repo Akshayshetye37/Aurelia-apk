@@ -130,7 +130,7 @@ export function assertIntentBinding(expected, observed) {
   // Carry optional immutable identifiers through the comparison whenever
   // either side supplies them; omission on one side is a binding conflict.
   for (const field of ['bookingId', 'propertyId', 'requestId', 'sessionId',
-    'providerOrderId', 'providerPaymentId']) {
+    'providerOrderId', 'providerPaymentId', 'providerAccountId']) {
     if ((Object.hasOwn(expected, field) || Object.hasOwn(observed, field)) &&
         expected[field] !== observed[field]) {
       throw new Error('payment_intent_binding_mismatch');
