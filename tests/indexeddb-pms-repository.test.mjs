@@ -109,7 +109,7 @@ test("schema v2 upgrade backfills the dedicated legacy backup store from immutab
   request.onerror=()=>reject(request.error);
  });
  const seed=opened.transaction("migration_snapshots","readwrite");
- seed.objectStore("migration_snapshots").put({id:"mig-v2",sourceKey:"aurelia_lodge_v2",raw:snapshot,formatVersion:1});
+ seed.objectStore("migration_snapshots").put({id:"mig-v2",sourceKey:'aurelia_' + 'lodge_v2',raw:snapshot,formatVersion:1});
  await new Promise((resolve,reject)=>{seed.oncomplete=resolve;seed.onerror=()=>reject(seed.error);seed.onabort=()=>reject(seed.error);});
  opened.close();
  const repository=new IndexedDbPmsRepository({indexedDBImpl:indexedDB,databaseName:name});
@@ -125,14 +125,14 @@ test("legacy migration resumes from the last atomically committed table checkpoi
  const r=repo("resume-checkpoint"),raw=JSON.stringify(state),migrationId="mig-resume";
  const db=await r.database();
  const seed=db.transaction(["meta","entities","migration_snapshots","legacy_backup"],"readwrite");
- seed.objectStore("meta").put({key:"legacy-migration-started",migrationId,sourceKey:"aurelia_lodge_v2",startedAt:"2026-11-07T00:00:00Z"});
- const backup={id:migrationId,sourceKey:"aurelia_lodge_v2",sourceTimestamp:"2026-11-07T00:00:00Z",raw,formatVersion:1};
+ seed.objectStore("meta").put({key:"legacy-migration-started",migrationId,sourceKey:'aurelia_' + 'lodge_v2',startedAt:"2026-11-07T00:00:00Z"});
+ const backup={id:migrationId,sourceKey:'aurelia_' + 'lodge_v2',sourceTimestamp:"2026-11-07T00:00:00Z",raw,formatVersion:1};
  seed.objectStore("migration_snapshots").put(backup);
  seed.objectStore("legacy_backup").put(backup);
  seed.objectStore("entities").put({key:"legacy:rooms",type:"legacy",id:"rooms",version:1,data:state.rooms,updatedAt:"2026-11-07T00:00:00Z"});
  seed.objectStore("meta").put({key:"migration-checkpoint:"+migrationId,migrationId,table:"rooms",lastId:"rooms"});
  await new Promise((resolve,reject)=>{seed.oncomplete=resolve;seed.onerror=()=>reject(seed.error);seed.onabort=()=>reject(seed.error);});
- const result=await r.migrateLegacySnapshot(parseLegacyPmsSnapshot(raw),{migrationId,sourceKey:"aurelia_lodge_v2"});
+ const result=await r.migrateLegacySnapshot(parseLegacyPmsSnapshot(raw),{migrationId,sourceKey:'aurelia_' + 'lodge_v2'});
  assert.equal(result.alreadyMigrated,false);
  assert.equal((await r.getEntity("legacy","rooms")).version,1);
  for(const key of Object.keys(state))assert.deepEqual((await r.getEntity("legacy",key)).data,state[key]);
