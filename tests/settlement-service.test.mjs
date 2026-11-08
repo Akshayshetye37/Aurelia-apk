@@ -113,7 +113,7 @@ test("manual UI and staff apply use the single guarded settlement boundary", asy
 
 test("reservation advance form retains amount validation and rollback checks", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  const start = html.indexOf("function dsave(){");
+  const start = html.indexOf("async function dsave(){");
   const end = html.indexOf("\nfunction cin(i)", start);
   assert.ok(start >= 0 && end > start);
   const handler = html.slice(start, end);
@@ -122,4 +122,6 @@ test("reservation advance form retains amount validation and rollback checks", a
   assert.match(handler, /priorBookings/);
   assert.match(handler, /Guest or reservation could not be verified in device storage/);
   assert.match(handler, /S\.b=priorBookings/);
+  assert.match(handler, /await persistCanonicalStrict\(\)/);
+  assert.doesNotMatch(handler, /\n\s*persist\(\);/);
 });
