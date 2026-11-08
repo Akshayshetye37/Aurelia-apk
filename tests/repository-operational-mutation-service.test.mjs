@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
-import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation, commitExpenseMutation } from "../src/storage/repository-operational-mutation-service.mjs";
+import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation, commitExpenseMutation, commitRestaurantFolioCharge } from "../src/storage/repository-operational-mutation-service.mjs";
 
 let sequence = 0;
 async function fixture() {
@@ -18,7 +18,7 @@ async function fixture() {
   }).bindActiveEngine(repository);
   const booking = { id: 51, g: "Guest", room: "101", st: "res", p: 0, pays: [], ch: [] };
   const room = { n: "101", s: "ready", r: 1000, t: "Deluxe" };
-  const snapshot = { tab: "stays", bk: {}, b: [booking], cancelled: [], rooms: [room], g: [], inv: [], led: [], exp: [], aud: [] };
+  const snapshot = { tab: "stays", bk: {}, b: [booking], cancelled: [], rooms: [room], g: [], inv: [], led: [], exp: [], t: [{ n: 1, s: 4, o: [["Tea", 100], ["Snacks", 150]], demo: 0 }], sales: [], aud: [] };
   await bridge.persistCompatibilitySnapshot(snapshot);
   await bridge.mutateEntity({
     entityType: "booking", entityId: "51", expectedVersion: 0, eventType: "booking.seeded",
@@ -318,4 +318,37 @@ test("expense creation rejects amounts smaller than one paise precision", async 
     bridge, snapshot, expenseId: expense.id, expenseIndex: 0, operation: "create", legacyStorage: null
   }), error => error.code === "INVALID_EXPENSE_AMOUNT");
   assert.equal(await bridge.fetchEntity("expense", expense.id), null);
+});
+
+test("restaurant folio posting commits booking charges, table clear, sale record and snapshot atomically", async () => {
+  const { bridge, snapshot, booking } = await fixture();
+  booking.st = "in";
+  booking.ch = [["Restaurant · Tea", 100, "din"], ["Restaurant · Snacks", 150, "din"]];
+  snapshot.t[0].o = [];
+  const sale = { id: "RP-sale-1", entity: "restaurant", t: 1, guest: booking.g, room: booking.room,
+    postedToHotel: true, items: [["Tea", 100], ["Snacks", 150]], a: 250, m: "Room folio", at: "2026-11-08T12:00:00.000Z" };
+  snapshot.sales.push(sale);
+  const result = await commitRestaurantFolioCharge({
+    bridge, snapshot, bookingId: booking.id, tableId: 1, saleId: sale.id,
+    saleIndex: 0, legacyStorage: null
+  });
+  assert.equal(result.booking.data.ch.length, 2);
+  assert.equal(result.table.data.o.length, 0);
+  assert.equal(result.sale.data.a, 250);
+  const saved = (await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot;
+  assert.equal(saved.sales[0].id, sale.id);
+  assert.equal(saved.t[0].o.length, 0);
+});
+
+test("restaurant folio posting rejects a sale whose amount differs from the new folio charges", async () => {
+  const { bridge, snapshot, booking } = await fixture();
+  booking.st = "in";
+  booking.ch = [["Restaurant · Tea", 100, "din"]];
+  snapshot.t[0].o = [];
+  snapshot.sales.push({ id: "RP-bad", postedToHotel: true, room: booking.room, a: 200, items: [["Tea", 200]] });
+  await assert.rejects(commitRestaurantFolioCharge({
+    bridge, snapshot, bookingId: booking.id, tableId: 1, saleId: "RP-bad",
+    saleIndex: 0, legacyStorage: null
+  }), error => error.code === "RESTAURANT_CHARGE_AMOUNT_MISMATCH");
+  assert.equal((await bridge.fetchEntity("booking", "51")).data.ch.length, 0);
 });
