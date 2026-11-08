@@ -9,6 +9,7 @@ test('uses provider event IDs and preserves composite Paytm and JioPay identitie
   assert.equal(deriveProviderEventId({ provider: 'cashfree', event: {}, headers: { 'x-webhook-id': 'hook_1' }, rawBody: body }), 'hook_1');
   assert.equal(deriveProviderEventId({ provider: 'phonepe', event: { eventId: 'phonepe_evt_1' }, rawBody: body }), 'phonepe_evt_1');
   assert.equal(deriveProviderEventId({ provider: 'paytm', event: { ORDERID: 'ORDER123', TXNID: 'TXN456' }, rawBody: body }), 'ORDER123:TXN456');
+  assert.equal(deriveProviderEventId({ provider: 'jiopay', event: { merchantTxnNo: 'MERCHANT123', txnID: '7700206064604' }, rawBody: body }), 'MERCHANT123:7700206064604');
   assert.equal(deriveProviderEventId({ provider: 'jiopay', event: { merchantTxnNo: 'MERCHANT123', pgTransactionId: 'PG456' }, rawBody: body }), 'MERCHANT123:PG456');
 });
 
