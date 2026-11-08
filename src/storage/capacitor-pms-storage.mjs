@@ -1,4 +1,5 @@
 import { PmsRepository, assertPmsIdentity, assertPmsVersion } from "./pms-repository-contract.mjs";
+import { createSqliteStorageAdapter } from "./sqlite-storage-adapter.mjs";
 
 function resolveNativePlugin() {
   const capacitor = globalThis.Capacitor;
@@ -11,7 +12,23 @@ const stable = value => Array.isArray(value) ? value.map(stable) : value && type
 const sameJson = (a,b) => JSON.stringify(stable(a)) === JSON.stringify(stable(b));
 
 export class CapacitorPmsStorageClient extends PmsRepository {
-  constructor(plugin) { super(); this.plugin = plugin || resolveNativePlugin(); }
+  constructor(plugin) { super(); this.plugin = plugin || resolveNativePlugin(); this.storageAdapter = this.plugin ? createSqliteStorageAdapter(this.plugin) : null; if(this.storageAdapter){this.meta=this.storageAdapter.meta;this.backup=this.storageAdapter.backup;} }
+  #storage(){if(!this.storageAdapter)throw new Error("Native SQLite StorageAdapter is not registered");return this.storageAdapter;}
+  transaction(fn){return this.#storage().transaction(fn);}
+  get(store,key){return this.#storage().get(store,key);}
+  put(store,key,value){return this.#storage().put(store,key,value);}
+  list(store){return this.#storage().list(store);}
+  getMeta(key){return this.#storage().getMeta(key);}
+  putMeta(key,value){return this.#storage().putMeta(key,value);}
+  getBackup(id){return this.#storage().getBackup(id);}
+  putBackup(id,value){return this.#storage().putBackup(id,value);}
+  createBackup(id){return this.#storage().createBackup(id);}
+  restoreSnapshot(snapshot){return this.#storage().restoreSnapshot(snapshot);}
+  integrityCheck(){return this.#storage().integrityCheck();}
+  authority(){return this.#storage().authority();}
+  authorityRecord(){return this.#storage().authorityRecord();}
+  setAuthorityRecord(record){return this.#storage().setAuthorityRecord(record);}
+  wipe(){return this.#storage().wipe();}
 
   async getOrCreateLocalIdentity() {
     if (!this.plugin || typeof this.plugin.getOrCreateLocalIdentity !== "function") throw new Error("Native Keystore-backed local identity is unavailable");
