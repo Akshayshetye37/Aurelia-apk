@@ -289,3 +289,33 @@ merchant's account, a signed webhook contract, or an ordinary refund-create
 operation. The API v1.3 guide also requires CCAvenue to register the server's
 public IP before API calls are accepted. These account-side prerequisites
 cannot be completed from source code or by inventing credentials.
+## Additional official CCAvenue capabilities verified (8 November 2026)
+
+A review of CCAvenue's current public product documentation found two capabilities that must be included in the implementation plan:
+
+### Dynamic Event Notifications
+
+CCAvenue's official Dynamic Event Notifications article confirms merchant-configured event destination URLs and notifications for order status, order risk status, disputes, reconciliation status and recurring-payment alerts. Its 2014 press announcement additionally identifies Order Refund Status notifications for full or partial refunds requested and processed by the bank.
+
+Implementation rule: the notification endpoint must preserve the raw request, apply the exact authentication/integrity mechanism documented by the merchant's current integration kit, enforce replay/idempotency controls, and enqueue provider-status reconciliation. A notification is not payment or refund evidence by itself. The adapter must confirm the order/refund using CCAvenue's authoritative server API before returning verified state. The public article says the event is posted securely but does not specify a verifiable signature/header contract, so no HMAC or other signature scheme may be invented.
+
+Official references:
+- https://www.ccavenue.com/article/Receive-real-time-updates-of-key-events-in-your-Merchant-Account-through-CCAvenues-Dynamic-Event-Notifications
+- https://www.ccavenue.com/pr/Get-real-time-status-updates-of-crucial-events-in-your-account-with-Dynamic-Event-Notifications
+
+### Instant Refund API
+
+CCAvenue's official Instant Refunds product article explicitly advertises APIs that trigger refunds. It also says the feature is available to live businesses on the platform and currently supports only specific BIN sets of leading card networks. This corrects the earlier broad inference that no programmatic ordinary-refund facility exists at all: an API product exists, but public documentation does not disclose its endpoint, request fields, authentication, idempotency, refund-reference semantics, eligibility checks or status lookup contract.
+
+The adapter must implement this product when the merchant account is enabled for it. Do not substitute splitRefund (which is only for Split Payout sub-accounts), and do not emulate a refund by automating the M.A.R.S. browser interface. Until CCAvenue supplies the Instant Refund API specification and confirms merchant/BIN eligibility, refund initiation remains fail-closed. Refund status can be reconciled using the merchant-confirmed API and the Order Refund Status event; the older getRefundDetails guide is only corroborating lookup documentation and must be version-confirmed.
+
+Official references:
+- https://www.ccavenue.com/article/Enhance-Customer-Experience-and-Boost-Retention-Substantially-with-CCAvenue-Instant-Refunds
+- https://www.ccavenue.com/ccavenue-mobile-app
+- https://www.ccavenue.com/article/track-and-manage-your-orders-swiftly-and-efficiently-with-ccavenues-order-lookup-feature.jsp
+
+### Updated end-to-end target
+
+CCAvenue must be integrated as a peer adapter with these operations: credential validation; idempotent order/tracking-ID creation; order lookup by Aurelia reference; authoritative payment status; authenticated event ingestion followed by authoritative reconciliation; full/partial refund initiation when the merchant's Instant Refund entitlement/API is confirmed; and refund-status lookup. The Android handoff must use the merchant's current official SDK kit, with backend-generated requestHash and no merchant secrets in the APK.
+
+The implementation must not advertise full lifecycle capability until the merchant-issued kit supplies and the sandbox proves: AES request/response compatibility, SDK package/API, event authentication, status API contract, Instant Refund API contract and merchant eligibility. The adapter remains unregistered and all live financial switches remain OFF until then.
