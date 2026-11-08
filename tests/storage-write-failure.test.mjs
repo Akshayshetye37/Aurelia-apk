@@ -19,12 +19,12 @@ test("localStorage quota or security errors must propagate instead of falling ba
   assert.ok(setter.indexOf("throw new Error") < setter.indexOf("mem[k]=String(v)"), "volatile fallback is allowed only when durable storage was unavailable at startup");
 });
 
-test("strict persistence must reject memory-only storage and verify exact durable read-back", () => {
+test("strict accounting persistence cannot write outside the canonical asynchronous repository", () => {
   const p = html.indexOf("function persistStrict(){");
   const q = html.indexOf("\nlet LOCAL_STATE_STATUS", p);
   assert.ok(p >= 0 && q > p);
   const strict = html.slice(p, q);
-  assert.match(strict, /if\(store\.memoryOnly\)throw/);
-  assert.match(strict, /store\.setItem\(SK,serialized\)/);
-  assert.match(strict, /store\.getItem\(SK\)!==serialized/);
+  assert.match(strict, /Synchronous accounting persistence is disabled/);
+  assert.equal(strict.includes("localStorage"), false);
+  assert.equal(strict.includes("setItem(SK"), false);
 });
