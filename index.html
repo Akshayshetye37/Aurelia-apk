@@ -815,19 +815,58 @@ function addSig(o){
  if(!Array.isArray(S.sig))S.sig=[];
  if(S.sig.some(x=>x.id===id))return;
  if(ref&&S.sig.some(x=>x.ref===ref&&x.amt===amt))return;
- const signal={id,app,amt,payer,ref,at:atDate.toISOString(),st:'new'};
+ const signal={id,app,amt,payer,ref,at:atDate.toISOString(),st:'open',reviewHistory:[]};
  S.sig.unshift(signal);S.sig.length=Math.min(S.sig.length,60);
  const candidates=S.b.filter(b=>b.st==='in'&&Math.abs(dueB(b)-signal.amt)<.01);
  const named=candidates.filter(b=>signal.payer&&String(b.g||'').toLowerCase().split(' ').some(w=>w.length>2&&signal.payer.toLowerCase().includes(w)));
  const match=named.length===1?named[0]:candidates.length===1?candidates[0]:null;
- if(match&&S.au.reconcile&&on('Automatic reconciliation')){
-   signal.st='pending_review';signal.suggestedBookingId=match.id;
- }else signal.st='open';
+ if(match)signal.suggestedBookingId=match.id;
+ try{persistStrict()}catch(error){S.sig=S.sig.filter(x=>x.id!==id);console.error('[Aurelia Payment Review] Could not durably save incoming evidence.',error);toast('Payment evidence was detected but could not be saved. Do not approve it; check device storage.');return}
  render();
 }
 window.aureliaNativePaymentSignal=j=>{try{addSig(typeof j==='string'?JSON.parse(j):j)}catch(e){}};
-function sigM(id){const s=S.sig.find(x=>x.id===id);openS(`<h2 class="foil">Match ${K(s.amt)}</h2><div class="lab">${esc(s.app)} · ${esc(s.payer||'Unknown payer')}</div><div class="list">${S.b.filter(b=>b.st==='in'&&dueB(b)>=s.amt).map(b=>row(b)+`<button class="btn sm" onclick="sigA('${id}',${b.id})">Apply</button></div>`).join('')||'<div class="empty">No folio has a balance this large.</div>'}</div>`)}
-function sigA(id,i){const s=S.sig.find(x=>x.id===id),b=bk(i);if(!s||!b){toast('Signal or booking not found');return}if(!['open','pending_review'].includes(s.st)){toast('This evidence is not available for settlement review');return}if(!window.confirm('Have you independently verified this UPI transaction in the bank or payment app? A notification alone is not proof of payment.'))return;try{const result=settlePayment({booking:b,amount:s.amt,method:'UPI',reference:s.ref||'',source:'staff_review',idempotencyKey:s.ref?'utr:'+s.ref:'signal:'+s.id,verificationConfirmed:true});if(!result||!result.ok){toast(result&&result.message||'Payment was not recorded');return}s.st='matched';s.b=b.id;persist();closeS();render();toast(result.duplicate?'This signal was already recorded':'Payment applied')}catch(e){toast(e&&e.message||'Payment was not recorded')}}
+function sigM(id){
+ const s=S.sig.find(x=>x.id===id);if(!s){toast('Payment evidence not found');return}
+ const linked=s.b==null?null:bk(s.b);
+ const candidates=S.b.filter(b=>(b.st==='in'||b.st==='done')&&dueB(b)>=s.amt);
+ const list=candidates.map(b=>row(b)+`<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" onclick="sigA('${id}',${b.id})">Approve payment</button><button class="btn sm ghost" onclick="sigReject('${id}',${b.id})">Reject</button></div></div>`).join('');
+ openS(`<h2 class="foil">Payment review · ${K(s.amt)}</h2><div class="lab">${esc(s.app)} · ${esc(s.payer||'Unknown payer')}<br>Reference: ${esc(s.ref||'Not supplied')}<br>Detected: ${tmf(new Date(s.at))}</div>${s.st==='rejected'?'<p class="lab">This payment was rejected but its evidence is retained in the folio. Reopen it to review again.</p>':''}${linked?'<div class="card"><b>Linked folio</b><div class="lab">'+esc(linked.g)+' · Room '+esc(String(linked.room))+'</div></div>':''}<div class="list">${s.st==='rejected'?'<button class="btn" onclick="sigReopen(\''+id+'\')">Reopen for review</button>':list||'<div class="empty">No eligible folio found. The payment evidence remains saved.</div>'}</div>`);
+}
+function sigReject(id,bookingId){
+ const s=S.sig.find(x=>x.id===id),b=bk(bookingId);if(!s||!b){toast('Payment or folio not found');return}
+ if(!['open','pending_review','new'].includes(s.st)){toast('This payment is not awaiting a decision');return}
+ const reason=window.prompt('Reason for rejecting this payment (required):','');
+ if(reason===null)return;
+ const clean=String(reason).trim();if(clean.length<3||clean.length>256||/[\u0000-\u001f\u007f]/.test(clean)){toast('Enter a valid rejection reason (3–256 characters)');return}
+ if(!window.confirm('Reject this payment for folio '+String(b.folioId||b.id)+'? The evidence will remain saved and can be reopened.'))return;
+ const before={st:s.st,b:s.b,reviewHistory:Array.isArray(s.reviewHistory)?s.reviewHistory.slice():[]};
+ s.st='rejected';s.b=b.id;s.rejectedAt=new Date().toISOString();s.rejectionReason=clean;
+ s.reviewHistory.push({decision:'rejected',bookingId:b.id,reason:clean,at:s.rejectedAt});
+ try{persistStrict()}catch(error){Object.assign(s,before);delete s.rejectedAt;delete s.rejectionReason;toast('Rejection was not saved. No decision was recorded.');console.error('[Aurelia Payment Review] Durable rejection save failed.',error);return}
+ closeS();render();toast('Payment rejection saved to the guest folio');
+}
+function sigReopen(id){
+ const s=S.sig.find(x=>x.id===id);if(!s||s.st!=='rejected'){toast('Only rejected payments can be reopened');return}
+ if(!window.confirm('Reopen this saved payment for staff review? The previous rejection will remain in its history.'))return;
+ const before={st:s.st,reviewHistory:Array.isArray(s.reviewHistory)?s.reviewHistory.slice():[]};
+ s.st='open';s.reopenedAt=new Date().toISOString();s.reviewHistory.push({decision:'reopened',bookingId:s.b??null,at:s.reopenedAt});
+ try{persistStrict()}catch(error){Object.assign(s,before);delete s.reopenedAt;toast('Reopen action could not be saved. The payment remains rejected.');console.error('[Aurelia Payment Review] Durable reopen save failed.',error);return}
+ closeS();render();toast('Payment reopened; prior rejection retained');
+}
+function sigA(id,i){
+ const s=S.sig.find(x=>x.id===id),b=bk(i);if(!s||!b){toast('Signal or booking not found');return}
+ if(!['open','pending_review'].includes(s.st)){toast('This evidence is not available for settlement review');return}
+ if(!window.confirm('Have you independently verified this transaction with the bank or payment provider? A notification alone is not proof of payment.'))return;
+ try{
+  const result=settlePayment({booking:b,amount:s.amt,method:'UPI',reference:s.ref||'',source:'staff_review',idempotencyKey:s.ref?'utr:'+s.ref:'signal:'+s.id,verificationConfirmed:true});
+  if(!result||!result.ok){toast(result&&result.message||'Payment was not recorded');return}
+  s.st='matched';s.b=b.id;s.approvedAt=new Date().toISOString();
+  if(!Array.isArray(s.reviewHistory))s.reviewHistory=[];
+  s.reviewHistory.push({decision:'approved',bookingId:b.id,at:s.approvedAt});
+  try{persistStrict()}catch(error){toast('Payment posting returned success but review history could not be saved. Stop and reconcile before retrying.');console.error('[Aurelia Payment Review] Approval audit save failed.',error);return}
+  closeS();render();toast(result.duplicate?'This signal was already recorded':'Payment applied');
+ }catch(e){toast(e&&e.message||'Payment was not recorded')}
+}
 /* money flow */
 const band=(x1,y1,x2,y2,w,c,dl)=>`<path d="M${x1} ${y1}C${(x1+x2)/2} ${y1} ${(x1+x2)/2} ${y2} ${x2} ${y2}" fill="none" stroke="${c}" stroke-opacity=".6" stroke-width="${Math.max(2,w)}" pathLength="1" stroke-dasharray="1" style="animation:dr 1.8s ${dl}s cubic-bezier(.3,.7,.2,1) both"/>`;
 function flow(A,Z){const G=A.reduce((s,x)=>s+x[0],0);if(!G)return'<div class="empty">Charges and payments will flow here.</div>';const H=112,sc=H/G;let y=16,ym=16,s='';A.forEach((x,i)=>{const h=x[0]*sc;if(x[0]>0)s+=band(12,y+h/2,166,ym+h/2,h,x[1],i*.15);y+=h+6;ym+=h});let m2=16,yy=16;Z.forEach((x,i)=>{const h=x[0]*sc;if(x[0]>0)s+=band(176,m2+h/2,324,yy+h/2,h,x[1],.5+i*.15);m2+=h;yy+=h+6});return`<svg viewBox="0 0 336 ${H+44}" style="width:100%">${s}<rect x="166" y="16" width="10" height="${H}" rx="4" fill="#d9b76e"/></svg><div class="row lab" style="flex-wrap:wrap;gap:6px 14px">${[...A,...Z].map(x=>`<span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${x[1]};margin-right:6px"></i>${x[2]} ${K(x[0])}</span>`).join('')}</div>`}
