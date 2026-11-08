@@ -14,12 +14,30 @@ function requireIdentity(value, field) {
 }
 
 function requireMinorUnits(value, field) {
-  // Legacy decimal rupee fields are deliberately not converted here. The PMS
-  // must supply an already-normalized integer paise value from its money layer.
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new TypeError(field + '_must_be_positive_safe_integer_paise');
   }
   return value;
+}
+
+function legacyPaymentAmountPaise(row) {
+  if (Number.isSafeInteger(row.amountPaise)) {
+    return requireMinorUnits(row.amountPaise, 'legacy_payment_amount');
+  }
+  // Legacy PMS rows may carry rupees in a/amount. Parse their decimal string
+  // representation with integer arithmetic; never multiply a float by 100.
+  const raw = row.a ?? row.amount;
+  const decimal = typeof raw === 'number' && Number.isFinite(raw) ? String(raw)
+    : typeof raw === 'string' ? raw.trim() : '';
+  const match = /^(0|[1-9][0-9]*)(?:\\.([0-9]{1,2}))?$/.exec(decimal);
+  if (!match) throw new TypeError('legacy_payment_amount_must_be_exact_rupee_decimal_or_integer_paise');
+  const whole = BigInt(match[1]);
+  const fraction = BigInt((match[2] || '').padEnd(2, '0') || '0');
+  const paise = whole * 100n + fraction;
+  if (paise <= 0n || paise > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new TypeError('legacy_payment_amount_out_of_safe_paise_range');
+  }
+  return Number(paise);
 }
 
 /**
@@ -44,7 +62,7 @@ export function mapLegacyPaymentCapture({
   }
   const bookingId = requireIdentity(String(booking.id ?? ''), 'booking_id');
   const txn = requireIdentity(transactionId, 'transaction_id');
-  const amountMinor = requireMinorUnits(paymentRow.amountPaise, 'legacy_payment_amount');
+  const amountMinor = legacyPaymentAmountPaise(paymentRow);
   if (paymentRow.bookingId != null && String(paymentRow.bookingId) !== bookingId) {
     throw new Error('legacy_payment_booking_binding_mismatch');
   }
