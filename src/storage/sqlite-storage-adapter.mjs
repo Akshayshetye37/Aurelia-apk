@@ -19,9 +19,9 @@ export class SqliteStorageAdapter extends StorageAdapter{
  async get(store,key){if(!STORES.has(store))throw new TypeError("Unsupported storage store: "+store);const r=await this.plugin.storageGet({store,key});return r?.value??null;}
  async put(store,key,value){if(!STORES.has(store))throw new TypeError("Unsupported storage store: "+store);await this.plugin.storageTransaction({operations:[{type:"put",store,key,value}]});return true;}
  async list(store){if(!STORES.has(store))throw new TypeError("Unsupported storage store: "+store);const r=await this.plugin.storageList({store});if(!Array.isArray(r?.rows))throw new Error("SQLite returned an invalid row list");return r.rows;}
- getMeta(key){return this.get("meta",key);}
+ async getMeta(key){const value=await this.get("meta",key);return value==null?null:{...value,key};}
  putMeta(key,value){return this.put("meta",key,{...value,key});}
- getBackup(id){return this.get("legacy_backup",id);}
+ async getBackup(id){const value=await this.get("legacy_backup",id);return value==null?null:{...value,id};}
  putBackup(id,value){return this.put("legacy_backup",id,{...value,id});}
  async integrityCheck(){const r=await this.plugin.storageIntegrityCheck();if(r?.ok!==true)throw new Error("SQLite integrity_check failed");return r;}
  async authority(){const r=await this.plugin.storageGetAuthority();if(!["legacy","migrating","canonical"].includes(r?.state))throw new Error("SQLite returned an invalid authority state");return r.state;}
