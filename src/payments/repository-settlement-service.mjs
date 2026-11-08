@@ -50,6 +50,7 @@ export async function settlePaymentToRepository({
   source = "manual",
   idempotencyKey,
   verificationConfirmed = false,
+  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" ||
@@ -196,6 +197,23 @@ export async function settlePaymentToRepository({
       "Payment transaction committed but exact canonical read-back failed. Stop payment entry and reconcile before retrying.");
   }
 
+  // Refresh the old UI cache only after canonical commit. It is never the
+  // authority for this operation; failure is reported separately so callers
+  // do not retry and accidentally create a second payment.
+  let cacheRefreshed = null;
+  if (legacyStorage) {
+    cacheRefreshed = false;
+    try {
+      if (legacyStorage.memoryOnly !== true) {
+        const serialized = JSON.stringify(canonicalState);
+        legacyStorage.setItem("aurelia_lodge_v2", serialized);
+        cacheRefreshed = legacyStorage.getItem("aurelia_lodge_v2") === serialized;
+      }
+    } catch (error) {
+      console.warn("[Aurelia Local Cache] Canonical payment committed; compatibility cache refresh failed.", error);
+    }
+  }
+
   // Keep the active UI references coherent only after durable commit/read-back.
   const liveBookings = state.b;
   const merged = canonicalState.b.map(saved => {
@@ -218,6 +236,7 @@ export async function settlePaymentToRepository({
     entity: storedBooking,
     folio: storedFolio,
     snapshotVersion: storedSnapshot.version,
+    cacheRefreshed,
     bookingVersion: committed.entities[0].version,
     folioVersion: committed.entities[1].version,
     eventSequence: committed.entities[1].version
