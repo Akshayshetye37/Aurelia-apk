@@ -12,6 +12,19 @@ import { getOrCreateBrowserLocalIdentity } from "./pms-local-identity.mjs";
 import { settlePaymentToRepository } from "../payments/repository-settlement-service.mjs";
 import { PmsRepositoryBridge } from "./pms-repository-bridge.mjs";
 import { projectLegacyPmsDomains } from "./pms-domain-cutover.mjs";
+const canonicalJson = value => Array.isArray(value) ? "[" + value.map(canonicalJson).join(",") + "]" :
+  value && typeof value === "object"
+    ? "{" + Object.keys(value).sort().map(key => JSON.stringify(key) + ":" + canonicalJson(value[key])).join(",") + "}"
+    : JSON.stringify(value);
+async function canonicalSha256(value) {
+  if (!globalThis.crypto?.subtle || typeof TextEncoder !== "function") {
+    throw new Error("SHA-256 migration verification is unavailable; startup stopped safely");
+  }
+  const bytes = new TextEncoder().encode(canonicalJson(value));
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
 
 export const AURELIA_LEGACY_STATE_KEY = LEGACY_STATE_KEY;
 export const AURELIA_MIGRATION_STATUS_KEY = LEGACY_MIGRATION_STATUS_KEY;
@@ -406,8 +419,9 @@ export class PmsBootstrapCoordinator {
     const actual = new Map(rows.map(row => [row.id, row]));
     for (const [key, value] of expected) {
       const row = actual.get(key);
-      if (!row || row.version !== 1 || JSON.stringify(row.data) !== JSON.stringify(value)) {
-        throw new Error("Legacy migration rejected: read-back mismatch for " + key);
+      if (!row || row.version !== 1 ||
+          await canonicalSha256(row.data) !== await canonicalSha256(value)) {
+        throw new Error("Legacy migration rejected: SHA-256 read-back mismatch for " + key);
       }
     }
     this.legacyImporter.writeMigrationStatus("VERIFIED:" + migrationId);
