@@ -567,3 +567,26 @@ Do not register CCAvenue, enable live collection, enable automatic settlement/re
 CCAvenue is selectable in the Aurelia Payment Gateway provider list so an authorized tenant administrator can enter the merchant's sandbox credential set through the protected admin session. The form posts to the dedicated CCAvenue credential endpoint, which stores API and notification secrets in Google Secret Manager and records only non-secret configuration metadata in Firestore. The UI clears secret inputs after submission and explicitly reports that schema acceptance is not credential validation.
 
 This onboarding affordance does not register the adapter, mark credentials validated, pass sandbox acceptance, verify notification authenticity, or permit activation. The activation action remains unavailable for CCAvenue and the backend factory/tenant-selection allowlist remain unchanged. New CCAvenue checkout must remain blocked until the documented merchant-kit, tracking-ID/AES, notification-authentication, authoritative status, general refund and Android SDK gates are satisfied. This prevents a configuration-only screen from implying payment capability.
+
+
+## Unqualified cryptography fail-closed guard (8 November 2026)
+
+The current AES compatibility codec is not independently verified against the
+merchant-issued AesCryptUtil implementation or a CCAvenue sandbox known-answer
+vector. It must therefore never be used against production endpoints.
+
+The repository now enforces this boundary in code:
+- hosted checkout construction accepts only `environment: test`;
+- Merchant API status verification accepts only `environment: test`;
+- the credential onboarding endpoint accepts only test credentials;
+- the CCAvenue notification endpoint accepts only test notifications;
+- provider tracking references are constrained to the documented maximum of
+  12 numeric digits in the hosted-notification and status-query paths.
+
+The live endpoint constants remain present only as documented endpoint
+metadata; the unqualified hosted-checkout and status-verification constructors
+cannot select them. CCAvenue remains absent from the provider factory and
+cannot become the active provider. This restriction is not a substitute for
+merchant qualification; it is the fail-closed state until official merchant
+cryptographic evidence, notification authentication semantics, refund
+contracts and Android SDK requirements are independently verified.
