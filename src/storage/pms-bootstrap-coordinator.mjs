@@ -6,7 +6,7 @@
  * UI cutover is a separate release gate requiring every mutation path to be
  * routed through the repository.
  */
-import { IndexedDbPmsRepository, parseLegacyPmsSnapshot } from "./indexeddb-pms-repository.mjs";
+import { parseLegacyPmsSnapshot } from "./legacy-snapshot-parser.mjs";
 import { LegacyImporter, LEGACY_STATE_KEY, LEGACY_MIGRATION_STATUS_KEY } from "./legacy-importer.mjs";
 import { createWebStorageAdapter } from "./web-storage-adapter.mjs";
 import { getOrCreateBrowserLocalIdentity } from "./pms-local-identity.mjs";
@@ -30,6 +30,8 @@ async function canonicalSha256(value) {
 
 export const AURELIA_LEGACY_STATE_KEY = LEGACY_STATE_KEY;
 export const AURELIA_MIGRATION_STATUS_KEY = LEGACY_MIGRATION_STATUS_KEY;
+
+async function createBrowserRepository({indexedDBImpl,databaseName}) { const { IndexedDbPmsRepository } = await import("./indexeddb-pms-repository.mjs"); return new IndexedDbPmsRepository({indexedDBImpl,databaseName}); }
 
 async function createNativeRepository() {
   const { capacitorPmsStorage } = await import("./capacitor-pms-storage.mjs");
@@ -107,10 +109,7 @@ export class PmsBootstrapCoordinator {
       if (this.environment === "ANDROID_WEBVIEW") {
         this.repository = await this.nativeRepositoryFactory();
       } else {
-        this.repository = new IndexedDbPmsRepository({
-          indexedDBImpl: this.indexedDBImpl,
-          databaseName: this.databaseName
-        });
+        this.repository = await createBrowserRepository({indexedDBImpl:this.indexedDBImpl,databaseName:this.databaseName});
       }
     }
 
