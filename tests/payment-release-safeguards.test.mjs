@@ -112,3 +112,15 @@ test('device enrollment challenges are single-current, one-use and freshness-bou
   assert.match(service, /currentTime\.getTime\(\) - integrityVerifiedAt > 10 \* 60_000/);
   assert.match(service, /playIntegrityStrongIntegrityRequired/);
 });
+
+
+test('Android generation installs payment SDK R8 rules without enabling live checkout', () => {
+  const patcher = read('scripts/patch-android.js');
+  const rules = read('android/templates/security/proguard-rules.pro');
+  assert.match(patcher, /proguard-rules\.pro/);
+  assert.match(patcher, /wireReleaseProguard/);
+  assert.match(rules, /-keep class com\.razorpay\.\*\* \{ \*; \}/);
+  assert.match(rules, /-keep class com\.cashfree\.\*\* \{ \*; \}/);
+  assert.match(rules, /-keep class com\.paytm\.\*\* \{ \*; \}/);
+  assert.match(rules, /AURELIA_PAYMENT_SDK_KEEP_RULES/);
+});
