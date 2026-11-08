@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
-    "@capacitor/core": "^7.4.3"
+    "@capacitor/core": "^7.4.3",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.3",
