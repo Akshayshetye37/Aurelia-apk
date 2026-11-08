@@ -4,7 +4,7 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 
 ## Production safety status
 
-**LIVE GATEWAY COLLECTION OFF.** Automatic settlement and automatic refund posting remain OFF. CCAvenue has isolated hosted-checkout, AES-envelope, server-status and notification-reconciliation foundations, but remains unregistered and unavailable. No gateway is production-qualified, and production deployment is not authorized by this branch.
+**LIVE GATEWAY COLLECTION OFF.** Automatic settlement and automatic refund posting remain OFF. CCAvenue now has isolated hosted-checkout request construction, an AES-128-CBC compatibility codec, Merchant API order-status verification, tenant-scoped notification reconciliation, and schema-only Secret Manager credential storage/revocation. It remains unregistered and not merchant-qualified; notification signature authentication, merchant AES interoperability, static API egress registration, Android SDK and refund lifecycle remain unverified. No gateway is production-qualified, and production deployment is not authorized by this branch.
 
 ## Architecture
 
@@ -158,7 +158,7 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 ## Canonical accounting integration — current phase
 
 - Added `payment-backend/src/accounting/pms-ledger-mapping.mjs`: a pure evidence-gated adapter from the actual `booking.pays[]` legacy payment row to canonical non-postable journal proposals.
-- Capture, processor fee and cancellation/refund mappings require independent provider evidence and exact integer-paise amounts. Legacy rupee decimals are parsed with decimal-string validation and BigInt arithmetic; binary floating-point multiplication is not used. The latest backend CI passed all 272 tests after correcting the decimal separator parser.
+- Capture, processor fee and cancellation/refund mappings require independent provider evidence and exact integer-paise amounts. Legacy rupee decimals are parsed with decimal-string validation and BigInt arithmetic; binary floating-point multiplication is not used. The latest verified backend CI passed 306/306 contract/security tests (plus 2/2 explicit CCAvenue Mobile SDK hash-vector checks) after correcting the decimal separator parser.
 - Mapping directions remain provisional: capture Dr 2020 / Cr 1010; actual processor fee Dr 5010 / Cr 2020; verified refund Dr 1010 / Cr 2020.
 - Added regression tests in `payment-backend/test/pms-ledger-mapping.test.mjs`.
 - Added `android/templates/security/proguard-rules.pro` and Android generation wiring for Razorpay, Cashfree and Paytm R8 preservation rules. This is source-level configuration only; Android Gradle compilation and release shrinker verification remain outstanding.
