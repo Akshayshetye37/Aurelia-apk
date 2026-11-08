@@ -889,7 +889,7 @@ app.put('/v1/admin/providers/ccavenue/credentials', requireTenantAdmin,
     const body = req.body || {};
     const environment = body.environment;
     const allowed = new Set([
-      'environment', 'merchantId', 'regId', 'accessCode', 'encryptionKey',
+      'environment', 'merchantId', 'regId', 'accessCode', 'encryptionKey', 'hostedCheckoutKey',
       'workingKey', 'notificationWorkingKey', 'apiVersion'
     ]);
     if (!['test', 'live'].includes(environment) ||
@@ -897,6 +897,7 @@ app.put('/v1/admin/providers/ccavenue/credentials', requireTenantAdmin,
         typeof body.merchantId !== 'string' || !/^[A-Za-z0-9]{1,20}$/.test(body.merchantId) ||
         typeof body.accessCode !== 'string' || !/^[A-Za-z0-9]{8,64}$/.test(body.accessCode) ||
         typeof body.encryptionKey !== 'string' || body.encryptionKey.length < 16 || body.encryptionKey.length > 512 ||
+        typeof body.hostedCheckoutKey !== 'string' || body.hostedCheckoutKey.length < 16 || body.hostedCheckoutKey.length > 512 ||
         (body.workingKey !== undefined && (typeof body.workingKey !== 'string' || body.workingKey.length < 16 || body.workingKey.length > 512)) ||
         typeof body.notificationWorkingKey !== 'string' || body.notificationWorkingKey.length < 16 ||
         body.notificationWorkingKey.length > 512 ||
@@ -910,6 +911,7 @@ app.put('/v1/admin/providers/ccavenue/credentials', requireTenantAdmin,
         ...(body.regId ? { regId: body.regId } : {}),
         accessCode: body.accessCode,
         encryptionKey: body.encryptionKey,
+        hostedCheckoutKey: body.hostedCheckoutKey,
         ...(body.workingKey ? { workingKey: body.workingKey } : {}),
         apiVersion: body.apiVersion || '1.1'
       };
