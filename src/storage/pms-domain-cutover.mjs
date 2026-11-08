@@ -13,6 +13,16 @@ const stable = value => Array.isArray(value) ? value.map(stable) :
     ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])]))
     : value;
 const same = (a, b) => JSON.stringify(stable(a)) === JSON.stringify(stable(b));
+const sameProjectedEntity = (a, b) => {
+  const clean = value => {
+    const copy = clone(value);
+    if (copy && typeof copy === "object" && !Array.isArray(copy)) {
+      delete copy.id; delete copy.updatedAt; delete copy.legacySource;
+    }
+    return copy;
+  };
+  return same(clean(a), clean(b));
+};
 const safeId = (value, label) => {
   const id = String(value ?? "").trim();
   if (!id || id.length > 180 || /[\u0000-\u001f]/.test(id)) {
@@ -58,13 +68,13 @@ function records(snapshot, migrationId) {
     const folioId = safeId(row.folioId ?? "booking-" + id, "folio identity");
     // Preserve source values verbatim. Do not reconcile p vs pays or infer
     // an opening balance during migration.
-    add("folio", folioId, {
+    // Legacy financial evidence is retained separately from normalized folios.
+    add("audit", "legacy-folio-source:" + folioId, {
       id: folioId, bookingId: id,
       legacyPaidTotal: row.p ?? null,
       legacyPaymentRows: clone(Array.isArray(row.pays) ? row.pays : []),
       legacyPaymentHistory: clone(Array.isArray(row.payments) ? row.payments : []),
-      legacyCurrencySymbol: snapshot.set?.cur ?? "₹",
-      legacySource: "b"
+      legacyCurrencySymbol: snapshot.set?.cur ?? "₹"
     }, "b");
   });
   snapshot.inv.forEach((row, index) => {
@@ -74,7 +84,8 @@ function records(snapshot, migrationId) {
   });
   snapshot.exp.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy expense at index " + index);
-    add("ledger", "legacy-expense-" + index, { sourceCollection: "exp", sourceIndex: index, value: clone(row) }, "exp");
+    const id = safeId(row.id ?? "legacy-expense-" + index, "expense identity");
+    add("expense", id, { ...clone(row), id, legacySource: "exp" }, "exp");
   });
   snapshot.led.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy ledger row at index " + index);
@@ -123,7 +134,7 @@ export async function projectLegacyPmsDomains({ bridge, snapshot, migrationId, b
     for (const row of planned.slice(offset, offset + batchSize)) {
       const current = await bridge.fetchEntity(row.entityType, row.entityId);
       if (current) {
-        if (!same(current.data, row.data)) {
+        if (!sameProjectedEntity(current.data, row.data)) {
           throw Object.assign(new Error("Canonical " + row.entityType + " entity " + row.entityId + " differs from the legacy snapshot; projection stopped."), {
             code: "LEGACY_DOMAIN_PROJECTION_DIVERGENCE",
             entityType: row.entityType, entityId: row.entityId
@@ -138,12 +149,13 @@ export async function projectLegacyPmsDomains({ bridge, snapshot, migrationId, b
       });
     }
     if (batch.length) {
-      await bridge.mutateEntities(batch);
+      if (batch.length === 1) await bridge.mutateEntity(batch[0]);
+      else await bridge.mutateEntities(batch);
       projected += batch.length;
       // Exact read-back is required before advancing to the next batch.
       for (const row of batch) {
         const stored = await bridge.fetchEntity(row.entityType, row.entityId);
-        if (!stored || stored.version !== 1 || !same(stored.data, row.data)) {
+        if (!stored || stored.version !== 1 || !sameProjectedEntity(stored.data, row.data)) {
           throw Object.assign(new Error("Domain projection read-back failed for " + row.entityType + ":" + row.entityId), {
             code: "LEGACY_DOMAIN_PROJECTION_READBACK_FAILED"
           });

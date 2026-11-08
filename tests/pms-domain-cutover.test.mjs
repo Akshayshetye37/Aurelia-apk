@@ -21,6 +21,7 @@ function fakeBridge() {
     async fetchEntity(type, id) { const row = entities.get(type + ":" + id); return row ? structuredClone(row) : null; },
     async mutateEntities(changes) {
       const rows = [];
+      assert.ok(changes.length >= 2 && changes.length <= 20, "repository batch size must be 2..20");
       for (const c of changes) {
         const key = c.entityType + ":" + c.entityId;
         const old = entities.get(key);
@@ -48,9 +49,9 @@ test("projects legacy operational domains and preserves financial source values 
   const bridge = fakeBridge();
   const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-test" });
   assert.equal(result.total, 8);
-  assert.equal(result.projected, 9);
-  assert.equal(bridge.entities.get("folio:folio-7").data.legacyPaidTotal, 500);
-  assert.deepEqual(bridge.entities.get("folio:folio-7").data.legacyPaymentRows, [{ a: 200, amountPaise: 20000 }]);
+  assert.equal(result.projected, 8);
+  assert.equal(bridge.entities.get("audit:legacy-folio-source:folio-7").data.legacyPaidTotal, 500);
+  assert.deepEqual(bridge.entities.get("audit:legacy-folio-source:folio-7").data.legacyPaymentRows, [{ a: 200, amountPaise: 20000 }]);
   assert.equal(result.manifest.financialReconciliationPerformed, false);
   assert.equal(result.manifest.preservesLegacySnapshot, true);
 });
@@ -83,4 +84,22 @@ test("projection rejects missing stable booking identity and preserves unnormali
   // Raw legacy payment values are intentionally preserved, not normalized here.
   const accepted = await projectLegacyPmsDomains({ bridge, snapshot: noMoney, migrationId: "mig-raw-money" });
   assert.equal(accepted.manifest.financialReconciliationPerformed, false);
+});
+
+test("single-record trailing batch uses the atomic single-entity transaction", async () => {
+  const bridge = fakeBridge();
+  const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-single-tail", batchSize: 7 });
+  assert.equal(result.projected, 8);
+  assert.ok(bridge.entities.has("audit:legacy-domain-projection:mig-single-tail"));
+});
+
+test("existing canonical operational rows ignore repository metadata but preserve source equality", async () => {
+  const bridge = fakeBridge(), data = snapshot();
+  bridge.entities.set("booking:7", {
+    type: "booking", id: "7", version: 1,
+    data: { ...structuredClone(data.b[0]), updatedAt: "2026-11-08T00:00:00.000Z" }
+  });
+  const result = await projectLegacyPmsDomains({ bridge, snapshot: data, migrationId: "mig-existing-domain" });
+  assert.equal(result.alreadyPresent, 1);
+  assert.equal(bridge.entities.get("booking:7").data.updatedAt, "2026-11-08T00:00:00.000Z");
 });

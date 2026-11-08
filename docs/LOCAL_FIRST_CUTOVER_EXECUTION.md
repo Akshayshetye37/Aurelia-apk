@@ -2,7 +2,7 @@
 
 **Branch:** `feature/multi-provider-payment-backend`  
 **Baseline:** `7262091cce720c48933d534071f8f77065efcbee`  
-**Status:** Phase 1 migration primitive added; application UI cutover remains OFF.
+**Status:** Canonical-first serialized writes are active; startup verifies migration replay and restores the latest canonical snapshot; domain projection is wired; application UI cutover remains OFF.
 
 ## Objective
 
@@ -14,7 +14,7 @@ Make the device repository the sole canonical read/write path for all PMS domain
 
 ## Implemented in this phase
 
-`src/storage/pms-domain-cutover.mjs` adds a resumable, non-destructive projection from the verified legacy snapshot into versioned domain entities. It covers rooms, guests, bookings, folio source records, inventory, expense/ledger rows and audit rows.
+`src/storage/pms-domain-cutover.mjs` adds a resumable, non-destructive projection from the verified legacy snapshot into versioned domain entities. It covers rooms, guests, bookings, preserved folio-source evidence, inventory, expenses/ledger rows and audit rows. Bootstrap runs this projection after migration verification and before UI release on both IndexedDB and Android SQLite. The manifest is stable across ordinary saves because it is tied to the immutable migration ID; replays verify the existing projection without overwriting operational entities.
 
 Each batch uses the repository's atomic entity-plus-outbox transaction and is read back before the next batch. A final manifest is committed only after all projected records have been verified. Replays are idempotent; divergent existing entities fail closed. The original legacy snapshot is not deleted or rewritten.
 
@@ -30,10 +30,9 @@ This is a migration primitive, not a completed application cutover:
 
 ## Next mandatory implementation stages
 
-1. Wire startup to verify and load the domain projection manifest on both adapters.
-2. Convert each application command to async repository reads and transactional writes; remove direct mutation of the legacy state object from that command.
-3. Cut over in bounded domains: rooms/housekeeping; guests/reservations; folio/accounting; inventory/expenses; restaurant/tables; settings/audit.
-4. For each domain, add tests for reload, duplicate commands, stale versions, transaction rollback, migration replay and read-back.
-5. Remove localStorage as a write authority only after every read and write path is migrated and recovery/rollback is qualified.
+1. Convert each application command to async repository reads and transactional writes; remove direct mutation of the legacy state object from that command.
+2. Cut over in bounded domains: rooms/housekeeping; guests/reservations; folio/accounting; inventory/expenses; restaurant/tables; settings/audit.
+3. For each domain, add tests for reload, duplicate commands, stale versions, transaction rollback, migration replay and read-back.
+4. Remove localStorage as a write authority only after every read and write path is migrated and recovery/rollback is qualified.
 
 **Release controls:** cloud sync OFF; live gateway collection OFF; automatic settlement OFF; automatic refund posting OFF; APK/release authorization NOT GRANTED.

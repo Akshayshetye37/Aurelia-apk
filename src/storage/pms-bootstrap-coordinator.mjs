@@ -9,6 +9,8 @@
 import { IndexedDbPmsRepository, parseLegacyPmsSnapshot } from "./indexeddb-pms-repository.mjs";
 import { getOrCreateBrowserLocalIdentity } from "./pms-local-identity.mjs";
 import { settlePaymentToRepository } from "../payments/repository-settlement-service.mjs";
+import { PmsRepositoryBridge } from "./pms-repository-bridge.mjs";
+import { projectLegacyPmsDomains } from "./pms-domain-cutover.mjs";
 
 export const AURELIA_LEGACY_STATE_KEY = "aurelia_lodge_v2";
 export const AURELIA_MIGRATION_STATUS_KEY = "aurelia_canonical_migration_status";
@@ -18,7 +20,7 @@ async function createNativeRepository() {
   return capacitorPmsStorage;
 }
 
-function stableMigrationId(raw) {
+export function stableMigrationId(raw) {
   // Stable non-cryptographic identifier: migration replay protection is
   // enforced by the repository marker and exact raw snapshot comparison.
   let hash = 2166136261;
@@ -132,20 +134,33 @@ export class PmsBootstrapCoordinator {
           migrated: false,
           alreadyMigrated: true,
           recoveredFromCanonical: true,
+          migrationId: recovery.migrationId || null,
           entityCount: (await this.repository.listEntities("legacy")).length,
           legacyKeyPreserved: true
         })
       : await this.executeGuardedMigration();
     this.status = migration.status;
+
+    // Project the verified source snapshot before releasing the UI. Projection
+    // is resumable and idempotent; it does not authorize synchronous UI cutover.
+    let domainProjection = null;
+    if (migration.status === "MIGRATION_VERIFIED" && migration.migrationId) {
+      const raw = this.storage.getItem(AURELIA_LEGACY_STATE_KEY);
+      const source = parseLegacyPmsSnapshot(raw);
+      const bridge = new PmsRepositoryBridge({
+        tenantId: identity.tenantId, propertyId: identity.propertyId,
+        deviceId: identity.deviceId, now: this.now
+      });
+      bridge.bindActiveEngine(this.repository, identity);
+      domainProjection = await projectLegacyPmsDomains({
+        bridge, snapshot: source.parsed, migrationId: migration.migrationId
+      });
+    }
+
     return Object.freeze({
-      success: true,
-      environment: this.environment,
-      storageEngine: this.storageEngine,
-      uiCutover: false,
-      recovery,
-      migration,
-      repository: this.repository,
-      identity
+      success: true, environment: this.environment, storageEngine: this.storageEngine,
+      uiCutover: false, recovery, migration, domainProjection,
+      repository: this.repository, identity
     });
   }
 
@@ -155,48 +170,44 @@ export class PmsBootstrapCoordinator {
       return Object.freeze({ restored: false, source: "legacy-store-present" });
     }
 
-    // Prefer the exact original migration bytes whenever the small migration
-    // marker survived. This preserves the stable migration ID and byte identity.
     const marker = this.storage.getItem(AURELIA_MIGRATION_STATUS_KEY);
     const markerMatch = typeof marker === "string" && marker.match(/^VERIFIED:(mig_legacy_[a-f0-9]{8})$/);
+    // A later canonical snapshot is newer than the immutable first-migration
+    // snapshot. Prefer it so recovery cannot roll back valid operational saves.
+    const canonical = await this.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+    const snapshot = canonical?.data?.snapshot;
+    if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)) {
+      const serialized = JSON.stringify(snapshot);
+      parseLegacyPmsSnapshot(serialized);
+      const migrated = await this.repository.listEntities("legacy");
+      if (!migrated.length) throw new Error("Canonical audit snapshot exists without verified migrated PMS entities; startup stopped");
+      this.storage.setItem(AURELIA_LEGACY_STATE_KEY, serialized);
+      if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== serialized) {
+        throw new Error("Canonical recovery rejected: restored latest snapshot failed exact read-back verification");
+      }
+      return Object.freeze({
+        restored: true, source: "canonical-audit-snapshot", migrationAlreadyVerified: true,
+        migrationId: markerMatch?.[1] || null, version: canonical.version,
+        snapshotSha256: canonical.data.snapshotSha256 || null
+      });
+    }
+
+    // Only fall back to the immutable migration bytes if no newer snapshot exists.
     if (markerMatch) {
       const original = await this.repository.readMigrationSnapshot(markerMatch[1]);
-      if (original?.raw) {
+      if (original?.raw && original.sourceKey === AURELIA_LEGACY_STATE_KEY) {
         parseLegacyPmsSnapshot(original.raw);
         this.storage.setItem(AURELIA_LEGACY_STATE_KEY, original.raw);
         if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== original.raw) {
           throw new Error("Canonical migration recovery failed exact raw snapshot read-back verification");
         }
-        return Object.freeze({ restored: true, source: "canonical-migration-snapshot", migrationAlreadyVerified: false });
+        return Object.freeze({
+          restored: true, source: "canonical-migration-snapshot",
+          migrationAlreadyVerified: true, migrationId: markerMatch[1]
+        });
       }
     }
 
-    const canonical = await this.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
-    const snapshot = canonical?.data?.snapshot;
-    if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)) {
-      const serialized = JSON.stringify(snapshot);
-      // Validate the complete real PMS shape before writing anything back.
-      parseLegacyPmsSnapshot(serialized);
-      const migrated = await this.repository.listEntities("legacy");
-      if (!migrated.length) {
-        throw new Error("Canonical audit snapshot exists without verified migrated PMS entities; startup stopped");
-      }
-      this.storage.setItem(AURELIA_LEGACY_STATE_KEY, serialized);
-      if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== serialized) {
-        throw new Error("Canonical recovery rejected: restored legacy state failed exact read-back verification");
-      }
-      return Object.freeze({
-        restored: true,
-        source: "canonical-audit-snapshot",
-        migrationAlreadyVerified: true,
-        version: canonical.version,
-        snapshotSha256: canonical.data.snapshotSha256 || null
-      });
-    }
-
-    // Never silently launch an empty PMS when canonical migrated records exist.
-    // The original migration snapshot remains the authoritative recovery source;
-    // without a readable full snapshot, startup must stop rather than risk loss.
     const migrated = await this.repository.listEntities("legacy");
     if (migrated.length) {
       throw new Error("Canonical PMS records exist but no committed full-state recovery snapshot is available; startup stopped to prevent an empty-state overwrite");
@@ -205,56 +216,106 @@ export class PmsBootstrapCoordinator {
   }
 
   async executeGuardedMigration() {
-    const raw = this.storage.getItem(AURELIA_LEGACY_STATE_KEY);
-    if (raw == null || raw === "") {
+    const rawAtStart = this.storage.getItem(AURELIA_LEGACY_STATE_KEY);
+    if (rawAtStart == null || rawAtStart === "") {
       return Object.freeze({ status: "READY_EMPTY", migrated: false, entityCount: 0 });
     }
 
-    // Parse and validate before opening a write transaction. The parser checks
-    // the real Aurelia v2 state shape (rooms, b, g, t, exp, inv, led, aud,
-    // set and menu), rather than an invented bookings/folios JSON shape.
-    const snapshot = parseLegacyPmsSnapshot(raw);
-    const migrationId = stableMigrationId(raw);
+    const marker = this.storage.getItem(AURELIA_MIGRATION_STATUS_KEY);
+    const markerMatch = typeof marker === "string" && marker.match(/^VERIFIED:(mig_legacy_[a-f0-9]{8})$/);
+    if (markerMatch) {
+      const migrationId = markerMatch[1];
+      const original = await this.repository.readMigrationSnapshot(migrationId);
+      if (!original?.raw || original.sourceKey !== AURELIA_LEGACY_STATE_KEY) {
+        throw new Error("Verified migration marker has no matching immutable source snapshot; startup stopped");
+      }
+      const originalSnapshot = parseLegacyPmsSnapshot(original.raw);
+      const rows = await this.repository.listEntities("legacy");
+      const expected = Object.entries(originalSnapshot.parsed);
+      if (rows.length !== expected.length) throw new Error("Verified migration source entity count no longer matches its immutable snapshot");
+      const actual = new Map(rows.map(row => [row.id, row]));
+      for (const [key, value] of expected) {
+        const row = actual.get(key);
+        if (!row || row.version !== 1 || JSON.stringify(row.data) !== JSON.stringify(value)) {
+          throw new Error("Verified migration source read-back mismatch for " + key);
+        }
+      }
+
+      const latest = await this.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+      if (latest?.data?.snapshot && typeof latest.data.snapshot === "object" && !Array.isArray(latest.data.snapshot)) {
+        const canonicalRaw = JSON.stringify(latest.data.snapshot);
+        parseLegacyPmsSnapshot(canonicalRaw);
+        if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== canonicalRaw) {
+          this.storage.setItem(AURELIA_LEGACY_STATE_KEY, canonicalRaw);
+          if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== canonicalRaw) {
+            throw new Error("Latest canonical PMS snapshot could not refresh the compatibility cache");
+          }
+        }
+      } else if (rawAtStart !== original.raw) {
+        throw new Error("Legacy PMS cache differs from its immutable migration source but no committed canonical snapshot exists; startup stopped");
+      }
+
+      return Object.freeze({
+        status: "MIGRATION_VERIFIED", migrated: false, alreadyMigrated: true,
+        migrationId, entityCount: rows.length, legacyKeyPreserved: true
+      });
+    }
+
+    const existingLegacy = await this.repository.listEntities("legacy");
+    if (existingLegacy.length) {
+      const latest = await this.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+      if (!latest?.data?.snapshot || typeof latest.data.snapshot !== "object" || Array.isArray(latest.data.snapshot)) {
+        throw new Error("Legacy migration marker is missing and no canonical recovery snapshot exists; startup stopped");
+      }
+      const canonicalRaw = JSON.stringify(latest.data.snapshot);
+      parseLegacyPmsSnapshot(canonicalRaw);
+      if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== canonicalRaw) {
+        this.storage.setItem(AURELIA_LEGACY_STATE_KEY, canonicalRaw);
+        if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== canonicalRaw) {
+          throw new Error("Canonical snapshot could not repair the legacy compatibility cache");
+        }
+      }
+      return Object.freeze({
+        status: "MIGRATION_VERIFIED", migrated: false, alreadyMigrated: true,
+        recoveredFromCanonical: true, migrationId: null,
+        entityCount: existingLegacy.length, legacyKeyPreserved: true
+      });
+    }
+
+    const existingSnapshot = await this.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+    if (existingSnapshot) {
+      throw new Error("Canonical recovery snapshot exists without verified legacy migration entities; startup stopped");
+    }
+
+    const snapshot = parseLegacyPmsSnapshot(rawAtStart);
+    const migrationId = stableMigrationId(rawAtStart);
     const sourceKey = AURELIA_LEGACY_STATE_KEY;
-
     const result = await this.repository.migrateLegacySnapshot(snapshot, {
-      migrationId,
-      sourceKey,
-      sourceTimestamp: this.now()
+      migrationId, sourceKey, sourceTimestamp: this.now()
     });
-
-    // Verify the exact backup and every imported legacy collection. A count
-    // match alone is insufficient to authorize migration completion.
     const storedSnapshot = await this.repository.readMigrationSnapshot(migrationId);
-    if (!storedSnapshot || storedSnapshot.raw !== raw ||
-        storedSnapshot.sourceKey !== sourceKey) {
+    if (!storedSnapshot || storedSnapshot.raw !== rawAtStart || storedSnapshot.sourceKey !== sourceKey) {
       throw new Error("Legacy migration rejected: exact raw snapshot read-back mismatch");
     }
-
     const rows = await this.repository.listEntities("legacy");
     const expected = Object.entries(snapshot.parsed);
-    if (rows.length !== expected.length) {
-      throw new Error("Legacy migration rejected: imported entity count mismatch");
-    }
+    if (rows.length !== expected.length) throw new Error("Legacy migration rejected: imported entity count mismatch");
     const actual = new Map(rows.map(row => [row.id, row]));
     for (const [key, value] of expected) {
       const row = actual.get(key);
-      if (!row || row.version !== 1 ||
-          JSON.stringify(row.data) !== JSON.stringify(value)) {
+      if (!row || row.version !== 1 || JSON.stringify(row.data) !== JSON.stringify(value)) {
         throw new Error("Legacy migration rejected: read-back mismatch for " + key);
       }
     }
 
-    // Marker is only a diagnostic hint. Repository metadata and exact snapshot
-    // verification remain authoritative; the original legacy value is untouched.
     this.storage.setItem(AURELIA_MIGRATION_STATUS_KEY, "VERIFIED:" + migrationId);
+    if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== rawAtStart) {
+      throw new Error("Legacy migration source changed during verification; startup stopped");
+    }
     return Object.freeze({
-      status: "MIGRATION_VERIFIED",
-      migrated: !result.alreadyMigrated,
-      alreadyMigrated: Boolean(result.alreadyMigrated),
-      migrationId,
-      entityCount: rows.length,
-      legacyKeyPreserved: this.storage.getItem(sourceKey) === raw
+      status: "MIGRATION_VERIFIED", migrated: !result.alreadyMigrated,
+      alreadyMigrated: Boolean(result.alreadyMigrated), migrationId,
+      entityCount: rows.length, legacyKeyPreserved: true
     });
   }
 }

@@ -3,7 +3,7 @@
  * Entity version increment and outbox append are one indivisible commit.
  */
 export const PMS_REPOSITORY_CONTRACT_VERSION = 1;
-export const PMS_ENTITY_TYPES = Object.freeze(["booking","folio","guest","room","room_block","inventory","ledger","audit"]);
+export const PMS_ENTITY_TYPES = Object.freeze(["booking","folio","guest","room","room_block","inventory","expense","ledger","restaurant_table","restaurant_sale","audit"]);
 export function assertPmsIdentity(value, label="identity") {
   if (typeof value !== "string" || !value.trim() || value.length > 180 || /[\u0000-\u001f]/.test(value)) throw new TypeError("Invalid " + label);
   return value;
