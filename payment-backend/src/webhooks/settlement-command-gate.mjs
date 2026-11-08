@@ -1,4 +1,4 @@
-import { normalizePaymentControls, paymentControlAllows } from '../payment-controls/firestore-controls.mjs';
+import { paymentControlAllows } from '../payment-controls/firestore-controls.mjs';
 
 /**
  * Authorise creation of a trusted-device settlement command.
@@ -15,9 +15,8 @@ export function mayIssueSettlementCommand({
 }) {
   if (controlExists !== true || settlementIssuerEnabled !== true ||
       !['test', 'live'].includes(publicEnvironment)) return false;
-  const controls = normalizePaymentControls(controlData);
   const collectionControl = publicEnvironment === 'live' ? 'live_collection' : 'test_collection';
-  return paymentControlAllows(controls, collectionControl) &&
-    paymentControlAllows(controls, 'automatic_settlement') &&
-    paymentControlAllows(controls, 'native_settlement_bridge');
+  return paymentControlAllows(controlData, collectionControl) &&
+    paymentControlAllows(controlData, 'automatic_settlement') &&
+    paymentControlAllows(controlData, 'native_settlement_bridge');
 }
