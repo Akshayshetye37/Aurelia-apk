@@ -4362,18 +4362,21 @@ window.loadAureliaProviderConfiguration=async function(){
 window.renderAureliaProviderCredentialForm=function(selectedProvider){
  const host=document.getElementById('aurelia-provider-config-content');if(!host)return;
  const supported=['razorpay','cashfree','payu','phonepe','paytm','jiopay'];
+ const names={razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay',ccavenue:'CCAvenue'};
  const byId=new Map(aureliaProviderAdminCatalogue.map(x=>[x.provider,x]));
- const names={razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay'};
  const currentSelect=document.getElementById('aurelia-provider-config-select');
  const selected=selectedProvider||currentSelect?.value||'razorpay';
  const p=byId.get(selected)||byId.get('razorpay')||null;
- const options=supported.map(id=>'<option value="'+id+'"'+(p?.provider===id?' selected':'')+'>'+names[id]+'</option>').join('')+'<option value="ccavenue" disabled>CCAvenue · in development, not activatable</option>';
+ const options=supported.map(id=>'<option value="'+id+'"'+(p?.provider===id?' selected':'')+'>'+names[id]+'</option>').join('')+
+  '<option value="ccavenue"'+(p?.provider==='ccavenue'?' selected':'')+'>CCAvenue · configure sandbox credentials</option>';
  const fields=(p?.credentials||[]).map(field=>'<label class="fld"><span>'+esc(field.label)+(field.required?' *':'')+'</span><input id="aurelia-provider-field-'+esc(field.key)+'" name="'+esc(field.key)+'" type="'+(field.secret?'password':'text')+'" autocomplete="'+(field.secret?'new-password':'off')+'" '+(field.required?'required':'')+' maxlength="512" spellcheck="false" placeholder="'+(field.secret?'Enter merchant secret':'Enter '+esc(field.label))+'"></label>').join('');
  const status=p?'<div class="provider-config-status lab" role="status">Configuration: '+(p.configured?'saved':'not configured')+' · Credential validation: '+(p.credentialsValidated?'passed':'not passed')+' · Sandbox acceptance: '+(p.sandboxTestPassed?'passed':'pending')+' · Webhook verification: '+(p.webhookVerified?'verified':'pending')+'</div>':'<p class="lab" role="status">No configuration record was returned for this gateway. Save is unavailable until the backend exposes this provider.</p>';
  const active=aureliaProviderAdminActiveId?'<div class="tag ready">App-wide primary provider: '+esc(names[aureliaProviderAdminActiveId]||aureliaProviderAdminActiveId)+(aureliaProviderAdminActiveEnvironment?' · '+esc(aureliaProviderAdminActiveEnvironment):'')+'</div><p class="lab">This selection applies to the entire Aurelia app and all enrolled device installations.</p>':'<div class="tag out">No app-wide online provider selected · gateway checkout is unavailable; local payments remain active</div>';
- const activate=p&&p.configured&&p.credentialsValidated&&p.sandboxTestPassed&&p.webhookVerified
-  ?'<button class="btn sm" type="button" onclick="activateAureliaPaymentProvider(\''+esc(p.provider)+'\')">Make this the active gateway</button>'
-  :'<p class="lab">Activation unlocks only after credentials, sandbox acceptance and a real verified webhook have all passed.</p>';
+ const activate=p&&supported.includes(p.provider)&&p.configured&&p.credentialsValidated&&p.sandboxTestPassed&&p.webhookVerified
+  ?'<button class="btn sm" type="button" onclick="activateAureliaPaymentProvider(\\''+esc(p.provider)+'\\')">Make this the active gateway</button>'
+  :p?.provider==='ccavenue'
+   ?'<p class="lab" role="status">CCAvenue sandbox credentials can be stored securely here, but activation remains blocked: the complete adapter, merchant-approved AES/Tracking ID flow, authenticated notification contract, authoritative status and general refund lifecycle are not yet qualified.</p>'
+   :'<p class="lab">Activation unlocks only after credentials, sandbox acceptance and a real verified webhook have all passed.</p>';
  host.innerHTML='<div class="provider-config-layout">'+active+
   '<label class="fld provider-select-field" for="aurelia-provider-config-select"><span>Choose one gateway</span><select id="aurelia-provider-config-select" name="paymentProvider" aria-label="Choose payment gateway" onchange="renderAureliaProviderCredentialForm(this.value)">'+options+'</select></label>'+
   '<div class="tag out provider-env-tag">Test / Sandbox configuration only · Live collection OFF</div>'+
@@ -4381,7 +4384,7 @@ window.renderAureliaProviderCredentialForm=function(selectedProvider){
   '<div class="lab" style="margin:10px 0">Enter the exact merchant values supplied by '+esc(names[p?.provider]||'your provider')+'. Secret fields are write-only and are sent directly to the trusted backend.</div>'+
   fields+'<button class="btn provider-save-button" type="submit" '+(!p?'disabled':'')+'>Save and validate credentials</button></form>'+
   status+activate+
-  '<p class="lab">CCAvenue is listed as the seventh gateway but remains unavailable for selection and activation until its complete adapter, credential validation, authenticated webhook, authoritative status, refund lifecycle and merchant acceptance tests are implemented. Do not enter CCAvenue credentials here.</p></div>';
+  '<p class="lab">CCAvenue is available for sandbox credential onboarding, but cannot be activated or used for checkout until its complete adapter, merchant-approved cryptography, notification authentication, authoritative status, general refund lifecycle and merchant acceptance tests are implemented.</p></div>';
 };
 window.saveAureliaProviderCredentials=async function(){
  const select=document.getElementById('aurelia-provider-config-select'),provider=select?.value||'';
@@ -4398,7 +4401,9 @@ window.saveAureliaProviderCredentials=async function(){
  try{
   await window.aureliaPaymentAdminRequest('/v1/admin/providers/'+encodeURIComponent(provider)+'/credentials','PUT',body);
   document.querySelectorAll('#aurelia-provider-credential-form input').forEach(input=>{input.value='';});
-  toast('Credentials validated and stored securely. Complete sandbox and webhook acceptance before activation.');
+  toast(provider==='ccavenue'
+   ?'CCAvenue credential schema accepted and secrets stored in Secret Manager. Credentials are not validated; checkout and activation remain disabled.'
+   :'Credentials validated and stored securely. Complete sandbox and webhook acceptance before activation.');
   await window.loadAureliaProviderConfiguration();
  }catch(error){toast(error.message||'Credential save failed.');}
  finally{
@@ -4408,7 +4413,9 @@ window.saveAureliaProviderCredentials=async function(){
 };
 window.activateAureliaPaymentProvider=async function(provider){
  if(!['razorpay','cashfree','payu','phonepe','paytm','jiopay'].includes(provider)){
-  toast('This provider is not available for activation.');return false;
+  toast(provider==='ccavenue'
+   ?'CCAvenue cannot be activated yet: its complete seven-operation adapter and merchant acceptance evidence are not available.'
+   :'This provider is not available for activation.');return false;
  }
  if(provider===aureliaProviderAdminActiveId){toast('This provider is already the app-wide primary gateway.');return true;}
  const label=({razorpay:'Razorpay',cashfree:'Cashfree Payments',payu:'PayU',phonepe:'PhonePe',paytm:'Paytm',jiopay:'JioPay'})[provider]||provider;
