@@ -30,10 +30,12 @@ export function deriveProviderEventId({ provider, event, headers = {}, rawBody }
       return typeof event.ORDERID === 'string' && event.ORDERID &&
         typeof event.TXNID === 'string' && event.TXNID
         ? event.ORDERID + ':' + event.TXNID : payloadHash();
-    case 'jiopay':
+    case 'jiopay': {
+      const transactionId = event.txnID || event.pgTransactionId || event.paymentID || event.txnAuthID;
       return typeof event.merchantTxnNo === 'string' && event.merchantTxnNo &&
-        typeof event.pgTransactionId === 'string' && event.pgTransactionId
-        ? event.merchantTxnNo + ':' + event.pgTransactionId : payloadHash();
+        typeof transactionId === 'string' && transactionId
+        ? event.merchantTxnNo + ':' + transactionId : payloadHash();
+    }
     default:
       return '';
   }
