@@ -75,3 +75,26 @@ test('JioPay status command uses authenticated form request and binds transactio
   assert.equal(result.amountMinor,12500);
   assert.equal(result.paymentId,'pg-123');
 });
+
+
+test('JioPay creates a refund and reconciles it by the merchant refund reference',async()=>{
+  const mock=mockFetch(async(url,options)=>{
+    const request=Object.fromEntries(new URLSearchParams(options.body));
+    assert.equal(verifyJioPaySecureHash(request,credentials.saltOrHashKey),true);
+    const response=request.transactionType==='REFUND'
+      ? {merchantId:credentials.merchantId,merchantTxnNo:'refund_123',originalTxnNo:'order_123',
+          transactionStatus:'PENDING',amount:'25.00',pgTransactionId:'pg-refund-txn'}
+      : {merchantId:credentials.merchantId,merchantTxnNo:'refund_123',originalTxnNo:'refund_123',
+          transactionStatus:'SUCCESS',amount:'25.00',pgTransactionId:'pg-refund-txn'};
+    return {status:200,body:{...response,secureHash:generateJioPaySecureHash(response,credentials.saltOrHashKey)}};
+  });
+  const adapter=new JioPayAdapter({credentials,environment:'uat',fetchImpl:mock.fetchImpl});
+  const created=await adapter.createRefund({orderId:'order_123',refundId:'refund_123',amountMinor:2500});
+  assert.equal(created.refundId,'refund_123');
+  assert.equal(created.amountMinor,2500);
+  assert.equal(created.status,'PENDING');
+  const status=await adapter.getRefundStatus({orderId:'order_123',refundId:'refund_123'});
+  assert.equal(status.refundId,'refund_123');
+  assert.equal(status.amountMinor,2500);
+  assert.equal(status.status,'SUCCESS');
+});
