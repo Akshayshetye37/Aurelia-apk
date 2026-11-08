@@ -20,7 +20,7 @@ test("transactional JSON import uses strict persistence for commit and rollback"
   const end = html.indexOf("// Full Aurelia backup:", start);
   assert.ok(start >= 0 && end > start, "JSON import handler must exist");
   const branch = html.slice(start, end);
-  assert.ok(branch.includes("persistStrict();"), "import must fail closed when persistence fails");
+  assert.ok(branch.includes("await persistCanonicalStrict();"), "import must fail closed when persistence fails");
   assert.ok(branch.includes("Rollback read-back verification failed"), "rollback must be independently verified");
   assert.ok(branch.includes("CRITICAL: JSON import failed and rollback could not be verified"));
 });
