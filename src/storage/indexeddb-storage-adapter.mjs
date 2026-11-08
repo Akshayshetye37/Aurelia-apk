@@ -39,7 +39,7 @@ export class IndexedDbStorageAdapter extends StorageAdapter{
  async integrityCheck(){const db=await this.repository.database();const missing=[...STORES].filter(name=>!db.objectStoreNames.contains(name));if(missing.length)throw new Error("IndexedDB schema is missing stores: "+missing.join(", "));return{ok:true,engine:"indexeddb",version:db.version};}
  async authority(){return this.repository.getAuthority();}
  async authorityRecord(){return this.repository.getAuthorityRecord();}
- async setAuthorityRecord(record){const state=record?.value||"legacy";if(state==="canonical"){if(record.freshInstallation)return this.repository.completeFreshCanonicalAuthority();return this.repository.completeMigrationAuthority(record.migrationId);}if(state==="migrating")return this.repository.beginMigrationAuthority();return this.repository.revertMigrationAuthority();}
+ async setAuthorityRecord(record){const state=record?.state||record?.value||"legacy";if(state==="canonical"){if(record.freshInstallation)return this.repository.completeFreshCanonicalAuthority();return this.repository.completeMigrationAuthority(record.migrationId);}if(state==="migrating")return this.repository.beginMigrationAuthority();return this.repository.revertMigrationAuthority();}
  async wipe(){const db=await this.repository.database(),names=Array.from(db.objectStoreNames),tx=db.transaction(names,"readwrite"),completion=done(tx);for(const name of names)tx.objectStore(name).clear();await completion;return true;}
 }
 export function createIndexedDbStorageAdapter(repository){return assertStorageAdapter(new IndexedDbStorageAdapter(repository));}
