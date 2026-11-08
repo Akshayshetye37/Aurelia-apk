@@ -1630,6 +1630,24 @@ function persistStrict(){
  if(window.AureliaRepositoryCompatibility)window.AureliaRepositoryCompatibility.persist(state).catch(error=>console.error('[Aurelia Repository Mirror] Verified strict local save succeeded but repository mirror failed; local state remains authoritative.',error));
  return true;
 }
+
+// Awaitable canonical commit for workflows that can participate in an async
+// transaction. IndexedDB/SQLite commit and exact repository read-back are the
+// success boundary; localStorage is refreshed only as a legacy UI cache.
+async function persistCanonicalStrict(){
+ if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
+ if(!window.AureliaRepositoryCompatibility?.persist||!window.AureliaRepositoryCompatibility?.readBack)throw new Error('Canonical local PMS repository is unavailable.');
+ const state={tab:S.tab,bk:S.bk};DK.forEach(k=>state[k]=S[k]);
+ const serialized=JSON.stringify(state);
+ await window.AureliaRepositoryCompatibility.persist(state);
+ const committed=await window.AureliaRepositoryCompatibility.readBack();
+ if(!committed||JSON.stringify(committed.snapshot)!==serialized)throw new Error('Canonical repository read-back did not exactly match the requested PMS state.');
+ try{
+  const cache=window.__aureliaStorage||localStorage;
+  if(!cache.memoryOnly){cache.setItem(SK,serialized);if(cache.getItem(SK)!==serialized)console.warn('[Aurelia Local Cache] Canonical state committed; cache read-back failed and will be recovered at startup.')}
+ }catch(cacheError){console.warn('[Aurelia Local Cache] Canonical state committed; cache refresh failed and will be recovered at startup.',cacheError)}
+ return committed.snapshot;
+}
 let LOCAL_STATE_STATUS='missing';
 window.AureliaAccountingBoundary = Object.freeze({
  getState:()=>S,
@@ -5327,7 +5345,13 @@ try {
   if (!boot || boot.success !== true || !boot.repository) throw new Error("Canonical storage bootstrap did not return a verified repository");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "REPOSITORY_BINDING";
   storageBridge.bindActiveEngine(boot.repository, boot.identity);
-  window.AureliaRepositoryCompatibility = Object.freeze({ persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot) });
+  window.AureliaRepositoryCompatibility = Object.freeze({
+     persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot),
+     readBack: async () => {
+       const row = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+       return row?.data || null;
+     }
+   });
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "APPLICATION_MODULES";
   await replayApplicationScripts();
