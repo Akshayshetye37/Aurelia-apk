@@ -47,10 +47,10 @@ test("cancellation accounting waits for canonical snapshot commit and verifies t
   const end = html.indexOf("\n};", start);
   assert.notEqual(end, -1, "cancellation accounting handler must be closed");
   const handler = html.slice(start, end);
-  assert.match(handler, /const saved=await persistCanonicalStrict\\(\\)/);
-  assert.match(handler, /const savedBooking=saved&&Array\\.isArray\\(saved\\.cancelled\\)/);
+  assert.match(handler, /const saved=await persistCanonicalStrict\(\)/);
+  assert.match(handler, /const savedBooking=saved&&Array\.isArray\(saved\.cancelled\)/);
   assert.doesNotMatch(handler, /__aureliaStorage|localStorage/);
-  assert.match(handler, /await persistCanonicalStrict\\(\\)/);
+  assert.match(handler, /await persistCanonicalStrict\(\)/);
   assert.match(handler, /RECOVERY_CHECK_PENDING=true/);
   const strictStart = html.indexOf("async function persistCanonicalStrict(){");
   const strictEnd = html.indexOf("\n}", strictStart);
@@ -58,5 +58,5 @@ test("cancellation accounting waits for canonical snapshot commit and verifies t
   assert.notEqual(strictEnd, -1);
   const strictWriter = html.slice(strictStart, strictEnd);
   assert.match(strictWriter, /AureliaLocalOperationalLock/);
-  assert.match(strictWriter, /await coordinator\\.save\\(state\\)/);
+  assert.match(strictWriter, /await coordinator\.save\(state\)/);
 });
