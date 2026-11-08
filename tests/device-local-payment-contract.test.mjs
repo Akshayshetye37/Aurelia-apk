@@ -46,9 +46,9 @@ test('provider directory is synchronized with the wired backend factory and labe
   assert.deepEqual(uiProviders, serverProviders, 'frontend directory and six complete backend adapters must match');
   assert.ok(allFactoryProviders.includes('ccavenue'), 'CCAvenue partial adapter remains discoverable in the backend factory');
   for (const provider of serverProviders) {
-    assert.match(registry, new RegExp('^[\\t ]*' + provider + ':[\\t ]*\\{', 'm'), provider + ' registry entry exists');
+    assert.ok(registry.includes('  ' + provider + ': {'), provider + ' registry entry exists');
   }
-  assert.equal((registry.match(/adapterStatus:\\s*'adapter_implemented_wired'/g) || []).length, 6,
+  assert.equal(registry.split("adapterStatus: 'adapter_implemented_wired'").length - 1, 6,
     'all six complete adapters must be marked wired in the registry');
   assert.match(registry, /ccavenue:[\\s\\S]*?adapterStatus:\\s*'adapter_partial_implemented'/);
   assert.match(html, /Server adapter ready \(test\) · Live collection OFF/);
