@@ -766,7 +766,7 @@ function brand(){const s=S.set;document.title=s.name;$('#crest').innerHTML=(s.lo
 function settlePayment(input){
  const b=input&&input.booking;
  if(!b)throw new Error('Booking not found');
- if(input.source==='manual'&&input.deferPersistence!==true){
+ if((input.source==='manual'||input.source==='staff_review')&&input.deferPersistence!==true){
   if(RECOVERY_CHECK_PENDING)throw new Error('Payment storage is paused during recovery');
   const commit=window.AureliaRepositoryCompatibility?.settlePayment;
   if(typeof commit!=='function')throw new Error('Canonical local payment repository is unavailable; no payment was recorded');
@@ -869,13 +869,10 @@ async function sigA(id,i){
  if(!['open','pending_review'].includes(s.st)){toast('This evidence is not available for settlement review');return}
  if(!window.confirm('Have you independently verified this transaction with the bank or payment provider? A notification alone is not proof of payment.'))return;
  try{
-  const result=settlePayment({booking:b,amount:s.amt,method:'UPI',reference:s.ref||'',source:'staff_review',idempotencyKey:s.ref?'utr:'+s.ref:'signal:'+s.id,verificationConfirmed:true});
+  const result=await settlePayment({booking:b,amount:s.amt,method:'UPI',reference:s.ref||'',source:'staff_review',evidenceId:id,idempotencyKey:s.ref?'utr:'+s.ref:'signal:'+s.id,verificationConfirmed:true});
   if(!result||!result.ok){toast(result&&result.message||'Payment was not recorded');return}
-  s.st='matched';s.b=b.id;s.approvedAt=new Date().toISOString();
-  if(!Array.isArray(s.reviewHistory))s.reviewHistory=[];
-  s.reviewHistory.push({decision:'approved',bookingId:b.id,at:s.approvedAt});
-  try{await persistCanonicalStrict()}catch(error){toast('Payment posting returned success but review history could not be saved. Stop and reconcile before retrying.');console.error('[Aurelia Payment Review] Approval audit save failed.',error);return}
-  closeS();render();toast(result.duplicate?'This signal was already recorded':'Payment applied');
+  closeS();render();
+  toast(result.cacheRefreshed===false?'Payment committed to device storage; compatibility cache refresh failed. Keep the app open and export a backup.':result.duplicate?'This signal was already recorded':'Payment applied');
  }catch(e){toast(e&&e.message||'Payment was not recorded')}
 }
 /* money flow */
