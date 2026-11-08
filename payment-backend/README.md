@@ -36,7 +36,7 @@ These controls improve runtime reliability and deployment safety; they do not co
 
 ## Implemented provider coverage
 
-The backend now has **seven provider entries**: Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue. Six adapters implement the seven-operation lifecycle contract. CCAvenue is factory-wired for five documented operations: hosted checkout, order lookup, status verification and encrypted callback verification; its ordinary refund and refund-status operations are deliberately not advertised as supported.
+The backend now has **seven provider entries**: Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue. Six adapters implement the seven-operation lifecycle contract. CCAvenue is factory-wired for hosted checkout, order lookup, status verification, encrypted return-response parsing and Dynamic Event Notification parsing; its ordinary refund and refund-status operations are deliberately not advertised as supported. Dynamic events are only triggers: the backend confirms capture through the encrypted merchant Status API.
 
 **All seven providers are exposed through the cloud checkout, sandbox test-order, webhook-ingress and provider-activation routes in test mode. Live collection remains disabled for every provider.** The registry is the single source of truth for route exposure, and the server enforces it at each execution route. Paytm's public test/live environments map to staging/production; JioPay maps to UAT/production. CCAvenue uses separate test/live hosts and its status API requires the Cloud Run public egress IP to be registered with CCAvenue.
 
