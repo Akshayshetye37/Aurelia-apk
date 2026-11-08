@@ -5,7 +5,7 @@ import { createWebStorageAdapter, StorageFullError } from "../src/storage/web-st
 test("quota failures become typed StorageFullError and never fall back to memory",()=>{
  const backing={
   getItem(){return null;},
-  setItem(){const error=new Error("quota exceeded");error.name="QuotaExceededError";throw error;},
+  setItem(key,value){if(key==="__aurelia_storage_probe__")return;const error=new Error("quota exceeded");error.name="QuotaExceededError";throw error;},
   removeItem(){}
  };
  const adapter=createWebStorageAdapter({windowRef:{localStorage:backing,location:{href:"https://app.example"},frameElement:null}});
@@ -19,7 +19,7 @@ test("quota failures become typed StorageFullError and never fall back to memory
 test("non-quota durable write failures propagate and do not become volatile writes",()=>{
  const backing={
   getItem(){return null;},
-  setItem(){const error=new Error("security denied");error.name="SecurityError";throw error;},
+  setItem(key,value){if(key==="__aurelia_storage_probe__")return;const error=new Error("security denied");error.name="SecurityError";throw error;},
   removeItem(){}
  };
  const adapter=createWebStorageAdapter({windowRef:{localStorage:backing,location:{href:"https://app.example"},frameElement:null}});
