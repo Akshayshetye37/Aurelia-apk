@@ -52,4 +52,11 @@ test("cancellation accounting waits for canonical snapshot commit and verifies t
   assert.doesNotMatch(handler, /__aureliaStorage|localStorage/);
   assert.match(handler, /await persistCanonicalStrict\\(\\)/);
   assert.match(handler, /RECOVERY_CHECK_PENDING=true/);
+  const strictStart = html.indexOf("async function persistCanonicalStrict(){");
+  const strictEnd = html.indexOf("\n}", strictStart);
+  assert.notEqual(strictStart, -1);
+  assert.notEqual(strictEnd, -1);
+  const strictWriter = html.slice(strictStart, strictEnd);
+  assert.match(strictWriter, /AureliaLocalOperationalLock/);
+  assert.match(strictWriter, /await coordinator\\.save\\(state\\)/);
 });
