@@ -94,7 +94,7 @@ Status/refund command: https://docs.jiopay.in/reference/command
 - Requests and responses use merchant-secret HMAC-SHA256 `secureHash`: sort parameter keys alphabetically, concatenate parameter values without delimiters, then HMAC-SHA256 the message and encode lowercase hex. Null response values must follow the provider's exact string canonicalization.
 - Hosted checkout uses `/pg/api/v2/initiateSale` (UAT `/tsp/pg/api/v2/initiateSale`), `currencyCode: 356`, `payType: 0`, a 20-character maximum merchant transaction reference and a valid customer email (use the documented guest address when unavailable).
 - The command API uses `/pg/api/command` (UAT `/tsp/pg/api/command`) with `STATUS` and `REFUND`; for STATUS, `merchantTxnNo` is the same as `originalTxnNo`.
-- Server-to-server callbacks are recommended, but must be hash-verified and reconciled against the status API. Merchant/aggregator configuration and UAT are still required.
+- Server-to-server callbacks are recommended, but must be hash-verified and reconciled against the status API. Published callback/status examples use `merchantTxnNo`, `txnID`, and (for status) `txnStatus: SUC`; the status example omits `currencyCode`. Aurelia therefore binds the webhook/payment lookup to `txnID` first and normalizes a missing currency to INR only because this adapter accepts and submits INR (currencyCode `356`) exclusively. An explicit non-INR currency is rejected. Merchant/aggregator configuration and UAT are still required.
 - Hosted checkout, QR/intent and seamless flows are distinct. Do not implement a card-data seamless flow unless the merchant has the required PCI-DSS certification and explicitly enabled product.
 
 ## Deployment gates
