@@ -21,7 +21,8 @@ function amountToMinor(value) {
   return Number(minor);
 }
 
-function statusToPaymentState(value) {
+function statusToPaymentState(value, fraudStatus) {
+  if (String(fraudStatus || '').trim().toLowerCase() === 'high') return 'REVIEW';
   switch (String(value || '').trim().toLowerCase()) {
     case 'successful':
     case 'shipped': return 'CAPTURED';
@@ -70,7 +71,7 @@ export class CCAvenueVerificationService {
     if (typeof accessCode !== 'string' || !/^[A-Za-z0-9]{8,64}$/.test(accessCode)) {
       throw new TypeError('ccavenue_access_code_invalid');
     }
-    if (!['1.1', '1.2', '1.3'].includes(apiVersion)) throw new TypeError('ccavenue_api_version_invalid');
+    if (apiVersion !== '1.1') throw new TypeError('ccavenue_api_version_invalid');
     if (typeof fetchImpl !== 'function' || !Number.isSafeInteger(timeoutMs) ||
         timeoutMs < 1000 || timeoutMs > 60000) throw new TypeError('ccavenue_transport_config_invalid');
     this.crypto = new CCAvenueCrypto(encryptionKey);
@@ -159,7 +160,18 @@ export class CCAvenueVerificationService {
 
     const providerStatus = typeof result.order_status === 'string' ? result.order_status.trim() : '';
     if (!providerStatus) throw new Error('ccavenue_status_order_state_missing');
-    const paymentStatus = statusToPaymentState(providerStatus);
+    if (result.status !== 0 && result.status !== '0') {
+      throw new Error('ccavenue_status_result_not_successful');
+    }
+    const captureAmountMinor = result.order_capt_amt == null
+      ? null : amountToMinor(result.order_capt_amt);
+    if (captureAmountMinor != null && captureAmountMinor > amountMinor) {
+      throw new Error('ccavenue_status_capture_amount_exceeds_order');
+    }
+    const fraudStatus = typeof result.order_fraud_status === 'string' ? result.order_fraud_status : null;
+    let paymentStatus = statusToPaymentState(providerStatus, fraudStatus);
+    if (paymentStatus === 'CAPTURED' && captureAmountMinor != null && captureAmountMinor > 0 &&
+        captureAmountMinor < amountMinor) paymentStatus = 'PARTIALLY_CAPTURED';
     return Object.freeze({
       provider: 'ccavenue',
       orderId: returnedOrderId,
@@ -169,7 +181,8 @@ export class CCAvenueVerificationService {
       amountMinor,
       currency,
       bankReference: typeof result.order_bank_ref_no === 'string' ? result.order_bank_ref_no : null,
-      fraudStatus: typeof result.order_fraud_status === 'string' ? result.order_fraud_status : null,
+      fraudStatus,
+      capturedAmountMinor: captureAmountMinor,
       verified: true,
       evidenceSource: 'ccavenue_order_status_tracker'
     });
