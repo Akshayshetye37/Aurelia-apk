@@ -821,7 +821,9 @@ function addSig(o){
  const candidates=S.b.filter(b=>b.st==='in'&&Math.abs(dueB(b)-signal.amt)<.01);
  const named=candidates.filter(b=>signal.payer&&String(b.g||'').toLowerCase().split(' ').some(w=>w.length>2&&signal.payer.toLowerCase().includes(w)));
  const match=named.length===1?named[0]:candidates.length===1?candidates[0]:null;
- if(match)signal.suggestedBookingId=match.id;
+ if(match&&S.au.reconcile&&on('Automatic reconciliation')){
+   signal.st='pending_review';signal.suggestedBookingId=match.id;
+ }else if(match)signal.suggestedBookingId=match.id;
  try{persistStrict()}catch(error){S.sig=S.sig.filter(x=>x.id!==id);console.error('[Aurelia Payment Review] Could not durably save incoming evidence.',error);toast('Payment evidence was detected but could not be saved. Do not approve it; check device storage.');return}
  render();
 }
