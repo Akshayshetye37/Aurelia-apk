@@ -55,7 +55,7 @@ class AureliaPlayIntegrityClient(
             return
         }
 
-        val request = StandardIntegrityManager.IntegrityTokenRequest.builder()
+        val request = StandardIntegrityManager.StandardIntegrityTokenRequest.builder()
             .setRequestHash(serverRequestHash)
             .build()
 
