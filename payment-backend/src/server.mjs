@@ -853,7 +853,8 @@ app.put('/v1/admin/providers/:provider/credentials', requireTenantAdmin, express
     payu: { publicKey: 'merchantKey', secretKeys: ['salt'], valid: x => /^[A-Za-z0-9_-]{4,50}$/.test(x.merchantKey || '') },
     phonepe: { publicKey: 'clientId', secretKeys: ['clientSecret', 'webhookPassword'], extra: ['clientVersion', 'webhookUsername'], valid: x => typeof x.clientId === 'string' && /^\d{1,8}$/.test(String(x.clientVersion || '')) && typeof x.webhookUsername === 'string' && x.webhookUsername.length > 0 },
     paytm: { publicKey: 'mid', secretKeys: ['merchantKey'], extra: ['websiteName'], valid: x => typeof x.mid === 'string' && /^[A-Za-z0-9._@-]{6,50}$/.test(x.mid) && Buffer.byteLength(x.merchantKey || '', 'utf8') === 16 && typeof x.websiteName === 'string' && /^[A-Za-z0-9_-]{1,50}$/.test(x.websiteName) },
-    jiopay: { publicKey: 'merchantId', secretKeys: ['saltOrHashKey'], extra: ['aggregatorId'], valid: x => typeof x.merchantId === 'string' && /^[A-Za-z0-9_-]{6,50}$/.test(x.merchantId) && (x.aggregatorId === undefined || typeof x.aggregatorId === 'string') }
+    jiopay: { publicKey: 'merchantId', secretKeys: ['saltOrHashKey'], extra: ['aggregatorId'], valid: x => typeof x.merchantId === 'string' && /^[A-Za-z0-9_-]{6,50}$/.test(x.merchantId) && (x.aggregatorId === undefined || typeof x.aggregatorId === 'string') },
+    ccavenue: { publicKey: 'merchantId', secretKeys: ['accessCode', 'workingKey'], valid: x => /^\\d{1,12}$/.test(String(x.merchantId || '')) && /^[A-Za-z0-9]{8,64}$/.test(x.accessCode || '') && typeof x.workingKey === 'string' && x.workingKey.length >= 16 && x.workingKey.length <= 128 }
   };
   const def = definitions[provider], allowed = new Set(['environment', def?.publicKey, ...(def?.secretKeys || []), ...(def?.extra || [])].filter(Boolean));
   if (!def || !environment || !providerQualificationStatus(provider).implemented ||
@@ -1040,7 +1041,7 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
   if (!implementedProviderAdapters().includes(provider) || !cloudCheckoutApiEnabled(provider) || !tenantIdPattern.test(tenantId || '') ||
       !environment || !Buffer.isBuffer(req.body)) return fail(res, 400, 'invalid_webhook_request');
   const webhookContentType = (req.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
-  const allowedWebhookTypes = provider === 'payu'
+  const allowedWebhookTypes = ['payu', 'ccavenue'].includes(provider)
     ? new Set(['application/json', 'application/x-www-form-urlencoded'])
     : new Set(['application/json']);
   if (!allowedWebhookTypes.has(webhookContentType)) return fail(res, 415, 'unsupported_webhook_content_type');
