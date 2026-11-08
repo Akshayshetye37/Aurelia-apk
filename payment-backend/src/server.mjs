@@ -653,20 +653,21 @@ function refundLookupInput(record) {
     case 'cashfree': return { orderId: record.providerOrderId, paymentId: record.providerPaymentId, refundId: record.refundId };
     case 'payu': return { refundId: record.refundId, paymentId: record.providerPaymentId, requestId: record.providerRequestId || undefined };
     case 'phonepe': case 'paytm': return { orderId: record.providerOrderId, refundId: record.refundId };
-    case 'jiopay': return { refundId: record.refundId };
+    case 'jiopay': return { orderId: record.providerOrderId, refundId: record.refundId };
     default: throw new TypeError('provider_not_supported');
   }
 }
 async function updateRefundEvidence(refundRef, intentRef, remote, record) {
+  const next = remote ? refundState(record.provider, remote.status) : 'UNKNOWN';
   if (!remote || (remote.refundId && record.provider !== 'razorpay' && remote.refundId !== record.refundId) ||
       (remote.amountMinor != null && remote.amountMinor !== record.amountMinor) ||
+      (next === 'SUCCEEDED' && remote.amountMinor !== record.amountMinor) ||
       (remote.currency != null && remote.currency !== 'INR') ||
       (remote.paymentId != null && ['razorpay', 'cashfree', 'payu'].includes(record.provider) &&
         String(remote.paymentId) !== record.providerPaymentId) ||
       (remote.orderId != null && remote.orderId !== record.providerOrderId)) {
     throw new Error('provider_refund_binding_mismatch');
   }
-  const next = refundState(record.provider, remote.status);
   await db.runTransaction(async tx => {
     const [refundSnap, intentSnap] = await Promise.all([tx.get(refundRef), tx.get(intentRef)]);
     if (!refundSnap.exists || !intentSnap.exists ||
@@ -676,7 +677,8 @@ async function updateRefundEvidence(refundRef, intentRef, remote, record) {
     const current = refundSnap.data(), intent = intentSnap.data();
     if (current.state === 'FAILED' || current.state === 'SUCCEEDED') return;
     const patch = { state: next, providerStatus: String(remote.status || 'UNKNOWN'),
-      providerRefundId: remote.refundId || current.providerRefundId || null,
+      providerRefundId: (record.provider === 'razorpay' ? remote.refundId : remote.providerRefundId) ||
+        current.providerRefundId || null,
       providerRequestId: remote.providerRequestId || current.providerRequestId || null,
       updatedAt: FieldValue.serverTimestamp() };
     tx.update(refundRef, patch);
