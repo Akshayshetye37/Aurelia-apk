@@ -23,14 +23,16 @@ function requireHttpsUrl(value, field) {
 
 /**
  * Builds the CCAvenue v3.3 hosted billing-page POST.
- * Merchant-specific encryption compatibility remains a sandbox qualification
- * gate; this module does not register or activate the provider.
+ * Merchant-specific encryption compatibility remains unqualified. This builder
+ * is intentionally restricted to the CCAvenue test host; live checkout is
+ * impossible until the official merchant codec is verified and this guard is
+ * deliberately revised with qualification evidence.
  */
 export class CCAvenueHostedCheckout {
   constructor({ merchantId, accessCode, hostedCheckoutKey, environment }) {
     if (typeof merchantId !== 'string' || !/^[A-Za-z0-9]{1,20}$/.test(merchantId) ||
         typeof accessCode !== 'string' || !/^[A-Za-z0-9]{8,64}$/.test(accessCode) ||
-        !['test', 'live'].includes(environment)) {
+        environment !== 'test') {
       throw new TypeError('ccavenue_checkout_credentials_invalid');
     }
     this.merchantId = merchantId;
