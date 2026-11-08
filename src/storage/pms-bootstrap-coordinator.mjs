@@ -121,6 +121,10 @@ export class PmsBootstrapCoordinator {
       throw new Error("Durable local PMS identity was not verified");
     }
 
+    // If the legacy Web Storage copy was cleared or lost, recover it from the
+    // last fully committed canonical snapshot before the UI is allowed to start.
+    // This is a recovery bridge, not a claim that the synchronous UI has cut over.
+    const recovery = await this.restoreLegacyStateFromCanonical();
     const migration = await this.executeGuardedMigration();
     this.status = migration.status;
     return Object.freeze({
@@ -128,10 +132,45 @@ export class PmsBootstrapCoordinator {
       environment: this.environment,
       storageEngine: this.storageEngine,
       uiCutover: false,
+      recovery,
       migration,
       repository: this.repository,
       identity
     });
+  }
+
+  async restoreLegacyStateFromCanonical() {
+    const existing = this.storage.getItem(AURELIA_LEGACY_STATE_KEY);
+    if (existing != null && existing !== "") {
+      return Object.freeze({ restored: false, source: "legacy-store-present" });
+    }
+
+    const canonical = await this.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+    const snapshot = canonical?.data?.snapshot;
+    if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)) {
+      const serialized = JSON.stringify(snapshot);
+      // Validate the complete real PMS shape before writing anything back.
+      parseLegacyPmsSnapshot(serialized);
+      this.storage.setItem(AURELIA_LEGACY_STATE_KEY, serialized);
+      if (this.storage.getItem(AURELIA_LEGACY_STATE_KEY) !== serialized) {
+        throw new Error("Canonical recovery rejected: restored legacy state failed exact read-back verification");
+      }
+      return Object.freeze({
+        restored: true,
+        source: "canonical-audit-snapshot",
+        version: canonical.version,
+        snapshotSha256: canonical.data.snapshotSha256 || null
+      });
+    }
+
+    // Never silently launch an empty PMS when canonical migrated records exist.
+    // The original migration snapshot remains the authoritative recovery source;
+    // without a readable full snapshot, startup must stop rather than risk loss.
+    const migrated = await this.repository.listEntities("legacy");
+    if (migrated.length) {
+      throw new Error("Canonical PMS records exist but no committed full-state recovery snapshot is available; startup stopped to prevent an empty-state overwrite");
+    }
+    return Object.freeze({ restored: false, source: "no-existing-pms-data" });
   }
 
   async executeGuardedMigration() {
