@@ -590,3 +590,56 @@ cannot become the active provider. This restriction is not a substitute for
 merchant qualification; it is the fail-closed state until official merchant
 cryptographic evidence, notification authentication semantics, refund
 contracts and Android SDK requirements are independently verified.
+
+
+## External Android sample review — senthilinfo62 CCAvenue integration (8 November 2026)
+
+Reviewed repository:
+https://github.com/senthilinfo62/ccavenue-payment-gateway-integration-in-android-sdk-master
+
+### Finding: useful historical reference, not an SDK to adopt
+
+The repository is a legacy Android hosted-checkout sample. Its source includes an RSA helper using `RSA/ECB/PKCS1Padding`, X.509 public-key decoding, a remotely fetched RSA key, form parameter assembly, and a WebView checkout handoff. Its build stack is from the Android Support Library / Android Gradle Plugin 2.3.x generation and is not compatible with Aurelia's Capacitor 7 / current AndroidX architecture without a rewrite.
+
+The sample's RSA/GetRSA flow is not evidence that the CCAvenue Mobile SDK v1.7 uses RSA for its requestHash. These are distinct integration contracts:
+- Legacy hosted-checkout sample: RSA public-key retrieval/encryption for its particular flow.
+- Classic hosted billing-page integration v3.3: server-side AES-encrypted `encRequest` and `access_code` form post.
+- Mobile SDK guide v1.7: server-generated Tracking ID plus SHA-512 `requestHash = SHA512(tracking_id + currency + amount + working_key)`, then pass the documented values to the official Android SDK.
+
+Do not transplant the sample's RSA helper, WebView HTML scraping, random order generator, dependency versions, or Android module descriptor into Aurelia. A redirect, WebView page, HTML text, or SDK callback is not authoritative payment evidence.
+
+### Aurelia implementation decision
+
+- Keep `ccavenue-crypto.mjs` isolated to the classic AES envelope compatibility path. Its MD5-derived AES-128-CBC construction remains unqualified until compared with the current merchant-issued AesCryptUtil source and CCAvenue sandbox known-answer vectors.
+- Keep `ccavenue-mobile-crypto.mjs` separate. Its SHA-512 requestHash is generated server-side; the working key must never be sent to Android.
+- Keep the Mobile SDK tracking-ID generation and response-decryption flow unimplemented/disabled until the current merchant-issued Mobile SDK kit confirms the API request fields, AES envelope details, response encoding, credential mapping, SDK artifact/package, and callback contract.
+- Do not assume the classic hosted-checkout encryption key, Merchant API encryption key, notification working key, and Mobile SDK requestHash working key are interchangeable. Keep purpose-specific secret names and configuration.
+- Continue treating notifications as untrusted triggers until CCAvenue confirms a verifiable authentication contract; independently call orderStatusTracker and bind order, tracking ID, amount and currency before recording evidence.
+- CCAvenue remains absent from the provider factory and live collection remains disabled.
+
+### Test evidence added
+
+A fixed local known-answer test now independently checks the SHA-512 concatenation formula using a non-secret fixture. This validates the implementation's byte/string construction only; it is not a CCAvenue-issued merchant interoperability vector and does not qualify AES, Tracking ID generation, SDK integration, notifications, refunds, or production use.
+
+### Source quality and provenance boundary
+
+The external repository is third-party code, not a CCAvenue-authenticated release. Its public source can inform protocol comparison but cannot replace the merchant's current Integration Kit. CCAvenue's public product page confirms that Android mobile SDKs are offered, while the actual merchant integration material is account/kit-specific. Obtain the current kit from the merchant M.A.R.S. account or CCAvenue support and preserve its version/hash as qualification evidence.
+
+References:
+- CCAvenue in-app SDK product: https://www.ccavenue.com/inapp-payments
+- CCAvenue classic Integration v3.3: https://links.avenues.info/downloads/CCAvenue_Integration_Ver_3_3.pdf
+- External sample RSA helper: https://github.com/senthilinfo62/ccavenue-payment-gateway-integration-in-android-sdk-master/blob/master/app/src/main/java/com/avenues/lib/utility/RSAUtility.java
+- External sample WebView activity: https://github.com/senthilinfo62/ccavenue-payment-gateway-integration-in-android-sdk-master/tree/master/app/src/main/java/com/avenues/lib/activity
+
+### Remaining merchant evidence required
+
+1. Current merchant-issued Mobile SDK guide and Android AAR/Maven artifact with version and checksum.
+2. Current Tracking ID Generation API request/response sample and AES test vector.
+3. Current merchant-issued AesCryptUtil source or CCAvenue-supplied encrypt/decrypt known-answer vectors for each enabled AES envelope.
+4. Exact mapping and scope of API Encryption Key, hosted checkout key, notification working key, and Mobile SDK requestHash working key.
+5. Merchant-specific notification authentication contract and sample raw delivery.
+6. Authoritative status API sandbox response for successful, pending, failed, partial-capture and refund states.
+7. General refund API contract and confirmation of merchant entitlement.
+8. Merchant sandbox/UAT evidence from the actual Aurelia backend and supported physical Android devices.
+
+Until those artifacts are obtained and tested, this review is an implementation hardening increment, not CCAvenue production qualification.
