@@ -5,6 +5,9 @@ import { CCAvenueVerificationService } from '../src/providers/ccavenue-verificat
 import { reconcileCcaVenueNotification } from '../src/providers/ccavenue-notification.mjs';
 
 const KEY = '1234567890123456';
+const API_KEY = 'API-ENCRYPTION-KEY-123456';
+const HOSTED_KEY = 'HOSTED-CHECKOUT-KEY-123456';
+const NOTIFY_KEY = 'NOTIFICATION-KEY-123456';
 const ACCESS = 'ABCD1234EFGH5678';
 const EXPECTED = { provider: 'ccavenue', tenantId: 'tenant_123', paymentIntentId: 'intent_123',
   orderId: 'AUR-ORDER-0001', amountMinor: 125050, currency: 'INR' };
@@ -18,12 +21,12 @@ function jsonStatus(status = 'Successful', patch = {}) {
 }
 function apiResponse(payload, status = '0') {
   const fields = new URLSearchParams({ status });
-  if (payload !== null) fields.set('enc_response', new CCAvenueCrypto(KEY).encrypt(JSON.stringify(payload)));
+  if (payload !== null) fields.set('enc_response', new CCAvenueCrypto(API_KEY).encrypt(JSON.stringify(payload)));
   return { ok: true, status: 200, text: async () => fields.toString() };
 }
 function service(fetchImpl) {
   return new CCAvenueVerificationService({
-    encryptionKey: KEY, accessCode: ACCESS, environment: 'test', fetchImpl
+    encryptionKey: API_KEY, accessCode: ACCESS, environment: 'test', fetchImpl
   });
 }
 
@@ -61,7 +64,7 @@ test('CCAvenue status verifier sends encrypted API v1.1 orderStatusTracker reque
   assert.equal(form.get('request_type'), 'JSON');
   assert.equal(form.get('response_type'), 'JSON');
   assert.equal(form.get('version'), '1.1');
-  assert.deepEqual(JSON.parse(new CCAvenueCrypto(KEY).decrypt(form.get('enc_request'))), {
+  assert.deepEqual(JSON.parse(new CCAvenueCrypto(API_KEY).decrypt(form.get('enc_request'))), {
     order_no: EXPECTED.orderId, reference_no: '212016048802'
   });
   assert.equal(result.paymentStatus, 'CAPTURED');
@@ -104,10 +107,10 @@ test('CCAvenue status API failures are not decrypted or treated as payment failu
 test('CCAvenue Dynamic Event Notification only records status after independent server verification', async () => {
   const plaintext = 'order_id=' + EXPECTED.orderId +
     '&tracking_id=212016048802&order_status=Success&currency=INR&amount=1250.50';
-  const body = { encResp: new CCAvenueCrypto(KEY).encrypt(plaintext) };
+  const body = { encResp: new CCAvenueCrypto(NOTIFY_KEY).encrypt(plaintext) };
   let recorded = null, resolved = null, verifierInput = null;
   const result = await reconcileCcaVenueNotification({
-    body, notificationWorkingKey: KEY,
+    body, notificationWorkingKey: NOTIFY_KEY,
     resolveExpectedPayment: async orderId => { resolved = orderId; return EXPECTED; },
     createVerificationService: async expected => ({
       async verifyOrderStatus(input) {
@@ -144,7 +147,7 @@ import { CCAvenueHostedCheckout } from '../src/providers/ccavenue-hosted-checkou
 
 test('CCAvenue hosted checkout builds encrypted v3.3 POST fields without exposing merchant encryption key', () => {
   const checkout = new CCAvenueHostedCheckout({
-    merchantId: '123456', accessCode: ACCESS, hostedCheckoutKey: KEY, environment: 'test'
+    merchantId: '123456', accessCode: ACCESS, hostedCheckoutKey: HOSTED_KEY, environment: 'test'
   }).createCheckout({
     orderId: EXPECTED.orderId, amountMinor: EXPECTED.amountMinor, currency: 'INR',
     redirectUrl: 'https://pms.example.com/payment/ccavenue/return',
@@ -154,7 +157,7 @@ test('CCAvenue hosted checkout builds encrypted v3.3 POST fields without exposin
     'https://test.ccavenue.com/transaction/transaction.do?command=initiateTransaction');
   assert.equal(checkout.method, 'POST');
   assert.equal(checkout.fields.access_code, ACCESS);
-  const plain = new CCAvenueCrypto(KEY).decrypt(checkout.fields.encRequest);
+  const plain = new CCAvenueCrypto(HOSTED_KEY).decrypt(checkout.fields.encRequest);
   const fields = new URLSearchParams(plain);
   assert.equal(fields.get('merchant_id'), '123456');
   assert.equal(fields.get('order_id'), EXPECTED.orderId);
@@ -162,7 +165,7 @@ test('CCAvenue hosted checkout builds encrypted v3.3 POST fields without exposin
   assert.equal(fields.get('currency'), 'INR');
   assert.equal(fields.get('redirect_url'), 'https://pms.example.com/payment/ccavenue/return');
   assert.equal(fields.get('cancel_url'), 'https://pms.example.com/payment/ccavenue/cancel');
-  assert.equal(JSON.stringify(checkout).includes(KEY), false);
+  assert.equal(JSON.stringify(checkout).includes(HOSTED_KEY), false);
 });
 
 test('CCAvenue hosted checkout rejects insecure URLs and malformed order amounts', () => {
