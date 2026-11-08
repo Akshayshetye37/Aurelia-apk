@@ -40,6 +40,14 @@ The current implementation contains substantial storage, payment and security fo
 - **Payment trust boundary:** provider credentials, webhook secrets and signing operations belong in the trusted backend. A browser redirect or client callback is not proof of payment capture.
 - **Optional cloud sync:** OFF by default and separate from provider payment verification.
 
+## Local-first cutover execution — 2026-11-08
+
+The first resumable domain-projection primitive is now committed in `src/storage/pms-domain-cutover.mjs`, with regression coverage in `tests/pms-domain-cutover.test.mjs` and the execution record in `docs/LOCAL_FIRST_CUTOVER_EXECUTION.md`.
+
+It projects rooms, guests, bookings, preserved folio source values, inventory, expense/ledger rows and audit rows into versioned local repository entities. Writes are grouped into atomic entity-plus-outbox batches, each batch is read back before continuing, replay is idempotent, and divergent records stop for reconciliation. The original legacy snapshot is retained.
+
+**This is not the completed UI cutover.** Existing screens still use legacy state for many reads and writes; `uiCutover` remains false. The projection must not be run against live data until the source snapshot is captured and the migration has been reviewed. Tables, settings and auxiliary collections still need dedicated domain mapping. No financial reconciliation is performed by this projection.
+
 ## Implemented foundations
 
 ### Storage and PMS
