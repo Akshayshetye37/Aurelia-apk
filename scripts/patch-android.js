@@ -392,6 +392,30 @@ if (fs.existsSync(appGradleGroovy)) {
   throw new Error('Generated Android app Gradle file was not found; native security dependencies cannot be wired.');
 }
 
+// Install narrowly scoped R8 rules for SDK reflection/serialization entry points.
+// These rules are inert unless the generated release build enables minification.
+const proguardTemplate = path.join(securityTemplateDir, 'proguard-rules.pro');
+if (!fs.existsSync(proguardTemplate)) throw new Error('Payment SDK ProGuard template is missing.');
+const proguardTarget = path.join(appModuleDir, 'proguard-rules.pro');
+const proguardRules = fs.readFileSync(proguardTemplate, 'utf8');
+if (!fs.existsSync(proguardTarget) || !fs.readFileSync(proguardTarget, 'utf8').includes('AURELIA_PAYMENT_SDK_KEEP_RULES')) {
+  const existingRules = fs.existsSync(proguardTarget) ? fs.readFileSync(proguardTarget, 'utf8') : '';
+  fs.writeFileSync(proguardTarget, existingRules + '\\n' + proguardRules);
+}
+function wireReleaseProguard(contents) {
+  if (/proguardFiles[^\\n]*proguard-rules\\.pro/.test(contents)) return contents;
+  const releaseBlock = /(release\\s*\\{)/;
+  if (!releaseBlock.test(contents)) return contents;
+  return contents.replace(releaseBlock, '$1\\n            proguardFiles getDefaultProguardFile(\'proguard-android-optimize.txt\'), \'proguard-rules.pro\'');
+}
+if (fs.existsSync(appGradleGroovy)) {
+  const gradle = wireReleaseProguard(fs.readFileSync(appGradleGroovy, 'utf8'));
+  fs.writeFileSync(appGradleGroovy, gradle);
+} else if (fs.existsSync(appGradleKts)) {
+  const gradle = wireReleaseProguard(fs.readFileSync(appGradleKts, 'utf8'));
+  fs.writeFileSync(appGradleKts, gradle);
+}
+
 const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
 
 function addFirebaseDependencies(contents, kotlinDsl) {
