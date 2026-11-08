@@ -86,7 +86,7 @@ class CloudPaymentDeviceEnrollmentClient(
                                         )
                                         val identity = keyStore.createAttestedIdentity(challengeBytes)
                                         val chain = JSONArray()
-                                        identity.certificateChainBase64.forEach(chain::put)
+                                        identity.certificateChainBase64.forEach { certificate -> chain.put(certificate) }
                                         val body = JSONObject()
                                             .put("deviceId", deviceId)
                                             .put("challengeId", challengeId)
