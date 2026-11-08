@@ -177,3 +177,12 @@ test('CCAvenue hosted checkout rejects insecure URLs and malformed order amounts
   assert.throws(() => checkout.createCheckout({ ...input, amountMinor: 0 }));
   assert.throws(() => checkout.createCheckout({ ...input, orderId: 'invalid order id' }));
 });
+
+test('CCAvenue status verifier accepts the flat JSON response shape shown in API v1.3', async () => {
+  const flat = { ...jsonStatus().Order_Status_Result };
+  const result = await service(async () => apiResponse(flat))
+    .verifyOrderStatus({ orderId: EXPECTED.orderId, trackingId: '212016048802',
+      expectedAmountMinor: EXPECTED.amountMinor, expectedCurrency: 'INR' });
+  assert.equal(result.paymentStatus, 'CAPTURED');
+  assert.equal(result.orderId, EXPECTED.orderId);
+});
