@@ -75,6 +75,7 @@ test("missing legacy UI state is recovered from the last committed canonical sna
   await bridge.persistCompatibilitySnapshot(state);
 
   storage.values.delete(AURELIA_LEGACY_STATE_KEY);
+  storage.values.delete(AURELIA_MIGRATION_STATUS_KEY);
   const restarted = await coordinator("recover-snapshot-restart", storage, {
     repository: first.repository
   }).initializeApplication();
@@ -83,12 +84,14 @@ test("missing legacy UI state is recovered from the last committed canonical sna
   assert.equal(restarted.recovery.source, "canonical-audit-snapshot");
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
   assert.equal(restarted.migration.status, "MIGRATION_VERIFIED");
+  assert.equal(restarted.migration.recoveredFromCanonical, true);
 });
 
 test("startup refuses to present an empty PMS when canonical migrated records exist without a full recovery snapshot", async () => {
   const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: JSON.stringify(state) });
   const first = await coordinator("recover-no-snapshot", storage).initializeApplication();
   storage.values.delete(AURELIA_LEGACY_STATE_KEY);
+  storage.values.delete(AURELIA_MIGRATION_STATUS_KEY);
   const restarted = coordinator("recover-no-snapshot-restart", storage, {
     repository: first.repository
   });
