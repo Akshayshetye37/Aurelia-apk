@@ -538,13 +538,13 @@ app.post('/v1/payments/intents', requireTenantPaymentActor, express.json({ limit
 
   const customerFields = {
     razorpay: [], cashfree: ['id', 'phone', 'email'], payu: ['firstName', 'email', 'phone'],
-    phonepe: ['id', 'phone', 'email'], paytm: ['id'], jiopay: ['id', 'phone', 'email']
+    phonepe: ['id', 'phone', 'email'], paytm: ['id'], jiopay: ['id', 'phone', 'email'], ccavenue: ['firstName', 'email', 'phone']
   }[body.provider];
   if (body.customer !== undefined && (!body.customer || typeof body.customer !== 'object' ||
       Array.isArray(body.customer) || Object.keys(body.customer).some(k => !customerFields.includes(k)))) {
     return fail(res, 400, 'invalid_provider_customer_schema');
   }
-  if (['cashfree', 'phonepe', 'paytm', 'jiopay', 'payu'].includes(body.provider)) {
+  if (['cashfree', 'phonepe', 'paytm', 'jiopay', 'payu', 'ccavenue'].includes(body.provider)) {
     let returnUrl;
     try { returnUrl = new URL(body.returnUrl); } catch { return fail(res, 400, 'invalid_provider_return_url'); }
     if (returnUrl.protocol !== 'https:' || returnUrl.username || returnUrl.password || !origins.has(returnUrl.origin)) {
