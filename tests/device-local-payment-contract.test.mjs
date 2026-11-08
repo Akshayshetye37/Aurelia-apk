@@ -287,3 +287,20 @@ test('expense creation and voiding use canonical local expense transactions', ()
     assert.doesNotMatch(body, /persist\(\)/);
   }
 });
+
+test('restaurant-to-folio posting awaits a single canonical booking, table, sale and snapshot transaction', () => {
+  const html = read('index.html');
+  const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
+  assert.match(runtime, /commitRestaurantFolioCharge/);
+  assert.match(runtime, /commitRestaurantFolioCharge: input => commitRestaurantFolioCharge/);
+  const helperStart = html.indexOf('async function commitRestaurantFolioState(');
+  const helperEnd = html.indexOf('\nlet LOCAL_STATE_STATUS', helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart);
+  assert.match(html.slice(helperStart, helperEnd), /await commit\(\{snapshot,bookingId,tableId,saleId,saleIndex\}\)/);
+  const start = html.lastIndexOf('async function chg(i)');
+  const end = html.indexOf('\nfunction openRestaurantReceipt', start);
+  assert.ok(start >= 0 && end > start);
+  const handler = html.slice(start, end);
+  assert.match(handler, /await commitRestaurantFolioState/);
+  assert.doesNotMatch(handler, /persist\(\)/);
+});
