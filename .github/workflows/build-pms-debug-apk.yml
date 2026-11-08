@@ -38,7 +38,7 @@ jobs:
         run: npm test
 
       - name: Prepare web application
-        run: npm run build
+        run: npm run android:build
 
       - name: Generate Android project from Capacitor templates
         shell: bash
