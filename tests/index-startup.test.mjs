@@ -94,7 +94,8 @@ test('startup hydrates the UI projection from the verified canonical snapshot be
   const replayAt = html.indexOf('await replayApplicationScripts()');
   assert.ok(bootstrapAt >= 0 && roomHydrationAt > bootstrapAt && canonicalHydrationAt > roomHydrationAt && replayAt > canonicalHydrationAt);
   assert.match(html, /import\("\.\/src\/storage\/pms-room-read-cutover\.mjs"\)/);
-  assert.match(html, /window\.AureliaPmsSnapshotFacade = Object\.freeze/);\n  assert.doesNotMatch(html, /getItem\(SK\)|setItem\(SK/);
+  assert.match(html, /window\.AureliaPmsSnapshotFacade = Object\.freeze/);
+  assert.doesNotMatch(html, /getItem\(SK\)|setItem\(SK/);
   assert.match(html, /function loadAll\(\)\{\s*let raw=window\.__AURELIA_CANONICAL_BOOTSTRAP_RAW\|\|null;\s*if\(!raw\)\{LOCAL_STATE_STATUS=.missing.;return\}/);
 });
 
