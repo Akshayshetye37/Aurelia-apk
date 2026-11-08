@@ -44,7 +44,7 @@ test("check-in commits booking, room occupancy and recovery snapshot in one loca
   assert.equal(result.canonical, true);
   assert.equal(result.booking.data.st, "in");
   assert.equal(result.room.data.s, "occ");
-  const saved = (await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot;
+  const saved = (await bridge.fetchLegacySnapshot()).data.snapshot;
   assert.equal(saved.b[0].st, "in");
   assert.equal(saved.rooms[0].s, "occ");
 });
@@ -76,7 +76,7 @@ test("canonical booking divergence fails closed before any room or snapshot writ
     legacyStorage: null
   }), error => error.code === "CANONICAL_BOOKING_DIVERGENCE");
   assert.equal((await bridge.fetchEntity("room", "101")).data.s, "ready");
-  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.b[0].st, "res");
+  assert.equal((await bridge.fetchLegacySnapshot()).data.snapshot.b[0].st, "res");
 });
 
 test("failed repository batch does not claim operational success", async () => {
@@ -102,7 +102,7 @@ test("standalone housekeeping room status changes commit room entity and snapsho
   });
   assert.equal(result.canonical, true);
   assert.equal(result.room.data.s, "clean");
-  const saved = (await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot;
+  const saved = (await bridge.fetchLegacySnapshot()).data.snapshot;
   assert.equal(saved.rooms[0].s, "clean");
 });
 
@@ -128,7 +128,7 @@ test("reservation cancellation moves the booking into the cancelled collection i
     legacyStorage: null
   });
   assert.equal(result.booking.data.st, "cancelled");
-  const saved = (await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot;
+  const saved = (await bridge.fetchLegacySnapshot()).data.snapshot;
   assert.equal(saved.b.length, 0);
   assert.equal(saved.cancelled[0].id, booking.id);
   assert.equal(saved.cancelled[0].st, "cancelled");
@@ -143,7 +143,7 @@ test("new room creation commits its room entity and complete snapshot", async ()
   });
   assert.equal(result.canonical, true);
   assert.equal((await bridge.fetchEntity("room", "102")).data.r, 1500);
-  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.rooms.length, 2);
+  assert.equal((await bridge.fetchLegacySnapshot()).data.snapshot.rooms.length, 2);
 });
 
 test("room edits preserve the stable room-number key and update the room entity with snapshot", async () => {
@@ -155,7 +155,7 @@ test("room edits preserve the stable room-number key and update the room entity 
   });
   assert.equal(result.room.data.t, "Premium Deluxe");
   assert.equal(result.room.data.r, 1200);
-  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.rooms[0].r, 1200);
+  assert.equal((await bridge.fetchLegacySnapshot()).data.snapshot.rooms[0].r, 1200);
 });
 
 test("room creation refuses an already-used stable room key", async () => {
@@ -174,7 +174,7 @@ test("unused room removal leaves a durable tombstone and removes it from the rec
   });
   assert.equal(result.room.data.retired, true);
   assert.equal(result.room.data.status, "retired");
-  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.rooms.length, 0);
+  assert.equal((await bridge.fetchLegacySnapshot()).data.snapshot.rooms.length, 0);
 });
 
 test("guest profile creation assigns a stable ID and commits the guest entity with the snapshot", async () => {
@@ -185,7 +185,7 @@ test("guest profile creation assigns a stable ID and commits the guest entity wi
   });
   assert.equal(result.canonical, true);
   assert.equal((await bridge.fetchEntity("guest", "guest-1")).data.n, "New Guest");
-  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.g[0].id, "guest-1");
+  assert.equal((await bridge.fetchLegacySnapshot()).data.snapshot.g[0].id, "guest-1");
 });
 
 test("legacy guest edit creates its first canonical entity without losing the expected prior profile", async () => {
@@ -200,7 +200,7 @@ test("legacy guest edit creates its first canonical entity without losing the ex
     expectedPreviousGuest: prior, legacyStorage: null
   });
   assert.equal(result.guest.data.ph, "54321");
-  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.g[0].id, next.id);
+  assert.equal((await bridge.fetchLegacySnapshot()).data.snapshot.g[0].id, next.id);
 });
 
 test("guest edit rejects a divergent canonical profile", async () => {
@@ -228,7 +228,7 @@ test("inventory item creation commits stable item entity and complete stock snap
   });
   assert.equal(result.canonical, true);
   assert.equal((await bridge.fetchEntity("inventory", "inv-1")).data.q, 20);
-  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.inv[0].id, "inv-1");
+  assert.equal((await bridge.fetchLegacySnapshot()).data.snapshot.inv[0].id, "inv-1");
 });
 
 test("stock issue commits quantity and immutable stock movement history together", async () => {
@@ -244,7 +244,7 @@ test("stock issue commits quantity and immutable stock movement history together
     expectedPreviousItem: prior, legacyStorage: null
   });
   assert.equal(result.item.data.q, 17);
-  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.led[0][1], -3);
+  assert.equal((await bridge.fetchLegacySnapshot()).data.snapshot.led[0][1], -3);
 });
 
 test("inventory mutation rejects stale canonical stock rather than overwriting it", async () => {
@@ -292,7 +292,7 @@ test("expense creation commits stable expense entity and complete snapshot", asy
   });
   assert.equal(result.canonical, true);
   assert.equal((await bridge.fetchEntity("expense", "exp-1")).data.a, 1250.5);
-  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.exp[0].id, "exp-1");
+  assert.equal((await bridge.fetchLegacySnapshot()).data.snapshot.exp[0].id, "exp-1");
 });
 
 test("expense void commits its durable entity and recovery snapshot together", async () => {
@@ -307,7 +307,7 @@ test("expense void commits its durable entity and recovery snapshot together", a
     expectedPreviousExpense: prior, legacyStorage: null
   });
   assert.equal(result.expense.data.v, 1);
-  assert.equal((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.exp[0].v, 1);
+  assert.equal((await bridge.fetchLegacySnapshot()).data.snapshot.exp[0].v, 1);
 });
 
 test("expense creation rejects amounts smaller than one paise precision", async () => {
@@ -335,7 +335,7 @@ test("restaurant folio posting commits booking charges, table clear, sale record
   assert.equal(result.booking.data.ch.length, 2);
   assert.equal(result.table.data.o.length, 0);
   assert.equal(result.sale.data.a, 250);
-  const saved = (await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot;
+  const saved = (await bridge.fetchLegacySnapshot()).data.snapshot;
   assert.equal(saved.sales[0].id, sale.id);
   assert.equal(saved.t[0].o.length, 0);
 });
@@ -401,7 +401,7 @@ test("restaurant table settlement commits sale, cleared table and daily snapshot
   assert.equal(result.canonical, true);
   assert.equal(result.sale.data.a, 250);
   assert.equal(result.table.data.o.length, 0);
-  const saved = (await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot;
+  const saved = (await bridge.fetchLegacySnapshot()).data.snapshot;
   assert.equal(saved.today, 250);
   assert.equal(saved.sales[0].id, sale.id);
 });
@@ -454,5 +454,5 @@ test("guest retirement removes the active profile and commits a minimal tombston
   assert.equal(retired.data.formerName, "Retired Guest");
   assert.equal(retired.data.idn, undefined);
   assert.equal(retired.data.img, undefined);
-  assert.deepEqual((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.g, []);
+  assert.deepEqual((await bridge.fetchLegacySnapshot()).data.snapshot.g, []);
 });
