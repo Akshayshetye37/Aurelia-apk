@@ -140,6 +140,6 @@ test("legacy migration resumes from the last atomically committed table checkpoi
  const checkpoint=await new Promise((resolve,reject)=>{const q=tx.objectStore("meta").get("migration-checkpoint:"+migrationId);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
  const marker=await new Promise((resolve,reject)=>{const q=tx.objectStore("meta").get("legacy-migration");q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
  await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});
- assert.equal(checkpoint.table,"menu");
+ assert.equal(checkpoint.table,"today");
  assert.equal(marker.migrationId,migrationId);
 });
