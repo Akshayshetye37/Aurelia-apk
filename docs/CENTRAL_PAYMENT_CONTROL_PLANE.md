@@ -74,3 +74,52 @@ Each update creates a durable record in `paymentControls/{tenantId}/audit/{audit
 | `refund_processing` | Refund state machine, cumulative limits, provider status verification, reversal journal and recovery tests |
 
 Emergency stop must remain available as a permanent immediate interlock. Passing tests alone does not authorize an unlock.
+
+
+## Evidence-backed provider qualification and native interlock (8 November 2026)
+
+The live-collection route now evaluates a tenant-scoped qualification record at
+`paymentProviderQualifications/{tenantId}/providers/{provider}` on every live
+intent request. The record is not a client setting and is not inferred from
+adapter registration or a provider's catalogue presence. It must identify the
+matching provider, production environment, schema version 1, APPROVED status,
+owner approval, approval timestamp and expiry. Every evidence item must be
+PASSED, have a durable evidence reference, identify a verifier distinct from
+the owner approver, and have a valid verification and expiry interval.
+
+Required evidence keys are:
+
+- `merchant_uat`
+- `signed_webhook_verification`
+- `provider_status_reconciliation`
+- `refund_lifecycle_uat`
+- `android_physical_device_acceptance`
+- `canonical_pms_ledger_parity`
+- `incident_response_and_alerting`
+- `production_readiness_review`
+
+The server also requires the production provider configuration to be active,
+configured and credential-validated. Missing, expired, malformed or unreadable
+qualification evidence blocks live routing. This qualification record does
+not itself enable live collection: the independent internal live control,
+tenant live switch and emergency-stop interlock must also permit it.
+
+The Android native checkout entry point now invokes
+`PaymentReleaseSafeguards.assertSandboxCheckoutAllowed` before SDK handoff.
+The immutable device matrix permits only test/staging/UAT environments for
+the six wired providers; CCAvenue remains NOT_IMPLEMENTED. Android's matrix is
+defence in depth only. It cannot authorize live collection, settlement or
+refund posting and cannot override backend policy.
+
+The refund-create route now checks the owner-approved `refund_processing`
+control before reserving a refund or calling any provider refund API. The
+read-only refund-status route remains available for recovery. A successful
+provider refund still does not authorize a PMS ledger reversal; verified
+refund evidence and the canonical accounting reversal remain separate gates.
+
+New automated coverage is in
+`payment-backend/test/provider-production-qualification.test.mjs` and
+`tests/payment-release-safeguards.test.mjs`. The backend CI run must pass
+before this implementation is considered CI-verified. Android Gradle
+compilation, instrumentation and physical-device acceptance are separate
+release requirements.
