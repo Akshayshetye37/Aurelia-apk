@@ -82,7 +82,7 @@ test('provider selection is app-wide, explicitly confirmed, and historical trans
   assert.ok(html.includes('primary for every enrolled device'));
   assert.ok(html.includes('No automatic fallback'));
   assert.ok(html.includes('window.confirm(\'Switch the primary payment provider for the entire Aurelia app'));
-  assert.ok(html.includes('existing transactions remain available for webhooks, verification, refunds and reconciliation'));
+  assert.ok(html.includes('existing transactions remain available for webhooks, payment verification, refunds and reconciliation'));
   assert.ok(html.includes('CCAvenue · in development, not activatable'));
   assert.ok(html.includes('complete adapter, credential validation, authenticated webhook, authoritative status, refund lifecycle'));
 });
