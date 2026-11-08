@@ -402,17 +402,17 @@ if (!fs.existsSync(proguardTarget) || !fs.readFileSync(proguardTarget, 'utf8').i
   const existingRules = fs.existsSync(proguardTarget) ? fs.readFileSync(proguardTarget, 'utf8') : '';
   fs.writeFileSync(proguardTarget, existingRules + '\n' + proguardRules);
 }
-function wireReleaseProguard(contents) {
+function wireReleaseProguard(contents, kotlinDsl) {
   if (/proguardFiles[^\n]*proguard-rules\.pro/.test(contents)) return contents;
   const releaseBlock = /(release\s*\{)/;
   if (!releaseBlock.test(contents)) return contents;
   return contents.replace(releaseBlock, '$1\n            proguardFiles getDefaultProguardFile(\'proguard-android-optimize.txt\'), \'proguard-rules.pro\'');
 }
 if (fs.existsSync(appGradleGroovy)) {
-  const gradle = wireReleaseProguard(fs.readFileSync(appGradleGroovy, 'utf8'));
+  const gradle = wireReleaseProguard(fs.readFileSync(appGradleGroovy, 'utf8'), false);
   fs.writeFileSync(appGradleGroovy, gradle);
 } else if (fs.existsSync(appGradleKts)) {
-  const gradle = wireReleaseProguard(fs.readFileSync(appGradleKts, 'utf8'));
+  const gradle = wireReleaseProguard(fs.readFileSync(appGradleKts, 'utf8'), true);
   fs.writeFileSync(appGradleKts, gradle);
 }
 
