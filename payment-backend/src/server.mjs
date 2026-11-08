@@ -1288,7 +1288,8 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
       : provider === 'cashfree' ? paymentEntity?.cf_payment_id
       : provider === 'payu' ? event?.mihpayid
       : provider === 'phonepe' ? (paymentEntity?.transactionId || paymentEntity?.paymentDetails?.[0]?.transactionId)
-      : provider === 'paytm' ? event?.TXNID : event?.pgTransactionId;
+      : provider === 'paytm' ? event?.TXNID
+      : (event?.txnID || event?.pgTransactionId || event?.paymentID || event?.txnAuthID);
     if (!providerOrderId || !paymentId) return res.status(200).json({ received: true, ignored: true });
     const providerOrderHash = crypto.createHash('sha256')
       .update(tenantId + ':' + provider + ':' + environment + ':' + providerOrderId).digest('hex');
