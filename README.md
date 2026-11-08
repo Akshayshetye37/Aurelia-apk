@@ -8,7 +8,7 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 - **Project root:** repository root (`/`)
 - **Active engineering branch:** `feature/multi-provider-payment-backend`
 - **Active branch:** `feature/multi-provider-payment-backend` (resolve the current SHA from the branch ref; avoid hard-coded moving HEAD values).
-- **Latest verification:** canonical recovery implementation and regression tests are committed. The latest commits have no returned workflow run or status-check evidence; tests have not been represented as executed.
+- **Latest verification:** GitHub Actions run [42486201213](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486201213) passed on commit `ae259d34d7551ca2961956bc85b5bba48c2c5927`: 353/353 Node tests, production web bundle build, production asset privacy checks and Android release-gate check. This workflow did **not** build or qualify an APK.
 - **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
 
 Useful project locations:
@@ -51,9 +51,10 @@ The current implementation contains substantial storage, payment and security fo
 - Startup recovery restores a missing legacy UI state from the committed canonical audit snapshot, validates the complete PMS schema, and verifies exact durable read-back. If canonical records exist but no complete recovery snapshot is available, startup fails closed rather than presenting an empty PMS.
 - Multi-entity batch transaction support in the browser and native repository layers.
 - Room inventory command foundation for stable-ID room creation, scoped edits, paise-based rate validation and versioned housekeeping/maintenance state.
-- Repository-backed folio settlement command foundation and concurrency regression coverage.
+- Manual payment and staff-reviewed UPI approval now use `settlePaymentToRepository`: booking entity, folio projection and complete recovery snapshot commit in one SQLite/IndexedDB batch, followed by exact read-back and post-commit legacy-cache refresh.
+- Regression coverage verifies atomic booking/folio/snapshot commit, UPI evidence approval, idempotent replay, canonical divergence rejection, failed-write rollback and cache refresh.
 
-**Cutover limitation:** the full booking, room, guest, folio and manual-payment UI is not yet migrated to use the asynchronous repository as its sole canonical read/write path. `uiCutover` remains false. Some operational UI state still uses the legacy synchronous application state. The room reassignment/stable room-reference migration is not complete.
+**Cutover limitation:** the full booking, room, guest, inventory, accounting and operational UI is not yet migrated to use the asynchronous repository as its sole canonical read/write path. Manual folio payment and staff-reviewed UPI approval are now on the transactional repository path, but reservation-advance creation and many non-payment mutations still use legacy synchronous state. `uiCutover` remains false. The room reassignment/stable room-reference migration is not complete.
 
 ### Payment and provider backend
 
@@ -64,9 +65,9 @@ The current implementation contains substantial storage, payment and security fo
 - Six providers (Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay) have complete adapter-operation foundations. CCAvenue has a partial adapter and cloud checkout scaffolding, but its webhook environment routing and refund/status coverage remain incomplete; it is not production-qualified.
 - The provider integration document records which providers are exposed through cloud API routes and which still need route integration and merchant qualification.
 
-**Payment limitation:** the client intent CAS and provider adapter tests do not constitute an exactly-once financial ledger. The canonical PMS folio, provider capture, webhook inbox, trusted device authorization, local posting/read-back, backend acknowledgement, refunds and reversals still need complete end-to-end integration and acceptance.
+**Payment limitation:** manual/staff-confirmed local payments now commit atomically to the device repository, but this does not complete the provider payment lifecycle. Provider capture, webhook inbox, trusted device authorization, verified gateway posting, backend acknowledgement, refunds and reversals still need end-to-end integration and acceptance.
 
-**Staff payment-review UI (local-device scope):** incoming native UPI notification evidence is now saved with strict local persistence before it is presented for review. Staff can reject only after confirming the action and entering a reason; the rejected evidence remains attached to the selected guest folio, can be reopened, and retains its prior decision history. This is an operational recovery feature, not provider-authenticated payment proof or a cross-device server audit log. The staff review evidence lifecycle now awaits the device repository commit and exact read-back before confirming the action. Native notification content is untrusted evidence; it must not authorize a gateway payment or folio credit. The trusted provider-status, staff identity/role authorization, backend decision audit, and canonical ledger integration remain release blockers.
+**Staff payment-review UI (local-device scope):** incoming native UPI evidence is saved before review. Approval now validates the selected evidence ID, amount, UPI reference and idempotency key, then commits the matched evidence decision, booking payment, folio projection and recovery snapshot in one device-repository transaction with exact read-back. Rejection and reopening remain separately persisted review decisions. Notification content is still untrusted evidence; only explicit staff confirmation permits this manual local posting. This is not provider-authenticated payment proof or a cross-device server audit log. Trusted provider status, staff identity/role authorization, backend decision audit and gateway posting remain release blockers.
 
 ### Android security
 
@@ -158,5 +159,5 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 ---
 
 **Active branch:** `feature/multi-provider-payment-backend`  
-**Latest CI:** not verified; no workflow runs or commit status checks were returned.  
+**Latest CI:** [run 42486201213 — passed](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42486201213); 353 tests passed, web bundle and privacy checks passed. No APK/device qualification was performed.  
 **Status:** engineering foundations exist; production release not approved.
