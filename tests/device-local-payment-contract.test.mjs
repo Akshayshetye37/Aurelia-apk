@@ -251,3 +251,21 @@ test('final check-in and check-out wrappers await the canonical lifecycle transa
   assert.match(wrappers, /await _completeCheckOutFinal\(i\)/);
   assert.doesNotMatch(wrappers, /persist\(\)/);
 });
+
+test('inventory creation and stock movements await local canonical transactions', () => {
+  const html = read('index.html');
+  const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
+  assert.match(runtime, /commitInventoryItemMutation/);
+  assert.match(runtime, /commitInventoryMutation: input => commitInventoryItemMutation/);
+  const start = html.indexOf('async function commitInventoryCatalogState(');
+  const end = html.indexOf('\nlet LOCAL_STATE_STATUS', start);
+  assert.ok(start >= 0 && end > start);
+  assert.match(html.slice(start, end), /await commit\(\{snapshot,inventoryId,inventoryIndex,operation,expectedPreviousItem\}\)/);
+  for (const name of ['async function invGo(i,d)', 'async function invSaveNew()']) {
+    const i = html.indexOf(name);
+    assert.ok(i >= 0, name + ' is present');
+    const body = html.slice(i, html.indexOf('\nfunction ', i + 10));
+    assert.match(body, /await commitInventoryCatalogState/);
+    assert.doesNotMatch(body, /persist\(\)/);
+  }
+});
