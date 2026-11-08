@@ -23,6 +23,7 @@ import {
   acknowledgeSettlementCommand, paymentDeviceRef
 } from './devices/firestore-device-service.mjs';
 import { verifiedWebhookProviderPatch } from './webhooks/provider-webhook-state.mjs';
+import { mayIssueSettlementCommand } from './webhooks/settlement-command-gate.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
   paymentControlAllows, updatePaymentControls
@@ -1097,10 +1098,21 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
     const deviceId = orderData.deviceId || null;
     const deviceRef = deviceId ? paymentDeviceRef(db, tenantId, deviceId) : null;
     const outcome = await db.runTransaction(async tx => {
-      const refs = [tx.get(inbox), tx.get(orderRef)];
-      if (intentRef) refs.push(tx.get(intentRef));
-      if (deviceRef) refs.push(tx.get(deviceRef));
-      const [seen, currentOrder, currentIntent, currentDevice] = await Promise.all(refs);
+      // Read the release-control document in the same transaction as the inbox,
+      // order, intent and device. A concurrent control change therefore conflicts
+      // with this transaction instead of leaving a stale authorisation window.
+      const controlRef = db.doc('paymentControls/' + tenantId);
+      const refs = [inbox, orderRef];
+      if (intentRef) refs.push(intentRef);
+      if (deviceRef) refs.push(deviceRef);
+      refs.push(controlRef);
+      const snapshots = await Promise.all(refs.map(ref => tx.get(ref)));
+      const seen = snapshots[0];
+      const currentOrder = snapshots[1];
+      let snapshotIndex = 2;
+      const currentIntent = intentRef ? snapshots[snapshotIndex++] : null;
+      const currentDevice = deviceRef ? snapshots[snapshotIndex++] : null;
+      const currentControls = snapshots[snapshotIndex];
       if (!currentOrder.exists || currentOrder.data().tenantId !== tenantId ||
           currentOrder.data().provider !== provider || currentOrder.data().environment !== environment ||
           currentOrder.data().providerOrderId !== providerOrderId) {
@@ -1139,8 +1151,15 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
         ['TRUSTED_ENVIRONMENT','STRONG_BOX'].includes(deviceData.attestationSecurityLevel) &&
         deviceData.attestationVerifiedBootState === 'VERIFIED' &&
         deviceData.attestationDeviceLocked === true;
-      if (captureVerified && intentRef && intentData && deviceReady && providerAccountId &&
-          intentData.deviceId === deviceId && !settlementCommandId) {
+      const settlementCommandAllowed = mayIssueSettlementCommand({
+        controlExists: currentControls.exists,
+        controlData: currentControls.exists ? currentControls.data() : null,
+        publicEnvironment,
+        settlementIssuerEnabled
+      });
+      if (captureVerified && settlementCommandAllowed && intentRef && intentData &&
+          deviceReady && providerAccountId && intentData.deviceId === deviceId &&
+          !settlementCommandId) {
         const sequenceId = (Number.isSafeInteger(deviceData.lastSequence) ? deviceData.lastSequence : 0) + 1;
         const commandId = crypto.randomUUID();
         const authorizationId = crypto.randomUUID();
