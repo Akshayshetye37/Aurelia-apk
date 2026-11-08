@@ -24,6 +24,7 @@ import {
 } from './devices/firestore-device-service.mjs';
 import { verifiedWebhookProviderPatch } from './webhooks/provider-webhook-state.mjs';
 import { mayIssueSettlementCommand } from './webhooks/settlement-command-gate.mjs';
+import { deriveProviderEventId } from './webhooks/provider-event-identity.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
   paymentControlAllows, updatePaymentControls
@@ -1081,12 +1082,9 @@ app.post('/v1/webhooks/:provider/:tenantId/:environment', express.raw({ type: '*
     const sameCurrency = status.currency === orderSnap.data().currency;
     const sameAmount = status.amountMinor === orderSnap.data().amountMinor;
     const verified = sameOrder && samePayment && sameCurrency && sameAmount && status.captured === true;
-    const eventId = provider === 'razorpay' ? req.get('x-razorpay-event-id')
-      : provider === 'cashfree' ? (req.get('x-webhook-id') || crypto.createHash('sha256').update(req.body).digest('hex'))
-      : provider === 'phonepe' ? String(event.eventId || event.id || crypto.createHash('sha256').update(req.body).digest('hex'))
-      : provider === 'payu' ? String(event.mihpayid || event.txnid || '')
-      : provider === 'paytm' ? String(event.ORDERID || '') + ':' + String(event.TXNID || 'event')
-      : String(event.merchantTxnNo || '') + ':' + String(event.pgTransactionId || 'event');
+    const eventId = deriveProviderEventId({
+      provider, event, headers: req.headers, rawBody: req.body
+    });
     if (typeof eventId !== 'string' || !webhookEventIdPattern.test(eventId)) return fail(res, 400, 'invalid_event_id');
     const inboxId = crypto.createHash('sha256').update(tenantId + ':' + provider + ':' + environment + ':' + eventId).digest('hex');
     const payloadHash = crypto.createHash('sha256').update(req.body).digest('hex');
