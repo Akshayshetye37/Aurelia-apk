@@ -167,7 +167,7 @@ export class CCAvenueAdapter extends PaymentProviderAdapter {
       amountMinor: Number.isSafeInteger(amountMinor) && amountMinor > 0 ? amountMinor : null,
       currency: row.order_currncy || row.order_currency || null,
       captured: ['successful', 'shipped'].includes(orderStatus) &&
-        ['low', 'nr', 'ga', 'na', ''].includes(String(row.order_fraud_status || '').toLowerCase())
+        ['low', 'nr', 'ga', 'na'].includes(String(row.order_fraud_status || '').toLowerCase())
     };
   }
 
