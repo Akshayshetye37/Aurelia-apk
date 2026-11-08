@@ -168,3 +168,10 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 **Not implemented by design:** no PostgreSQL schema, no parallel `payment_records` database, no legacy backfill, no accounting writer, no scheduled reconciliation. Aurelia's actual PMS storage is local IndexedDB/native SQLite with a Firestore payment backend; the proposed PostgreSQL tables do not exist in this repository. Account 2020 normal balance still requires Finance approval.
 
 **Release safeguards remain locked:** live collection OFF, automatic settlement OFF, automatic refund posting OFF, CCAvenue adapter disabled, and 0/6 registered providers production-qualified. These source changes do not constitute production readiness.
+
+
+## Payment provider selection policy
+
+Aurelia has one app-wide primary payment provider per tenant/account. All enrolled device installations for the same app use the same primary selection; Device IDs identify installations and do not create separate provider selections. An authorized administrator explicitly confirms a switch, after which the newly qualified provider becomes primary for all new online payments. The previous provider is frozen for new checkout, with no automatic fallback. Existing transactions remain bound to their original provider for delayed webhooks, status verification, refunds and reconciliation.
+
+The Payment Gateway screen lists all seven planned providers. Six adapters are currently registered and may be qualified for test activation. CCAvenue remains visible but unavailable until its complete adapter and merchant lifecycle are implemented and verified. Live collection remains OFF.
