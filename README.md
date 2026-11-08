@@ -177,3 +177,17 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 **Audited implementation baseline:** `7dd1883dfe2b90199ce3b0fd0d3bc46fe9221301`  
 **Active work branch:** `feature/phase-7-pms-persistence`  
 **Status:** Phase 7 foundations and recorded source/backend CI verified; seven-gateway production qualification remains 0/7; production release not approved.
+
+
+## Canonical accounting integration — current phase
+
+- Added \`payment-backend/src/accounting/pms-ledger-mapping.mjs\`: a pure evidence-gated adapter from the actual \`booking.pays[]\` legacy payment row to canonical non-postable journal proposals.
+- Capture, processor fee and cancellation/refund mappings require independent provider evidence and exact integer-paise amounts. Legacy rupee decimals are parsed with integer arithmetic; binary floating-point multiplication is not used.
+- Mapping directions remain provisional: capture Dr 2020 / Cr 1010; actual processor fee Dr 5010 / Cr 2020; verified refund Dr 1010 / Cr 2020.
+- Added regression tests in \`payment-backend/test/pms-ledger-mapping.test.mjs\`.
+- Added \`android/templates/security/proguard-rules.pro\` and Android generation wiring for Razorpay, Cashfree and Paytm R8 preservation rules. This is source-level configuration only; Android Gradle compilation and release shrinker verification remain outstanding.
+- Detailed boundary and migration decision: [PMS canonical accounting integration](docs/PMS_CANONICAL_ACCOUNTING_INTEGRATION.md).
+
+**Not implemented by design:** no PostgreSQL schema, no parallel \`payment_records\` database, no legacy backfill, no accounting writer, no scheduled reconciliation. Aurelia's actual PMS storage is local IndexedDB/native SQLite with a Firestore payment backend; the proposed PostgreSQL tables do not exist in this repository. Account 2020 normal balance still requires Finance approval.
+
+**Release safeguards remain locked:** live collection OFF, automatic settlement OFF, automatic refund posting OFF, CCAvenue disabled, and 0/6 providers production-qualified. These source changes do not constitute production readiness.
