@@ -76,6 +76,9 @@ test('CCAvenue catalogue keeps API encryption key separate from Mobile SDK worki
   assert.equal(fields.accessCode.secret, true);
   assert.equal(fields.encryptionKey.secret, true);
   assert.equal(fields.workingKey.secret, true);
+  assert.equal(fields.notificationWorkingKey.secret, true);
+  assert.equal(fields.regId.required, false);
+  assert.equal(fields.workingKey.required, false);
   assert.match(fields.encryptionKey.label, /AES/);
   assert.match(fields.workingKey.label, /requestHash/);
   const catalogue = publicProviderCatalogue().find(item => item.id === 'ccavenue');
