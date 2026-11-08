@@ -5,7 +5,7 @@ import { createWebStorageAdapter } from "../src/storage/web-storage-adapter.mjs"
 test("web storage adapter uses durable storage when available and reports persistence",()=>{
  const values=new Map(),backing={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,String(value)),removeItem:key=>values.delete(key)};
  const win={localStorage:backing,location:{href:"https://app.example/"},frameElement:null};
- const adapter=createWebStorageAdapter({windowRef:win});
+ const adapter=createWebStorageAdapter({windowRef:win,mode:"test"});
  assert.equal(adapter.persistent,true);
  assert.equal(win.__aureliaStorage,adapter);
  assert.throws(()=>backing.setItem("payment_status","PAID"),error=>error.name==="StorageAuthorityViolation");
