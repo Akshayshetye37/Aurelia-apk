@@ -21,14 +21,11 @@ test('cloud API route exposure is separate from adapter factory wiring', async (
 });
 
 test('only providers with all seven concrete operations are registered', () => {
-  assert.deepEqual(implementedProviderAdapters(), ['razorpay','cashfree','payu','phonepe','paytm','jiopay']);
-  for (const provider of ['ccavenue']) {
-    assert.equal(providerCapabilities(provider), null);
-    assert.deepEqual(providerQualificationStatus(provider), {
-      implemented: false, testCheckout: false, liveCollection: false
-    });
-    assert.throws(() => createProviderAdapter(provider, {}), /provider_adapter_unavailable/);
-  }
+  assert.deepEqual(implementedProviderAdapters(), ['razorpay','cashfree','payu','phonepe','paytm','jiopay','ccavenue']);
+  assert.deepEqual(providerCapabilities('ccavenue'), ['validateCredentials','createOrder','findOrderByReference','getPaymentStatus','verifyWebhook']);
+  assert.equal(providerQualificationStatus('ccavenue').implemented, true);
+  assert.equal(providerQualificationStatus('ccavenue').cloudCheckoutApiEnabled, false);
+  assert.equal(providerQualificationStatus('ccavenue').refunds, false);
 });
 
 test('all wired adapters expose every lifecycle operation but remain release-gated', () => {
@@ -74,4 +71,19 @@ test('enabled adapters do not inherit abstract lifecycle methods', () => {
     const adapter=createProviderAdapter(provider,{credentials,environment});
     for (const operation of REQUIRED) assert.equal(typeof adapter[operation],'function');
   }
+});
+
+
+test('CCAvenue is factory-wired for documented checkout/status/webhook operations only', async () => {
+  const { createProviderAdapter, providerCapabilities, providerQualificationStatus } = await import('../src/providers/factory.mjs');
+  const adapter = createProviderAdapter('ccavenue', {
+    credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey: '0123456789ABCDEF0123456789ABCDEF' },
+    environment: 'test'
+  });
+  for (const operation of providerCapabilities('ccavenue')) assert.equal(typeof adapter[operation], 'function');
+  assert.equal(providerQualificationStatus('ccavenue').cloudCheckoutApiEnabled, false);
+  await assert.rejects(() => adapter.createRefund({ amountMinor: 100, refundId: 'refund-1' }),
+    /ccavenue_standard_refund_requires_merchant_specific_api/);
+  await assert.rejects(() => adapter.getRefundStatus({ refundId: 'refund-1' }),
+    /ccavenue_refund_status_requires_merchant_specific_api/);
 });
