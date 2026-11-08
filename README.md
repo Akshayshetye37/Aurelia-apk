@@ -226,3 +226,8 @@ Reviewed the third-party Android sample at [senthilinfo62/ccavenue-payment-gatew
 Important distinction: the sample's RSA flow is not the CCAvenue Mobile SDK v1.7 requestHash contract. Aurelia keeps classic hosted-checkout AES compatibility, Mobile SDK server-side SHA-512 requestHash, and Merchant API encryption as separate protocol/credential scopes. The Mobile SDK requestHash has a deterministic local formula test; this is not a CCAvenue merchant interoperability vector. Current merchant-issued SDK/AES vectors, tracking-ID API contract, notification authentication, refund contract and merchant UAT remain outstanding. CCAvenue remains unregistered, test-only and unavailable for live collection.
 
 Detailed findings and acceptance evidence checklist: [CCAvenue integration review](./docs/CCAVENUE_INTEGRATION.md#external-android-sample-review--senthilinfo62-ccavenue-integration-8-november-2026).
+
+
+## Public Indian payment-provider GitHub research
+
+Reviewed vendor-maintained public SDKs and samples for Razorpay, Cashfree, PhonePe, Paytm and PayU, plus public third-party references for CCAvenue and multi-gateway architecture. The audit records useful implementation evidence, source limitations and patterns Aurelia intentionally does not copy: [Public GitHub provider reference audit](./docs/PUBLIC_GITHUB_PROVIDER_REFERENCE_AUDIT.md).
