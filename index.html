@@ -677,8 +677,8 @@ async function invGo(i,d){const x=S.inv[i],q=Math.floor(+$('#iq').value);if(!x||
 function invNew(){openS(`<h2 class="foil">New stock item</h2><label class="fld"><span>Name</span><input id="n1"></label><label class="fld"><span>Opening quantity</span><input id="n2" type="number" value="10"></label><label class="fld"><span>Reorder level</span><input id="n3" type="number" value="5"></label><label class="fld"><span>Unit cost</span><input id="n4" type="number" value="0"></label><label class="fld"><span>Sell price (optional)</span><input id="n5" type="number" value="0"></label><label class="fld"><span>Available for sale</span><select id="n6"><option value="no">No · stock use only</option><option value="yes">Yes · sell from POS</option></select></label><button class="btn" style="width:100%" onclick="invSaveNew()">Add item</button>`)}
 async function invSaveNew(){const n=$('#n1').value.trim(),q=Number($('#n2').value),ro=Number($('#n3').value),u=Number($('#n4').value),price=Number($('#n5').value);if(!n||!Number.isSafeInteger(q)||q<0||!Number.isSafeInteger(ro)||ro<0||![u,price].every(v=>Number.isFinite(v)&&v>=0&&Number.isSafeInteger(Math.round(v*100))&&Math.abs(v*100-Math.round(v*100))<1e-7)){toast('Enter whole stock quantities and non-negative prices with no more than two decimal places');return}if(S.inv.some(x=>x.n.toLowerCase()===n.toLowerCase())){toast('That inventory item already exists');return}const inventoryId='inv_'+createStableGuestId().slice(4),index=S.inv.length,next={id:inventoryId,n,q,ro,u,price,sellable:$('#n6').value==='yes'};try{const result=await commitInventoryCatalogState({inventoryId,inventoryIndex:index,operation:'create',auditAction:'Stock item added',auditDetail:n,apply:()=>S.inv.push(next)});closeS();render();toast(result.cacheRefreshed===false?'Inventory item saved to device storage; compatibility cache refresh failed.':'Stock item added')}catch(error){toast(error.message||'Inventory item was not saved')}}
 function expNew(){openS(`<h2 class="foil">New expense</h2><label class="fld"><span>Title</span><input id="e1"></label><label class="fld"><span>Category</span><select id="e2">${['Kitchen','Utilities','Staff','Maintenance','Other'].map(c=>`<option>${c}</option>`).join('')}</select></label><label class="fld"><span>Amount</span><input id="e3" type="number"></label><button class="btn" style="width:100%" onclick="expAdd()">Save expense</button>`)}
-function expAdd(){const a=+$('#e3').value,t=$('#e1').value.trim();if(!t||!(a>0)){toast('Add a title and an amount');return}S.exp.unshift({id:Date.now(),t,c:$('#e2').value,a,v:0});aud('Expense',t+' · '+K(a));closeS();render()}
-function expVoid(i){const e=S.exp.find(x=>x.id===i);e.v=1;aud('Expense voided',e.t+' · '+K(e.a));render();toast('Expense voided')}
+async function expAdd(){const a=Number($('#e3').value),t=$('#e1').value.trim();if(!t||!Number.isFinite(a)||a<=0||!Number.isSafeInteger(Math.round(a*100))||Math.abs(a*100-Math.round(a*100))>1e-7){toast('Enter a title and a positive amount with no more than two decimal places');return}const expenseId='exp_'+createStableGuestId().slice(4),expense={id:expenseId,t,c:$('#e2').value,a,v:0},index=0;try{const result=await commitExpenseCatalogState({expenseId,expenseIndex:index,operation:'create',auditAction:'Expense',auditDetail:t+' · '+K(a),apply:()=>S.exp.unshift(expense)});closeS();render();toast(result.cacheRefreshed===false?'Expense saved to device storage; compatibility cache refresh failed.':'Expense saved')}catch(error){toast(error.message||'Expense was not saved')}}
+async function expVoid(i){const index=S.exp.findIndex(x=>x.id===i);if(index<0)return;const e=S.exp[index];if(e.v)return;const expenseId=e.id||('exp_'+createStableGuestId().slice(4)),prior=cloneRuntimeState(e);try{const result=await commitExpenseCatalogState({expenseId,expenseIndex:index,operation:'update',expectedPreviousExpense:prior,auditAction:'Expense voided',auditDetail:e.t+' · '+K(e.a),apply:()=>{e.id=expenseId;e.v=1}});render();toast(result.cacheRefreshed===false?'Expense voided in device storage; compatibility cache refresh failed.':'Expense voided')}catch(error){toast(error.message||'Expense was not voided')}}
 function cp(k){const q=s=>'"'+String(s).replace(/"/g,'""')+'"',t=k==='json'?JSON.stringify({guests:S.g,bookings:S.b,rooms:S.rooms,expenses:S.exp,inventory:S.inv,audit:S.aud},null,1):k==='guests'?'name,phone,id type,id number\n'+S.g.map(g=>[g.n,g.ph,g.idt,g.idn].map(q).join(',')).join('\n'):'guest,room,in,out,status,total,paid\n'+S.b.map(b=>[b.g,b.room,fd(b.in),fd(b.out),b.st,tt(b),b.p||0].map(q).join(',')).join('\n');navigator.clipboard.writeText(t).then(()=>toast('Copied to clipboard'),()=>toast('Copy was blocked by the browser'))}
 function hc(){const names=S.g.map(g=>g.n.toLowerCase()),dup=names.filter((n,i)=>names.indexOf(n)!==i),bad=S.b.filter(b=>!rm(b.room));aud('Health check',dup.length+' duplicates, '+bad.length+' malformed');openS(`<h2 class="foil">Health check</h2>${[['Guests',S.g.length],['Bookings',S.b.length],['Rooms',S.rooms.length],['Expenses',S.exp.length],['Inventory',S.inv.length],['Audit entries',S.aud.length]].map(x=>`<div class="ln"><span>${x[0]}</span><span class="ready">${x[1]} found</span></div>`).join('')}<div class="ln"><span>Duplicate guests</span><span class="${dup.length?'out':'ready'}">${dup.length?dup.join(', '):'None'}</span></div><div class="ln"><span>Bookings with a missing room</span><span class="${bad.length?'out':'ready'}">${bad.length||'None'}</span></div><p class="lab">Nothing is merged or deleted automatically. Duplicates stay for you to review.</p>`)}
 function demoRm(){openS(`<h2 class="foil">Remove demo entries</h2><p class="lab">This removes the sample expenses and the sample order on table 3. Real guests, bookings and payments stay as they are.</p><button class="btn" style="width:100%" onclick="S.exp=S.exp.filter(e=>!e.demo);if(S.t[2])S.t[2].o=[];aud('Demo entries removed','Sample expenses and orders');closeS();render();toast('Demo entries removed')">Remove demo entries</button>`)}
@@ -1779,6 +1779,30 @@ async function commitInventoryCatalogState({inventoryId,inventoryIndex,operation
    if(error&&error.code==='OPERATIONAL_CANONICAL_READBACK_MISMATCH'){
     RECOVERY_CHECK_PENDING=true;
     console.error('[Aurelia Inventory] Repository read-back mismatch after inventory commit. Writes are frozen.',error);
+    throw new Error('CRITICAL: Device storage read-back is inconsistent. Do not retry or edit; keep the app open for recovery.');
+   }
+   Object.keys(S).forEach(key=>delete S[key]);
+   Object.assign(S,before);
+   throw error;
+  }
+ });
+}
+
+async function commitExpenseCatalogState({expenseId,expenseIndex,operation,expectedPreviousExpense,apply,auditAction,auditDetail}){
+ return withLocalOperationalLock(async()=>{
+  if(RECOVERY_CHECK_PENDING)throw new Error('Operational writes are paused during recovery.');
+  const before=cloneRuntimeState(S);
+  try{
+   apply();
+   if(typeof aud==='function')aud(auditAction,auditDetail);
+   const snapshot={tab:S.tab,bk:S.bk};DK.forEach(k=>snapshot[k]=S[k]);
+   const commit=window.AureliaRepositoryCompatibility?.commitExpenseMutation;
+   if(typeof commit!=='function')throw new Error('Canonical local repository is unavailable; expense change was not saved.');
+   return await commit({snapshot,expenseId,expenseIndex,operation,expectedPreviousExpense});
+  }catch(error){
+   if(error&&error.code==='OPERATIONAL_CANONICAL_READBACK_MISMATCH'){
+    RECOVERY_CHECK_PENDING=true;
+    console.error('[Aurelia Expense] Repository read-back mismatch after expense commit. Writes are frozen.',error);
     throw new Error('CRITICAL: Device storage read-back is inconsistent. Do not retry or edit; keep the app open for recovery.');
    }
    Object.keys(S).forEach(key=>delete S[key]);
@@ -5449,7 +5473,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 import { bootstrapper } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
-import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation } from "./src/storage/repository-operational-mutation-service.mjs";
+import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation, commitExpenseMutation } from "./src/storage/repository-operational-mutation-service.mjs";
 import { commitReservationToRepository } from "./src/storage/repository-reservation-service.mjs";
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
@@ -5503,6 +5527,7 @@ try {
      commitRoomCatalogMutation: input => commitRoomCatalogMutation({ ...input, bridge: storageBridge }),
      commitGuestMutation: input => commitGuestStateMutation({ ...input, bridge: storageBridge }),
      commitInventoryMutation: input => commitInventoryItemMutation({ ...input, bridge: storageBridge }),
+     commitExpenseMutation: input => commitExpenseMutation({ ...input, bridge: storageBridge }),
      commitReservation: input => commitReservationToRepository({ ...input, bridge: storageBridge })
    });
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
