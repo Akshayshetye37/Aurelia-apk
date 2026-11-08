@@ -270,3 +270,24 @@ test("verified legacy marker without its immutable migration snapshot fails clos
   await assert.rejects(app.initializeApplication(), /Verified migration marker has no matching immutable source snapshot/i);
   assert.equal(app.status, "FAILED_CLOSED");
 });
+
+test("canonical authority blocks legacy restore and migration entry points",async()=>{
+ const raw=JSON.stringify(state),storage=makeStorage({[AURELIA_LEGACY_STATE_KEY]:raw});
+ const first=await coordinator("canonical-hard-lock",storage).initializeApplication();
+ const locked=coordinator("canonical-hard-lock-restart",storage,{repository:first.repository});
+ await assert.rejects(locked.restoreLegacyStateFromCanonical(),/forbidden after canonical/);
+ await assert.rejects(locked.executeGuardedMigration(),/forbidden after canonical/);
+});
+
+test("canonical startup does not read or refresh legacy Web Storage",async()=>{
+ const raw=JSON.stringify(state),initial=makeStorage({[AURELIA_LEGACY_STATE_KEY]:raw});
+ const first=await coordinator("canonical-no-legacy-read",initial).initializeApplication();
+ const forbiddenStorage={
+  getItem(){throw new Error("legacy read attempted after canonical authority");},
+  setItem(){throw new Error("legacy write attempted after canonical authority");}
+ };
+ const restarted=await coordinator("canonical-no-legacy-read-restart",forbiddenStorage,{repository:first.repository}).initializeApplication();
+ assert.equal(restarted.success,true);
+ assert.equal(restarted.migration.canonicalLocked,true);
+ assert.equal(await restarted.repository.getAuthority(),"canonical");
+});
