@@ -857,7 +857,7 @@ async function sigReopen(id){
  try{await persistCanonicalStrict()}catch(error){Object.assign(s,before);delete s.reopenedAt;toast('Reopen action could not be saved. The payment remains rejected.');console.error('[Aurelia Payment Review] Durable reopen save failed.',error);return}
  closeS();render();toast('Payment reopened; prior rejection retained');
 }
-function sigA(id,i){
+async function sigA(id,i){
  const s=S.sig.find(x=>x.id===id),b=bk(i);if(!s||!b){toast('Signal or booking not found');return}
  if(!['open','pending_review'].includes(s.st)){toast('This evidence is not available for settlement review');return}
  if(!window.confirm('Have you independently verified this transaction with the bank or payment provider? A notification alone is not proof of payment.'))return;
@@ -867,7 +867,7 @@ function sigA(id,i){
   s.st='matched';s.b=b.id;s.approvedAt=new Date().toISOString();
   if(!Array.isArray(s.reviewHistory))s.reviewHistory=[];
   s.reviewHistory.push({decision:'approved',bookingId:b.id,at:s.approvedAt});
-  try{persistStrict()}catch(error){toast('Payment posting returned success but review history could not be saved. Stop and reconcile before retrying.');console.error('[Aurelia Payment Review] Approval audit save failed.',error);return}
+  try{await persistCanonicalStrict()}catch(error){toast('Payment posting returned success but review history could not be saved. Stop and reconcile before retrying.');console.error('[Aurelia Payment Review] Approval audit save failed.',error);return}
   closeS();render();toast(result.duplicate?'This signal was already recorded':'Payment applied');
  }catch(e){toast(e&&e.message||'Payment was not recorded')}
 }
