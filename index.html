@@ -24,7 +24,7 @@ IMPLEMENTED PMS FOUNDATIONS:
 
 PAYMENT / ACCOUNTING:
 - Six gateways have backend adapters/routes and test/UAT Android checkout handoffs: Razorpay, Cashfree, PayU, PhonePe, Paytm and JioPay.
-- CCAvenue has isolated hosted-checkout request construction, AES-128-CBC compatibility codec, Merchant API order-status verifier, tenant-scoped notification reconciliation, and schema-only Secret Manager credential storage/revocation. It is NOT registered in the provider factory and is not merchant-qualified.
+- CCAvenue hosted-checkout/status/notification modules are unqualified and hard-restricted to test only. The backend rejects live CCAvenue credential onboarding and live notifications; CCAvenue remains absent from the provider factory and cannot be activated. Its AES compatibility codec still requires official merchant-kit vectors and sandbox interoperability.
 - CCAvenue release blockers: merchant-issued AES interoperability vector; account-confirmed notification authentication contract; registered static egress IP for Merchant API; current official Android SDK package/API; general refund API and merchant sandbox UAT.
 - 0 of 7 catalogue gateways are end-to-end production-qualified.
 - Canonical journal mapping remains PROPOSAL_ONLY / NOT_AUTHORIZED. Capture Dr 2020 / Cr 1010; actual processor fee Dr 5010 / Cr 2020; verified refund Dr 1010 / Cr 2020 are provisional only. Finance must approve Account 2020 normal balance and chart treatment. No production journal writer, historical backfill or automated reconciliation scheduler is connected.
@@ -4382,7 +4382,7 @@ window.renderAureliaProviderCredentialForm=function(selectedProvider){
   '<div class="tag out provider-env-tag">Test / Sandbox configuration only · Live collection OFF</div>'+
   '<form id="aurelia-provider-credential-form" onsubmit="event.preventDefault();saveAureliaProviderCredentials()">'+
   '<div class="lab" style="margin:10px 0">Enter the exact merchant values supplied by '+esc(names[p?.provider]||'your provider')+'. Secret fields are write-only and are sent directly to the trusted backend.</div>'+
-  fields+'<button class="btn provider-save-button" type="submit" '+(!p?'disabled':'')+'>Save and validate credentials</button></form>'+
+  fields+'<button class="btn provider-save-button" type="submit" '+(!p?'disabled':'')+'>'+(p?.provider==='ccavenue'?'Store sandbox credentials (not validated)':'Save and validate credentials')+'</button></form>'+
   status+activate+
   '<p class="lab">CCAvenue is available for sandbox credential onboarding, but cannot be activated or used for checkout until its complete adapter, merchant-approved cryptography, notification authentication, authoritative status, general refund lifecycle and merchant acceptance tests are implemented.</p></div>';
 };
