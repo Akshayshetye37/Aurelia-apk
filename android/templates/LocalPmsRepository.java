@@ -31,7 +31,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     db.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL,source_timestamp TEXT NOT NULL,created_at INTEGER NOT NULL,format_version INTEGER NOT NULL)");
     db.execSQL("CREATE TABLE pms_meta(meta_key TEXT PRIMARY KEY NOT NULL,value_json TEXT NOT NULL,updated_at INTEGER NOT NULL)");
     db.execSQL("CREATE TABLE pms_legacy_backup(backup_id TEXT PRIMARY KEY NOT NULL,raw_json TEXT NOT NULL,sha256 TEXT,created_at INTEGER NOT NULL)");
-    db.execSQL("CREATE TABLE pms_migration_checkpoints(migration_id TEXT PRIMARY KEY NOT NULL,table_name TEXT NOT NULL,last_id TEXT NOT NULL,updated_at INTEGER NOT NULL)");
+    db.execSQL("CREATE TABLE pms_migration_checkpoints(migration_id TEXT NOT NULL,table_name TEXT NOT NULL,last_id TEXT NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(migration_id,table_name))");
     db.execSQL("CREATE TABLE pms_authority(singleton INTEGER PRIMARY KEY CHECK(singleton=1),state TEXT NOT NULL CHECK(state IN ('legacy','migrating','canonical')),migration_id TEXT,updated_at INTEGER NOT NULL)");
     db.execSQL("INSERT OR IGNORE INTO pms_authority(singleton,state,migration_id,updated_at) VALUES(1,'legacy',NULL,0)");
   }
@@ -47,7 +47,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       db.execSQL("CREATE TABLE IF NOT EXISTS pms_authority(singleton INTEGER PRIMARY KEY CHECK(singleton=1),state TEXT NOT NULL CHECK(state IN ('legacy','migrating','canonical')),migration_id TEXT,updated_at INTEGER NOT NULL)");
       db.execSQL("INSERT OR IGNORE INTO pms_authority(singleton,state,migration_id,updated_at) VALUES(1,'legacy',NULL,0)");
     }
-    if(oldVersion<5) db.execSQL("CREATE TABLE IF NOT EXISTS pms_migration_checkpoints(migration_id TEXT PRIMARY KEY NOT NULL,table_name TEXT NOT NULL,last_id TEXT NOT NULL,updated_at INTEGER NOT NULL)");
+    if(oldVersion<5) db.execSQL("CREATE TABLE IF NOT EXISTS pms_migration_checkpoints(migration_id TEXT NOT NULL,table_name TEXT NOT NULL,last_id TEXT NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(migration_id,table_name))");
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
 
@@ -112,27 +112,59 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     final JSONObject parsed;
     try { parsed=new JSONObject(rawJson); for(String key:LEGACY_ARRAYS)if(!(parsed.opt(key) instanceof JSONArray))throw new IllegalArgumentException("legacy_snapshot_missing_"+key); if(!(parsed.opt("set") instanceof JSONObject)||!(parsed.opt("menu") instanceof JSONObject))throw new IllegalArgumentException("legacy_snapshot_missing_object"); }
     catch(RuntimeException e){throw e;} catch(Exception e){throw failure("invalid_legacy_snapshot",e);}
-    SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
+    SQLiteDatabase db=getWritableDatabase();
+    // Copy-first: persist the exact raw bytes and their digest before importing a single entity.
+    db.beginTransactionNonExclusive();
     try {
       try(Cursor c=db.rawQuery("SELECT migration_id,source_key,entity_count FROM pms_migrations WHERE migration_key=?",new String[]{MIGRATION_KEY})) {
         if(c.moveToFirst()) {
-          if(!migrationId.equals(c.getString(0))||!sourceKey.equals(c.getString(1)))throw new IllegalStateException("legacy_migration_already_completed");
-          try(Cursor s=db.rawQuery("SELECT raw_json FROM pms_migration_snapshots WHERE snapshot_id=?",new String[]{migrationId})) {
-            if(!s.moveToFirst()||!rawJson.equals(s.getString(0)))throw new IllegalStateException("legacy_migration_replay_payload_mismatch");
+          if(!migrationId.equals(c.getString(0))||!sourceKey.equals(c.getString(1))||c.getInt(2)!=parsed.length())throw new IllegalStateException("legacy_migration_already_completed");
+          try(Cursor s=db.rawQuery("SELECT raw_json FROM pms_migration_snapshots WHERE snapshot_id=?",new String[]{migrationId});Cursor b=db.rawQuery("SELECT raw_json,sha256 FROM pms_legacy_backup WHERE backup_id=?",new String[]{migrationId})) {
+            if(!s.moveToFirst()||!rawJson.equals(s.getString(0))||!b.moveToFirst()||!rawJson.equals(b.getString(0))||!sha256Hex(rawJson).equals(b.getString(1)))throw new IllegalStateException("legacy_migration_replay_payload_mismatch");
           }
-          int count=c.getInt(2); if(count!=parsed.length())throw new IllegalStateException("legacy_migration_entity_count_mismatch");
-          db.setTransactionSuccessful();return migrationResult(true,migrationId,count);
+          db.setTransactionSuccessful();return migrationResult(true,migrationId,parsed.length());
         }
       }
-      if(DatabaseUtils.longForQuery(db,"SELECT COUNT(*) FROM pms_entities",null)!=0)throw new IllegalStateException("canonical_repository_not_empty");
-      java.util.Iterator<String> keys=parsed.keys();int imported=0;long now=System.currentTimeMillis();
-      while(keys.hasNext()){String key=keys.next();validateIdentity(key,"legacy entity key");ContentValues row=new ContentValues();row.put("entity_type","legacy");row.put("entity_id",key);row.put("version",1);Object value=parsed.opt(key);
-        row.put("data_json",serializeJsonValue(value));row.put("updated_at",now);db.insertOrThrow("pms_entities",null,row);ContentValues checkpoint=new ContentValues();checkpoint.put("migration_id",migrationId);checkpoint.put("table_name",key);checkpoint.put("last_id",key);checkpoint.put("updated_at",System.currentTimeMillis());db.insertWithOnConflict("pms_migration_checkpoints",null,checkpoint,SQLiteDatabase.CONFLICT_REPLACE);imported++;}
-      ContentValues backup=new ContentValues();backup.put("backup_id",migrationId);backup.put("raw_json",rawJson);backup.put("sha256",sha256Hex(rawJson));backup.put("created_at",now);db.insertOrThrow("pms_legacy_backup",null,backup);
-      ContentValues snap=new ContentValues();snap.put("snapshot_id",migrationId);snap.put("source_key",sourceKey);snap.put("raw_json",rawJson);snap.put("source_timestamp",sourceTimestamp);snap.put("created_at",now);snap.put("format_version",1);db.insertOrThrow("pms_migration_snapshots",null,snap);
-      ContentValues marker=new ContentValues();marker.put("migration_key",MIGRATION_KEY);marker.put("migration_id",migrationId);marker.put("source_key",sourceKey);marker.put("completed_at",now);marker.put("entity_count",imported);db.insertOrThrow("pms_migrations",null,marker);
-      db.setTransactionSuccessful();return migrationResult(false,migrationId,imported);
-    } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("legacy_migration_failed",e);}
+      try(Cursor existing=db.rawQuery("SELECT raw_json FROM pms_migration_snapshots WHERE snapshot_id=?",new String[]{migrationId});Cursor backup=db.rawQuery("SELECT raw_json,sha256 FROM pms_legacy_backup WHERE backup_id=?",new String[]{migrationId})) {
+        if(existing.moveToFirst()||backup.moveToFirst()) {
+          if(!existing.isFirst()||!backup.isFirst()||!rawJson.equals(existing.getString(0))||!rawJson.equals(backup.getString(0))||!sha256Hex(rawJson).equals(backup.getString(1)))throw new IllegalStateException("legacy_migration_backup_mismatch");
+        } else {
+          if(DatabaseUtils.longForQuery(db,"SELECT COUNT(*) FROM pms_entities",null)!=0)throw new IllegalStateException("canonical_repository_not_empty");
+          long now=System.currentTimeMillis();
+          ContentValues backupRow=new ContentValues();backupRow.put("backup_id",migrationId);backupRow.put("raw_json",rawJson);backupRow.put("sha256",sha256Hex(rawJson));backupRow.put("created_at",now);db.insertOrThrow("pms_legacy_backup",null,backupRow);
+          ContentValues snapshotRow=new ContentValues();snapshotRow.put("snapshot_id",migrationId);snapshotRow.put("source_key",sourceKey);snapshotRow.put("raw_json",rawJson);snapshotRow.put("source_timestamp",sourceTimestamp);snapshotRow.put("created_at",now);snapshotRow.put("format_version",1);db.insertOrThrow("pms_migration_snapshots",null,snapshotRow);
+        }
+      }
+      ContentValues authority=new ContentValues();authority.put("singleton",1);authority.put("state","migrating");authority.put("migration_id",migrationId);authority.put("updated_at",System.currentTimeMillis());db.insertWithOnConflict("pms_authority",null,authority,SQLiteDatabase.CONFLICT_REPLACE);
+      db.setTransactionSuccessful();
+    } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("legacy_migration_backup_failed",e);}
+    finally{db.endTransaction();}
+    // One independently committed batch per legacy table. The table row and its
+    // checkpoint are committed together; restart skips only verified checkpoints.
+    java.util.TreeSet<String> keys=new java.util.TreeSet<>();java.util.Iterator<String> iterator=parsed.keys();while(iterator.hasNext())keys.add(iterator.next());
+    for(String key:keys) {
+      validateIdentity(key,"legacy entity key");Object value=parsed.opt(key);String encoded=serializeJsonValue(value);
+      db.beginTransactionNonExclusive();
+      try {
+        boolean checkpointed=false;
+        try(Cursor cp=db.rawQuery("SELECT last_id FROM pms_migration_checkpoints WHERE migration_id=? AND table_name=?",new String[]{migrationId,key})) {checkpointed=cp.moveToFirst()&&key.equals(cp.getString(0));}
+        if(checkpointed) {
+          try(Cursor entity=db.rawQuery("SELECT data_json,version FROM pms_entities WHERE entity_type='legacy' AND entity_id=?",new String[]{key})) {
+            if(!entity.moveToFirst()||entity.getLong(1)!=1||!encoded.equals(entity.getString(0)))throw new IllegalStateException("legacy_migration_checkpoint_divergence_"+key);
+          }
+        } else {
+          ContentValues row=new ContentValues();row.put("entity_type","legacy");row.put("entity_id",key);row.put("version",1);row.put("data_json",encoded);row.put("updated_at",System.currentTimeMillis());db.insertOrThrow("pms_entities",null,row);
+          ContentValues checkpoint=new ContentValues();checkpoint.put("migration_id",migrationId);checkpoint.put("table_name",key);checkpoint.put("last_id",key);checkpoint.put("updated_at",System.currentTimeMillis());db.insertWithOnConflict("pms_migration_checkpoints",null,checkpoint,SQLiteDatabase.CONFLICT_REPLACE);
+        }
+        db.setTransactionSuccessful();
+      } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("legacy_migration_batch_failed_"+key,e);}
+      finally{db.endTransaction();}
+    }
+    db.beginTransactionNonExclusive();
+    try {
+      ContentValues marker=new ContentValues();marker.put("migration_key",MIGRATION_KEY);marker.put("migration_id",migrationId);marker.put("source_key",sourceKey);marker.put("completed_at",System.currentTimeMillis());marker.put("entity_count",parsed.length());db.insertOrThrow("pms_migrations",null,marker);
+      db.setTransactionSuccessful();return migrationResult(false,migrationId,parsed.length());
+    } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("legacy_migration_commit_failed",e);}
     finally{db.endTransaction();}
   }
 
