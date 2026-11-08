@@ -181,13 +181,13 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 ## Canonical accounting integration — current phase
 
-- Added \`payment-backend/src/accounting/pms-ledger-mapping.mjs\`: a pure evidence-gated adapter from the actual \`booking.pays[]\` legacy payment row to canonical non-postable journal proposals.
+- Added `payment-backend/src/accounting/pms-ledger-mapping.mjs`: a pure evidence-gated adapter from the actual `booking.pays[]` legacy payment row to canonical non-postable journal proposals.
 - Capture, processor fee and cancellation/refund mappings require independent provider evidence and exact integer-paise amounts. Legacy rupee decimals are parsed with integer arithmetic; binary floating-point multiplication is not used.
 - Mapping directions remain provisional: capture Dr 2020 / Cr 1010; actual processor fee Dr 5010 / Cr 2020; verified refund Dr 1010 / Cr 2020.
-- Added regression tests in \`payment-backend/test/pms-ledger-mapping.test.mjs\`.
-- Added \`android/templates/security/proguard-rules.pro\` and Android generation wiring for Razorpay, Cashfree and Paytm R8 preservation rules. This is source-level configuration only; Android Gradle compilation and release shrinker verification remain outstanding.
+- Added regression tests in `payment-backend/test/pms-ledger-mapping.test.mjs`.
+- Added `android/templates/security/proguard-rules.pro` and Android generation wiring for Razorpay, Cashfree and Paytm R8 preservation rules. This is source-level configuration only; Android Gradle compilation and release shrinker verification remain outstanding.
 - Detailed boundary and migration decision: [PMS canonical accounting integration](docs/PMS_CANONICAL_ACCOUNTING_INTEGRATION.md).
 
-**Not implemented by design:** no PostgreSQL schema, no parallel \`payment_records\` database, no legacy backfill, no accounting writer, no scheduled reconciliation. Aurelia's actual PMS storage is local IndexedDB/native SQLite with a Firestore payment backend; the proposed PostgreSQL tables do not exist in this repository. Account 2020 normal balance still requires Finance approval.
+**Not implemented by design:** no PostgreSQL schema, no parallel `payment_records` database, no legacy backfill, no accounting writer, no scheduled reconciliation. Aurelia's actual PMS storage is local IndexedDB/native SQLite with a Firestore payment backend; the proposed PostgreSQL tables do not exist in this repository. Account 2020 normal balance still requires Finance approval.
 
 **Release safeguards remain locked:** live collection OFF, automatic settlement OFF, automatic refund posting OFF, CCAvenue disabled, and 0/6 providers production-qualified. These source changes do not constitute production readiness.
