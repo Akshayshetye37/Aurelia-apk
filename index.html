@@ -943,7 +943,7 @@ function dsheet(){
   <button class="btn" style="width:100%;margin-top:14px" onclick="dsave()">${res?'Confirm reservation':'Save guest'}</button>`;
   openS(html);
 }
-function dsave(){
+async function dsave(){
  rdD();
  const d=S.dr,g=d.g,nm=String(g.n||'').trim();
  if(!nm){toast('Enter the guest’s name');return}
@@ -1000,12 +1000,9 @@ function dsave(){
    aud('Guest saved',nm);
   }
 
-  persist();
-  let saved;
-  try{
-   const raw=(window.__aureliaStorage||localStorage).getItem(SK);
-   saved=raw?JSON.parse(raw):null;
-  }catch(_){throw new Error('Could not verify the saved guest and reservation records')}
+  // Commit the complete guest/reservation/advance snapshot to SQLite or
+  // IndexedDB first. localStorage is refreshed only as a compatibility cache.
+  const saved=await persistCanonicalStrict();
   const savedGuest=saved&&Array.isArray(saved.g)?saved.g.find(x=>x.n===nm):null;
   const savedBooking=d.k==='res'&&saved&&Array.isArray(saved.b)?saved.b.find(x=>x.id===booking.id):null;
   if(!savedGuest||(d.k==='res'&&(!savedBooking||
@@ -1026,7 +1023,13 @@ function dsave(){
   if(Array.isArray(S.aud))S.aud.splice(0,S.aud.length,...priorAudit);
   S.today=priorToday;
   id=priorId;
-  persist();
+  try{
+   await persistCanonicalStrict();
+  }catch(rollbackError){
+   console.error('[Aurelia Reservation] Canonical rollback could not be verified.',rollbackError);
+   toast('CRITICAL: Reservation save failed and canonical rollback could not be verified. Stop editing; preserve the device and recover from backup.');
+   return;
+  }
   toast(error&&error.message||'Could not save guest or reservation; no payment was recorded');
  }
 }
