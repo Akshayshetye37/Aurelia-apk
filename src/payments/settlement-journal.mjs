@@ -123,7 +123,7 @@ export class IndexedDbSettlementJournal {
       throw error;
     }
   }
-  async transition(key, payloadHash, status, patch) {
+  async #transition(key, payloadHash, status, patch) {
     const db = await this.database(); const tx = openWrite(db); const done = transactionComplete(tx); done.catch(() => {});
     const store = tx.objectStore(STORE_NAME), eventsStore = tx.objectStore(EVENT_STORE_NAME);
     try {
@@ -142,8 +142,8 @@ export class IndexedDbSettlementJournal {
       return projectRecord(base, [...events, event]);
     } catch (error) { try { tx.abort(); } catch {} await done.catch(() => {}); throw error; }
   }
-  markApplied(key, payloadHash) { return this.transition(key, payloadHash, "APPLIED", { appliedAt: this.now() }); }
-  markRejected(key, payloadHash, reasonCode) { return this.transition(key, payloadHash, "REJECTED", { rejectedAt: this.now(), rejectedReason: safeId(String(reasonCode || "UNKNOWN"), "reasonCode", 120) }); }
+  markApplied(key, payloadHash) { return this.#transition(key, payloadHash, "APPLIED", { appliedAt: this.now() }); }
+  markRejected(key, payloadHash, reasonCode) { return this.#transition(key, payloadHash, "REJECTED", { rejectedAt: this.now(), rejectedReason: safeId(String(reasonCode || "UNKNOWN"), "reasonCode", 120) }); }
   async get(key) {
     const db = await this.database(); const tx = db.transaction([STORE_NAME, EVENT_STORE_NAME], "readonly"); const done = transactionComplete(tx); done.catch(() => {});
     const identity = safeId(key, "journal key", 700);
@@ -156,7 +156,7 @@ export class IndexedDbSettlementJournal {
   async listPending() {
     const db = await this.database(); const tx = db.transaction([STORE_NAME, EVENT_STORE_NAME], "readonly"); const done = transactionComplete(tx); done.catch(() => {});
     const [records, events] = await Promise.all([
-      request(tx.objectStore(STORE_NAME).getAll()),
+      request(tx.objectStore(STORE_NAME).index("status").getAll("PENDING")),
       request(tx.objectStore(EVENT_STORE_NAME).getAll())
     ]);
     await done;
