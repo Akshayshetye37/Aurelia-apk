@@ -155,3 +155,23 @@ test('biometric enrollment invalidation API is guarded for the minSdk and lint r
   assert.match(workflow, /Upload Android lint diagnostics/);
   assert.match(workflow, /lint-results-debug\.txt/);
 });
+
+
+test('generated Android sources are API 23 compatible and manifest removal directives stay lint-safe', () => {
+  const patcher = read('scripts/patch-android.js');
+  const repository = read('android/templates/LocalPmsRepository.java');
+  const storage = read('android/templates/CapacitorPmsStoragePlugin.java');
+  const ledger = read('android/templates/LocalPaymentLedger.java');
+  const payBridge = read('android/templates/PayBridgeClient.java');
+  assert.match(patcher, /java\.util\.Collections\.sort\(candidates/);
+  assert.match(patcher, /takePersistableUriPermission\(uri,\s*Intent\.FLAG_GRANT_READ_URI_PERMISSION/);
+  assert.match(patcher, /tools:ignore="ProtectedPermissions,PermissionImpliesUnsupportedChromeOsHardware/);
+  assert.match(patcher, /certificates src="system"/);
+  assert.doesNotMatch(patcher, /certificates src="user"/);
+  assert.match(repository, /yyyy-MM-dd'T'HH:mm:ss\.SSSZ/);
+  assert.doesNotMatch(repository, /SSSXXX/);
+  assert.doesNotMatch(storage, /Date\(\)\.toInstant\(\)/);
+  assert.match(storage, /createdAtFormatter\.setTimeZone/);
+  assert.match(ledger, /toLowerCase\(java\.util\.Locale\.ROOT\)/);
+  assert.match(payBridge, /Build\.VERSION\.SDK_INT >= 28/);
+});
