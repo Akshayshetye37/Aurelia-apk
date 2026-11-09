@@ -33,7 +33,8 @@ jobs:
         with:
           node-version: "22"
       - name: Install application dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
       - name: Assert R1 release flags default OFF
         run: node --test tests/release-defaults.test.mjs
       - name: Run complete PMS test suite
