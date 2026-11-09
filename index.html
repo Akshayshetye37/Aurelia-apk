@@ -1,22 +1,28 @@
 <!--
-AURELIA PMS — CURRENT SOURCE AND RELEASE BOUNDARY
+AURELIA PMS — CURRENT SOURCE AND RELEASE BOUNDARY (updated 2026-11-09)
 Repository: https://github.com/Akshayshetye37/Aurelia-apk
 Project root: /
-Active branch: feature/multi-provider-payment-backend
-Branch HEAD: resolve the current SHA from the active branch ref; do not hard-code a moving HEAD.
-Latest verification: [GitHub Actions run 42492883511](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42492883511) passed 427/427 tests, production web build and client-asset privacy checks on commit 83d3ddfa41573fbbcca18efaf4bde73b8a9513cf. This is not APK or device qualification.
-Recovery point: backup/pre-local-first-cutover-2026-11-07 at 8b74f3d2cb723237b5f3a8901e22ef7370552812; backup/pre-release-html-update-2026-11-07 preserves the pre-documentation-update snapshot.
-CI evidence: source-tests-web and settlement-foundation passed on the exact verified commit above. The workflow does not build or qualify an Android APK.
-LOCAL IDENTITY: browser/PWA uses a cryptographically generated local identity in IndexedDB with a verified localStorage fallback. Android stores identity encrypted with AES-GCM using an Android Keystore key. Local identity is distinct from Firebase/cloud tenant identity.
-LOCAL-FIRST SNAPSHOT WRITES: ordinary persist() and persistCanonicalStrict() serialize complete PMS snapshots through PmsLocalFirstWriteCoordinator into the canonical local repository, verify exact read-back, and refresh aurelia_lodge_v2 only afterward as a compatibility cache. Snapshot writes are ordered with the operational mutation lock and fail closed on repository or read-back failure. Room and guest UI collections now hydrate from canonical entities; other domain collections remain snapshot-backed.
-STRICT ASYNC WORKFLOWS: JSON import/rollback, full backup restore/rollback, manual folio payments, staff-reviewed UPI approval, guest profile create/update/retire and primary reservation creation await canonical repository commit and exact read-back before confirming success. Manual payment and UPI approval atomically commit booking, folio projection and full recovery snapshot. Reservation creation atomically commits guest, booking, folio projection and the full recovery snapshot. Legacy localStorage is refreshed only as a compatibility cache after commit; other operational UI mutations remain to be migrated.
-RECOVERY: startup prefers the latest committed canonical audit snapshot over the immutable first-migration bytes, validates the complete PMS schema and verifies exact read-back. The immutable migration snapshot is a fallback only when no newer committed snapshot exists. Missing or inconsistent recovery evidence fails closed.
-CUTOVER: uiCutover=false globally. Room status/catalogue commands and guest profile create/update/retire commands use transactional domain entities. Room and guest collections are hydrated from verified canonical entities before application scripts replay. Payment, reservation, lifecycle, inventory, expense and restaurant paths have varying levels of domain-entity transactions. Remaining synchronous accounting and domain mutation paths must be migrated before the repository becomes the sole operational source of truth.
-RUNTIME: serve/package the complete project and ./src module tree. Startup must fail closed if durable storage bootstrap or exact snapshot verification fails. Embedded previews without durable storage are unsupported.
-PAYMENTS: six adapter/factory foundations exist. The provider integration matrix states only Razorpay and Cashfree currently have cloud checkout API routes; PayU, PhonePe, Paytm and JioPay cloud route integration remains outstanding. CCAvenue is catalogue-only. Adapter tests do not prove merchant UAT or production support.
-ANDROID: Capacitor appId com.aurelia.pms; webDir www. Previous CI notes report a debug APK build, not production signing or physical-device qualification. Native process-death recovery and device acceptance remain open.
-RELEASE: cloud sync OFF; live gateway collection OFF; automatic gateway settlement OFF; automatic refund posting OFF; production release NOT AUTHORIZED.
-The application must never contain merchant credentials, webhook secrets, signing keys or backend secrets.
+Active engineering branch: work/p0-storage-hardening
+Candidate commit: e430a9cd72d8e7ec7f653cbbb15e617595daf758
+Draft PR: https://github.com/Akshayshetye37/Aurelia-apk/pull/18 (open, draft, unmerged)
+CURRENT STATE: canonical authority is PREPARED_COMPATIBILITY. uiCutover=false. Live gateway collection, automatic settlement, automatic refund posting, provider activation and production release remain OFF.
+CURRENT CHAT OVERVIEW / OPEN GATES:
+1) Emulator SQLite instrumentation is blocked: native compilation passed in runs 42646801316 and 42646788499, but Linux emulator startup/ADB failed and timed out. No connected instrumentation report exists; no SQLite assertions can be claimed as passed or failed.
+2) Physical Android qualification has not started; it is blocked until emulator instrumentation is green.
+3) No owner-authorized real/production-shaped snapshot has been migrated and parity/rollback verified.
+4) Domain-command routing is incomplete; not every business mutation uses the command/repository layer exclusively.
+5) Legacy direct business-data writes remain and require removal after command coverage.
+6) Accounting owner sign-off on representative real/realistic folios is missing.
+7) Repository governance is incomplete; PR #18 remains draft and branch protection/required checks need owner/admin configuration.
+8) UI cutover remains disabled until storage, migration, command routing and accounting gates pass.
+9) Live collection, automatic settlement and automatic refund posting remain OFF pending server-side qualification and explicit audited owner authorization.
+DEPENDENCY ORDER: close emulator instrumentation, then physical-device qualification and authorized snapshot migration/parity/rollback; only then complete domain-command routing and remove bypasses; obtain accounting sign-off and governance approval. Do not merge or activate any release gate based on synthetic or incomplete evidence.
+LATEST VERIFIED CI: R1 local-first run 42646800927 and settlement foundation run 42646800905 passed on candidate SHA e430a9c. Native runs above compiled successfully but failed at emulator boot before instrumentation could produce results.
+LOCAL IDENTITY / KEY BOUNDARY: SQLCipher receives a short-lived process-memory DEK/passphrase byte array; the DEK is not a non-exportable Android Keystore key. Android Keystore protects the persisted wrapped envelope at rest. Never log or persist clear key material.
+LOCAL-FIRST: ordinary PMS operations must use durable device-local storage. Browser/PWA uses IndexedDB; Android uses native SQLCipher-backed SQLite through Capacitor. Missing native storage must fail closed.
+PAYMENT TRUST: provider credentials, webhook secrets and signing material remain backend-only. Browser redirects/callbacks are not proof of payment capture.
+The app must be served/packaged with the complete project and ./src module tree. Embedded HTML previews are not supported as a durable PMS runtime.
+See README.md and docs/ for architecture, test evidence and release qualification details.
 -->
 
 <!-- Application metadata
