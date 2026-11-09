@@ -11,6 +11,8 @@ on:
   pull_request:
     paths:
       - "payment-backend/infra/terraform/**"
+      - "android/templates/**/*.java"
+      - "android/templates/**/*.kt"
       - ".github/workflows/payment-backend-infra.yml"
   workflow_dispatch:
 
