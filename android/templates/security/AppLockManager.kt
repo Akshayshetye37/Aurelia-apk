@@ -39,6 +39,21 @@ class AppLockManager(context: Context) {
         val bootCount: Int
     )
 
+    /**
+     * Creates retry state exactly once during a verified first enrollment.
+     * A missing file after this point is corruption/deletion, never a clean slate.
+     */
+    @Synchronized
+    fun initializeForEnrollment() {
+        val store = KeyStore.getInstance(STORE).apply { load(null) }
+        val backupExists = File(file.baseFile.path + ".bak").exists()
+        if (file.baseFile.exists() || backupExists || store.containsAlias(ALIAS)) {
+            throw SecurityException("Missing or pre-existing lock state; refusing fresh initialization.")
+        }
+        getOrCreateKey()
+        writeState(State(0, 0L, bootCount()))
+    }
+
     @Synchronized
     fun state(): State {
         val state = readState()
@@ -90,8 +105,10 @@ class AppLockManager(context: Context) {
 
     private fun readState(): State {
         val bytes = try { file.openRead().use { it.readBytes() } }
-        catch (missing: java.io.FileNotFoundException) { return State(0, 0L, bootCount()) }
-        val plain = decrypt(bytes)
+        catch (missing: java.io.FileNotFoundException) {
+            throw SecurityException("Missing lock state; refusing to reset retry counter.", missing)
+        }
+        val plain = try { decrypt(bytes) } finally { bytes.fill(0) }
         return try {
             val json = JSONObject(String(plain, Charsets.UTF_8))
             require(json.getString("magic") == MAGIC)
@@ -144,9 +161,16 @@ class AppLockManager(context: Context) {
         val iv = input.copyOfRange(1, 1 + ivSize)
         val ciphertext = input.copyOfRange(1 + ivSize, input.size)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, iv))
+        cipher.init(Cipher.DECRYPT_MODE, loadKey(), GCMParameterSpec(128, iv))
         cipher.updateAAD(MAGIC.toByteArray(Charsets.UTF_8))
         return try { cipher.doFinal(ciphertext) } finally { iv.fill(0); ciphertext.fill(0) }
+    }
+
+    @Synchronized
+    private fun loadKey(): SecretKey {
+        val store = KeyStore.getInstance(STORE).apply { load(null) }
+        return store.getKey(ALIAS, null) as? SecretKey
+            ?: throw SecurityException("Lock-state Keystore key is missing; refusing reset.")
     }
 
     @Synchronized
