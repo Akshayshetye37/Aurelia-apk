@@ -38,7 +38,7 @@ Only after R1 has operated with real local data and the operational model is val
 
 ### Gate R1-A — Governance and baseline
 - Use `release/r1-local-first-execution` as the execution branch; do not change the existing feature branch or merge automatically.
-- Maintain `STATUS.md` as the single current gate ledger. Record exact commit SHAs and workflow URLs; never carry forward a pass from a different SHA.
+- Generate a per-run `STATUS.md` artifact from actual workflow outcomes, including the exact candidate SHA and run URL. The checked-in `STATUS.md` is only a pointer to that generated artifact; do not hand-edit gate pass/fail claims or carry evidence forward to a different SHA.
 - Require protected-branch review and required checks before merge. Verify settings after applying them; do not claim protection from configuration intent alone.
 - Keep secrets out of source, logs, issues and chat. Signing keys remain under owner control.
 - Correct workflow path filters so native template changes trigger the relevant CI job.
