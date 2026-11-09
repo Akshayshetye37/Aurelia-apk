@@ -110,3 +110,10 @@ test('native security Kotlin CI compiles the exact SHA and release tags require 
   assert.match(workflow, /verified \$VERIFIED_SHA/);
   assert.match(releaseGuard, /native-security-kotlin/);
 });
+
+
+test('Android generation increases Gradle wrapper download timeout without changing its pinned distribution', () => {
+  const patcher = read('scripts/patch-android.js');
+  assert.match(patcher, /networkTimeout=120000/);
+  assert.match(patcher, /gradle-wrapper\.properties/);
+});
