@@ -266,7 +266,7 @@ test('inventory creation and stock movements await local canonical transactions'
     assert.ok(i >= 0, name + ' is present');
     const body = html.slice(i, html.indexOf('\nfunction ', i + 10));
     assert.match(body, /await commitInventoryCatalogState/);
-    assert.doesNotMatch(body, /persist\(\)/);
+    assert.match(body, /await persist\(\)/, name + " refreshes the compatibility recovery cache after canonical commit");
   }
 });
 
