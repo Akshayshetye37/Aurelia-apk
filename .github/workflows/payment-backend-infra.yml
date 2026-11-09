@@ -5,6 +5,8 @@ on:
     branches: [feature/multi-provider-payment-backend]
     paths:
       - "payment-backend/infra/terraform/**"
+      - "android/templates/**/*.java"
+      - "android/templates/**/*.kt"
       - ".github/workflows/payment-backend-infra.yml"
   pull_request:
     paths:
