@@ -16,7 +16,7 @@ R1 CI checks out the event SHA explicitly and verifies the checkout SHA, tests r
 | Workstream | Status | Acceptance still required |
 |---|---|---|
 | 0. Governance | PARTIAL / ADMIN BLOCKED | Protect `main` and `release/r1-local-first-execution`; require one review, exact R1 status check, no force-push and admin enforcement. |
-| 1. Local-first data | PARTIAL | Complete repository-only reads/writes domain-by-domain, shadow comparison, zero mismatches, legacy quarantine, IndexedDB/SQLite contract suite and rollback drills. |
+| 1. Local-first data | PARTIAL | Property settings and menu now have canonical versioned reads/writes and outbox coverage. Complete remaining domain reads/writes, shadow comparison, zero mismatches, legacy quarantine, shared IndexedDB/SQLite contract suite and rollback drills. |
 | 2. Financial correctness | BLOCKED | Run read-only diagnostic on authorized redacted backup; obtain accounting-owner sign-off; implement append-only integer-paise journal and atomic payment/journal/outbox with idempotency tests. |
 | 3. Atomic operations | PARTIAL | Complete checkout, POS sale, stock adjustment, payment approval and refund request as single DB transactions; fault-inject every write step; verify folio/ledger and stock/movement invariants. |
 | 4. Android/security | BLOCKED | Complete DEK envelope design/tests, Kotlin compile/unit tests, instrumentation, storage-full/rollback/migration/process-kill tests and two-phone qualification. |
