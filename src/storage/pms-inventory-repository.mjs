@@ -46,9 +46,7 @@ const movementHash = value => {
   }
   return hash.toString(16).padStart(16, "0");
 };
-const movementRows = (snapshot, previous) => {
-  const nextRows = Array.isArray(snapshot.led) ? snapshot.led : [];
-  const priorRows = Array.isArray(previous?.led) ? previous.led : [];
+const appendOnlyRows = (nextRows, priorRows, errorCode, errorMessage) => {
   const priorCounts = new Map();
   const nextCounts = new Map();
   for (const row of priorRows) {
@@ -61,9 +59,7 @@ const movementRows = (snapshot, previous) => {
   }
   for (const [key, count] of priorCounts) {
     if ((nextCounts.get(key) || 0) < count) {
-      throw Object.assign(new Error("Inventory movement ledger is append-only; existing movement rows cannot be removed or edited."), {
-        code: "INVENTORY_MOVEMENT_HISTORY_MUTATION"
-      });
+      throw Object.assign(new Error(errorMessage), { code: errorCode });
     }
   }
   const additions = [];
@@ -78,6 +74,18 @@ const movementRows = (snapshot, previous) => {
   }
   return additions;
 };
+const movementRows = (snapshot, previous) => appendOnlyRows(
+  Array.isArray(snapshot.led) ? snapshot.led : [],
+  Array.isArray(previous?.led) ? previous.led : [],
+  "INVENTORY_MOVEMENT_HISTORY_MUTATION",
+  "Inventory movement ledger is append-only; existing movement rows cannot be removed or edited."
+);
+const auditRows = (snapshot, previous) => appendOnlyRows(
+  Array.isArray(snapshot.aud) ? snapshot.aud : [],
+  Array.isArray(previous?.aud) ? previous.aud : [],
+  "PMS_AUDIT_HISTORY_MUTATION",
+  "PMS audit history is append-only; existing audit rows cannot be removed or edited."
+);
 
 function validateItem(row) {
   if (!row || typeof row !== "object" || Array.isArray(row)) throw new TypeError("Inventory item must be a plain object.");
@@ -245,6 +253,9 @@ export class PmsInventoryRepository {
     const newMovements = snapshotRow
       ? movementRows(snapshot, snapshotRow.data.snapshot)
       : [];
+    const newAuditRows = snapshotRow
+      ? auditRows(snapshot, snapshotRow.data.snapshot)
+      : [];
 
     const tableChanges = [];
     if (snapshotRow) {
@@ -308,6 +319,19 @@ export class PmsInventoryRepository {
       }
     }
     const movementChanges = [];
+    for (const audit of newAuditRows) {
+      const id = "pms-audit-" + movementHash(audit.row) + "-" + audit.ordinal;
+      const stored = await this.bridge.fetchEntity("audit", id);
+      if (!stored || !same({
+        kind: stored.data.kind, source: stored.data.source, value: stored.data.value
+      }, {
+        kind: "pms_audit", source: "snapshot_audit", value: audit.row
+      })) {
+        throw Object.assign(new Error("PMS audit row failed exact canonical read-back."), {
+          code: "PMS_AUDIT_READBACK_FAILED", auditId: id
+        });
+      }
+    }
     for (const movement of newMovements) {
       const id = "inventory-movement-" + movementHash(movement.row) + "-" + movement.ordinal;
       const data = {
@@ -328,6 +352,27 @@ export class PmsInventoryRepository {
         entityType: "ledger", entityId: id, expectedVersion: 0,
         eventType: "inventory.movement_recorded",
         eventPayload: { movementId: id, source: "inventory_snapshot_ledger" },
+        mutate: entity => Object.assign(entity, clone(data), { createdAt: this.now() })
+      });
+    }
+
+    const auditLogChanges = [];
+    for (const audit of newAuditRows) {
+      const id = "pms-audit-" + movementHash(audit.row) + "-" + audit.ordinal;
+      const data = { kind: "pms_audit", source: "snapshot_audit", value: audit.row };
+      const existing = await this.bridge.fetchEntity("audit", id);
+      if (existing) {
+        if (!same(existing.data, data)) {
+          throw Object.assign(new Error("PMS audit identity collision; refusing to overwrite audit history."), {
+            code: "PMS_AUDIT_ID_COLLISION", auditId: id
+          });
+        }
+        continue;
+      }
+      auditLogChanges.push({
+        entityType: "audit", entityId: id, expectedVersion: 0,
+        eventType: "pms.audit_recorded",
+        eventPayload: { auditId: id, source: "snapshot_audit" },
         mutate: entity => Object.assign(entity, clone(data), { createdAt: this.now() })
       });
     }
@@ -367,16 +412,16 @@ export class PmsInventoryRepository {
         }
       });
     }
-    if (changes.length + movementChanges.length + tableChanges.length > 19) {
-      throw new RangeError("Inventory, table and movement changes exceed the 19-entity atomic transaction limit.");
+    if (changes.length + movementChanges.length + tableChanges.length + auditLogChanges.length > 19) {
+      throw new RangeError("Inventory, table, movement and audit changes exceed the 19-entity atomic transaction limit.");
     }
-    if (changes.length || movementChanges.length || tableChanges.length) {
+    if (changes.length || movementChanges.length || tableChanges.length || auditLogChanges.length) {
       const committedAt = this.now();
       const auditChange = {
         entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2",
         expectedVersion: snapshotRow?.version ?? 0,
         eventType: "pms.snapshot_inventory_mutation",
-        eventPayload: { inventoryCount: desired.size, changedInventory: changes.map(change => change.entityId), tableCount: tableChanges.length, movementCount: movementChanges.length },
+        eventPayload: { inventoryCount: desired.size, changedInventory: changes.map(change => change.entityId), tableCount: tableChanges.length, movementCount: movementChanges.length, auditCount: auditLogChanges.length },
         mutate: entity => {
           entity.sourceKey = "aurelia_lodge_v2";
           entity.snapshot = clone(snapshot);
@@ -384,7 +429,7 @@ export class PmsInventoryRepository {
           return entity;
         }
       };
-      await this.bridge.mutateEntities([...changes, ...tableChanges, ...movementChanges, auditChange]);
+      await this.bridge.mutateEntities([...changes, ...tableChanges, ...movementChanges, ...auditLogChanges, auditChange]);
     }
 
     const active = await this.list();
@@ -421,7 +466,7 @@ export class PmsInventoryRepository {
         });
       }
     }
-    if (changes.length || movementChanges.length || tableChanges.length) {
+    if (changes.length || movementChanges.length || tableChanges.length || auditLogChanges.length) {
       const storedSnapshot = await this.bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
       if (!storedSnapshot || !same(storedSnapshot.data.snapshot, snapshot)) {
         throw Object.assign(new Error("Inventory transaction failed exact recovery snapshot read-back."), {
