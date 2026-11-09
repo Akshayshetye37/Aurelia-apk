@@ -238,6 +238,6 @@ TAG_CREATED=0
   echo "- Ruleset: [Aurelia R1 protected branches](https://github.com/$REPO/rules/$RULESET_ID) — active, verified."
   echo "- Protected refs: `main`, `feature/multi-provider-payment-backend`, `release/**`."
   echo "- Required checks: `r1-governance` and `native-security-kotlin`; approvals: 1; force-push and deletion blocked; bypass actors: none."
-  echo "- Direct push probe: rejected on `$PROBE_BRANCH` even though the pushed SHA already had a green `r1-governance` check; both disposable branches removed."
+  echo "- Direct push probe: rejected on `$PROBE_BRANCH` even though the pushed SHA already had both required checks green; both disposable branches removed."
   echo "- Red-SHA tag probe: refused by [release-tag guard run $TAG_RUN_ID](https://github.com/$REPO/actions/runs/$TAG_RUN_ID); temporary tag removed."
 } >> "$GITHUB_STEP_SUMMARY"
