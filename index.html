@@ -3800,6 +3800,11 @@ pay=async function(i){
  }catch(e){toast(e&&e.message||'Payment was not recorded')}
 };
 
+// Local-only release profile: no cloud sync, gateway checkout, Pay Bridge or provider activation.
+window.AURELIA_LOCAL_ONLY_RELEASE=Object.freeze({
+ uiCutover:false,cloudSync:false,gatewayPayments:false,payBridge:false,
+ ccavenue:false,enabledProviders:Object.freeze([])
+});
 // Provider checkout is intentionally routed through the authenticated LAN engine.
 // The browser receives only the public checkout token/key; provider secrets stay server-side.
 const AURELIA_CHECKOUT_SCRIPTS={
@@ -3821,6 +3826,7 @@ function loadAureliaCheckoutScript(provider){
  AURELIA_SCRIPT_PROMISES.set(provider,task);task.catch(()=>AURELIA_SCRIPT_PROMISES.delete(provider));return task;
 }
 window.aureliaGatewayFolioHtml=function(i){
+ if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true)return '<h3>Online payment</h3><p class="lab">Online gateway payments are disabled in this local-only release. Cash, UPI recorded after verification, and manual folio payments continue to work on this device.</p>';
  const a=window.AureliaPaymentProviderState||{},providers=(a.providers||[]).filter(x=>x.environment==='test'&&x.active);
  const activeProviderId=a.activeProviderId||null;
   const supported=providers.filter(x=>x.provider===activeProviderId&&['razorpay','cashfree'].includes(x.provider)&&x.capabilities?.testCheckout===true&&x.capabilities?.liveCollection===false&&x.productionReady===false);
@@ -3834,6 +3840,7 @@ window.aureliaGatewayFolioHtml=function(i){
 };
 document.addEventListener('change',e=>{if(e.target?.id==='aurelia-online-provider'){const box=document.getElementById('aurelia-cashfree-details');if(box)box.hidden=e.target.value!=='cashfree';}});
 window.startAureliaGatewayCheckout=async function(i){
+ if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true){toast('Online gateway payments are disabled in this local-only release. No payment request was sent.');return false;}
  const b=bk(i);if(!b){toast('Booking not found');return}
  const status=document.getElementById('aurelia-gateway-checkout-status');
  const stop=message=>{if(status)status.textContent=message;toast(message);return false;};
@@ -4532,6 +4539,7 @@ if (typeof window.render === "function") window.render();
   finally{state.busy=false;window.render();}
  };
  function platformHtml(){
+  if(window.AURELIA_LOCAL_ONLY_RELEASE?.payBridge!==true)return '<div class="card payment-platform-card"><h2>Payment Gateway</h2><p class="lab">Provider configuration, CCAvenue and Pay Bridge are disabled for the local-only release. Device-local PMS operations do not require a gateway or server.</p></div>';
   const platform=window.AureliaPaymentPlatform;
   if(!platform){
    const failed=window.AureliaPaymentPlatformLoadState==="error";
@@ -4588,6 +4596,7 @@ function providerConfigPanelHtml(){
 let aureliaProviderAdminCatalogue=[];
 let aureliaProviderAdminActiveId=null;
 window.loadAureliaProviderConfiguration=async function(){
+ if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true){toast('Provider configuration is disabled in this local-only release.');return false;}
  const host=document.getElementById('aurelia-provider-config-content');if(host)host.innerHTML='<p class="lab">Loading protected provider configuration…</p>';
  try{
   const result=await window.aureliaPaymentAdminRequest('/v1/admin/providers','GET');
@@ -4621,6 +4630,7 @@ window.renderAureliaProviderCredentialForm=function(selectedProvider){
   '<p class="lab">CCAvenue is intentionally unavailable: no CCAvenue adapter or end-to-end payment flow is implemented. Do not enter CCAvenue credentials here.</p></div>';
 };
 window.saveAureliaProviderCredentials=async function(){
+ if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true){toast('Provider configuration is disabled in this local-only release.');return false;}
  const select=document.getElementById('aurelia-provider-config-select'),provider=select?.value||'';
  const p=aureliaProviderAdminCatalogue.find(x=>x.provider===provider&&x.environment==='test');
  if(!p){toast('This gateway is not available for configuration.');return;}
@@ -4744,8 +4754,8 @@ window.testAureliaBackendConnection=async function(){
   persist();render();toast('Backend readiness check failed: '+(error?.name==='AbortError'?'request timed out':(error?.message||'connection unavailable')));
  }
 };
-window.requestAureliaPayBridge=function(){try{const native=window.AureliaNative;if(!native||typeof native.postMessage!=='function')throw new Error('Native Pay Bridge client is unavailable. Update the PMS APK.');native.postMessage(JSON.stringify({type:'payBridgeConnect'}));toast('Checking Pay Bridge installation, signing identity and native service…');setTimeout(()=>{try{render()}catch(_){ }},350)}catch(e){toast(e.message||'Could not start Pay Bridge connection')}};
- window.disconnectAureliaPayBridge=function(){try{window.AureliaNative.postMessage(JSON.stringify({type:'payBridgeDisconnect'}));toast('Pay Bridge disconnected')}catch(_){toast('Native Pay Bridge client is unavailable')}};
+window.requestAureliaPayBridge=function(){if(window.AURELIA_LOCAL_ONLY_RELEASE?.payBridge!==true){toast('Pay Bridge is disabled in this local-only release.');return false;}try{const native=window.AureliaNative;if(!native||typeof native.postMessage!=='function')throw new Error('Native Pay Bridge client is unavailable. Update the PMS APK.');native.postMessage(JSON.stringify({type:'payBridgeConnect'}));toast('Checking Pay Bridge installation, signing identity and native service…');setTimeout(()=>{try{render()}catch(_){ }},350)}catch(e){toast(e.message||'Could not start Pay Bridge connection')}};
+ window.disconnectAureliaPayBridge=function(){if(window.AURELIA_LOCAL_ONLY_RELEASE?.payBridge!==true){toast('Pay Bridge is disabled in this local-only release.');return false;}try{window.AureliaNative.postMessage(JSON.stringify({type:'payBridgeDisconnect'}));toast('Pay Bridge disconnected')}catch(_){toast('Native Pay Bridge client is unavailable')}};
  window.aureliaPayBridgeStatusChanged=function(){try{if(document.querySelector('.payment-platform-card'))render()}catch(_){ }};
  /* Optional Firebase owner authentication. Local PMS never waits for this subsystem. */
 (function(){
