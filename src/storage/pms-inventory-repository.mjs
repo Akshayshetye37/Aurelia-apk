@@ -63,12 +63,14 @@ const movementRows = (snapshot, previous) => {
     }
   }
   const additions = [];
+  const seenCounts = new Map();
   for (const row of nextRows) {
     const key = stableString(row);
-    const seen = additions.filter(entry => entry.key === key).length;
+    const seen = seenCounts.get(key) || 0;
     const already = priorCounts.get(key) || 0;
-    if (seen + 1 > (nextCounts.get(key) || 0) - already) continue;
-    additions.push({ key, row: clone(row), ordinal: already + seen + 1 });
+    const addedCount = (nextCounts.get(key) || 0) - already;
+    if (seen < addedCount) additions.push({ key, row: clone(row), ordinal: already + seen + 1 });
+    seenCounts.set(key, seen + 1);
   }
   return additions;
 };
