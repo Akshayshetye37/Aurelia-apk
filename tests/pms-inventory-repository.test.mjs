@@ -136,3 +136,23 @@ test("retired inventory identities cannot be resurrected", async () => {
     error => error.code === "INVENTORY_ID_RETIRED"
   );
 });
+
+test("independent repository instances reject stale cross-tab inventory edits", async () => {
+  const first = setup("cross-tab");
+  const second = setup("cross-tab");
+  const initial = { inv: [{ id: "soap-1", n: "Soap", q: 12, ro: 3, u: 2, price: 0 }] };
+  await first.inventory.syncSnapshot(initial);
+  await second.inventory.hydrateSnapshot(initial, { enabled: true });
+
+  const latest = structuredClone(initial);
+  latest.inv[0].q = 10;
+  await first.inventory.syncSnapshot(latest);
+
+  const stale = structuredClone(initial);
+  stale.inv[0].q = 8;
+  await assert.rejects(
+    second.inventory.syncSnapshot(stale),
+    error => error.code === "INVENTORY_VERSION_CONFLICT"
+  );
+  assert.equal((await first.bridge.fetchEntity("inventory", "soap-1")).data.q, 10);
+});
