@@ -212,3 +212,45 @@ test("inventory movement history is append-only and cannot be edited or removed"
   );
   assert.equal((await bridge.listEntities("ledger")).filter(row => row.data?.kind === "inventory_movement").length, 0);
 });
+
+
+test("new audit rows are append-only canonical entities committed with the recovery snapshot", async () => {
+  const { repository, bridge, inventory } = setup("audit-append");
+  const initial = {
+    t: [], inv: [], led: [],
+    aud: [{ action: "PMS opened", at: "2026-11-09T00:00:00.000Z" }]
+  };
+  await inventory.syncSnapshot(initial);
+  const next = structuredClone(initial);
+  next.aud.unshift({ action: "Stock issue", detail: "Tea · 1", at: "2026-11-09T00:01:00.000Z" });
+  await inventory.syncSnapshot(next);
+  const auditRows = (await bridge.listEntities("audit")).filter(row => row.data?.kind === "pms_audit");
+  assert.equal(auditRows.length, 1);
+  assert.deepEqual(auditRows[0].data.value, next.aud[0]);
+  assert.deepEqual((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot, next);
+  const hydrated = await inventory.hydrateSnapshot(initial, { enabled: true });
+  assert.deepEqual(hydrated.aud, next.aud);
+  const outbox = await repository.claimOutboxBatch({ deviceId: "device-local" });
+  assert.ok(outbox.some(event => event.entityType === "audit" && event.eventType === "pms.audit_recorded"));
+});
+
+test("audit history cannot be rewritten or removed by a later compatibility snapshot", async () => {
+  const { inventory } = setup("audit-no-rewrite");
+  const initial = {
+    t: [], inv: [], led: [],
+    aud: [{ action: "PMS opened", at: "2026-11-09T00:00:00.000Z" }]
+  };
+  await inventory.syncSnapshot(initial);
+  const changed = structuredClone(initial);
+  changed.aud[0].action = "PMS closed";
+  await assert.rejects(
+    inventory.syncSnapshot(changed),
+    error => error.code === "PMS_AUDIT_HISTORY_MUTATION"
+  );
+  const removed = structuredClone(initial);
+  removed.aud = [];
+  await assert.rejects(
+    inventory.syncSnapshot(removed),
+    error => error.code === "PMS_AUDIT_HISTORY_MUTATION"
+  );
+});
