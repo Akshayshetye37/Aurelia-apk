@@ -197,7 +197,12 @@ export class PmsInventoryRepository {
     const changes = [];
     for (const [id, target] of desired) {
       const old = current.get(id);
-      if (old && !retired(old) && same(old.data, target.data)) continue;
+      if (old && retired(old)) {
+        throw Object.assign(new Error("Retired inventory IDs cannot be reused; create a new item ID."), {
+          code: "INVENTORY_ID_RETIRED", inventoryId: id
+        });
+      }
+      if (old && same(old.data, target.data)) continue;
       changes.push({
         entityType: "inventory", entityId: id, expectedVersion: old?.version ?? 0,
         eventType: old ? "inventory.updated" : "inventory.created",
