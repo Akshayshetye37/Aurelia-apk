@@ -42,10 +42,10 @@ test("direct browser storage access outside src/storage never grows beyond the a
 
 test("guest photo persistence never falls back to localStorage and migrates legacy copies only after read-back", () => {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
-  assert.doesNotMatch(html, /localStorage\\.setItem\\(PHOTO_FALLBACK_PREFIX/);
-  assert.doesNotMatch(html, /localStorage\\.getItem\\(PHOTO_FALLBACK_PREFIX/);
+  assert.equal(html.includes("localStorage.setItem(PHOTO_FALLBACK_PREFIX"), false);
+  assert.equal(html.includes("localStorage.getItem(PHOTO_FALLBACK_PREFIX"), false);
   assert.match(html, /migrateLegacyPhotoFallback/);
   assert.match(html, /Restored photo archive failed exact read-back verification/);
   assert.match(html, /Legacy photo migration read-back mismatch/);
-  assert.match(html, /localStorage\\.removeItem\\(PHOTO_FALLBACK_PREFIX/);
+  assert.ok(html.includes("localStorage.removeItem(PHOTO_FALLBACK_PREFIX"));
 });
