@@ -110,9 +110,7 @@ export function buildFolioEvidenceExport(state, sourceSha256) {
     if (payments.some(payment => payment.method.toLowerCase() === "upi" &&
         payment.source === "staff_review" && payment.verificationConfirmed)) {
       const evidence = (Array.isArray(state.sig) ? state.sig : [])
-        .filter(row => String(row?.b ?? row?.bookingId ?? "") === String(booking.id) ||
-          payments.some(payment => payment.source === "staff_review" &&
-            payment.reference?.last4 && maskReference(row?.ref)?.last4 === payment.reference.last4));
+        .filter(row => String(row?.b ?? row?.bookingId ?? "") === String(booking.id));
       summary.staffReviewEvidence = evidence.map(row => ({
         evidenceId: row.id == null ? null : String(row.id),
         status: String(row.st ?? ""),
