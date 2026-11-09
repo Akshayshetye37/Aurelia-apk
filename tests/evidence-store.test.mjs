@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
-import { createEvidenceStore } from "../src/payments/evidence-store.mjs";
+import { createEvidenceStore } from "../src/storage/indexeddb-evidence-store.mjs";
 import { AUTO_FOLIO_SETTLEMENT_ENABLED, assertAutoFolioSettlementEnabled } from "../src/payments/settlement-gate.mjs";
 
 const base = (overrides = {}) => ({
