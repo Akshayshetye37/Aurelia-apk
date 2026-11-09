@@ -164,9 +164,4 @@ class LockGateActivity : Activity() {
     private fun showError(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
-
-    override fun onBackPressed() {
-        // Launcher is the only entry path; back exits instead of bypassing the gate.
-        super.onBackPressed()
-    }
 }
