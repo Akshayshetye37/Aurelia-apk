@@ -33,6 +33,7 @@ test("gateway and backend entry points fail closed in the local-only release", (
     "window.loadAureliaProviderConfiguration=async function(){\n if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true)",
     "window.saveAureliaProviderCredentials=async function(){\n if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true)",
     "window.activateAureliaPaymentProvider=async function(provider){\n if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true)",
+    "window.aureliaPaymentAdminRequest=async function(path,method='GET',body,options={}){\n if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true)",
     "window.requestAureliaPayBridge=function(){if(window.AURELIA_LOCAL_ONLY_RELEASE?.payBridge!==true)",
     "window.disconnectAureliaPayBridge=function(){if(window.AURELIA_LOCAL_ONLY_RELEASE?.payBridge!==true)"
   ]) assert.ok(index.includes(marker), "missing local-only guard: " + marker.split("\n")[0]);
