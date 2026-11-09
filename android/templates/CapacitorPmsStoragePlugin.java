@@ -1,3 +1,4 @@
+// CI path-filter probe: this branch intentionally changes only this Java template.
 // Native template: keep this path covered by settlement-foundation CI.
 package com.aurelia.pms;
 
