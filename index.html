@@ -472,7 +472,7 @@ window.AureliaAdsBridge = {
 </script>
 
 
-<div class="app"><div class="top"><div class="crest" id="crest"></div><div class="pill" id="connection-status"><i></i>Local PMS · Internet optional</div></div><main id="v"></main></div>
+<div class="app"><div class="top"><div class="crest" id="crest"></div><div class="pill" id="connection-status"><i></i>Local PMS · Internet optional</div><div class="pill" id="save-status" role="status" aria-live="polite" data-state="idle"><i></i>Device save · Ready</div></div><main id="v"></main></div>
 <nav class="dock" id="dock" style="--i:0"></nav>
 <div class="sheet" id="sh"><div class="scrim" onclick="closeS()"></div><div class="pan" id="pan"></div></div><div id="toast"></div>
 <script type="application/x-aurelia-deferred" data-aurelia-original-type="classic">
@@ -5684,7 +5684,22 @@ try {
       window.__AURELIA_CANONICAL_BOOTSTRAP_RAW = JSON.stringify(hydrated);
     }
   }
-  const operationalFeedback = new PmsOperationalFeedback();
+  const operationalFeedback = new PmsOperationalFeedback({
+    onChange: status => {
+      const indicator = document.getElementById("save-status");
+      if (!indicator) return;
+      indicator.dataset.state = status.state;
+      const labels = {
+        idle: "Device save · Ready",
+        saving: "Saving to this device…",
+        saved: status.message || "Saved on this device",
+        save_failed: "Save failed · " + status.message,
+        database_unavailable: "Database unavailable · " + status.message,
+        recovery_required: "Recovery required · " + status.message
+      };
+      indicator.textContent = labels[status.state] || "Device save status unavailable";
+    }
+  });
   window.AureliaOperationalFeedback = Object.freeze({
     get status() { return operationalFeedback.status; },
     subscribe: listener => operationalFeedback.subscribe(listener)
