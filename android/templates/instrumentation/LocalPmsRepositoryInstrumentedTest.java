@@ -242,7 +242,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
   }
 
   @Test public void migrationPreservesExactRawSnapshotAndIsReplaySafe() throws Exception {
-    String raw = "{\\"rooms\\":[{\\"n\\":\\"101\\",\\"r\\":1200}],\\"b\\":[{\\"id\\":7,\\"p\\":500,\\"pays\\":[{\\"a\\":200,\\"m\\":\\"Cash\\"}]}],\\"g\\":[{\\"id\\":\\"g-1\\"}],\\"t\\":[],\\"exp\\":[],\\"inv\\":[],\\"led\\":[],\\"aud\\":[],\\"set\\":{\\"cur\\":\\"INR\\"},\\"menu\\":{}}";
+    String raw = "{\"rooms\":[{\"n\":\"101\",\"r\":1200}],\"b\":[{\"id\":7,\"p\":500,\"pays\":[{\"a\":200,\"m\":\"Cash\"}]}],\"g\":[{\"id\":\"g-1\"}],\"t\":[],\"exp\":[],\"inv\":[],\"led\":[],\"aud\":[],\"set\":{\"cur\":\"INR\"},\"menu\":{}}";
     JSONObject first = repository.migrateLegacySnapshot("migration-test", "aurelia_lodge_v2",
       "2026-11-09T12:00:00.000Z", raw);
     assertFalse(first.getBoolean("alreadyMigrated"));
@@ -266,7 +266,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
   @Test public void migrationRefusesNonEmptyRepositoryWithoutCreatingSnapshot() throws Exception {
     repository.transactBusinessChange("folio", "folio-1", 0, data("existing"),
       event("folio-event", "folio", "folio-1", 1));
-    String raw = "{\\"rooms\\":[],\\"b\\":[],\\"g\\":[],\\"t\\":[],\\"exp\\":[],\\"inv\\":[],\\"led\\":[],\\"aud\\":[],\\"set\\":{},\\"menu\\":{}}";
+    String raw = "{\"rooms\":[],\"b\":[],\"g\":[],\"t\":[],\"exp\":[],\"inv\":[],\"led\":[],\"aud\":[],\"set\":{},\"menu\":{}}";
     boolean rejected = false;
     try {
       repository.migrateLegacySnapshot("migration-rejected", "aurelia_lodge_v2",
