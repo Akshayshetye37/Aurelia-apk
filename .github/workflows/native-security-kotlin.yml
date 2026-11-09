@@ -83,7 +83,15 @@ jobs:
           grep -R --include='*.gradle' --include='*.gradle.kts' -E 'com.android.tools.build:gradle:8.7.2|com.android.application.*8.7.2' .
           grep -F 'gradle-8.11.1-all.zip' gradle/wrapper/gradle-wrapper.properties
           grep -R --include='*.gradle' --include='*.gradle.kts' -F 'allWarningsAsErrors.set(true)' app
-          ./gradlew --version
+          for attempt in 1 2 3; do
+            if ./gradlew --version; then
+              exit 0
+            fi
+            echo "Gradle distribution fetch attempt $attempt failed; retrying."
+            sleep 15
+          done
+          echo "::error::Unable to fetch the pinned Gradle distribution after three attempts."
+          exit 1
 
       - name: Compile, assemble, lint and unit-test exact Android candidate
         working-directory: android
