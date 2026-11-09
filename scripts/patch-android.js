@@ -526,6 +526,9 @@ fs.copyFileSync(localPaymentLedgerTemplate, path.join(javaDir, 'LocalPaymentLedg
 const localPmsRepositoryTemplate = path.join(androidDir, 'templates', 'LocalPmsRepository.java');
 if (!fs.existsSync(localPmsRepositoryTemplate)) throw new Error('LocalPmsRepository.java template is missing.');
 fs.copyFileSync(localPmsRepositoryTemplate, path.join(javaDir, 'LocalPmsRepository.java'));
+const storageSerializationExceptionTemplate = path.join(androidDir, 'templates', 'StorageSerializationException.java');
+if (!fs.existsSync(storageSerializationExceptionTemplate)) throw new Error('StorageSerializationException.java template is missing.');
+fs.copyFileSync(storageSerializationExceptionTemplate, path.join(javaDir, 'StorageSerializationException.java'));
 const pmsStoragePluginTemplate = path.join(androidDir, 'templates', 'CapacitorPmsStoragePlugin.java');
 if (!fs.existsSync(pmsStoragePluginTemplate)) throw new Error('CapacitorPmsStoragePlugin.java template is missing.');
 fs.copyFileSync(pmsStoragePluginTemplate, path.join(javaDir, 'CapacitorPmsStoragePlugin.java'));
