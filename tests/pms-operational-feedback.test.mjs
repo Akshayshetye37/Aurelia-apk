@@ -60,6 +60,6 @@ test("status snapshots are immutable and listeners receive transitions", () => {
   feedback.subscribe(status => states.push(status.state));
   const operation = feedback.beginSave();
   feedback.completeSave(operation);
-  assert.deepEqual(states, ["saving", "saved"]);
+  assert.deepEqual(states, ["idle", "saving", "saved"]);
   assert.equal(Object.isFrozen(feedback.status), true);
 });
