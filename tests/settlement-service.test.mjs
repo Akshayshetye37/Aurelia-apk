@@ -26,7 +26,13 @@ test("offline manual folio operations remain enabled while gateway controls stay
     blockAllBalanceMutations: false,
     automaticSettlement: true,
     liveCollection: true,
-    nativeSettlementBridge: true
+    nativeSettlementBridge: true,
+    onlineGatewayPayments: false,
+    payBridge: false,
+    cloudSync: false,
+    uiCutover: false,
+    ccavenue: false,
+    enabledProviders: []
   });
 });
 
