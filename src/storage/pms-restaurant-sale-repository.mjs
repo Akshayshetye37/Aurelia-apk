@@ -177,11 +177,16 @@ export class PmsRestaurantSaleRepository {
         });
       }
     }
+    const included = new Set(normalized.map(sale => sale.id));
     return Object.freeze({
       count: storedSales.length,
       created: changes.length,
-      // Preserve the caller's array order so index-derived legacy IDs remain stable.
-      sales: normalized.map(sale => clone(storedById.get(sale.id)))
+      // Preserve caller order for legacy fallback IDs, then append canonical
+      // records that may have committed after the caller's stale snapshot.
+      sales: [
+        ...normalized.map(sale => clone(storedById.get(sale.id))),
+        ...storedSales.filter(sale => !included.has(sale.id)).map(clone)
+      ]
     });
   }
 }
