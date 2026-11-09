@@ -328,3 +328,37 @@ test("bootstrap projects and exposes canonical inventory before the PMS UI start
   assert.equal((await result.repository.getEntity("inventory", "coffee-1")).version, 1);
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
 });
+
+test("bootstrap persists canonical preparation in the device repository without enabling UI cutover", async () => {
+  const raw = JSON.stringify(state);
+  const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: raw });
+  const result = await coordinator("persisted-authority-state", storage).initializeApplication();
+  assert.equal(result.authority.data.status, "PREPARED_COMPATIBILITY");
+  assert.equal(result.authority.data.uiCutover, false);
+  assert.equal(result.authority.data.projectionStatus, "VERIFIED");
+  const persisted = await result.repository.getEntity("audit", "pms:authority");
+  assert.equal(persisted.version, 1);
+  assert.equal(persisted.data.migrationId, result.migration.migrationId);
+  assert.equal(persisted.data.status, "PREPARED_COMPATIBILITY");
+});
+
+test("bootstrap refuses to start the legacy UI after canonical authority is persisted", async () => {
+  const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: JSON.stringify(state) });
+  const repository = new IndexedDbPmsRepository({ indexedDBImpl: indexedDB, databaseName: "authority-cutover-block" });
+  await repository.database();
+  const bridge = new PmsRepositoryBridge({ tenantId: "tenant-authority", propertyId: "property-authority", deviceId: "device-authority" });
+  bridge.bindActiveEngine(repository);
+  await bridge.mutateEntity({
+    entityType: "audit", entityId: "pms:authority", expectedVersion: 0,
+    eventType: "test.authority_seed",
+    mutate: data => Object.assign(data, {
+      schemaVersion: 1, status: "CANONICAL_AUTHORITATIVE", uiCutover: true,
+      migrationId: null, projectionStatus: "VERIFIED",
+      preparedAt: "2026-11-09T00:00:00.000Z", updatedAt: "2026-11-09T00:00:00.000Z"
+    })
+  });
+  const app = coordinator("authority-cutover-block", storage, { repository });
+  await assert.rejects(app.initializeApplication(), error => error.code === "PMS_CANONICAL_AUTHORITY_CUTOVER_REQUIRED");
+  assert.equal(app.status, "FAILED_CLOSED");
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), JSON.stringify(state));
+});
