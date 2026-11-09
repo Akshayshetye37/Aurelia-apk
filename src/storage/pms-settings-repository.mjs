@@ -123,7 +123,7 @@ export class PmsSettingsRepository {
 
     const committed = await this.bridge.fetchEntity("settings", "property-settings");
     if (!committed || committed.version !== actualVersion + 1 ||
-        JSON.stringify(committed.data) !== JSON.stringify(next)) {
+        !same(committed.data, next)) {
       throw Object.assign(new Error("Property settings commit failed exact repository read-back."), {
         code: "SETTINGS_READBACK_FAILED"
       });
