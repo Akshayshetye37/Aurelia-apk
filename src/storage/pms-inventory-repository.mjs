@@ -371,7 +371,7 @@ export class PmsInventoryRepository {
       };
       const existing = await this.bridge.fetchEntity("ledger", id);
       if (existing) {
-        if (!same(existing.data, data)) {
+        if (!same({ kind: existing.data.kind, source: existing.data.source, value: existing.data.value }, data)) {
           throw Object.assign(new Error("Inventory movement identity collision; refusing to overwrite ledger history."), {
             code: "INVENTORY_MOVEMENT_ID_COLLISION", movementId: id
           });
@@ -392,7 +392,7 @@ export class PmsInventoryRepository {
       const data = { kind: "pms_audit", source: "snapshot_audit", value: audit.row };
       const existing = await this.bridge.fetchEntity("audit", id);
       if (existing) {
-        if (!same(existing.data, data)) {
+        if (!same({ kind: existing.data.kind, source: existing.data.source, value: existing.data.value }, data)) {
           throw Object.assign(new Error("PMS audit identity collision; refusing to overwrite audit history."), {
             code: "PMS_AUDIT_ID_COLLISION", auditId: id
           });
