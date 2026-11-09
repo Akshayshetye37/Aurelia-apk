@@ -24,7 +24,7 @@ function setup(name) {
 
 test("inventory rows and recovery snapshot are created in one IndexedDB transaction", async () => {
   const { repository, bridge, inventory } = setup("atomic-create");
-  const snapshot = { inv: [{ id: "towel-1", n: "Towels", q: 5, ro: 2, u: 10, price: 0, sellable: false }] };
+  const snapshot = { t: [], inv: [{ id: "towel-1", n: "Towels", q: 5, ro: 2, u: 10, price: 0, sellable: false }] };
   const result = await inventory.syncSnapshot(snapshot);
   assert.equal(result.changed, 1);
   const item = await bridge.fetchEntity("inventory", "towel-1");
@@ -41,7 +41,7 @@ test("inventory rows and recovery snapshot are created in one IndexedDB transact
 
 test("POS stock deductions update canonical quantity and recovery snapshot", async () => {
   const { bridge, inventory } = setup("pos-deduction");
-  const before = { inv: [{ id: "coffee-1", n: "Coffee", q: 8, ro: 2, u: 5, price: 20, sellable: true }] };
+  const before = { t: [], inv: [{ id: "coffee-1", n: "Coffee", q: 8, ro: 2, u: 5, price: 20, sellable: true }] };
   await inventory.syncSnapshot(before);
   const after = structuredClone(before);
   after.inv[0].q -= 2;
@@ -56,9 +56,9 @@ test("POS stock deductions update canonical quantity and recovery snapshot", asy
 
 test("inventory hydration restores stable IDs and canonical quantities over stale cache data", async () => {
   const { inventory } = setup("hydrate");
-  const canonical = { inv: [{ id: "legacy-inventory-0", n: "Soap", q: 7, ro: 2, u: 3, price: 0 }] };
+  const canonical = { t: [], inv: [{ id: "legacy-inventory-0", n: "Soap", q: 7, ro: 2, u: 3, price: 0 }] };
   await inventory.syncSnapshot(canonical);
-  const stale = { inv: [{ n: "Soap", q: 2, ro: 2, u: 3, price: 0 }] };
+  const stale = { t: [], inv: [{ n: "Soap", q: 2, ro: 2, u: 3, price: 0 }] };
   const hydrated = await inventory.hydrateSnapshot(stale, { enabled: true });
   assert.equal(hydrated.inv.length, 1);
   assert.equal(hydrated.inv[0].id, canonical.inv[0].id);
@@ -69,7 +69,7 @@ test("inventory hydration restores stable IDs and canonical quantities over stal
 
 test("inventory retirement is a tombstone and cannot silently discard canonical history", async () => {
   const { bridge, inventory } = setup("retire");
-  await inventory.syncSnapshot({ inv: [{ id: "minibar-1", n: "Water", q: 3, ro: 1, u: 5, price: 20 }] });
+  await inventory.syncSnapshot({ t: [], inv: [{ id: "minibar-1", n: "Water", q: 3, ro: 1, u: 5, price: 20 }] });
   await inventory.syncSnapshot({ inv: [] });
   const stored = await bridge.fetchEntity("inventory", "minibar-1");
   assert.equal(stored.data.retired, true);
@@ -78,7 +78,7 @@ test("inventory retirement is a tombstone and cannot silently discard canonical 
 
 test("stale inventory snapshots fail closed instead of overwriting canonical stock", async () => {
   const { bridge, inventory } = setup("divergence");
-  const original = { inv: [{ id: "linen-1", n: "Linen", q: 10, ro: 2, u: 8, price: 0 }] };
+  const original = { t: [], inv: [{ id: "linen-1", n: "Linen", q: 10, ro: 2, u: 8, price: 0 }] };
   await inventory.syncSnapshot(original);
   await inventory.hydrateSnapshot(original, { enabled: true });
   const live = structuredClone(original);
@@ -119,7 +119,7 @@ test("invalid inventory quantities, prices and duplicate IDs are rejected before
 
 test("numeric legacy inventory IDs are normalized to stable string entity keys", async () => {
   const { bridge, inventory } = setup("numeric-legacy-id");
-  const snapshot = { inv: [{ id: 42, n: "Mini bar water", q: 6, ro: 2, u: 4, price: 15 }] };
+  const snapshot = { t: [], inv: [{ id: 42, n: "Mini bar water", q: 6, ro: 2, u: 4, price: 15 }] };
   await inventory.syncSnapshot(snapshot);
   const stored = await bridge.fetchEntity("inventory", "42");
   assert.equal(stored.data.id, "42");
@@ -141,7 +141,7 @@ test("retired inventory identities cannot be resurrected", async () => {
 test("independent repository instances reject stale cross-tab inventory edits", async () => {
   const first = setup("cross-tab");
   const second = setup("cross-tab");
-  const initial = { inv: [{ id: "soap-1", n: "Soap", q: 12, ro: 3, u: 2, price: 0 }] };
+  const initial = { t: [], inv: [{ id: "soap-1", n: "Soap", q: 12, ro: 3, u: 2, price: 0 }] };
   await first.inventory.syncSnapshot(initial);
   await second.inventory.hydrateSnapshot(initial, { enabled: true });
 
