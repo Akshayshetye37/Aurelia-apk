@@ -10,12 +10,12 @@
     "diagnose:accounting": "node scripts/diagnose-accounting.mjs"
   },
   "dependencies": {
-    "@capacitor/android": "^7.4.3",
-    "@capacitor/core": "^7.4.3"
+    "@capacitor/android": "7.4.3",
+    "@capacitor/core": "7.4.3"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.4.3",
-    "fake-indexeddb": "^6.2.4",
-    "sharp": "^0.34.3"
+    "@capacitor/cli": "7.4.3",
+    "fake-indexeddb": "6.2.4",
+    "sharp": "0.34.3"
   }
 }
