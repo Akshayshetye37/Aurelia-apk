@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { indexedDB, IDBKeyRange } from "fake-indexeddb";
-import { IndexedDbPaymentIntentStore } from "../src/payments/indexeddb-payment-intent-store.mjs";
+import { IndexedDbPaymentIntentStore } from "../src/storage/indexeddb-payment-intent-store.mjs";
 
 const intent = (overrides = {}) => ({
   requestId: "req-local-1", bookingId: "booking-1", folioId: "folio-1",
