@@ -19,6 +19,12 @@ class AureliaAppManager(
 
     data class Enrollment(val envelopeJson: String, val biometricKeyRequired: Boolean = false)
 
+    /** Called only by the launcher after confirming no prior enrollment artifacts exist. */
+    @Synchronized
+    fun initializeForEnrollment() {
+        lockout.initializeForEnrollment()
+    }
+
     /** Generates a fresh DEK and wraps it under the new PIN. Caller persists the envelope atomically. */
     @Synchronized
     fun enroll(pin: CharArray): Enrollment {
