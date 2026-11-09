@@ -72,7 +72,8 @@ export function scanStorageBoundaries({ rootDir = process.cwd(), includeLegacyIn
       const lines = [...new Set(legacyMatches.map(match =>
         source.slice(0, match.index).split("\n").length
       ))];
-      violations.push(relative + " references prohibited key aurelia_lodge_v2 outside its migration boundary (lines " +
+      // Avoid re-emitting the prohibited literal in the diagnostic itself.
+      violations.push(relative + " references the legacy business snapshot key outside its migration boundary (lines " +
         lines.join(", ") + ")");
     }
   }
