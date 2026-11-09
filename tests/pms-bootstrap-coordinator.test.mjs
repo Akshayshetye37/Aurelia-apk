@@ -175,6 +175,10 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(html, /window\.__AURELIA_CANONICAL_SALES/);
   assert.match(html, /compatibility\.syncRestaurantTables\(snapshot\)/);
   assert.match(html, /compatibility\.syncInventory\(snapshot\)/);
+  assert.match(html, /async function addI\(c,i\)/);
+  assert.match(html, /Restaurant stock issue/);
+  assert.match(html, /async function sellStockItem\(name,price\)/);
+  assert.match(html, /Retail stock issue/);
   assert.match(html, /commitInventoryMutation: input => boot\.inventoryRepository\.syncSnapshot\(input\.snapshot\)/);
   assert.match(html, /window\.__AURELIA_CANONICAL_TABLES/);
   assert.match(loader, /window\.__AURELIA_CANONICAL_SETTINGS/);
