@@ -7,6 +7,9 @@ on:
     paths:
       - "src/payments/**"
       - "tests/**"
+      - "android/templates/**/*.java"
+      - "android/templates/**/*.kt"
+      - "scripts/patch-android.js"
       - "package.json"
       - ".github/workflows/settlement-foundation-ci.yml"
   pull_request:
@@ -15,6 +18,9 @@ on:
     paths:
       - "src/payments/**"
       - "tests/**"
+      - "android/templates/**/*.java"
+      - "android/templates/**/*.kt"
+      - "scripts/patch-android.js"
       - "package.json"
       - ".github/workflows/settlement-foundation-ci.yml"
 
