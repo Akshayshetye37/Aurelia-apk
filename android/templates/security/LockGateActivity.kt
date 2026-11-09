@@ -36,10 +36,13 @@ class LockGateActivity : Activity() {
         envelopeStore = AureliaEnvelopeStore(this)
         val enrolled = AureliaSecurityRuntime.isEnrolled()
         val envelopeExists = envelopeStore.exists()
-        if (enrolled != envelopeExists) {
-            throw SecurityException("PIN enrollment state is inconsistent; refusing setup or unlock.")
+        if (enrolled && !envelopeExists) {
+            throw SecurityException("PIN envelope is missing; refusing setup or unlock.")
         }
-        enrollmentMode = !enrolled
+        // Recover safely from process death after the envelope was durably written
+        // but before the separate enrollment marker was committed.
+        enrollmentMode = !enrolled && !envelopeExists
+        if (enrollmentMode) manager.initializeForEnrollment()
         render()
     }
 
@@ -121,8 +124,11 @@ class LockGateActivity : Activity() {
                 openPms()
             } else {
                 val envelope = readEnvelope()
-                if (manager.unlock(first, envelope)) openPms()
-                else showError("Incorrect PIN.")
+                if (manager.unlock(first, envelope)) {
+                    // Completes a possibly interrupted enrollment-marker write.
+                    AureliaSecurityRuntime.markEnrolled()
+                    openPms()
+                } else showError("Incorrect PIN.")
             }
         } catch (failure: SecurityException) {
             showError(failure.message ?: "Security verification failed.")
