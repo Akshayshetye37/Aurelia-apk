@@ -5,6 +5,7 @@ import { projectLegacyPmsDomains } from "../src/storage/pms-domain-cutover.mjs";
 const snapshot = () => ({
   rooms: [{ n: "101", t: "Deluxe", r: 1200, s: "ready" }],
   g: [{ id: "guest-1", n: "Guest One" }],
+  t: [{ n: 1, s: 2, o: [["Tea", 20, "din"]] }],
   b: [{ id: 7, folioId: "folio-7", g: "Guest One", p: 500, pays: [{ a: 200, amountPaise: 20000 }], payments: [] }],
   inv: [{ id: "item-1", n: "Towels", q: 5 }],
   exp: [{ amount: 100, note: "Utilities" }],
@@ -49,8 +50,11 @@ function fakeBridge() {
 test("projects legacy operational domains and preserves financial source values without reconciling them", async () => {
   const bridge = fakeBridge();
   const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-test" });
-  assert.equal(result.total, 9);
-  assert.equal(result.projected, 9);
+  assert.equal(result.total, 10);
+  assert.equal(result.projected, 10);
+  const table = bridge.entities.get("restaurant_table:table-1");
+  assert.deepEqual(table.data, { n: 1, s: 2, o: [["Tea", 20, "din"]], id: "table-1" });
+  assert.equal(result.manifest.counts.restaurant_table, 1);
   const settings = bridge.entities.get("settings:property-settings");
   assert.deepEqual(settings.data.set, { cur: "₹", name: "Aurelia" });
   assert.deepEqual(settings.data.menu, { items: [{ id: "breakfast", name: "Breakfast" }] });
@@ -93,9 +97,10 @@ test("projection rejects missing stable booking identity and preserves unnormali
 
 test("single-record trailing batch uses the atomic single-entity transaction", async () => {
   const bridge = fakeBridge();
-  const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-single-tail", batchSize: 8 });
-  assert.equal(result.projected, 9);
+  const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-single-tail", batchSize: 9 });
+  assert.equal(result.projected, 10);
   assert.ok(bridge.entities.has("settings:property-settings"));
+  assert.ok(bridge.entities.has("restaurant_table:table-1"));
   assert.ok(bridge.entities.has("audit:legacy-domain-projection:mig-single-tail"));
 });
 
@@ -116,5 +121,20 @@ test("projection rejects malformed settings instead of silently dropping them", 
   await assert.rejects(
     projectLegacyPmsDomains({ bridge, snapshot: invalid, migrationId: "mig-invalid-settings" }),
     /settings must be a plain object/
+  );
+});
+
+test("projection rejects duplicate or invalid restaurant table identities", async () => {
+  const bridge = fakeBridge(), duplicate = snapshot();
+  duplicate.t.push({ n: "1", s: 4, o: [] });
+  await assert.rejects(
+    projectLegacyPmsDomains({ bridge, snapshot: duplicate, migrationId: "mig-duplicate-table" }),
+    /table numbers are duplicated/
+  );
+  const invalid = snapshot();
+  invalid.t[0].n = 1.5;
+  await assert.rejects(
+    projectLegacyPmsDomains({ bridge, snapshot: invalid, migrationId: "mig-invalid-table" }),
+    /positive integer table number/
   );
 });
