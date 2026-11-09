@@ -160,7 +160,7 @@ for (const feature of [
   '<uses-feature android:name="android.hardware.telephony" android:required="false" />'
 ]) {
   if (!manifest.includes(feature)) {
-    manifest = manifest.replace(/<application\\b/, feature + '\\n    <application');
+    manifest = manifest.replace(/<application\b/, feature + '\n    <application');
   }
 }
 
