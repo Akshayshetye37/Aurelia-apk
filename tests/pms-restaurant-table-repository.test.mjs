@@ -34,8 +34,9 @@ test("restaurant tables project to settlement-compatible numeric entity IDs and 
   assert.deepEqual({ n: two.data.n, s: two.data.s, o: two.data.o }, { n: 2, s: 4, o: [["Tea", 20, "din"]] });
   assert.equal(typeof one.data.updatedAt, "string");
   const outbox = await repository.claimOutboxBatch({ deviceId: "device-local" });
-  assert.equal(outbox.length, 2);
-  assert.ok(outbox.every(event => event.entityType === "restaurant_table"));
+  assert.equal(outbox.length, 3);
+  assert.equal(outbox.filter(event => event.entityType === "restaurant_table").length, 2);
+  assert.equal(outbox.filter(event => event.entityType === "audit").length, 1);
   assert.deepEqual((await tables.list()).map(row => row.n), [1, 2]);
 });
 
@@ -51,7 +52,9 @@ test("restaurant table updates are versioned and idempotent", async () => {
   assert.equal(changed.changed, 1);
   assert.equal((await bridge.fetchEntity("restaurant_table", "1")).version, 2);
   const events = await repository.claimOutboxBatch({ deviceId: "device-local" });
-  assert.equal(events.length, 2);
+  assert.equal(events.length, 4);
+  assert.equal(events.filter(event => event.entityType === "restaurant_table").length, 2);
+  assert.equal(events.filter(event => event.entityType === "audit").length, 2);
 });
 
 test("removed tables are tombstoned and never physically deleted", async () => {
