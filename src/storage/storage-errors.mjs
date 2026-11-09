@@ -1,7 +1,7 @@
 // Typed storage failures shared by IndexedDB and native SQLite adapters.
 export class StorageFullError extends Error {
   constructor(cause) {
-    super("Device storage is full; the change was NOT saved. Free space or export a backup, then retry.");
+    super("Device storage is full; the change was NOT saved. Free device space before retrying.");
     this.name = "StorageFullError";
     this.code = "STORAGE_FULL";
     if (cause) this.cause = cause;
