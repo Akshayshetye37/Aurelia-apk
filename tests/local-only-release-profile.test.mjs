@@ -15,7 +15,7 @@ test("release profile defaults to local-only with all optional network paths dis
   assert.deepEqual(normalizeSyncConfig({}), { enabled: false, endpoint: "", schemaVersion: 1 });
 
   assert.match(html, /AURELIA_LOCAL_ONLY_RELEASE=Object\.freeze\(\{/);
-  assert.match(html, /uiCutover:false,cloudSync:false,gatewayPayments:false,payBridge:false/);
+  assert.match(html, /uiCutover:false,cloudSync:false,sync:false,gatewayPayments:false,payBridge:false/);
   assert.match(html, /ccavenue:false,enabledProviders:Object\.freeze\(\[\]\)/);
   assert.match(html, /gatewayPayments!==true/);
   assert.match(html, /payBridge!==true/);
