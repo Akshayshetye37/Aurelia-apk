@@ -199,7 +199,7 @@ It projects rooms, guests, bookings, preserved folio source values, inventory, e
 
 ## CI evidence and verification boundary
 
-The active branch is `feature/multi-provider-payment-backend`. GitHub returned no workflow runs and no commit status checks for the latest storage recovery commit. The older [PMS workflow run 42380831922](https://github.com/Akshayshety37/Aurelia-apk/actions/runs/42380831922) is historical evidence for its recorded SHA only and does not establish verification of the current branch head. No new Android build is authorized by this audit.
+The active branch is `feature/multi-provider-payment-backend`. GitHub returned no workflow runs and no commit status checks for the latest storage recovery commit. The older [PMS workflow run 42380831922](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42380831922) is historical evidence for its recorded SHA only and does not establish verification of the current branch head. No new Android build is authorized by this audit.
 
 Historical evidence is commit-scoped and must not be treated as an automatic pass for later revisions:
 
