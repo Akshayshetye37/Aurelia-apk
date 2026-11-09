@@ -16,6 +16,7 @@ import { PmsRestaurantTableRepository } from "./pms-restaurant-table-repository.
 import { PmsRestaurantSaleRepository } from "./pms-restaurant-sale-repository.mjs";
 import { PmsInventoryRepository } from "./pms-inventory-repository.mjs";
 import { PmsExpenseRepository } from "./pms-expense-repository.mjs";
+import { assertCompatibilityUiAllowed, ensureCanonicalPrepared } from "./pms-authority-state.mjs";
 
 export const AURELIA_LEGACY_STATE_KEY = "aurelia_lodge_v2";
 export const AURELIA_MIGRATION_STATUS_KEY = "aurelia_canonical_migration_status";
@@ -148,6 +149,7 @@ export class PmsBootstrapCoordinator {
       deviceId: identity.deviceId, now: this.now
     });
     bridge.bindActiveEngine(this.repository, identity);
+    await assertCompatibilityUiAllowed(bridge);
     const settingsRepository = new PmsSettingsRepository({ bridge });
     const restaurantTableRepository = new PmsRestaurantTableRepository({ bridge, now: this.now });
     const restaurantSaleRepository = new PmsRestaurantSaleRepository({ bridge });
@@ -180,11 +182,16 @@ export class PmsBootstrapCoordinator {
         bridge, snapshot: source.parsed, migrationId: migration.migrationId
       });
     }
+    const authority = await ensureCanonicalPrepared({
+      bridge, migrationId: migration.migrationId || null,
+      projectionStatus: domainProjection?.manifest?.status === "VERIFIED" ? "VERIFIED" : (domainProjection ? "PENDING" : "NOT_REQUIRED"),
+      now: this.now
+    });
 
     return Object.freeze({
       success: true, environment: this.environment, storageEngine: this.storageEngine,
       persistentStorage: Object.freeze({ requested: Boolean(this.persistenceRequested), granted: this.persistenceGranted }),
-      uiCutover: false, recovery, migration, domainProjection,
+      uiCutover: false, authority, recovery, migration, domainProjection,
       repository: this.repository, identity, bridge, settingsRepository, restaurantTableRepository, restaurantSaleRepository, inventoryRepository, expenseRepository
     });
   }
