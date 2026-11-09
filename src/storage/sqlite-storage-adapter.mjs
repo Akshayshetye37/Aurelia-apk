@@ -1,7 +1,21 @@
 import { StorageAdapter, assertStorageAdapter } from "./storage-adapter.mjs";
+import { StorageFullError } from "./storage-errors.mjs";
 const STORES=new Set(["meta","entities","outbox","migration_snapshots","legacy_backup"]);
 export class SqliteStorageAdapter extends StorageAdapter{
- constructor(plugin){super();if(!plugin)throw new TypeError("Native SQLite plugin required");this.plugin=plugin;}
+ constructor(plugin){
+  super();
+  if(!plugin)throw new TypeError("Native SQLite plugin required");
+  this.plugin=new Proxy(plugin,{
+   get(target,property,receiver){
+    const member=Reflect.get(target,property,receiver);
+    if(typeof member!=="function")return member;
+    return (...args)=>Promise.resolve(member.apply(target,args)).catch(error=>{
+     if(error?.code==="STORAGE_FULL")throw new StorageFullError(undefined,{cause:error});
+     throw error;
+    });
+   }
+  });
+ }
  async transaction(fn){
   if(typeof fn!=="function")throw new TypeError("transaction callback required");
   const operations=[];
