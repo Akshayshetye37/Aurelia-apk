@@ -82,47 +82,32 @@ jobs:
             cd android
             ./gradlew --no-daemon --stacktrace --info connectedDebugAndroidTest
             gradle_status=$?
-
             diagnostics="app/build/diagnostics"
             mkdir -p "$diagnostics"
             {
-              echo "=== emulator ==="
+              echo '=== emulator ==='
               adb devices -l
               adb shell getprop ro.build.fingerprint
               adb shell getprop ro.build.version.sdk
-              echo "=== registered instrumentation ==="
+              echo '=== registered instrumentation ==='
               adb shell pm list instrumentation -f
-              echo "=== app process exit history ==="
+              echo '=== process exit history ==='
               adb shell dumpsys activity exit-info com.aurelia.pms
               adb shell dumpsys activity exit-info com.aurelia.pms.test
-              echo "=== test package metadata ==="
+              echo '=== test package metadata ==='
               adb shell dumpsys package com.aurelia.pms.test
             } > "$diagnostics/device-state.txt" 2>&1 || true
-
             adb logcat -b crash -d -v threadtime > "$diagnostics/logcat-crash.txt" 2>&1 || true
             adb logcat -b all -d -v threadtime '*:S' AndroidRuntime:E DEBUG:E libc:F linker:E ActivityManager:E ActivityTaskManager:E Instrumentation:E TestRunner:V SQLiteLog:E > "$diagnostics/logcat-startup-filtered.txt" 2>&1 || true
-
             test_apk="app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
             if [ -f "$test_apk" ]; then
               {
-                echo "=== test APK entries ==="
+                echo '=== test APK entries ==='
                 unzip -l "$test_apk"
-                echo "=== instrumentation/test class DEX strings ==="
-                while IFS= read -r dex; do
+                echo '=== instrumentation/test class DEX strings ==='
+                unzip -Z1 "$test_apk" | grep 'classes.*dex' | while IFS= read -r dex; do
                   unzip -p "$test_apk" "$dex" | strings | grep -E 'LocalPmsRepositoryInstrumentedTest|AndroidJUnitRunner|com/aurelia/pms' || true
-                done < <(unzip -Z1 "$test_apk" | grep -E '^classes([0-9]+)?\\.dex
-      - name: Upload native instrumentation reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: aurelia-native-sqlite-${{ github.sha }}
-          path: |
-            android/app/build/outputs/androidTest-results/connected/**
-            android/app/build/reports/androidTests/connected/**
-            android/app/build/diagnostics/**
-          if-no-files-found: warn
-          retention-days: 14
-)
+                done
               } > "$diagnostics/test-apk-inspection.txt" 2>&1 || true
             fi
             exit "$gradle_status"
@@ -135,5 +120,6 @@ jobs:
           path: |
             android/app/build/outputs/androidTest-results/connected/**
             android/app/build/reports/androidTests/connected/**
+            android/app/build/diagnostics/**
           if-no-files-found: warn
           retention-days: 14
