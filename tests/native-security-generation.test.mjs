@@ -110,7 +110,7 @@ test('native PMS SQLite uses SQLCipher and ties its key lifetime to the unlock s
   assert.ok(plugin.includes('closeForBackground'));
   assert.ok(migration.includes('PMS_ENCRYPTED_MIGRATION_READBACK_MISMATCH'));
   assert.ok(migration.includes('PMS_PLAINTEXT_SOURCE_CLEANUP_FAILED'));
-  assert.ok(patcher.includes('net.zetetic:sqlcipher-android:4.19.1@aar'));
+  assert.ok(patcher.includes('net.zetetic:sqlcipher-android:4.17.0@aar'));
   assert.ok(patcher.includes('PmsPlaintextDatabaseMigration.java'));
   assert.ok(patcher.includes('CapacitorPmsStoragePlugin.closeForBackground()'));
 });
