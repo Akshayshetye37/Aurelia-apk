@@ -96,3 +96,13 @@ test("invalid inventory quantities, prices and duplicate IDs are rejected before
   ] }), /IDs must be unique/);
   assert.equal((await repository.listEntities("inventory")).length, 0);
 });
+
+test("numeric legacy inventory IDs are normalized to stable string entity keys", async () => {
+  const { bridge, inventory } = setup("numeric-legacy-id");
+  const snapshot = { inv: [{ id: 42, n: "Mini bar water", q: 6, ro: 2, u: 4, price: 15 }] };
+  await inventory.syncSnapshot(snapshot);
+  const stored = await bridge.fetchEntity("inventory", "42");
+  assert.equal(stored.data.id, "42");
+  const hydrated = await inventory.hydrateSnapshot(snapshot, { enabled: true });
+  assert.equal(hydrated.inv[0].id, "42");
+});
