@@ -35,6 +35,11 @@ final class PmsPlaintextDatabaseMigration {
       if (source.getVersion() != 3) {
         throw new IllegalStateException("PMS_PLAINTEXT_DB_VERSION_UNSUPPORTED");
       }
+      try (Cursor integrity = source.rawQuery("PRAGMA quick_check", null)) {
+        if (!integrity.moveToFirst() || !"ok".equalsIgnoreCase(integrity.getString(0))) {
+          throw new IllegalStateException("PMS_PLAINTEXT_DB_INTEGRITY_FAILED");
+        }
+      }
       for (String table : TABLES) {
         if (!hasTable(source, table)) throw new IllegalStateException("PMS_PLAINTEXT_DB_SCHEMA_INCOMPLETE");
         if (!hasTable(encrypted, table)) throw new IllegalStateException("PMS_ENCRYPTED_DB_SCHEMA_INCOMPLETE");
