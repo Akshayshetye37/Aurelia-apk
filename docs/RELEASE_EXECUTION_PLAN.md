@@ -1,5 +1,7 @@
 # Aurelia release execution plan — R1 first
 
+**Binding acceptance standard:** Every packet must satisfy [`docs/DEFINITION_OF_DONE.md`](DEFINITION_OF_DONE.md). The repository PR template carries the universal checklist. Any unchecked item means the packet remains In progress/Blocked; do not begin the next packet until the current packet is accepted, merged, and green.
+
 **Decision:** Replace parallel multi-workstream delivery with three sequential releases. R1 is a local-only PMS. No external money movement or cloud sync is part of R1.
 
 **Baseline audited:** `feature/multi-provider-payment-backend` at `410175355120c62a3b16a716169fdcf86ef7b6f9` (2026-11-09). This is a source/documentation baseline, not a release candidate.
