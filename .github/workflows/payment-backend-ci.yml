@@ -36,7 +36,8 @@ jobs:
         with:
           node-version: "22"
       - name: Install backend dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
       - name: Run payment backend contract and security tests
         run: npm test
       - name: Verify payment backend JavaScript syntax
