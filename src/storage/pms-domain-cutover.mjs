@@ -105,7 +105,7 @@ function records(snapshot, migrationId) {
     tableIds.add(id);
     add("restaurant_table", id, clone(row), "t");
   });
-  const sales = snapshot.sales ?? [];
+  const sales = snapshot.sales === undefined ? [] : snapshot.sales;
   if (!Array.isArray(sales)) throw new TypeError("Legacy restaurant sales must be an array.");
   const saleIds = new Set();
   sales.forEach((row, index) => {
