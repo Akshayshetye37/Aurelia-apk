@@ -104,6 +104,17 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon clean compileDebugKotlin compileReleaseKotlin assembleDebug lintDebug testDebugUnitTest
 
+      - name: Upload Android lint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-security-lint-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            android/app/build/reports/lint-results-debug.html
+            android/app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Record exact verified source SHA
         if: success()
         env:
