@@ -1,7 +1,8 @@
 import { canonicalBytes, canonicalize } from "./canonical.mjs";
 const DB_NAME = "aurelia-pms-settlement-journal";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = "settlements";
+const EVENT_STORE_NAME = "settlement_events";
 const clone = value => structuredClone(value);
 function safeId(value, label, max = 128) {
   if (typeof value !== "string" || !value.trim() || value !== value.trim() || value.length > max || /[\u0000-\u001f\u007f]/.test(value)) throw new TypeError("Invalid " + label);
@@ -14,7 +15,26 @@ async function sha256Hex(value, cryptoImpl) {
   const digest = await cryptoImpl.subtle.digest("SHA-256", canonicalBytes(value));
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
 }
-function openWrite(db) { try { return db.transaction(STORE_NAME, "readwrite", { durability: "strict" }); } catch (e) { if (e instanceof TypeError) return db.transaction(STORE_NAME, "readwrite"); throw e; } }
+function openWrite(db, stores = [STORE_NAME, EVENT_STORE_NAME]) {
+  try { return db.transaction(stores, "readwrite", { durability: "strict" }); }
+  catch (e) { if (e instanceof TypeError) return db.transaction(stores, "readwrite"); throw e; }
+}
+function nextEvent(identity, events, type, values, now) {
+  const sequence = events.reduce((max, event) => Math.max(max, Number(event.sequence) || 0), 0) + 1;
+  return { eventId: identity + "#" + String(sequence).padStart(8, "0"), identity, sequence, type, ...values, createdAt: now };
+}
+function projectRecord(base, events = []) {
+  const record = clone(base);
+  for (const event of [...events].sort((a, b) => a.sequence - b.sequence)) {
+    if (event.type === "AUTHORIZATION_RENEWED") {
+      record.authorization = clone(event.authorization);
+      record.policyLease = clone(event.policyLease);
+    } else if (event.type === "STATUS_TRANSITION") {
+      Object.assign(record, event.patch, { status: event.status });
+    }
+  }
+  return record;
+}
 export class IndexedDbSettlementJournal {
   constructor({ indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto, databaseName = DB_NAME, now = () => new Date().toISOString() } = {}) {
     if (!indexedDBImpl) throw new Error("IndexedDB is unavailable; durable settlement is disabled");
@@ -28,6 +48,11 @@ export class IndexedDbSettlementJournal {
         const store = db.objectStoreNames.contains(STORE_NAME) ? tx.objectStore(STORE_NAME) : db.createObjectStore(STORE_NAME, { keyPath: "key" });
         if (!store.indexNames.contains("status")) store.createIndex("status", "status", { unique: false });
         if (!store.indexNames.contains("createdAt")) store.createIndex("createdAt", "createdAt", { unique: false });
+        if (!db.objectStoreNames.contains(EVENT_STORE_NAME)) {
+          const events = db.createObjectStore(EVENT_STORE_NAME, { keyPath: "eventId" });
+          events.createIndex("identity", "identity", { unique: false });
+          events.createIndex("createdAt", "createdAt", { unique: false });
+        }
       };
       open.onsuccess = () => { const db = open.result; db.onversionchange = () => db.close(); resolve(db); };
       open.onerror = () => reject(open.error || new Error("Could not open settlement journal"));
@@ -62,19 +87,26 @@ export class IndexedDbSettlementJournal {
     if ((payload.command.providerTransactionId ?? null) !== providerTransactionId ||
         (payload.command.commandId ?? null) !== commandId) throw new TypeError("Settlement command identity mismatch");
     const payloadHash = await sha256Hex(payload, this.crypto); const db = await this.database();
-    const tx = openWrite(db); const done = transactionComplete(tx); done.catch(() => {}); const store = tx.objectStore(STORE_NAME);
+    const tx = openWrite(db); const done = transactionComplete(tx); done.catch(() => {});
+    const store = tx.objectStore(STORE_NAME), eventsStore = tx.objectStore(EVENT_STORE_NAME);
     try {
-      const existing = await request(store.get(key));
+      const [existing, events] = await Promise.all([
+        request(store.get(key)), request(eventsStore.index("identity").getAll(key))
+      ]);
       if (existing) {
         if (existing.payloadHash !== payloadHash) { const e = new Error("Settlement identity was reused with a different payload"); e.code = "SETTLEMENT_IDEMPOTENCY_CONFLICT"; throw e; }
-        // Signed authorization and short policy lease are renewable evidence.
-        // The immutable command payload/hash remains unchanged across redelivery.
-        if (existing.status === "PENDING" && input.authorization && input.policyLease) {
-          existing.authorization = canonicalize(input.authorization);
-          existing.policyLease = canonicalize(input.policyLease);
-          store.put(existing);
+        let projected = projectRecord(existing, events);
+        // Renew authorization as a new immutable evidence event; never rewrite the command row.
+        if (projected.status === "PENDING" && input.authorization && input.policyLease) {
+          const authorization = canonicalize(input.authorization), policyLease = canonicalize(input.policyLease);
+          if (JSON.stringify(projected.authorization) !== JSON.stringify(authorization) ||
+              JSON.stringify(projected.policyLease) !== JSON.stringify(policyLease)) {
+            const event = nextEvent(key, events, "AUTHORIZATION_RENEWED", { authorization, policyLease }, this.now());
+            eventsStore.add(event);
+            projected = projectRecord(existing, [...events, event]);
+          }
         }
-        await done; return { record: clone(existing), duplicate: true };
+        await done; return { record: projected, duplicate: true };
       }
       const record = { key, ...scope, providerTransactionId, commandId, payload, payloadHash,
         authorization: input.authorization ? canonicalize(input.authorization) : null,
@@ -92,25 +124,49 @@ export class IndexedDbSettlementJournal {
     }
   }
   async transition(key, payloadHash, status, patch) {
-    const db = await this.database(); const tx = openWrite(db); const done = transactionComplete(tx); done.catch(() => {}); const store = tx.objectStore(STORE_NAME);
+    const db = await this.database(); const tx = openWrite(db); const done = transactionComplete(tx); done.catch(() => {});
+    const store = tx.objectStore(STORE_NAME), eventsStore = tx.objectStore(EVENT_STORE_NAME);
     try {
-      const record = await request(store.get(safeId(key, "journal key", 700)));
-      if (!record) throw new Error("Settlement journal record not found");
+      const identity = safeId(key, "journal key", 700);
+      const [base, events] = await Promise.all([
+        request(store.get(identity)), request(eventsStore.index("identity").getAll(identity))
+      ]);
+      if (!base) throw new Error("Settlement journal record not found");
+      const record = projectRecord(base, events);
       if (record.payloadHash !== payloadHash) throw new Error("Settlement payload hash mismatch");
-      if (record.status === status) { await done; return clone(record); }
+      if (record.status === status) { await done; return record; }
       if (record.status !== "PENDING" || !["APPLIED", "REJECTED"].includes(status)) throw new Error("Illegal settlement journal state transition");
-      Object.assign(record, { status }, patch); store.put(record); await done; return clone(record);
+      const event = nextEvent(identity, events, "STATUS_TRANSITION", { status, patch: canonicalize(patch) }, this.now());
+      eventsStore.add(event);
+      await done;
+      return projectRecord(base, [...events, event]);
     } catch (error) { try { tx.abort(); } catch {} await done.catch(() => {}); throw error; }
   }
   markApplied(key, payloadHash) { return this.transition(key, payloadHash, "APPLIED", { appliedAt: this.now() }); }
   markRejected(key, payloadHash, reasonCode) { return this.transition(key, payloadHash, "REJECTED", { rejectedAt: this.now(), rejectedReason: safeId(String(reasonCode || "UNKNOWN"), "reasonCode", 120) }); }
   async get(key) {
-    const db = await this.database(); const tx = db.transaction(STORE_NAME, "readonly"); const done = transactionComplete(tx); done.catch(() => {});
-    const row = await request(tx.objectStore(STORE_NAME).get(safeId(key, "journal key", 700))); await done; return row ? clone(row) : null;
+    const db = await this.database(); const tx = db.transaction([STORE_NAME, EVENT_STORE_NAME], "readonly"); const done = transactionComplete(tx); done.catch(() => {});
+    const identity = safeId(key, "journal key", 700);
+    const [base, events] = await Promise.all([
+      request(tx.objectStore(STORE_NAME).get(identity)),
+      request(tx.objectStore(EVENT_STORE_NAME).index("identity").getAll(identity))
+    ]);
+    await done; return base ? projectRecord(base, events) : null;
   }
   async listPending() {
-    const db = await this.database(); const tx = db.transaction(STORE_NAME, "readonly"); const done = transactionComplete(tx); done.catch(() => {});
-    const rows = await request(tx.objectStore(STORE_NAME).index("status").getAll("PENDING")); await done;
-    return rows.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))).map(clone);
+    const db = await this.database(); const tx = db.transaction([STORE_NAME, EVENT_STORE_NAME], "readonly"); const done = transactionComplete(tx); done.catch(() => {});
+    const [records, events] = await Promise.all([
+      request(tx.objectStore(STORE_NAME).getAll()),
+      request(tx.objectStore(EVENT_STORE_NAME).getAll())
+    ]);
+    await done;
+    const grouped = new Map();
+    for (const event of events) {
+      if (!grouped.has(event.identity)) grouped.set(event.identity, []);
+      grouped.get(event.identity).push(event);
+    }
+    return records.map(record => projectRecord(record, grouped.get(record.key) || []))
+      .filter(record => record.status === "PENDING")
+      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
   }
 }
