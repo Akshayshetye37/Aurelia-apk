@@ -26,6 +26,8 @@ on:
       - "tests/**"
       - "android/templates/**/*.java"
       - "android/templates/**/*.kt"
+      - "android/templates/**/*.java"
+      - "android/templates/**/*.kt"
       - "scripts/patch-android.js"
       - "package.json"
       - ".github/workflows/settlement-foundation-ci.yml"
