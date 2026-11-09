@@ -422,3 +422,31 @@ test("pending refund journal recognizes retained cancellation revenue exactly on
   assert.equal(missingRetention.cancellationFlagMismatches[0].reason,
     "pending_refund_retention_does_not_match_journal");
 });
+
+
+test("strict diagnostic CLI rejects an export without the active bookings array", () => {
+  const dir = mkdtempSync(join(tmpdir(), "aurelia-accounting-invalid-root-"));
+  try {
+    const path = join(dir, "wrong-shape.json");
+    writeFileSync(path, JSON.stringify({ cancelled: [], financialLedger: [] }));
+    const result = spawnSync(process.execPath, ["scripts/diagnose-accounting.mjs", path, "--strict"], { encoding: "utf8" });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /must be an object containing the active bookings array/);
+    assert.doesNotMatch(result.stdout, /"scannedBookingCount": 0/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("strict diagnostic CLI rejects a malformed cancelled collection", () => {
+  const dir = mkdtempSync(join(tmpdir(), "aurelia-accounting-invalid-cancelled-"));
+  try {
+    const path = join(dir, "wrong-cancelled.json");
+    writeFileSync(path, JSON.stringify({ b: [], cancelled: {}, financialLedger: [] }));
+    const result = spawnSync(process.execPath, ["scripts/diagnose-accounting.mjs", path, "--strict"], { encoding: "utf8" });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /cancelled.*must be an array/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
