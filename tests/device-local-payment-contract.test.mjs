@@ -315,7 +315,7 @@ test('restaurant table settlement records the sale and clears the table only aft
   assert.ok(helperStart >= 0 && helperEnd > helperStart);
   assert.match(html.slice(helperStart, helperEnd), /await commit\(\{snapshot,tableId,saleId,saleIndex\}\)/);
   const start = html.lastIndexOf('async function settleGo()');
-  const end = html.indexOf('\nasync function chg(i)', start);
+  const end = html.indexOf('\\nfunction addI', start);
   assert.ok(start >= 0 && end > start);
   const handler = html.slice(start, end);
   assert.match(handler, /await commitRestaurantSettlementState/);
