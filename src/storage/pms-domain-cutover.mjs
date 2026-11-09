@@ -45,11 +45,25 @@ function records(snapshot, migrationId) {
     if (!Array.isArray(snapshot[key])) throw new Error("Legacy snapshot is missing " + key + ".");
   }
   const rows = [];
+  const isPlainObject = value => value !== null && typeof value === "object" &&
+    !Array.isArray(value) && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
+  for (const [key, value] of [["set", snapshot.set ?? {}], ["menu", snapshot.menu ?? {}]]) {
+    if (!isPlainObject(value)) throw new TypeError("Legacy " + key + " settings must be a plain object.");
+  }
   const add = (entityType, entityId, data, source) => rows.push({
     entityType, entityId, data: clone(data),
     eventType: "legacy.domain_projection",
     eventPayload: { migrationId, sourceCollection: source, sourceId: entityId }
   });
+
+  // Property configuration and restaurant menu are business settings, not
+  // disposable UI preferences. Keep both source objects intact in one canonical
+  // entity so later settings writes have a stable, versioned repository target.
+  add("settings", "property-settings", {
+    id: "property-settings",
+    set: clone(snapshot.set ?? {}),
+    menu: clone(snapshot.menu ?? {})
+  }, "set/menu");
 
   snapshot.rooms.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy room at index " + index);
@@ -118,7 +132,7 @@ export async function projectLegacyPmsDomains({ bridge, snapshot, migrationId, b
     status: "VERIFIED",
     recordCount: planned.length,
     counts: planned.reduce((out, row) => (out[row.entityType] = (out[row.entityType] || 0) + 1, out), {}),
-    sourceCollections: ["rooms", "g", "b", "inv", "exp", "led", "aud"],
+    sourceCollections: ["set", "menu", "rooms", "g", "b", "inv", "exp", "led", "aud"],
     preservesLegacySnapshot: true,
     financialReconciliationPerformed: false
   };
