@@ -445,7 +445,7 @@ export class PmsInventoryRepository {
     if (changes.length + movementChanges.length + tableChanges.length + auditLogChanges.length > 19) {
       throw new RangeError("Inventory, table, movement and audit changes exceed the 19-entity atomic transaction limit.");
     }
-    if (changes.length || movementChanges.length || tableChanges.length || auditLogChanges.length) {
+    if (changes.length || movementChanges.length || tableChanges.length || auditLogChanges.length || !snapshotRow) {
       const committedAt = this.now();
       const auditChange = {
         entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2",
@@ -496,7 +496,7 @@ export class PmsInventoryRepository {
         });
       }
     }
-    if (changes.length || movementChanges.length || tableChanges.length || auditLogChanges.length) {
+    if (changes.length || movementChanges.length || tableChanges.length || auditLogChanges.length || !snapshotRow) {
       const storedSnapshot = await this.bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
       if (!storedSnapshot || !same(storedSnapshot.data.snapshot, snapshot)) {
         throw Object.assign(new Error("Inventory transaction failed exact recovery snapshot read-back."), {
