@@ -6,10 +6,17 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 
 - **GitHub repository:** https://github.com/Akshayshetye37/Aurelia-apk
 - **Project root:** repository root (`/`)
-- **Active engineering branch:** `feature/multi-provider-payment-backend`
-- **Active branch:** `feature/multi-provider-payment-backend` (resolve the current SHA from the branch ref; avoid hard-coded moving HEAD values).
-- **Latest verification:** GitHub Actions run [42490479012](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42490479012) passed on commit `b2b93fef715618dc28cb3bcf12a4ee43df877334`: 397/397 Node tests, production web bundle build, production asset privacy checks and Android release-gate check. This workflow did **not** build or qualify an APK.
+- **Active engineering baseline:** `feature/multi-provider-payment-backend` (audit baseline SHA is recorded below; resolve moving branch heads before each change).
+- **Current execution branch:** `release/r1-local-first-execution` — sequential R1-first delivery; not merged and not a release candidate.
+- **Latest recorded source-quality verification:** [run 42495345884](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42495345884) passed on audited baseline SHA `410175355120c62a3b16a716169fdcf86ef7b6f9`. Scope: Node tests, production web build and asset privacy checks. It did **not** qualify an APK or physical Android device.
 - **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
+
+## Current release strategy — R1 first
+
+The governing delivery sequence is now **R1 local-only PMS → R2 one qualified payment provider → R3 optional sync**. External money movement, Pay Bridge, sync and global UI cutover remain disabled until their separate acceptance gates pass. The earlier multi-workstream remediation material remains a technical reference, but this sequential release plan controls prioritization and enablement.
+
+- [Release execution plan](./docs/RELEASE_EXECUTION_PLAN.md) — scope, security invariants, sequencing and acceptance gates.
+- [STATUS.md](./STATUS.md) — single current release/gate ledger. Update it with exact commit SHAs and workflow evidence.
 
 Useful project locations:
 
