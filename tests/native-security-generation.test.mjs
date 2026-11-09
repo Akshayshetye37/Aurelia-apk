@@ -32,7 +32,7 @@ test('Kotlin Android plugin is enabled for native security sources', () => {
 test('native security dependencies are injected idempotently', () => {
   const patcher = read('scripts/patch-android.js');
   assert.match(patcher, /org\.bouncycastle:bcprov-jdk18on:1\.80/);
-  assert.match(patcher, /androidx\.biometric:biometric:1\.2\.0/);
+  assert.match(patcher, /androidx\.biometric:biometric:1\.2\.0-alpha05/);
   assert.match(patcher, /if \(contents\.includes\(marker\)\) continue/);
 });
 
@@ -94,8 +94,8 @@ test('first-run lockout initialization is explicit and enrollment marker recover
 
 test('Android native security build pins biometric dependency and treats Kotlin warnings as errors', () => {
   const patcher = read('scripts/patch-android.js');
-  assert.match(patcher, /androidx\.biometric:biometric:1\.2\.0/);
-  assert.doesNotMatch(patcher, /androidx\.biometric:biometric:1\.2\.0-alpha/);
+  assert.match(patcher, /androidx\.biometric:biometric:1\.2\.0-alpha05/);
+  assert.match(patcher, /androidx\.biometric:biometric:1\.2\.0-alpha05/);
   assert.match(patcher, /allWarningsAsErrors\.set\(true\)/);
 });
 
