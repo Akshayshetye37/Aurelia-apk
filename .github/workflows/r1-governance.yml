@@ -51,6 +51,7 @@ jobs:
         run: node --input-type=module -e "import { assertReleaseFlagsOff } from './src/release-flags.mjs'; assertReleaseFlagsOff();"
 
       - name: Syntax-check administrator finalization script
+        id: finalizer_syntax
         run: bash -n scripts/finalize-r1-governance.sh
 
       - name: Build production web bundle
@@ -67,6 +68,7 @@ jobs:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           TESTS_OUTCOME: ${{ steps.tests.outcome }}
           FLAGS_OUTCOME: ${{ steps.flags.outcome }}
+          FINALIZER_SYNTAX_OUTCOME: ${{ steps.finalizer_syntax.outcome }}
           BUILD_OUTCOME: ${{ steps.build.outcome }}
           BOUNDARY_OUTCOME: ${{ steps.boundary.outcome }}
         run: node scripts/generate-status.mjs
