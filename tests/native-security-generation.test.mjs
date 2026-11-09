@@ -32,7 +32,7 @@ test('Kotlin Android plugin is enabled for native security sources', () => {
 test('native security dependencies are injected idempotently', () => {
   const patcher = read('scripts/patch-android.js');
   assert.match(patcher, /org\.bouncycastle:bcprov-jdk18on:1\.80/);
-  assert.match(patcher, /androidx\.biometric:biometric:1\.2\.0-alpha05/);
+  assert.match(patcher, /androidx\.biometric:biometric:1\.2\.0/);
   assert.match(patcher, /if \(contents\.includes\(marker\)\) continue/);
 });
 
@@ -53,7 +53,7 @@ test('PIN gate persists enrollment marker separately from the PIN envelope', () 
   assert.match(store, /AndroidKeyStore/);
   assert.match(store, /AES\/GCM\/NoPadding/);
   assert.match(gate, /AureliaEnvelopeStore/);
-  assert.match(gate, /enrolled != envelopeExists/);
+  assert.match(gate, /enrolled && !envelopeExists/);
   assert.match(gate, /refusing setup or unlock/);
 });
 
@@ -86,7 +86,7 @@ test('lockout state cannot silently reset when its persisted file is missing', (
 test('first-run lockout initialization is explicit and enrollment marker recovery is crash-safe', () => {
   const gate = read('android/templates/security/LockGateActivity.kt');
   assert.match(gate, /initializeForEnrollment\(\)/);
-  assert.match(gate, /!enrolled && envelopeExists/);
+  assert.match(gate, /enrollmentMode = !enrolled && !envelopeExists/);
   assert.match(gate, /markEnrolled\(\)/);
   assert.match(gate, /manager\.unlock\(first, envelope\)/);
 });
