@@ -3,7 +3,8 @@
 **Release:** R1 — local-only PMS  
 **Status:** **NOT RELEASE READY**  
 **Engineering branch:** `work/p0-storage-hardening`  
-**Engineering branch head:** `850bdcb7ab8e7c76648591f952c2543e1524040a`  
+**Engineering branch head:** `c69626abf66164581927c9c6834723f977547de7`  
+**Code verification SHA:** `850bdcb7ab8e7c76648591f952c2543e1524040a`  
 **Exact-head CI:** [PMS source/web #2678](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507298) · [R1 required checks #153](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507418) · [settlement foundation #737](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507240) · [payment backend #734](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507184) — **all four passed on the exact engineering branch head**.
 
 ## Latest implemented increment
@@ -19,12 +20,9 @@ The four passing workflows are source/CI evidence only. They do not qualify phys
 
 ---
 
-**Release:** R1 — local-only PMS  
-**Status:** **NOT RELEASE READY**  
-**Candidate SHA:** `6540efb109d62c74ccdf85f361569335fb30ea63`  
-**Verified CI (exact candidate SHA):** [R1 required checks #148](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42614702847) · [PMS source tests and production web packaging #2672](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42614702919) · [settlement-foundation](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42614702875)
+## Historical release-candidate evidence (superseded by the engineering-branch verification above)
 
-The three CI workflows above completed successfully on the exact candidate SHA. CI evidence covers source tests, release-default checks, production web packaging/privacy and settlement module checks. It does not qualify Android hardware, financial data migration, accounting sign-off, physical devices, signing, backup/restore or production operations.
+The earlier candidate SHA was `6540efb109d62c74ccdf85f361569335fb30ea63`. Its prior R1, PMS source/web and settlement checks passed, but those runs are not used as evidence for the current engineering branch.
 
 ## Workstream status
 
