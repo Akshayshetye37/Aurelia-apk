@@ -41,7 +41,7 @@ const paise = value => {
 
 function records(snapshot, migrationId) {
   if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) throw new TypeError("A parsed legacy PMS snapshot is required.");
-  for (const key of ["rooms", "b", "g", "inv", "exp", "led", "aud"]) {
+  for (const key of ["rooms", "b", "g", "t", "inv", "exp", "led", "aud"]) {
     if (!Array.isArray(snapshot[key])) throw new Error("Legacy snapshot is missing " + key + ".");
   }
   const rows = [];
@@ -91,6 +91,20 @@ function records(snapshot, migrationId) {
       legacyCurrencySymbol: snapshot.set?.cur ?? "₹"
     }, "b");
   });
+  const tableIds = new Set();
+  snapshot.t.forEach((row, index) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      throw new Error("Malformed legacy restaurant table at index " + index);
+    }
+    const tableNumber = Number(row.n);
+    if (!Number.isSafeInteger(tableNumber) || tableNumber < 1) {
+      throw new Error("Legacy restaurant table has no safe positive integer table number at index " + index);
+    }
+    const id = "table-" + safeId(tableNumber, "restaurant table identity");
+    if (tableIds.has(id)) throw new Error("Legacy restaurant table numbers are duplicated; projection stopped.");
+    tableIds.add(id);
+    add("restaurant_table", id, { ...clone(row), id }, "t");
+  });
   snapshot.inv.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy inventory item at index " + index);
     const id = safeId(row.id ?? "legacy-inventory-" + index, "inventory identity");
@@ -132,7 +146,7 @@ export async function projectLegacyPmsDomains({ bridge, snapshot, migrationId, b
     status: "VERIFIED",
     recordCount: planned.length,
     counts: planned.reduce((out, row) => (out[row.entityType] = (out[row.entityType] || 0) + 1, out), {}),
-    sourceCollections: ["set", "menu", "rooms", "g", "b", "inv", "exp", "led", "aud"],
+    sourceCollections: ["set", "menu", "rooms", "g", "b", "t", "inv", "exp", "led", "aud"],
     preservesLegacySnapshot: true,
     financialReconciliationPerformed: false
   };
