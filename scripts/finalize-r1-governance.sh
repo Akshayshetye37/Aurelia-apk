@@ -105,7 +105,11 @@ if [[ "$PUSH_EXIT" -eq 0 ]]; then
   echo "::error::Direct push unexpectedly succeeded on the protected probe branch."
   exit 1
 fi
-echo "Direct push was rejected as required."
+if ! grep -Eqi 'GH013|repository rule violations|protected branch update failed|push declined due to repository rule' /tmp/r1-protection-push.log; then
+  echo "::error::Push failed, but not with a GitHub branch-protection rejection. Refusing to count this as a passing probe."
+  exit 1
+fi
+echo "Direct push was rejected by GitHub repository rules as required."
 
 echo "Removing the disposable probe branch before enabling deletion protection..."
 gh api --method DELETE "repos/$REPO/git/refs/heads/$PROBE_BRANCH" >/dev/null
