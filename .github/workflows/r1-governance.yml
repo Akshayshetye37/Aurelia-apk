@@ -1,0 +1,76 @@
+name: R1 governance CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - feature/multi-provider-payment-backend
+      - "release/**"
+  pull_request:
+    branches:
+      - main
+      - master
+      - feature/multi-provider-payment-backend
+      - "release/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r1-governance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  r1-governance:
+    name: r1-governance
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact candidate SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run complete application tests
+        id: tests
+        run: npm test
+
+      - name: Assert R1 release safety flags default OFF
+        id: flags
+        run: node --input-type=module -e "import { assertReleaseFlagsOff } from './src/release-flags.mjs'; assertReleaseFlagsOff();"
+
+      - name: Build production web bundle
+        id: build
+        run: npm run build
+
+      - name: Enforce production asset privacy boundaries
+        id: boundary
+        run: node scripts/check-release-boundaries.mjs
+
+      - name: Generate exact-SHA STATUS.md
+        if: always()
+        env:
+          TESTS_OUTCOME: ${{ steps.tests.outcome }}
+          FLAGS_OUTCOME: ${{ steps.flags.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          BOUNDARY_OUTCOME: ${{ steps.boundary.outcome }}
+        run: node scripts/generate-status.mjs
+
+      - name: Publish generated STATUS.md
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r1-status-${{ github.sha }}
+          path: STATUS.md
+          if-no-files-found: error
+          retention-days: 90
