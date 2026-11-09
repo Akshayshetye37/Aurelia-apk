@@ -166,10 +166,13 @@ export class PmsInventoryRepository {
     if (!Array.isArray(auditEntities)) throw new Error("Canonical audit repository returned an invalid entity list.");
     const canonicalAudit = auditEntities.filter(row => row?.data?.kind === "pms_audit");
     for (const row of canonicalAudit) {
+      const prefix = "pms-audit-" + movementHash(row.data.value) + "-";
+      const ordinal = row.id.startsWith(prefix) ? Number(row.id.slice(prefix.length)) : 0;
       if (row.type !== "audit" || typeof row.id !== "string" ||
           !Number.isSafeInteger(row.version) || row.version < 1 ||
-          !row.data.value || typeof row.data.value !== "object" || Array.isArray(row.data.value)) {
-        throw new Error("Canonical audit history contains an invalid entity.");
+          !row.data.value || typeof row.data.value !== "object" || Array.isArray(row.data.value) ||
+          !Number.isSafeInteger(ordinal) || ordinal < 1) {
+        throw new Error("Canonical audit history contains an invalid entity or unstable identity.");
       }
     }
     const currentAudit = Array.isArray(hydrated.aud) ? hydrated.aud : [];
