@@ -101,6 +101,7 @@ test('native PMS SQLite uses SQLCipher and ties its key lifetime to the unlock s
   const plugin = read('android/templates/CapacitorPmsStoragePlugin.java');
   const migration = read('android/templates/PmsPlaintextDatabaseMigration.java');
   const patcher = read('scripts/patch-android.js');
+  const manager = read('android/templates/security/AureliaAppManager.kt');
   assert.ok(repository.includes('net.zetetic.database.sqlcipher.SQLiteOpenHelper'));
   assert.ok(repository.includes('System.loadLibrary("sqlcipher")'));
   assert.ok(repository.includes('PRAGMA cipher_status'));
@@ -108,6 +109,9 @@ test('native PMS SQLite uses SQLCipher and ties its key lifetime to the unlock s
   assert.ok(repository.includes('Arrays.fill(databaseKey, (byte) 0)'));
   assert.ok(plugin.includes('currentDataKeyCopy()'));
   assert.ok(plugin.includes('closeForBackground'));
+  assert.ok(manager.includes('if (backgroundAtElapsed > 0L)'));
+  assert.ok(manager.includes('return false'));
+  assert.ok(manager.includes('onForeground() must explicitly re-authorize'));
   assert.ok(migration.includes('PMS_ENCRYPTED_MIGRATION_READBACK_MISMATCH'));
   assert.ok(migration.includes('PMS_PLAINTEXT_SOURCE_CLEANUP_FAILED'));
   assert.ok(patcher.includes('net.zetetic:sqlcipher-android:4.17.0@aar'));
