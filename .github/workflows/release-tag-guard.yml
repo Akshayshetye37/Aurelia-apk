@@ -1,0 +1,32 @@
+name: Release tag guard
+
+on:
+  push:
+    tags:
+      - "aurelia-approved-*"
+
+permissions:
+  contents: read
+  checks: read
+
+jobs:
+  verify-tagged-sha:
+    name: verify-tagged-sha
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Refuse tags without green exact-SHA governance checks
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/verify-release-tag.mjs
