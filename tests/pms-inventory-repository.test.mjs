@@ -70,7 +70,7 @@ test("inventory hydration restores stable IDs and canonical quantities over stal
 test("inventory retirement is a tombstone and cannot silently discard canonical history", async () => {
   const { bridge, inventory } = setup("retire");
   await inventory.syncSnapshot({ t: [], inv: [{ id: "minibar-1", n: "Water", q: 3, ro: 1, u: 5, price: 20 }] });
-  await inventory.syncSnapshot({ inv: [] });
+  await inventory.syncSnapshot({ t: [], inv: [] });
   const stored = await bridge.fetchEntity("inventory", "minibar-1");
   assert.equal(stored.data.retired, true);
   assert.deepEqual(await inventory.list(), []);
@@ -108,8 +108,8 @@ test("stale inventory snapshots fail closed instead of overwriting canonical sto
 
 test("invalid inventory quantities, prices and duplicate IDs are rejected before commit", async () => {
   const { repository, inventory } = setup("validation");
-  await assert.rejects(inventory.syncSnapshot({ inv: [{ id: "bad", n: "Bad", q: -1, ro: 0, u: 1, price: 1 }] }), /whole units/);
-  await assert.rejects(inventory.syncSnapshot({ inv: [{ id: "bad", n: "Bad", q: 1, ro: 0, u: 1.001, price: 1 }] }), /two decimal places/);
+  await assert.rejects(inventory.syncSnapshot({ t: [], inv: [{ id: "bad", n: "Bad", q: -1, ro: 0, u: 1, price: 1 }] }), /whole units/);
+  await assert.rejects(inventory.syncSnapshot({ t: [], inv: [{ id: "bad", n: "Bad", q: 1, ro: 0, u: 1.001, price: 1 }] }), /two decimal places/);
   await assert.rejects(inventory.syncSnapshot({ inv: [
     { id: "duplicate", n: "One", q: 1, ro: 0, u: 1, price: 1 },
     { id: "duplicate", n: "Two", q: 1, ro: 0, u: 1, price: 1 }
@@ -130,7 +130,7 @@ test("numeric legacy inventory IDs are normalized to stable string entity keys",
 test("retired inventory identities cannot be resurrected", async () => {
   const { inventory } = setup("no-resurrection");
   const item = { id: "retired-1", n: "Old stock", q: 0, ro: 0, u: 0, price: 0 };
-  await inventory.syncSnapshot({ inv: [item] });
+  await inventory.syncSnapshot({ t: [], inv: [item] });
   await inventory.syncSnapshot({ inv: [] });
   await assert.rejects(
     inventory.syncSnapshot({ inv: [item] }),
@@ -163,6 +163,7 @@ test("restaurant stock issue commits inventory, table order, movement ledger and
   const tables = new PmsRestaurantTableRepository({ bridge, now: () => "2026-11-09T00:00:00.000Z" });
   await tables.syncSnapshot({ t: [{ n: 1, s: 2, o: [] }] });
   const initial = {
+    t: [{ n: 1, s: 2, o: [] }],
     inv: [{ id: "tea-1", n: "Tea", q: 5, ro: 1, u: 2, price: 20, sellable: true }],
     t: [{ n: 1, s: 2, o: [] }],
     led: []
@@ -192,6 +193,7 @@ test("restaurant stock issue commits inventory, table order, movement ledger and
 test("inventory movement history is append-only and cannot be edited or removed", async () => {
   const { bridge, inventory } = setup("movement-append-only");
   const initial = {
+    t: [],
     inv: [{ id: "milk-1", n: "Milk", q: 5, ro: 1, u: 3, price: 0 }],
     t: [], led: [["Milk", -1, "restaurant-sale", "2026-11-09T00:00:00.000Z"]]
   };
