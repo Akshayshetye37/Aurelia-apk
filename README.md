@@ -265,5 +265,5 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 
 **Engineering baseline:** `feature/multi-provider-payment-backend`  
 **Execution branch:** `release/r1-local-first-execution` (draft PR [#13](https://github.com/Akshayshetye37/Aurelia-apk/pull/13)).  
-**Latest recorded source-quality evidence:** [run 42495345884](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42495345884) on baseline SHA `410175355120c62a3b16a716169fdcf86ef7b6f9`; no APK/device qualification was performed. The execution-branch changes are awaiting CI.  
+**Latest recorded source-quality evidence:** [run 42495345884](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42495345884) on baseline SHA `410175355120c62a3b16a716169fdcf86ef7b6f9`; no APK/device qualification was performed. The R1 foundation source/test SHA `9796ed84eaa2041a76b81354e410be7fc4bb162e` passed [run 42569418219](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42569418219): 433/433 tests, syntax checks and production web build. No APK/device qualification was performed.  
 **Status:** R1 implementation in progress; production release not approved.
