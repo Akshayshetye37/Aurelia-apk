@@ -2,6 +2,8 @@
  * Serializes all ordinary PMS state writes through the canonical local repository.
  * Web Storage is refreshed only after repository commit and exact read-back.
  */
+import { normalizeStorageError } from "./storage-errors.mjs";
+
 const clone = value => value == null ? value :
   (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
 const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -51,9 +53,15 @@ export class PmsLocalFirstWriteCoordinator {
         }
         return Object.freeze({ committed: true, sequence, snapshot: clone(stored.snapshot) });
       } catch (error) {
-        this.failure = error instanceof Error ? error : new Error(String(error));
-        try { this.onFailure(this.failure, sequence); } catch (_) {}
-        throw this.failure;
+        const typed = normalizeStorageError(error);
+        this.failure = typed;
+        try {
+          this.onFailure(typed, sequence);
+        } catch (_) {
+          // A failure callback must never replace or hide the original storage error.
+          console.error("[Aurelia Local First] Storage failure callback failed.");
+        }
+        throw typed;
       }
     };
     const result = this.queue.then(commit, commit);
@@ -62,6 +70,11 @@ export class PmsLocalFirstWriteCoordinator {
   }
 
   get status() {
-    return Object.freeze({ queuedSequence: this.sequence, failed: Boolean(this.failure), error: this.failure?.message || null });
+    return Object.freeze({
+      queuedSequence: this.sequence,
+      failed: Boolean(this.failure),
+      error: this.failure?.message || null,
+      errorCode: this.failure?.code || null
+    });
   }
 }
