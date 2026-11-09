@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 function paise(value, label) {
   const amount = typeof value === "number" ? value
-    : typeof value === "string" && /^\\d+(?:\\.\\d{1,2})?$/.test(value.trim()) ? Number(value)
+    : typeof value === "string" && /^\d+(?:\.\d{1,2})?$/.test(value.trim()) ? Number(value)
     : Number.NaN;
   const scaled = amount * 100;
   const result = Math.round(scaled);
@@ -18,7 +18,7 @@ function paise(value, label) {
 }
 
 function maskReference(value) {
-  const normalized = String(value ?? "").replace(/\\s+/g, "");
+  const normalized = String(value ?? "").replace(/\s+/g, "");
   if (!normalized) return null;
   return { last4: normalized.slice(-4), length: normalized.length };
 }
