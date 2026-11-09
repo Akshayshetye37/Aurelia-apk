@@ -3802,7 +3802,7 @@ pay=async function(i){
 
 // Local-only release profile: no cloud sync, gateway checkout, Pay Bridge or provider activation.
 window.AURELIA_LOCAL_ONLY_RELEASE=Object.freeze({
- uiCutover:false,cloudSync:false,gatewayPayments:false,payBridge:false,
+ uiCutover:false,cloudSync:false,sync:false,gatewayPayments:false,payBridge:false,
  ccavenue:false,enabledProviders:Object.freeze([])
 });
 // Provider checkout is intentionally routed through the authenticated LAN engine.
@@ -3923,6 +3923,7 @@ window.startAureliaGatewayCheckout=async function(i){
  }
 };
 window.reconcileAureliaGatewayPayment=async function(i,transactionId,paymentId){
+ if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true){toast('Gateway reconciliation is disabled in this local-only release.');return false;}
  const b=bk(i);if(!b)return false;
  const record=(b.gatewayPayments||[]).find(x=>x.transactionId===transactionId);
  if(!record){toast('Payment transaction record not found.');return false;}
@@ -4654,6 +4655,7 @@ window.saveAureliaProviderCredentials=async function(){
  }
 };
 window.activateAureliaPaymentProvider=async function(provider){
+ if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true){toast('Provider activation is disabled in this local-only release.');return false;}
  try{
   await window.aureliaPaymentAdminRequest('/v1/admin/providers/'+encodeURIComponent(provider)+'/activate','POST',{environment:'test',confirm:true});
   toast('Active online gateway updated. Default local payment methods remain available.');
@@ -4720,6 +4722,7 @@ window.refreshAureliaLocalPaymentJournal=async function(){
  finally{window.AureliaLocalPaymentJournalState.loading=false;}
 };
 window.saveAureliaBackendEndpoint=function(){
+ if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true){toast('Payment backend connection is disabled in this local-only release.');return false;}
  const input=document.querySelector('[data-aurelia-backend-url]');
  const raw=(input?.value||'').trim();
  let url;
@@ -4729,6 +4732,7 @@ window.saveAureliaBackendEndpoint=function(){
  persist();render();toast('Backend endpoint saved. Run Test backend to verify it.');return true;
 };
 window.testAureliaBackendConnection=async function(){
+ if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true){toast('Payment backend connection is disabled in this local-only release.');return false;}
  const input=document.querySelector('[data-aurelia-backend-url]');
  const raw=(input?.value||S.set.backendConnection?.endpoint||'').trim();
  let url;
@@ -5126,6 +5130,7 @@ function mapCloudPaymentStatus(intent) {
 
 window.AndroidPaymentEngine = Object.freeze({
  async getEngineStatus() {
+  if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true)return {ready:false,livePaymentsEnabled:false,disabled:true};
   if(!paymentDeviceNativeAvailable()) return { ready:false, livePaymentsEnabled:false };
   const native = await getNativePaymentEngineStatus();
   if(typeof native?.deviceId === 'string' && native.deviceId) {
@@ -5144,6 +5149,7 @@ window.AndroidPaymentEngine = Object.freeze({
     activeProviderEnvironment:capabilities.activeProviderEnvironment || null, folioSettlementEnabled:false };
  },
  async createPaymentIntent(payload) {
+  if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true)throw Object.assign(new Error('Online gateway payments are disabled in this local-only release.'),{code:'ONLINE_GATEWAY_DISABLED'});
   if(!payload || !/^[0-9a-f-]{36}$/i.test(payload.transactionId || '') ||
      !window.AureliaPaymentDeviceId) throw new Error('A verified payment device is required.');
   if(!['razorpay','cashfree'].includes(payload.provider)) {
@@ -5162,6 +5168,7 @@ window.AndroidPaymentEngine = Object.freeze({
    providerOrderId:result.providerOrderId || null, checkoutData:result.checkoutData || null };
  },
  async startCheckout({ transactionId } = {}) {
+  if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true)throw Object.assign(new Error('Online gateway payments are disabled in this local-only release.'),{code:'ONLINE_GATEWAY_DISABLED'});
   const intent = pendingCloudIntents.get(transactionId);
   if(!intent) throw new Error('The verified cloud checkout intent is not available.');
   if(intent.payload.environment !== 'test') throw new Error('Live checkout is disabled in this release.');
