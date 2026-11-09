@@ -159,7 +159,7 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(loader, /await bootstrapper\.initializeApplication\(\)/);
   assert.match(loader, /storageBridge\.bindActiveEngine\(boot\.repository, boot\.identity\)/);
   assert.match(loader, /boot\.settingsRepository\.get\(\)/);
-  assert.match(loader, /compatibility\.syncSettings\(snapshot\)/);
+  assert.match(html, /compatibility\.syncSettings\(snapshot\)/);
   assert.match(loader, /await replayApplicationScripts\(\)/);
   assert.match(loader, /PMS startup stopped safely/);
   assert.match(html, /type="application\/x-aurelia-deferred"/);
