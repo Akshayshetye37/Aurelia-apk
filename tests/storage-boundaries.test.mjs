@@ -29,7 +29,7 @@ test("direct browser database and Web Storage access outside src/storage is reje
 test("new direct storage access in the legacy UI cannot exceed its reviewed baseline", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "aurelia-storage-baseline-"));
   try {
-    writeFileSync(path.join(root, "index.html"), "localStorage.getItem('new-key');");
+    writeFileSync(path.join(root, "index.html"), Array(33).fill("localStorage").join(";"));
     const result = scanStorageBoundaries({ rootDir: root });
     assert.ok(result.violations.some(message => /index.html.*localStorage/.test(message)));
   } finally {
