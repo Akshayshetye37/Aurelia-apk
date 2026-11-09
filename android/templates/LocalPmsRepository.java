@@ -4,19 +4,42 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
-import android.database.sqlite.SQLiteDatabase;
-import android.database.sqlite.SQLiteOpenHelper;
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
+import net.zetetic.database.sqlcipher.SQLiteOpenHelper;
 import org.json.JSONArray;
 import org.json.JSONTokener;
 import org.json.JSONObject;
 
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
-  private static final String NAME = "aurelia-pms.db";
+  private static final String NAME = "aurelia-pms-encrypted.db";
   private static final int VERSION = 3;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
-  LocalPmsRepository(Context context) { super(context.getApplicationContext(), NAME, null, VERSION); setWriteAheadLoggingEnabled(true); }
+  private final Context appContext;
+  private final byte[] databaseKey;
+  private boolean initialized;
+  static { System.loadLibrary("sqlcipher"); }
+
+  LocalPmsRepository(Context context, byte[] databaseKey) {
+    super(context.getApplicationContext(), NAME, databaseKey, null, VERSION, 0, null, null, true);
+    if (databaseKey == null || databaseKey.length != 32) throw new IllegalArgumentException("PMS database key must be 256 bits");
+    this.appContext = context.getApplicationContext();
+    this.databaseKey = databaseKey;
+    setWriteAheadLoggingEnabled(true);
+  }
+
+  synchronized void initialize() {
+    if (initialized) return;
+    SQLiteDatabase encrypted = getWritableDatabase();
+    PmsPlaintextDatabaseMigration.migrateIfNeeded(appContext, encrypted);
+    initialized = true;
+  }
+
+  @Override public synchronized void close() {
+    try { super.close(); }
+    finally { java.util.Arrays.fill(databaseKey, (byte) 0); initialized = false; }
+  }
 
   @Override public void onConfigure(SQLiteDatabase db) {
     super.onConfigure(db);
@@ -25,7 +48,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
 
   @Override public void onOpen(SQLiteDatabase db) {
     super.onOpen(db);
-    db.execSQL("PRAGMA synchronous=FULL");
+    db.execSQL("PRAGMA synchronous=FULL");\n    try (android.database.Cursor cipher = db.rawQuery("PRAGMA cipher_integrity_check", null)) {\n      if (!cipher.moveToFirst() || !"ok".equalsIgnoreCase(cipher.getString(0))) throw new IllegalStateException("pms_cipher_integrity_failed");\n    }
     // Fail closed: never write into a structurally corrupt local database.
     try (android.database.Cursor c = db.rawQuery("PRAGMA quick_check", null)) {
       if (!c.moveToFirst() || !"ok".equalsIgnoreCase(c.getString(0))) {
