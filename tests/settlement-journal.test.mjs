@@ -208,3 +208,11 @@ test("schema upgrade from the v2 mutable journal preserves existing records and 
   await new Promise((resolve, reject) => { read.oncomplete = resolve; read.onabort = () => reject(read.error); });
   assert.deepEqual(persisted, oldRecord);
 });
+
+test("journal exposes only fixed terminal transition methods, not arbitrary patch mutation", async () => {
+  const journal = makeJournal();
+  const appended = await journal.append(input());
+  assert.equal(journal.transition, undefined);
+  await journal.markApplied(appended.record.key, appended.record.payloadHash);
+  assert.equal((await journal.get(appended.record.key)).status, "APPLIED");
+});
