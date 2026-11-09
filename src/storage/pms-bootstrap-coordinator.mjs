@@ -12,6 +12,7 @@ import { settlePaymentToRepository } from "../payments/repository-settlement-ser
 import { PmsRepositoryBridge } from "./pms-repository-bridge.mjs";
 import { projectLegacyPmsDomains } from "./pms-domain-cutover.mjs";
 import { PmsSettingsRepository } from "./pms-settings-repository.mjs";
+import { PmsRestaurantTableRepository } from "./pms-restaurant-table-repository.mjs";
 
 export const AURELIA_LEGACY_STATE_KEY = "aurelia_lodge_v2";
 export const AURELIA_MIGRATION_STATUS_KEY = "aurelia_canonical_migration_status";
@@ -145,6 +146,7 @@ export class PmsBootstrapCoordinator {
     });
     bridge.bindActiveEngine(this.repository, identity);
     const settingsRepository = new PmsSettingsRepository({ bridge });
+    const restaurantTableRepository = new PmsRestaurantTableRepository({ bridge, now: this.now });
 
     // If the legacy Web Storage copy was cleared or lost, recover it from the
     // last fully committed canonical snapshot before the UI is allowed to start.
@@ -177,7 +179,7 @@ export class PmsBootstrapCoordinator {
       success: true, environment: this.environment, storageEngine: this.storageEngine,
       persistentStorage: Object.freeze({ requested: Boolean(this.persistenceRequested), granted: this.persistenceGranted }),
       uiCutover: false, recovery, migration, domainProjection,
-      repository: this.repository, identity, bridge, settingsRepository
+      repository: this.repository, identity, bridge, settingsRepository, restaurantTableRepository
     });
   }
 
