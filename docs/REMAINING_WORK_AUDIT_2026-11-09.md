@@ -28,13 +28,13 @@
 **Fix and implementation:**
 
 1. Migrate all business reads and writes from the legacy state object to asynchronous domain/repository services. Do this in bounded domains, not as a rewrite:
-   - Reservations and booking lifecycle, including every reservation creation/edit/advance/cancel path.
+   - Reservations and booking lifecycle: canonical booking entities are now verified and hydrated at startup, but every reservation creation/edit/advance/cancel mutation path still needs full transaction coverage.
    - Guests, stable guest IDs and guest-to-booking foreign keys.
    - Rooms, stable room IDs, room reassignment and historical rate snapshots.
    - Folios, charges, payments, invoices, receipts and daily totals.
-   - Inventory balance reads, edits and retirement now hydrate and write through `PmsInventoryRepository`; stock changes, POS/restaurant deductions and the recovery snapshot commit atomically with versioned outbox events. A dedicated append-only inventory movement ledger and report projections remain open.
-   - Expenses, voids and reports.
-   - Restaurant sale backfill now projects immutable sale entities and canonical hydration merges committed sales over stale snapshots. Table rows/open orders and new settlement/folio-charge paths use canonical entities and transactional outbox writes; POS/restaurant stock deductions now update canonical inventory. Remaining restaurant work is reporting projections and append-only stock-movement ledger linkage.
+   - Inventory balance reads, edits and retirement now hydrate and write through `PmsInventoryRepository`; stock changes, POS/restaurant deductions, restaurant table orders, append-only inventory movement ledger records and the recovery snapshot commit atomically with versioned outbox events. Inventory and stock-movement report projections remain open.
+   - Expense records now hydrate from canonical versioned entities at startup; create/update commits use the canonical expense transaction service. Expense void policy, report projections and full expense mutation coverage remain open.
+   - Restaurant sale backfill now projects immutable sale entities and canonical hydration merges committed sales over stale snapshots. Table rows/open orders and new settlement/folio-charge paths use canonical entities and transactional outbox writes; POS/restaurant stock deductions now update canonical inventory. Remaining restaurant work is reporting projections and stock-movement reconciliation/report linkage.
    - Feature flags, audit history and auxiliary collections. Property configuration (`set`) and menu now have a dedicated `settings:property-settings` entity, canonical startup hydration and versioned repository/outbox writes; remaining settings-related flags and auxiliary records are still in scope.
 2. Hydrate each screen from canonical repository reads at startup and after mutations. Do not let a stale in-memory object overwrite newer repository state.
 3. Convert each mutation to a version-checked repository transaction. Related entity changes and the corresponding immutable outbox event must commit in the same SQLite/IndexedDB transaction.
