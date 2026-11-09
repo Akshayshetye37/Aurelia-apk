@@ -1,5 +1,47 @@
 # Aurelia PMS
 
+## Current engineering status — 2026-11-09
+
+**Release posture: NOT PRODUCTION READY.** This branch is an open draft engineering change. The canonical authority remains `PREPARED_COMPATIBILITY`. UI cutover, live gateway collection, automatic settlement, automatic refund posting, provider activation and production release remain disabled.
+
+### Current project location
+
+- Repository: https://github.com/Akshayshetye37/Aurelia-apk
+- Project root: `/` (repository root)
+- Active engineering branch: `work/p0-storage-hardening`
+- Draft PR: https://github.com/Akshayshetye37/Aurelia-apk/pull/18
+- Code candidate SHA before documentation-only updates: `e430a9cd72d8e7ec7f653cbbb15e617595daf758` (current branch tip is shown by PR #18)
+- Main application entry: `index.html`
+- Android native templates: `android/templates/`
+- Repository/storage implementation: `src/storage/`
+- Payment implementation: `src/payments/` and `payment-backend/`
+- Tests: `tests/` and `android/templates/instrumentation/`
+- Engineering/release documentation: `docs/`
+
+### Chat overview — remaining problems and dependency order
+
+This overview records the current decisions and evidence from this engineering conversation. It is not a production approval.
+
+1. **Emulator SQLite instrumentation — OPEN / BLOCKED.** Native source compilation passed on both [run 42646801316](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42646801316) and [run 42646788499](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42646788499), but both failed before connected instrumentation reports were produced. Logs show ADB connection failures and emulator boot timeout on Linux without KVM acceleration. No SQLite instrumentation assertion result can be claimed. Correct the CI emulator startup only; do not alter application logic without a test-level failure.
+2. **Physical Android qualification — NOT STARTED / BLOCKED BY 1.** After emulator instrumentation passes, run the full matrix on physical hardware: fresh install, process death, background/foreground reauthorization, plaintext migration and parity, wrong-key fail-closed behavior, and interrupted/low-storage migration. Record model, Android version and exact SHA.
+3. **Owner-authorized production-shaped snapshot — MISSING / BLOCKER.** No authorized real or production-shaped snapshot has been supplied and processed. Run migration, full entity read-back, parity and rollback against such a snapshot; retain the source until evidence is accepted. Synthetic fixtures are not real-data evidence.
+4. **Domain-command read/write routing — INCOMPLETE / BLOCKED BY 1–3.** Complete commands for bookings, guests, rooms, folios, payments, audit and inventory. Commands must become the sole business write path while the legacy projection remains active. Demonstrate clean divergence checks.
+5. **Remaining legacy business writes — PRESENT / BLOCKED BY 4.** Inventory and remove direct localStorage or equivalent business-data writes only after domain commands cover the mutations. Keep only explicitly approved preference/cache use outside the repository layer; prove zero business-write bypasses.
+6. **Accounting sign-off — MISSING.** Use the existing read-only folio evidence exporter on representative manual-cash, staff-reviewed UPI and unpaid folios. Obtain written owner/accountant confirmation of balances, history and audit evidence before opening any gateway-to-folio posting path.
+7. **Repository governance — INCOMPLETE.** PR #18 remains draft and unmerged. Configure protected target-branch rules, required reviews and required status checks (PMS, R1, settlement, payment backend, Android compile and instrumentation) before release-critical merge.
+8. **UI cutover — DISABLED.** Keep `uiCutover=false` until items 1–5, clean divergence evidence and accounting sign-off are complete. Any future change must be isolated, reviewed and reversible.
+9. **Financial release gates — OFF.** Live collection, automatic settlement and automatic refund posting remain OFF. Any future activation requires completed storage/migration/routing/accounting qualification, webhook and reconciliation proof, and an explicit authenticated, audited owner release decision on the server side.
+
+### Verified state at this update
+
+- Exact candidate commit: `e430a9cd72d8e7ec7f653cbbb15e617595daf758`.
+- Both native workflows compiled native sources and unit tests successfully, but the emulator failed to boot; connected instrumentation tests did not produce reports. This is an infrastructure/startup failure, not a green test result and not evidence of a SQLite assertion failure.
+- R1 local-first checks and settlement foundation checks passed on this candidate SHA (see [R1 run 42646800927](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42646800927) and [settlement run 42646800905](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42646800905)).
+- No physical-device qualification, authorized snapshot migration, accounting sign-off or production release approval is claimed.
+
+**Operating rule:** proceed in dependency order. Do not start physical-device qualification until emulator instrumentation is green. Do not begin domain routing or legacy-write removal until emulator, physical-device and snapshot gates are closed. Do not merge, enable UI cutover, enable financial gates or fabricate evidence.
+
+
 **MANDATORY PRODUCT PRINCIPLE — Our app works primarily on the primary device's local storage.**
 
 **Current remaining work:** [2026-11-09 end-to-end audit and implementation acceptance plan](./docs/REMAINING_WORK_AUDIT_2026-11-09.md). This is the current task list; it preserves local PMS operation as primary and treats internet/cloud as optional.
@@ -29,10 +71,11 @@ The read-only accounting diagnostic already exists at `npm run diagnose:accounti
 
 - **GitHub repository:** https://github.com/Akshayshetye37/Aurelia-apk
 - **Project root:** repository root (`/`)
-- **Active engineering branch:** `feature/multi-provider-payment-backend`
-- **Active branch:** `feature/multi-provider-payment-backend` (resolve the current SHA from the branch ref; avoid hard-coded moving HEAD values).
-- **Latest verification:** On exact commit `4e7659c42b404b23175df898f16de58bf774d5da`, [PMS source/web CI run 42591219837](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42591219837) and [settlement foundation CI run 42591219781](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42591219781) both completed successfully. PMS CI passed the complete test suite, production web bundle build and production asset privacy checks. Neither workflow qualifies an APK or physical Android device.
-- **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
+- **Active engineering branch:** `work/p0-storage-hardening`
+- **Current candidate SHA:** `e430a9cd72d8e7ec7f653cbbb15e617595daf758`
+- **Draft PR #18:** https://github.com/Akshayshetye37/Aurelia-apk/pull/18
+- **Current CI evidence:** the two native runs linked above compiled but could not boot the emulator; instrumentation did not execute to completion. Do not treat them as passing.
+- **Recovery baselines:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) and [`backup/phase-0-baseline-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07).
 
 Useful project locations:
 
@@ -199,7 +242,7 @@ It projects rooms, guests, bookings, preserved folio source values, inventory, e
 
 ## CI evidence and verification boundary
 
-The active branch is `feature/multi-provider-payment-backend`. GitHub returned no workflow runs and no commit status checks for the latest storage recovery commit. The older [PMS workflow run 42380831922](https://github.com/Akshayshety37/Aurelia-apk/actions/runs/42380831922) is historical evidence for its recorded SHA only and does not establish verification of the current branch head. No new Android build is authorized by this audit.
+The active branch is `feature/multi-provider-payment-backend`. GitHub returned no workflow runs and no commit status checks for the latest storage recovery commit. The older [PMS workflow run 42380831922](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42380831922) is historical evidence for its recorded SHA only and does not establish verification of the current branch head. No new Android build is authorized by this audit.
 
 Historical evidence is commit-scoped and must not be treated as an automatic pass for later revisions:
 

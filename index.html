@@ -1,22 +1,28 @@
 <!--
-AURELIA PMS — CURRENT SOURCE AND RELEASE BOUNDARY
+AURELIA PMS — CURRENT SOURCE AND RELEASE BOUNDARY (updated 2026-11-09)
 Repository: https://github.com/Akshayshetye37/Aurelia-apk
 Project root: /
-Active branch: feature/multi-provider-payment-backend
-Branch HEAD: resolve the current SHA from the active branch ref; do not hard-code a moving HEAD.
-Latest verification: [GitHub Actions run 42492883511](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42492883511) passed 427/427 tests, production web build and client-asset privacy checks on commit 83d3ddfa41573fbbcca18efaf4bde73b8a9513cf. This is not APK or device qualification.
-Recovery point: backup/pre-local-first-cutover-2026-11-07 at 8b74f3d2cb723237b5f3a8901e22ef7370552812; backup/pre-release-html-update-2026-11-07 preserves the pre-documentation-update snapshot.
-CI evidence: source-tests-web and settlement-foundation passed on the exact verified commit above. The workflow does not build or qualify an Android APK.
-LOCAL IDENTITY: browser/PWA uses a cryptographically generated local identity in IndexedDB with a verified localStorage fallback. Android stores identity encrypted with AES-GCM using an Android Keystore key. Local identity is distinct from Firebase/cloud tenant identity.
-LOCAL-FIRST SNAPSHOT WRITES: ordinary persist() and persistCanonicalStrict() serialize complete PMS snapshots through PmsLocalFirstWriteCoordinator into the canonical local repository, verify exact read-back, and refresh aurelia_lodge_v2 only afterward as a compatibility cache. Snapshot writes are ordered with the operational mutation lock and fail closed on repository or read-back failure. Room and guest UI collections now hydrate from canonical entities; other domain collections remain snapshot-backed.
-STRICT ASYNC WORKFLOWS: JSON import/rollback, full backup restore/rollback, manual folio payments, staff-reviewed UPI approval, guest profile create/update/retire and primary reservation creation await canonical repository commit and exact read-back before confirming success. Manual payment and UPI approval atomically commit booking, folio projection and full recovery snapshot. Reservation creation atomically commits guest, booking, folio projection and the full recovery snapshot. Legacy localStorage is refreshed only as a compatibility cache after commit; other operational UI mutations remain to be migrated.
-RECOVERY: startup prefers the latest committed canonical audit snapshot over the immutable first-migration bytes, validates the complete PMS schema and verifies exact read-back. The immutable migration snapshot is a fallback only when no newer committed snapshot exists. Missing or inconsistent recovery evidence fails closed.
-CUTOVER: uiCutover=false globally. Room status/catalogue commands and guest profile create/update/retire commands use transactional domain entities. Room and guest collections are hydrated from verified canonical entities before application scripts replay. Payment, reservation, lifecycle, inventory, expense and restaurant paths have varying levels of domain-entity transactions. Remaining synchronous accounting and domain mutation paths must be migrated before the repository becomes the sole operational source of truth.
-RUNTIME: serve/package the complete project and ./src module tree. Startup must fail closed if durable storage bootstrap or exact snapshot verification fails. Embedded previews without durable storage are unsupported.
-PAYMENTS: six adapter/factory foundations exist. The provider integration matrix states only Razorpay and Cashfree currently have cloud checkout API routes; PayU, PhonePe, Paytm and JioPay cloud route integration remains outstanding. CCAvenue is catalogue-only. Adapter tests do not prove merchant UAT or production support.
-ANDROID: Capacitor appId com.aurelia.pms; webDir www. Previous CI notes report a debug APK build, not production signing or physical-device qualification. Native process-death recovery and device acceptance remain open.
-RELEASE: cloud sync OFF; live gateway collection OFF; automatic gateway settlement OFF; automatic refund posting OFF; production release NOT AUTHORIZED.
-The application must never contain merchant credentials, webhook secrets, signing keys or backend secrets.
+Active engineering branch: work/p0-storage-hardening
+Source candidate before documentation-only commits: e430a9cd72d8e7ec7f653cbbb15e617595daf758 (see PR #18 for current branch tip)
+Draft PR: https://github.com/Akshayshetye37/Aurelia-apk/pull/18 (open, draft, unmerged)
+CURRENT STATE: canonical authority is PREPARED_COMPATIBILITY. uiCutover=false. Live gateway collection, automatic settlement, automatic refund posting, provider activation and production release remain OFF.
+CURRENT CHAT OVERVIEW / OPEN GATES:
+1) Emulator SQLite instrumentation is blocked: native compilation passed in runs 42646801316 and 42646788499, but Linux emulator startup/ADB failed and timed out. No connected instrumentation report exists; no SQLite assertions can be claimed as passed or failed.
+2) Physical Android qualification has not started; it is blocked until emulator instrumentation is green.
+3) No owner-authorized real/production-shaped snapshot has been migrated and parity/rollback verified.
+4) Domain-command routing is incomplete; not every business mutation uses the command/repository layer exclusively.
+5) Legacy direct business-data writes remain and require removal after command coverage.
+6) Accounting owner sign-off on representative real/realistic folios is missing.
+7) Repository governance is incomplete; PR #18 remains draft and branch protection/required checks need owner/admin configuration.
+8) UI cutover remains disabled until storage, migration, command routing and accounting gates pass.
+9) Live collection, automatic settlement and automatic refund posting remain OFF pending server-side qualification and explicit audited owner authorization.
+DEPENDENCY ORDER: close emulator instrumentation, then physical-device qualification and authorized snapshot migration/parity/rollback; only then complete domain-command routing and remove bypasses; obtain accounting sign-off and governance approval. Do not merge or activate any release gate based on synthetic or incomplete evidence.
+LATEST VERIFIED CI: R1 local-first run 42646800927 and settlement foundation run 42646800905 passed on candidate SHA e430a9c. Native runs above compiled successfully but failed at emulator boot before instrumentation could produce results.
+LOCAL IDENTITY / KEY BOUNDARY: SQLCipher receives a short-lived process-memory DEK/passphrase byte array; the DEK is not a non-exportable Android Keystore key. Android Keystore protects the persisted wrapped envelope at rest. Never log or persist clear key material.
+LOCAL-FIRST: ordinary PMS operations must use durable device-local storage. Browser/PWA uses IndexedDB; Android uses native SQLCipher-backed SQLite through Capacitor. Missing native storage must fail closed.
+PAYMENT TRUST: provider credentials, webhook secrets and signing material remain backend-only. Browser redirects/callbacks are not proof of payment capture.
+The app must be served/packaged with the complete project and ./src module tree. Embedded HTML previews are not supported as a durable PMS runtime.
+See README.md and docs/ for architecture, test evidence and release qualification details.
 -->
 
 <!-- Application metadata
@@ -697,44 +703,64 @@ const PHOTO_NATIVE_PENDING=new Map();
 let PHOTO_NATIVE_SEQ=0;
 window.aureliaNativePhotoResult=function(id,ok,payload){const p=PHOTO_NATIVE_PENDING.get(String(id));if(!p)return;PHOTO_NATIVE_PENDING.delete(String(id));if(ok){if(p.type==='photoArchive'&&typeof payload==='string'){try{payload=JSON.parse(payload)}catch(e){p.reject(e);return}}p.resolve(payload)}else p.reject(new Error(payload||'Native photo storage failed'))};
 function photoNative(type,extra={}){return new Promise((resolve,reject)=>{if(!window.AureliaNative){reject(new Error('Native photo storage is only available in the Android app'));return}const requestId='photo-'+Date.now()+'-'+(++PHOTO_NATIVE_SEQ);PHOTO_NATIVE_PENDING.set(requestId,{resolve,reject,type});if(!nat({type,requestId,...extra})){PHOTO_NATIVE_PENDING.delete(requestId);reject(new Error('Could not contact native photo storage'))}setTimeout(()=>{const p=PHOTO_NATIVE_PENDING.get(requestId);if(p){PHOTO_NATIVE_PENDING.delete(requestId);p.reject(new Error('Native photo storage timed out'))}},30000)})}
-function photoDb(){return new Promise((resolve,reject)=>{try{if(!window.indexedDB||typeof indexedDB.open!=='function')throw new Error('IndexedDB unavailable');const q=indexedDB.open(PHOTO_DB,1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('originals'))q.result.createObjectStore('originals')};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Photo storage unavailable'))}catch(e){reject(e)}})}
+function photoDbOpen(){return new Promise((resolve,reject)=>{try{if(!window.indexedDB||typeof indexedDB.open!=='function')throw new Error('IndexedDB unavailable');const q=indexedDB.open(PHOTO_DB,1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('originals'))q.result.createObjectStore('originals')};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Photo storage unavailable'))}catch(e){reject(e)}})}
+let photoLegacyMigration=null;
+async function migrateLegacyPhotoFallback(db){
+ if(photoStorageSandboxed())return;
+ let entries=[];
+ try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX)){const value=localStorage.getItem(k);if(typeof value==='string')entries.push([k.slice(PHOTO_FALLBACK_PREFIX.length),value])}}}
+ catch(e){return}
+ if(!entries.length)return;
+ await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite'),store=tx.objectStore('originals');entries.forEach(([key,value])=>store.put(value,key));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Legacy photo migration failed'));tx.onabort=()=>reject(tx.error||new Error('Legacy photo migration was aborted'))});
+ for(const [key,value] of entries){
+  const stored=await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Legacy photo read-back failed'))});
+  if(stored!==value)throw new Error('Legacy photo migration read-back mismatch; source photo was retained.');
+ }
+ // Delete old localStorage copies only after every IndexedDB value passed exact read-back.
+ for(const [key] of entries)localStorage.removeItem(PHOTO_FALLBACK_PREFIX+key);
+}
+function photoDb(){return photoDbOpen().then(async db=>{if(!photoLegacyMigration)photoLegacyMigration=migrateLegacyPhotoFallback(db).catch(error=>{photoLegacyMigration=null;throw error});try{await photoLegacyMigration;return db}catch(error){db.close();throw error}})}
 async function photoPut(key,data){
  if(window.AureliaNative)return photoNative('photoStore',{key,data}).then(()=>true);
  if(photoStorageSandboxed()){PHOTO_MEMORY_FALLBACK.set(key,data);return true}
- try{const db=await photoDb();await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite');tx.objectStore('originals').put(data,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not store original photo'));tx.onabort=()=>reject(tx.error||new Error('Photo storage transaction aborted'))});db.close();return true}
- catch(e){try{localStorage.setItem(PHOTO_FALLBACK_PREFIX+key,data);return true}catch(f){PHOTO_MEMORY_FALLBACK.set(key,data);console.warn('Persistent photo storage unavailable in this preview; photo exists only for this session.',e);return true}}
+ let db;
+ try{
+  db=await photoDb();
+  await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite');tx.objectStore('originals').put(data,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not store original photo'));tx.onabort=()=>reject(tx.error||new Error('Photo storage transaction aborted'))});
+  return true;
+ }catch(e){throw new Error('Durable photo storage is unavailable; no localStorage fallback was written. '+(e?.message||''))}
+ finally{db?.close()}
 }
-async function photoGet(key){if(!key)return null;if(window.AureliaNative){try{return await photoNative('photoLoad',{key})}catch(e){return null}}if(PHOTO_MEMORY_FALLBACK.has(key))return PHOTO_MEMORY_FALLBACK.get(key);if(photoStorageSandboxed())return null;try{const db=await photoDb();const data=await new Promise((resolve,reject)=>{const q=db.transaction('originals').objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result||null);q.onerror=()=>reject(q.error||new Error('Could not read original photo'))});db.close();if(data)return data}catch(e){}try{const fallback=localStorage.getItem(PHOTO_FALLBACK_PREFIX+key);if(fallback)return fallback}catch(e){}return PHOTO_MEMORY_FALLBACK.get(key)||null}
+async function photoGet(key){
+ if(!key)return null;
+ if(window.AureliaNative)return photoNative('photoLoad',{key}).catch(()=>null);
+ if(PHOTO_MEMORY_FALLBACK.has(key))return PHOTO_MEMORY_FALLBACK.get(key);
+ if(photoStorageSandboxed())return null;
+ const db=await photoDb();
+ try{return await new Promise((resolve,reject)=>{const q=db.transaction('originals').objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result||null);q.onerror=()=>reject(q.error||new Error('Could not read original photo'))})}
+ finally{db.close()}
+}
 async function photoArchive(){
  if(window.AureliaNative)return photoNative('photoArchive');
- const out={};
- try{const db=await photoDb();await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').getAllKeys(),v=tx.objectStore('originals').getAll();tx.oncomplete=()=>{q.result.forEach((k,i)=>out[k]=v.result[i]);resolve()};tx.onerror=()=>reject(tx.error||new Error('Could not prepare photo archive'))});db.close()}catch(e){}
- try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX))out[k.slice(PHOTO_FALLBACK_PREFIX.length)]=localStorage.getItem(k)}}catch(e){}
- PHOTO_MEMORY_FALLBACK.forEach((v,k)=>out[k]=v);
- if(Object.keys(out).length||!window.indexedDB)return out;
- try{await photoDb();return out}catch(e){return out}
+ if(photoStorageSandboxed()){const memory={};PHOTO_MEMORY_FALLBACK.forEach((value,key)=>memory[key]=value);return memory}
+ const out={},db=await photoDb();
+ try{
+  await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').getAllKeys(),v=tx.objectStore('originals').getAll();tx.oncomplete=()=>{q.result.forEach((key,index)=>out[key]=v.result[index]);resolve()};tx.onerror=()=>reject(tx.error||new Error('Could not prepare photo archive'));tx.onabort=()=>reject(tx.error||new Error('Photo archive read was aborted'))});
+  return out;
+ }finally{db.close()}
 }
 async function photoRestore(archive){
  if(!archive||typeof archive!=='object'||Array.isArray(archive))throw new Error('Backup photo archive is invalid');
  const entries=Object.entries(archive);
- for(const [k,v] of entries)if(!k||typeof v!=='string'||!/^data:image\//i.test(v))throw new Error('Photo archive contains an invalid original image');
+ for(const [key,value] of entries)if(!key||typeof value!=='string'||!/^data:image\//i.test(value))throw new Error('Photo archive contains an invalid original image');
  if(window.AureliaNative){await photoNative('photoRestore',{archive});return entries.length}
- let db;
- try{db=await photoDb()}catch(e){
-  const keep=new Set(entries.map(([k])=>PHOTO_FALLBACK_PREFIX+k));
-  try{for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX)&&!keep.has(k))localStorage.removeItem(k)}}catch(_){}
-  PHOTO_MEMORY_FALLBACK.clear();
-  for(const [k,v] of entries){try{localStorage.setItem(PHOTO_FALLBACK_PREFIX+k,v)}catch(_){PHOTO_MEMORY_FALLBACK.set(k,v)}}
-  return entries.length;
- }
+ if(photoStorageSandboxed()){PHOTO_MEMORY_FALLBACK.clear();for(const [key,value] of entries)PHOTO_MEMORY_FALLBACK.set(key,value);return entries.length}
+ const db=await photoDb();
  try{
-  await new Promise((resolve,reject)=>{
-   const tx=db.transaction('originals','readwrite'),st=tx.objectStore('originals');
-   st.clear();entries.forEach(([k,v])=>st.put(v,k));
-   tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not restore original photos'));tx.onabort=()=>reject(tx.error||new Error('Photo restore was cancelled'));
-  });
+  await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite'),store=tx.objectStore('originals');store.clear();entries.forEach(([key,value])=>store.put(value,key));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not restore original photos'));tx.onabort=()=>reject(tx.error||new Error('Photo restore was cancelled'))});
+  const stored=await Promise.all(entries.map(([key])=>new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Restored photo read-back failed'))})));
+  if(entries.some((entry,index)=>stored[index]!==entry[1]))throw new Error('Restored photo archive failed exact read-back verification');
  }finally{db.close()}
- try{for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX))localStorage.removeItem(k)}}catch(_){}
  PHOTO_MEMORY_FALLBACK.clear();
  return entries.length;
 }

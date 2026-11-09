@@ -2,10 +2,26 @@
 
 **Release:** R1 — local-only PMS  
 **Status:** **NOT RELEASE READY**  
-**Candidate SHA:** `6540efb109d62c74ccdf85f361569335fb30ea63`  
-**Verified CI (exact candidate SHA):** [R1 required checks #148](https://github.com/Akshayshety37/Aurelia-apk/actions/runs/42614702847) · [PMS source tests and production web packaging #2672](https://github.com/Akshayshety37/Aurelia-apk/actions/runs/42614702919) · [settlement-foundation](https://github.com/Akshayshety37/Aurelia-apk/actions/runs/42614702875)
+**Engineering branch:** `work/p0-storage-hardening`  
+**Code verification SHA:** `850bdcb7ab8e7c76648591f952c2543e1524040a`  
+**Exact-code-SHA CI:** [PMS source/web #2678](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507298) · [R1 required checks #153](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507418) · [settlement foundation #737](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507240) · [payment backend #734](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507184) — **all four passed on exact code SHA `850bdcb7ab8e7c76648591f952c2543e1524040a`**.
 
-The three CI workflows above completed successfully on the exact candidate SHA. CI evidence covers source tests, release-default checks, production web packaging/privacy and settlement module checks. It does not qualify Android hardware, financial data migration, accounting sign-off, physical devices, signing, backup/restore or production operations.
+## Latest implemented increment
+
+- Added typed storage quota/full errors and native SQLite integrity/foreign-key/durability settings.
+- Added a storage bypass ratchet and isolated write-fault injection tests.
+- Converted settlement journal state transitions and authorization renewals to append-only v3 events; added concurrency and migration tests.
+- Added persisted PMS authority state. Bootstrap records `PREPARED_COMPATIBILITY`, records domain projection status, and fails closed if canonical authority is already active. It does **not** activate canonical authority or enable UI cutover.
+- New migration identities use SHA-256 (64 hex characters). Existing 8-hex FNV migration markers remain accepted for upgrade compatibility; no new short identifiers are generated.
+- The exact-head PMS workflow passed the full Node suite, production web packaging and asset privacy scan. R1, settlement and payment-backend workflows also passed.
+
+The four passing workflows are source/CI evidence only. They do not qualify physical Android devices, real financial migration, accounting sign-off, owner signing, backup/restore drills or production operations.
+
+---
+
+## Historical release-candidate evidence (superseded by the engineering-branch verification above)
+
+The earlier candidate SHA was `6540efb109d62c74ccdf85f361569335fb30ea63`. Its prior R1, PMS source/web and settlement checks passed, but those runs are not used as evidence for the current engineering branch.
 
 ## Workstream status
 

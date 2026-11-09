@@ -3,20 +3,65 @@ package com.aurelia.pms;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
-import android.database.DatabaseUtils;
-import android.database.sqlite.SQLiteDatabase;
-import android.database.sqlite.SQLiteOpenHelper;
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
+import net.zetetic.database.sqlcipher.SQLiteOpenHelper;
 import org.json.JSONArray;
 import org.json.JSONTokener;
 import org.json.JSONObject;
 
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
-  private static final String NAME = "aurelia-pms.db";
+  private static final String NAME = "aurelia-pms-encrypted.db";
   private static final int VERSION = 3;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
-  LocalPmsRepository(Context context) { super(context.getApplicationContext(), NAME, null, VERSION); setWriteAheadLoggingEnabled(true); }
+  private final Context appContext;
+  private final byte[] databaseKey;
+  private boolean initialized;
+  static { System.loadLibrary("sqlcipher"); }
+
+  LocalPmsRepository(Context context, byte[] databaseKey) {
+    super(context.getApplicationContext(), NAME, databaseKey, null, VERSION, 0, null, null, true);
+    if (databaseKey == null || databaseKey.length != 32) throw new IllegalArgumentException("PMS database key must be 256 bits");
+    this.appContext = context.getApplicationContext();
+    this.databaseKey = databaseKey;
+    setWriteAheadLoggingEnabled(true);
+  }
+
+  synchronized void initialize() {
+    if (initialized) return;
+    SQLiteDatabase encrypted = getWritableDatabase();
+    PmsPlaintextDatabaseMigration.migrateIfNeeded(appContext, encrypted);
+    initialized = true;
+  }
+
+  @Override public synchronized void close() {
+    try { super.close(); }
+    finally { java.util.Arrays.fill(databaseKey, (byte) 0); initialized = false; }
+  }
+
+  @Override public void onConfigure(SQLiteDatabase db) {
+    super.onConfigure(db);
+    db.setForeignKeyConstraintsEnabled(true);
+  }
+
+  @Override public void onOpen(SQLiteDatabase db) {
+    super.onOpen(db);
+    db.execSQL("PRAGMA synchronous=FULL");
+    try (android.database.Cursor status = db.rawQuery("PRAGMA cipher_status", null)) {
+      if (!status.moveToFirst() || status.getInt(0) != 1) throw new IllegalStateException("pms_cipher_not_active");
+    }
+    // SQLCipher returns one row per invalid page and no rows when page HMACs pass.
+    try (android.database.Cursor cipher = db.rawQuery("PRAGMA cipher_integrity_check", null)) {
+      if (cipher.moveToFirst()) throw new IllegalStateException("pms_cipher_integrity_failed: " + cipher.getString(0));
+    }
+    // Fail closed: never write into a structurally corrupt local database.
+    try (android.database.Cursor c = db.rawQuery("PRAGMA quick_check", null)) {
+      if (!c.moveToFirst() || !"ok".equalsIgnoreCase(c.getString(0))) {
+        throw new IllegalStateException("pms_db_integrity_failed");
+      }
+    }
+  }
 
   @Override public void onCreate(SQLiteDatabase db) {
     db.execSQL("PRAGMA foreign_keys=ON");
@@ -108,7 +153,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
           db.setTransactionSuccessful();return migrationResult(true,migrationId,count);
         }
       }
-      if(DatabaseUtils.longForQuery(db,"SELECT COUNT(*) FROM pms_entities",null)!=0)throw new IllegalStateException("canonical_repository_not_empty");
+      if(longForQuery(db,"SELECT COUNT(*) FROM pms_entities",null)!=0)throw new IllegalStateException("canonical_repository_not_empty");
       java.util.Iterator<String> keys=parsed.keys();int imported=0;long now=System.currentTimeMillis();
       while(keys.hasNext()){String key=keys.next();validateIdentity(key,"legacy entity key");ContentValues row=new ContentValues();row.put("entity_type","legacy");row.put("entity_id",key);row.put("version",1);Object value=parsed.opt(key);
         row.put("data_json",serializeJsonValue(value));row.put("updated_at",now);db.insertOrThrow("pms_entities",null,row);imported++;}
@@ -172,6 +217,9 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     JSONObject x=new JSONObject();x.put("eventId",c.getString(0));x.put("tenantId",c.getString(1));x.put("propertyId",c.getString(2));x.put("deviceId",c.getString(3));x.put("entityType",c.getString(4));x.put("entityId",c.getString(5));x.put("sequence",c.getLong(6));x.put("eventType",c.getString(7));x.put("schemaVersion",c.getLong(8));x.put("occurredAt",c.getString(9));x.put("payload",new JSONTokener(c.getString(10)).nextValue());x.put("status","IN_FLIGHT");x.put("attempts",attempts);x.put("retryAt",c.isNull(13)?JSONObject.NULL:c.getString(13));x.put("leaseOwner",owner);x.put("leaseUntil",isoTimestamp(leaseUntil));x.put("acknowledgedAt",c.isNull(18)?JSONObject.NULL:isoTimestamp(c.getLong(18)));x.put("lastErrorCode",c.isNull(16)?JSONObject.NULL:c.getString(16));x.put("createdAt",isoTimestamp(c.getLong(17)));return x;
   }
   private static String isoTimestamp(long value){java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",java.util.Locale.US);f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));return f.format(new java.util.Date(value));}
+  private static long longForQuery(SQLiteDatabase db,String sql,String[] args){
+    try(Cursor c=db.rawQuery(sql,args)){if(!c.moveToFirst())throw new IllegalStateException("pms_query_no_result");return c.getLong(0);}
+  }
   private static long entityVersion(SQLiteDatabase db,String type,String id){try(Cursor c=db.rawQuery("SELECT version FROM pms_entities WHERE entity_type=? AND entity_id=?",new String[]{type,id})){return c.moveToFirst()?c.getLong(0):0;}}
   private static void validateEvent(JSONObject e,String type,String id,long sequence){try{for(String k:new String[]{"eventId","tenantId","propertyId","deviceId","eventType"})validateIdentity(e.getString(k),k);if(!type.equals(e.getString("entityType"))||!id.equals(e.getString("entityId"))||safeJsonInteger(e,"sequence",1)!=sequence||safeJsonInteger(e,"schemaVersion",1)<1||!Double.isFinite(parseDate(e.getString("occurredAt"))))throw new IllegalArgumentException("invalid_pms_outbox_event");if(e.has("payload")&&serializeJsonValue(e.get("payload"))==null)throw new IllegalArgumentException("invalid_payload");}catch(RuntimeException x){throw x;}catch(Exception x){throw new IllegalArgumentException("invalid_pms_outbox_event",x);}}
   private static long safeJsonInteger(JSONObject object,String key,long minimum)throws Exception{Object raw=object.get(key);if(!(raw instanceof Number))throw new IllegalArgumentException("invalid_integer_"+key);double number=((Number)raw).doubleValue();if(!Double.isFinite(number)||number!=Math.rint(number)||number<minimum||number>9007199254740991d)throw new IllegalArgumentException("invalid_integer_"+key);return ((Number)raw).longValue();}
@@ -180,5 +228,5 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static RuntimeException conflict(String code){return new IllegalStateException(code);}
   private static RuntimeException failure(String code,Exception cause){return new IllegalStateException(code,cause);}
   private static JSONObject migrationResult(boolean replay,String id,int count){JSONObject r=new JSONObject();try{r.put("alreadyMigrated",replay);r.put("migrationId",id);r.put("entityCount",count);}catch(Exception ignored){}return r;}
-  private static String serializeJsonValue(Object value) throws Exception {org.json.JSONArray wrapper=new org.json.JSONArray();wrapper.put(value);String encoded=wrapper.toString();return encoded.substring(1,encoded.length()-1);}
+  private static String serializeJsonValue(Object value) {try{org.json.JSONArray wrapper=new org.json.JSONArray();wrapper.put(value);String encoded=wrapper.toString();return encoded.substring(1,encoded.length()-1);}catch(RuntimeException e){throw new IllegalStateException("pms_serialization_failed",e);}}
 }

@@ -9,7 +9,8 @@ import { CapacitorPmsStorageClient } from "../src/storage/capacitor-pms-storage.
 import {
   PmsBootstrapCoordinator,
   AURELIA_LEGACY_STATE_KEY,
-  AURELIA_MIGRATION_STATUS_KEY
+  AURELIA_MIGRATION_STATUS_KEY,
+  stableMigrationId
 } from "../src/storage/pms-bootstrap-coordinator.mjs";
 
 const state = {
@@ -270,7 +271,7 @@ test("stale fresh-install marker without its canonical snapshot fails closed", a
 });
 
 test("verified legacy marker without its immutable migration snapshot fails closed", async () => {
-  const storage = makeStorage({ [AURELIA_MIGRATION_STATUS_KEY]: "VERIFIED:mig_legacy_00000000" });
+  const storage = makeStorage({ [AURELIA_MIGRATION_STATUS_KEY]: "VERIFIED:mig_legacy_0000000000000000000000000000000000000000000000000000000000000000" });
   const app = coordinator("missing-immutable-migration", storage);
   await assert.rejects(app.initializeApplication(), /Verified migration marker has no matching immutable source snapshot/i);
   assert.equal(app.status, "FAILED_CLOSED");
@@ -327,4 +328,48 @@ test("bootstrap projects and exposes canonical inventory before the PMS UI start
   assert.equal(canonical.find(row => row.n === "Towels").q, 5);
   assert.equal((await result.repository.getEntity("inventory", "coffee-1")).version, 1);
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
+});
+
+test("bootstrap persists canonical preparation in the device repository without enabling UI cutover", async () => {
+  const raw = JSON.stringify(state);
+  const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: raw });
+  const result = await coordinator("persisted-authority-state", storage).initializeApplication();
+  assert.equal(result.authority.data.status, "PREPARED_COMPATIBILITY");
+  assert.equal(result.authority.data.uiCutover, false);
+  assert.equal(result.authority.data.projectionStatus, "VERIFIED");
+  const persisted = await result.repository.getEntity("audit", "pms:authority");
+  assert.equal(persisted.version, 1);
+  assert.equal(persisted.data.migrationId, result.migration.migrationId);
+  assert.equal(persisted.data.status, "PREPARED_COMPATIBILITY");
+});
+
+test("bootstrap refuses to start the legacy UI after canonical authority is persisted", async () => {
+  const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: JSON.stringify(state) });
+  const repository = new IndexedDbPmsRepository({ indexedDBImpl: indexedDB, databaseName: "authority-cutover-block" });
+  await repository.database();
+  const bridge = new PmsRepositoryBridge({ tenantId: "tenant-authority", propertyId: "property-authority", deviceId: "device-authority" });
+  bridge.bindActiveEngine(repository);
+  await bridge.mutateEntity({
+    entityType: "audit", entityId: "pms:authority", expectedVersion: 0,
+    eventType: "test.authority_seed",
+    mutate: data => Object.assign(data, {
+      schemaVersion: 1, status: "CANONICAL_AUTHORITATIVE", uiCutover: true,
+      migrationId: null, projectionStatus: "VERIFIED",
+      preparedAt: "2026-11-09T00:00:00.000Z", updatedAt: "2026-11-09T00:00:00.000Z"
+    })
+  });
+  const app = coordinator("authority-cutover-block", storage, { repository });
+  await assert.rejects(app.initializeApplication(), error => error.code === "PMS_CANONICAL_AUTHORITY_CUTOVER_REQUIRED");
+  assert.equal(app.status, "FAILED_CLOSED");
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), JSON.stringify(state));
+});
+
+
+test("legacy migration identity is a full SHA-256 digest and deterministic", async () => {
+  const raw = JSON.stringify(state);
+  const first = await stableMigrationId(raw);
+  const second = await stableMigrationId(raw);
+  assert.match(first, /^mig_legacy_[a-f0-9]{64}$/);
+  assert.equal(second, first);
+  assert.notEqual(await stableMigrationId(raw + " "), first);
 });

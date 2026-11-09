@@ -37,7 +37,8 @@ jobs:
           java-version: '21'
 
       - name: Install Node dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
 
       - name: Install payment backend dependencies
         run: npm --prefix payment-backend install --no-audit --no-fund

@@ -105,9 +105,11 @@ class AureliaAppManager(
     @Synchronized
     fun isSessionAuthorized(): Boolean {
         if (!authenticated) return false
-        if (backgroundAtElapsed > 0L &&
-            SystemClock.elapsedRealtime() - backgroundAtElapsed >= sessionTimeoutMs) {
-            clearSession()
+        if (backgroundAtElapsed > 0L) {
+            val elapsed = SystemClock.elapsedRealtime() - backgroundAtElapsed
+            if (elapsed < 0L || elapsed >= sessionTimeoutMs) clearSession()
+            // Backgrounded sessions may not reopen the encrypted database.
+            // onForeground() must explicitly re-authorize before key access.
             return false
         }
         return true
