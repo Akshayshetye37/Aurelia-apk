@@ -55,6 +55,7 @@ export function assertPayBridgeAllowed() {
     const error = new Error("Pay Bridge is disabled for the local-only release.");
     error.code = "PAY_BRIDGE_DISABLED";
     throw error;
+  }
 }
 
 export function assertNativeBridgeAllowed() {
