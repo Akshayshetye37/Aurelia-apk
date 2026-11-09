@@ -42,7 +42,7 @@
 
 - [x] Correct stale diagnostic CI state: this ledger now records the exact SHA and scope of the passing run rather than saying CI is pending.
 - [x] Add Java and Kotlin native-template paths to settlement CI push and pull-request filters.
-- [ ] Prove a Java/Kotlin-template-only PR triggers the workflow; pending the new PR check.
+- [x] Prove a Java-template-only PR triggers the workflow: [run 42576505089](https://github.com/Akshayshety37/Aurelia-apk/actions/runs/42576505089) completed PASS on exact probe SHA `cf7eeea07584009d1077ac986a05dc2ba15f11c8`; the changed Java template was the only new file in that commit.
 - [ ] Verify required checks and reject direct pushes to the protected release branch; not verified.
 - [ ] Verify protection on `main`; the connected integration returned HTTP 403 for the protection endpoint.
 - [ ] Generate this ledger from machine-readable CI results; not implemented. This file is a manually maintained gate ledger and must not be represented as CI-generated.
