@@ -3,9 +3,8 @@
 **Release:** R1 — local-only PMS  
 **Status:** **NOT RELEASE READY**  
 **Engineering branch:** `work/p0-storage-hardening`  
-**Engineering branch head:** `c69626abf66164581927c9c6834723f977547de7`  
 **Code verification SHA:** `850bdcb7ab8e7c76648591f952c2543e1524040a`  
-**Exact-head CI:** [PMS source/web #2678](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507298) · [R1 required checks #153](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507418) · [settlement foundation #737](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507240) · [payment backend #734](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507184) — **all four passed on the exact engineering branch head**.
+**Exact-code-SHA CI:** [PMS source/web #2678](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507298) · [R1 required checks #153](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507418) · [settlement foundation #737](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507240) · [payment backend #734](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42628507184) — **all four passed on exact code SHA `850bdcb7ab8e7c76648591f952c2543e1524040a`**.
 
 ## Latest implemented increment
 
