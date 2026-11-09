@@ -5641,6 +5641,8 @@ try {
   });
   window.AureliaRepositoryCompatibility = Object.freeze({
      persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot),
+     updateSettings: (patch, options) => boot.settingsRepository.update(patch, options),
+     syncSettings: snapshot => boot.settingsRepository.syncSnapshot(snapshot),
      readBack: async () => {
        const row = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
        return row?.data || null;
