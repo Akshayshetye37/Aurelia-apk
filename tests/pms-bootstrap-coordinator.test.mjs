@@ -49,6 +49,7 @@ test("bootstrap migrates the actual Aurelia legacy key and preserves its exact r
   assert.ok(await result.repository.getEntity("booking", "7"));
   assert.deepEqual((await result.settingsRepository.get()).data.set, state.set);
   assert.deepEqual((await result.settingsRepository.get()).data.menu, state.menu);
+  assert.equal(typeof result.settingsRepository.syncSnapshot, "function");
   assert.ok(await result.repository.getEntity("audit", "legacy-folio-source:booking-7"));
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
   assert.match(storage.getItem(AURELIA_MIGRATION_STATUS_KEY), /^VERIFIED:/);
@@ -157,6 +158,8 @@ test("index startup awaits verified storage bootstrap before replaying operation
   const loader = html.slice(loaderAt, html.indexOf("</script>", loaderAt));
   assert.match(loader, /await bootstrapper\.initializeApplication\(\)/);
   assert.match(loader, /storageBridge\.bindActiveEngine\(boot\.repository, boot\.identity\)/);
+  assert.match(loader, /boot\.settingsRepository\.get\(\)/);
+  assert.match(loader, /compatibility\.syncSettings\(snapshot\)/);
   assert.match(loader, /await replayApplicationScripts\(\)/);
   assert.match(loader, /PMS startup stopped safely/);
   assert.match(html, /type="application\/x-aurelia-deferred"/);
