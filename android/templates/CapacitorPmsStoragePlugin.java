@@ -1,4 +1,5 @@
 // CI path-filter probe: this branch intentionally changes only this Java template.
+// Second commit confirms the updated PR workflow path filters.
 // Native template: keep this path covered by settlement-foundation CI.
 package com.aurelia.pms;
 
