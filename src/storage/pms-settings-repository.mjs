@@ -60,7 +60,14 @@ export class PmsSettingsRepository {
     return pending;
   }
 
-  async syncSnapshot(snapshot) {
+  syncSnapshot(snapshot) {
+    const operation = () => this.#syncSnapshot(snapshot);
+    const pending = this.writeQueue.then(operation, operation);
+    this.writeQueue = pending.catch(() => {});
+    return pending;
+  }
+
+  async #syncSnapshot(snapshot) {
     if (!isPlainObject(snapshot)) throw new TypeError("PMS snapshot must be a plain object.");
     const patch = {};
     const current = await this.get();
@@ -70,7 +77,7 @@ export class PmsSettingsRepository {
       if (current.version === 0 || !same(current.data[key], next)) patch[key] = next;
     }
     if (!Object.keys(patch).length) return current;
-    return this.update(patch);
+    return this.#update(patch);
   }
 
   async #update(patch, { expectedVersion } = {}) {
