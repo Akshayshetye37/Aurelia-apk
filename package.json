@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node scripts/prepare-web.js",
     "test": "node --test tests/*.test.mjs",
+    "check:storage-boundaries": "node scripts/check-storage-boundaries.mjs",
     "android:sync": "npx cap sync android",
     "diagnose:accounting": "node scripts/diagnose-accounting.mjs"
   },
