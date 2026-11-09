@@ -24,8 +24,8 @@ const comparable = value => {
 };
 const same = (left, right) => JSON.stringify(stable(comparable(left))) === JSON.stringify(stable(comparable(right)));
 const inventoryId = (row, index) => {
-  const id = row?.id ?? "legacy-inventory-" + index;
-  if (typeof id !== "string" || !id.trim() || id.length > 180 || /[\u0000-\u001f]/.test(id)) {
+  const id = String(row?.id ?? "legacy-inventory-" + index);
+  if (!id.trim() || id.length > 180 || /[\u0000-\u001f]/.test(id)) {
     throw new TypeError("Inventory item requires a stable valid ID.");
   }
   return id;
@@ -69,7 +69,7 @@ export class PmsInventoryRepository {
           !row.data || typeof row.data !== "object" || Array.isArray(row.data)) {
         throw new Error("Canonical inventory contains an invalid entity.");
       }
-      if (row.id !== String(row.data.id || row.id) || ids.has(row.id)) {
+      if (row.data.id !== row.id || ids.has(row.id)) {
         throw new Error("Canonical inventory contains a duplicate or unstable identity.");
       }
       ids.add(row.id);
@@ -132,7 +132,7 @@ export class PmsInventoryRepository {
       if (!row || row.type !== "inventory" || typeof row.id !== "string" ||
           !Number.isSafeInteger(row.version) || row.version < 1 ||
           !row.data || typeof row.data !== "object" || Array.isArray(row.data) ||
-          row.id !== String(row.data.id || row.id) || current.has(row.id)) {
+          row.data.id !== row.id || current.has(row.id)) {
         throw new Error("Canonical inventory contains an invalid or duplicate entity.");
       }
       validateItem(row.data);
