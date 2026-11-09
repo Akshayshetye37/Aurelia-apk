@@ -40,8 +40,8 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Install locked JavaScript dependencies
-        run: npm ci --no-audit --no-fund
+      - name: Install JavaScript dependencies (repository has no package lock)
+        run: npm install --no-audit --no-fund
 
       - name: Run application and native-template contract tests
         run: npm test
