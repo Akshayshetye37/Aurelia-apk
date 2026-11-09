@@ -5575,7 +5575,7 @@ import { bootstrapper } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
 import { PmsLocalFirstWriteCoordinator } from "./src/storage/pms-local-first-write-coordinator.mjs";
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
-import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitInventoryItemMutation, commitExpenseMutation, commitRestaurantFolioCharge, commitRestaurantTableSettlement } from "./src/storage/repository-operational-mutation-service.mjs";
+import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitExpenseMutation, commitRestaurantFolioCharge, commitRestaurantTableSettlement } from "./src/storage/repository-operational-mutation-service.mjs";
 import { commitReservationToRepository } from "./src/storage/repository-reservation-service.mjs";
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
@@ -5680,7 +5680,7 @@ try {
      commitRoomMutation: input => commitRoomStateMutation({ ...input, bridge: storageBridge }),
      commitRoomCatalogMutation: input => commitRoomCatalogMutation({ ...input, bridge: storageBridge }),
      commitGuestMutation: input => commitGuestStateMutation({ ...input, bridge: storageBridge }),
-     commitInventoryMutation: input => commitInventoryItemMutation({ ...input, bridge: storageBridge }),
+     commitInventoryMutation: input => boot.inventoryRepository.syncSnapshot(input.snapshot),
      commitExpenseMutation: input => commitExpenseMutation({ ...input, bridge: storageBridge }),
      commitRestaurantFolioCharge: input => commitRestaurantFolioCharge({ ...input, bridge: storageBridge }),
      commitRestaurantTableSettlement: input => commitRestaurantTableSettlement({ ...input, bridge: storageBridge }),
