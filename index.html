@@ -1644,12 +1644,11 @@ function persist(){
   if(!S.qw){S.qw=1;toast(error.message)}
   return Promise.resolve(false);
  }
- const save=()=>coordinator.save(snapshot).then(async result=>{
-  if(result===false)return false;
+ const save=()=>Promise.resolve().then(async()=>{
   const compatibility=window.AureliaRepositoryCompatibility;
   if(!compatibility||typeof compatibility.syncSettings!=='function')throw new Error('Canonical property settings repository is unavailable.');
   await compatibility.syncSettings(snapshot);
-  return result;
+  return coordinator.save(snapshot);
  }).catch(error=>{
   RECOVERY_CHECK_PENDING=true;
   console.error('[Aurelia Local First] Canonical commit/read-back failed; operational writes are frozen pending recovery.',error);
