@@ -15,7 +15,7 @@ const state = {
   rooms: [{ n: "101", t: "Deluxe", r: 1200, s: "ready" }],
   b: [{ id: 7, g: "Guest", room: "101", st: "res", in: 10, out: 11 }],
   g: [{ n: "Guest", ph: "0000000000" }],
-  t: [{ n: 1, s: 2, o: [] }], exp: [], inv: [], led: [], aud: [],
+  t: [{ n: 1, s: 2, o: [] }], sales: [{ id: "RS-BOOT-1", entity: "restaurant", t: 1, guest: "Walk-in", phone: "", items: [["Tea", 20]], a: 20, m: "Cash", at: "2026-11-08T10:00:00.000Z" }], exp: [], inv: [], led: [], aud: [],
   set: { name: "Aurelia", cur: "₹" }, menu: {}, tab: "home", bk: { verified: false },
   today: 0
 };
@@ -53,6 +53,8 @@ test("bootstrap migrates the actual Aurelia legacy key and preserves its exact r
   assert.deepEqual(await result.restaurantTableRepository.list(), state.t);
   assert.ok(await result.repository.getEntity("restaurant_table", "1"));
   assert.equal(typeof result.restaurantSaleRepository.syncSnapshot, "function");
+  assert.deepEqual(await result.restaurantSaleRepository.list(), state.sales);
+  assert.ok(await result.repository.getEntity("restaurant_sale", "RS-BOOT-1"));
   assert.equal(typeof result.settingsRepository.syncSnapshot, "function");
   assert.ok(await result.repository.getEntity("audit", "legacy-folio-source:booking-7"));
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
