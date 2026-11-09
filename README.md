@@ -24,6 +24,88 @@ Useful project locations:
 | `docs/` | Architecture, security, accounting and release qualification documents |
 | `.github/workflows/` | Automated source, backend and packaging checks |
 
+## Implementation status and production-readiness audit — 2026-11-09
+
+**Audit target:** `feature/multi-provider-payment-backend` at `410175355120c62a3b16a716169fdcf86ef7b6f9`.
+
+Status labels in this section are evidence-based:
+- **Implemented (source present):** implementation and relevant automated coverage were found in this branch. This does not imply physical-device or production qualification.
+- **Partially implemented:** a foundation or limited workflow exists, but acceptance criteria or end-to-end coverage remain incomplete.
+- **Missing / not evidenced:** the required implementation or proof was not found during this audit. Do not treat an unchecked item as complete.
+
+### Executive status
+
+| Workstream | Status | Audit conclusion |
+|---|---|---|
+| IndexedDB repository foundation | **Implemented (source present)** | Entity storage, version checks, transactional entity/outbox writes, migration snapshots and outbox lifecycle APIs exist. |
+| Legacy migration and startup recovery | **Partially implemented** | Guarded migration, immutable source snapshot, read-back checks and recovery exist; legacy cache recovery remains coupled to startup. |
+| Domain projection | **Partially implemented** | Initial rooms/guests/bookings/stock/expense/ledger/audit projection exists; it is not a complete domain/UI cutover and does not reconcile financials. |
+| `index.html` legacy storage removal | **Missing / blocker** | The legacy key and direct `localStorage` access remain in inline UI code, including business/payment/recovery paths. |
+| Canonical authority hard lock | **Missing / not evidenced** | No verified authority-state lock was found that makes coordinator restore/refresh/re-read paths throw after canonical cutover. |
+| Preference-only Web Storage guard | **Missing / not evidenced** | No enforced preference-key whitelist with dev/test rejection and production log-and-ignore behavior was found. |
+| Android SQLite adapter | **Partially implemented** | Capacitor adapter and native transaction/migration/outbox foundations exist; full authority state, backup/checkpoint/WAL parity and device qualification are not proven. |
+| Shared IndexedDB/SQLite contract suite | **Missing / not evidenced** | Existing adapter tests are separate; a single shared contract suite running against both adapters was not established. |
+| BaseRepo, Zod domain schemas and repository CRUD | **Missing / not evidenced** | The requested uniform domain repository layer and Zod validation contract were not found. |
+| Payment authorization invariant | **Partially implemented** | Payment intent/provider/backend foundations and local manual settlement exist; a repository-level rule rejecting `PAID` without a backend-verified token is not established. |
+| Immutable ledger/audit repository APIs | **Missing / not evidenced** | No proof that ledger/audit repositories omit update/delete methods. |
+| ESLint storage restrictions | **Missing / not evidenced** | No enforced `no-restricted-imports` / `no-restricted-properties` boundary was found. |
+| Atomic operational actions | **Partially implemented** | Several booking, folio, room, inventory, expense and restaurant flows use atomic local batches; the complete five-action transaction set and required invariants are not established. |
+| Fault injection and recovery matrix | **Partially implemented** | Regression and interruption tests exist, but step-by-step fault injection for every action, every migration checkpoint, clean-profile backup/wipe/restore checksums and typed quota failure are not all evidenced. |
+| Quarantine lifecycle | **Missing / not evidenced** | Verified migration does not yet establish the requested delayed quarantine and one-release-later deletion lifecycle. |
+| Payment provider backend | **Partially implemented** | Multiple provider adapter and backend foundations exist; merchant UAT, verified webhook-to-ledger lifecycle, refunds/reversals and production authorization remain outstanding. |
+| Android release qualification | **Missing / not evidenced** | Source CI does not establish a physical-device SQLite contract pass, Android instrumentation qualification or production-signed release. |
+| Production operations/security | **Partially implemented** | Security and infrastructure foundations exist; deployment, operational controls, monitoring, incident/DR exercises and formal sign-offs require evidence. |
+
+### Fully implemented foundations found in this audit
+
+These are implemented code capabilities, not a declaration that the whole product is production-ready:
+
+- IndexedDB repository entity reads/lists and version-checked entity writes.
+- IndexedDB atomic entity-plus-outbox transaction and batch APIs.
+- Outbox leasing, acknowledgement, retry and conflict lifecycle in the repository layer.
+- Exact legacy migration snapshot storage and read-back verification.
+- Startup coordinator selection between browser IndexedDB and the native Android adapter; Android fails closed if the native plugin is unavailable.
+- Capacitor client methods for entity access, version-checked changes/batches, migration snapshot verification and outbox operations.
+- Local-first write coordinator that verifies canonical snapshot read-back before refreshing its compatibility cache.
+- Regression tests for selected migration replay, startup recovery, entity/outbox behavior, native adapter wrapper behavior and selected operational mutations.
+
+### Partially implemented work — exact remaining scope
+
+1. **Storage migration:** migrate every remaining business read/write out of `index.html` into repository facades; hydrate the synchronous UI projection from canonical DB state; migrate one module per commit; add a repository-wide grep gate that permits the legacy key only under `src/storage/**`.
+2. **Canonical authority:** define explicit authority states and make restore, refresh and re-read operations reject after canonical authority is committed; add negative tests for each entry point and startup/restart transitions.
+3. **Android parity:** implement and persist authority state, `migration_verified`, `legacy_backup`, resumable checkpoints and WAL semantics in native SQLite; validate schema upgrades, rollback and process death.
+4. **Operational atomicity:** implement dedicated transaction functions for checkout, POS sale, stock adjustment, payment approval and refund request, each with its outbox event in the same DB transaction. Keep all non-database awaits outside the transaction. Verify folio balance against ledger sum and stock quantity against movement sum after commit.
+5. **Payments:** require backend-verified authorization evidence before any `PAID` transition; complete provider capture/status/webhook verification, ledger posting, idempotency, timeout reconciliation, refunds and reversals.
+6. **Recovery testing:** inject a failure after each step of each business action; interrupt migration at each checkpoint and compare restarted state to uninterrupted state; test backup/wipe/restore on a clean profile with checksums; map quota exhaustion to a typed `StorageFullError`.
+7. **Release evidence:** run the shared contract suite on both adapters and on a physical Android device; verify Android packaging excludes the IndexedDB business store.
+
+### Missing enforcement and release gates
+
+- [ ] CI grep test: `aurelia_lodge_v2` is forbidden in `index.html` and every path outside `src/storage/**`.
+- [ ] ESLint restrictions for `indexedDB`, `dexie` and `localStorage`, disabled only for `src/storage/**`.
+- [ ] Preference whitelist: only approved preferences such as `theme` and `lang`; dev/test writes to other keys throw; production logs and ignores.
+- [ ] Canonical authority lock tests for restore, refresh and re-read after cutover.
+- [ ] Shared IndexedDB/SQLite adapter contract suite and physical-device Android pass.
+- [ ] BaseRepo + Zod validation and consistent create/update/softDelete/get/list/version semantics for each mutable domain.
+- [ ] PaymentRepo rejects `PAID` without a backend-verified token; ledger and audit APIs expose no update/delete operations.
+- [ ] Atomic transaction tests and post-commit folio/ledger and stock/movement invariants.
+- [ ] Full fault-injection, migration checkpoint, backup/restore checksum and typed quota-error tests.
+- [ ] Legacy key quarantine only after verified migration, with deletion deferred until a later release.
+- [ ] Zero persistence bypass hits and verification against real, authorized, redacted legacy snapshots.
+- [ ] Provider merchant UAT, webhook security, refunds/reversals and reconciliation sign-off.
+- [ ] Android physical-device, signing, upgrade/rollback, security and operational acceptance.
+
+### Work completed in this audit
+
+- Inspected the current branch head, repository README, storage coordinator, IndexedDB repository, native Capacitor adapter, repository contract, existing tests and CI workflow.
+- Confirmed the current branch head is `410175355120c62a3b16a716169fdcf86ef7b6f9`.
+- Confirmed the latest PMS source-quality workflow for that exact SHA, [run 42495345884](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42495345884), completed successfully. This workflow runs the Node test suite, production web build and asset privacy check. It does **not** establish Android APK/device qualification or production readiness.
+- Recorded the detailed acceptance checklist in [Issue #12](https://github.com/Akshayshetye37/Aurelia-apk/issues/12).
+
+### Production-ready definition of done
+
+Aurelia is production-ready only when every blocker above has an implementation, an automated test that fails when the rule is violated, passing CI on the exact release candidate SHA, and required real-world evidence (legacy snapshot, merchant sandbox and physical Android device). Documentation alone does not close a gate. No merge, UI cutover, live gateway collection, automatic settlement or sync enablement is authorized by this audit.
+
 ## Current release decision
 
 **NOT PRODUCTION READY — LIVE GATEWAY COLLECTION OFF; production release and automatic settlement remain disabled.**
