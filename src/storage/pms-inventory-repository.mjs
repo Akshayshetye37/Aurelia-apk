@@ -302,15 +302,6 @@ export class PmsInventoryRepository {
       }
     }
     const movementChanges = [];
-    for (const change of tableChanges) {
-      const stored = await this.bridge.fetchEntity("restaurant_table", change.entityId);
-      const expected = snapshot.t.find(row => String(row?.n) === change.entityId);
-      if (!stored || !expected || !same(stored.data, expected)) {
-        throw Object.assign(new Error("Restaurant table order failed exact canonical read-back."), {
-          code: "RESTAURANT_TABLE_READBACK_FAILED", tableId: change.entityId
-        });
-      }
-    }
     for (const movement of newMovements) {
       const id = "inventory-movement-" + movementHash(movement.row) + "-" + movement.ordinal;
       const data = {
@@ -402,6 +393,15 @@ export class PmsInventoryRepository {
     }
     const finalRows = await this.bridge.listEntities("inventory");
     this.knownVersions = new Map(finalRows.map(row => [row.id, row.version]));
+    for (const change of tableChanges) {
+      const stored = await this.bridge.fetchEntity("restaurant_table", change.entityId);
+      const expected = snapshot.t.find(row => String(row?.n) === change.entityId);
+      if (!stored || !expected || !same(stored.data, expected)) {
+        throw Object.assign(new Error("Restaurant table order failed exact canonical read-back."), {
+          code: "RESTAURANT_TABLE_READBACK_FAILED", tableId: change.entityId
+        });
+      }
+    }
     for (const movement of newMovements) {
       const id = "inventory-movement-" + movementHash(movement.row) + "-" + movement.ordinal;
       const stored = await this.bridge.fetchEntity("ledger", id);
