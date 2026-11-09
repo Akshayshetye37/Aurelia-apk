@@ -1644,7 +1644,13 @@ function persist(){
   if(!S.qw){S.qw=1;toast(error.message)}
   return Promise.resolve(false);
  }
- const save=()=>coordinator.save(snapshot).catch(error=>{
+ const save=()=>coordinator.save(snapshot).then(async result=>{
+  if(result===false)return false;
+  const compatibility=window.AureliaRepositoryCompatibility;
+  if(!compatibility||typeof compatibility.syncSettings!=='function')throw new Error('Canonical property settings repository is unavailable.');
+  await compatibility.syncSettings(snapshot);
+  return result;
+ }).catch(error=>{
   RECOVERY_CHECK_PENDING=true;
   console.error('[Aurelia Local First] Canonical commit/read-back failed; operational writes are frozen pending recovery.',error);
   if(!S.qw){S.qw=1;toast('CRITICAL: Device save failed. Writes are paused; keep the app open for recovery.')}
@@ -5611,7 +5617,11 @@ try {
   const hydrateDomainRead = async snapshot => {
     const enabled = Boolean(boot.domainProjection?.manifest?.status === "VERIFIED");
     const rooms = await hydrateCanonicalRoomSnapshot({ repository: boot.repository, snapshot, enabled });
-    return hydrateCanonicalGuestSnapshot({ repository: boot.repository, snapshot: rooms, enabled });
+    const guests = await hydrateCanonicalGuestSnapshot({ repository: boot.repository, snapshot: rooms, enabled });
+    const settings = await boot.settingsRepository.get();
+    return settings.version > 0
+      ? { ...guests, set: settings.data.set, menu: settings.data.menu }
+      : guests;
   };
   const canonicalAudit = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
   if (canonicalAudit?.data?.snapshot) {
