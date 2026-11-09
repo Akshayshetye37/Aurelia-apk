@@ -18,6 +18,22 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   LocalPmsRepository(Context context) { super(context.getApplicationContext(), NAME, null, VERSION); setWriteAheadLoggingEnabled(true); }
 
+  @Override public void onConfigure(SQLiteDatabase db) {
+    super.onConfigure(db);
+    db.setForeignKeyConstraintsEnabled(true);
+  }
+
+  @Override public void onOpen(SQLiteDatabase db) {
+    super.onOpen(db);
+    db.execSQL("PRAGMA synchronous=FULL");
+    // Fail closed: never write into a structurally corrupt local database.
+    try (android.database.Cursor c = db.rawQuery("PRAGMA quick_check", null)) {
+      if (!c.moveToFirst() || !"ok".equalsIgnoreCase(c.getString(0))) {
+        throw new IllegalStateException("pms_db_integrity_failed");
+      }
+    }
+  }
+
   @Override public void onCreate(SQLiteDatabase db) {
     db.execSQL("PRAGMA foreign_keys=ON");
     db.execSQL("CREATE TABLE pms_entities(entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,version INTEGER NOT NULL CHECK(version>=1),data_json TEXT NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(entity_type,entity_id))");
@@ -180,5 +196,5 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static RuntimeException conflict(String code){return new IllegalStateException(code);}
   private static RuntimeException failure(String code,Exception cause){return new IllegalStateException(code,cause);}
   private static JSONObject migrationResult(boolean replay,String id,int count){JSONObject r=new JSONObject();try{r.put("alreadyMigrated",replay);r.put("migrationId",id);r.put("entityCount",count);}catch(Exception ignored){}return r;}
-  private static String serializeJsonValue(Object value) throws Exception {org.json.JSONArray wrapper=new org.json.JSONArray();wrapper.put(value);String encoded=wrapper.toString();return encoded.substring(1,encoded.length()-1);}
+  private static String serializeJsonValue(Object value) {try{org.json.JSONArray wrapper=new org.json.JSONArray();wrapper.put(value);String encoded=wrapper.toString();return encoded.substring(1,encoded.length()-1);}catch(RuntimeException e){throw new IllegalStateException("pms_serialization_failed",e);}}
 }
