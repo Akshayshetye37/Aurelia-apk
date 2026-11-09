@@ -1678,3 +1678,43 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
 `;
 fs.writeFileSync(javaPath, java);
 console.log('Installed SAF backup, Android Photo Picker, reusable Google ML Kit OCR, system-bar styling, and minimal manifest permissions.');
+
+
+// Real SQLite instrumentation tests are copied into the generated Android project.
+// These tests exercise LocalPmsRepository itself; JavaScript fake-plugin tests do not
+// count as native SQLite evidence.
+const instrumentationTemplate = path.join(androidDir, 'templates', 'instrumentation', 'LocalPmsRepositoryInstrumentedTest.java');
+if (!fs.existsSync(instrumentationTemplate)) throw new Error('LocalPmsRepository instrumentation template is missing.');
+const instrumentationSourceDir = path.join(androidDir, 'app', 'src', 'androidTest', 'java', 'com', 'aurelia', 'pms');
+fs.mkdirSync(instrumentationSourceDir, { recursive: true });
+fs.copyFileSync(instrumentationTemplate, path.join(instrumentationSourceDir, 'LocalPmsRepositoryInstrumentedTest.java'));
+
+function ensurePmsInstrumentation(contents, kotlinDsl) {
+  if (!/defaultConfig\\s*\\{/.test(contents)) throw new Error('Android defaultConfig block is missing; instrumentation runner cannot be configured.');
+  if (!contents.includes('testInstrumentationRunner')) {
+    const runner = kotlinDsl
+      ? '\\n        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"'
+      : '\\n        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"';
+    contents = contents.replace(/defaultConfig\\s*\\{/, match => match + runner);
+  }
+  const dependencies = [
+    ['androidx.test:runner:1.6.2', 'androidx.test:runner'],
+    ['androidx.test:core:1.6.1', 'androidx.test:core'],
+    ['androidx.test.ext:junit:1.2.1', 'androidx.test.ext:junit']
+  ];
+  for (const [coordinate, marker] of dependencies) {
+    if (contents.includes(marker)) continue;
+    const line = kotlinDsl
+      ? `\\n    androidTestImplementation("${coordinate}")`
+      : `\\n    androidTestImplementation "${coordinate}"`;
+    contents = contents.replace(/dependencies\\s*\\{/, match => match + line);
+  }
+  return contents;
+}
+if (fs.existsSync(appGradleGroovy)) {
+  fs.writeFileSync(appGradleGroovy, ensurePmsInstrumentation(fs.readFileSync(appGradleGroovy, 'utf8'), false));
+} else if (fs.existsSync(appGradleKts)) {
+  fs.writeFileSync(appGradleKts, ensurePmsInstrumentation(fs.readFileSync(appGradleKts, 'utf8'), true));
+} else {
+  throw new Error('Generated app Gradle file missing; native SQLite instrumentation cannot be configured.');
+}
