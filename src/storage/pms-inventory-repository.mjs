@@ -283,6 +283,11 @@ export class PmsInventoryRepository {
       }
       for (const [id, data] of desiredTables) {
         const old = currentById.get(id);
+        if (old && (old.data.retired === true || old.data.status === "retired")) {
+          throw Object.assign(new Error("Retired restaurant table IDs cannot be reused."), {
+            code: "RESTAURANT_TABLE_ID_RETIRED", tableId: id
+          });
+        }
         if (old && same(old.data, data)) continue;
         tableChanges.push({
           entityType: "restaurant_table", entityId: id, expectedVersion: old?.version ?? 0,
