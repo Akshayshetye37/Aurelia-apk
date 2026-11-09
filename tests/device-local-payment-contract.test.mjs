@@ -255,8 +255,8 @@ test('final check-in and check-out wrappers await the canonical lifecycle transa
 test('inventory creation and stock movements await local canonical transactions', () => {
   const html = read('index.html');
   const runtime = html.slice(html.indexOf('id="aurelia-async-runtime-bootstrap"'));
-  assert.match(runtime, /commitInventoryItemMutation/);
-  assert.match(runtime, /commitInventoryMutation: input => commitInventoryItemMutation/);
+  assert.match(runtime, /boot\.inventoryRepository\.syncSnapshot\(input\.snapshot\)/);
+  assert.match(runtime, /commitInventoryMutation: input => boot\.inventoryRepository\.syncSnapshot/);
   const start = html.indexOf('async function commitInventoryCatalogState(');
   const end = html.indexOf('\nlet LOCAL_STATE_STATUS', start);
   assert.ok(start >= 0 && end > start);
