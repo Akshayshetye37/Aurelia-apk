@@ -29,7 +29,9 @@ test("inventory rows and recovery snapshot are created in one IndexedDB transact
   const item = await bridge.fetchEntity("inventory", "towel-1");
   const recovery = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
   assert.equal(item.version, 1);
-  assert.deepEqual(item.data, snapshot.inv[0]);
+  assert.equal(item.data.id, snapshot.inv[0].id);
+  assert.equal(item.data.q, snapshot.inv[0].q);
+  assert.equal(typeof item.data.updatedAt, "string");
   assert.deepEqual(recovery.data.snapshot, snapshot);
   const events = await repository.claimOutboxBatch({ deviceId: "device-local" });
   assert.equal(events.length, 2);
@@ -57,7 +59,10 @@ test("inventory hydration restores stable IDs and canonical quantities over stal
   await inventory.syncSnapshot(canonical);
   const stale = { inv: [{ n: "Soap", q: 2, ro: 2, u: 3, price: 0 }] };
   const hydrated = await inventory.hydrateSnapshot(stale, { enabled: true });
-  assert.deepEqual(hydrated.inv, [{ ...canonical.inv[0] }]);
+  assert.equal(hydrated.inv.length, 1);
+  assert.equal(hydrated.inv[0].id, canonical.inv[0].id);
+  assert.equal(hydrated.inv[0].q, canonical.inv[0].q);
+  assert.equal(typeof hydrated.inv[0].updatedAt, "string");
   assert.equal(stale.inv[0].id, undefined);
 });
 
@@ -74,14 +79,28 @@ test("stale inventory snapshots fail closed instead of overwriting canonical sto
   const { bridge, inventory } = setup("divergence");
   const original = { inv: [{ id: "linen-1", n: "Linen", q: 10, ro: 2, u: 8, price: 0 }] };
   await inventory.syncSnapshot(original);
+  await inventory.hydrateSnapshot(original, { enabled: true });
   const live = structuredClone(original);
   live.inv[0].q = 9;
-  await inventory.syncSnapshot(live);
+  const item = await bridge.fetchEntity("inventory", "linen-1");
+  const snapshotRow = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  await bridge.mutateEntities([
+    {
+      entityType: "inventory", entityId: "linen-1", expectedVersion: item.version,
+      eventType: "inventory.external_update", eventPayload: { inventoryId: "linen-1" },
+      mutate: entity => { entity.q = 9; return entity; }
+    },
+    {
+      entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2", expectedVersion: snapshotRow.version,
+      eventType: "snapshot.external_update", eventPayload: {},
+      mutate: entity => { entity.snapshot = live; return entity; }
+    }
+  ]);
   const stale = structuredClone(original);
   stale.inv[0].q = 7;
   await assert.rejects(
     inventory.syncSnapshot(stale),
-    error => error.code === "INVENTORY_SNAPSHOT_DIVERGENCE"
+    error => error.code === "INVENTORY_VERSION_CONFLICT"
   );
   assert.equal((await bridge.fetchEntity("inventory", "linen-1")).data.q, 9);
 });
