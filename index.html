@@ -4903,6 +4903,7 @@ window.requestAureliaPayBridge=function(){if(window.AURELIA_LOCAL_ONLY_RELEASE?.
  initFromWindow().catch(error=>console.warn('Optional payment administration authentication unavailable:',error.message));
 })();
 window.aureliaPaymentAdminRequest=async function(path,method='GET',body,options={}){
+ if(window.AURELIA_LOCAL_ONLY_RELEASE?.gatewayPayments!==true)throw Object.assign(new Error('Payment backend administration is disabled in this local-only release.'),{code:'ONLINE_GATEWAY_DISABLED'});
  const origin=(S.set.backendConnection?.endpoint||'').trim();
  if(!origin||S.set.backendConnection?.reachable!==true)throw new Error('Configure and verify the optional HTTPS payment backend first.');
  const auth=window.AureliaPaymentAuth;
