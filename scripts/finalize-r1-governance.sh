@@ -96,6 +96,7 @@ fi
 
 git fetch origin refs/heads/release/r1-local-first-execution:refs/remotes/origin/release/r1-local-first-execution
 BASE_SHA="$(git rev-parse refs/remotes/origin/release/r1-local-first-execution)"
+gh api "repos/$REPO/commits/$BASE_SHA/check-runs?per_page=100" | jq -e '[.check_runs[] | select(.name == "r1-governance" and .status == "completed" and .conclusion == "success")] | length > 0' >/dev/null
 echo "Creating an unprotected temporary check branch $CHECK_BRANCH at $BASE_SHA..."
 gh api --method POST "repos/$REPO/git/refs" -f "ref=refs/heads/$CHECK_BRANCH" -f "sha=$BASE_SHA" >/dev/null
 CHECK_BRANCH_CREATED=1
@@ -198,6 +199,11 @@ if [[ -z "$TAG_RUN_ID" ]]; then
 fi
 if [[ "$CONCLUSION" != "failure" ]]; then
   echo "::error::Expected the release-tag guard to refuse the red SHA; observed conclusion '$CONCLUSION'."
+  exit 1
+fi
+TAG_LOG="$(gh run view "$TAG_RUN_ID" --repo "$REPO" --log)"
+if ! grep -Fq "Release tag refused. Required checks are not all green" <<<"$TAG_LOG"; then
+  echo "::error::The tag workflow failed, but its logs do not prove the expected red-check refusal."
   exit 1
 fi
 
