@@ -102,6 +102,7 @@ test('Android native security build pins biometric dependency and treats Kotlin 
 test('native security Kotlin CI compiles the exact SHA and release tags require it', () => {
   const workflow = read('.github/workflows/native-security-kotlin.yml');
   const releaseGuard = read('scripts/verify-release-tag.mjs');
+  const finalizer = read('scripts/finalize-r1-governance.sh');
   assert.match(workflow, /pull_request:/);
   assert.match(workflow, /push:/);
   assert.match(workflow, /compileDebugKotlin compileReleaseKotlin assembleDebug lintDebug testDebugUnitTest/);
@@ -109,6 +110,9 @@ test('native security Kotlin CI compiles the exact SHA and release tags require 
   assert.match(workflow, /gradle-8\.11\.1-all\.zip/);
   assert.match(workflow, /verified \$VERIFIED_SHA/);
   assert.match(releaseGuard, /native-security-kotlin/);
+  assert.match(finalizer, /context: "native-security-kotlin"/);
+  assert.match(finalizer, /NATIVE_WORKFLOW_ID/);
+  assert.match(finalizer, /index\("native-security-kotlin"\)/);
 });
 
 
