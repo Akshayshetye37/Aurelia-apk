@@ -84,3 +84,55 @@ test("invalid identity and missing crypto fail closed", async () => {
   const noCrypto = new IndexedDbSettlementJournal({ indexedDBImpl: indexedDB, cryptoImpl: null, databaseName: "no-crypto" });
   await assert.rejects(noCrypto.append(input()), /Web Crypto is unavailable/);
 });
+
+test("settlement status transitions append events without mutating the original command row", async () => {
+  const journal = makeJournal();
+  const appended = await journal.append(input());
+  const db = await journal.database();
+  const beforeTx = db.transaction("settlements", "readonly");
+  const before = await new Promise((resolve, reject) => {
+    const request = beforeTx.objectStore("settlements").get(appended.record.key);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise((resolve, reject) => { beforeTx.oncomplete = resolve; beforeTx.onabort = () => reject(beforeTx.error); });
+  await journal.markApplied(appended.record.key, appended.record.payloadHash);
+  const afterTx = db.transaction("settlements", "readonly");
+  const after = await new Promise((resolve, reject) => {
+    const request = afterTx.objectStore("settlements").get(appended.record.key);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise((resolve, reject) => { afterTx.oncomplete = resolve; afterTx.onabort = () => reject(afterTx.error); });
+  assert.deepEqual(after, before);
+  assert.equal(after.status, "PENDING");
+  const eventsTx = db.transaction("settlement_events", "readonly");
+  const events = await new Promise((resolve, reject) => {
+    const request = eventsTx.objectStore("settlement_events").getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise((resolve, reject) => { eventsTx.oncomplete = resolve; eventsTx.onabort = () => reject(eventsTx.error); });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].status, "APPLIED");
+  assert.equal((await journal.get(appended.record.key)).status, "APPLIED");
+});
+
+test("authorization renewal is recorded as a new evidence event", async () => {
+  const journal = makeJournal();
+  const first = await journal.append(input());
+  const second = await journal.append({ ...input(), authorization: { id: "auth-1" }, policyLease: { id: "lease-1" } });
+  assert.equal(second.duplicate, true);
+  assert.deepEqual(second.record.authorization, { id: "auth-1" });
+  const db = await journal.database();
+  const tx = db.transaction("settlement_events", "readonly");
+  const events = await new Promise((resolve, reject) => {
+    const request = tx.objectStore("settlement_events").getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = () => reject(tx.error); });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, "AUTHORIZATION_RENEWED");
+  assert.equal((await journal.get(first.record.key)).status, "PENDING");
+});
