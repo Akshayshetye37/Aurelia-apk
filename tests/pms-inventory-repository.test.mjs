@@ -4,6 +4,7 @@ import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
 import { PmsInventoryRepository } from "../src/storage/pms-inventory-repository.mjs";
+import { PmsRestaurantTableRepository } from "../src/storage/pms-restaurant-table-repository.mjs";
 
 function setup(name) {
   const repository = new IndexedDbPmsRepository({
@@ -155,4 +156,57 @@ test("independent repository instances reject stale cross-tab inventory edits", 
     error => error.code === "INVENTORY_VERSION_CONFLICT"
   );
   assert.equal((await first.bridge.fetchEntity("inventory", "soap-1")).data.q, 10);
+});
+
+test("restaurant stock issue commits inventory, table order, movement ledger and recovery snapshot together", async () => {
+  const { repository, bridge, inventory } = setup("restaurant-atomic");
+  const tables = new PmsRestaurantTableRepository({ bridge, now: () => "2026-11-09T00:00:00.000Z" });
+  await tables.syncSnapshot({ t: [{ n: 1, s: 2, o: [] }] });
+  const initial = {
+    inv: [{ id: "tea-1", n: "Tea", q: 5, ro: 1, u: 2, price: 20, sellable: true }],
+    t: [{ n: 1, s: 2, o: [] }],
+    led: []
+  };
+  await inventory.syncSnapshot(initial);
+  const next = structuredClone(initial);
+  next.inv[0].q = 4;
+  next.t[0].o = [["Tea", 20, "din"]];
+  next.led.unshift(["Tea", -1, "restaurant-sale", "2026-11-09T00:01:00.000Z"]);
+  const result = await inventory.syncSnapshot(next);
+  assert.equal(result.count, 1);
+  assert.equal((await bridge.fetchEntity("inventory", "tea-1")).data.q, 4);
+  assert.deepEqual((await bridge.fetchEntity("restaurant_table", "1")).data.o, [["Tea", 20, "din"]]);
+  const movementRows = await bridge.listEntities("ledger");
+  const movement = movementRows.find(row => row.data?.kind === "inventory_movement");
+  assert.ok(movement);
+  assert.deepEqual(movement.data.value, next.led[0]);
+  assert.deepEqual((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot, next);
+  const outbox = await repository.claimOutboxBatch({ deviceId: "device-local" });
+  const committedTypes = outbox.map(event => event.entityType);
+  assert.ok(committedTypes.includes("inventory"));
+  assert.ok(committedTypes.includes("restaurant_table"));
+  assert.ok(committedTypes.includes("ledger"));
+  assert.ok(committedTypes.includes("audit"));
+});
+
+test("inventory movement history is append-only and cannot be edited or removed", async () => {
+  const { bridge, inventory } = setup("movement-append-only");
+  const initial = {
+    inv: [{ id: "milk-1", n: "Milk", q: 5, ro: 1, u: 3, price: 0 }],
+    t: [], led: [["Milk", -1, "restaurant-sale", "2026-11-09T00:00:00.000Z"]]
+  };
+  await inventory.syncSnapshot(initial);
+  const edited = structuredClone(initial);
+  edited.led[0][1] = -2;
+  await assert.rejects(
+    inventory.syncSnapshot(edited),
+    error => error.code === "INVENTORY_MOVEMENT_HISTORY_MUTATION"
+  );
+  const removed = structuredClone(initial);
+  removed.led = [];
+  await assert.rejects(
+    inventory.syncSnapshot(removed),
+    error => error.code === "INVENTORY_MOVEMENT_HISTORY_MUTATION"
+  );
+  assert.equal((await bridge.listEntities("ledger")).filter(row => row.data?.kind === "inventory_movement").length, 0);
 });
