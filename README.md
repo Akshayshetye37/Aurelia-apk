@@ -10,7 +10,7 @@
 - Project root: `/` (repository root)
 - Active engineering branch: `work/p0-storage-hardening`
 - Draft PR: https://github.com/Akshayshetye37/Aurelia-apk/pull/18
-- Current branch commit: `e430a9cd72d8e7ec7f653cbbb15e617595daf758`
+- Code candidate SHA before documentation-only updates: `e430a9cd72d8e7ec7f653cbbb15e617595daf758` (current branch tip is shown by PR #18)
 - Main application entry: `index.html`
 - Android native templates: `android/templates/`
 - Repository/storage implementation: `src/storage/`
