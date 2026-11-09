@@ -5659,13 +5659,14 @@ try {
     ? await boot.restaurantSaleRepository.list() : null;
   // Hydrate the legacy UI projection from the verified canonical repository before
   // replaying application scripts. Web Storage is only a recovery/cache fallback.
-  const { hydrateCanonicalRoomSnapshot, hydrateCanonicalGuestSnapshot } = await import("./src/storage/pms-room-read-cutover.mjs");
+  const { hydrateCanonicalRoomSnapshot, hydrateCanonicalGuestSnapshot, hydrateCanonicalBookingSnapshot } = await import("./src/storage/pms-room-read-cutover.mjs");
   const hydrateDomainRead = async snapshot => {
     const enabled = Boolean(boot.domainProjection?.manifest?.status === "VERIFIED");
     const rooms = await hydrateCanonicalRoomSnapshot({ repository: boot.repository, snapshot, enabled });
     const guests = await hydrateCanonicalGuestSnapshot({ repository: boot.repository, snapshot: rooms, enabled });
+    const bookings = await hydrateCanonicalBookingSnapshot({ repository: boot.repository, snapshot: guests, enabled });
     const settings = window.__AURELIA_CANONICAL_SETTINGS;
-    const withSettings = settings ? { ...guests, set: settings.set, menu: settings.menu } : guests;
+    const withSettings = settings ? { ...bookings, set: settings.set, menu: settings.menu } : bookings;
     const withTables = await boot.restaurantTableRepository.hydrateSnapshot(withSettings, { enabled });
     const withSales = await boot.restaurantSaleRepository.hydrateSnapshot(withTables, { enabled });
     const withInventory = await boot.inventoryRepository.hydrateSnapshot(withSales, { enabled });
