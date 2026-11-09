@@ -5,10 +5,11 @@ set -Eeuo pipefail
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 : "${GITHUB_RUN_ID:?GITHUB_RUN_ID is required}"
 : "${GITHUB_SHA:?GITHUB_SHA is required}"
-if [[ "${GITHUB_REF:-}" != "refs/heads/release/r1-local-first-execution" ]]; then
-  echo "::error::Run this workflow from release/r1-local-first-execution only."
-  exit 1
-fi
+case "${GITHUB_REF:-}" in
+  "refs/heads/release/r1-local-first-execution"|"refs/heads/admin-finalize/r1") ;;
+  *) echo "::error::Run only from release/r1-local-first-execution or admin-finalize/r1."
+     exit 1 ;;
+esac
 
 export GH_TOKEN="$R1_ADMIN_TOKEN"
 REPO="$GITHUB_REPOSITORY"
@@ -93,7 +94,8 @@ else
   RULESET_ID="$(printf '%s' "$RULESET_BASE" | gh api --method POST "repos/$REPO/rulesets" --input - --jq '.id')"
 fi
 
-BASE_SHA="$(git rev-parse HEAD)"
+git fetch origin refs/heads/release/r1-local-first-execution:refs/remotes/origin/release/r1-local-first-execution
+BASE_SHA="$(git rev-parse refs/remotes/origin/release/r1-local-first-execution)"
 echo "Creating an unprotected temporary check branch $CHECK_BRANCH at $BASE_SHA..."
 gh api --method POST "repos/$REPO/git/refs" -f "ref=refs/heads/$CHECK_BRANCH" -f "sha=$BASE_SHA" >/dev/null
 CHECK_BRANCH_CREATED=1
