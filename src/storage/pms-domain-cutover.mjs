@@ -100,10 +100,10 @@ function records(snapshot, migrationId) {
     if (!Number.isSafeInteger(tableNumber) || tableNumber < 1) {
       throw new Error("Legacy restaurant table has no safe positive integer table number at index " + index);
     }
-    const id = "table-" + safeId(tableNumber, "restaurant table identity");
+    const id = safeId(tableNumber, "restaurant table identity");
     if (tableIds.has(id)) throw new Error("Legacy restaurant table numbers are duplicated; projection stopped.");
     tableIds.add(id);
-    add("restaurant_table", id, { ...clone(row), id }, "t");
+    add("restaurant_table", id, clone(row), "t");
   });
   snapshot.inv.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy inventory item at index " + index);
