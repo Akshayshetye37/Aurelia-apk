@@ -1,0 +1,108 @@
+name: Native security Kotlin CI
+
+on:
+  # Run on every branch push and tag so a release tag is tested at its exact SHA.
+  push:
+  pull_request:
+    paths:
+      - "android/templates/**"
+      - "scripts/patch-android.js"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/native-security-kotlin.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-security-kotlin-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-security-kotlin:
+    name: native-security-kotlin
+    runs-on: ubuntu-22.04
+    timeout-minutes: 55
+    steps:
+      - name: Checkout exact candidate SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install locked JavaScript dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run application and native-template contract tests
+        run: npm test
+
+      - name: Build web application
+        run: npm run build
+
+      - name: Generate Android project from pinned Capacitor dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          if [[ -d android/templates ]]; then
+            mv android/templates "$template_dir"
+          fi
+          if [[ -d android ]]; then
+            rmdir android
+          fi
+          npx cap add android
+          if [[ -d "$template_dir" ]]; then
+            mkdir -p android/templates
+            cp -a "$template_dir/." android/templates/
+          fi
+          test -f android/gradlew
+          test -f android/app/build.gradle
+
+      - name: Apply native security and launcher configuration
+        run: node scripts/patch-android.js
+
+      - name: Sync generated Android project
+        run: npx cap sync android
+
+      - name: Verify pinned Android toolchain inputs
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R --include='*.gradle' --include='*.gradle.kts' -E 'org.jetbrains.kotlin.android.*2.0.21|org.jetbrains.kotlin.android.*version "2.0.21"' app
+          grep -R --include='*.gradle' --include='*.gradle.kts' -F 'allWarningsAsErrors.set(true)' app
+          grep -E 'distributionUrl=.*gradle-[0-9].*-bin.zip' gradle/wrapper/gradle-wrapper.properties
+          ./gradlew --version
+
+      - name: Compile, assemble, lint and unit-test exact Android candidate
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon clean compileDebugKotlin compileReleaseKotlin assembleDebug lintDebug testDebugUnitTest
+
+      - name: Record exact verified source SHA
+        if: success()
+        env:
+          VERIFIED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          mkdir -p build
+          echo "verified $VERIFIED_SHA" > build/verified-sha.txt
+
+      - name: Upload exact-SHA verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-security-kotlin-${{ github.event.pull_request.head.sha || github.sha }}
+          path: build/verified-sha.txt
+          if-no-files-found: warn
+          retention-days: 90
