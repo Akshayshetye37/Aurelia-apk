@@ -138,3 +138,55 @@ test("projection rejects duplicate or invalid restaurant table identities", asyn
     /positive integer table number/
   );
 });
+
+test("an older verified manifest is extended additively without overwriting live canonical entities", async () => {
+  const bridge = fakeBridge(), source = snapshot(), migrationId = "mig-additive-upgrade";
+  await projectLegacyPmsDomains({ bridge, snapshot: source, migrationId });
+  const manifestId = "audit:legacy-domain-projection:" + migrationId;
+  const oldManifest = bridge.entities.get(manifestId);
+  delete bridge.entities.delete("settings:property-settings");
+  bridge.entities.delete("restaurant_table:1");
+  const counts = { ...oldManifest.data.counts };
+  delete counts.settings;
+  delete counts.restaurant_table;
+  oldManifest.data = {
+    ...oldManifest.data,
+    recordCount: Object.values(counts).reduce((sum, value) => sum + value, 0),
+    counts,
+    sourceCollections: ["rooms", "g", "b", "inv", "exp", "led", "aud"]
+  };
+  const liveRoom = bridge.entities.get("room:101");
+  liveRoom.version = 3;
+  liveRoom.data.r = 1777;
+
+  const result = await projectLegacyPmsDomains({ bridge, snapshot: source, migrationId });
+  assert.equal(result.projected, 2);
+  assert.equal(result.manifest.counts.settings, 1);
+  assert.equal(result.manifest.counts.restaurant_table, 1);
+  assert.equal(result.manifest.sourceCollections.includes("t"), true);
+  assert.equal(bridge.entities.get("room:101").data.r, 1777);
+  assert.equal(bridge.entities.get(manifestId).version, 2);
+});
+
+test("an older verified manifest with a missing previously projected entity fails closed", async () => {
+  const bridge = fakeBridge(), source = snapshot(), migrationId = "mig-missing-old-domain";
+  await projectLegacyPmsDomains({ bridge, snapshot: source, migrationId });
+  const manifestId = "audit:legacy-domain-projection:" + migrationId;
+  const oldManifest = bridge.entities.get(manifestId);
+  bridge.entities.delete("settings:property-settings");
+  bridge.entities.delete("restaurant_table:1");
+  const counts = { ...oldManifest.data.counts };
+  delete counts.settings;
+  delete counts.restaurant_table;
+  oldManifest.data = {
+    ...oldManifest.data,
+    recordCount: Object.values(counts).reduce((sum, value) => sum + value, 0),
+    counts,
+    sourceCollections: ["rooms", "g", "b", "inv", "exp", "led", "aud"]
+  };
+  bridge.entities.delete("room:101");
+  await assert.rejects(
+    projectLegacyPmsDomains({ bridge, snapshot: source, migrationId }),
+    error => error.code === "LEGACY_DOMAIN_PROJECTION_MISSING_ENTITY"
+  );
+});
