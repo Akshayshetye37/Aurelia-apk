@@ -450,3 +450,17 @@ test("strict diagnostic CLI rejects a malformed cancelled collection", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+
+test("accounting diagnostic fails closed on findings without an optional strict flag", () => {
+  const dir = mkdtempSync(join(tmpdir(), "aurelia-accounting-default-strict-"));
+  try {
+    const path = join(dir, "drift.json");
+    writeFileSync(path, JSON.stringify({ b: [{ id: "B-2", p: 12, pays: [], payments: [] }], cancelled: [] }));
+    const result = spawnSync(process.execPath, ["scripts/diagnose-accounting.mjs", path], { encoding: "utf8" });
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stdout, /"affectedBookingCount": 1/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
