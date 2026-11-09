@@ -1015,7 +1015,7 @@ async function dsave(){
   if(d.k==='res'){S.tab='stays';S.f='res';render();toast(result.cacheRefreshed===false?'Reservation committed to device storage; compatibility cache refresh failed.':result.duplicate?'Reservation was already committed':'Reservation confirmed for '+nm)}
   else{render();toast(result.cacheRefreshed===false?'Guest committed to device storage; compatibility cache refresh failed.':'Guest saved')}
  }catch(error){
-  if(error&&error.code==='OPERATIONAL_CANONICAL_READBACK_MISMATCH'){
+  if(error&&['OPERATIONAL_CANONICAL_READBACK_MISMATCH','INVENTORY_READBACK_FAILED','INVENTORY_SNAPSHOT_READBACK_FAILED'].includes(error.code)){
    RECOVERY_CHECK_PENDING=true;
    console.error('[Aurelia Reservation] Canonical transaction may have committed but read-back failed. Writes are frozen.',error);
    toast('CRITICAL: Reservation storage read-back failed. Do not retry or edit; keep the app open for recovery.');
