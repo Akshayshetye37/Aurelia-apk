@@ -1,3 +1,4 @@
+// Native template: keep this path covered by settlement-foundation CI.
 package com.aurelia.pms;
 
 import com.getcapacitor.JSObject;
