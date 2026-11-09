@@ -40,7 +40,7 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
         String installation="ins_"+UUID.randomUUID().toString();
         JSONObject identity=new JSONObject(); identity.put("schemaVersion",1); identity.put("installationId",installation);
         identity.put("tenantId","local_"+installation); identity.put("propertyId","property_"+UUID.randomUUID().toString());
-        identity.put("deviceId","device_"+UUID.randomUUID().toString()); identity.put("createdAt",new java.util.Date().toInstant().toString());
+        identity.put("deviceId","device_"+UUID.randomUUID().toString()); java.text.SimpleDateFormat createdAtFormatter=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",java.util.Locale.US); createdAtFormatter.setTimeZone(java.util.TimeZone.getTimeZone("UTC")); identity.put("createdAt",createdAtFormatter.format(new java.util.Date()));
         identity.put("scope","LOCAL_ONLY"); json=identity.toString();
         String encrypted=encryptIdentity(json);
         if(!prefs.edit().putString("identity",encrypted).commit() || !json.equals(decryptIdentity(prefs.getString("identity",null)))) throw new IllegalStateException("Keystore identity read-back failed");
