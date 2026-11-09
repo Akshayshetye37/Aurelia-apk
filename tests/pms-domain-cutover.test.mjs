@@ -181,9 +181,11 @@ test("an older verified manifest with a missing previously projected entity fail
   const oldManifest = bridge.entities.get(manifestId);
   bridge.entities.delete("settings:property-settings");
   bridge.entities.delete("restaurant_table:1");
+  bridge.entities.delete("restaurant_sale:RS-LEGACY-1");
   const counts = { ...oldManifest.data.counts };
   delete counts.settings;
   delete counts.restaurant_table;
+  delete counts.restaurant_sale;
   oldManifest.data = {
     ...oldManifest.data,
     recordCount: Object.values(counts).reduce((sum, value) => sum + value, 0),
