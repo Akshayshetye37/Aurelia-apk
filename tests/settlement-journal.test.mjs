@@ -136,3 +136,75 @@ test("authorization renewal is recorded as a new evidence event", async () => {
   assert.equal(events[0].type, "AUTHORIZATION_RENEWED");
   assert.equal((await journal.get(first.record.key)).status, "PENDING");
 });
+
+test("concurrent duplicate appends produce one immutable command and one idempotent replay", async () => {
+  const journal = makeJournal();
+  const [left, right] = await Promise.all([journal.append(input()), journal.append(input())]);
+  assert.deepEqual([left.duplicate, right.duplicate].sort(), [false, true]);
+  assert.equal((await journal.listPending()).length, 1);
+  const db = await journal.database();
+  const tx = db.transaction("settlements", "readonly");
+  const rows = await new Promise((resolve, reject) => {
+    const request = tx.objectStore("settlements").getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = () => reject(tx.error); });
+  assert.equal(rows.length, 1);
+});
+
+test("concurrent terminal transitions append exactly one status event", async () => {
+  const journal = makeJournal();
+  const appended = await journal.append(input());
+  const results = await Promise.all([
+    journal.markApplied(appended.record.key, appended.record.payloadHash),
+    journal.markApplied(appended.record.key, appended.record.payloadHash)
+  ]);
+  assert.deepEqual(results.map(row => row.status), ["APPLIED", "APPLIED"]);
+  const db = await journal.database();
+  const tx = db.transaction("settlement_events", "readonly");
+  const events = await new Promise((resolve, reject) => {
+    const request = tx.objectStore("settlement_events").getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = () => reject(tx.error); });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].status, "APPLIED");
+});
+
+test("schema upgrade from the v2 mutable journal preserves existing records and adds event history", async () => {
+  const databaseName = "settlement-v2-upgrade-" + Math.random();
+  const legacy = await new Promise((resolve, reject) => {
+    const open = indexedDB.open(databaseName, 2);
+    open.onupgradeneeded = () => {
+      const store = open.result.createObjectStore("settlements", { keyPath: "key" });
+      store.createIndex("status", "status", { unique: false });
+      store.createIndex("createdAt", "createdAt", { unique: false });
+    };
+    open.onsuccess = () => resolve(open.result);
+    open.onerror = () => reject(open.error);
+  });
+  const oldRecord = {
+    key: "legacy-settlement-key", payloadHash: "legacy-hash", status: "PENDING",
+    createdAt: "2026-11-01T00:00:00.000Z", authorization: null, policyLease: null
+  };
+  const write = legacy.transaction("settlements", "readwrite");
+  write.objectStore("settlements").add(oldRecord);
+  await new Promise((resolve, reject) => { write.oncomplete = resolve; write.onabort = () => reject(write.error); });
+  legacy.close();
+
+  const journal = new IndexedDbSettlementJournal({ indexedDBImpl: indexedDB, cryptoImpl: webcrypto, databaseName });
+  assert.deepEqual(await journal.get(oldRecord.key), oldRecord);
+  const applied = await journal.markApplied(oldRecord.key, oldRecord.payloadHash);
+  assert.equal(applied.status, "APPLIED");
+  const db = await journal.database();
+  const read = db.transaction("settlements", "readonly");
+  const persisted = await new Promise((resolve, reject) => {
+    const request = read.objectStore("settlements").get(oldRecord.key);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise((resolve, reject) => { read.oncomplete = resolve; read.onabort = () => reject(read.error); });
+  assert.deepEqual(persisted, oldRecord);
+});
