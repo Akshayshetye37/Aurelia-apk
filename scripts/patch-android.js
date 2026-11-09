@@ -392,12 +392,12 @@ for (const file of [
 function ensureJUnitDependency(contents, kotlinDsl) {
   if (contents.includes('junit:junit')) return contents;
   const line = kotlinDsl
-    ? '\\n    testImplementation("junit:junit:4.13.2")'
-    : '\\n    testImplementation "junit:junit:4.13.2"';
-  if (!/dependencies\\s*\\{/.test(contents)) {
+    ? '\n    testImplementation("junit:junit:4.13.2")'
+    : '\n    testImplementation "junit:junit:4.13.2"';
+  if (!/dependencies\s*\{/.test(contents)) {
     throw new Error('App Gradle file has no dependencies block; security unit tests cannot be wired.');
   }
-  return contents.replace(/dependencies\\s*\\{/, match => match + line);
+  return contents.replace(/dependencies\s*\{/, match => match + line);
 }
 
 function addNativeSecurityDependencies(contents, kotlinDsl) {
