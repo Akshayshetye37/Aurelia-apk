@@ -17,6 +17,19 @@ test("R1 release profile exists and all privileged capabilities default OFF", ()
     assert.match(profile, new RegExp(`(?:^|[,\\s])${flag}\\s*:\\s*false(?:\\s*[,}]|$)`), `${flag} must explicitly default to false`);
   }
   assert.match(profile, /enabledProviders\s*:\s*Object\.freeze\(\s*\[\s*\]\s*\)/, "provider allow-list must be empty");
+  assert.match(profile, /uiCutover\s*:\s*false/);
+  assert.match(profile, /cloudSync\s*:\s*false/);
+  assert.match(profile, /sync\s*:\s*false/);
+  assert.match(profile, /gatewayPayments\s*:\s*false/);
+  assert.match(profile, /payBridge\s*:\s*false/);
+  assert.match(profile, /ccavenue\s*:\s*false/);
+});
+
+test("release profile remains immutable and exposes no enabled payment providers", () => {
+  const profile = releaseProfile(html);
+  assert.match(html, /window\.AURELIA_LOCAL_ONLY_RELEASE\s*=\s*Object\.freeze\(/);
+  assert.match(profile, /enabledProviders\s*:\s*Object\.freeze\(\s*\[\s*\]\s*\)/);
+  assert.doesNotMatch(profile, /enabledProviders\s*:\s*Object\.freeze\(\s*\[[^\]]+\]/);
 });
 
 test("gateway and Pay Bridge entry points fail closed when R1 flags are OFF", () => {
