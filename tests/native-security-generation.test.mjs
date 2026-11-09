@@ -74,3 +74,19 @@ test('PIN enrollment and confirmation fields both accept the full 4–16 digit p
   assert.equal((gate.match(/InputFilter\.LengthFilter\(16\)/g) || []).length, 2);
   assert.doesNotMatch(gate, /LengthFilter\(12\)/);
 });
+
+
+test('lockout state cannot silently reset when its persisted file is missing', () => {
+  const lockout = read('android/templates/security/AppLockManager.kt');
+  assert.match(lockout, /fun initializeForEnrollment\(\)/);
+  assert.match(lockout, /Missing lock state/);
+  assert.doesNotMatch(lockout, /FileNotFoundException\) \{ return State\(0, 0L, bootCount\(\)\) \}/);
+});
+
+test('first-run lockout initialization is explicit and enrollment marker recovery is crash-safe', () => {
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.match(gate, /initializeForEnrollment\(\)/);
+  assert.match(gate, /!enrolled && envelopeExists/);
+  assert.match(gate, /markEnrolled\(\)/);
+  assert.match(gate, /manager\.unlock\(first, envelope\)/);
+});
