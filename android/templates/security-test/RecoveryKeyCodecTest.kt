@@ -19,7 +19,7 @@ class RecoveryKeyCodecTest {
                 try {
                     assertArrayEquals(generated, encoded)
                 } finally {
-                    encoded.fill('\\u0000')
+                    encoded.fill('\u0000')
                 }
             } finally {
                 decoded.fill(0)
