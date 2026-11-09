@@ -52,8 +52,8 @@ test("projects legacy operational domains and preserves financial source values 
   const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-test" });
   assert.equal(result.total, 10);
   assert.equal(result.projected, 10);
-  const table = bridge.entities.get("restaurant_table:table-1");
-  assert.deepEqual(table.data, { n: 1, s: 2, o: [["Tea", 20, "din"]], id: "table-1" });
+  const table = bridge.entities.get("restaurant_table:1");
+  assert.deepEqual(table.data, { n: 1, s: 2, o: [["Tea", 20, "din"]] });
   assert.equal(result.manifest.counts.restaurant_table, 1);
   const settings = bridge.entities.get("settings:property-settings");
   assert.deepEqual(settings.data.set, { cur: "₹", name: "Aurelia" });
@@ -100,7 +100,7 @@ test("single-record trailing batch uses the atomic single-entity transaction", a
   const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-single-tail", batchSize: 9 });
   assert.equal(result.projected, 10);
   assert.ok(bridge.entities.has("settings:property-settings"));
-  assert.ok(bridge.entities.has("restaurant_table:table-1"));
+  assert.ok(bridge.entities.has("restaurant_table:1"));
   assert.ok(bridge.entities.has("audit:legacy-domain-projection:mig-single-tail"));
 });
 
