@@ -5,7 +5,7 @@ fs.mkdirSync(dest,{recursive:true});
 fs.copyFileSync(src,path.join(dest,'index.html'));
 const storageDest=path.join(dest,'src','storage');
 fs.mkdirSync(storageDest,{recursive:true});
-for(const name of ['pms-operational-feedback.mjs','pms-repository-contract.mjs','pms-local-identity.mjs','indexeddb-pms-repository.mjs','pms-bootstrap-coordinator.mjs','pms-repository-bridge.mjs','pms-local-first-write-coordinator.mjs','storage-errors.mjs','capacitor-pms-storage.mjs']){
+for(const name of ['pms-operational-feedback.mjs','indexeddb-payment-intent-store.mjs','pms-repository-contract.mjs','pms-local-identity.mjs','indexeddb-pms-repository.mjs','pms-bootstrap-coordinator.mjs','pms-repository-bridge.mjs','pms-local-first-write-coordinator.mjs','storage-errors.mjs','capacitor-pms-storage.mjs']){
  const source=path.join(root,'src','storage',name);
  if(!fs.existsSync(source))throw new Error('PMS storage module not found: '+source);
  fs.copyFileSync(source,path.join(storageDest,name));
