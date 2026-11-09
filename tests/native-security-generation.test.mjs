@@ -138,3 +138,11 @@ test('Kotlin warnings-as-errors policy has no unhandled deprecated launcher or h
   assert.doesNotMatch(gate, /override fun onBackPressed/);
   assert.match(deviceKeys, /@Suppress\("DEPRECATION"\).*securityLevel/);
 });
+
+
+test('native Kotlin CI caches Gradle and retries transient distribution downloads', () => {
+  const workflow = read('.github/workflows/native-security-kotlin.yml');
+  assert.match(workflow, /gradle\/actions\/setup-gradle@v4/);
+  assert.match(workflow, /for attempt in 1 2 3/);
+  assert.match(workflow, /Unable to fetch the pinned Gradle distribution/);
+});
