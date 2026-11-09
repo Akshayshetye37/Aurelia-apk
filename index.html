@@ -1648,9 +1648,9 @@ function persist(){
   const compatibility=window.AureliaRepositoryCompatibility;
   if(!compatibility||typeof compatibility.syncSettings!=='function')throw new Error('Canonical property settings repository is unavailable.');
   await compatibility.syncSettings(snapshot);
-  await compatibility.syncRestaurantTables(snapshot);
   const salesSync=await compatibility.syncRestaurantSales(snapshot);
   snapshot.sales=salesSync.sales;
+  await compatibility.syncRestaurantTables(snapshot);
   return coordinator.save(snapshot);
  }).catch(error=>{
   RECOVERY_CHECK_PENDING=true;
