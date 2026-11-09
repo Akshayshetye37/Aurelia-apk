@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
-import { IndexedDbSettlementJournal } from "../src/payments/settlement-journal.mjs";
+import { IndexedDbSettlementJournal } from "../src/storage/indexeddb-settlement-journal.mjs";
 
 function makeJournal() {
   return new IndexedDbSettlementJournal({
