@@ -1,0 +1,91 @@
+name: Aurelia native SQLite contract
+
+on:
+  push:
+    branches:
+      - work/p0-storage-hardening
+  pull_request:
+    branches:
+      - feature/multi-provider-payment-backend
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurelia-native-sqlite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-sqlite-instrumentation:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 55
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install application dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+
+      - name: Run source regression suite
+        run: npm test
+
+      - name: Prepare web application
+        run: npm run build
+
+      - name: Generate Android project from repository templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          if [[ -d android/templates ]]; then mv android/templates "$template_dir"; fi
+          if [[ -d android ]]; then rmdir android; fi
+          npx cap add android
+          if [[ -d "$template_dir" ]]; then mkdir -p android/templates && cp -a "$template_dir/." android/templates/; fi
+          test -f android/gradlew
+          test -f android/app/build.gradle
+
+      - name: Apply native PMS and instrumentation configuration
+        run: node scripts/patch-android.js
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Compile native sources and unit tests
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace compileDebugJavaWithJavac compileReleaseJavaWithJavac testDebugUnitTest assembleDebug
+
+      - name: Execute real SQLite contract tests on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: cd android && ./gradlew --no-daemon --stacktrace connectedDebugAndroidTest
+
+      - name: Upload native instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurelia-native-sqlite-${{ github.sha }}
+          path: |
+            android/app/build/outputs/androidTest-results/connected/**
+            android/app/build/reports/androidTests/connected/**
+          if-no-files-found: warn
+          retention-days: 14
