@@ -406,7 +406,7 @@ function addNativeSecurityDependencies(contents, kotlinDsl) {
   }
   const dependencies = [
     ['org.bouncycastle:bcprov-jdk18on:1.80', 'org.bouncycastle:bcprov-jdk18on'],
-    ['androidx.biometric:biometric:1.2.0', 'androidx.biometric:biometric']
+    ['androidx.biometric:biometric:1.2.0-alpha05', 'androidx.biometric:biometric']
   ];
   for (const [coordinate, marker] of dependencies) {
     if (contents.includes(marker)) continue;
