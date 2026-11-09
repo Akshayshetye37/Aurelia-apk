@@ -6,7 +6,8 @@
 const clone = value => typeof structuredClone === "function"
   ? structuredClone(value)
   : JSON.parse(JSON.stringify(value));
-const stable = value => Array.isArray(value) ? value.map(stable) :
+const stable = value => value instanceof Date ? value.toISOString() :
+  Array.isArray(value) ? value.map(stable) :
   value && typeof value === "object"
     ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])]))
     : value;
