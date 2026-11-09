@@ -16,13 +16,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
-      - name: Checkout the R1 execution branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          token: ${{ secrets.R1_ADMIN_TOKEN }}
-
-      - name: Install GitHub CLI and verify administrator token
+      - name: Validate administrator token is configured
         env:
           GH_TOKEN: ${{ secrets.R1_ADMIN_TOKEN }}
         run: |
@@ -31,6 +25,12 @@ jobs:
             exit 1
           fi
           gh auth status
+
+      - name: Checkout the R1 execution branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          token: ${{ secrets.R1_ADMIN_TOKEN }}
 
       - name: Apply and verify branch protections, test direct-push rejection, and test red-tag refusal
         env:
