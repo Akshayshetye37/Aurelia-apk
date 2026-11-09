@@ -1,3 +1,4 @@
+// Dedicated Java-only PR path-filter verification.
 // Native template: keep this path covered by settlement-foundation CI.
 package com.aurelia.pms;
 
