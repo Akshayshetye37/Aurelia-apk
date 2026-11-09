@@ -105,6 +105,18 @@ function records(snapshot, migrationId) {
     tableIds.add(id);
     add("restaurant_table", id, clone(row), "t");
   });
+  const sales = snapshot.sales ?? [];
+  if (!Array.isArray(sales)) throw new TypeError("Legacy restaurant sales must be an array.");
+  const saleIds = new Set();
+  sales.forEach((row, index) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      throw new Error("Malformed legacy restaurant sale at index " + index);
+    }
+    const id = safeId(row.id ?? ("legacy-restaurant-sale-" + (index + 1)), "restaurant sale identity");
+    if (saleIds.has(id)) throw new Error("Legacy restaurant sale IDs are duplicated; projection stopped.");
+    saleIds.add(id);
+    add("restaurant_sale", id, { ...clone(row), id }, "sales");
+  });
   snapshot.inv.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy inventory item at index " + index);
     const id = safeId(row.id ?? "legacy-inventory-" + index, "inventory identity");
@@ -146,7 +158,7 @@ export async function projectLegacyPmsDomains({ bridge, snapshot, migrationId, b
     status: "VERIFIED",
     recordCount: planned.length,
     counts: planned.reduce((out, row) => (out[row.entityType] = (out[row.entityType] || 0) + 1, out), {}),
-    sourceCollections: ["set", "menu", "rooms", "g", "b", "t", "inv", "exp", "led", "aud"],
+    sourceCollections: ["set", "menu", "rooms", "g", "b", "t", "sales", "inv", "exp", "led", "aud"],
     preservesLegacySnapshot: true,
     financialReconciliationPerformed: false
   };
