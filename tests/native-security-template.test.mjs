@@ -167,7 +167,7 @@ test('Capacitor PMS SQLite plugin is copied and explicitly registered before Mai
   assert.match(plugin, /@PluginMethod public void initializeStorage/);
   assert.match(plugin, /@PluginMethod public void getEntity/);
   assert.match(plugin, /@PluginMethod public void transactBusinessChange/);
-  assert.match(plugin, /repository\.transactBusinessChange\(/);
+  assert.ok(plugin.includes("repository().transactBusinessChange("));
   assert.doesNotMatch(plugin, /beginTransaction|endTransaction|setTransactionSuccessful/);
   assert.match(patcher, /CapacitorPmsStoragePlugin\.java/);
   assert.match(patcher, /registerPlugin\(CapacitorPmsStoragePlugin\.class\)/);
