@@ -24,7 +24,11 @@ const comparable = value => {
 };
 const same = (left, right) => JSON.stringify(stable(comparable(left))) === JSON.stringify(stable(comparable(right)));
 const inventoryId = (row, index) => {
-  const id = String(row?.id ?? "legacy-inventory-" + index);
+  const rawId = row?.id ?? "legacy-inventory-" + index;
+  if (typeof rawId !== "string" && !Number.isSafeInteger(rawId)) {
+    throw new TypeError("Inventory item ID must be a string or safe integer.");
+  }
+  const id = String(rawId);
   if (!id.trim() || id.length > 180 || /[\u0000-\u001f]/.test(id)) {
     throw new TypeError("Inventory item requires a stable valid ID.");
   }
