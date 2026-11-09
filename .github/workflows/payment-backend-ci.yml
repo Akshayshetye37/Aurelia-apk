@@ -6,6 +6,8 @@ on:
       - feature/multi-provider-payment-backend
     paths:
       - "payment-backend/**"
+      - "android/templates/**/*.java"
+      - "android/templates/**/*.kt"
       - ".github/workflows/payment-backend-ci.yml"
   pull_request:
     branches:
