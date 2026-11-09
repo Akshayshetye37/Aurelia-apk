@@ -60,6 +60,9 @@ test("restaurant sale synchronization is idempotent and preserves legacy array o
   const second = await sales.syncSnapshot({ sales: first.sales });
   assert.equal(second.created, 0);
   assert.deepEqual(second.sales.map(row => row.id), ["legacy-restaurant-sale-1", "RS-SECOND"]);
+  const stale = await sales.syncSnapshot({ sales: [first.sales[0]] });
+  assert.equal(stale.created, 0);
+  assert.deepEqual(stale.sales.map(row => row.id), ["legacy-restaurant-sale-1", "RS-SECOND"]);
   assert.equal((await repository.claimOutboxBatch({ deviceId: "device-local" })).length, 2);
 });
 
