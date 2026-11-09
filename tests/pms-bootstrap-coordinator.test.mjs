@@ -264,7 +264,7 @@ test("fresh canonical installation can save, restart and project without legacy 
 });
 
 test("stale fresh-install marker without its canonical snapshot fails closed", async () => {
-  const storage = makeStorage({ [AURELIA_MIGRATION_STATUS_KEY]: "READY_CANONICAL:mig_legacy_0000000000000000000000000000000000000000000000000000000000000000" });
+  const storage = makeStorage({ [AURELIA_MIGRATION_STATUS_KEY]: "READY_CANONICAL:mig_legacy_00000000" });
   const app = coordinator("stale-fresh-marker", storage);
   await assert.rejects(app.initializeApplication(), /Fresh canonical installation marker has no committed full-state snapshot/i);
   assert.equal(app.status, "FAILED_CLOSED");
