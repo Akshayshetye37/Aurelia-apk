@@ -63,12 +63,22 @@ jobs:
         run: |
           set -euo pipefail
           wrapper="gradle/wrapper/gradle-wrapper.properties"
+          sed -i 's#services.gradle.org#downloads.gradle.org#' "$wrapper"
           grep -q '^networkTimeout=' "$wrapper" || printf '\\nnetworkTimeout=120000\\n' >> "$wrapper"
       - name: Compile native SQLite repository and Capacitor plugin
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace assembleDebug
+          for attempt in 1 2 3; do
+            if ./gradlew --no-daemon --stacktrace assembleDebug; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Gradle build attempt $attempt failed; retrying after transient distribution/dependency failure."
+              sleep $((attempt * 15))
+            fi
+          done
+          exit 1
       - name: Verify packaged assets exclude IndexedDB business adapter
         shell: bash
         run: |
