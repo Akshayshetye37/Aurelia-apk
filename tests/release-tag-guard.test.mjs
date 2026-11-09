@@ -4,14 +4,21 @@ import { evaluateRequiredChecks, verifyTaggedSha } from "../scripts/verify-relea
 
 test("release tag gate accepts only a successful required check on the SHA", () => {
   assert.deepEqual(evaluateRequiredChecks([
-    { name: "r1-governance", status: "completed", conclusion: "success" }
+    { name: "r1-governance", status: "completed", conclusion: "success" },
+    { name: "native-security-kotlin", status: "completed", conclusion: "success" }
   ]), { ok: true, failures: [] });
 });
 
 test("release tag gate refuses red, pending, and missing checks", () => {
   for (const checkRuns of [
-    [{ name: "r1-governance", status: "completed", conclusion: "failure" }],
-    [{ name: "r1-governance", status: "in_progress", conclusion: null }],
+    [
+      { name: "r1-governance", status: "completed", conclusion: "success" },
+      { name: "native-security-kotlin", status: "completed", conclusion: "failure" }
+    ],
+    [
+      { name: "r1-governance", status: "completed", conclusion: "success" },
+      { name: "native-security-kotlin", status: "in_progress", conclusion: null }
+    ],
     []
   ]) {
     assert.equal(evaluateRequiredChecks(checkRuns).ok, false);
@@ -25,7 +32,10 @@ test("release tag verifier calls GitHub for the exact SHA and refuses a red resu
     return {
       ok: true,
       json: async () => ({
-        check_runs: [{ name: "r1-governance", status: "completed", conclusion: "failure" }]
+        check_runs: [
+          { name: "r1-governance", status: "completed", conclusion: "success" },
+          { name: "native-security-kotlin", status: "completed", conclusion: "failure" }
+        ]
       })
     };
   };
