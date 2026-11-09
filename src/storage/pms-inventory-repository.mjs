@@ -32,6 +32,47 @@ const inventoryId = (row, index) => {
 };
 const retired = row => row?.data?.retired === true || row?.data?.status === "retired";
 
+const stableString = value => JSON.stringify(stable(value));
+const movementHash = value => {
+  const input = stableString(value);
+  let hash = 0xcbf29ce484222325n;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= BigInt(input.charCodeAt(index));
+    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+  }
+  return hash.toString(16).padStart(16, "0");
+};
+const movementRows = (snapshot, previous) => {
+  const nextRows = Array.isArray(snapshot.led) ? snapshot.led : [];
+  const priorRows = Array.isArray(previous?.led) ? previous.led : [];
+  const priorCounts = new Map();
+  const nextCounts = new Map();
+  for (const row of priorRows) {
+    const key = stableString(row);
+    priorCounts.set(key, (priorCounts.get(key) || 0) + 1);
+  }
+  for (const row of nextRows) {
+    const key = stableString(row);
+    nextCounts.set(key, (nextCounts.get(key) || 0) + 1);
+  }
+  for (const [key, count] of priorCounts) {
+    if ((nextCounts.get(key) || 0) < count) {
+      throw Object.assign(new Error("Inventory movement ledger is append-only; existing movement rows cannot be removed or edited."), {
+        code: "INVENTORY_MOVEMENT_HISTORY_MUTATION"
+      });
+    }
+  }
+  const additions = [];
+  for (const row of nextRows) {
+    const key = stableString(row);
+    const seen = additions.filter(entry => entry.key === key).length;
+    const already = priorCounts.get(key) || 0;
+    if (seen + 1 > (nextCounts.get(key) || 0) - already) continue;
+    additions.push({ key, row: clone(row), ordinal: already + seen + 1 });
+  }
+  return additions;
+};
+
 function validateItem(row) {
   if (!row || typeof row !== "object" || Array.isArray(row)) throw new TypeError("Inventory item must be a plain object.");
   if (!Number.isSafeInteger(Number(row.q)) || Number(row.q) < 0 ||
@@ -194,6 +235,34 @@ export class PmsInventoryRepository {
       });
     }
 
+    const newMovements = snapshotRow
+      ? movementRows(snapshot, snapshotRow.data.snapshot)
+      : [];
+    const movementChanges = [];
+    for (const movement of newMovements) {
+      const id = "inventory-movement-" + movementHash(movement.row) + "-" + movement.ordinal;
+      const data = {
+        kind: "inventory_movement",
+        source: "inventory_snapshot_ledger",
+        value: movement.row
+      };
+      const existing = await this.bridge.fetchEntity("ledger", id);
+      if (existing) {
+        if (!same(existing.data, data)) {
+          throw Object.assign(new Error("Inventory movement identity collision; refusing to overwrite ledger history."), {
+            code: "INVENTORY_MOVEMENT_ID_COLLISION", movementId: id
+          });
+        }
+        continue;
+      }
+      movementChanges.push({
+        entityType: "ledger", entityId: id, expectedVersion: 0,
+        eventType: "inventory.movement_recorded",
+        eventPayload: { movementId: id, source: "inventory_snapshot_ledger" },
+        mutate: entity => Object.assign(entity, clone(data), { createdAt: this.now() })
+      });
+    }
+
     const changes = [];
     for (const [id, target] of desired) {
       const old = current.get(id);
@@ -229,16 +298,16 @@ export class PmsInventoryRepository {
         }
       });
     }
-    if (changes.length > 19) {
-      throw new RangeError("Inventory snapshot changes exceed the 19-item atomic transaction limit.");
+    if (changes.length + movementChanges.length > 19) {
+      throw new RangeError("Inventory and movement changes exceed the 19-entity atomic transaction limit.");
     }
-    if (changes.length) {
+    if (changes.length || movementChanges.length) {
       const committedAt = this.now();
       const auditChange = {
         entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2",
         expectedVersion: snapshotRow?.version ?? 0,
         eventType: "pms.snapshot_inventory_mutation",
-        eventPayload: { inventoryCount: desired.size, changedInventory: changes.map(change => change.entityId) },
+        eventPayload: { inventoryCount: desired.size, changedInventory: changes.map(change => change.entityId), movementCount: movementChanges.length },
         mutate: entity => {
           entity.sourceKey = "aurelia_lodge_v2";
           entity.snapshot = clone(snapshot);
@@ -246,7 +315,7 @@ export class PmsInventoryRepository {
           return entity;
         }
       };
-      await this.bridge.mutateEntities([...changes, auditChange]);
+      await this.bridge.mutateEntities([...changes, ...movementChanges, auditChange]);
     }
 
     const active = await this.list();
@@ -261,7 +330,18 @@ export class PmsInventoryRepository {
     }
     const finalRows = await this.bridge.listEntities("inventory");
     this.knownVersions = new Map(finalRows.map(row => [row.id, row.version]));
-    if (changes.length) {
+    for (const movement of newMovements) {
+      const id = "inventory-movement-" + movementHash(movement.row) + "-" + movement.ordinal;
+      const stored = await this.bridge.fetchEntity("ledger", id);
+      if (!stored || !same(stored.data, {
+        kind: "inventory_movement", source: "inventory_snapshot_ledger", value: movement.row
+      })) {
+        throw Object.assign(new Error("Inventory movement failed exact canonical ledger read-back."), {
+          code: "INVENTORY_MOVEMENT_READBACK_FAILED", movementId: id
+        });
+      }
+    }
+    if (changes.length || movementChanges.length) {
       const storedSnapshot = await this.bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
       if (!storedSnapshot || !same(storedSnapshot.data.snapshot, snapshot)) {
         throw Object.assign(new Error("Inventory transaction failed exact recovery snapshot read-back."), {
