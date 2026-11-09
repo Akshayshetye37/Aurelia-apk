@@ -110,7 +110,7 @@ test("invalid inventory quantities, prices and duplicate IDs are rejected before
   const { repository, inventory } = setup("validation");
   await assert.rejects(inventory.syncSnapshot({ t: [], inv: [{ id: "bad", n: "Bad", q: -1, ro: 0, u: 1, price: 1 }] }), /whole units/);
   await assert.rejects(inventory.syncSnapshot({ t: [], inv: [{ id: "bad", n: "Bad", q: 1, ro: 0, u: 1.001, price: 1 }] }), /two decimal places/);
-  await assert.rejects(inventory.syncSnapshot({ inv: [
+  await assert.rejects(inventory.syncSnapshot({ t: [], inv: [
     { id: "duplicate", n: "One", q: 1, ro: 0, u: 1, price: 1 },
     { id: "duplicate", n: "Two", q: 1, ro: 0, u: 1, price: 1 }
   ] }), /IDs must be unique/);
@@ -131,9 +131,9 @@ test("retired inventory identities cannot be resurrected", async () => {
   const { inventory } = setup("no-resurrection");
   const item = { id: "retired-1", n: "Old stock", q: 0, ro: 0, u: 0, price: 0 };
   await inventory.syncSnapshot({ t: [], inv: [item] });
-  await inventory.syncSnapshot({ inv: [] });
+  await inventory.syncSnapshot({ t: [], inv: [] });
   await assert.rejects(
-    inventory.syncSnapshot({ inv: [item] }),
+    inventory.syncSnapshot({ t: [], inv: [item] }),
     error => error.code === "INVENTORY_ID_RETIRED"
   );
 });
@@ -165,7 +165,6 @@ test("restaurant stock issue commits inventory, table order, movement ledger and
   const initial = {
     t: [{ n: 1, s: 2, o: [] }],
     inv: [{ id: "tea-1", n: "Tea", q: 5, ro: 1, u: 2, price: 20, sellable: true }],
-    t: [{ n: 1, s: 2, o: [] }],
     led: []
   };
   await inventory.syncSnapshot(initial);
@@ -195,7 +194,7 @@ test("inventory movement history is append-only and cannot be edited or removed"
   const initial = {
     t: [],
     inv: [{ id: "milk-1", n: "Milk", q: 5, ro: 1, u: 3, price: 0 }],
-    t: [], led: [["Milk", -1, "restaurant-sale", "2026-11-09T00:00:00.000Z"]]
+    led: [["Milk", -1, "restaurant-sale", "2026-11-09T00:00:00.000Z"]]
   };
   await inventory.syncSnapshot(initial);
   const edited = structuredClone(initial);
