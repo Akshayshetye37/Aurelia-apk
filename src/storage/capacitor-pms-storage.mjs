@@ -1,4 +1,5 @@
 import { PmsRepository, assertPmsIdentity, assertPmsVersion } from "./pms-repository-contract.mjs";
+import { guardNativePlugin } from "./storage-errors.mjs";
 
 function resolveNativePlugin() {
   const capacitor = globalThis.Capacitor;
@@ -11,7 +12,7 @@ const stable = value => Array.isArray(value) ? value.map(stable) : value && type
 const sameJson = (a,b) => JSON.stringify(stable(a)) === JSON.stringify(stable(b));
 
 export class CapacitorPmsStorageClient extends PmsRepository {
-  constructor(plugin) { super(); this.plugin = plugin || resolveNativePlugin(); }
+  constructor(plugin) { super(); this.plugin = guardNativePlugin(plugin || resolveNativePlugin()); }
 
   async getOrCreateLocalIdentity() {
     if (!this.plugin || typeof this.plugin.getOrCreateLocalIdentity !== "function") throw new Error("Native Keystore-backed local identity is unavailable");
