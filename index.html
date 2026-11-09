@@ -1652,7 +1652,7 @@ function persist(){
   snapshot.sales=salesSync.sales;
   await compatibility.syncRestaurantTables(snapshot);
   await compatibility.syncInventory(snapshot);
-  return window.AureliaVerifiedLocalSave(snapshot);
+  return coordinator.save(snapshot);
  }).catch(error=>{
   RECOVERY_CHECK_PENDING=true;
   console.error('[Aurelia Local First] Canonical commit/read-back failed; operational writes are frozen pending recovery.',error);
@@ -1679,7 +1679,7 @@ async function persistCanonicalStrict(){
  const commit=async()=>{
   if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
   const state={tab:S.tab,bk:S.bk};DK.forEach(k=>state[k]=S[k]);
-  const result=await window.AureliaVerifiedLocalSave(state);
+  const result=await coordinator.save(state);
   if(!result?.committed||!result.snapshot)throw new Error('Canonical local PMS commit was not verified.');
   return result.snapshot;
  };
@@ -1694,7 +1694,25 @@ function cloneRuntimeState(value){
 }
 let LOCAL_OPERATIONAL_QUEUE=Promise.resolve();
 function withLocalOperationalLock(task){
- const run=LOCAL_OPERATIONAL_QUEUE.then(task,task);
+ const execute=async()=>{
+  const feedback=window.AureliaOperationalFeedbackController;
+  let operation=null;
+  try{
+   if(feedback)operation=feedback.beginSave();
+   const result=await task();
+   if(operation!==null){
+    if(result===false)feedback.failSave(operation,new Error('The operational change was not committed.'),{recoveryRequired:RECOVERY_CHECK_PENDING});
+    else feedback.completeSave(operation);
+   }
+   return result;
+  }catch(error){
+   if(operation!==null)feedback.failSave(operation,error,{
+    recoveryRequired:RECOVERY_CHECK_PENDING||error?.code!=='DATABASE_UNAVAILABLE'
+   });
+   throw error;
+  }
+ };
+ const run=LOCAL_OPERATIONAL_QUEUE.then(execute,execute);
  LOCAL_OPERATIONAL_QUEUE=run.then(()=>undefined,()=>undefined);
  return run;
 }
@@ -5702,22 +5720,10 @@ try {
   });
   window.AureliaOperationalFeedback = Object.freeze({
     get status() { return operationalFeedback.status; },
-    subscribe: listener => operationalFeedback.subscribe(listener)
+    subscribe: listener => operationalFeedback.subscribe(listener),
+    completeRecovery: result => operationalFeedback.completeRecovery(result)
   });
-  window.AureliaVerifiedLocalSave = async snapshot => {
-    const operation = operationalFeedback.beginSave();
-    try {
-      const result = await localFirstWrites.save(snapshot);
-      if (!result?.committed || !result.snapshot) throw new Error("Canonical local save was not verified.");
-      operationalFeedback.completeSave(operation);
-      return result;
-    } catch (error) {
-      operationalFeedback.failSave(operation, error, {
-        recoveryRequired: error?.code !== "DATABASE_UNAVAILABLE"
-      });
-      throw error;
-    }
-  };
+  window.AureliaOperationalFeedbackController = operationalFeedback;
   const localFirstWrites = new PmsLocalFirstWriteCoordinator({
     persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot),
     readBack: async () => {
