@@ -8,7 +8,22 @@ The app runs primarily on the primary device and stores its operational data in 
 
 **This principle is a release requirement, not merely a design preference.** Any implementation that requires internet/cloud/server availability for ordinary local PMS operation, or reports a successful local write before the device database commit and read-back succeed, violates this requirement.
 
-Aurelia is a local-first property management system (PMS) for reservations, guests, rooms, folios and property operations, with a separately trusted backend for online payment-provider operations.
+Aurelia is a local-first property management system (PMS) for reservations, guests, rooms, folios and property operations, with optional online payment-provider operations planned after the local-only release.
+
+## Current release scope — local-only PMS first
+
+The current branch release profile intentionally ships local-only PMS capabilities first:
+
+- `uiCutover=false`; do not switch the global UI until Workstream A acceptance is complete.
+- Cloud sync and the local sync feature flag are OFF.
+- Online gateway checkout, payment backend administration, provider activation, reconciliation and Pay Bridge are blocked at their application entry points.
+- CCAvenue is OFF and the enabled-provider allow-list is empty. No provider has been selected for the later single-provider phase.
+- Device-local cash/manual payment recording remains available. Live collection, automatic settlement and automatic refund posting remain locked.
+- A CI regression test checks the release defaults and protected entry-point guards.
+
+**Repository administration is still outstanding:** GitHub currently reports this branch as unprotected with required checks unenforced. The connected GitHub capability can inspect this setting but cannot write repository branch-protection settings. An owner/admin with repository administration permission must enable one required review, required CI checks and force-push restrictions before merge.
+
+The read-only accounting diagnostic already exists at `npm run diagnose:accounting -- <redacted-backup.json>`. It has not yet been run against a real authorized backup; no real-data discrepancy count is claimed. The existing documented booking shape is `booking.p` (legacy stored paid total), `booking.pays[]` (payment rows) and `booking.payments[]` (history mirror). Do not migrate or repair balances until the diagnostic report has been reviewed and approved by the accounting owner.
 
 ## Project location
 
@@ -16,7 +31,7 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 - **Project root:** repository root (`/`)
 - **Active engineering branch:** `feature/multi-provider-payment-backend`
 - **Active branch:** `feature/multi-provider-payment-backend` (resolve the current SHA from the branch ref; avoid hard-coded moving HEAD values).
-- **Latest verification:** GitHub Actions run [42589493499](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42589493499) passed on commit `1431611075c8bebddda445facecd01367a610892`: PMS test suite, production web bundle build and production asset privacy checks. This workflow did **not** build or qualify an APK or physical Android device.
+- **Latest verification:** On exact commit `4e7659c42b404b23175df898f16de58bf774d5da`, [PMS source/web CI run 42591219837](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42591219837) and [settlement foundation CI run 42591219781](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42591219781) both completed successfully. PMS CI passed the complete test suite, production web bundle build and production asset privacy checks. Neither workflow qualifies an APK or physical Android device.
 - **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
 
 Useful project locations:
