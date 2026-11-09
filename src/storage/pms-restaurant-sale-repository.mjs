@@ -180,7 +180,8 @@ export class PmsRestaurantSaleRepository {
     return Object.freeze({
       count: storedSales.length,
       created: changes.length,
-      sales: storedSales
+      // Preserve the caller's array order so index-derived legacy IDs remain stable.
+      sales: normalized.map(sale => clone(storedById.get(sale.id)))
     });
   }
 }
