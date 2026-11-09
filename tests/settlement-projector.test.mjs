@@ -111,7 +111,9 @@ test("journal transitions are one-way and persistent read-back is stable", async
 test("gateway settlement interlocks remain closed while local manual entry is available", () => {
   assert.deepEqual(PAYMENT_SAFETY_LOCKS, {
     blockAllBalanceMutations: false, automaticSettlement: true,
-    liveCollection: true, nativeSettlementBridge: true
+    liveCollection: true, nativeSettlementBridge: true,
+    onlineGatewayPayments: false, payBridge: false, cloudSync: false,
+    uiCutover: false, ccavenue: false, enabledProviders: []
   });
   assert.equal(AUTO_FOLIO_SETTLEMENT_ENABLED, false);
 });
