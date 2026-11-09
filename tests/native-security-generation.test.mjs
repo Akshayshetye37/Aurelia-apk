@@ -146,3 +146,12 @@ test('native Kotlin CI caches Gradle and retries transient distribution download
   assert.match(workflow, /for attempt in 1 2 3/);
   assert.match(workflow, /Unable to fetch the pinned Gradle distribution/);
 });
+
+
+test('biometric enrollment invalidation API is guarded for the minSdk and lint reports are retained', () => {
+  const biometric = read('android/templates/security/BiometricVaultManager.kt');
+  const workflow = read('.github/workflows/native-security-kotlin.yml');
+  assert.match(biometric, /Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.N[\s\S]*?setInvalidatedByBiometricEnrollment\(true\)/);
+  assert.match(workflow, /Upload Android lint diagnostics/);
+  assert.match(workflow, /lint-results-debug\.txt/);
+});
