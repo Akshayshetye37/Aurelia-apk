@@ -1,34 +1,48 @@
-# GitHub administrator action — R1 protected branches
+# R1 protected-branch enforcement
 
-The connected GitHub integration used for this execution branch does not have repository-administration permission (the branch-protection API returned HTTP 403). No branch-protection change or rejected-push experiment is claimed.
+Repository ruleset enforcement is automated by `.github/workflows/r1-admin-finalize.yml`. The workflow applies and verifies the ruleset, attempts a real direct push to a disposable protected release branch, confirms GitHub rejects it, cleans up that branch, then enables deletion protection. It also creates a temporary `aurelia-approved-*` tag against a known-red commit, verifies the release-tag guard rejects it, and deletes the tag.
 
-Apply the following settings in **Repository → Settings → Rules → Rulesets** (preferred) or **Branches → Branch protection rules**:
+## One-time credential setup
 
-## Target branches
+The GitHub App connected to this workspace can read and write repository contents but cannot administer rulesets or create tags. Do not paste an administrator token into chat or commit it to the repository.
 
-- `main`
-- `release/*`
+Create a **fine-grained personal access token** restricted to this repository with these permissions:
 
-## Required rule configuration
+- **Administration: Read and write** — create/update the repository ruleset.
+- **Contents: Read and write** — create/delete the disposable branch and tag.
+- **Actions: Read** — poll the release-tag guard run.
+- **Checks: Read** — verify the red commit has a completed failing `r1-governance` check.
 
-- Require a pull request before merging.
-- Require **1 approving review**.
-- Require status check **`r1-governance`**.
-- Require branches to be up to date before merging.
+Save it as the repository Actions secret named `R1_ADMIN_TOKEN`:
+
+`Settings → Secrets and variables → Actions → New repository secret`.
+
+## Run the finalizer
+
+1. Open **Actions → R1 administrator finalization**.
+2. Select branch `release/r1-local-first-execution`.
+3. Select **Run workflow**.
+4. Wait for the job `apply-ruleset-and-run-negative-probes` to finish.
+5. Confirm its job summary links to the active ruleset and the failed red-tag guard run. A successful workflow also means the direct-push probe was rejected and the temporary branch and tag were removed.
+
+## Exact rules applied
+
+The workflow creates or updates the repository ruleset **Aurelia R1 protected branches**:
+
+- Target refs: `main`, `feature/multi-provider-payment-backend`, and `release/**`.
+- Enforcement: active.
+- Bypass actors: none, including administrators and repository roles.
+- Require pull requests and one approving review.
+- Dismiss stale approvals after new reviewable commits.
+- Require resolved review conversations.
+- Require the `r1-governance` status check and up-to-date checks.
 - Block force pushes.
 - Block branch deletion.
-- Do not add bypass actors; administrators must not bypass the rule.
-- If using classic branch protection, enable **Include administrators** / enforce the rule for administrators.
-- Do not enable an option that permits bypassing these requirements for administrators or repository roles.
 
-The `r1-governance` check is defined by `.github/workflows/r1-governance.yml`. It runs the full application test suite, asserts the R1 release safety defaults, builds the production web bundle, and enforces the production asset boundary. It is intentionally not a substitute for packet-specific acceptance evidence.
+The direct-push probe is performed before enabling deletion protection so the disposable branch can be removed safely. The final ruleset is then read back and verified to contain the deletion rule as well.
 
-## Required verification after saving
+## Failure handling
 
-1. Re-open the ruleset and verify both branch patterns are targeted and active.
-2. Verify `r1-governance` is selected as a required status check.
-3. From a non-admin test clone/credential, attempt a direct push to a disposable protected test branch and a force-push; retain the exact server rejection output in the Packet 1 PR. Do not experiment with destructive pushes to `main` or a release branch.
-4. Verify an administrator is also subject to the rule (no bypass list; admin enforcement enabled).
-5. Record the ruleset URL/screenshot and test output in the Packet 1 PR.
+The workflow fails closed if the token lacks permissions, the red SHA is no longer known-red, ruleset read-back differs from the requested configuration, the direct push unexpectedly succeeds, the tag guard does not start, or the tag guard does not conclude `failure`. Cleanup is attempted on exit for temporary refs.
 
-**Packet 1 remains In progress until an administrator applies and verifies these settings.** A written configuration guide, workflow, or HTTP 403 is not proof that GitHub enforcement is active.
+Packet 1 is not complete until this workflow finishes successfully and its evidence is attached to PR #13.
