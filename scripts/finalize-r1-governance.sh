@@ -14,8 +14,10 @@ export GH_TOKEN="$R1_ADMIN_TOKEN"
 REPO="$GITHUB_REPOSITORY"
 RULESET_NAME="Aurelia R1 protected branches"
 RED_SHA="036b3f31029687345a0ee19c8a9740172d4507b3"
+CHECK_BRANCH="test/r1-protection-checks-probe-$GITHUB_RUN_ID"
 PROBE_BRANCH="release/r1-protection-probe-$GITHUB_RUN_ID"
 TAG="aurelia-approved-probe-red-036b3f3-$GITHUB_RUN_ID"
+CHECK_BRANCH_CREATED=0
 PROBE_BRANCH_CREATED=0
 TAG_CREATED=0
 
@@ -25,6 +27,9 @@ cleanup() {
   fi
   if [[ "$PROBE_BRANCH_CREATED" == "1" ]]; then
     gh api --method DELETE "repos/$REPO/git/refs/heads/$PROBE_BRANCH" >/dev/null 2>&1 || true
+  fi
+  if [[ "$CHECK_BRANCH_CREATED" == "1" ]]; then
+    gh api --method DELETE "repos/$REPO/git/refs/heads/$CHECK_BRANCH" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
@@ -89,13 +94,44 @@ else
 fi
 
 BASE_SHA="$(git rev-parse HEAD)"
-echo "Creating disposable protected branch $PROBE_BRANCH at $BASE_SHA..."
+echo "Creating an unprotected temporary check branch $CHECK_BRANCH at $BASE_SHA..."
+gh api --method POST "repos/$REPO/git/refs" -f "ref=refs/heads/$CHECK_BRANCH" -f "sha=$BASE_SHA" >/dev/null
+CHECK_BRANCH_CREATED=1
+
+git checkout --detach "$BASE_SHA"
+git -c user.name="R1 governance verifier" -c user.email="r1-governance@users.noreply.github.com" commit --allow-empty -m "test: produce a green R1 governance SHA for direct-push probe"
+PROBE_SHA="$(git rev-parse HEAD)"
+AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$R1_ADMIN_TOKEN" | base64 -w0)"
+git -c http.extraheader="$AUTH_HEADER" push origin "HEAD:refs/heads/$CHECK_BRANCH"
+
+echo "Waiting for r1-governance to pass on exact probe SHA $PROBE_SHA..."
+GOVERNANCE_WORKFLOW_ID="$(gh api "repos/$REPO/actions/workflows/r1-governance.yml" --jq '.id')"
+GOVERNANCE_RUN_ID=""
+GOVERNANCE_CONCLUSION=""
+for attempt in $(seq 1 72); do
+  GOVERNANCE_RUN_ID="$(gh api "repos/$REPO/actions/runs?event=push&per_page=100" --jq --argjson workflow_id "$GOVERNANCE_WORKFLOW_ID" --arg sha "$PROBE_SHA" '
+    [.workflow_runs[] | select(.workflow_id == $workflow_id and .head_sha == $sha)] | sort_by(.created_at) | last | (.id // empty)
+  ' | head -n1)"
+  if [[ -n "$GOVERNANCE_RUN_ID" ]]; then
+    GOVERNANCE_STATE="$(gh api "repos/$REPO/actions/runs/$GOVERNANCE_RUN_ID")"
+    if [[ "$(echo "$GOVERNANCE_STATE" | jq -r '.status')" == "completed" ]]; then
+      GOVERNANCE_CONCLUSION="$(echo "$GOVERNANCE_STATE" | jq -r '.conclusion')"
+      break
+    fi
+  fi
+  sleep 5
+done
+if [[ "$GOVERNANCE_CONCLUSION" != "success" ]]; then
+  echo "::error::The temporary source SHA did not receive a successful r1-governance run."
+  exit 1
+fi
+gh api "repos/$REPO/commits/$PROBE_SHA/check-runs?per_page=100" | jq -e '[.check_runs[] | select(.name == "r1-governance" and .status == "completed" and .conclusion == "success")] | length > 0' >/dev/null
+
+echo "Creating protected target branch $PROBE_BRANCH at $BASE_SHA..."
 gh api --method POST "repos/$REPO/git/refs" -f "ref=refs/heads/$PROBE_BRANCH" -f "sha=$BASE_SHA" >/dev/null
 PROBE_BRANCH_CREATED=1
 
-git checkout --detach "$BASE_SHA"
-git -c user.name="R1 governance verifier" -c user.email="r1-governance@users.noreply.github.com" commit --allow-empty -m "test: verify protected release branch rejects direct pushes"
-AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$R1_ADMIN_TOKEN" | base64 -w0)"
+echo "Attempting direct push of an already-green SHA to the protected release branch..."
 set +e
 git -c http.extraheader="$AUTH_HEADER" push origin "HEAD:refs/heads/$PROBE_BRANCH" >/tmp/r1-protection-push.log 2>&1
 PUSH_EXIT=$?
@@ -109,11 +145,13 @@ if ! grep -Eqi 'GH013|repository rule violations|protected branch update failed|
   echo "::error::Push failed, but not with a GitHub branch-protection rejection. Refusing to count this as a passing probe."
   exit 1
 fi
-echo "Direct push was rejected by GitHub repository rules as required."
+echo "GitHub rejected the direct push even though r1-governance was already green for the exact commit."
 
-echo "Removing the disposable probe branch before enabling deletion protection..."
+echo "Removing both disposable branches before enabling deletion protection..."
 gh api --method DELETE "repos/$REPO/git/refs/heads/$PROBE_BRANCH" >/dev/null
 PROBE_BRANCH_CREATED=0
+gh api --method DELETE "repos/$REPO/git/refs/heads/$CHECK_BRANCH" >/dev/null
+CHECK_BRANCH_CREATED=0
 
 echo "Enabling deletion protection and verifying the final ruleset..."
 printf '%s' "$RULESET_FINAL" | gh api --method PUT "repos/$REPO/rulesets/$RULESET_ID" --input - >/dev/null
@@ -136,14 +174,14 @@ echo "Creating a temporary approved-pattern tag pointing to the known-red SHA...
 gh api --method POST "repos/$REPO/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$RED_SHA" >/dev/null
 TAG_CREATED=1
 WORKFLOW_ID="$(gh api "repos/$REPO/actions/workflows/release-tag-guard.yml" --jq '.id')"
-RUN_ID=""
+TAG_RUN_ID=""
 CONCLUSION=""
 for attempt in $(seq 1 36); do
-  RUN_ID="$(gh api "repos/$REPO/actions/runs?event=push&per_page=100" --jq --argjson workflow_id "$WORKFLOW_ID" --arg sha "$RED_SHA" '
+  TAG_RUN_ID="$(gh api "repos/$REPO/actions/runs?event=push&per_page=100" --jq --argjson workflow_id "$WORKFLOW_ID" --arg sha "$RED_SHA" '
     [.workflow_runs[] | select(.workflow_id == $workflow_id and .head_sha == $sha)] | sort_by(.created_at) | last | (.id // empty)
   ' | head -n1)"
-  if [[ -n "$RUN_ID" ]]; then
-    RUN_STATE="$(gh api "repos/$REPO/actions/runs/$RUN_ID")"
+  if [[ -n "$TAG_RUN_ID" ]]; then
+    RUN_STATE="$(gh api "repos/$REPO/actions/runs/$TAG_RUN_ID")
     if [[ "$(echo "$RUN_STATE" | jq -r '.status')" == "completed" ]]; then
       CONCLUSION="$(echo "$RUN_STATE" | jq -r '.conclusion')"
       break
@@ -152,7 +190,7 @@ for attempt in $(seq 1 36); do
   sleep 5
 done
 
-if [[ -z "$RUN_ID" ]]; then
+if [[ -z "$TAG_RUN_ID" ]]; then
   echo "::error::Release-tag guard did not start for the temporary red-SHA tag."
   exit 1
 fi
@@ -161,7 +199,7 @@ if [[ "$CONCLUSION" != "failure" ]]; then
   exit 1
 fi
 
-echo "Release-tag guard correctly refused the red SHA (run $RUN_ID)."
+echo "Release-tag guard correctly refused the red SHA (run $TAG_RUN_ID)."
 gh api --method DELETE "repos/$REPO/git/refs/tags/$TAG" >/dev/null
 TAG_CREATED=0
 
@@ -171,6 +209,6 @@ TAG_CREATED=0
   echo "- Ruleset: [Aurelia R1 protected branches](https://github.com/$REPO/rules/$RULESET_ID) — active, verified."
   echo "- Protected refs: `main`, `feature/multi-provider-payment-backend`, `release/**`."
   echo "- Required check: `r1-governance`; approvals: 1; force-push and deletion blocked; bypass actors: none."
-  echo "- Direct push probe: rejected on `$PROBE_BRANCH`; disposable branch removed."
-  echo "- Red-SHA tag probe: refused by [release-tag guard run $RUN_ID](https://github.com/$REPO/actions/runs/$RUN_ID); temporary tag removed."
+  echo "- Direct push probe: rejected on `$PROBE_BRANCH` even though the pushed SHA already had a green `r1-governance` check; both disposable branches removed."
+  echo "- Red-SHA tag probe: refused by [release-tag guard run $TAG_RUN_ID](https://github.com/$REPO/actions/runs/$TAG_RUN_ID); temporary tag removed."
 } >> "$GITHUB_STEP_SUMMARY"
