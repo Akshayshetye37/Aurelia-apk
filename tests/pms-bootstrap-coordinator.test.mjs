@@ -174,6 +174,7 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(loader, /boot\.restaurantSaleRepository\.hydrateSnapshot/);
   assert.match(loader, /boot\.inventoryRepository\.hydrateSnapshot/);
   assert.match(loader, /boot\.expenseRepository\.hydrateSnapshot/);
+  assert.match(loader, /hydrateCanonicalBookingSnapshot/);
   assert.match(html, /compatibility\.syncRestaurantSales\(snapshot\)/);
   assert.match(html, /window\.__AURELIA_CANONICAL_SALES/);
   assert.match(html, /compatibility\.syncRestaurantTables\(snapshot\)/);
