@@ -2130,7 +2130,7 @@ SUB.rest=()=>hd('Restaurant business')+`<div class="grid g2"><div class="card"><
 DK.push('restaurant','tableGuests','tableRooms');
 
 /* start */
-loadAll();if(S.set&&/hari\s*om/i.test(String(S.set.name||''))){S.set.name='Aurelia PMS';S.set.addr=String(S.set.addr||'').replace(/hari\s*om(?:\s+retreat)?/ig,'Aurelia PMS');persist()}if(S.restaurant&&/hari\s*om/i.test(String(S.restaurant.name||''))){S.restaurant.name='Aurelia PMS';S.restaurant.addr=String(S.restaurant.addr||'').replace(/hari\s*om(?:\s+retreat)?/ig,'Aurelia PMS');persist()}RECOVERY_CHECK_PENDING=!!window.AureliaNative&&LOCAL_STATE_STATUS==='invalid';if(!window.AureliaNative)S.bk.folder=false;S.restaurant=Object.assign({name:'The Dining Room',phone:'',addr:'',tax:'',upi:'',cur:S.set.cur||'K',gst:0,qr:'',logo:''},S.restaurant||{});if(!S.restaurant.cur)S.restaurant.cur=S.set.cur||'K';S.tableGuests=S.tableGuests||{};S.tableRooms=S.tableRooms||{};cleanTableOrders();useMenu(S.menu);syncT();
+loadAll();if(window.__AURELIA_CANONICAL_SETTINGS){S.set=window.__AURELIA_CANONICAL_SETTINGS.set;S.menu=window.__AURELIA_CANONICAL_SETTINGS.menu;useMenu(S.menu)}if(S.set&&/hari\s*om/i.test(String(S.set.name||''))){S.set.name='Aurelia PMS';S.set.addr=String(S.set.addr||'').replace(/hari\s*om(?:\s+retreat)?/ig,'Aurelia PMS');persist()}if(S.restaurant&&/hari\s*om/i.test(String(S.restaurant.name||''))){S.restaurant.name='Aurelia PMS';S.restaurant.addr=String(S.restaurant.addr||'').replace(/hari\s*om(?:\s+retreat)?/ig,'Aurelia PMS');persist()}RECOVERY_CHECK_PENDING=!!window.AureliaNative&&LOCAL_STATE_STATUS==='invalid';if(!window.AureliaNative)S.bk.folder=false;S.restaurant=Object.assign({name:'The Dining Room',phone:'',addr:'',tax:'',upi:'',cur:S.set.cur||'K',gst:0,qr:'',logo:''},S.restaurant||{});if(!S.restaurant.cur)S.restaurant.cur=S.set.cur||'K';S.tableGuests=S.tableGuests||{};S.tableRooms=S.tableRooms||{};cleanTableOrders();useMenu(S.menu);syncT();
 const _r3=render;render=function(){try{if(!S||typeof S!=='object')throw new Error('Saved app state is unavailable');['rooms','b','g','t','exp','inv','aud','cancelled','financialLedger'].forEach(k=>{if(!Array.isArray(S[k]))S[k]=[]});if(!S.set||typeof S.set!=='object')S.set={name:'Aurelia',tag:'Peace, comfort and mindful hospitality.',cur:'K'};if(!S.au||typeof S.au!=='object')S.au={};if(!S.bk||typeof S.bk!=='object')S.bk={folder:false,label:'',last:null,hash:'',hist:[]};syncRoomTypes();syncT();_r3();brand();persist()}catch(err){console.error('Aurelia startup/render wrapper failed',err);const v=$('#v');if(v)v.innerHTML='<div class="card" style="margin:24px;padding:20px"><h2>Recovery needed</h2><p class="lab">A saved setting or room record prevented the screen from loading. Your existing records have not been intentionally deleted. Use Backup/Restore before clearing app data.</p><button class="btn" onclick="location.reload()">Reload app</button><button class="btn ghost" onclick="S.tab=\'more\';S.sub=\'backup\';location.reload()">Open backup after reload</button></div>'}};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)auto()});setInterval(auto,60000);
 nat({type:'deviceBackupStatus',requestId:'bs'+Date.now(),hash:curHash()});
@@ -5610,6 +5610,8 @@ try {
   if (!boot || boot.success !== true || !boot.repository) throw new Error("Canonical storage bootstrap did not return a verified repository");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "REPOSITORY_BINDING";
   storageBridge.bindActiveEngine(boot.repository, boot.identity);
+  const canonicalSettings = await boot.settingsRepository.get();
+  window.__AURELIA_CANONICAL_SETTINGS = canonicalSettings.version > 0 ? canonicalSettings.data : null;
   // Hydrate the legacy UI projection from the verified canonical repository before
   // replaying application scripts. Web Storage is only a recovery/cache fallback.
   const { hydrateCanonicalRoomSnapshot, hydrateCanonicalGuestSnapshot } = await import("./src/storage/pms-room-read-cutover.mjs");
@@ -5617,10 +5619,8 @@ try {
     const enabled = Boolean(boot.domainProjection?.manifest?.status === "VERIFIED");
     const rooms = await hydrateCanonicalRoomSnapshot({ repository: boot.repository, snapshot, enabled });
     const guests = await hydrateCanonicalGuestSnapshot({ repository: boot.repository, snapshot: rooms, enabled });
-    const settings = await boot.settingsRepository.get();
-    return settings.version > 0
-      ? { ...guests, set: settings.data.set, menu: settings.data.menu }
-      : guests;
+    const settings = window.__AURELIA_CANONICAL_SETTINGS;
+    return settings ? { ...guests, set: settings.set, menu: settings.menu } : guests;
   };
   const canonicalAudit = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
   if (canonicalAudit?.data?.snapshot) {
