@@ -144,7 +144,7 @@ test("an older verified manifest is extended additively without overwriting live
   await projectLegacyPmsDomains({ bridge, snapshot: source, migrationId });
   const manifestId = "audit:legacy-domain-projection:" + migrationId;
   const oldManifest = bridge.entities.get(manifestId);
-  delete bridge.entities.delete("settings:property-settings");
+  bridge.entities.delete("settings:property-settings");
   bridge.entities.delete("restaurant_table:1");
   const counts = { ...oldManifest.data.counts };
   delete counts.settings;
