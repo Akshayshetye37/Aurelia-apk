@@ -3,7 +3,7 @@
 **Release:** R1 — local-only PMS  
 **Status:** **NOT RELEASE READY**  
 **Candidate SHA:** `6540efb109d62c74ccdf85f361569335fb30ea63`  
-**Verified CI (exact candidate SHA):** [R1 required checks #148](https://github.com/Akshayshety37/Aurelia-apk/actions/runs/42614702847) · [PMS source tests and production web packaging #2672](https://github.com/Akshayshety37/Aurelia-apk/actions/runs/42614702919) · [settlement-foundation](https://github.com/Akshayshety37/Aurelia-apk/actions/runs/42614702875)
+**Verified CI (exact candidate SHA):** [R1 required checks #148](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42614702847) · [PMS source tests and production web packaging #2672](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42614702919) · [settlement-foundation](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42614702875)
 
 The three CI workflows above completed successfully on the exact candidate SHA. CI evidence covers source tests, release-default checks, production web packaging/privacy and settlement module checks. It does not qualify Android hardware, financial data migration, accounting sign-off, physical devices, signing, backup/restore or production operations.
 
