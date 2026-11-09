@@ -72,6 +72,27 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace compileDebugJavaWithJavac compileReleaseJavaWithJavac testDebugUnitTest assembleDebug
 
+      - name: Run real SQLite instrumentation suite on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: cd android && ./gradlew --no-daemon connectedDebugAndroidTest
+
+      - name: Preserve Android instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurelia-pms-android-instrumentation-${{ github.sha }}
+          path: |
+            android/app/build/outputs/androidTest-results/connected/**
+            android/app/build/reports/androidTests/connected/**
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Verify APK package identity and signature
         working-directory: android
         run: |
