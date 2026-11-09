@@ -25,10 +25,46 @@ import javax.crypto.spec.GCMParameterSpec;
 @CapacitorPlugin(name = "CapacitorPmsStorage")
 public final class CapacitorPmsStoragePlugin extends Plugin {
   private final ExecutorService io = Executors.newSingleThreadExecutor();
-  private LocalPmsRepository repository;
+  private volatile LocalPmsRepository repository;
+  private static volatile CapacitorPmsStoragePlugin activeInstance;
 
-  @Override public void load() { super.load(); repository = new LocalPmsRepository(getContext()); }
-  @Override protected void handleOnDestroy() { io.shutdown(); super.handleOnDestroy(); }
+  @Override public void load() { super.load(); activeInstance = this; }
+
+  /** Close the SQLCipher connection and wipe the helper's passphrase copy on every app background. */
+  public static void closeForBackground() {
+    CapacitorPmsStoragePlugin active = activeInstance;
+    if (active == null) return;
+    try { active.io.execute(active::closeRepository); }
+    catch (java.util.concurrent.RejectedExecutionException ignored) { }
+  }
+
+  private synchronized void closeRepository() {
+    LocalPmsRepository current = repository;
+    repository = null;
+    if (current != null) current.close();
+  }
+
+  private synchronized LocalPmsRepository repository() {
+    if (repository != null) return repository;
+    byte[] key = com.aurelia.pms.security.AureliaSecurityRuntime.INSTANCE.manager(getContext()).currentDataKeyCopy();
+    LocalPmsRepository opened = new LocalPmsRepository(getContext(), key);
+    try {
+      opened.initialize();
+      repository = opened;
+      return opened;
+    } catch (RuntimeException failure) {
+      opened.close();
+      throw failure;
+    }
+  }
+
+  @Override protected void handleOnDestroy() {
+    try { io.execute(this::closeRepository); }
+    catch (java.util.concurrent.RejectedExecutionException ignored) { }
+    io.shutdown();
+    if (activeInstance == this) activeInstance = null;
+    super.handleOnDestroy();
+  }
 
   @PluginMethod public void getOrCreateLocalIdentity(PluginCall call) {
     io.execute(() -> { try {
@@ -68,7 +104,7 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
   }
 
   @PluginMethod public void initializeStorage(PluginCall call) {
-    io.execute(() -> { try { repository.getWritableDatabase(); JSObject r=new JSObject();r.put("success",true);r.put("engine","android-sqlite");r.put("contractVersion",1);call.resolve(r); }
+    io.execute(() -> { try { repository().getWritableDatabase(); JSObject r=new JSObject();r.put("success",true);r.put("engine","android-sqlite");r.put("contractVersion",1);call.resolve(r); }
       catch(Exception e){call.reject("Native SQLite initialization failed","PMS_SQLITE_INIT_FAILED",e);} });
   }
   @PluginMethod public void getEntity(PluginCall call) {
