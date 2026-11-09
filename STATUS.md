@@ -50,7 +50,9 @@
 |---|---|---|
 | `410175355120c62a3b16a716169fdcf86ef7b6f9` | BASELINE AUDIT | README and source audit recorded on 2026-11-09. |
 | [PMS source-quality run 42495345884](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42495345884) | PASS (historical baseline) | Node tests, production web build and asset privacy checks; no APK/device qualification. |
-| Diagnostic privacy implementation | COMMITTED | Source and regression-test commit: `c75613bcdcba6739e34c505092d2ff727de6c34c`. CI has not yet been run on the execution branch. |
+| Diagnostic privacy implementation | COMMITTED | Source and regression-test commit: `c75613bcdcba6739e34c505092d2ff727de6c34c`. CI run [42569418219](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42569418219) passed on exact source/test SHA `9796ed84eaa2041a76b81354e410be7fc4bb162e`: syntax checks, full 433-test suite and production web build. No APK/device qualification was part of this workflow. |
+
+An earlier run [42569280165](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42569280165) exposed one failing private-report test fixture (the fixture did not contain a duplicate payment reference for the assertion). The fixture was corrected, then the complete suite passed on the source/test SHA recorded above.
 
 ## Next implementation checkpoints
 1. Correct native template workflow path filters and prove a template-only change triggers CI.
