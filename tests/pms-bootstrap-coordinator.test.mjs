@@ -175,6 +175,7 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(html, /window\.__AURELIA_CANONICAL_SALES/);
   assert.match(html, /compatibility\.syncRestaurantTables\(snapshot\)/);
   assert.match(html, /compatibility\.syncInventory\(snapshot\)/);
+  assert.match(html, /commitInventoryMutation: input => boot\.inventoryRepository\.syncSnapshot\(input\.snapshot\)/);
   assert.match(html, /window\.__AURELIA_CANONICAL_TABLES/);
   assert.match(loader, /window\.__AURELIA_CANONICAL_SETTINGS/);
   assert.match(html, /loadAll\(\);if\(window\.__AURELIA_CANONICAL_SETTINGS\)/);
