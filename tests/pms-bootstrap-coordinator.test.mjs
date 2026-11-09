@@ -54,6 +54,8 @@ test("bootstrap migrates the actual Aurelia legacy key and preserves its exact r
   assert.deepEqual(await result.restaurantTableRepository.list(), state.t);
   assert.ok(await result.repository.getEntity("restaurant_table", "1"));
   assert.equal(typeof result.inventoryRepository.syncSnapshot, "function");
+  assert.equal(typeof result.expenseRepository.hydrateSnapshot, "function");
+  assert.deepEqual(await result.expenseRepository.list(), state.exp.map((row, index) => ({ ...row, id: row.id ?? "legacy-expense-" + index })));
   assert.deepEqual(await result.inventoryRepository.list(), state.inv);
   assert.equal(typeof result.restaurantSaleRepository.syncSnapshot, "function");
   assert.deepEqual(await result.restaurantSaleRepository.list(), state.sales);
@@ -171,6 +173,7 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(loader, /boot\.restaurantTableRepository\.hydrateSnapshot/);
   assert.match(loader, /boot\.restaurantSaleRepository\.hydrateSnapshot/);
   assert.match(loader, /boot\.inventoryRepository\.hydrateSnapshot/);
+  assert.match(loader, /boot\.expenseRepository\.hydrateSnapshot/);
   assert.match(html, /compatibility\.syncRestaurantSales\(snapshot\)/);
   assert.match(html, /window\.__AURELIA_CANONICAL_SALES/);
   assert.match(html, /compatibility\.syncRestaurantTables\(snapshot\)/);
