@@ -293,6 +293,20 @@ function ensureKotlinAndroidPlugin(contents, kotlinDsl) {
   return 'plugins {\n' + statement + '\n}\n\n' + contents;
 }
 
+function ensureKotlinWarningsAsErrors(contents) {
+  const marker = 'AURELIA_KOTLIN_WARNINGS_AS_ERRORS';
+  if (contents.includes(marker)) return contents;
+  return contents + `
+
+// ${marker}: fail the Android app build on Kotlin compiler warnings.
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    compilerOptions {
+        allWarningsAsErrors.set(true)
+    }
+}
+`;
+}
+
 function ensureJavaResourcePackaging(contents, kotlinDsl) {
   // These are duplicate metadata files from transitive JAR dependencies. The
   // runtime classes remain packaged; only the duplicate multi-release manifest
@@ -306,6 +320,7 @@ function ensureJavaResourcePackaging(contents, kotlinDsl) {
 
 if (fs.existsSync(appGradleGroovy)) {
   let gradle = ensureKotlinAndroidPlugin(fs.readFileSync(appGradleGroovy, 'utf8'), false);
+  gradle = ensureKotlinWarningsAsErrors(gradle);
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
   }
@@ -367,7 +382,7 @@ function addNativeSecurityDependencies(contents, kotlinDsl) {
   }
   const dependencies = [
     ['org.bouncycastle:bcprov-jdk18on:1.80', 'org.bouncycastle:bcprov-jdk18on'],
-    ['androidx.biometric:biometric:1.2.0-alpha05', 'androidx.biometric:biometric']
+    ['androidx.biometric:biometric:1.2.0', 'androidx.biometric:biometric']
   ];
   for (const [coordinate, marker] of dependencies) {
     if (contents.includes(marker)) continue;
@@ -379,10 +394,12 @@ function addNativeSecurityDependencies(contents, kotlinDsl) {
   return contents;
 }
 if (fs.existsSync(appGradleGroovy)) {
-  const gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleGroovy, 'utf8'), false);
+  let gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleGroovy, 'utf8'), false);
+  gradle = ensureKotlinWarningsAsErrors(gradle);
   fs.writeFileSync(appGradleGroovy, gradle);
 } else if (fs.existsSync(appGradleKts)) {
-  const gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleKts, 'utf8'), true);
+  let gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleKts, 'utf8'), true);
+  gradle = ensureKotlinWarningsAsErrors(gradle);
   fs.writeFileSync(appGradleKts, gradle);
 } else {
   throw new Error('Generated Android app Gradle file was not found; native security dependencies cannot be wired.');
