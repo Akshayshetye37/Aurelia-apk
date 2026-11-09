@@ -50,7 +50,7 @@
 |---|---|---|
 | `410175355120c62a3b16a716169fdcf86ef7b6f9` | BASELINE AUDIT | README and source audit recorded on 2026-11-09. |
 | [PMS source-quality run 42495345884](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42495345884) | PASS (historical baseline) | Node tests, production web build and asset privacy checks; no APK/device qualification. |
-| `release/r1-local-first-execution` @ `c75613bcdcba6739e34c505092d2ff727de6c34c` | PENDING | Documentation and diagnostic privacy hardening committed; CI has not yet been run on this branch. |
+| Diagnostic privacy implementation | COMMITTED | Source and regression-test commit: `c75613bcdcba6739e34c505092d2ff727de6c34c`. CI has not yet been run on the execution branch. |
 
 ## Next implementation checkpoints
 1. Correct native template workflow path filters and prove a template-only change triggers CI.
