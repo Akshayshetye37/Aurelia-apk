@@ -3,7 +3,10 @@ name: Aurelia payment backend CI
 on:
   push:
     branches:
+      - main
+      - master
       - feature/multi-provider-payment-backend
+      - "release/**"
     paths:
       - "payment-backend/**"
       - "android/templates/**/*.java"
@@ -11,7 +14,10 @@ on:
       - ".github/workflows/payment-backend-ci.yml"
   pull_request:
     branches:
+      - main
+      - master
       - feature/multi-provider-payment-backend
+      - "release/**"
     paths:
       - "payment-backend/**"
       - ".github/workflows/payment-backend-ci.yml"
