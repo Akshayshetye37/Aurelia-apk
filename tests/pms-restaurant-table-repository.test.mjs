@@ -38,6 +38,8 @@ test("restaurant tables project to settlement-compatible numeric entity IDs and 
   assert.equal(outbox.filter(event => event.entityType === "restaurant_table").length, 2);
   assert.equal(outbox.filter(event => event.entityType === "audit").length, 1);
   assert.deepEqual((await tables.list()).map(row => row.n), [1, 2]);
+  const recovery = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  assert.deepEqual(recovery.data.snapshot.t, [{ n: 1, s: 2, o: [] }, { n: 2, s: 4, o: [["Tea", 20, "din"]] }]);
 });
 
 test("restaurant table updates are versioned and idempotent", async () => {
@@ -102,4 +104,17 @@ test("verified migration refuses to fall back when its table entities are missin
   );
   const unchanged = await tables.hydrateSnapshot({ t: [{ n: 1, s: 2, o: [] }] }, { enabled: false });
   assert.deepEqual(unchanged.t, [{ n: 1, s: 2, o: [] }]);
+});
+
+test("table rows and recovery snapshot roll back together when the batch transaction fails", async () => {
+  const { repository, bridge, tables } = setup("rollback");
+  const original = repository.transactBusinessBatch.bind(repository);
+  repository.transactBusinessBatch = async () => { throw new Error("Injected batch failure"); };
+  await assert.rejects(
+    tables.syncSnapshot({ t: [{ n: 1, s: 2, o: [] }] }),
+    /Injected batch failure/
+  );
+  assert.equal(await bridge.fetchEntity("restaurant_table", "1"), null);
+  assert.equal(await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2"), null);
+  repository.transactBusinessBatch = original;
 });
