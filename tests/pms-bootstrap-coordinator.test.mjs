@@ -159,6 +159,8 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(loader, /await bootstrapper\.initializeApplication\(\)/);
   assert.match(loader, /storageBridge\.bindActiveEngine\(boot\.repository, boot\.identity\)/);
   assert.match(loader, /boot\.settingsRepository\.get\(\)/);
+  assert.match(loader, /window\.__AURELIA_CANONICAL_SETTINGS/);
+  assert.match(html, /loadAll\(\);if\(window\.__AURELIA_CANONICAL_SETTINGS\)/);
   assert.match(html, /compatibility\.syncSettings\(snapshot\)/);
   assert.match(loader, /await replayApplicationScripts\(\)/);
   assert.match(loader, /PMS startup stopped safely/);
