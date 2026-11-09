@@ -1,3 +1,5 @@
+import { pathToFileURL } from "node:url";
+
 export const REQUIRED_RELEASE_CHECKS = Object.freeze(["r1-governance"]);
 
 export function evaluateRequiredChecks(checkRuns, requiredNames = REQUIRED_RELEASE_CHECKS) {
@@ -36,7 +38,7 @@ export async function verifyTaggedSha({ repository, sha, token, fetchImpl = fetc
   return { ok: true, sha, requiredChecks: REQUIRED_RELEASE_CHECKS };
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const result = await verifyTaggedSha({
       repository: process.env.GITHUB_REPOSITORY,
