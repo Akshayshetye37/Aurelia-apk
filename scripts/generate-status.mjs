@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-const sha = process.env.GITHUB_SHA || "unknown";
+const sha = process.env.CANDIDATE_SHA || process.env.GITHUB_SHA || "unknown";
 const repository = process.env.GITHUB_REPOSITORY || "unknown/repository";
 const runId = process.env.GITHUB_RUN_ID || "unknown";
 const server = process.env.GITHUB_SERVER_URL || "https://github.com";
