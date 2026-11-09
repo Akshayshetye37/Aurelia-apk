@@ -459,7 +459,9 @@ export class PmsInventoryRepository {
           return entity;
         }
       };
-      await this.bridge.mutateEntities([...changes, ...tableChanges, ...movementChanges, ...auditLogChanges, auditChange]);
+      const transactionChanges = [...changes, ...tableChanges, ...movementChanges, ...auditLogChanges, auditChange];
+      if (transactionChanges.length === 1) await this.bridge.mutateEntity(transactionChanges[0]);
+      else await this.bridge.mutateEntities(transactionChanges);
     }
 
     const active = await this.list();
