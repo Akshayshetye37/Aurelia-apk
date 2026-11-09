@@ -30,8 +30,9 @@ test("restaurant tables project to settlement-compatible numeric entity IDs and 
   assert.equal(result.changed, 2);
   const one = await bridge.fetchEntity("restaurant_table", "1");
   const two = await bridge.fetchEntity("restaurant_table", "2");
-  assert.deepEqual(one.data, { n: 1, s: 2, o: [] });
-  assert.deepEqual(two.data, { n: 2, s: 4, o: [["Tea", 20, "din"]] });
+  assert.deepEqual({ n: one.data.n, s: one.data.s, o: one.data.o }, { n: 1, s: 2, o: [] });
+  assert.deepEqual({ n: two.data.n, s: two.data.s, o: two.data.o }, { n: 2, s: 4, o: [["Tea", 20, "din"]] });
+  assert.equal(typeof one.data.updatedAt, "string");
   const outbox = await repository.claimOutboxBatch({ deviceId: "device-local" });
   assert.equal(outbox.length, 2);
   assert.ok(outbox.every(event => event.entityType === "restaurant_table"));
