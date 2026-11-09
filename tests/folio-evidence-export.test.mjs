@@ -41,8 +41,9 @@ test("read-only evidence export classifies real-shaped payment rows and mirrors 
   assert.equal(report.groups.staffReviewedUpi[0].bookingId, "2");
   assert.equal(report.groups.staffReviewedUpi[0].staffReviewEvidence[0].evidenceId, "evidence-2");
   assert.deepEqual(report.groups.staffReviewedUpi[0].pays[0].reference, { last4: "3456", length: 14 });
-  assert.equal(report.groups.unpaidBalance[0].totalPaise, 110000);
-  assert.equal(report.groups.unpaidBalance[0].balanceDuePaise, 110000);
+  assert.deepEqual(report.groups.unpaidBalance.map(row => row.bookingId), ["2", "3"]);
+  assert.equal(report.groups.unpaidBalance[1].totalPaise, 110000);
+  assert.equal(report.groups.unpaidBalance[1].balanceDuePaise, 110000);
   assert.equal(JSON.stringify(state), before, "export must not mutate the source snapshot");
   const encoded = JSON.stringify(report);
   assert.doesNotMatch(encoded, /PRIVATE GUEST|9999999999|8888888888|7777777777|UTR-ABC-123456/);
