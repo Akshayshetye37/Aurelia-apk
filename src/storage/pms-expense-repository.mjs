@@ -46,7 +46,9 @@ export class PmsExpenseRepository {
     if (!enabled) return hydrated;
     const canonical = await this.list();
     if (!canonical.length && hydrated.exp.length) {
-      throw new Error("Canonical expense entities are missing for the verified migration.");
+      throw Object.assign(new Error("Canonical expense entities are missing for the verified migration."), {
+        code: "EXPENSE_ENTITY_MISSING"
+      });
     }
     const byId = new Map(canonical.map(row => [String(row.id), row]));
     const used = new Set();
