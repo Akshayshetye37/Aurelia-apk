@@ -48,6 +48,10 @@ export class PmsExpenseRepository {
     }
     const hydrated = clone(snapshot);
     if (!enabled) return hydrated;
+    const sourceIds = hydrated.exp.map(expenseId);
+    if (new Set(sourceIds).size !== sourceIds.length) {
+      throw new Error("Expense snapshot contains duplicate stable expense IDs.");
+    }
     const canonical = await this.list();
     if (!canonical.length && hydrated.exp.length) {
       throw Object.assign(new Error("Canonical expense entities are missing for the verified migration."), {
@@ -57,7 +61,7 @@ export class PmsExpenseRepository {
     const byId = new Map(canonical.map(row => [String(row.id), row]));
     const used = new Set();
     const ordered = hydrated.exp.map((row, index) => {
-      const id = expenseId(row, index);
+      const id = sourceIds[index];
       const stored = byId.get(id);
       if (!stored) {
         throw Object.assign(new Error("Canonical expense " + id + " is missing; recovery is required."), {
