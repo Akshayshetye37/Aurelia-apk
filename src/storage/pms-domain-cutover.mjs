@@ -151,18 +151,59 @@ export async function projectLegacyPmsDomains({ bridge, snapshot, migrationId, b
     financialReconciliationPerformed: false
   };
   const existingManifest = await bridge.fetchEntity("audit", manifestId);
+  let alreadyPresent = 0;
+  let projectionRows = planned;
   if (existingManifest) {
-    if (!same(existingManifest.data, manifest)) throw new Error("Existing domain projection manifest differs; migration is frozen for reconciliation.");
-    return Object.freeze({ alreadyProjected: true, projected: 0, total: planned.length, manifest: existingManifest.data });
+    const previous = existingManifest.data;
+    const previousCounts = previous?.counts;
+    const previousCollections = previous?.sourceCollections;
+    if (!previous || previous.migrationId !== id || previous.status !== "VERIFIED" ||
+        previous.preservesLegacySnapshot !== true || previous.financialReconciliationPerformed !== false ||
+        !previousCounts || typeof previousCounts !== "object" || Array.isArray(previousCounts) ||
+        !Array.isArray(previousCollections) ||
+        previousCollections.some(collection => !manifest.sourceCollections.includes(collection))) {
+      throw new Error("Existing domain projection manifest is invalid or incompatible; migration is frozen for reconciliation.");
+    }
+    for (const [entityType, count] of Object.entries(previousCounts)) {
+      if (!Number.isSafeInteger(count) || count < 0 || manifest.counts[entityType] !== count) {
+        throw new Error("Existing domain projection counts differ from the immutable source snapshot; migration is frozen for reconciliation.");
+      }
+    }
+    const previousTypes = new Set(Object.keys(previousCounts));
+    projectionRows = [];
+    // Earlier projection versions may not have known about newly added domains.
+    // Preserve existing canonical rows for old domains; only add missing rows
+    // for newly introduced entity types. Never replay an old snapshot over live data.
+    for (const row of planned) {
+      const current = await bridge.fetchEntity(row.entityType, row.entityId);
+      if (previousTypes.has(row.entityType)) {
+        if (!current) {
+          throw Object.assign(new Error("Previously verified canonical " + row.entityType + " entity " + row.entityId + " is missing; recovery is required."), {
+            code: "LEGACY_DOMAIN_PROJECTION_MISSING_ENTITY",
+            entityType: row.entityType, entityId: row.entityId
+          });
+        }
+        alreadyPresent++;
+        continue;
+      }
+      if (current) {
+        alreadyPresent++;
+        continue;
+      }
+      projectionRows.push(row);
+    }
+    if (same(previous, manifest)) {
+      return Object.freeze({ alreadyProjected: true, projected: 0, alreadyPresent, total: planned.length, manifest: previous });
+    }
   }
 
-  let projected = 0, alreadyPresent = 0;
-  for (let offset = 0; offset < planned.length; offset += batchSize) {
+  let projected = 0;
+  for (let offset = 0; offset < projectionRows.length; offset += batchSize) {
     const batch = [];
-    for (const row of planned.slice(offset, offset + batchSize)) {
+    for (const row of projectionRows.slice(offset, offset + batchSize)) {
       const current = await bridge.fetchEntity(row.entityType, row.entityId);
       if (current) {
-        if (!sameProjectedEntity(current.data, row.data)) {
+        if (!existingManifest && !sameProjectedEntity(current.data, row.data)) {
           throw Object.assign(new Error("Canonical " + row.entityType + " entity " + row.entityId + " differs from the legacy snapshot; projection stopped."), {
             code: "LEGACY_DOMAIN_PROJECTION_DIVERGENCE",
             entityType: row.entityType, entityId: row.entityId
@@ -195,9 +236,10 @@ export async function projectLegacyPmsDomains({ bridge, snapshot, migrationId, b
       }
     }
   }
-  const committed = await bridge.mutateEntity({
-    entityType: "audit", entityId: manifestId, expectedVersion: 0,
-    eventType: "legacy.domain_projection_verified",
+  const expectedManifestVersion = existingManifest?.version ?? 0;
+  await bridge.mutateEntity({
+    entityType: "audit", entityId: manifestId, expectedVersion: expectedManifestVersion,
+    eventType: existingManifest ? "legacy.domain_projection_extended" : "legacy.domain_projection_verified",
     eventPayload: { migrationId: id, recordCount: planned.length, counts: manifest.counts },
     mutate: entity => {
       for (const key of Object.keys(entity)) delete entity[key];
@@ -206,10 +248,12 @@ export async function projectLegacyPmsDomains({ bridge, snapshot, migrationId, b
     }
   });
   const verify = await bridge.fetchEntity("audit", manifestId);
-  if (!verify || verify.version !== 1 || !same(verify.data, manifest)) {
+  if (!verify || verify.version !== expectedManifestVersion + 1 || !same(verify.data, manifest)) {
     throw Object.assign(new Error("Projection manifest read-back failed; do not switch application reads."), {
       code: "LEGACY_DOMAIN_PROJECTION_MANIFEST_FAILED"
     });
   }
-  return Object.freeze({ alreadyProjected: false, projected, alreadyPresent, total: planned.length, manifest: verify.data });
+  return Object.freeze({
+    alreadyProjected: false, projected, alreadyPresent, total: planned.length, manifest: verify.data
+  });
 }
