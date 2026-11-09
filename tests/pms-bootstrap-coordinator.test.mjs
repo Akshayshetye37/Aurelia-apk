@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
+import { PmsSettingsRepository } from "../src/storage/pms-settings-repository.mjs";
 import { CapacitorPmsStorageClient } from "../src/storage/capacitor-pms-storage.mjs";
 import {
   PmsBootstrapCoordinator,
@@ -248,4 +249,38 @@ test("verified legacy marker without its immutable migration snapshot fails clos
   const app = coordinator("missing-immutable-migration", storage);
   await assert.rejects(app.initializeApplication(), /Verified migration marker has no matching immutable source snapshot/i);
   assert.equal(app.status, "FAILED_CLOSED");
+});
+
+test("bootstrap exposes durable canonical settings on a fresh profile without a recovery snapshot", async () => {
+  const storage = makeStorage();
+  const repository = new IndexedDbPmsRepository({
+    indexedDBImpl: indexedDB,
+    databaseName: "pms-bootstrap-settings-without-snapshot"
+  });
+  await repository.database();
+  const bridge = new PmsRepositoryBridge({
+    tenantId: "tenant-fresh", propertyId: "property-fresh", deviceId: "device-fresh",
+    eventId: () => "seed-settings-event"
+  });
+  bridge.bindActiveEngine(repository);
+  const settings = new PmsSettingsRepository({ bridge });
+  await settings.update({
+    set: { name: "Aurelia Fresh", cur: "₹" },
+    menu: { breakfast: [["Tea", 20]] }
+  });
+
+  const result = await coordinator("settings-without-snapshot", storage, {
+    repository,
+    identityProvider: async () => ({
+      schemaVersion: 1, scope: "LOCAL_ONLY",
+      installationId: "ins_fresh_settings_test_0001",
+      tenantId: "tenant-fresh", propertyId: "property-fresh",
+      deviceId: "device-fresh", createdAt: "2026-11-09T00:00:00.000Z"
+    })
+  }).initializeApplication();
+
+  assert.equal(result.migration.status, "READY_EMPTY");
+  assert.equal(result.domainProjection, null);
+  assert.deepEqual((await result.settingsRepository.get()).data.set, { name: "Aurelia Fresh", cur: "₹" });
+  assert.deepEqual((await result.settingsRepository.get()).data.menu, { breakfast: [["Tea", 20]] });
 });
