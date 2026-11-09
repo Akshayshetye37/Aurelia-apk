@@ -47,7 +47,7 @@ test("read-only evidence export classifies real-shaped payment rows and mirrors 
   assert.equal(JSON.stringify(state), before, "export must not mutate the source snapshot");
   const encoded = JSON.stringify(report);
   assert.doesNotMatch(encoded, /PRIVATE GUEST|9999999999|8888888888|7777777777|UTR-ABC-123456/);
-  assert.match(encoded, /"paidTotalUsedByRunningBalance": "booking.p"/);
+  assert.ok(encoded.includes('"paidTotalUsedByRunningBalance":"booking.p"'));
 });
 
 test("evidence export rejects malformed booking inputs instead of silently treating them as zero", () => {
