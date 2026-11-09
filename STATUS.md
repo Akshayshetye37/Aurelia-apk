@@ -2,8 +2,8 @@
 
 **Release:** R1 — local-only PMS  
 **Status:** **NOT RELEASE READY**  
-**Candidate SHA:** `e7bab3f1b7534c6dcb5321d383744ae2a9bbaf79`  
-**Workflow run:** [R1 required checks](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42612669441) · [PMS source tests and production web packaging](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42612669139)
+**Candidate SHA:** `5b4576916f11bc71dac2559903f98ee8fa4f153c`  
+**Workflow run:** [R1 required checks](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42613430740) · [PMS source tests and production web packaging](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42613430371)
 
 This file is committed as an initial status snapshot. The R1 workflow regenerates it from the exact workflow SHA and run metadata after successful validation.
 
@@ -16,7 +16,7 @@ R1 CI checks out the event SHA explicitly and verifies the checkout SHA, tests r
 | Workstream | Status | Acceptance still required |
 |---|---|---|
 | 0. Governance | PARTIAL / ADMIN BLOCKED | Protect `main` and `release/r1-local-first-execution`; require one review, exact R1 status check, no force-push and admin enforcement. |
-| 1. Local-first data | PARTIAL | Property settings/menu, bookings, expenses, rooms, guests, restaurant tables/open orders, immutable restaurant sales and inventory now have canonical startup hydration or read verification. Restaurant/retail POS stock deductions commit inventory, table orders, append-only movement ledger, recovery snapshot and outbox in one transaction; stock adjustments and inventory retirement are version-checked. Complete remaining domain reads/writes, report projections, shadow comparison, zero mismatches, legacy quarantine, shared IndexedDB/SQLite contract suite and rollback drills. |
+| 1. Local-first data | PARTIAL | Property settings/menu, bookings, expenses, rooms, guests, restaurant tables/open orders, immutable restaurant sales and inventory now have canonical startup hydration or read verification. Restaurant/retail POS stock deductions commit inventory, table orders, append-only movement ledger, audit rows, recovery snapshot and outbox in one transaction; stock adjustments and inventory retirement are version-checked. Complete remaining domain reads/writes, report projections, shadow comparison, zero mismatches, legacy quarantine, shared IndexedDB/SQLite contract suite and rollback drills. |
 | 2. Financial correctness | BLOCKED | Run read-only diagnostic on authorized redacted backup; obtain accounting-owner sign-off; implement append-only integer-paise journal and atomic payment/journal/outbox with idempotency tests. |
 | 3. Atomic operations | PARTIAL | Complete checkout, POS sale, stock adjustment, payment approval and refund request as single DB transactions; fault-inject every write step; verify folio/ledger and stock/movement invariants. |
 | 4. Android/security | BLOCKED | Complete DEK envelope design/tests, Kotlin compile/unit tests, instrumentation, storage-full/rollback/migration/process-kill tests and two-phone qualification. |
