@@ -25,7 +25,7 @@ const safeId = value => {
   return id;
 };
 const normalizeSales = sales => {
-  if (sales === undefined || sales === null) sales = [];
+  if (sales === undefined) sales = [];
   if (!Array.isArray(sales)) throw new TypeError("Restaurant sales snapshot must be an array.");
   const ids = new Set();
   return sales.map((sale, index) => {
