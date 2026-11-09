@@ -43,7 +43,7 @@ if (!input || input.startsWith("-")) {
       "cancellationFlagMismatchCount"
     ];
     const hasFindings = findingCounts.some(key => report[key] > 0);
-    if (process.argv.includes("--strict") && hasFindings) process.exitCode = 2;
+    if (hasFindings) process.exitCode = 2;
   } catch (error) {
     console.error("Accounting diagnostic failed:", error.message);
     process.exitCode = 1;
