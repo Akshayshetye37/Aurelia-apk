@@ -199,11 +199,12 @@ export class PmsInventoryRepository {
     const snapshotRow = await this.bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
     if (snapshotRow) {
       const prior = snapshotRow.data?.snapshot;
-      if (!prior || !Array.isArray(prior.inv)) {
+      if (!prior || (prior.inv !== undefined && !Array.isArray(prior.inv)) ||
+          (prior.inv === undefined && current.size > 0)) {
         throw new Error("Canonical recovery snapshot has no valid inventory collection.");
       }
       const priorById = new Map();
-      prior.inv.forEach((row, index) => {
+      (prior.inv || []).forEach((row, index) => {
         const id = inventoryId(row, index);
         if (priorById.has(id)) throw new Error("Canonical recovery snapshot contains duplicate inventory IDs.");
         priorById.set(id, { ...clone(row), id });
@@ -399,7 +400,9 @@ export class PmsInventoryRepository {
     for (const movement of newMovements) {
       const id = "inventory-movement-" + movementHash(movement.row) + "-" + movement.ordinal;
       const stored = await this.bridge.fetchEntity("ledger", id);
-      if (!stored || !same(stored.data, {
+      if (!stored || !same({
+        kind: stored.data.kind, source: stored.data.source, value: stored.data.value
+      }, {
         kind: "inventory_movement", source: "inventory_snapshot_ledger", value: movement.row
       })) {
         throw Object.assign(new Error("Inventory movement failed exact canonical ledger read-back."), {
