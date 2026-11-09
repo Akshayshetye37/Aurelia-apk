@@ -15,7 +15,7 @@ const state = {
   rooms: [{ n: "101", t: "Deluxe", r: 1200, s: "ready" }],
   b: [{ id: 7, g: "Guest", room: "101", st: "res", in: 10, out: 11 }],
   g: [{ n: "Guest", ph: "0000000000" }],
-  t: [], exp: [], inv: [], led: [], aud: [],
+  t: [{ n: 1, s: 2, o: [] }], exp: [], inv: [], led: [], aud: [],
   set: { name: "Aurelia", cur: "₹" }, menu: {}, tab: "home", bk: { verified: false },
   today: 0
 };
@@ -50,6 +50,8 @@ test("bootstrap migrates the actual Aurelia legacy key and preserves its exact r
   assert.ok(await result.repository.getEntity("booking", "7"));
   assert.deepEqual((await result.settingsRepository.get()).data.set, state.set);
   assert.deepEqual((await result.settingsRepository.get()).data.menu, state.menu);
+  assert.deepEqual(await result.restaurantTableRepository.list(), state.t);
+  assert.ok(await result.repository.getEntity("restaurant_table", "1"));
   assert.equal(typeof result.settingsRepository.syncSnapshot, "function");
   assert.ok(await result.repository.getEntity("audit", "legacy-folio-source:booking-7"));
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
@@ -160,6 +162,9 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(loader, /await bootstrapper\.initializeApplication\(\)/);
   assert.match(loader, /storageBridge\.bindActiveEngine\(boot\.repository, boot\.identity\)/);
   assert.match(loader, /boot\.settingsRepository\.get\(\)/);
+  assert.match(loader, /boot\.restaurantTableRepository\.hydrateSnapshot/);
+  assert.match(html, /compatibility\.syncRestaurantTables\(snapshot\)/);
+  assert.match(html, /window\.__AURELIA_CANONICAL_TABLES/);
   assert.match(loader, /window\.__AURELIA_CANONICAL_SETTINGS/);
   assert.match(html, /loadAll\(\);if\(window\.__AURELIA_CANONICAL_SETTINGS\)/);
   assert.match(html, /compatibility\.syncSettings\(snapshot\)/);
