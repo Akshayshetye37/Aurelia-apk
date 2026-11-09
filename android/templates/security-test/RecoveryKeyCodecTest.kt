@@ -15,7 +15,12 @@ class RecoveryKeyCodecTest {
             val decoded = RecoveryKeyCodec.decode(generated)
             try {
                 assertEquals(20, decoded.size)
-                assertArrayEquals(generated, RecoveryKeyCodec.encode(decoded))
+                val encoded = RecoveryKeyCodec.encode(decoded)
+                try {
+                    assertArrayEquals(generated, encoded)
+                } finally {
+                    encoded.fill('\\u0000')
+                }
             } finally {
                 decoded.fill(0)
             }
