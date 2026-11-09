@@ -422,3 +422,43 @@ test("pending refund journal recognizes retained cancellation revenue exactly on
   assert.equal(missingRetention.cancellationFlagMismatches[0].reason,
     "pending_refund_retention_does_not_match_journal");
 });
+
+
+test("accounting diagnostic CLI redacts record identifiers and payment references by default", () => {
+  const dir = mkdtempSync(join(tmpdir(), "aurelia-accounting-redacted-"));
+  try {
+    const path = join(dir, "private-backup.json");
+    writeFileSync(path, JSON.stringify({
+      b: [{ id: "PRIVATE-BOOKING-91", g: "PRIVATE-GUEST-NAME", room: "ROOM-SECRET",
+        p: 10, pays: [{ a: 5, r: "UTR-SECRET-991", idempotencyKey: "IDEMPOTENCY-SECRET" }] }],
+      cancelled: []
+    }));
+    const result = spawnSync(process.execPath, ["scripts/diagnose-accounting.mjs", path], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /"privacy": "REDACTED_SUMMARY"/);
+    for (const secret of ["PRIVATE-BOOKING-91", "PRIVATE-GUEST-NAME", "ROOM-SECRET", "UTR-SECRET-991", "IDEMPOTENCY-SECRET"]) {
+      assert.equal(result.stdout.includes(secret), false, "default report leaked " + secret);
+    }
+    assert.match(result.stdout, /"affectedBookingCount": 1/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("private accounting report requires an explicit local opt-in", () => {
+  const dir = mkdtempSync(join(tmpdir(), "aurelia-accounting-private-"));
+  try {
+    const path = join(dir, "private-backup.json");
+    writeFileSync(path, JSON.stringify({
+      b: [{ id: "PRIVATE-BOOKING-92", p: 5, pays: [{ a: 5, r: "UTR-PRIVATE-92" }] }],
+      cancelled: []
+    }));
+    const result = spawnSync(process.execPath, ["scripts/diagnose-accounting.mjs", path, "--private-report"], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /"privacy": "PRIVATE_ROW_LEVEL_REPORT"/);
+    assert.match(result.stdout, /PRIVATE-BOOKING-92/);
+    assert.match(result.stdout, /UTR-PRIVATE-92/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
