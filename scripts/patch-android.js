@@ -3,6 +3,18 @@ const path = require('path');
 
 const androidDir = path.join(__dirname, '..', 'android');
 const appDir = path.join(androidDir, 'app', 'src', 'main');
+const gradleWrapperPropertiesPath = path.join(androidDir, 'gradle', 'wrapper', 'gradle-wrapper.properties');
+if (fs.existsSync(gradleWrapperPropertiesPath)) {
+  let wrapperProperties = fs.readFileSync(gradleWrapperPropertiesPath, 'utf8');
+  // CI runners and slower first-run devices need a realistic wrapper download timeout.
+  if (/^networkTimeout=\d+$/m.test(wrapperProperties)) {
+    wrapperProperties = wrapperProperties.replace(/^networkTimeout=\d+$/m, 'networkTimeout=120000');
+  } else {
+    wrapperProperties += '\\nnetworkTimeout=120000\\n';
+  }
+  fs.writeFileSync(gradleWrapperPropertiesPath, wrapperProperties);
+}
+
 const manifestPath = path.join(appDir, 'AndroidManifest.xml');
 if (!fs.existsSync(manifestPath)) throw new Error('AndroidManifest.xml not found; run npx cap add android first.');
 
