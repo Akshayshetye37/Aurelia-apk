@@ -4,6 +4,8 @@ export const RELEASE_FLAGS = Object.freeze({
   gatewayPayments: false
 });
 
+if (typeof window !== "undefined") window.AURELIA_RELEASE_FLAGS = RELEASE_FLAGS;
+
 export function assertReleaseFlagsOff(flags = RELEASE_FLAGS) {
   const enabled = Object.entries(flags)
     .filter(([name, value]) => ["uiCutover", "sync", "gatewayPayments"].includes(name) && value !== false)
