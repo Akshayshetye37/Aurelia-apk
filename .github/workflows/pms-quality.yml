@@ -40,6 +40,9 @@ jobs:
       - name: Run complete PMS test suite
         run: npm test
 
+      - name: Enforce storage module boundary
+        run: npm run check:storage-boundaries
+
       - name: Build production web bundle
         run: npm run build
 
