@@ -1,0 +1,38 @@
+name: R1 administrator finalization
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r1-admin-finalization
+  cancel-in-progress: false
+
+jobs:
+  enforce-and-probe:
+    name: apply-ruleset-and-run-negative-probes
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout the R1 execution branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          token: ${{ secrets.R1_ADMIN_TOKEN }}
+
+      - name: Install GitHub CLI and verify administrator token
+        env:
+          GH_TOKEN: ${{ secrets.R1_ADMIN_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Add the repository secret R1_ADMIN_TOKEN before running this workflow."
+            exit 1
+          fi
+          gh auth status
+
+      - name: Apply and verify branch protections, test direct-push rejection, and test red-tag refusal
+        env:
+          R1_ADMIN_TOKEN: ${{ secrets.R1_ADMIN_TOKEN }}
+        run: bash scripts/finalize-r1-governance.sh
