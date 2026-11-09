@@ -52,6 +52,7 @@ test("bootstrap migrates the actual Aurelia legacy key and preserves its exact r
   assert.deepEqual((await result.settingsRepository.get()).data.menu, state.menu);
   assert.deepEqual(await result.restaurantTableRepository.list(), state.t);
   assert.ok(await result.repository.getEntity("restaurant_table", "1"));
+  assert.equal(typeof result.restaurantSaleRepository.syncSnapshot, "function");
   assert.equal(typeof result.settingsRepository.syncSnapshot, "function");
   assert.ok(await result.repository.getEntity("audit", "legacy-folio-source:booking-7"));
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
@@ -163,6 +164,9 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(loader, /storageBridge\.bindActiveEngine\(boot\.repository, boot\.identity\)/);
   assert.match(loader, /boot\.settingsRepository\.get\(\)/);
   assert.match(loader, /boot\.restaurantTableRepository\.hydrateSnapshot/);
+  assert.match(loader, /boot\.restaurantSaleRepository\.hydrateSnapshot/);
+  assert.match(html, /compatibility\.syncRestaurantSales\(snapshot\)/);
+  assert.match(html, /window\.__AURELIA_CANONICAL_SALES/);
   assert.match(html, /compatibility\.syncRestaurantTables\(snapshot\)/);
   assert.match(html, /window\.__AURELIA_CANONICAL_TABLES/);
   assert.match(loader, /window\.__AURELIA_CANONICAL_SETTINGS/);
