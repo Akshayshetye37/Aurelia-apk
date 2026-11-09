@@ -8,7 +8,7 @@ export async function readPmsAuthorityState(bridge){if(!bridge||typeof bridge.fe
 export async function assertCompatibilityUiAllowed(bridge){const row=await readPmsAuthorityState(bridge);if(row?.data.status===PMS_AUTHORITY_STATUS.CANONICAL_AUTHORITATIVE)throw Object.assign(new Error("Canonical PMS authority is active; legacy compatibility UI startup is prohibited"),{code:"PMS_CANONICAL_AUTHORITY_CUTOVER_REQUIRED"});return row;}
 export async function ensureCanonicalPrepared({bridge,migrationId=null,projectionStatus="NOT_REQUIRED",now=()=>new Date().toISOString()}={}){
  if(!bridge||typeof bridge.fetchEntity!=="function"||typeof bridge.mutateEntity!=="function")throw new TypeError("A bound PMS repository bridge is required");
- if(migrationId!==null&&(typeof migrationId!=="string"||!/^mig_legacy_[a-f0-9]{64}$/.test(migrationId)))throw new TypeError("Invalid canonical authority migration ID");
+ if(migrationId!==null&&(typeof migrationId!=="string"||!/^mig_legacy_(?:[a-f0-9]{8}|[a-f0-9]{64})$/.test(migrationId)))throw new TypeError("Invalid canonical authority migration ID");
  if(!["NOT_REQUIRED","PENDING","VERIFIED"].includes(projectionStatus))throw new TypeError("Invalid canonical domain projection status");
  for(let attempt=0;attempt<4;attempt++){
   const current=await readPmsAuthorityState(bridge);
