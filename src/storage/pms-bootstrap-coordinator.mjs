@@ -11,6 +11,7 @@ import { getOrCreateBrowserLocalIdentity } from "./pms-local-identity.mjs";
 import { settlePaymentToRepository } from "../payments/repository-settlement-service.mjs";
 import { PmsRepositoryBridge } from "./pms-repository-bridge.mjs";
 import { projectLegacyPmsDomains } from "./pms-domain-cutover.mjs";
+import { PmsSettingsRepository } from "./pms-settings-repository.mjs";
 
 export const AURELIA_LEGACY_STATE_KEY = "aurelia_lodge_v2";
 export const AURELIA_MIGRATION_STATUS_KEY = "aurelia_canonical_migration_status";
@@ -138,6 +139,13 @@ export class PmsBootstrapCoordinator {
       throw new Error("Durable local PMS identity was not verified");
     }
 
+    const bridge = new PmsRepositoryBridge({
+      tenantId: identity.tenantId, propertyId: identity.propertyId,
+      deviceId: identity.deviceId, now: this.now
+    });
+    bridge.bindActiveEngine(this.repository, identity);
+    const settingsRepository = new PmsSettingsRepository({ bridge });
+
     // If the legacy Web Storage copy was cleared or lost, recover it from the
     // last fully committed canonical snapshot before the UI is allowed to start.
     // This is a recovery bridge, not a claim that the synchronous UI has cut over.
@@ -160,11 +168,6 @@ export class PmsBootstrapCoordinator {
     if (["MIGRATION_VERIFIED", "READY_CANONICAL"].includes(migration.status) && migration.migrationId) {
       const raw = this.storage.getItem(AURELIA_LEGACY_STATE_KEY);
       const source = parseLegacyPmsSnapshot(raw);
-      const bridge = new PmsRepositoryBridge({
-        tenantId: identity.tenantId, propertyId: identity.propertyId,
-        deviceId: identity.deviceId, now: this.now
-      });
-      bridge.bindActiveEngine(this.repository, identity);
       domainProjection = await projectLegacyPmsDomains({
         bridge, snapshot: source.parsed, migrationId: migration.migrationId
       });
@@ -174,7 +177,7 @@ export class PmsBootstrapCoordinator {
       success: true, environment: this.environment, storageEngine: this.storageEngine,
       persistentStorage: Object.freeze({ requested: Boolean(this.persistenceRequested), granted: this.persistenceGranted }),
       uiCutover: false, recovery, migration, domainProjection,
-      repository: this.repository, identity
+      repository: this.repository, identity, bridge, settingsRepository
     });
   }
 
