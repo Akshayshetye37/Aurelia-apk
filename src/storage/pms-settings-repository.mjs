@@ -5,6 +5,12 @@
  * deliberately writes only through the local repository bridge so each
  * settings update and its immutable outbox event share one database commit.
  */
+const stable = value => Array.isArray(value) ? value.map(stable) :
+  value && typeof value === "object"
+    ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])]))
+    : value;
+const same = (left, right) => JSON.stringify(stable(left)) === JSON.stringify(stable(right));
+
 const clone = value => typeof structuredClone === "function"
   ? structuredClone(value)
   : JSON.parse(JSON.stringify(value));
@@ -34,6 +40,7 @@ export class PmsSettingsRepository {
       throw new TypeError("A bound canonical PMS repository bridge is required.");
     }
     this.bridge = bridge;
+    this.writeQueue = Promise.resolve();
   }
 
   async get() {
@@ -46,7 +53,27 @@ export class PmsSettingsRepository {
     return Object.freeze({ version: row.version, data: Object.freeze(data) });
   }
 
-  async update(patch, { expectedVersion } = {}) {
+  update(patch, options = {}) {
+    const operation = () => this.#update(patch, options);
+    const pending = this.writeQueue.then(operation, operation);
+    this.writeQueue = pending.catch(() => {});
+    return pending;
+  }
+
+  async syncSnapshot(snapshot) {
+    if (!isPlainObject(snapshot)) throw new TypeError("PMS snapshot must be a plain object.");
+    const patch = {};
+    const current = await this.get();
+    for (const key of ["set", "menu"]) {
+      const next = snapshot[key] ?? {};
+      if (!isPlainObject(next)) throw new TypeError(key + " settings must be a plain object.");
+      if (current.version === 0 || !same(current.data[key], next)) patch[key] = next;
+    }
+    if (!Object.keys(patch).length) return current;
+    return this.update(patch);
+  }
+
+  async #update(patch, { expectedVersion } = {}) {
     if (!isPlainObject(patch)) throw new TypeError("Settings patch must be a plain object.");
     const keys = Object.keys(patch);
     if (!keys.length || keys.some(key => key !== "set" && key !== "menu")) {
