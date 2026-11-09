@@ -313,9 +313,9 @@ test("bootstrap projects and exposes canonical inventory before the PMS UI start
   assert.equal(result.domainProjection.manifest.counts.inventory, 2);
   const canonical = await result.inventoryRepository.list();
   assert.equal(canonical.length, 2);
-  assert.equal(canonical[0].id, "legacy-inventory-0");
-  assert.equal(canonical[1].id, "coffee-1");
-  assert.equal(canonical[0].q, 5);
+  assert.equal(canonical.find(row => row.n === "Towels").id, "legacy-inventory-0");
+  assert.equal(canonical.find(row => row.n === "Coffee").id, "coffee-1");
+  assert.equal(canonical.find(row => row.n === "Towels").q, 5);
   assert.equal((await result.repository.getEntity("inventory", "coffee-1")).version, 1);
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
 });
