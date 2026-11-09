@@ -162,6 +162,36 @@ export class PmsInventoryRepository {
     });
     for (const row of canonical) if (!used.has(String(row.id))) ordered.push(clone(row));
     hydrated.inv = ordered;
+    const auditEntities = await this.bridge.listEntities("audit");
+    if (!Array.isArray(auditEntities)) throw new Error("Canonical audit repository returned an invalid entity list.");
+    const canonicalAudit = auditEntities.filter(row => row?.data?.kind === "pms_audit");
+    for (const row of canonicalAudit) {
+      if (row.type !== "audit" || typeof row.id !== "string" ||
+          !Number.isSafeInteger(row.version) || row.version < 1 ||
+          !row.data.value || typeof row.data.value !== "object" || Array.isArray(row.data.value)) {
+        throw new Error("Canonical audit history contains an invalid entity.");
+      }
+    }
+    const currentAudit = Array.isArray(hydrated.aud) ? hydrated.aud : [];
+    const currentCounts = new Map();
+    for (const row of currentAudit) {
+      const key = stableString(row);
+      currentCounts.set(key, (currentCounts.get(key) || 0) + 1);
+    }
+    const canonicalCounts = new Map();
+    const canonicalValues = canonicalAudit
+      .slice()
+      .sort((left, right) => String(right.data.createdAt || "").localeCompare(String(left.data.createdAt || "")));
+    const missingAudit = [];
+    for (const row of canonicalValues) {
+      const value = row.data.value;
+      const key = stableString(value);
+      const seen = canonicalCounts.get(key) || 0;
+      const existing = currentCounts.get(key) || 0;
+      if (seen >= existing) missingAudit.push(clone(value));
+      canonicalCounts.set(key, seen + 1);
+    }
+    hydrated.aud = [...missingAudit, ...currentAudit];
     return hydrated;
   }
 
