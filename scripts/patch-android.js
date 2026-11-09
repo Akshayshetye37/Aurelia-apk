@@ -381,11 +381,23 @@ for (const file of [
   'PaymentDeviceKeyStore.kt',
   'PaymentDeviceClient.kt',
   'SettlementEnvelopeVerifier.kt',
-  'LockGateActivity.kt'
+  'LockGateActivity.kt',
+  'RecoveryKeyCodec.kt'
 ]) {
   const source = path.join(securityTemplateDir, file);
   if (!fs.existsSync(source)) throw new Error('Native security template is missing: ' + file);
   fs.copyFileSync(source, path.join(securitySourceDir, file));
+}
+
+function ensureJUnitDependency(contents, kotlinDsl) {
+  if (contents.includes('junit:junit')) return contents;
+  const line = kotlinDsl
+    ? '\\n    testImplementation("junit:junit:4.13.2")'
+    : '\\n    testImplementation "junit:junit:4.13.2"';
+  if (!/dependencies\\s*\\{/.test(contents)) {
+    throw new Error('App Gradle file has no dependencies block; security unit tests cannot be wired.');
+  }
+  return contents.replace(/dependencies\\s*\\{/, match => match + line);
 }
 
 function addNativeSecurityDependencies(contents, kotlinDsl) {
@@ -408,14 +420,24 @@ function addNativeSecurityDependencies(contents, kotlinDsl) {
 if (fs.existsSync(appGradleGroovy)) {
   let gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleGroovy, 'utf8'), false);
   gradle = ensureKotlinWarningsAsErrors(gradle);
+  gradle = ensureJUnitDependency(gradle, false);
   fs.writeFileSync(appGradleGroovy, gradle);
 } else if (fs.existsSync(appGradleKts)) {
   let gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleKts, 'utf8'), true);
   gradle = ensureKotlinWarningsAsErrors(gradle);
+  gradle = ensureJUnitDependency(gradle, true);
   fs.writeFileSync(appGradleKts, gradle);
 } else {
   throw new Error('Generated Android app Gradle file was not found; native security dependencies cannot be wired.');
 }
+
+// Copy focused JVM security tests into the generated app module.
+const securityTestTemplateDir = path.join(androidDir, 'templates', 'security-test');
+const securityJvmTestDir = path.join(appModuleDir, 'src', 'test', 'java', 'com', 'aurelia', 'pms', 'security');
+const recoveryCodecTest = path.join(securityTestTemplateDir, 'RecoveryKeyCodecTest.kt');
+if (!fs.existsSync(recoveryCodecTest)) throw new Error('RecoveryKeyCodecTest.kt template is missing.');
+fs.mkdirSync(securityJvmTestDir, { recursive: true });
+fs.copyFileSync(recoveryCodecTest, path.join(securityJvmTestDir, 'RecoveryKeyCodecTest.kt'));
 
 const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
 
