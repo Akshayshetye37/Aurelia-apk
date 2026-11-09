@@ -4,6 +4,7 @@ on:
     branches: ["fix/p0-storage-authority"]
     paths:
       - "src/storage/**"
+      - "tests/storage-adapter-quota.test.mjs"
       - "android/templates/LocalPmsRepository.java"
       - "android/templates/CapacitorPmsStoragePlugin.java"
       - "scripts/patch-android.js"
@@ -57,6 +58,12 @@ jobs:
           cp -a "$template_dir/." android/templates/
       - run: node scripts/patch-android.js
       - run: npx cap sync android
+      - name: Increase Gradle wrapper download timeout
+        working-directory: android
+        run: |
+          set -euo pipefail
+          wrapper="gradle/wrapper/gradle-wrapper.properties"
+          grep -q '^networkTimeout=' "$wrapper" || printf '\\nnetworkTimeout=120000\\n' >> "$wrapper"
       - name: Compile native SQLite repository and Capacitor plugin
         working-directory: android
         run: |
