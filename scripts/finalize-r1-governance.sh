@@ -55,7 +55,7 @@ BASE_RULES="$(jq -n '[
     type: "required_status_checks",
     parameters: {
       do_not_enforce_on_create: false,
-      required_status_checks: [{context: "r1-governance"}],
+      required_status_checks: [{context: "r1-governance"}, {context: "native-security-kotlin"}],
       strict_required_status_checks_policy: true
     }
   },
@@ -96,7 +96,7 @@ fi
 
 git fetch origin refs/heads/release/r1-local-first-execution:refs/remotes/origin/release/r1-local-first-execution
 BASE_SHA="$(git rev-parse refs/remotes/origin/release/r1-local-first-execution)"
-gh api "repos/$REPO/commits/$BASE_SHA/check-runs?per_page=100" | jq -e '[.check_runs[] | select(.name == "r1-governance" and .status == "completed" and .conclusion == "success")] | length > 0' >/dev/null
+gh api "repos/$REPO/commits/$BASE_SHA/check-runs?per_page=100" | jq -e '[.check_runs[] | select((.name == "r1-governance" or .name == "native-security-kotlin") and .status == "completed" and .conclusion == "success")] | unique_by(.name) | length == 2' >/dev/null
 echo "Creating an unprotected temporary check branch $CHECK_BRANCH at $BASE_SHA..."
 gh api --method POST "repos/$REPO/git/refs" -f "ref=refs/heads/$CHECK_BRANCH" -f "sha=$BASE_SHA" >/dev/null
 CHECK_BRANCH_CREATED=1
@@ -128,7 +128,27 @@ if [[ "$GOVERNANCE_CONCLUSION" != "success" ]]; then
   echo "::error::The temporary source SHA did not receive a successful r1-governance run."
   exit 1
 fi
-gh api "repos/$REPO/commits/$PROBE_SHA/check-runs?per_page=100" | jq -e '[.check_runs[] | select(.name == "r1-governance" and .status == "completed" and .conclusion == "success")] | length > 0' >/dev/null
+NATIVE_WORKFLOW_ID="$(gh api "repos/$REPO/actions/workflows/native-security-kotlin.yml" --jq '.id')"
+NATIVE_RUN_ID=""
+NATIVE_CONCLUSION=""
+for attempt in $(seq 1 72); do
+  NATIVE_RUN_ID="$(gh api "repos/$REPO/actions/runs?event=push&per_page=100" --jq --argjson workflow_id "$NATIVE_WORKFLOW_ID" --arg sha "$PROBE_SHA" '
+    [.workflow_runs[] | select(.workflow_id == $workflow_id and .head_sha == $sha)] | sort_by(.created_at) | last | (.id // empty)
+  ' | head -n1)"
+  if [[ -n "$NATIVE_RUN_ID" ]]; then
+    NATIVE_STATE="$(gh api "repos/$REPO/actions/runs/$NATIVE_RUN_ID")"
+    if [[ "$(echo "$NATIVE_STATE" | jq -r '.status')" == "completed" ]]; then
+      NATIVE_CONCLUSION="$(echo "$NATIVE_STATE" | jq -r '.conclusion')"
+      break
+    fi
+  fi
+  sleep 5
+done
+if [[ "$NATIVE_CONCLUSION" != "success" ]]; then
+  echo "::error::The temporary source SHA did not receive a successful native-security-kotlin run."
+  exit 1
+fi
+gh api "repos/$REPO/commits/$PROBE_SHA/check-runs?per_page=100" | jq -e '[.check_runs[] | select((.name == "r1-governance" or .name == "native-security-kotlin") and .status == "completed" and .conclusion == "success")] | unique_by(.name) | length == 2' >/dev/null
 
 echo "Creating protected target branch $PROBE_BRANCH at $BASE_SHA..."
 gh api --method POST "repos/$REPO/git/refs" -f "ref=refs/heads/$PROBE_BRANCH" -f "sha=$BASE_SHA" >/dev/null
@@ -170,7 +190,8 @@ echo "$FINAL_STATE" | jq -e '
   ([.rules[].type] | index("non_fast_forward") != null) and
   ([.rules[].type] | index("deletion") != null) and
   ([.rules[] | select(.type == "pull_request") | .parameters.required_approving_review_count] | index(1) != null) and
-  ([.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | index("r1-governance") != null)
+  ([.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | index("r1-governance") != null) and
+  ([.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | index("native-security-kotlin") != null)
 ' >/dev/null
 
 echo "Creating a temporary approved-pattern tag pointing to the known-red SHA..."
@@ -216,7 +237,7 @@ TAG_CREATED=0
   echo ""
   echo "- Ruleset: [Aurelia R1 protected branches](https://github.com/$REPO/rules/$RULESET_ID) — active, verified."
   echo "- Protected refs: `main`, `feature/multi-provider-payment-backend`, `release/**`."
-  echo "- Required check: `r1-governance`; approvals: 1; force-push and deletion blocked; bypass actors: none."
+  echo "- Required checks: `r1-governance` and `native-security-kotlin`; approvals: 1; force-push and deletion blocked; bypass actors: none."
   echo "- Direct push probe: rejected on `$PROBE_BRANCH` even though the pushed SHA already had a green `r1-governance` check; both disposable branches removed."
   echo "- Red-SHA tag probe: refused by [release-tag guard run $TAG_RUN_ID](https://github.com/$REPO/actions/runs/$TAG_RUN_ID); temporary tag removed."
 } >> "$GITHUB_STEP_SUMMARY"
