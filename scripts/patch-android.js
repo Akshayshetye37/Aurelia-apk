@@ -368,8 +368,8 @@ function addNativeSecurityDependencies(contents, kotlinDsl) {
   const dependencies = [
     ['org.bouncycastle:bcprov-jdk18on:1.80', 'org.bouncycastle:bcprov-jdk18on'],
     ['androidx.biometric:biometric:1.2.0-alpha05', 'androidx.biometric:biometric'],
-    ['net.zetetic:sqlcipher-android:4.19.1@aar', 'net.zetetic:sqlcipher-android'],
-    ['androidx.sqlite:sqlite:2.7.0', 'androidx.sqlite:sqlite']
+    ['net.zetetic:sqlcipher-android:4.17.0@aar', 'net.zetetic:sqlcipher-android'],
+    ['androidx.sqlite:sqlite:2.6.2', 'androidx.sqlite:sqlite']
   ];
   for (const [coordinate, marker] of dependencies) {
     if (contents.includes(marker)) continue;
