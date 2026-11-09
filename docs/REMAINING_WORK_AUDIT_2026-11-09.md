@@ -5,6 +5,8 @@
 **Audit date:** 2026-11-09  
 **Purpose:** Record only the work that remains to make the local-first PMS dependable and to complete optional online payment capabilities. This document supersedes earlier remaining-work lists where their status or wording conflicts with this audit.
 
+**Implementation update — 2026-11-09:** Local-only release freeze is implemented at `4e7659c42b404b23175df898f16de58bf774d5da`. Both [PMS source/web CI](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42591219837) and [settlement foundation CI](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42591219781) passed on that exact SHA. The global UI cutover remains false; sync, gateway payments, provider activation, CCAvenue and Pay Bridge are disabled; no provider is enabled. Branch protection remains disabled because the connected GitHub integration cannot change repository administration settings. The real-backup accounting diagnostic remains pending because no authorized redacted PMS backup has been supplied.
+
 ## 1. Product contract that every implementation must preserve
 
 - The primary device is the operational source of truth for PMS data.
@@ -226,7 +228,7 @@
 
 ### Workstream J — End-to-end qualification and release controls
 
-**Current blocker:** The latest audited commit has a passing source/web workflow, not an APK build or physical-device qualification. The active branch is not protected and required status checks are not enforced. Historical test runs apply only to their recorded commit SHA.
+**Current blocker:** The local-only release profile and its regression checks are implemented and passed source/web CI on the recorded SHA; this is not an APK build or physical-device qualification. The active branch is still not protected and required status checks/reviews are not enforced. Enabling protection requires a repository owner/admin permission not available through the connected GitHub integration. Historical test runs apply only to their recorded commit SHA.
 
 **Fix and implementation:**
 
