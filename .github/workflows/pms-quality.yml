@@ -3,11 +3,10 @@ name: PMS source tests and production web packaging
 on:
   push:
     branches:
-      - feature/multi-provider-payment-backend
+      - '**'
   pull_request:
     branches:
-      - main
-      - master
+      - '**'
 
 permissions:
   contents: read
@@ -32,6 +31,12 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Assert exact candidate SHA
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Assert R1 release defaults remain OFF
+        run: node --test tests/release-defaults.test.mjs
+
       - name: Run complete PMS test suite
         run: npm test
 
@@ -48,6 +53,17 @@ jobs:
           path: www/
           if-no-files-found: error
           retention-days: 7
+
+      - name: Generate evidence-based STATUS.md
+        run: node scripts/generate-status.mjs
+
+      - name: Upload generated R1 status
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurelia-r1-status-${{ github.sha }}
+          path: STATUS.md
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Record Android release gate
         run: |
