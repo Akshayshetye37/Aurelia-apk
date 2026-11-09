@@ -105,4 +105,5 @@ test("restaurant sale IDs must be safe and unique", async () => {
     sales.syncSnapshot({ sales: [legacySale("../escape", 20, "2026-11-08T10:00:00.000Z")] }),
     /safe ID/
   );
+  await assert.rejects(sales.syncSnapshot({ sales: null }), /must be an array/);
 });
