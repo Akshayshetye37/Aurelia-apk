@@ -349,19 +349,6 @@ export class PmsInventoryRepository {
       }
     }
     const movementChanges = [];
-    for (const audit of newAuditRows) {
-      const id = "pms-audit-" + movementHash(audit.row) + "-" + audit.ordinal;
-      const stored = await this.bridge.fetchEntity("audit", id);
-      if (!stored || !same({
-        kind: stored.data.kind, source: stored.data.source, value: stored.data.value
-      }, {
-        kind: "pms_audit", source: "snapshot_audit", value: audit.row
-      })) {
-        throw Object.assign(new Error("PMS audit row failed exact canonical read-back."), {
-          code: "PMS_AUDIT_READBACK_FAILED", auditId: id
-        });
-      }
-    }
     for (const movement of newMovements) {
       const id = "inventory-movement-" + movementHash(movement.row) + "-" + movement.ordinal;
       const data = {
@@ -482,6 +469,19 @@ export class PmsInventoryRepository {
       if (!stored || !expected || !same(stored.data, expected)) {
         throw Object.assign(new Error("Restaurant table order failed exact canonical read-back."), {
           code: "RESTAURANT_TABLE_READBACK_FAILED", tableId: change.entityId
+        });
+      }
+    }
+    for (const audit of newAuditRows) {
+      const id = "pms-audit-" + movementHash(audit.row) + "-" + audit.ordinal;
+      const stored = await this.bridge.fetchEntity("audit", id);
+      if (!stored || !same({
+        kind: stored.data.kind, source: stored.data.source, value: stored.data.value
+      }, {
+        kind: "pms_audit", source: "snapshot_audit", value: audit.row
+      })) {
+        throw Object.assign(new Error("PMS audit row failed exact canonical read-back."), {
+          code: "PMS_AUDIT_READBACK_FAILED", auditId: id
         });
       }
     }
