@@ -106,6 +106,8 @@ test('native security Kotlin CI compiles the exact SHA and release tags require 
   assert.match(workflow, /pull_request:/);
   assert.match(workflow, /push:/);
   assert.match(workflow, /compileDebugKotlin compileReleaseKotlin assembleDebug lintDebug testDebugUnitTest/);
+  assert.match(workflow, /com\.android\.tools\.build:gradle:8\.7\.2/);
+  assert.match(workflow, /gradle-8\.11\.1-all\.zip/);
   assert.match(workflow, /verified \$VERIFIED_SHA/);
   assert.match(releaseGuard, /native-security-kotlin/);
 });
