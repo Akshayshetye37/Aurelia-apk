@@ -113,3 +113,30 @@ test("concurrent settings updates serialize and preserve independent settings do
   assert.deepEqual(menu.data.menu, { breakfast: [] });
   assert.equal(events.length, 2);
 });
+
+test("IndexedDB settings commit and immutable outbox event are durable together", async () => {
+  const { indexedDB } = await import("fake-indexeddb");
+  const { IndexedDbPmsRepository } = await import("../src/storage/indexeddb-pms-repository.mjs");
+  const repository = new IndexedDbPmsRepository({
+    indexedDBImpl: indexedDB,
+    databaseName: "pms-settings-atomic-integration",
+    now: () => "2026-11-09T00:00:00.000Z"
+  });
+  const bridge = new PmsRepositoryBridge({
+    tenantId: "tenant-local", propertyId: "property-local", deviceId: "device-local",
+    now: () => "2026-11-09T00:00:00.000Z",
+    eventId: () => "settings-atomic-event"
+  });
+  bridge.bindActiveEngine(repository);
+  const settings = new PmsSettingsRepository({ bridge });
+  const saved = await settings.update({ set: { name: "Aurelia", cur: "₹" } });
+  const stored = await repository.getEntity("settings", "property-settings");
+  const outbox = await repository.claimOutboxBatch({ deviceId: "device-local" });
+  assert.equal(saved.version, 1);
+  assert.deepEqual(stored.data.set, { name: "Aurelia", cur: "₹" });
+  assert.equal(outbox.length, 1);
+  assert.equal(outbox[0].entityType, "settings");
+  assert.equal(outbox[0].entityId, "property-settings");
+  assert.equal(outbox[0].sequence, stored.version);
+  assert.deepEqual(outbox[0].payload, { changedFields: ["set"] });
+});
