@@ -5668,7 +5668,8 @@ try {
     const withSettings = settings ? { ...guests, set: settings.set, menu: settings.menu } : guests;
     const withTables = await boot.restaurantTableRepository.hydrateSnapshot(withSettings, { enabled });
     const withSales = await boot.restaurantSaleRepository.hydrateSnapshot(withTables, { enabled });
-    return boot.inventoryRepository.hydrateSnapshot(withSales, { enabled });
+    const withInventory = await boot.inventoryRepository.hydrateSnapshot(withSales, { enabled });
+    return boot.expenseRepository.hydrateSnapshot(withInventory, { enabled });
   };
   const canonicalAudit = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
   if (canonicalAudit?.data?.snapshot) {
