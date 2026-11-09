@@ -2036,7 +2036,6 @@ async function sellStockItem(name,price){
    item.id=inventoryId;item.q=Number(item.q)-1;S.led.unshift([item.n,-1,'retail-sale',new Date()]);
    table.o.push([item.n,Number(price)||0,'retail']);
   }});
-  if(typeof aud==='function')aud('Retail item added to restaurant bill',item.n+' · '+K(price));
   if(await persist()===false)throw new Error('Retail item was saved but compatibility cache refresh failed; writes are paused for recovery.');
   if(item.q<=item.ro)toast(item.n+' is running low');
   render();
