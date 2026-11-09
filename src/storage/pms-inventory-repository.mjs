@@ -56,6 +56,7 @@ export class PmsInventoryRepository {
     this.bridge = bridge;
     this.now = now;
     this.writeQueue = Promise.resolve();
+    this.knownVersions = null;
   }
 
   async list() {
@@ -85,6 +86,9 @@ export class PmsInventoryRepository {
     }
     const hydrated = clone(snapshot);
     if (!enabled) return hydrated;
+    const rows = await this.bridge.listEntities("inventory");
+    if (!Array.isArray(rows)) throw new Error("Canonical inventory repository returned an invalid entity list.");
+    this.knownVersions = new Map(rows.map(row => [row.id, row.version]));
     const canonical = await this.list();
     if (!canonical.length && hydrated.inv.length) {
       throw new Error("Canonical inventory entities are missing for the verified migration.");
@@ -137,6 +141,18 @@ export class PmsInventoryRepository {
       }
       validateItem(row.data);
       current.set(row.id, row);
+    }
+
+    if (this.knownVersions === null) {
+      this.knownVersions = new Map([...current].map(([id, row]) => [id, row.version]));
+    }
+    for (const [id, row] of current) {
+      if (this.knownVersions.get(id) !== row.version) {
+        throw Object.assign(new Error("Inventory item " + id + " changed in another session; reload before writing stock."), {
+          code: "INVENTORY_VERSION_CONFLICT", inventoryId: id,
+          expectedVersion: this.knownVersions.get(id) ?? 0, actualVersion: row.version
+        });
+      }
     }
 
     const snapshotRow = await this.bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
@@ -238,6 +254,8 @@ export class PmsInventoryRepository {
         });
       }
     }
+    const finalRows = await this.bridge.listEntities("inventory");
+    this.knownVersions = new Map(finalRows.map(row => [row.id, row.version]));
     if (changes.length) {
       const storedSnapshot = await this.bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
       if (!storedSnapshot || !same(storedSnapshot.data.snapshot, snapshot)) {
