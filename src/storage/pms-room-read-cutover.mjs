@@ -109,3 +109,69 @@ export async function hydrateCanonicalGuestSnapshot({ repository, snapshot, enab
   }
   return hydrated;
 }
+
+
+/**
+ * Booking read cutover. Booking IDs and business fields (including status,
+ * payment evidence and historical rate snapshots) are preserved verbatim.
+ */
+function withoutBookingRepositoryMetadata(value) {
+  const result = clone(value);
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    delete result.id;
+    delete result.updatedAt;
+    delete result.legacySource;
+  }
+  return result;
+}
+
+export async function hydrateCanonicalBookingSnapshot({ repository, snapshot, enabled = true } = {}) {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) || !Array.isArray(snapshot.b)) {
+    throw new TypeError("A complete PMS snapshot with a booking collection is required.");
+  }
+  const hydrated = clone(snapshot);
+  if (!enabled) return hydrated;
+  if (!repository || typeof repository.listEntities !== "function") {
+    throw new TypeError("Canonical booking repository is unavailable; booking read cutover cannot proceed.");
+  }
+  const rows = await repository.listEntities("booking");
+  if (!Array.isArray(rows)) throw new Error("Canonical booking repository returned an invalid entity list.");
+  const byId = new Map();
+  for (const row of rows) {
+    if (!row || row.type !== "booking" || typeof row.id !== "string" ||
+        !Number.isSafeInteger(row.version) || row.version < 1 ||
+        !row.data || typeof row.data !== "object" || Array.isArray(row.data) ||
+        String(row.data.id) !== row.id || byId.has(row.id)) {
+      throw new Error("Canonical booking inventory contains an invalid or duplicate booking entity.");
+    }
+    byId.set(row.id, row);
+  }
+  const expectedIds = new Set();
+  hydrated.b = hydrated.b.map((source, index) => {
+    if (!source || typeof source !== "object" || Array.isArray(source)) {
+      throw new Error("Booking snapshot contains a malformed row at index " + index + ".");
+    }
+    const id = String(source.id ?? "").trim();
+    if (!id || expectedIds.has(id)) {
+      throw new Error("Booking snapshot has a missing or duplicate stable booking identity.");
+    }
+    expectedIds.add(id);
+    const row = byId.get(id);
+    if (!row) {
+      throw Object.assign(new Error("Canonical booking entity is missing for booking " + id + "."), {
+        code: "BOOKING_ENTITY_MISSING", bookingId: id
+      });
+    }
+    const canonical = withoutBookingRepositoryMetadata(row.data);
+    if (!same(canonical, withoutBookingRepositoryMetadata(source))) {
+      throw Object.assign(new Error("Canonical booking entity diverges from the committed recovery snapshot for booking " + id + "."), {
+        code: "BOOKING_SNAPSHOT_DIVERGENCE", bookingId: id
+      });
+    }
+    return { ...canonical, id: row.id };
+  });
+  if (byId.size !== expectedIds.size) {
+    throw new Error("Canonical booking inventory contains a booking that is absent from the recovery snapshot.");
+  }
+  return hydrated;
+}
