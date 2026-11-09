@@ -47,7 +47,14 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
 
   @Override public void onOpen(SQLiteDatabase db) {
     super.onOpen(db);
-    db.execSQL("PRAGMA synchronous=FULL");\n    try (android.database.Cursor cipher = db.rawQuery("PRAGMA cipher_integrity_check", null)) {\n      if (!cipher.moveToFirst() || !"ok".equalsIgnoreCase(cipher.getString(0))) throw new IllegalStateException("pms_cipher_integrity_failed");\n    }
+    db.execSQL("PRAGMA synchronous=FULL");
+    try (android.database.Cursor status = db.rawQuery("PRAGMA cipher_status", null)) {
+      if (!status.moveToFirst() || status.getInt(0) != 1) throw new IllegalStateException("pms_cipher_not_active");
+    }
+    // SQLCipher returns one row per invalid page and no rows when page HMACs pass.
+    try (android.database.Cursor cipher = db.rawQuery("PRAGMA cipher_integrity_check", null)) {
+      if (cipher.moveToFirst()) throw new IllegalStateException("pms_cipher_integrity_failed: " + cipher.getString(0));
+    }
     // Fail closed: never write into a structurally corrupt local database.
     try (android.database.Cursor c = db.rawQuery("PRAGMA quick_check", null)) {
       if (!c.moveToFirst() || !"ok".equalsIgnoreCase(c.getString(0))) {
