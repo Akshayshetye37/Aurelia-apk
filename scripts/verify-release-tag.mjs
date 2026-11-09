@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 
-export const REQUIRED_RELEASE_CHECKS = Object.freeze(["r1-governance"]);
+export const REQUIRED_RELEASE_CHECKS = Object.freeze(["r1-governance", "native-security-kotlin"]);
 
 export function evaluateRequiredChecks(checkRuns, requiredNames = REQUIRED_RELEASE_CHECKS) {
   const failures = [];
