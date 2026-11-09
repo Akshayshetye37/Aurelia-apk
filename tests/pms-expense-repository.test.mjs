@@ -67,3 +67,11 @@ test("unverified expense hydration preserves compatibility snapshot without clai
   const hydrated = await expenses.hydrateSnapshot(snapshot, { enabled: false });
   assert.deepEqual(hydrated, snapshot);
 });
+
+test("expense snapshot rejects object-valued IDs instead of coercing unstable keys", async () => {
+  const { expenses } = setup("invalid-id");
+  await assert.rejects(
+    expenses.hydrateSnapshot({ exp: [{ id: { unsafe: true }, t: "Expense", a: 100 }] }, { enabled: true }),
+    /ID must be a string or safe integer/
+  );
+});
