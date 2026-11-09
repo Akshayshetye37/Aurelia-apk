@@ -3,20 +3,13 @@
  * screens never access browser key-value storage directly.
  */
 import { installPreferenceStorageGuard } from "./preference-storage-guard.mjs";
+import { StorageFullError } from "./storage-errors.mjs";
+export { StorageFullError };
 
 const DETECTED_BUILD_MODE = globalThis.__AURELIA_BUILD_MODE ||
   (import.meta.env?.DEV ? "development" : import.meta.env?.MODE) ||
   (typeof process !== "undefined" && process.env?.NODE_ENV) ||
   (typeof process !== "undefined" && (process.env?.NODE_TEST_CONTEXT || process.argv?.includes("--test")) ? "test" : "production");
-
-export class StorageFullError extends Error {
-  constructor(message = "Device storage is full. Export your PMS data and free space before continuing.", options = {}) {
-    super(message, options);
-    this.name = "StorageFullError";
-    this.code = "STORAGE_FULL";
-    this.action = "EXPORT_DATA";
-  }
-}
 
 export function createWebStorageAdapter({
   windowRef = globalThis.window,
