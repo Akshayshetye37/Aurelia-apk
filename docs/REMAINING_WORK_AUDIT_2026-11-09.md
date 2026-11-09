@@ -32,9 +32,9 @@
    - Guests, stable guest IDs and guest-to-booking foreign keys.
    - Rooms, stable room IDs, room reassignment and historical rate snapshots.
    - Folios, charges, payments, invoices, receipts and daily totals.
-   - Inventory reads, edits, retirement, stock movements and POS-linked stock decrement.
+   - Inventory balance reads, edits and retirement now hydrate and write through `PmsInventoryRepository`; stock changes, POS/restaurant deductions and the recovery snapshot commit atomically with versioned outbox events. A dedicated append-only inventory movement ledger and report projections remain open.
    - Expenses, voids and reports.
-   - Restaurant sale backfill now projects immutable sale entities and canonical hydration merges committed sales over stale snapshots. Remaining restaurant work is reporting projections and inventory linkage; table rows/open orders and new settlement/folio-charge paths use canonical entities and transactional outbox writes.
+   - Restaurant sale backfill now projects immutable sale entities and canonical hydration merges committed sales over stale snapshots. Table rows/open orders and new settlement/folio-charge paths use canonical entities and transactional outbox writes; POS/restaurant stock deductions now update canonical inventory. Remaining restaurant work is reporting projections and append-only stock-movement ledger linkage.
    - Feature flags, audit history and auxiliary collections. Property configuration (`set`) and menu now have a dedicated `settings:property-settings` entity, canonical startup hydration and versioned repository/outbox writes; remaining settings-related flags and auxiliary records are still in scope.
 2. Hydrate each screen from canonical repository reads at startup and after mutations. Do not let a stale in-memory object overwrite newer repository state.
 3. Convert each mutation to a version-checked repository transaction. Related entity changes and the corresponding immutable outbox event must commit in the same SQLite/IndexedDB transaction.
