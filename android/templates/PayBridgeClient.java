@@ -331,13 +331,17 @@ final class PayBridgeClient {
     }
   }
 
+  @SuppressWarnings("deprecation")
   private PackageInfo packageInfo(String name) {
     try {
       if (Build.VERSION.SDK_INT >= 33) {
         return context.getPackageManager().getPackageInfo(name,
             PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES));
       }
-      return context.getPackageManager().getPackageInfo(name, PackageManager.GET_SIGNING_CERTIFICATES);
+      if (Build.VERSION.SDK_INT >= 28) {
+        return context.getPackageManager().getPackageInfo(name, PackageManager.GET_SIGNING_CERTIFICATES);
+      }
+      return context.getPackageManager().getPackageInfo(name, PackageManager.GET_SIGNATURES);
     } catch (PackageManager.NameNotFoundException e) {
       return null;
     }
