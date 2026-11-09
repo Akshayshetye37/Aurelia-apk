@@ -74,3 +74,23 @@ test('PIN enrollment and confirmation fields both accept the full 4–16 digit p
   assert.equal((gate.match(/InputFilter\.LengthFilter\(16\)/g) || []).length, 2);
   assert.doesNotMatch(gate, /LengthFilter\(12\)/);
 });
+
+
+test('real Android SQLite instrumentation source is copied and configured by the generator', () => {
+  const patcher = read('scripts/patch-android.js');
+  const instrumentation = read('android/templates/instrumentation/LocalPmsRepositoryInstrumentedTest.java');
+  assert.match(patcher, /LocalPmsRepositoryInstrumentedTest\\.java/);
+  assert.match(patcher, /testInstrumentationRunner/);
+  assert.match(patcher, /androidTestImplementation/);
+  assert.match(instrumentation, /entityAndOutboxCommitTogetherAndDuplicateOutboxRollsBackEntity/);
+  assert.match(instrumentation, /businessBatchRollsBackEveryEntityWhenAnyOutboxInsertFails/);
+  assert.match(instrumentation, /migrationPreservesExactRawSnapshotAndIsReplaySafe/);
+  assert.match(instrumentation, /migrationRefusesNonEmptyRepositoryWithoutCreatingSnapshot/);
+});
+
+test('manual Android QA workflow executes instrumentation rather than relying on JS fake-plugin tests', () => {
+  const workflow = read('.github/workflows/build-pms-debug-apk.yml');
+  assert.match(workflow, /reactivecircus\\/android-emulator-runner@v2/);
+  assert.match(workflow, /connectedDebugAndroidTest/);
+  assert.match(workflow, /Preserve Android instrumentation reports/);
+});
