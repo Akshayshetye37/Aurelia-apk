@@ -91,6 +91,48 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertEquals("event-existing", claimed.getJSONObject(0).getString("eventId"));
   }
 
+  @Test public void acknowledgementBatchIsAtomicAndRetryConflictLifecycleIsLeaseBound() throws Exception {
+    repository.transactBusinessChange("booking", "ack-1", 0, data("one"),
+      event("ack-event-1", "booking", "ack-1", 1));
+    repository.transactBusinessChange("booking", "ack-2", 0, data("two"),
+      event("ack-event-2", "booking", "ack-2", 1));
+    JSONArray claimed = repository.claimOutboxBatch("device-test", 50, 60_000L);
+    assertEquals(2, claimed.length());
+
+    JSONArray invalidAck = new JSONArray()
+      .put(new JSONObject().put("eventId", "ack-event-1").put("sequence", 1))
+      .put(new JSONObject().put("eventId", "ack-event-2").put("sequence", 99));
+    boolean rejected = false;
+    try { repository.acknowledgeOutbox("device-test", invalidAck); }
+    catch (RuntimeException expected) { rejected = true; }
+    assertTrue("invalid member must roll back the whole acknowledgement batch", rejected);
+
+    JSONArray validAck = new JSONArray()
+      .put(new JSONObject().put("eventId", "ack-event-1").put("sequence", 1))
+      .put(new JSONObject().put("eventId", "ack-event-2").put("sequence", 1));
+    assertEquals(2, repository.acknowledgeOutbox("device-test", validAck).getInt("acknowledged"));
+
+    repository.transactBusinessChange("expense", "expense-1", 0, data("retry"),
+      event("retry-event", "expense", "expense-1", 1));
+    assertEquals(1, repository.claimOutboxBatch("device-test", 50, 60_000L).length());
+    String future = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US) {{
+      setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+    }}.format(new java.util.Date(System.currentTimeMillis() + 60_000L));
+    assertTrue(repository.retryOutbox("device-test", "retry-event", future, "NETWORK"));
+    assertEquals(0, repository.claimOutboxBatch("device-test", 50, 60_000L).length());
+
+    String past = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US) {{
+      setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+    }}.format(new java.util.Date(System.currentTimeMillis() - 1_000L));
+    repository.getWritableDatabase().execSQL("UPDATE pms_outbox SET retry_at=? WHERE event_id=?",
+      new Object[]{past, "retry-event"});
+    JSONArray retried = repository.claimOutboxBatch("device-test", 50, 60_000L);
+    assertEquals(1, retried.length());
+    assertEquals(2, retried.getJSONObject(0).getInt("attempts"));
+    assertTrue(repository.markOutboxConflict("device-test", "retry-event", "VERSION_CONFLICT"));
+    assertEquals(0, repository.claimOutboxBatch("device-test", 50, 60_000L).length());
+  }
+
   @Test public void migrationPreservesExactRawSnapshotAndIsReplaySafe() throws Exception {
     String raw = "{\\"rooms\\":[{\\"n\\":\\"101\\",\\"r\\":1200}],\\"b\\":[{\\"id\\":7,\\"p\\":500,\\"pays\\":[{\\"a\\":200,\\"m\\":\\"Cash\\"}]}],\\"g\\":[{\\"id\\":\\"g-1\\"}],\\"t\\":[],\\"exp\\":[],\\"inv\\":[],\\"led\\":[],\\"aud\\":[],\\"set\\":{\\"cur\\":\\"INR\\"},\\"menu\\":{}}";
     JSONObject first = repository.migrateLegacySnapshot("migration-test", "aurelia_lodge_v2",
