@@ -2,9 +2,9 @@
 
 **MANDATORY PRODUCT PRINCIPLE — Our app works primarily on the primary device's local storage.**
 
-The primary device's persistent local database is the source of truth for PMS operations: native SQLite on Android and IndexedDB in a browser/PWA. This means durable on-device storage, not volatile RAM. Core property operations must not depend on cloud availability. Cloud payment verification is a separate trusted service; optional cloud sync remains separate and OFF by default.
+The app runs primarily on the primary device and stores its operational data in that device's persistent local database: native SQLite on Android and IndexedDB in a browser/PWA. This means durable on-device storage, not volatile RAM. **Internet access, cloud services and remote servers are optional—not prerequisites for ordinary local PMS operation.** The app must continue to support its locally available features when offline. Internet may be used when available for explicitly online features, such as provider-hosted payment processing; those features must not make local operations dependent on a server. Optional cloud sync is separate and OFF by default.
 
-**This principle is a release requirement, not merely a design preference.** Any implementation that makes cloud connectivity a prerequisite for ordinary PMS operation, or reports a successful write before the local database commit and read-back succeed, violates this requirement.
+**This principle is a release requirement, not merely a design preference.** Any implementation that requires internet/cloud/server availability for ordinary local PMS operation, or reports a successful local write before the device database commit and read-back succeed, violates this requirement.
 
 Aurelia is a local-first property management system (PMS) for reservations, guests, rooms, folios and property operations, with a separately trusted backend for online payment-provider operations.
 
