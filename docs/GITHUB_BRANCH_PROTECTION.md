@@ -39,7 +39,7 @@ The workflow creates or updates the repository ruleset **Aurelia R1 protected br
 - Require pull requests and one approving review.
 - Dismiss stale approvals after new reviewable commits.
 - Require resolved review conversations.
-- Require the `r1-governance` status check and up-to-date checks.
+- Require both `r1-governance` and `native-security-kotlin` status checks on the exact commit and up-to-date checks.
 - Block force pushes.
 - Block branch deletion.
 
