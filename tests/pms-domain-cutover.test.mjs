@@ -93,7 +93,7 @@ test("projection rejects missing stable booking identity and preserves unnormali
 
 test("single-record trailing batch uses the atomic single-entity transaction", async () => {
   const bridge = fakeBridge();
-  const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-single-tail", batchSize: 7 });
+  const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-single-tail", batchSize: 8 });
   assert.equal(result.projected, 9);
   assert.ok(bridge.entities.has("settings:property-settings"));
   assert.ok(bridge.entities.has("audit:legacy-domain-projection:mig-single-tail"));
