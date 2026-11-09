@@ -203,8 +203,8 @@ export class PmsBootstrapCoordinator {
     }
 
     const marker = this.storage.getItem(AURELIA_MIGRATION_STATUS_KEY);
-    const markerMatch = typeof marker === "string" && marker.match(/^VERIFIED:(mig_legacy_[a-f0-9]{64})$/);
-    const freshMatch = typeof marker === "string" && marker.match(/^READY_CANONICAL:(mig_legacy_[a-f0-9]{64})$/);
+    const markerMatch = typeof marker === "string" && marker.match(/^VERIFIED:(mig_legacy_(?:[a-f0-9]{8}|[a-f0-9]{64}))$/);
+    const freshMatch = typeof marker === "string" && marker.match(/^READY_CANONICAL:(mig_legacy_(?:[a-f0-9]{8}|[a-f0-9]{64}))$/);
     // A later canonical snapshot is newer than the immutable first-migration
     // snapshot. Prefer it so recovery cannot roll back valid operational saves.
     const canonical = await this.repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
@@ -277,7 +277,7 @@ export class PmsBootstrapCoordinator {
     }
 
     const marker = this.storage.getItem(AURELIA_MIGRATION_STATUS_KEY);
-    const freshMatch = typeof marker === "string" && marker.match(/^READY_CANONICAL:(mig_legacy_[a-f0-9]{64})$/);
+    const freshMatch = typeof marker === "string" && marker.match(/^READY_CANONICAL:(mig_legacy_(?:[a-f0-9]{8}|[a-f0-9]{64}))$/);
     if (freshMatch) {
       const legacyRows = await this.repository.listEntities("legacy");
       if (legacyRows.length) throw new Error("Fresh canonical installation unexpectedly contains legacy migration rows; startup stopped");
@@ -300,7 +300,7 @@ export class PmsBootstrapCoordinator {
       });
     }
 
-    const markerMatch = typeof marker === "string" && marker.match(/^VERIFIED:(mig_legacy_[a-f0-9]{64})$/);
+    const markerMatch = typeof marker === "string" && marker.match(/^VERIFIED:(mig_legacy_(?:[a-f0-9]{8}|[a-f0-9]{64}))$/);
     if (markerMatch) {
       const migrationId = markerMatch[1];
       const original = await this.repository.readMigrationSnapshot(migrationId);
