@@ -7,7 +7,7 @@ export const WRITE_METHODS = new Set([
 
 export function injectFault(transaction, failOnWrite, counter = { writes: 0 }) {
   if (!transaction || typeof transaction !== "object") throw new TypeError("A transaction wrapper is required");
-  if (!Number.isSafeInteger(failOnWrite) && failOnWrite !== Infinity) throw new TypeError("failOnWrite must be a positive integer or Infinity");
+  if ((failOnWrite !== Infinity && !Number.isSafeInteger(failOnWrite)) || failOnWrite < 1) throw new TypeError("failOnWrite must be a positive integer or Infinity");
   return new Proxy(transaction, {
     get(target, key, receiver) {
       const value = Reflect.get(target, key, receiver);
