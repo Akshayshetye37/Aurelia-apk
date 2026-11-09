@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 function paise(value, label) {
   const amount = typeof value === "number" ? value
@@ -23,8 +24,11 @@ function maskReference(value) {
 }
 
 function paymentEvidence(row) {
+  if (!row || typeof row !== "object" || Array.isArray(row)) throw new TypeError("Payment evidence row is malformed");
+  const amountPaise = Number.isSafeInteger(row.amountPaise) ? row.amountPaise : paise(row.a ?? row.amount, "Payment amount");
+  if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) throw new RangeError("Payment amount must be positive safe integer paise");
   return {
-    amountPaise: Number.isSafeInteger(row.amountPaise) ? row.amountPaise : paise(row.a ?? row.amount, "Payment amount"),
+    amountPaise,
     method: String(row.m ?? row.method ?? ""),
     source: String(row.source ?? "legacy_unspecified"),
     timestamp: row.at ?? row.date ?? null,
@@ -37,12 +41,16 @@ function paymentEvidence(row) {
 
 function summarizeBooking(booking, rooms) {
   const room = rooms.find(item => String(item?.n) === String(booking.room));
-  const rateValue = booking.rate != null ? booking.rate : room?.r;
+  const suppliedRate = Number(booking.rate);
+  const hasValidRateSnapshot = booking.rate != null && Number.isFinite(suppliedRate) &&
+    suppliedRate >= 0 && Number.isSafeInteger(Math.round(suppliedRate * 100));
+  const rateValue = hasValidRateSnapshot ? Math.round(suppliedRate * 100) / 100 : (room || { r: 0 }).r;
   const ratePaise = paise(rateValue, "Room rate");
   const nights = Number(booking.out) - Number(booking.in);
   if (!Number.isSafeInteger(nights) || nights < 0) throw new TypeError("Booking has invalid in/out day offsets");
   const stayNights = Math.max(1, nights);
-  const charges = Array.isArray(booking.ch) ? booking.ch : [];
+  if (!Array.isArray(booking.ch)) throw new TypeError("Booking charge collection is missing or malformed");
+  const charges = booking.ch;
   const chargeLines = charges.map((line, index) => {
     if (!Array.isArray(line) || line.length < 2) throw new TypeError("Booking charge line " + index + " is malformed");
     return { description: String(line[0] ?? ""), amountPaise: paise(line[1], "Charge line amount") };
@@ -78,6 +86,7 @@ function summarizeBooking(booking, rooms) {
 
 /** Build a PII-minimized report from a real owner-exported PMS JSON snapshot. */
 export function buildFolioEvidenceExport(state, sourceSha256) {
+  if (typeof sourceSha256 !== "string" || !/^[a-f0-9]{64}$/.test(sourceSha256)) throw new TypeError("A source SHA-256 digest is required");
   if (!state || typeof state !== "object" || Array.isArray(state) ||
       !Array.isArray(state.b) || !Array.isArray(state.rooms)) {
     throw new TypeError("PMS snapshot must contain bookings 'b' and rooms arrays");
@@ -154,7 +163,7 @@ async function main() {
     const digest = createHash("sha256").update(raw, "utf8").digest("hex");
     const report = buildFolioEvidenceExport(state, digest);
     // Exclusive create avoids silently overwriting a prior evidence export.
-    await writeFile(outputPath, JSON.stringify(report, null, 2) + "\\n", { flag: "wx", mode: 0o600 });
+    await writeFile(outputPath, JSON.stringify(report, null, 2) + "\n", { flag: "wx", mode: 0o600 });
     console.log(JSON.stringify({ mode: "READ_ONLY", output: outputPath, sourceSha256: digest, counts: report.counts }, null, 2));
   } catch (error) {
     console.error("Folio evidence export failed:", error.message);
@@ -162,6 +171,6 @@ async function main() {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   await main();
 }
