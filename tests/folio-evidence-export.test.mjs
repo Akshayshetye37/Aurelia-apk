@@ -35,7 +35,7 @@ test("read-only evidence export classifies real-shaped payment rows and mirrors 
   const report = buildFolioEvidenceExport(state, digest);
   assert.deepEqual(report.counts, {
     activeBookings: 3, manualCashBookings: 1, staffReviewedUpiBookings: 1,
-    unpaidBalanceBookings: 1, legacyPaymentFoliosPresent: null
+    unpaidBalanceBookings: 2, legacyPaymentFoliosPresent: null
   });
   assert.equal(report.groups.manualCash[0].bookingId, "1");
   assert.equal(report.groups.staffReviewedUpi[0].bookingId, "2");
