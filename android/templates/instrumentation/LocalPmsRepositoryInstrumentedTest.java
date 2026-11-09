@@ -1,6 +1,11 @@
 package com.aurelia.pms;
 
 import android.content.Context;
+import android.content.ContentValues;
+import android.database.sqlite.SQLiteDatabase;
+import java.io.File;
+import java.io.FileInputStream;
+import java.util.Arrays;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import org.json.JSONArray;
@@ -19,17 +24,23 @@ import static org.junit.Assert.*;
 public final class LocalPmsRepositoryInstrumentedTest {
   private Context context;
   private LocalPmsRepository repository;
+  private byte[] databaseKey;
+
+  private static byte[] key() { byte[] value = new byte[32]; Arrays.fill(value, (byte) 0x42); return value; }
 
   @Before public void setUp() {
     context = ApplicationProvider.getApplicationContext();
     context.deleteDatabase("aurelia-pms.db");
-    repository = new LocalPmsRepository(context);
-    repository.getWritableDatabase();
+    context.deleteDatabase("aurelia-pms-encrypted.db");
+    databaseKey = key();
+    repository = new LocalPmsRepository(context, databaseKey);
+    repository.initialize();
   }
 
   @After public void tearDown() {
     if (repository != null) repository.close();
     context.deleteDatabase("aurelia-pms.db");
+    context.deleteDatabase("aurelia-pms-encrypted.db");
   }
 
   private static JSONObject event(String id, String type, String entityId, long sequence) throws Exception {
@@ -44,6 +55,70 @@ public final class LocalPmsRepositoryInstrumentedTest {
 
   private static JSONObject data(String value) throws Exception {
     return new JSONObject().put("value", value);
+  }
+
+  @Test public void databaseFileIsEncryptedAndKeyCopyIsWipedOnClose() throws Exception {
+    repository.transactBusinessChange("guest", "guest-encrypted", 0, data("sensitive-guest-data"),
+      event("encrypted-event", "guest", "guest-encrypted", 1));
+    File file = context.getDatabasePath("aurelia-pms-encrypted.db");
+    assertTrue(file.exists());
+    byte[] header = new byte[16];
+    try (FileInputStream input = new FileInputStream(file)) {
+      assertEquals(16, input.read(header));
+    }
+    assertFalse("SQLCipher database must not expose the plaintext SQLite file header",
+      Arrays.equals("SQLite format 3\0".getBytes("US-ASCII"), header));
+    repository.close();
+    assertArrayEquals(new byte[32], databaseKey);
+
+    LocalPmsRepository reopened = new LocalPmsRepository(context, key());
+    try {
+      reopened.initialize();
+      assertEquals("sensitive-guest-data", reopened.getEntity("guest", "guest-encrypted")
+        .getJSONObject("data").getString("value"));
+    } finally { reopened.close(); }
+
+    byte[] wrongKey = new byte[32]; Arrays.fill(wrongKey, (byte) 0x24);
+    LocalPmsRepository wrong = new LocalPmsRepository(context, wrongKey);
+    boolean rejected = false;
+    try { wrong.initialize(); } catch (RuntimeException expected) { rejected = true; }
+    finally { wrong.close(); }
+    assertTrue("wrong database key must fail closed", rejected);
+  }
+
+  @Test public void legacyPlaintextDatabaseIsCopiedVerifiedAndDeletedOnlyAfterEncryptedCommit() throws Exception {
+    repository.close();
+    context.deleteDatabase("aurelia-pms-encrypted.db");
+    File legacyFile = context.getDatabasePath("aurelia-pms.db");
+    SQLiteDatabase legacy = SQLiteDatabase.openOrCreateDatabase(legacyFile, null);
+    try {
+      legacy.execSQL("CREATE TABLE pms_entities(entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,version INTEGER NOT NULL CHECK(version>=1),data_json TEXT NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(entity_type,entity_id))");
+      legacy.execSQL("CREATE TABLE pms_outbox(event_id TEXT PRIMARY KEY NOT NULL,tenant_id TEXT NOT NULL,property_id TEXT NOT NULL,device_id TEXT NOT NULL,entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence>=1),event_type TEXT NOT NULL,schema_version INTEGER NOT NULL,occurred_at TEXT NOT NULL,payload_json TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('PENDING','IN_FLIGHT','ACKNOWLEDGED','RETRY','CONFLICT')),attempts INTEGER NOT NULL DEFAULT 0,retry_at TEXT,lease_owner TEXT,lease_until INTEGER,last_error_code TEXT,created_at INTEGER NOT NULL,acknowledged_at INTEGER,UNIQUE(entity_type,entity_id,sequence))");
+      legacy.execSQL("CREATE TABLE pms_migrations(migration_key TEXT PRIMARY KEY NOT NULL,migration_id TEXT NOT NULL,source_key TEXT NOT NULL,completed_at INTEGER NOT NULL,entity_count INTEGER NOT NULL)");
+      legacy.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL,source_timestamp TEXT NOT NULL,created_at INTEGER NOT NULL,format_version INTEGER NOT NULL)");
+      ContentValues entity = new ContentValues();
+      entity.put("entity_type", "guest"); entity.put("entity_id", "legacy-guest-1");
+      entity.put("version", 1); entity.put("data_json", "{\"id\":\"legacy-guest-1\",\"name\":\"Imported\"}");
+      entity.put("updated_at", 123456L);
+      legacy.insertOrThrow("pms_entities", null, entity);
+      ContentValues migration = new ContentValues();
+      migration.put("migration_key", "legacy-localstorage"); migration.put("migration_id", "mig_legacy_00000000");
+      migration.put("source_key", "aurelia_lodge_v2"); migration.put("completed_at", 123456L); migration.put("entity_count", 10);
+      legacy.insertOrThrow("pms_migrations", null, migration);
+      ContentValues snapshot = new ContentValues();
+      snapshot.put("snapshot_id", "mig_legacy_00000000"); snapshot.put("source_key", "aurelia_lodge_v2");
+      snapshot.put("raw_json", "{\"rooms\":[]}"); snapshot.put("source_timestamp", "2026-11-09T12:00:00.000Z");
+      snapshot.put("created_at", 123456L); snapshot.put("format_version", 1);
+      legacy.insertOrThrow("pms_migration_snapshots", null, snapshot);
+      legacy.setVersion(3);
+    } finally { legacy.close(); }
+
+    repository = new LocalPmsRepository(context, key());
+    repository.initialize();
+    assertEquals("Imported", repository.getEntity("guest", "legacy-guest-1").getJSONObject("data").getString("name"));
+    assertEquals("mig_legacy_00000000", repository.readMigrationSnapshot("mig_legacy_00000000").getString("id"));
+    assertFalse("plaintext source file must be removed after exact encrypted read-back", legacyFile.exists());
+    assertTrue(context.getDatabasePath("aurelia-pms-encrypted.db").exists());
   }
 
   @Test public void entityAndOutboxCommitTogetherAndDuplicateOutboxRollsBackEntity() throws Exception {
