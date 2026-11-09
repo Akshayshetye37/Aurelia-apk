@@ -79,7 +79,7 @@ test('PIN enrollment and confirmation fields both accept the full 4–16 digit p
 test('real Android SQLite instrumentation source is copied and configured by the generator', () => {
   const patcher = read('scripts/patch-android.js');
   const instrumentation = read('android/templates/instrumentation/LocalPmsRepositoryInstrumentedTest.java');
-  assert.match(patcher, /LocalPmsRepositoryInstrumentedTest\\.java/);
+  assert.match(patcher, /LocalPmsRepositoryInstrumentedTest\.java/);
   assert.match(patcher, /testInstrumentationRunner/);
   assert.match(patcher, /androidTestImplementation/);
   assert.match(instrumentation, /entityAndOutboxCommitTogetherAndDuplicateOutboxRollsBackEntity/);
