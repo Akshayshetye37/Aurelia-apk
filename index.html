@@ -1651,6 +1651,7 @@ function persist(){
   const salesSync=await compatibility.syncRestaurantSales(snapshot);
   snapshot.sales=salesSync.sales;
   await compatibility.syncRestaurantTables(snapshot);
+  await compatibility.syncInventory(snapshot);
   return coordinator.save(snapshot);
  }).catch(error=>{
   RECOVERY_CHECK_PENDING=true;
@@ -5631,7 +5632,8 @@ try {
     const settings = window.__AURELIA_CANONICAL_SETTINGS;
     const withSettings = settings ? { ...guests, set: settings.set, menu: settings.menu } : guests;
     const withTables = await boot.restaurantTableRepository.hydrateSnapshot(withSettings, { enabled });
-    return boot.restaurantSaleRepository.hydrateSnapshot(withTables, { enabled });
+    const withSales = await boot.restaurantSaleRepository.hydrateSnapshot(withTables, { enabled });
+    return boot.inventoryRepository.hydrateSnapshot(withSales, { enabled });
   };
   const canonicalAudit = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
   if (canonicalAudit?.data?.snapshot) {
@@ -5665,6 +5667,7 @@ try {
      syncSettings: snapshot => boot.settingsRepository.syncSnapshot(snapshot),
      syncRestaurantTables: snapshot => boot.restaurantTableRepository.syncSnapshot(snapshot),
      syncRestaurantSales: snapshot => boot.restaurantSaleRepository.syncSnapshot(snapshot),
+     syncInventory: snapshot => boot.inventoryRepository.syncSnapshot(snapshot),
      readBack: async () => {
        const row = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
        return row?.data || null;
