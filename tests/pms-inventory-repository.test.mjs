@@ -110,6 +110,7 @@ test("invalid inventory quantities, prices and duplicate IDs are rejected before
   const { repository, inventory } = setup("validation");
   await assert.rejects(inventory.syncSnapshot({ t: [], inv: [{ id: "bad", n: "Bad", q: -1, ro: 0, u: 1, price: 1 }] }), /whole units/);
   await assert.rejects(inventory.syncSnapshot({ t: [], inv: [{ id: "bad", n: "Bad", q: 1, ro: 0, u: 1.001, price: 1 }] }), /two decimal places/);
+  await assert.rejects(inventory.syncSnapshot({ t: [], inv: [{ id: { unsafe: true }, n: "Bad ID", q: 1, ro: 0, u: 1, price: 1 }] }), /ID must be a string or safe integer/);
   await assert.rejects(inventory.syncSnapshot({ t: [], inv: [
     { id: "duplicate", n: "One", q: 1, ro: 0, u: 1, price: 1 },
     { id: "duplicate", n: "Two", q: 1, ro: 0, u: 1, price: 1 }
