@@ -10,7 +10,8 @@ const snapshot = () => ({
   exp: [{ amount: 100, note: "Utilities" }],
   led: [["Towels", 5, "", "2026-11-08"]],
   aud: [{ at: "2026-11-08T00:00:00.000Z", action: "Created" }],
-  set: { cur: "₹" }
+  set: { cur: "₹", name: "Aurelia" },
+  menu: { items: [{ id: "breakfast", name: "Breakfast" }] }
 });
 
 function fakeBridge() {
@@ -48,8 +49,12 @@ function fakeBridge() {
 test("projects legacy operational domains and preserves financial source values without reconciling them", async () => {
   const bridge = fakeBridge();
   const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-test" });
-  assert.equal(result.total, 8);
-  assert.equal(result.projected, 8);
+  assert.equal(result.total, 9);
+  assert.equal(result.projected, 9);
+  const settings = bridge.entities.get("settings:property-settings");
+  assert.deepEqual(settings.data.set, { cur: "₹", name: "Aurelia" });
+  assert.deepEqual(settings.data.menu, { items: [{ id: "breakfast", name: "Breakfast" }] });
+  assert.equal(result.manifest.counts.settings, 1);
   assert.equal(bridge.entities.get("audit:legacy-folio-source:folio-7").data.legacyPaidTotal, 500);
   assert.deepEqual(bridge.entities.get("audit:legacy-folio-source:folio-7").data.legacyPaymentRows, [{ a: 200, amountPaise: 20000 }]);
   assert.equal(result.manifest.financialReconciliationPerformed, false);
@@ -89,7 +94,8 @@ test("projection rejects missing stable booking identity and preserves unnormali
 test("single-record trailing batch uses the atomic single-entity transaction", async () => {
   const bridge = fakeBridge();
   const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-single-tail", batchSize: 7 });
-  assert.equal(result.projected, 8);
+  assert.equal(result.projected, 9);
+  assert.ok(bridge.entities.has("settings:property-settings"));
   assert.ok(bridge.entities.has("audit:legacy-domain-projection:mig-single-tail"));
 });
 
@@ -102,4 +108,13 @@ test("existing canonical operational rows ignore repository metadata but preserv
   const result = await projectLegacyPmsDomains({ bridge, snapshot: data, migrationId: "mig-existing-domain" });
   assert.equal(result.alreadyPresent, 1);
   assert.equal(bridge.entities.get("booking:7").data.updatedAt, "2026-11-08T00:00:00.000Z");
+});
+
+test("projection rejects malformed settings instead of silently dropping them", async () => {
+  const bridge = fakeBridge(), invalid = snapshot();
+  invalid.set = [];
+  await assert.rejects(
+    projectLegacyPmsDomains({ bridge, snapshot: invalid, migrationId: "mig-invalid-settings" }),
+    /settings must be a plain object/
+  );
 });
