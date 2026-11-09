@@ -90,3 +90,22 @@ test('first-run lockout initialization is explicit and enrollment marker recover
   assert.match(gate, /markEnrolled\(\)/);
   assert.match(gate, /manager\.unlock\(first, envelope\)/);
 });
+
+
+test('Android native security build pins biometric dependency and treats Kotlin warnings as errors', () => {
+  const patcher = read('scripts/patch-android.js');
+  assert.match(patcher, /org\.bouncycastle:bcprov-jdk18n:1\.80/);
+  assert.match(patcher, /androidx\.biometric:biometric:1\.2\.0/);
+  assert.doesNotMatch(patcher, /androidx\.biometric:biometric:1\.2\.0-alpha/);
+  assert.match(patcher, /allWarningsAsErrors\.set\(true\)/);
+});
+
+test('native security Kotlin CI compiles the exact SHA and release tags require it', () => {
+  const workflow = read('.github/workflows/native-security-kotlin.yml');
+  const releaseGuard = read('scripts/verify-release-tag.mjs');
+  assert.match(workflow, /pull_request:/);
+  assert.match(workflow, /push:/);
+  assert.match(workflow, /compileDebugKotlin compileReleaseKotlin assembleDebug lintDebug testDebugUnitTest/);
+  assert.match(workflow, /verified \$VERIFIED_SHA/);
+  assert.match(releaseGuard, /native-security-kotlin/);
+});
