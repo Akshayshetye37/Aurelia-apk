@@ -113,6 +113,49 @@ export class PmsRestaurantTableRepository {
       current.set(number, row);
     }
 
+    const snapshotRow = await this.bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+    if (snapshotRow) {
+      const priorSnapshot = snapshotRow.data?.snapshot;
+      if (!priorSnapshot || !Array.isArray(priorSnapshot.t)) {
+        throw new Error("Canonical recovery snapshot has no valid restaurant table collection.");
+      }
+      const priorTables = new Map();
+      for (const row of priorSnapshot.t) {
+        const number = tableNumber(row);
+        if (priorTables.has(number)) throw new Error("Canonical recovery snapshot contains duplicate restaurant table numbers.");
+        priorTables.set(number, row);
+      }
+      for (const [number, row] of current) {
+        const prior = priorTables.get(number);
+        if (isRetired(row)) {
+          if (prior) throw Object.assign(new Error("Canonical restaurant table retirement differs from the recovery snapshot."), {
+            code: "RESTAURANT_TABLE_SNAPSHOT_DIVERGENCE", tableNumber: number
+          });
+          continue;
+        }
+        if (!prior || !same(row.data, prior)) {
+          throw Object.assign(new Error("Canonical restaurant table " + number + " differs from the recovery snapshot; refusing a non-atomic repair."), {
+            code: "RESTAURANT_TABLE_SNAPSHOT_DIVERGENCE", tableNumber: number
+          });
+        }
+        priorTables.delete(number);
+      }
+      if (priorTables.size) {
+        const missingNumber = priorTables.keys().next().value;
+        throw Object.assign(new Error("Canonical restaurant table " + missingNumber + " is missing although the recovery snapshot still references it."), {
+          code: "RESTAURANT_TABLE_ENTITY_MISSING", tableNumber: missingNumber
+        });
+      }
+    } else {
+      for (const [number, row] of current) {
+        if (!isRetired(row) && !desired.has(number)) {
+          throw Object.assign(new Error("Cannot remove an existing restaurant table before a recovery snapshot has been established."), {
+            code: "RESTAURANT_TABLE_SNAPSHOT_MISSING", tableNumber: number
+          });
+        }
+      }
+    }
+
     const changes = [];
     for (const [number, target] of desired) {
       const old = current.get(number);
@@ -155,11 +198,30 @@ export class PmsRestaurantTableRepository {
       });
     }
 
-    if (changes.length > 20) {
-      throw new RangeError("Restaurant table snapshot changes exceed the 20-entity atomic transaction limit.");
+    if (changes.length > 19) {
+      throw new RangeError("Restaurant table snapshot changes exceed the 19-table atomic transaction limit.");
     }
-    if (changes.length === 1) await this.bridge.mutateEntity(changes[0]);
-    else if (changes.length > 1) await this.bridge.mutateEntities(changes);
+    if (changes.length) {
+      const committedAt = this.now();
+      const auditChange = {
+        entityType: "audit",
+        entityId: "legacy_snapshot:aurelia_lodge_v2",
+        expectedVersion: snapshotRow?.version ?? 0,
+        eventType: "pms.snapshot_restaurant_table_mutation",
+        eventPayload: {
+          tableCount: desired.size,
+          changedTables: changes.map(change => change.entityId)
+        },
+        mutate: entity => {
+          entity.sourceKey = "aurelia_lodge_v2";
+          entity.snapshot = clone(snapshot);
+          entity.updatedAt = committedAt;
+          return entity;
+        }
+      };
+      // Table state and the complete recovery snapshot share one transaction.
+      await this.bridge.mutateEntities([...changes, auditChange]);
+    }
 
     const active = await this.list();
     if (active.length !== desired.size) {
@@ -170,6 +232,14 @@ export class PmsRestaurantTableRepository {
       if (!stored || isRetired(stored) || !same(stored.data, target.data)) {
         throw Object.assign(new Error("Restaurant table commit failed exact read-back for table " + number + "."), {
           code: "RESTAURANT_TABLE_READBACK_FAILED", tableNumber: number
+        });
+      }
+    }
+    if (changes.length) {
+      const storedSnapshot = await this.bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+      if (!storedSnapshot || !same(storedSnapshot.data.snapshot, snapshot)) {
+        throw Object.assign(new Error("Restaurant table transaction failed exact recovery snapshot read-back."), {
+          code: "RESTAURANT_TABLE_SNAPSHOT_READBACK_FAILED"
         });
       }
     }
