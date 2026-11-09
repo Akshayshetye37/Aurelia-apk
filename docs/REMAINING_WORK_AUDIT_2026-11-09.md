@@ -34,7 +34,7 @@
    - Folios, charges, payments, invoices, receipts and daily totals.
    - Inventory reads, edits, retirement, stock movements and POS-linked stock decrement.
    - Expenses, voids and reports.
-   - Restaurant tables, orders, sales and every folio-charge path.
+   - Historical restaurant sale backfill, sales/reporting projections and remaining restaurant inventory linkage. Table rows/open orders and new settlement/folio-charge paths now use canonical entities and transactional outbox writes.
    - Feature flags, audit history and auxiliary collections. Property configuration (`set`) and menu now have a dedicated `settings:property-settings` entity, canonical startup hydration and versioned repository/outbox writes; remaining settings-related flags and auxiliary records are still in scope.
 2. Hydrate each screen from canonical repository reads at startup and after mutations. Do not let a stale in-memory object overwrite newer repository state.
 3. Convert each mutation to a version-checked repository transaction. Related entity changes and the corresponding immutable outbox event must commit in the same SQLite/IndexedDB transaction.
