@@ -47,6 +47,8 @@ test("bootstrap migrates the actual Aurelia legacy key and preserves its exact r
   assert.equal(result.domainProjection.manifest.preservesLegacySnapshot, true);
   assert.equal(result.domainProjection.manifest.financialReconciliationPerformed, false);
   assert.ok(await result.repository.getEntity("booking", "7"));
+  assert.deepEqual((await result.settingsRepository.get()).data.set, state.set);
+  assert.deepEqual((await result.settingsRepository.get()).data.menu, state.menu);
   assert.ok(await result.repository.getEntity("audit", "legacy-folio-source:booking-7"));
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
   assert.match(storage.getItem(AURELIA_MIGRATION_STATUS_KEY), /^VERIFIED:/);
