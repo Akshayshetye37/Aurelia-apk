@@ -10,7 +10,7 @@ const LEGACY_INDEX_BASELINE = Object.freeze({
   legacySnapshotKey: 5
 });
 const STORAGE_ACCESS = /\b(?:localStorage|sessionStorage|indexedDB)\b|\b(?:openDatabase|CapacitorSQLite|SQLiteConnection|SQLiteDBConnection)\b|@capacitor-community\/sqlite/g;
-const LEGACY_SNAPSHOT_KEY = /aurelia_lodge_v2/g;
+const LEGACY_SNAPSHOT_KEY = /aurelia_lodge_v2/;
 
 function walk(directory) {
   if (!fs.existsSync(directory)) return [];
@@ -61,13 +61,20 @@ export function scanStorageBoundaries({ rootDir = process.cwd(), includeLegacyIn
 
     const storageMatches = [...source.matchAll(STORAGE_ACCESS)];
     if (storageMatches.length) {
+      const lines = [...new Set(storageMatches.map(match =>
+        source.slice(0, match.index).split("\\n").length
+      ))];
       violations.push(relative + " accesses browser/native storage outside src/storage (" +
-        storageMatches.length + " occurrence(s))");
+        storageMatches.length + " occurrence(s); lines " + lines.join(", ") + ")");
     }
-    if (LEGACY_SNAPSHOT_KEY.test(source)) {
-      violations.push(relative + " references the legacy business snapshot key outside its migration boundary");
+    const legacyMatches = [...source.matchAll(new RegExp(LEGACY_SNAPSHOT_KEY.source, "g"))];
+    if (legacyMatches.length) {
+      const lines = [...new Set(legacyMatches.map(match =>
+        source.slice(0, match.index).split("\\n").length
+      ))];
+      violations.push(relative + " references the legacy business snapshot key outside its migration boundary (lines " +
+        lines.join(", ") + ")");
     }
-    LEGACY_SNAPSHOT_KEY.lastIndex = 0;
   }
 
   return Object.freeze({
