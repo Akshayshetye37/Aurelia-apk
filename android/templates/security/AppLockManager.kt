@@ -48,7 +48,13 @@ class AppLockManager(context: Context) {
         val store = KeyStore.getInstance(STORE).apply { load(null) }
         val backupExists = File(file.baseFile.path + ".bak").exists()
         if (file.baseFile.exists() || backupExists || store.containsAlias(ALIAS)) {
-            throw SecurityException("Missing or pre-existing lock state; refusing fresh initialization.")
+            // Permit only a previously initialized, untouched first-run state.
+            // This recovers a crash before PIN enrollment without clearing attempts.
+            val existing = readState()
+            if (existing.failures != 0 || existing.lockedUntilElapsed != 0L) {
+                throw SecurityException("Existing lock state is not eligible for enrollment initialization.")
+            }
+            return
         }
         getOrCreateKey()
         writeState(State(0, 0L, bootCount()))
