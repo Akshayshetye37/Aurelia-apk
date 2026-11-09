@@ -238,7 +238,73 @@ export class PmsInventoryRepository {
     const newMovements = snapshotRow
       ? movementRows(snapshot, snapshotRow.data.snapshot)
       : [];
+
+    const tableChanges = [];
+    if (snapshotRow) {
+      const priorTables = snapshotRow.data.snapshot?.t;
+      if (!Array.isArray(priorTables) || !Array.isArray(snapshot.t)) {
+        throw new Error("Canonical recovery snapshot has no valid restaurant table collection.");
+      }
+      const priorById = new Map();
+      for (const row of priorTables) {
+        const number = Number(row?.n);
+        if (!Number.isSafeInteger(number) || number < 1 || priorById.has(String(number))) {
+          throw new Error("Canonical recovery snapshot contains an invalid or duplicate restaurant table.");
+        }
+        priorById.set(String(number), row);
+      }
+      const currentTables = await this.bridge.listEntities("restaurant_table");
+      if (!Array.isArray(currentTables)) throw new Error("Canonical restaurant table repository returned an invalid entity list.");
+      const currentById = new Map();
+      for (const row of currentTables) {
+        const number = Number(row?.data?.n);
+        if (!row || row.type !== "restaurant_table" || !Number.isSafeInteger(number) ||
+            number < 1 || row.id !== String(number) || currentById.has(row.id)) {
+          throw new Error("Canonical restaurant table inventory contains an invalid entity.");
+        }
+        currentById.set(row.id, row);
+      }
+      for (const [id, prior] of priorById) {
+        const stored = currentById.get(id);
+        if (!stored || !same(stored.data, prior)) {
+          throw Object.assign(new Error("Restaurant table " + id + " changed in another session; reload before stock/order mutation."), {
+            code: "RESTAURANT_TABLE_VERSION_CONFLICT", tableId: id
+          });
+        }
+      }
+      const desiredTables = new Map();
+      for (const row of snapshot.t) {
+        const number = Number(row?.n);
+        if (!Number.isSafeInteger(number) || number < 1 || desiredTables.has(String(number))) {
+          throw new Error("Requested restaurant table snapshot contains an invalid or duplicate table.");
+        }
+        desiredTables.set(String(number), clone(row));
+      }
+      for (const [id, data] of desiredTables) {
+        const old = currentById.get(id);
+        if (old && same(old.data, data)) continue;
+        tableChanges.push({
+          entityType: "restaurant_table", entityId: id, expectedVersion: old?.version ?? 0,
+          eventType: old ? "restaurant.table_order_updated" : "restaurant.table_created",
+          eventPayload: { tableId: id, operation: old ? "update" : "create", source: "inventory_mutation" },
+          mutate: entity => {
+            for (const key of Object.keys(entity)) delete entity[key];
+            Object.assign(entity, clone(data), { updatedAt: this.now() });
+            return entity;
+          }
+        });
+      }
+    }
     const movementChanges = [];
+    for (const change of tableChanges) {
+      const stored = await this.bridge.fetchEntity("restaurant_table", change.entityId);
+      const expected = snapshot.t.find(row => String(row?.n) === change.entityId);
+      if (!stored || !expected || !same(stored.data, expected)) {
+        throw Object.assign(new Error("Restaurant table order failed exact canonical read-back."), {
+          code: "RESTAURANT_TABLE_READBACK_FAILED", tableId: change.entityId
+        });
+      }
+    }
     for (const movement of newMovements) {
       const id = "inventory-movement-" + movementHash(movement.row) + "-" + movement.ordinal;
       const data = {
@@ -298,16 +364,16 @@ export class PmsInventoryRepository {
         }
       });
     }
-    if (changes.length + movementChanges.length > 19) {
-      throw new RangeError("Inventory and movement changes exceed the 19-entity atomic transaction limit.");
+    if (changes.length + movementChanges.length + tableChanges.length > 19) {
+      throw new RangeError("Inventory, table and movement changes exceed the 19-entity atomic transaction limit.");
     }
-    if (changes.length || movementChanges.length) {
+    if (changes.length || movementChanges.length || tableChanges.length) {
       const committedAt = this.now();
       const auditChange = {
         entityType: "audit", entityId: "legacy_snapshot:aurelia_lodge_v2",
         expectedVersion: snapshotRow?.version ?? 0,
         eventType: "pms.snapshot_inventory_mutation",
-        eventPayload: { inventoryCount: desired.size, changedInventory: changes.map(change => change.entityId), movementCount: movementChanges.length },
+        eventPayload: { inventoryCount: desired.size, changedInventory: changes.map(change => change.entityId), tableCount: tableChanges.length, movementCount: movementChanges.length },
         mutate: entity => {
           entity.sourceKey = "aurelia_lodge_v2";
           entity.snapshot = clone(snapshot);
@@ -315,7 +381,7 @@ export class PmsInventoryRepository {
           return entity;
         }
       };
-      await this.bridge.mutateEntities([...changes, ...movementChanges, auditChange]);
+      await this.bridge.mutateEntities([...changes, ...tableChanges, ...movementChanges, auditChange]);
     }
 
     const active = await this.list();
@@ -341,7 +407,7 @@ export class PmsInventoryRepository {
         });
       }
     }
-    if (changes.length || movementChanges.length) {
+    if (changes.length || movementChanges.length || tableChanges.length) {
       const storedSnapshot = await this.bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
       if (!storedSnapshot || !same(storedSnapshot.data.snapshot, snapshot)) {
         throw Object.assign(new Error("Inventory transaction failed exact recovery snapshot read-back."), {
