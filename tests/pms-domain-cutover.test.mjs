@@ -101,7 +101,7 @@ test("projection rejects missing stable booking identity and preserves unnormali
 test("single-record trailing batch uses the atomic single-entity transaction", async () => {
   const bridge = fakeBridge();
   const result = await projectLegacyPmsDomains({ bridge, snapshot: snapshot(), migrationId: "mig-single-tail", batchSize: 10 });
-  assert.equal(result.projected, 10);
+  assert.equal(result.projected, 11);
   assert.ok(bridge.entities.has("settings:property-settings"));
   assert.ok(bridge.entities.has("restaurant_table:1"));
   assert.ok(bridge.entities.has("audit:legacy-domain-projection:mig-single-tail"));
@@ -169,6 +169,7 @@ test("an older verified manifest is extended additively without overwriting live
   assert.equal(result.manifest.counts.settings, 1);
   assert.equal(result.manifest.counts.restaurant_table, 1);
   assert.equal(result.manifest.sourceCollections.includes("t"), true);
+  assert.equal(result.manifest.sourceCollections.includes("sales"), true);
   assert.equal(bridge.entities.get("room:101").data.r, 1777);
   assert.equal(bridge.entities.get(manifestId).version, 2);
 });
