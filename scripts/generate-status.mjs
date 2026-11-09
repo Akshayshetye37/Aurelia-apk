@@ -8,6 +8,7 @@ const outcomes = {
   "Application tests": process.env.TESTS_OUTCOME || "not-run",
   "Production build": process.env.BUILD_OUTCOME || "not-run",
   "Release safety flags": process.env.FLAGS_OUTCOME || "not-run",
+  "Administrator finalizer syntax": process.env.FINALIZER_SYNTAX_OUTCOME || "not-run",
   "Production asset boundary": process.env.BOUNDARY_OUTCOME || "not-run"
 };
 const passed = Object.values(outcomes).every(value => value === "success");
