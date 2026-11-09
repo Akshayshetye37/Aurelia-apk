@@ -147,8 +147,10 @@ for (const permission of permissionsToRemove) {
   // Remove direct and SDK-scoped declarations contributed by transitive AAR manifests.
   // The PMS has no dangerous runtime-permission use case; network access needs INTERNET only.
   for (const tag of ['uses-permission', 'uses-permission-sdk-23', 'uses-permission-sdk-m']) {
-    const marker = '<' + tag + ' android:name="' + permission + '" tools:node="remove" />';
-    if (!manifest.includes(marker)) manifest = manifest.replace('</manifest>', '    ' + marker + '\n</manifest>');
+    const marker = '<' + tag + ' android:name="' + permission + '" tools:node="remove" tools:ignore="ProtectedPermissions,PermissionImpliesUnsupportedChromeOsHardware,QueryAllPackagesPermission,ScopedStorage,Deprecated,SystemPermissionTypo" />';
+    if (!manifest.includes(marker)) {
+      manifest = manifest.replace(/<application\\b/, '    ' + marker + '\\n    <application');
+    }
   }
 }
 
@@ -173,6 +175,7 @@ if (!manifest.includes('com.aurelia.pms.security.LockGateActivity')) {
 manifest = manifest.replace(/<application([^>]*)>/, (match, attrs) => {
   attrs = attrs.replace(/\s+android:usesCleartextTraffic="[^"]*"/, '')
     .replace(/\s+android:networkSecurityConfig="[^"]*"/, '');
+  if (!/tools:targetApi=/.test(attrs)) attrs += ' tools:targetApi="24"';
   return '<application' + attrs +
     ' android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/aurelia_network_security_config">';
 });
@@ -184,7 +187,6 @@ fs.writeFileSync(path.join(xmlDir, 'aurelia_network_security_config.xml'),
     '<base-config cleartextTrafficPermitted="false">' +
       '<trust-anchors>' +
         '<certificates src="system" />' +
-        '<certificates src="user" />' +
       '</trust-anchors>' +
     '</base-config>' +
   '</network-security-config>');
@@ -1134,7 +1136,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         candidates.add(new BackupCandidate(fileUri, modified, valid, protectedFile));
       }
     }
-    candidates.sort((a, b) -> {
+    java.util.Collections.sort(candidates, (a, b) -> {
       if (a.protectedNew != b.protectedNew) return a.protectedNew ? -1 : 1;
       if (a.valid != b.valid) return a.valid ? -1 : 1;
       return Long.compare(b.modified, a.modified);
@@ -1687,8 +1689,18 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       if (resultCode == RESULT_OK && data != null && data.getData() != null) {
         Uri uri = data.getData();
         try {
-          getContentResolver().takePersistableUriPermission(uri, data.getFlags() &
-            (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION));
+          int grantedFlags = data.getFlags();
+          if ((grantedFlags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0 &&
+              (grantedFlags & Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0) {
+            getContentResolver().takePersistableUriPermission(uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+          } else if ((grantedFlags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
+            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+          } else if ((grantedFlags & Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0) {
+            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+          } else {
+            throw new SecurityException("Selected folder did not grant persistable read or write access.");
+          }
           String preferenceKey="shared".equals(folderPurpose)?"shared_tree_uri":"backup_tree_uri";
           prefs.edit().putString(preferenceKey, uri.toString()).apply();
           String label = uri.getLastPathSegment();
