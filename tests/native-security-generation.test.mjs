@@ -117,3 +117,13 @@ test('Android generation increases Gradle wrapper download timeout without chang
   assert.match(patcher, /networkTimeout=120000/);
   assert.match(patcher, /gradle-wrapper\.properties/);
 });
+
+
+test('recovery key codec and JVM tests are copied into generated Android sources', () => {
+  const patcher = read('scripts/patch-android.js');
+  assert.ok(fs.existsSync(path.join(root, 'android/templates/security/RecoveryKeyCodec.kt')));
+  assert.ok(fs.existsSync(path.join(root, 'android/templates/security-test/RecoveryKeyCodecTest.kt')));
+  assert.match(patcher, /RecoveryKeyCodec\.kt/);
+  assert.match(patcher, /RecoveryKeyCodecTest\.kt/);
+  assert.match(patcher, /testImplementation\("junit:junit:4\.13\.2"\)/);
+});
