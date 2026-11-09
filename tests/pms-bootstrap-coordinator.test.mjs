@@ -9,7 +9,8 @@ import { CapacitorPmsStorageClient } from "../src/storage/capacitor-pms-storage.
 import {
   PmsBootstrapCoordinator,
   AURELIA_LEGACY_STATE_KEY,
-  AURELIA_MIGRATION_STATUS_KEY
+  AURELIA_MIGRATION_STATUS_KEY,
+  stableMigrationId
 } from "../src/storage/pms-bootstrap-coordinator.mjs";
 
 const state = {
@@ -263,14 +264,14 @@ test("fresh canonical installation can save, restart and project without legacy 
 });
 
 test("stale fresh-install marker without its canonical snapshot fails closed", async () => {
-  const storage = makeStorage({ [AURELIA_MIGRATION_STATUS_KEY]: "READY_CANONICAL:mig_legacy_00000000" });
+  const storage = makeStorage({ [AURELIA_MIGRATION_STATUS_KEY]: "READY_CANONICAL:mig_legacy_0000000000000000000000000000000000000000000000000000000000000000" });
   const app = coordinator("stale-fresh-marker", storage);
   await assert.rejects(app.initializeApplication(), /Fresh canonical installation marker has no committed full-state snapshot/i);
   assert.equal(app.status, "FAILED_CLOSED");
 });
 
 test("verified legacy marker without its immutable migration snapshot fails closed", async () => {
-  const storage = makeStorage({ [AURELIA_MIGRATION_STATUS_KEY]: "VERIFIED:mig_legacy_00000000" });
+  const storage = makeStorage({ [AURELIA_MIGRATION_STATUS_KEY]: "VERIFIED:mig_legacy_0000000000000000000000000000000000000000000000000000000000000000" });
   const app = coordinator("missing-immutable-migration", storage);
   await assert.rejects(app.initializeApplication(), /Verified migration marker has no matching immutable source snapshot/i);
   assert.equal(app.status, "FAILED_CLOSED");
@@ -361,4 +362,14 @@ test("bootstrap refuses to start the legacy UI after canonical authority is pers
   await assert.rejects(app.initializeApplication(), error => error.code === "PMS_CANONICAL_AUTHORITY_CUTOVER_REQUIRED");
   assert.equal(app.status, "FAILED_CLOSED");
   assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), JSON.stringify(state));
+});
+
+
+test("legacy migration identity is a full SHA-256 digest and deterministic", async () => {
+  const raw = JSON.stringify(state);
+  const first = await stableMigrationId(raw);
+  const second = await stableMigrationId(raw);
+  assert.match(first, /^mig_legacy_[a-f0-9]{64}$/);
+  assert.equal(second, first);
+  assert.notEqual(await stableMigrationId(raw + " "), first);
 });
