@@ -183,7 +183,7 @@ for attempt in $(seq 1 36); do
     [.workflow_runs[] | select(.workflow_id == $workflow_id and .head_sha == $sha)] | sort_by(.created_at) | last | (.id // empty)
   ' | head -n1)"
   if [[ -n "$TAG_RUN_ID" ]]; then
-    RUN_STATE="$(gh api "repos/$REPO/actions/runs/$TAG_RUN_ID")
+    RUN_STATE="$(gh api "repos/$REPO/actions/runs/$TAG_RUN_ID")"
     if [[ "$(echo "$RUN_STATE" | jq -r '.status')" == "completed" ]]; then
       CONCLUSION="$(echo "$RUN_STATE" | jq -r '.conclusion')"
       break
