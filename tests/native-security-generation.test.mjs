@@ -94,3 +94,23 @@ test('manual Android QA workflow executes instrumentation rather than relying on
   assert.match(workflow, /connectedDebugAndroidTest/);
   assert.match(workflow, /Preserve Android instrumentation reports/);
 });
+
+
+test('native PMS SQLite uses SQLCipher and ties its key lifetime to the unlock session', () => {
+  const repository = read('android/templates/LocalPmsRepository.java');
+  const plugin = read('android/templates/CapacitorPmsStoragePlugin.java');
+  const migration = read('android/templates/PmsPlaintextDatabaseMigration.java');
+  const patcher = read('scripts/patch-android.js');
+  assert.match(repository, /net\\.zetetic\\.database\\.sqlcipher\\.SQLiteOpenHelper/);
+  assert.match(repository, /System\\.loadLibrary\\("sqlcipher"\\)/);
+  assert.match(repository, /PRAGMA cipher_status/);
+  assert.match(repository, /PRAGMA cipher_integrity_check/);
+  assert.match(repository, /Arrays\\.fill\\(databaseKey, \\(byte\\) 0\\)/);
+  assert.match(plugin, /currentDataKeyCopy\\(\\)/);
+  assert.match(plugin, /closeForBackground/);
+  assert.match(migration, /PMS_ENCRYPTED_MIGRATION_READBACK_MISMATCH/);
+  assert.match(migration, /PMS_PLAINTEXT_SOURCE_CLEANUP_FAILED/);
+  assert.ok(patcher.includes('net.zetetic:sqlcipher-android:4.19.1@aar'));
+  assert.ok(patcher.includes('PmsPlaintextDatabaseMigration.java'));
+  assert.ok(patcher.includes('CapacitorPmsStoragePlugin.closeForBackground()'));
+});
