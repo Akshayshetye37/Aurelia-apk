@@ -450,7 +450,7 @@ test("private accounting report requires an explicit local opt-in", () => {
   try {
     const path = join(dir, "private-backup.json");
     writeFileSync(path, JSON.stringify({
-      b: [{ id: "PRIVATE-BOOKING-92", p: 6, pays: [{ a: 5, r: "UTR-PRIVATE-92" }] }],
+      b: [{ id: "PRIVATE-BOOKING-92", p: 10, pays: [{ a: 5, r: "UTR-PRIVATE-92" }, { a: 5, r: "UTR-PRIVATE-92" }] }],
       cancelled: []
     }));
     const result = spawnSync(process.execPath, ["scripts/diagnose-accounting.mjs", path, "--private-report"], { encoding: "utf8" });
