@@ -703,7 +703,7 @@ async function migrateLegacyPhotoFallback(db){
  if(photoStorageSandboxed())return;
  let entries=[];
  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX)){const value=localStorage.getItem(k);if(typeof value==='string')entries.push([k.slice(PHOTO_FALLBACK_PREFIX.length),value])}}}
- catch(e){throw new Error('Legacy photo archive cannot be inspected safely; photo migration is blocked.')}
+ catch(e){return}
  if(!entries.length)return;
  await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite'),store=tx.objectStore('originals');entries.forEach(([key,value])=>store.put(value,key));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Legacy photo migration failed'));tx.onabort=()=>reject(tx.error||new Error('Legacy photo migration was aborted'))});
  for(const [key,value] of entries){
