@@ -5,6 +5,10 @@ set -Eeuo pipefail
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 : "${GITHUB_RUN_ID:?GITHUB_RUN_ID is required}"
 : "${GITHUB_SHA:?GITHUB_SHA is required}"
+if [[ "${GITHUB_REF:-}" != "refs/heads/release/r1-local-first-execution" ]]; then
+  echo "::error::Run this workflow from release/r1-local-first-execution only."
+  exit 1
+fi
 
 export GH_TOKEN="$R1_ADMIN_TOKEN"
 REPO="$GITHUB_REPOSITORY"
