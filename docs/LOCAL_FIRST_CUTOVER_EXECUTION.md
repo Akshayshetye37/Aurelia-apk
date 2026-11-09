@@ -14,7 +14,7 @@ Make the device repository the sole canonical read/write path for all PMS domain
 
 ## Implemented in this phase
 
-`src/storage/pms-domain-cutover.mjs` adds a resumable, non-destructive projection from the verified legacy snapshot into versioned domain entities. It covers property settings and menu, rooms, guests, bookings, preserved folio-source evidence, inventory, expenses/ledger rows and audit rows. The `settings:property-settings` record preserves the legacy `set` and `menu` objects; bootstrap hydrates them from canonical storage, and every compatibility snapshot save first synchronizes changed settings through a versioned entity-plus-outbox transaction with exact read-back. Bootstrap runs this projection after migration verification and before UI release on both IndexedDB and Android SQLite. The manifest is stable across ordinary saves because it is tied to the immutable migration ID; replays verify the existing projection without overwriting operational entities.
+`src/storage/pms-domain-cutover.mjs` adds a resumable, non-destructive projection from the verified legacy snapshot into versioned domain entities. It covers property settings and menu, rooms, guests, bookings, restaurant table rows/open orders, preserved folio-source evidence, inventory, expenses/ledger rows and audit rows. The `restaurant_table` entity uses the existing numeric table ID contract shared by settlement transactions; table creation, edits, open-order changes and retirement synchronize through versioned entity-plus-outbox writes, and startup hydrates canonical table rows. Removed tables are tombstoned and tables with open orders cannot be retired. The `settings:property-settings` record preserves the legacy `set` and `menu` objects; bootstrap hydrates them from canonical storage, and every compatibility snapshot save first synchronizes changed settings through a versioned entity-plus-outbox transaction with exact read-back. Bootstrap runs this projection after migration verification and before UI release on both IndexedDB and Android SQLite. The manifest is stable across ordinary saves because it is tied to the immutable migration ID; replays verify the existing projection without overwriting operational entities.
 
 Each batch uses the repository's atomic entity-plus-outbox transaction and is read back before the next batch. A final manifest is committed only after all projected records have been verified. Replays are idempotent; divergent existing entities fail closed. The original legacy snapshot is not deleted or rewritten.
 
@@ -49,7 +49,7 @@ The implementation sequence follows the requested dependency order: repository/m
 This is a migration primitive, not a completed application cutover:
 - It does not yet route every screen's reads/writes through domain entities.
 - It does not enable `uiCutover`.
-- It does not migrate restaurant tables, feature flags, audit history, or every auxiliary collection into dedicated domain schemas. Property settings and menu have a dedicated canonical entity and startup/read-write path, but the global UI cutover remains disabled.
+- It does not yet backfill historical restaurant sales, feature flags, audit history, or every auxiliary collection into dedicated domain schemas. Property settings/menu and restaurant table rows/open orders now have canonical startup/read-write paths, but the global UI cutover remains disabled.
 - It deliberately preserves `booking.p`, `booking.pays` and `booking.payments` as source evidence; it does not reconcile financial history or infer balances.
 - The full projection is resumable across atomic batches, not one giant transaction. The legacy snapshot remains the recovery source until a separate verified activation step.
 - Android/native adapter parity and physical-device persistence qualification remain required.
@@ -58,7 +58,7 @@ This is a migration primitive, not a completed application cutover:
 
 1. Verify room-domain reload, stale-version conflicts, retirement and recovery on browser/PWA and Android SQLite.
 2. Convert each remaining application command to async repository reads and transactional writes; remove direct mutation of the legacy state object from that command.
-3. Cut over in bounded domains: rooms/housekeeping; guests/reservations; folio/accounting; inventory/expenses; restaurant/tables; feature flags and remaining audit/auxiliary collections.
+3. Cut over in bounded domains: rooms/housekeeping; guests/reservations; folio/accounting; inventory/expenses; restaurant sale-history backfill; feature flags and remaining audit/auxiliary collections.
 4. For each domain, add tests for reload, duplicate commands, stale versions, transaction rollback, migration replay and read-back.
 5. Remove localStorage as a write authority only after every read and write path is migrated and recovery/rollback is qualified.
 
