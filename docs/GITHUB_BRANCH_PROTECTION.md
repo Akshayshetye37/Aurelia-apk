@@ -19,11 +19,15 @@ Save it as the repository Actions secret named `R1_ADMIN_TOKEN`:
 
 ## Run the finalizer
 
-1. Open **Actions → R1 administrator finalization**.
-2. Select branch `release/r1-local-first-execution`.
-3. Select **Run workflow**.
+The workflow file is on the R1 execution branch, not yet on the default branch, so GitHub's manual `workflow_dispatch` UI may not list it. The supported trigger is a push to `admin-finalize/**`.
+
+1. Add the `R1_ADMIN_TOKEN` repository secret as described above.
+2. Confirm the secret is saved; do not paste its value into chat.
+3. Tell the assistant **“R1 admin token added”**. The assistant can then create/update the dedicated `admin-finalize/r1` branch with a harmless trigger commit, which starts the workflow.
 4. Wait for the job `apply-ruleset-and-run-negative-probes` to finish.
 5. Confirm its job summary links to the active ruleset and the failed red-tag guard run. A successful workflow also means the direct-push probe was rejected and the temporary branch and tag were removed.
+
+If this workflow is later merged into the default branch, it can also be run manually from **Actions → R1 administrator finalization → Run workflow**.
 
 ## Exact rules applied
 
