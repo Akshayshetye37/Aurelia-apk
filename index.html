@@ -697,44 +697,64 @@ const PHOTO_NATIVE_PENDING=new Map();
 let PHOTO_NATIVE_SEQ=0;
 window.aureliaNativePhotoResult=function(id,ok,payload){const p=PHOTO_NATIVE_PENDING.get(String(id));if(!p)return;PHOTO_NATIVE_PENDING.delete(String(id));if(ok){if(p.type==='photoArchive'&&typeof payload==='string'){try{payload=JSON.parse(payload)}catch(e){p.reject(e);return}}p.resolve(payload)}else p.reject(new Error(payload||'Native photo storage failed'))};
 function photoNative(type,extra={}){return new Promise((resolve,reject)=>{if(!window.AureliaNative){reject(new Error('Native photo storage is only available in the Android app'));return}const requestId='photo-'+Date.now()+'-'+(++PHOTO_NATIVE_SEQ);PHOTO_NATIVE_PENDING.set(requestId,{resolve,reject,type});if(!nat({type,requestId,...extra})){PHOTO_NATIVE_PENDING.delete(requestId);reject(new Error('Could not contact native photo storage'))}setTimeout(()=>{const p=PHOTO_NATIVE_PENDING.get(requestId);if(p){PHOTO_NATIVE_PENDING.delete(requestId);p.reject(new Error('Native photo storage timed out'))}},30000)})}
-function photoDb(){return new Promise((resolve,reject)=>{try{if(!window.indexedDB||typeof indexedDB.open!=='function')throw new Error('IndexedDB unavailable');const q=indexedDB.open(PHOTO_DB,1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('originals'))q.result.createObjectStore('originals')};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Photo storage unavailable'))}catch(e){reject(e)}})}
+function photoDbOpen(){return new Promise((resolve,reject)=>{try{if(!window.indexedDB||typeof indexedDB.open!=='function')throw new Error('IndexedDB unavailable');const q=indexedDB.open(PHOTO_DB,1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('originals'))q.result.createObjectStore('originals')};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Photo storage unavailable'))}catch(e){reject(e)}})}
+let photoLegacyMigration=null;
+async function migrateLegacyPhotoFallback(db){
+ if(photoStorageSandboxed())return;
+ let entries=[];
+ try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX)){const value=localStorage.getItem(k);if(typeof value==='string')entries.push([k.slice(PHOTO_FALLBACK_PREFIX.length),value])}}}
+ catch(e){throw new Error('Legacy photo archive cannot be inspected safely; photo migration is blocked.')}
+ if(!entries.length)return;
+ await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite'),store=tx.objectStore('originals');entries.forEach(([key,value])=>store.put(value,key));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Legacy photo migration failed'));tx.onabort=()=>reject(tx.error||new Error('Legacy photo migration was aborted'))});
+ for(const [key,value] of entries){
+  const stored=await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Legacy photo read-back failed'))});
+  if(stored!==value)throw new Error('Legacy photo migration read-back mismatch; source photo was retained.');
+ }
+ // Delete old localStorage copies only after every IndexedDB value passed exact read-back.
+ for(const [key] of entries)localStorage.removeItem(PHOTO_FALLBACK_PREFIX+key);
+}
+function photoDb(){return photoDbOpen().then(async db=>{if(!photoLegacyMigration)photoLegacyMigration=migrateLegacyPhotoFallback(db).catch(error=>{photoLegacyMigration=null;throw error});try{await photoLegacyMigration;return db}catch(error){db.close();throw error}})}
 async function photoPut(key,data){
  if(window.AureliaNative)return photoNative('photoStore',{key,data}).then(()=>true);
  if(photoStorageSandboxed()){PHOTO_MEMORY_FALLBACK.set(key,data);return true}
- try{const db=await photoDb();await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite');tx.objectStore('originals').put(data,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not store original photo'));tx.onabort=()=>reject(tx.error||new Error('Photo storage transaction aborted'))});db.close();return true}
- catch(e){try{localStorage.setItem(PHOTO_FALLBACK_PREFIX+key,data);return true}catch(f){PHOTO_MEMORY_FALLBACK.set(key,data);console.warn('Persistent photo storage unavailable in this preview; photo exists only for this session.',e);return true}}
+ let db;
+ try{
+  db=await photoDb();
+  await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite');tx.objectStore('originals').put(data,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not store original photo'));tx.onabort=()=>reject(tx.error||new Error('Photo storage transaction aborted'))});
+  return true;
+ }catch(e){throw new Error('Durable photo storage is unavailable; no localStorage fallback was written. '+(e?.message||''))}
+ finally{db?.close()}
 }
-async function photoGet(key){if(!key)return null;if(window.AureliaNative){try{return await photoNative('photoLoad',{key})}catch(e){return null}}if(PHOTO_MEMORY_FALLBACK.has(key))return PHOTO_MEMORY_FALLBACK.get(key);if(photoStorageSandboxed())return null;try{const db=await photoDb();const data=await new Promise((resolve,reject)=>{const q=db.transaction('originals').objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result||null);q.onerror=()=>reject(q.error||new Error('Could not read original photo'))});db.close();if(data)return data}catch(e){}try{const fallback=localStorage.getItem(PHOTO_FALLBACK_PREFIX+key);if(fallback)return fallback}catch(e){}return PHOTO_MEMORY_FALLBACK.get(key)||null}
+async function photoGet(key){
+ if(!key)return null;
+ if(window.AureliaNative)return photoNative('photoLoad',{key}).catch(()=>null);
+ if(PHOTO_MEMORY_FALLBACK.has(key))return PHOTO_MEMORY_FALLBACK.get(key);
+ if(photoStorageSandboxed())return null;
+ const db=await photoDb();
+ try{return await new Promise((resolve,reject)=>{const q=db.transaction('originals').objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result||null);q.onerror=()=>reject(q.error||new Error('Could not read original photo'))})}
+ finally{db.close()}
+}
 async function photoArchive(){
  if(window.AureliaNative)return photoNative('photoArchive');
- const out={};
- try{const db=await photoDb();await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').getAllKeys(),v=tx.objectStore('originals').getAll();tx.oncomplete=()=>{q.result.forEach((k,i)=>out[k]=v.result[i]);resolve()};tx.onerror=()=>reject(tx.error||new Error('Could not prepare photo archive'))});db.close()}catch(e){}
- try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX))out[k.slice(PHOTO_FALLBACK_PREFIX.length)]=localStorage.getItem(k)}}catch(e){}
- PHOTO_MEMORY_FALLBACK.forEach((v,k)=>out[k]=v);
- if(Object.keys(out).length||!window.indexedDB)return out;
- try{await photoDb();return out}catch(e){return out}
+ if(photoStorageSandboxed()){const memory={};PHOTO_MEMORY_FALLBACK.forEach((value,key)=>memory[key]=value);return memory}
+ const out={},db=await photoDb();
+ try{
+  await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').getAllKeys(),v=tx.objectStore('originals').getAll();tx.oncomplete=()=>{q.result.forEach((key,index)=>out[key]=v.result[index]);resolve()};tx.onerror=()=>reject(tx.error||new Error('Could not prepare photo archive'));tx.onabort=()=>reject(tx.error||new Error('Photo archive read was aborted'))});
+  return out;
+ }finally{db.close()}
 }
 async function photoRestore(archive){
  if(!archive||typeof archive!=='object'||Array.isArray(archive))throw new Error('Backup photo archive is invalid');
  const entries=Object.entries(archive);
- for(const [k,v] of entries)if(!k||typeof v!=='string'||!/^data:image\//i.test(v))throw new Error('Photo archive contains an invalid original image');
+ for(const [key,value] of entries)if(!key||typeof value!=='string'||!/^data:image\//i.test(value))throw new Error('Photo archive contains an invalid original image');
  if(window.AureliaNative){await photoNative('photoRestore',{archive});return entries.length}
- let db;
- try{db=await photoDb()}catch(e){
-  const keep=new Set(entries.map(([k])=>PHOTO_FALLBACK_PREFIX+k));
-  try{for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX)&&!keep.has(k))localStorage.removeItem(k)}}catch(_){}
-  PHOTO_MEMORY_FALLBACK.clear();
-  for(const [k,v] of entries){try{localStorage.setItem(PHOTO_FALLBACK_PREFIX+k,v)}catch(_){PHOTO_MEMORY_FALLBACK.set(k,v)}}
-  return entries.length;
- }
+ if(photoStorageSandboxed()){PHOTO_MEMORY_FALLBACK.clear();for(const [key,value] of entries)PHOTO_MEMORY_FALLBACK.set(key,value);return entries.length}
+ const db=await photoDb();
  try{
-  await new Promise((resolve,reject)=>{
-   const tx=db.transaction('originals','readwrite'),st=tx.objectStore('originals');
-   st.clear();entries.forEach(([k,v])=>st.put(v,k));
-   tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not restore original photos'));tx.onabort=()=>reject(tx.error||new Error('Photo restore was cancelled'));
-  });
+  await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite'),store=tx.objectStore('originals');store.clear();entries.forEach(([key,value])=>store.put(value,key));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not restore original photos'));tx.onabort=()=>reject(tx.error||new Error('Photo restore was cancelled'))});
+  const stored=await Promise.all(entries.map(([key])=>new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Restored photo read-back failed'))})));
+  if(entries.some((entry,index)=>stored[index]!==entry[1]))throw new Error('Restored photo archive failed exact read-back verification');
  }finally{db.close()}
- try{for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX))localStorage.removeItem(k)}}catch(_){}
  PHOTO_MEMORY_FALLBACK.clear();
  return entries.length;
 }
