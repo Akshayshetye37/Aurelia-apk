@@ -54,7 +54,7 @@ export class PmsRestaurantTableRepository {
         throw new Error("Canonical restaurant table inventory contains a duplicate or unstable table identity.");
       }
       seen.add(number);
-      if (!isRetired(row)) active.push(clone(row.data));
+      if (!isRetired(row)) active.push(clean(row.data));
     }
     return active.sort((a, b) => Number(a.n) - Number(b.n));
   }
