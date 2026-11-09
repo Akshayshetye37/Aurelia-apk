@@ -23,7 +23,7 @@ const tableNumber = row => {
   }
   return number;
 };
-const tableId = number => "table-" + number;
+const tableId = number => String(number);
 const isRetired = row => row?.data?.retired === true || row?.data?.status === "retired";
 
 export class PmsRestaurantTableRepository {
@@ -94,7 +94,7 @@ export class PmsRestaurantTableRepository {
       }
       const number = tableNumber(row);
       if (desired.has(number)) throw new Error("Restaurant table numbers must be unique.");
-      desired.set(number, { id: tableId(number), data: { ...clone(row), id: tableId(number) } });
+      desired.set(number, { id: tableId(number), data: clone(row) });
     }
 
     const currentRows = await this.bridge.listEntities("restaurant_table");
