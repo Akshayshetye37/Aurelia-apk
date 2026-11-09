@@ -149,8 +149,18 @@ for (const permission of permissionsToRemove) {
   for (const tag of ['uses-permission', 'uses-permission-sdk-23', 'uses-permission-sdk-m']) {
     const marker = '<' + tag + ' android:name="' + permission + '" tools:node="remove" tools:ignore="ProtectedPermissions,PermissionImpliesUnsupportedChromeOsHardware,QueryAllPackagesPermission,ScopedStorage,Deprecated,SystemPermissionTypo" />';
     if (!manifest.includes(marker)) {
-      manifest = manifest.replace(/<application\\b/, '    ' + marker + '\\n    <application');
+      manifest = manifest.replace(/<application\b/, '    ' + marker + '\n    <application');
     }
+  }
+}
+
+// Optional hardware features prevent store filtering for optional camera/telephony capabilities.
+for (const feature of [
+  '<uses-feature android:name="android.hardware.camera" android:required="false" />',
+  '<uses-feature android:name="android.hardware.telephony" android:required="false" />'
+]) {
+  if (!manifest.includes(feature)) {
+    manifest = manifest.replace(/<application\\b/, feature + '\\n    <application');
   }
 }
 
