@@ -48,3 +48,30 @@ test("legacy business snapshot key is rejected outside its explicit migration bo
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("legacy business snapshot key detection is deterministic across multiple source files", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "aurelia-storage-key-repeat-"));
+  try {
+    mkdirSync(path.join(root, "src", "features"), { recursive: true });
+    writeFileSync(path.join(root, "src", "features", "one.mjs"), "const first = 'aurelia_lodge_v2';");
+    writeFileSync(path.join(root, "src", "features", "two.mjs"), "const second = 'aurelia_lodge_v2';");
+    const result = scanStorageBoundaries({ rootDir: root, includeLegacyIndex: false });
+    assert.equal(result.violations.length, 2);
+    assert.ok(result.violations.every(message => /lines 1/.test(message)));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("approved preference storage stays inside the explicit storage boundary", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "aurelia-storage-preference-"));
+  try {
+    mkdirSync(path.join(root, "src", "storage"), { recursive: true });
+    writeFileSync(path.join(root, "src", "storage", "preferences.mjs"),
+      'export const readTheme = storage => storage.getItem("aurelia.preference.theme");');
+    const result = scanStorageBoundaries({ rootDir: root, includeLegacyIndex: false });
+    assert.deepEqual(result.violations, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
