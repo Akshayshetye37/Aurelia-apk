@@ -1690,12 +1690,12 @@ fs.mkdirSync(instrumentationSourceDir, { recursive: true });
 fs.copyFileSync(instrumentationTemplate, path.join(instrumentationSourceDir, 'LocalPmsRepositoryInstrumentedTest.java'));
 
 function ensurePmsInstrumentation(contents, kotlinDsl) {
-  if (!/defaultConfig\\s*\\{/.test(contents)) throw new Error('Android defaultConfig block is missing; instrumentation runner cannot be configured.');
+  if (!/defaultConfig\s*\{/.test(contents)) throw new Error('Android defaultConfig block is missing; instrumentation runner cannot be configured.');
   if (!contents.includes('testInstrumentationRunner')) {
     const runner = kotlinDsl
-      ? '\\n        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"'
-      : '\\n        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"';
-    contents = contents.replace(/defaultConfig\\s*\\{/, match => match + runner);
+      ? '\n        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"'
+      : '\n        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"';
+    contents = contents.replace(/defaultConfig\s*\{/, match => match + runner);
   }
   const dependencies = [
     ['androidx.test:runner:1.6.2', 'androidx.test:runner'],
@@ -1705,9 +1705,9 @@ function ensurePmsInstrumentation(contents, kotlinDsl) {
   for (const [coordinate, marker] of dependencies) {
     if (contents.includes(marker)) continue;
     const line = kotlinDsl
-      ? `\\n    androidTestImplementation("${coordinate}")`
-      : `\\n    androidTestImplementation "${coordinate}"`;
-    contents = contents.replace(/dependencies\\s*\\{/, match => match + line);
+      ? `\n    androidTestImplementation("${coordinate}")`
+      : `\n    androidTestImplementation "${coordinate}"`;
+    contents = contents.replace(/dependencies\s*\{/, match => match + line);
   }
   return contents;
 }
