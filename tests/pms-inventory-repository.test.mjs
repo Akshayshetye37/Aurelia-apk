@@ -125,3 +125,14 @@ test("numeric legacy inventory IDs are normalized to stable string entity keys",
   const hydrated = await inventory.hydrateSnapshot(snapshot, { enabled: true });
   assert.equal(hydrated.inv[0].id, "42");
 });
+
+test("retired inventory identities cannot be resurrected", async () => {
+  const { inventory } = setup("no-resurrection");
+  const item = { id: "retired-1", n: "Old stock", q: 0, ro: 0, u: 0, price: 0 };
+  await inventory.syncSnapshot({ inv: [item] });
+  await inventory.syncSnapshot({ inv: [] });
+  await assert.rejects(
+    inventory.syncSnapshot({ inv: [item] }),
+    error => error.code === "INVENTORY_ID_RETIRED"
+  );
+});
