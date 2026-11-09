@@ -1707,7 +1707,12 @@ function withLocalOperationalLock(task){
    return result;
   }catch(error){
    if(operation!==null)feedback.failSave(operation,error,{
-    recoveryRequired:RECOVERY_CHECK_PENDING||error?.code!=='DATABASE_UNAVAILABLE'
+    recoveryRequired:error?.code!=='DATABASE_UNAVAILABLE'&&(
+     RECOVERY_CHECK_PENDING||[
+      'STORAGE_FULL','PERMISSION_DENIED','DATABASE_CORRUPTION',
+      'TRANSACTION_ABORTED','VERSION_CONFLICT','ATTACHMENT_WRITE_FAILED','MIGRATION_FAILED'
+     ].includes(error?.code)
+    )
    });
    throw error;
   }
