@@ -1,5 +1,5 @@
 {
-  "index.html": 42,
+  "index.html": 35,
   "src/payments/evidence-store.mjs": 5,
   "src/payments/indexeddb-payment-intent-store.mjs": 3,
   "src/payments/repository-settlement-service.mjs": 7,
