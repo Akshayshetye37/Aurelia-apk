@@ -87,3 +87,29 @@ test("malformed canonical settings fail closed instead of being overwritten", as
   await assert.rejects(settings.update({ set: { name: "Replacement" } }), /malformed/);
   assert.equal(events.length, 0);
 });
+
+test("snapshot synchronization is idempotent and writes settings only when values change", async () => {
+  const { settings, events } = setup();
+  const snapshot = { set: { name: "Aurelia", cur: "₹" }, menu: { breakfast: [] } };
+  const first = await settings.syncSnapshot(snapshot);
+  assert.equal(first.version, 1);
+  const unchanged = await settings.syncSnapshot(structuredClone(snapshot));
+  assert.equal(unchanged.version, 1);
+  assert.equal(events.length, 1);
+  const changed = await settings.syncSnapshot({ ...snapshot, menu: { breakfast: [["Tea", 20]] } });
+  assert.equal(changed.version, 2);
+  assert.equal(events.length, 2);
+});
+
+test("concurrent settings updates serialize and preserve independent settings domains", async () => {
+  const { settings, events } = setup();
+  const [property, menu] = await Promise.all([
+    settings.update({ set: { name: "Aurelia", cur: "₹" } }),
+    settings.update({ menu: { breakfast: [] } })
+  ]);
+  assert.equal(property.version, 1);
+  assert.equal(menu.version, 2);
+  assert.deepEqual(menu.data.set, { name: "Aurelia", cur: "₹" });
+  assert.deepEqual(menu.data.menu, { breakfast: [] });
+  assert.equal(events.length, 2);
+});
