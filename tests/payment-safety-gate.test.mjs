@@ -5,7 +5,9 @@ import {
   assertBalanceMutationAllowed,
   assertAutomaticSettlementAllowed,
   assertLiveCollectionAllowed,
-  assertNativeBridgeAllowed
+  assertNativeBridgeAllowed,
+  assertOnlineGatewayAllowed,
+  assertPayBridgeAllowed
 } from "../src/payments/payment-safety-gate.mjs";
 
 test("offline manual folio mutations are available while gateway paths remain locked", () => {
@@ -13,7 +15,13 @@ test("offline manual folio mutations are available while gateway paths remain lo
     blockAllBalanceMutations: false,
     automaticSettlement: true,
     liveCollection: true,
-    nativeSettlementBridge: true
+    nativeSettlementBridge: true,
+    onlineGatewayPayments: false,
+    payBridge: false,
+    cloudSync: false,
+    uiCutover: false,
+    ccavenue: false,
+    enabledProviders: []
   });
   assert.doesNotThrow(assertBalanceMutationAllowed);
 });
@@ -28,4 +36,15 @@ test("live collection remains blocked", () => {
 
 test("native settlement bridge remains blocked", () => {
   assert.throws(assertNativeBridgeAllowed, { code: "NATIVE_SETTLEMENT_BRIDGE_KILL_SWITCH" });
+});
+
+test("local-only release keeps every optional network/payment path disabled", () => {
+  assert.equal(PAYMENT_SAFETY_LOCKS.uiCutover, false);
+  assert.equal(PAYMENT_SAFETY_LOCKS.cloudSync, false);
+  assert.equal(PAYMENT_SAFETY_LOCKS.onlineGatewayPayments, false);
+  assert.equal(PAYMENT_SAFETY_LOCKS.payBridge, false);
+  assert.equal(PAYMENT_SAFETY_LOCKS.ccavenue, false);
+  assert.deepEqual(PAYMENT_SAFETY_LOCKS.enabledProviders, []);
+  assert.throws(assertOnlineGatewayAllowed, { code: "ONLINE_GATEWAY_DISABLED" });
+  assert.throws(assertPayBridgeAllowed, { code: "PAY_BRIDGE_DISABLED" });
 });
