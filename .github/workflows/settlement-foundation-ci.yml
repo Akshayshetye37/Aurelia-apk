@@ -17,7 +17,10 @@ on:
       - ".github/workflows/settlement-foundation-ci.yml"
   pull_request:
     branches:
+      - main
+      - master
       - feature/multi-provider-payment-backend
+      - "release/**"
     paths:
       - "src/payments/**"
       - "tests/**"
