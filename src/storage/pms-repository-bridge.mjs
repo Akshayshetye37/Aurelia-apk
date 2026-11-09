@@ -53,6 +53,17 @@ export class PmsRepositoryBridge {
     return row ? clone(row) : null;
   }
 
+  async listEntities(entityType) {
+    this.assertBound();
+    assertPmsIdentity(entityType, "entity type");
+    if (typeof this.repo.listEntities !== "function") {
+      throw new TypeError("The bound PMS repository does not support entity listing.");
+    }
+    const rows = await this.repo.listEntities(entityType);
+    if (!Array.isArray(rows)) throw new TypeError("The PMS repository returned an invalid entity list.");
+    return rows.map(clone);
+  }
+
   async mutateEntity({ entityType, entityId, expectedVersion, eventType, mutate, tenantId, propertyId, deviceId, eventPayload }) {
     this.assertBound();
     assertPmsIdentity(entityType, "entity type");
