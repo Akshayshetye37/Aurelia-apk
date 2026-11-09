@@ -10,7 +10,7 @@ if (fs.existsSync(gradleWrapperPropertiesPath)) {
   if (/^networkTimeout=\d+$/m.test(wrapperProperties)) {
     wrapperProperties = wrapperProperties.replace(/^networkTimeout=\d+$/m, 'networkTimeout=120000');
   } else {
-    wrapperProperties += '\\nnetworkTimeout=120000\\n';
+    wrapperProperties += '\nnetworkTimeout=120000\n';
   }
   fs.writeFileSync(gradleWrapperPropertiesPath, wrapperProperties);
 }
