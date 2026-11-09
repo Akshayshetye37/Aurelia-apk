@@ -2,6 +2,8 @@
 
 **MANDATORY PRODUCT PRINCIPLE — Our app works primarily on the primary device's local storage.**
 
+**Current remaining work:** [2026-11-09 end-to-end audit and implementation acceptance plan](./docs/REMAINING_WORK_AUDIT_2026-11-09.md). This is the current task list; it preserves local PMS operation as primary and treats internet/cloud as optional.
+
 The app runs primarily on the primary device and stores its operational data in that device's persistent local database: native SQLite on Android and IndexedDB in a browser/PWA. This means durable on-device storage, not volatile RAM. **Internet access, cloud services and remote servers are optional—not prerequisites for ordinary local PMS operation.** The app must continue to support its locally available features when offline. Internet may be used when available for explicitly online features, such as provider-hosted payment processing; those features must not make local operations dependent on a server. Optional cloud sync is separate and OFF by default.
 
 **This principle is a release requirement, not merely a design preference.** Any implementation that requires internet/cloud/server availability for ordinary local PMS operation, or reports a successful local write before the device database commit and read-back succeed, violates this requirement.
@@ -14,7 +16,7 @@ Aurelia is a local-first property management system (PMS) for reservations, gues
 - **Project root:** repository root (`/`)
 - **Active engineering branch:** `feature/multi-provider-payment-backend`
 - **Active branch:** `feature/multi-provider-payment-backend` (resolve the current SHA from the branch ref; avoid hard-coded moving HEAD values).
-- **Latest verification:** GitHub Actions run [42490479012](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42490479012) passed on commit `b2b93fef715618dc28cb3bcf12a4ee43df877334`: 397/397 Node tests, production web bundle build, production asset privacy checks and Android release-gate check. This workflow did **not** build or qualify an APK.
+- **Latest verification:** GitHub Actions run [42589493499](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42589493499) passed on commit `1431611075c8bebddda445facecd01367a610892`: PMS test suite, production web bundle build and production asset privacy checks. This workflow did **not** build or qualify an APK or physical Android device.
 - **Recovery baseline:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) preserves the pre-documentation-update snapshot; the independent [`phase-0 baseline`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07) is also retained.
 
 Useful project locations:
@@ -32,7 +34,7 @@ Useful project locations:
 
 ## Implementation status and production-readiness audit — 2026-11-09
 
-**Audit target:** `feature/multi-provider-payment-backend` at `410175355120c62a3b16a716169fdcf86ef7b6f9`.
+**Historical audit target:** `410175355120c62a3b16a716169fdcf86ef7b6f9`. For current remaining work, use the [2026-11-09 remaining-work and end-to-end audit](./docs/REMAINING_WORK_AUDIT_2026-11-09.md), audited at `1431611075c8bebddda445facecd01367a610892`. That document supersedes this historical checklist wherever they conflict.
 
 Status labels in this section are evidence-based:
 - **Implemented (source present):** implementation and relevant automated coverage were found in this branch. This does not imply physical-device or production qualification.
