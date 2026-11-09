@@ -224,6 +224,7 @@ test("new audit rows are append-only canonical entities committed with the recov
   const next = structuredClone(initial);
   next.aud.unshift({ action: "Stock issue", detail: "Tea · 1", at: "2026-11-09T00:01:00.000Z" });
   await inventory.syncSnapshot(next);
+  await inventory.syncSnapshot(structuredClone(next));
   const auditRows = (await bridge.listEntities("audit")).filter(row => row.data?.kind === "pms_audit");
   assert.equal(auditRows.length, 1);
   assert.deepEqual(auditRows[0].data.value, next.aud[0]);
