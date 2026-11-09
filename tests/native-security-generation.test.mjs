@@ -130,3 +130,11 @@ test('recovery key codec and JVM tests are copied into generated Android sources
   assert.match(patcher, /RecoveryKeyCodecTest\.kt/);
   assert.match(patcher, /testImplementation\("junit:junit:4\.13\.2"\)/);
 });
+
+
+test('Kotlin warnings-as-errors policy has no unhandled deprecated launcher or hardware APIs', () => {
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  const deviceKeys = read('android/templates/security/PaymentDeviceKeyStore.kt');
+  assert.doesNotMatch(gate, /override fun onBackPressed/);
+  assert.match(deviceKeys, /@Suppress\("DEPRECATION"\).*securityLevel/);
+});
