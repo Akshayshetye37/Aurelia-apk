@@ -4,6 +4,7 @@ import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
 import { PmsSettingsRepository } from "../src/storage/pms-settings-repository.mjs";
+import { PmsInventoryRepository } from "../src/storage/pms-inventory-repository.mjs";
 import { CapacitorPmsStorageClient } from "../src/storage/capacitor-pms-storage.mjs";
 import {
   PmsBootstrapCoordinator,
@@ -52,6 +53,8 @@ test("bootstrap migrates the actual Aurelia legacy key and preserves its exact r
   assert.deepEqual((await result.settingsRepository.get()).data.menu, state.menu);
   assert.deepEqual(await result.restaurantTableRepository.list(), state.t);
   assert.ok(await result.repository.getEntity("restaurant_table", "1"));
+  assert.equal(typeof result.inventoryRepository.syncSnapshot, "function");
+  assert.deepEqual(await result.inventoryRepository.list(), state.inv);
   assert.equal(typeof result.restaurantSaleRepository.syncSnapshot, "function");
   assert.deepEqual(await result.restaurantSaleRepository.list(), state.sales);
   assert.ok(await result.repository.getEntity("restaurant_sale", "RS-BOOT-1"));
@@ -167,9 +170,11 @@ test("index startup awaits verified storage bootstrap before replaying operation
   assert.match(loader, /boot\.settingsRepository\.get\(\)/);
   assert.match(loader, /boot\.restaurantTableRepository\.hydrateSnapshot/);
   assert.match(loader, /boot\.restaurantSaleRepository\.hydrateSnapshot/);
+  assert.match(loader, /boot\.inventoryRepository\.hydrateSnapshot/);
   assert.match(html, /compatibility\.syncRestaurantSales\(snapshot\)/);
   assert.match(html, /window\.__AURELIA_CANONICAL_SALES/);
   assert.match(html, /compatibility\.syncRestaurantTables\(snapshot\)/);
+  assert.match(html, /compatibility\.syncInventory\(snapshot\)/);
   assert.match(html, /window\.__AURELIA_CANONICAL_TABLES/);
   assert.match(loader, /window\.__AURELIA_CANONICAL_SETTINGS/);
   assert.match(html, /loadAll\(\);if\(window\.__AURELIA_CANONICAL_SETTINGS\)/);
@@ -294,4 +299,23 @@ test("bootstrap exposes durable canonical settings on a fresh profile without a 
   assert.equal(result.domainProjection, null);
   assert.deepEqual((await result.settingsRepository.get()).data.set, { name: "Aurelia Fresh", cur: "₹" });
   assert.deepEqual((await result.settingsRepository.get()).data.menu, { breakfast: [["Tea", 20]] });
+});
+
+test("bootstrap projects and exposes canonical inventory before the PMS UI starts", async () => {
+  const inventoryState = structuredClone(state);
+  inventoryState.inv = [
+    { n: "Towels", q: 5, ro: 2, u: 10, price: 0, sellable: false },
+    { id: "coffee-1", n: "Coffee", q: 8, ro: 3, u: 5, price: 20, sellable: true }
+  ];
+  const raw = JSON.stringify(inventoryState);
+  const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: raw });
+  const result = await coordinator("inventory-bootstrap", storage).initializeApplication();
+  assert.equal(result.domainProjection.manifest.counts.inventory, 2);
+  const canonical = await result.inventoryRepository.list();
+  assert.equal(canonical.length, 2);
+  assert.equal(canonical[0].id, "legacy-inventory-0");
+  assert.equal(canonical[1].id, "coffee-1");
+  assert.equal(canonical[0].q, 5);
+  assert.equal((await result.repository.getEntity("inventory", "coffee-1")).version, 1);
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), raw);
 });
