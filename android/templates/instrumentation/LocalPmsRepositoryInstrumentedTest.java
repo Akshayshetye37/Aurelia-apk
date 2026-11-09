@@ -57,6 +57,39 @@ public final class LocalPmsRepositoryInstrumentedTest {
     return new JSONObject().put("value", value);
   }
 
+  @Test public void backgroundSessionBlocksDekCopiesUntilForegroundReauthorization() {
+    com.aurelia.pms.security.AureliaAppManager manager =
+      new com.aurelia.pms.security.AureliaAppManager(
+        new com.aurelia.pms.security.AureliaCryptoEngine(),
+        new com.aurelia.pms.security.AppLockManager(context),
+        new java.security.SecureRandom(),
+        300_000L);
+    char[] pin = "481592".toCharArray();
+    byte[] sessionKey = null;
+    try {
+      manager.enroll(pin);
+      sessionKey = manager.currentDataKeyCopy();
+      assertEquals(32, sessionKey.length);
+      manager.onBackground();
+      assertFalse("backgrounded session must not authorize native DB key access",
+        manager.isSessionAuthorized());
+      boolean blocked = false;
+      try { manager.currentDataKeyCopy(); }
+      catch (IllegalStateException | SecurityException expected) { blocked = true; }
+      assertTrue("DEK copies must be blocked while backgrounded", blocked);
+      assertTrue("foreground reauthorization should restore an unexpired session", manager.onForeground());
+      byte[] resumed = manager.currentDataKeyCopy();
+      assertEquals(32, resumed.length);
+      Arrays.fill(resumed, (byte) 0);
+      manager.lock();
+      assertFalse(manager.isSessionAuthorized());
+    } finally {
+      Arrays.fill(pin, '\0');
+      if (sessionKey != null) Arrays.fill(sessionKey, (byte) 0);
+      manager.lock();
+    }
+  }
+
   @Test public void databaseFileIsEncryptedAndKeyCopyIsWipedOnClose() throws Exception {
     repository.transactBusinessChange("guest", "guest-encrypted", 0, data("sensitive-guest-data"),
       event("encrypted-event", "guest", "guest-encrypted", 1));
