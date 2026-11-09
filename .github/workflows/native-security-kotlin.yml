@@ -80,8 +80,9 @@ jobs:
         run: |
           set -euo pipefail
           grep -R --include='*.gradle' --include='*.gradle.kts' -E 'org.jetbrains.kotlin.android.*2.0.21|org.jetbrains.kotlin.android.*version "2.0.21"' app
+          grep -R --include='*.gradle' --include='*.gradle.kts' -E 'com.android.tools.build:gradle:8.7.2|com.android.application.*8.7.2' .
+          grep -F 'gradle-8.11.1-all.zip' gradle/wrapper/gradle-wrapper.properties
           grep -R --include='*.gradle' --include='*.gradle.kts' -F 'allWarningsAsErrors.set(true)' app
-          grep -E 'distributionUrl=.*gradle-[0-9].*-bin.zip' gradle/wrapper/gradle-wrapper.properties
           ./gradlew --version
 
       - name: Compile, assemble, lint and unit-test exact Android candidate
