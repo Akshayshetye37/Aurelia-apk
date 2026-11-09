@@ -9,7 +9,13 @@ export const PAYMENT_SAFETY_LOCKS = Object.freeze({
   blockAllBalanceMutations: false,
   automaticSettlement: true,
   liveCollection: true,
-  nativeSettlementBridge: true
+  nativeSettlementBridge: true,
+  onlineGatewayPayments: false,
+  payBridge: false,
+  cloudSync: false,
+  uiCutover: false,
+  ccavenue: false,
+  enabledProviders: Object.freeze([])
 });
 
 export function assertBalanceMutationAllowed() {
@@ -34,6 +40,21 @@ export function assertLiveCollectionAllowed() {
     error.code = "LIVE_COLLECTION_KILL_SWITCH";
     throw error;
   }
+}
+
+export function assertOnlineGatewayAllowed() {
+  if (!PAYMENT_SAFETY_LOCKS.onlineGatewayPayments) {
+    const error = new Error("Online gateway payments are disabled for the local-only release.");
+    error.code = "ONLINE_GATEWAY_DISABLED";
+    throw error;
+  }
+}
+
+export function assertPayBridgeAllowed() {
+  if (!PAYMENT_SAFETY_LOCKS.payBridge) {
+    const error = new Error("Pay Bridge is disabled for the local-only release.");
+    error.code = "PAY_BRIDGE_DISABLED";
+    throw error;
 }
 
 export function assertNativeBridgeAllowed() {
