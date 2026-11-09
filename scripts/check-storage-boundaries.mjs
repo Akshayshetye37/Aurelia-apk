@@ -62,7 +62,7 @@ export function scanStorageBoundaries({ rootDir = process.cwd(), includeLegacyIn
     const storageMatches = [...source.matchAll(STORAGE_ACCESS)];
     if (storageMatches.length) {
       const lines = [...new Set(storageMatches.map(match =>
-        source.slice(0, match.index).split("\\n").length
+        source.slice(0, match.index).split("\n").length
       ))];
       violations.push(relative + " accesses browser/native storage outside src/storage (" +
         storageMatches.length + " occurrence(s); lines " + lines.join(", ") + ")");
@@ -70,7 +70,7 @@ export function scanStorageBoundaries({ rootDir = process.cwd(), includeLegacyIn
     const legacyMatches = [...source.matchAll(new RegExp(LEGACY_SNAPSHOT_KEY.source, "g"))];
     if (legacyMatches.length) {
       const lines = [...new Set(legacyMatches.map(match =>
-        source.slice(0, match.index).split("\\n").length
+        source.slice(0, match.index).split("\n").length
       ))];
       violations.push(relative + " references the legacy business snapshot key outside its migration boundary (lines " +
         lines.join(", ") + ")");
