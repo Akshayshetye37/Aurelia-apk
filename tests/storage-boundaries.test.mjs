@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { scanStorageBoundaries } from "../scripts/check-storage-boundaries.mjs";
 
+const LEGACY_KEY_FIXTURE = ["aurelia", "lodge", "v2"].join("_");
+
 test("current source respects the storage boundary and grandfathered legacy UI ceiling", () => {
   const result = scanStorageBoundaries({ rootDir: path.resolve(".") });
   assert.deepEqual(result.violations, []);
@@ -31,7 +33,7 @@ test("new direct storage access in the legacy UI cannot exceed its reviewed base
   try {
     writeFileSync(path.join(root, "index.html"), Array(33).fill("localStorage").join(";"));
     const result = scanStorageBoundaries({ rootDir: root });
-    assert.ok(result.violations.some(message => /index.html.*localStorage/.test(message)));
+    assert.ok(result.violations.some(message => /index\.html.*localStorage/.test(message)));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -41,9 +43,9 @@ test("legacy business snapshot key is rejected outside its explicit migration bo
   const root = mkdtempSync(path.join(os.tmpdir(), "aurelia-storage-key-"));
   try {
     mkdirSync(path.join(root, "src", "features"), { recursive: true });
-    writeFileSync(path.join(root, "src", "features", "bad.mjs"), "const key = 'aurelia_lodge_v2';");
+    writeFileSync(path.join(root, "src", "features", "bad.mjs"), "const key = '" + LEGACY_KEY_FIXTURE + "';");
     const result = scanStorageBoundaries({ rootDir: root, includeLegacyIndex: false });
-    assert.ok(result.violations.some(message => /aurelia_lodge_v2/.test(message)));
+    assert.ok(result.violations.some(message => message.includes(LEGACY_KEY_FIXTURE)));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -53,8 +55,8 @@ test("legacy business snapshot key detection is deterministic across multiple so
   const root = mkdtempSync(path.join(os.tmpdir(), "aurelia-storage-key-repeat-"));
   try {
     mkdirSync(path.join(root, "src", "features"), { recursive: true });
-    writeFileSync(path.join(root, "src", "features", "one.mjs"), "const first = 'aurelia_lodge_v2';");
-    writeFileSync(path.join(root, "src", "features", "two.mjs"), "const second = 'aurelia_lodge_v2';");
+    writeFileSync(path.join(root, "src", "features", "one.mjs"), "const first = '" + LEGACY_KEY_FIXTURE + "';");
+    writeFileSync(path.join(root, "src", "features", "two.mjs"), "const second = '" + LEGACY_KEY_FIXTURE + "';");
     const result = scanStorageBoundaries({ rootDir: root, includeLegacyIndex: false });
     assert.equal(result.violations.length, 2);
     assert.ok(result.violations.every(message => /lines 1/.test(message)));
