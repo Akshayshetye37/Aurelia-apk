@@ -151,7 +151,7 @@ The first resumable domain-projection primitive is now committed in `src/storage
 
 It projects rooms, guests, bookings, preserved folio source values, inventory, expense/ledger rows and audit rows into versioned local repository entities. Writes are grouped into atomic entity-plus-outbox batches, each batch is read back before continuing, replay is idempotent, and divergent records stop for reconciliation. The original legacy snapshot is retained.
 
-**This is not the completed UI cutover.** Existing screens still use legacy state for many reads and writes; `uiCutover` remains false. The projection must not be run against live data until the source snapshot is captured and the migration has been reviewed. Tables, settings and auxiliary collections still need dedicated domain mapping. No financial reconciliation is performed by this projection.
+**This is not the completed UI cutover.** Existing screens still use legacy state for many reads and writes; `uiCutover` remains false. The projection must not be run against live data until the source snapshot is captured and the migration has been reviewed. Restaurant tables, feature flags and auxiliary collections still need dedicated domain mapping. Property configuration (`set`) and menu now project into the versioned `settings:property-settings` entity; startup hydrates both from that canonical record, and settings/menu changes commit through the settings repository and outbox before the compatibility snapshot. No financial reconciliation is performed by this projection.
 
 ## Implemented foundations
 
