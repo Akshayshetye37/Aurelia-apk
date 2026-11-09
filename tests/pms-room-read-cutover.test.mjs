@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hydrateCanonicalRoomSnapshot, hydrateCanonicalGuestSnapshot } from "../src/storage/pms-room-read-cutover.mjs";
+import { hydrateCanonicalRoomSnapshot, hydrateCanonicalGuestSnapshot, hydrateCanonicalBookingSnapshot } from "../src/storage/pms-room-read-cutover.mjs";
 
 const snapshot = () => ({
   rooms: [{ n: "101", t: "Deluxe", r: 1500, s: "ready" }, { n: "102", t: "Standard", r: 900, s: "clean" }],
@@ -83,4 +83,57 @@ test("guest read cutover excludes retired entities and rejects divergent active 
     { type: "guest", id: "gst-1", version: 2, data: { id: "gst-1", n: "Changed" } }
   ]; }};
   await assert.rejects(hydrateCanonicalGuestSnapshot({ repository: divergent, snapshot }), /diverges from the committed recovery snapshot/);
+});
+
+
+test("booking read cutover hydrates canonical records without altering financial evidence or business status", async () => {
+  const source = snapshot();
+  source.b = [{
+    id: "bk-1", g: "Guest", room: "101", st: "in", p: 500,
+    pays: [["Cash", 500, "2026-11-01"]],
+    payments: [{ id: "payment-legacy-1", amount: 500 }],
+    rate: 1500
+  }];
+  const repository = { async listEntities(type) {
+    assert.equal(type, "booking");
+    return [{
+      type: "booking", id: "bk-1", version: 4,
+      data: { ...source.b[0], updatedAt: "2026-11-09T00:00:00Z" }
+    }];
+  }};
+  const result = await hydrateCanonicalBookingSnapshot({ repository, snapshot: source });
+  assert.deepEqual(result.b, source.b);
+  assert.equal(result.b[0].st, "in");
+  assert.deepEqual(result.b[0].pays, source.b[0].pays);
+  assert.deepEqual(result.b[0].payments, source.b[0].payments);
+  assert.equal(source.b[0].updatedAt, undefined, "input snapshot must not be mutated");
+});
+
+test("booking read cutover fails closed on missing, extra or divergent canonical records", async () => {
+  const source = snapshot();
+  source.b = [{ id: "bk-1", g: "Guest", room: "101", st: "in", p: 0 }];
+  await assert.rejects(
+    hydrateCanonicalBookingSnapshot({ repository: { async listEntities() { return []; } }, snapshot: source }),
+    error => error.code === "BOOKING_ENTITY_MISSING"
+  );
+  await assert.rejects(
+    hydrateCanonicalBookingSnapshot({ repository: { async listEntities() { return [
+      { type: "booking", id: "bk-1", version: 1, data: { ...source.b[0], st: "out" } }
+    ]; } }, snapshot: source }),
+    error => error.code === "BOOKING_SNAPSHOT_DIVERGENCE"
+  );
+  await assert.rejects(
+    hydrateCanonicalBookingSnapshot({ repository: { async listEntities() { return [
+      { type: "booking", id: "bk-1", version: 1, data: source.b[0] },
+      { type: "booking", id: "bk-2", version: 1, data: { id: "bk-2" } }
+    ]; } }, snapshot: source }),
+    /absent from the recovery snapshot/
+  );
+});
+
+test("booking read cutover preserves compatibility snapshot when migration is unverified", async () => {
+  const source = snapshot();
+  source.b = [{ id: "bk-1", g: "Guest", room: "101", st: "in" }];
+  const result = await hydrateCanonicalBookingSnapshot({ repository: null, snapshot: source, enabled: false });
+  assert.deepEqual(result, source);
 });
