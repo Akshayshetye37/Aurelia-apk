@@ -71,10 +71,10 @@ final class LocalPaymentLedger extends SQLiteOpenHelper {
   synchronized JSONObject create(JSONObject input) {
     if (input == null) throw new IllegalArgumentException("payment_ledger_payload_required");
     String tx = input.optString("transactionId", "").trim();
-    String provider = input.optString("provider", "").trim().toLowerCase();
+    String provider = input.optString("provider", "").trim().toLowerCase(java.util.Locale.ROOT);
     String env = input.optString("environment", "test").trim().toLowerCase();
     String folio = input.optString("folioId", "").trim();
-    String currency = input.optString("currency", "INR").trim().toUpperCase();
+    String currency = input.optString("currency", "INR").trim().toUpperCase(java.util.Locale.ROOT);
     long amount = input.optLong("amountMinor", -1);
     if (!SAFE_ID.matcher(tx).matches() || !SAFE_ID.matcher(folio).matches() ||
         !PROVIDERS.contains(provider) || !validEnvironment(provider, env) ||

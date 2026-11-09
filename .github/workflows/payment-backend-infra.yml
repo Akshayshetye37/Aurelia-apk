@@ -2,13 +2,17 @@ name: Payment backend infrastructure validation
 
 on:
   push:
-    branches: [feature/multi-provider-payment-backend]
+    branches: [main, master, feature/multi-provider-payment-backend, "release/**"]
     paths:
       - "payment-backend/infra/terraform/**"
+      - "android/templates/**/*.java"
+      - "android/templates/**/*.kt"
       - ".github/workflows/payment-backend-infra.yml"
   pull_request:
     paths:
       - "payment-backend/infra/terraform/**"
+      - "android/templates/**/*.java"
+      - "android/templates/**/*.kt"
       - ".github/workflows/payment-backend-infra.yml"
   workflow_dispatch:
 

@@ -3,6 +3,18 @@ const path = require('path');
 
 const androidDir = path.join(__dirname, '..', 'android');
 const appDir = path.join(androidDir, 'app', 'src', 'main');
+const gradleWrapperPropertiesPath = path.join(androidDir, 'gradle', 'wrapper', 'gradle-wrapper.properties');
+if (fs.existsSync(gradleWrapperPropertiesPath)) {
+  let wrapperProperties = fs.readFileSync(gradleWrapperPropertiesPath, 'utf8');
+  // CI runners and slower first-run devices need a realistic wrapper download timeout.
+  if (/^networkTimeout=\d+$/m.test(wrapperProperties)) {
+    wrapperProperties = wrapperProperties.replace(/^networkTimeout=\d+$/m, 'networkTimeout=120000');
+  } else {
+    wrapperProperties += '\nnetworkTimeout=120000\n';
+  }
+  fs.writeFileSync(gradleWrapperPropertiesPath, wrapperProperties);
+}
+
 const manifestPath = path.join(appDir, 'AndroidManifest.xml');
 if (!fs.existsSync(manifestPath)) throw new Error('AndroidManifest.xml not found; run npx cap add android first.');
 
@@ -135,8 +147,20 @@ for (const permission of permissionsToRemove) {
   // Remove direct and SDK-scoped declarations contributed by transitive AAR manifests.
   // The PMS has no dangerous runtime-permission use case; network access needs INTERNET only.
   for (const tag of ['uses-permission', 'uses-permission-sdk-23', 'uses-permission-sdk-m']) {
-    const marker = '<' + tag + ' android:name="' + permission + '" tools:node="remove" />';
-    if (!manifest.includes(marker)) manifest = manifest.replace('</manifest>', '    ' + marker + '\n</manifest>');
+    const marker = '<' + tag + ' android:name="' + permission + '" tools:node="remove" tools:ignore="ProtectedPermissions,PermissionImpliesUnsupportedChromeOsHardware,QueryAllPackagesPermission,ScopedStorage,Deprecated,SystemPermissionTypo" />';
+    if (!manifest.includes(marker)) {
+      manifest = manifest.replace(/<application\b/, '    ' + marker + '\n    <application');
+    }
+  }
+}
+
+// Optional hardware features prevent store filtering for optional camera/telephony capabilities.
+for (const feature of [
+  '<uses-feature android:name="android.hardware.camera" android:required="false" />',
+  '<uses-feature android:name="android.hardware.telephony" android:required="false" />'
+]) {
+  if (!manifest.includes(feature)) {
+    manifest = manifest.replace(/<application\b/, feature + '\n    <application');
   }
 }
 
@@ -161,6 +185,7 @@ if (!manifest.includes('com.aurelia.pms.security.LockGateActivity')) {
 manifest = manifest.replace(/<application([^>]*)>/, (match, attrs) => {
   attrs = attrs.replace(/\s+android:usesCleartextTraffic="[^"]*"/, '')
     .replace(/\s+android:networkSecurityConfig="[^"]*"/, '');
+  if (!/tools:targetApi=/.test(attrs)) attrs += ' tools:targetApi="24"';
   return '<application' + attrs +
     ' android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/aurelia_network_security_config">';
 });
@@ -172,7 +197,6 @@ fs.writeFileSync(path.join(xmlDir, 'aurelia_network_security_config.xml'),
     '<base-config cleartextTrafficPermitted="false">' +
       '<trust-anchors>' +
         '<certificates src="system" />' +
-        '<certificates src="user" />' +
       '</trust-anchors>' +
     '</base-config>' +
   '</network-security-config>');
@@ -293,6 +317,20 @@ function ensureKotlinAndroidPlugin(contents, kotlinDsl) {
   return 'plugins {\n' + statement + '\n}\n\n' + contents;
 }
 
+function ensureKotlinWarningsAsErrors(contents) {
+  const marker = 'AURELIA_KOTLIN_WARNINGS_AS_ERRORS';
+  if (contents.includes(marker)) return contents;
+  return contents + `
+
+// ${marker}: fail the Android app build on Kotlin compiler warnings.
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    compilerOptions {
+        allWarningsAsErrors.set(true)
+    }
+}
+`;
+}
+
 function ensureJavaResourcePackaging(contents, kotlinDsl) {
   // These are duplicate metadata files from transitive JAR dependencies. The
   // runtime classes remain packaged; only the duplicate multi-release manifest
@@ -306,6 +344,7 @@ function ensureJavaResourcePackaging(contents, kotlinDsl) {
 
 if (fs.existsSync(appGradleGroovy)) {
   let gradle = ensureKotlinAndroidPlugin(fs.readFileSync(appGradleGroovy, 'utf8'), false);
+  gradle = ensureKotlinWarningsAsErrors(gradle);
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
   }
@@ -354,11 +393,23 @@ for (const file of [
   'PaymentDeviceKeyStore.kt',
   'PaymentDeviceClient.kt',
   'SettlementEnvelopeVerifier.kt',
-  'LockGateActivity.kt'
+  'LockGateActivity.kt',
+  'RecoveryKeyCodec.kt'
 ]) {
   const source = path.join(securityTemplateDir, file);
   if (!fs.existsSync(source)) throw new Error('Native security template is missing: ' + file);
   fs.copyFileSync(source, path.join(securitySourceDir, file));
+}
+
+function ensureJUnitDependency(contents, kotlinDsl) {
+  if (contents.includes('junit:junit')) return contents;
+  const line = kotlinDsl
+    ? '\n    testImplementation("junit:junit:4.13.2")'
+    : '\n    testImplementation "junit:junit:4.13.2"';
+  if (!/dependencies\s*\{/.test(contents)) {
+    throw new Error('App Gradle file has no dependencies block; security unit tests cannot be wired.');
+  }
+  return contents.replace(/dependencies\s*\{/, match => match + line);
 }
 
 function addNativeSecurityDependencies(contents, kotlinDsl) {
@@ -379,14 +430,26 @@ function addNativeSecurityDependencies(contents, kotlinDsl) {
   return contents;
 }
 if (fs.existsSync(appGradleGroovy)) {
-  const gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleGroovy, 'utf8'), false);
+  let gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleGroovy, 'utf8'), false);
+  gradle = ensureKotlinWarningsAsErrors(gradle);
+  gradle = ensureJUnitDependency(gradle, false);
   fs.writeFileSync(appGradleGroovy, gradle);
 } else if (fs.existsSync(appGradleKts)) {
-  const gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleKts, 'utf8'), true);
+  let gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleKts, 'utf8'), true);
+  gradle = ensureKotlinWarningsAsErrors(gradle);
+  gradle = ensureJUnitDependency(gradle, true);
   fs.writeFileSync(appGradleKts, gradle);
 } else {
   throw new Error('Generated Android app Gradle file was not found; native security dependencies cannot be wired.');
 }
+
+// Copy focused JVM security tests into the generated app module.
+const securityTestTemplateDir = path.join(androidDir, 'templates', 'security-test');
+const securityJvmTestDir = path.join(appModuleDir, 'src', 'test', 'java', 'com', 'aurelia', 'pms', 'security');
+const recoveryCodecTest = path.join(securityTestTemplateDir, 'RecoveryKeyCodecTest.kt');
+if (!fs.existsSync(recoveryCodecTest)) throw new Error('RecoveryKeyCodecTest.kt template is missing.');
+fs.mkdirSync(securityJvmTestDir, { recursive: true });
+fs.copyFileSync(recoveryCodecTest, path.join(securityJvmTestDir, 'RecoveryKeyCodecTest.kt'));
 
 const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
 
@@ -1083,7 +1146,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         candidates.add(new BackupCandidate(fileUri, modified, valid, protectedFile));
       }
     }
-    candidates.sort((a, b) -> {
+    java.util.Collections.sort(candidates, (a, b) -> {
       if (a.protectedNew != b.protectedNew) return a.protectedNew ? -1 : 1;
       if (a.valid != b.valid) return a.valid ? -1 : 1;
       return Long.compare(b.modified, a.modified);
@@ -1636,8 +1699,18 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       if (resultCode == RESULT_OK && data != null && data.getData() != null) {
         Uri uri = data.getData();
         try {
-          getContentResolver().takePersistableUriPermission(uri, data.getFlags() &
-            (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION));
+          int grantedFlags = data.getFlags();
+          if ((grantedFlags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0 &&
+              (grantedFlags & Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0) {
+            getContentResolver().takePersistableUriPermission(uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+          } else if ((grantedFlags & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
+            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+          } else if ((grantedFlags & Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0) {
+            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+          } else {
+            throw new SecurityException("Selected folder did not grant persistable read or write access.");
+          }
           String preferenceKey="shared".equals(folderPurpose)?"shared_tree_uri":"backup_tree_uri";
           prefs.edit().putString(preferenceKey, uri.toString()).apply();
           String label = uri.getLastPathSegment();

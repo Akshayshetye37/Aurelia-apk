@@ -81,3 +81,34 @@ The current native gate implements initial PIN enrollment and PIN unlock only. I
 - Security review of backup/restore and upgrade/migration behavior.
 
 Until these gates pass, this is an implementation foundation, not a production security certification. Live payment collection and automatic folio settlement remain unrelated and disabled.
+
+
+## Corrected shared-DEK recovery architecture (implementation target)
+
+The canonical design is one random 256-bit DEK per encrypted PMS dataset. PIN, biometric and recovery-key paths each hold an independent authenticated wrapper of that same DEK. PIN rotation changes only the PIN wrapper; it must not generate a replacement DEK or re-encrypt database pages. OTP is a server-authorized second factor for starting the recovery workflow only. It is never a wrapper, KEK, key-derivation input, or DEK replacement capability.
+
+### Wrapper and backup rules
+
+- The PIN wrapper uses the existing Argon2id profile and AES-256-GCM. The resulting wrapper is additionally protected at rest by a non-exportable Android Keystore key on the enrolled device.
+- The biometric wrapper uses a distinct AES-GCM key in Android Keystore with strong-biometric authentication required and biometric-enrollment invalidation enabled. The launcher must execute the authenticated Cipher through `BiometricPrompt.CryptoObject`; callback success alone never unlocks the app.
+- The recovery wrapper uses an independently derived KEK from a randomly generated recovery secret of at least 160 bits. The secret is displayed once, confirmed by re-entry, and never persisted or logged. Only the authenticated recovery wrapper is persisted.
+- Device-bound Keystore wrappers are not portable to a replacement installation or device. An owner-authorized encrypted backup must carry a portable recovery wrapper and the encrypted database payload. It must not carry the recovery secret or plaintext DEK. Backup restore must be tested on a clean install before being represented as supported.
+- The PMS database itself must use the DEK through an encrypted SQLite implementation. Until that integration and migration are complete, the database is not considered encrypted by this design.
+- If all wrappers and authorized encrypted backups are lost, the data is unrecoverable by design. Setup must explain this before the user proceeds.
+
+### Recovery and authorization rules
+
+- Offline forgotten-PIN recovery requires the recovery secret, locally unwraps the existing DEK, and writes a new PIN wrapper. It does not create a new DEK.
+- Recovery-key rotation requires an authenticated session and replaces only the recovery wrapper; the previous recovery secret must stop working after the new wrapper is committed.
+- OTP verification produces a short-lived, signed, one-time, device-bound permit with a nonce, audience and expiry. The server tracks nonce consumption; the app verifies signature and bindings before exposing the recovery-key entry screen. Replayed permits are rejected.
+- OTP permits workflow continuation only. A valid permit without the recovery secret cannot unwrap the DEK.
+- Recovery attempts, including wrong recovery secrets, use durable rate limiting. State deletion, corruption or Keystore invalidation fails closed. Time calculations use monotonic elapsed time; reboot behavior is explicitly tested.
+- Audit records contain event type, result and timestamp only. They must never contain PINs, recovery secrets, KEKs, DEKs, OTPs or wrapper plaintext.
+
+### Current implementation progress
+
+- Existing Android Keystore PIN envelope, Argon2id PIN wrapping, biometric CryptoObject primitives and launcher PIN gate are retained.
+- Lockout state now has explicit first-enrollment initialization and refuses a missing persisted state instead of silently resetting the failure counter.
+- A crash after writing the PIN envelope but before writing the enrollment marker is recoverable: the next launch can authenticate the persisted envelope and complete the marker.
+- Exact-SHA Kotlin compilation CI is being added and release tags are being gated on its check.
+- Shared multi-wrapper envelope lifecycle, recovery-key provisioning, recovery flow, OTP permit service, SQLCipher/DEK database integration, instrumentation tests and physical-device qualification remain incomplete until their own tests and exact-SHA CI evidence pass.

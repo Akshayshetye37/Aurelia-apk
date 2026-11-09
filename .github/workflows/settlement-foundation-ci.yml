@@ -3,18 +3,32 @@ name: Aurelia settlement foundation CI
 on:
   push:
     branches:
+      - main
+      - master
       - feature/multi-provider-payment-backend
+      - "release/**"
     paths:
       - "src/payments/**"
       - "tests/**"
+      - "android/templates/**/*.java"
+      - "android/templates/**/*.kt"
+      - "scripts/patch-android.js"
       - "package.json"
       - ".github/workflows/settlement-foundation-ci.yml"
   pull_request:
     branches:
+      - main
+      - master
       - feature/multi-provider-payment-backend
+      - "release/**"
     paths:
       - "src/payments/**"
       - "tests/**"
+      - "android/templates/**/*.java"
+      - "android/templates/**/*.kt"
+      - "android/templates/**/*.java"
+      - "android/templates/**/*.kt"
+      - "scripts/patch-android.js"
       - "package.json"
       - ".github/workflows/settlement-foundation-ci.yml"
 

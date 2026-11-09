@@ -19,6 +19,8 @@ RELEASE: cloud sync OFF; live gateway collection OFF; automatic gateway settleme
 The application must never contain merchant credentials, webhook secrets, signing keys or backend secrets.
 -->
 
+<script type="module" src="./src/release-flags.mjs"></script>
+
 <!-- Application metadata
      Fresh-install posture: no fabricated rooms, guests, bookings, tables or revenue.
      Storage posture: durable write failures surface; strict import/restore requires

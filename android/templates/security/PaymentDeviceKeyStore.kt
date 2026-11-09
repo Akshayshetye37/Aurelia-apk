@@ -95,6 +95,7 @@ class PaymentDeviceKeyStore {
                 ?: throw SecurityException("Attested public key is unavailable.")
             val info = KeyFactory.getInstance(privateKey.algorithm, STORE)
                 .getKeySpec(privateKey, KeyInfo::class.java)
+            @Suppress("DEPRECATION") // Pre-Android 12 fallback API; Android 12+ uses securityLevel.
             val level = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 when (info.securityLevel) {
                     KeyProperties.SECURITY_LEVEL_STRONGBOX -> "STRONGBOX"

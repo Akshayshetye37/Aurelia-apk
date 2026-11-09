@@ -49,7 +49,12 @@ class BiometricVaultManager {
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setRandomizedEncryptionRequired(true)
             .setUserAuthenticationRequired(true)
-            .setInvalidatedByBiometricEnrollment(true)
+
+        // setInvalidatedByBiometricEnrollment was added in API 24; biometric
+        // enrollment is unavailable on API 23 in this vault implementation.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            builder.setInvalidatedByBiometricEnrollment(true)
+        }
 
         if (Build.VERSION.SDK_INT >= 30) {
             builder.setUserAuthenticationParameters(
