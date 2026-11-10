@@ -56,7 +56,6 @@ class AureliaAppManager(
     /** Accepts a DEK only after a BiometricPrompt CryptoObject authenticated its wrapper. */
     @Synchronized
     fun unlockWithDataKey(unwrappedDataKey: ByteArray): Boolean {
-        lockout.assertUnlocked()
         require(unwrappedDataKey.size == 32) { "Invalid biometric DEK." }
         dataKey?.fill(0)
         dataKey = unwrappedDataKey.copyOf()
@@ -140,7 +139,6 @@ class AureliaAppManager(
     /** Recovers the same DEK from the one-time 256-bit recovery key and rotates only the PIN wrapper. */
     @Synchronized
     fun recoverWithRecoveryKey(recoveryCode: CharArray, newPin: CharArray, envelopeBundle: String): String {
-        lockout.assertUnlocked()
         val bundle = JSONObject(envelopeBundle)
         require(bundle.getInt("bundleVersion") == 1 && bundle.has("recovery")) {
             "A recovery-enabled envelope bundle is required."
