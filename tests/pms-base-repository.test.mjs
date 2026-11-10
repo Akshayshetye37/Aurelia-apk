@@ -128,3 +128,58 @@ test("domain repository adapters bind guest, room, reservation and folio domains
     assert.throws(() => new GuestRepo({ bridge, authorize, entityType: "room" }), /cannot be rebound/);
   } finally { adapter.close?.(); }
 });
+
+test("guest, room, reservation, folio and payment repositories pass CRUD conflict rollback and restart contracts", async () => {
+  const cases = [
+    [GuestRepo, "guest", "guest-contract", { n: "Contract Guest", ph: "+911234567890" }, { ph: "+919876543210" }],
+    [RoomRepo, "room", "room-contract", { n: "101", t: "Deluxe", r: 1200, s: "ready" }, { s: "occ" }],
+    [ReservationRepo, "booking", "booking-contract", {
+      g: "Contract Guest", room: "101", in: 10, out: 12, st: "res", rate: 1200, p: 0,
+      ch: [], pays: [], checkInTime: "14:00", checkOutTime: "11:00"
+    }, { st: "in" }],
+    [FolioRepo, "folio", "folio-contract", {
+      bookingId: "booking-contract", paymentRows: [], paidPaise: 0, balanceDuePaise: 120000
+    }, { balanceDuePaise: 0 }],
+    [PaymentRepo, "payment", "payment-contract", {
+      bookingId: "booking-contract", folioId: "folio-contract", transactionId: "txn-contract",
+      provider: "razorpay", environment: "test", amountMinor: 120000, currency: "INR",
+      status: "created", idempotencyKey: "payment-contract", createdAt: "2026-11-10T00:00:00.000Z"
+    }, { status: "pending" }]
+  ];
+  for (const [Repo, entityType, id, initial, patch] of cases) {
+    const databaseName = "domain-contract-" + entityType;
+    const adapter = new IndexedDbPmsRepository({ indexedDBImpl: indexedDB, databaseName });
+    await adapter.database();
+    let eventNo = 0;
+    const makeBridge = engine => {
+      const bridge = new PmsRepositoryBridge({
+        tenantId: "tenant-domain-contract", propertyId: "property-domain-contract",
+        deviceId: "device-domain-contract", eventId: () => "domain-" + entityType + "-" + (++eventNo)
+      });
+      bridge.bindActiveEngine(engine, {
+        tenantId: "tenant-domain-contract", propertyId: "property-domain-contract",
+        deviceId: "device-domain-contract"
+      });
+      return bridge;
+    };
+    const authorize = () => true;
+    const repo = new Repo({ bridge: makeBridge(adapter), authorize });
+    try {
+      const created = await repo.create(id, initial);
+      const updated = await repo.update(id, created.version, current => ({ ...current, ...patch }));
+      assert.equal(updated.version, created.version + 1, entityType + " version must increment once");
+      await assert.rejects(repo.update(id, created.version, current => current),
+        error => error.code === "ENTITY_VERSION_CONFLICT");
+      const beforeRollback = await repo.get(id);
+      await assert.rejects(repo.update(id, updated.version, current => ({ ...current, notAllowed: true })),
+        error => error.code === "PMS_DOMAIN_VALIDATION_FAILED");
+      assert.deepEqual(await repo.get(id), beforeRollback, entityType + " failed write must roll back");
+      adapter.close?.();
+      const reopened = new IndexedDbPmsRepository({ indexedDBImpl: indexedDB, databaseName });
+      await reopened.database();
+      const afterRestart = new Repo({ bridge: makeBridge(reopened), authorize });
+      assert.deepEqual(await afterRestart.get(id), beforeRollback, entityType + " state must survive restart");
+      reopened.close?.();
+    } finally { adapter.close?.(); }
+  }
+});
