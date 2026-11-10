@@ -6,12 +6,55 @@ const stableId = z.union([
 ]);
 const base = z.object({ id: stableId.optional() }).passthrough();
 
-const booking = base.superRefine((row, context) => {
-  if (row.st !== undefined && !["res", "in", "done", "cancelled", "checkedin", "checked-in", "checked_in"].includes(row.st)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["st"], message: "unsupported booking lifecycle state" });
-  }
-  if (row.status !== undefined && !["reserved", "confirmed", "checked_in", "checked_out", "cancelled"].includes(row.status)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["status"], message: "unsupported booking lifecycle state" });
+const amountMajor = z.unknown().optional();
+const booking = z.object({
+  id: stableId,
+  g: z.string().trim().min(1).max(180),
+  room: z.union([z.string().trim().min(1).max(80), z.number().int().safe()]),
+  in: z.number().int().safe(),
+  out: z.number().int().safe(),
+  st: z.enum(["res", "in", "done", "cancelled", "checkedin", "checked-in", "checked_in"]),
+  rate: amountMajor,
+  p: amountMajor,
+  ch: z.array(z.unknown()).optional(),
+  pays: z.array(z.unknown()).optional(),
+  folioId: z.string().min(1).max(180).optional(),
+  checkInTime: z.string().regex(/^([01]\\d|2[0-3]):[0-5]\\d$/).optional(),
+  checkOutTime: z.string().regex(/^([01]\\d|2[0-3]):[0-5]\\d$/).optional(),
+  scheduledCheckIn: z.string().max(40).optional(),
+  scheduledCheckOut: z.string().max(40).optional(),
+  actualCheckInAt: z.string().max(40).optional(),
+  actualCheckInDate: z.string().max(20).optional(),
+  actualCheckOutAt: z.string().max(40).optional(),
+  actualCheckOutDate: z.string().max(20).optional(),
+  gatewayPayments: z.array(z.record(z.unknown())).optional(),
+  oc: z.array(z.record(z.unknown())).optional(),
+  veh: z.array(z.record(z.unknown())).optional(),
+  img: z.string().max(20_000_000).optional(),
+  imgKey: z.string().max(180).optional(),
+  demo: z.boolean().optional(),
+  bookedAt: z.string().max(40).optional(),
+  createdAt: z.string().max(40).optional(),
+  updatedAt: z.string().max(40).optional(),
+  cancelledAt: z.string().max(40).optional(),
+  cancelledStatus: z.string().max(80).optional(),
+  cancellationAccountingCommitted: z.boolean().optional(),
+  refundStatus: z.string().max(80).optional(),
+  refundRecordedAt: z.string().max(40).optional(),
+  refundPayableJournalRecorded: z.boolean().optional(),
+  refund_amount: amountMajor,
+  refund_date: z.string().max(40).optional(),
+  refund_settlement_confirmed: z.boolean().optional(),
+  refund_transaction_reference: z.string().max(180).optional(),
+  retentionJournalRecorded: z.boolean().optional(),
+  retention_fee_retained: amountMajor,
+  original_amount_paid: amountMajor,
+  paymentSnapshot: z.unknown().optional(),
+  dc: z.unknown().optional(),
+  protectedNew: z.boolean().optional()
+}).strict().superRefine((row, context) => {
+  if (row.out <= row.in) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["out"], message: "check-out offset must be after check-in offset" });
   }
 });
 const guest = z.object({
@@ -71,7 +114,18 @@ const inventory = base.superRefine((row, context) => {
 
 const schemas = {
   booking,
-  folio: base,
+  folio: z.object({
+    id: stableId,
+    bookingId: stableId,
+    paymentRows: z.array(z.unknown()),
+    paidPaise: z.number().int().safe().nonnegative(),
+    balanceDuePaise: z.number().int().safe().nonnegative(),
+    updatedAt: z.string().max(40).optional(),
+    legacySourceEvidence: z.object({
+      legacyPaidTotal: z.unknown(),
+      legacyPaymentRows: z.array(z.unknown())
+    }).strict().optional()
+  }).strict(),
   guest,
   room,
   room_block: base,

@@ -7,7 +7,7 @@ const snapshot = () => ({
   g: [{ id: "guest-1", n: "Guest One" }],
   t: [{ n: 1, s: 2, o: [["Tea", 20, "din"]] }],
   sales: [{ id: "RS-LEGACY-1", entity: "restaurant", t: 1, guest: "Walk-in", phone: "", items: [["Tea", 20]], a: 20, m: "Cash", at: "2026-11-08T10:00:00.000Z" }],
-  b: [{ id: 7, folioId: "folio-7", g: "Guest One", p: 500, pays: [{ a: 200, amountPaise: 20000 }], payments: [] }],
+  b: [{ id: 7, folioId: "folio-7", g: "Guest One", room: "101", in: 0, out: 1, st: "res", rate: 1200, p: 500, ch: [], pays: [{ a: 200, amountPaise: 20000 }], payments: [], checkInTime: "14:00", checkOutTime: "11:00" }],
   inv: [{ id: "item-1", n: "Towels", q: 5 }],
   exp: [{ amount: 100, note: "Utilities" }],
   led: [["Towels", 5, "", "2026-11-08"]],

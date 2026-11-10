@@ -108,9 +108,39 @@ function records(snapshot, migrationId) {
     add("guest", id, data, "g");
   });
   snapshot.b.forEach((row, index) => {
-    if (!row || typeof row !== "object") throw new Error("Malformed legacy booking at index " + index);
+    if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("Malformed legacy booking at index " + index);
     const id = safeId(row.id, "booking identity");
-    add("booking", id, { ...clone(row), id }, "b");
+    const guestName = safeId(row.g ?? row.guest ?? row.guestName ?? row.name, "booking guest identity");
+    const roomId = safeId(row.room ?? row.roomNo ?? row.roomNumber, "booking room identity");
+    const checkIn = Number(row.in ?? row.checkIn ?? row.arrival);
+    const checkOut = Number(row.out ?? row.checkOut ?? row.departure);
+    if (!Number.isSafeInteger(checkIn) || !Number.isSafeInteger(checkOut) || checkOut <= checkIn) {
+      throw new Error("Legacy booking dates are not normalized to valid day offsets; dry-run normalization is required.");
+    }
+    const statusValue = String(row.st ?? row.status ?? "res").toLowerCase().replace(/[ _]/g, "-");
+    const status = ["in", "checkedin", "checked-in"].includes(statusValue) ? "in"
+      : statusValue === "done" || statusValue === "checked-out" ? "done"
+      : statusValue === "cancelled" ? "cancelled" : "res";
+    const data = {
+      id, g: guestName, room: roomId, in: checkIn, out: checkOut, st: status,
+      ch: Array.isArray(row.ch) ? clone(row.ch) : Array.isArray(row.charges) ? clone(row.charges) : [],
+      pays: Array.isArray(row.pays) ? clone(row.pays) : Array.isArray(row.payments) ? clone(row.payments) : [],
+      p: row.p ?? row.paid ?? 0,
+      folioId: safeId(row.folioId ?? "booking-" + id, "folio identity"),
+      checkInTime: String(row.checkInTime ?? row.check_in_time ?? "14:00"),
+      checkOutTime: String(row.checkOutTime ?? row.check_out_time ?? "11:00")
+    };
+    const optionalFields = [
+      "rate", "scheduledCheckIn", "scheduledCheckOut", "actualCheckInAt", "actualCheckInDate",
+      "actualCheckOutAt", "actualCheckOutDate", "gatewayPayments", "oc", "veh", "img", "imgKey",
+      "demo", "bookedAt", "createdAt", "updatedAt", "cancelledAt", "cancelledStatus",
+      "cancellationAccountingCommitted", "refundStatus", "refundRecordedAt",
+      "refundPayableJournalRecorded", "refund_amount", "refund_date",
+      "refund_settlement_confirmed", "refund_transaction_reference", "retentionJournalRecorded",
+      "retention_fee_retained", "original_amount_paid", "paymentSnapshot", "dc", "protectedNew"
+    ];
+    for (const field of optionalFields) if (row[field] !== undefined) data[field] = clone(row[field]);
+    add("booking", id, data, "b");
     const folioId = safeId(row.folioId ?? "booking-" + id, "folio identity");
     // Preserve source values verbatim. Do not reconcile p vs pays or infer
     // an opening balance during migration.
