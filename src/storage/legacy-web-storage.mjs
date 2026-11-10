@@ -45,7 +45,7 @@ export function createLegacyMigrationStorage({ storage } = {}) {
     },
     setItem(key, value) {
       assertAllowed(key);
-      if (!persistent) throw Object.assign(new Error("Legacy migration storage is unavailable; refusing a volatile write."), {
+      if (!persistent) throw failure || Object.assign(new Error("Legacy migration storage is unavailable; refusing a volatile write."), {
         code: "LEGACY_STORAGE_UNAVAILABLE"
       });
       const serialized = String(value);
@@ -58,7 +58,7 @@ export function createLegacyMigrationStorage({ storage } = {}) {
     },
     removeItem(key) {
       assertAllowed(key);
-      if (!persistent) throw Object.assign(new Error("Legacy migration storage is unavailable."), {
+      if (!persistent) throw failure || Object.assign(new Error("Legacy migration storage is unavailable."), {
         code: "LEGACY_STORAGE_UNAVAILABLE"
       });
       target.removeItem(key);
