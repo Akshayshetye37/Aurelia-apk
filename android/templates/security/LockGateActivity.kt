@@ -700,9 +700,9 @@ class LockGateActivity : FragmentActivity() {
                 } catch (failure: Exception) {
                     showError(failure.message ?: "Recovery verification failed.")
                 } finally {
-                    recoveryChars.fill('\\u0000')
-                    newPinChars.fill('\\u0000')
-                    confirmChars.fill('\\u0000')
+                    recoveryChars.fill('\u0000')
+                    newPinChars.fill('\u0000')
+                    confirmChars.fill('\u0000')
                     recovery.text.clear()
                     newPin.text.clear()
                     confirm.text.clear()
