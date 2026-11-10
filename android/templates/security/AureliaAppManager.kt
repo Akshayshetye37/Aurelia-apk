@@ -53,6 +53,19 @@ class AureliaAppManager(
     }
 
     /** Unlocks only when the envelope authenticates and yields a 256-bit DEK. */
+    /** Accepts a DEK only after a BiometricPrompt CryptoObject authenticated its wrapper. */
+    @Synchronized
+    fun unlockWithDataKey(unwrappedDataKey: ByteArray): Boolean {
+        lockout.assertUnlocked()
+        require(unwrappedDataKey.size == 32) { "Invalid biometric DEK." }
+        dataKey?.fill(0)
+        dataKey = unwrappedDataKey.copyOf()
+        authenticated = true
+        backgroundAtElapsed = 0L
+        lockout.registerSuccess()
+        return true
+    }
+
     @Synchronized
     fun unlock(pin: CharArray, envelopeJson: String): Boolean {
         lockout.assertUnlocked()
