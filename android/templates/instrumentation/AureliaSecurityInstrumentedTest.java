@@ -80,6 +80,7 @@ public final class AureliaSecurityInstrumentedTest {
         byte[] dek = new byte[32];
         new SecureRandom().nextBytes(dek);
         byte[] recoveryKey = crypto.createRecoveryKey();
+        char[] oldPin = "481592".toCharArray();
         char[] newPin = "826491".toCharArray();
         try {
             String recoveryEnvelope = crypto.wrapDataKeyWithRecovery(dek, recoveryKey);
@@ -101,6 +102,7 @@ public final class AureliaSecurityInstrumentedTest {
         } finally {
             java.util.Arrays.fill(dek, (byte) 0);
             java.util.Arrays.fill(recoveryKey, (byte) 0);
+            java.util.Arrays.fill(oldPin, '\\0');
             java.util.Arrays.fill(newPin, '\\0');
         }
     }
