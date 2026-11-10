@@ -1,0 +1,206 @@
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { importPKCS8, jwtVerify, SignJWT } from "jose";
+
+if (!getApps().length) initializeApp();
+const db = getFirestore();
+const PHONE_PEPPER = defineSecret("PHONE_PEPPER");
+const RECOVERY_SIGNING_KEY_PKCS8 = defineSecret("RECOVERY_SIGNING_KEY_PKCS8");
+const GENERIC = new HttpsError("permission-denied", "Verification failed.");
+const ISSUER = "aurelia-recovery";
+const AUDIENCE = "aurelia-recovery-client";
+const REGION = "asia-south1";
+
+type PhoneProof = { uid: string; phone: string; authTime: number };
+
+function requiredString(value: unknown, max = 512): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > max) throw GENERIC;
+  return value;
+}
+
+function digest(tenantId: string, e164: string): Buffer {
+  return createHmac("sha256", PHONE_PEPPER.value())
+    .update(tenantId).update("|").update(e164).digest();
+}
+
+function equalDigest(encoded: unknown, actual: Buffer): boolean {
+  if (typeof encoded !== "string") return false;
+  let stored: Buffer;
+  try { stored = Buffer.from(encoded, "base64"); } catch { return false; }
+  return stored.length === actual.length && timingSafeEqual(stored, actual);
+}
+
+async function verifyPhoneToken(tokenValue: unknown): Promise<PhoneProof> {
+  const token = requiredString(tokenValue, 8192);
+  const decoded = await getAuth().verifyIdToken(token, true);
+  const authTime = Number(decoded.auth_time);
+  const fresh = Number.isFinite(authTime) && Math.floor(Date.now() / 1000) - authTime >= 0 &&
+    Math.floor(Date.now() / 1000) - authTime < 300;
+  if (decoded.firebase?.sign_in_provider !== "phone" || typeof decoded.phone_number !== "string" || !fresh) {
+    throw GENERIC;
+  }
+  if (!/^\+[1-9][0-9]{7,14}$/.test(decoded.phone_number)) throw GENERIC;
+  return { uid: decoded.uid, phone: decoded.phone_number, authTime };
+}
+
+/** Rate-limit transaction commits even when the request is rejected. */
+async function spendRateLimit(key: string, max: number, windowMs: number): Promise<void> {
+  const ref = db.doc(`rateLimits/${key}`);
+  const now = Date.now();
+  const allowed = await db.runTransaction(async tx => {
+    const snapshot = await tx.get(ref);
+    const current = snapshot.data() ?? { count: 0, startedAt: now };
+    const reset = now - Number(current.startedAt) >= windowMs;
+    const count = reset ? 1 : Number(current.count) + 1;
+    tx.set(ref, { count, startedAt: reset ? now : current.startedAt, updatedAt: FieldValue.serverTimestamp() });
+    return count <= max;
+  });
+  if (!allowed) throw new HttpsError("resource-exhausted", "Try again later.");
+}
+
+function maskPhone(phone: string): string {
+  const digits = phone.slice(1);
+  return "+" + digits.slice(0, 2) + " " + "•".repeat(Math.max(3, digits.length - 5)) + digits.slice(-3);
+}
+
+function validateTenantId(value: unknown): string {
+  const tenant = requiredString(value, 128);
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(tenant)) throw GENERIC;
+  return tenant;
+}
+
+function validateDeviceHash(value: unknown): string {
+  const device = requiredString(value, 64);
+  if (!/^[a-f0-9]{64}$/.test(device)) throw GENERIC;
+  return device;
+}
+
+function validateNonce(value: unknown): string {
+  const nonce = requiredString(value, 128);
+  if (!/^[A-Za-z0-9_-]{32,128}$/.test(nonce)) throw GENERIC;
+  return nonce;
+}
+
+async function signGrant(tenantId: string, deviceIdHash: string, nonce: string, jti: string) {
+  const privateKey = await importPKCS8(RECOVERY_SIGNING_KEY_PKCS8.value(), "ES256");
+  const now = Math.floor(Date.now() / 1000);
+  return new SignJWT({ did: deviceIdHash, nonce, scope: "recovery:continue" })
+    .setProtectedHeader({ alg: "ES256", typ: "JWT" })
+    .setIssuer(ISSUER).setAudience(AUDIENCE).setSubject(tenantId)
+    .setJti(jti).setIssuedAt(now).setExpirationTime(now + 600).sign(privateKey);
+}
+
+/**
+ * Owner-only phone registration. The phone ID token is supplied by the isolated
+ * recovery FirebaseAuth client; owner identity comes from the primary callable
+ * auth context. No raw phone number is persisted.
+ */
+export const registerRecoveryPhone = onCall(
+  { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER] },
+  async request => {
+    const tenantId = validateTenantId(request.auth?.token.tenantId);
+    if (request.auth?.token.role !== "owner") throw GENERIC;
+    const authTime = Number(request.auth?.token.auth_time ?? 0);
+    if (!authTime || Date.now() / 1000 - authTime >= 300) throw GENERIC;
+    await spendRateLimit(`reg:${tenantId}`, 5, 60 * 60_000);
+
+    const proof = await verifyPhoneToken(request.data?.phoneIdToken);
+    const hash = digest(tenantId, proof.phone);
+    const ref = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
+    const result = await db.runTransaction(async tx => {
+      const snapshot = await tx.get(ref);
+      const current = snapshot.data();
+      if (!current?.hash) {
+        tx.set(ref, { hash: hash.toString("base64"), masked: maskPhone(proof.phone),
+          state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp(), otpRequired: true });
+        return "VERIFIED" as const;
+      }
+      if (equalDigest(current.hash, hash)) {
+        tx.set(ref, { ...current, state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return "VERIFIED" as const;
+      }
+      if (current.pending?.hash) throw new HttpsError("failed-precondition", "A recovery phone change is already pending.");
+      tx.set(ref, { ...current, state: "CHANGE_PENDING",
+        pending: { hash: hash.toString("base64"), masked: maskPhone(proof.phone),
+          effectiveAt: Date.now() + 48 * 60 * 60_000 } }, { merge: true });
+      return "CHANGE_PENDING" as const;
+    });
+    return { state: result, masked: result === "VERIFIED" ? maskPhone(proof.phone) : undefined };
+  }
+);
+
+/** OTP proof may issue one grant per Firebase phone-auth event (uid + auth_time). */
+export const issueRecoveryGrant = onCall(
+  { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER, RECOVERY_SIGNING_KEY_PKCS8] },
+  async request => {
+    const tenantId = validateTenantId(request.data?.tenantId);
+    const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
+    const nonce = validateNonce(request.data?.nonce);
+    const proof = await verifyPhoneToken(request.data?.phoneIdToken);
+    await spendRateLimit(`rec:t:${tenantId}`, 5, 60 * 60_000);
+    await spendRateLimit(`rec:d:${deviceIdHash}`, 5, 60 * 60_000);
+    const ip = String(request.rawRequest.ip ?? "unknown").slice(0, 64);
+    const ipKey = createHmac("sha256", PHONE_PEPPER.value()).update(ip).digest("hex");
+    await spendRateLimit(`rec:ip:${ipKey}`, 20, 60 * 60_000);
+
+    const phoneRef = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
+    const phoneSnapshot = await phoneRef.get();
+    const phoneRecord = phoneSnapshot.data();
+    const actualHash = digest(tenantId, proof.phone);
+    if (!phoneRecord || phoneRecord.state !== "VERIFIED" ||
+        phoneRecord.otpRequired === false || !equalDigest(phoneRecord.hash, actualHash)) throw GENERIC;
+
+    // Firebase ID tokens can be replayed while fresh. Consume each auth event once.
+    const proofId = createHmac("sha256", PHONE_PEPPER.value())
+      .update(`${tenantId}|${proof.uid}|${proof.authTime}`).digest("hex");
+    const proofRef = db.doc(`usedPhoneProofs/${proofId}`);
+    const jti = randomUUID();
+    const grantRef = db.doc(`recoveryGrants/${jti}`);
+    await db.runTransaction(async tx => {
+      const used = await tx.get(proofRef);
+      if (used.exists) throw GENERIC;
+      tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
+        expiresAt: Date.now() + 10 * 60_000 });
+      tx.create(grantRef, { tenantId, deviceIdHash, nonce, state: "ISSUED",
+        createdAt: FieldValue.serverTimestamp(), expiresAt: Date.now() + 10 * 60_000 });
+    });
+    return { grant: await signGrant(tenantId, deviceIdHash, nonce, jti) };
+  }
+);
+
+/** Consume jti atomically before the Android app arms its in-memory recovery gate. */
+export const consumeRecoveryGrant = onCall(
+  { region: REGION, enforceAppCheck: true, secrets: [RECOVERY_SIGNING_KEY_PKCS8] },
+  async request => {
+    const grant = requiredString(request.data?.grant, 4096);
+    const publicKeyPem = requiredString(request.data?.verificationPublicKeyPem, 4096);
+    // The supplied public key is not trusted for authorization; it is only used
+    // to ensure the presented token is structurally the expected server-issued JWT.
+    // Server signature verification uses the configured private key's public half.
+    const privateKey = await importPKCS8(RECOVERY_SIGNING_KEY_PKCS8.value(), "ES256");
+    const { publicKey } = await import("jose");
+    const publicKeyObject = await publicKey(privateKey);
+    const verified = await jwtVerify(grant, publicKeyObject, { issuer: ISSUER, audience: AUDIENCE });
+    const { sub, jti, did, nonce, scope } = verified.payload;
+    if (typeof sub !== "string" || typeof jti !== "string" || typeof did !== "string" ||
+        typeof nonce !== "string" || scope !== "recovery:continue") throw GENERIC;
+    const tenantId = validateTenantId(sub);
+    const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
+    const clientNonce = validateNonce(request.data?.nonce);
+    if (did !== deviceIdHash || nonce !== clientNonce) throw GENERIC;
+    const ref = db.doc(`recoveryGrants/${jti}`);
+    await db.runTransaction(async tx => {
+      const snapshot = await tx.get(ref);
+      const data = snapshot.data();
+      if (!data || data.state !== "ISSUED" || data.tenantId !== tenantId ||
+          data.deviceIdHash !== deviceIdHash || data.nonce !== clientNonce ||
+          Number(data.expiresAt) <= Date.now()) throw GENERIC;
+      tx.update(ref, { state: "CONSUMED", consumedAt: FieldValue.serverTimestamp() });
+    });
+    return { consumed: true };
+  }
+);
