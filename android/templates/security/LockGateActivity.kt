@@ -522,6 +522,10 @@ class LockGateActivity : FragmentActivity() {
     private fun showRecoveryPrompt() {
         try {
             val record = RecoveryPhoneStore(this).read()
+            if (record.state == RecoveryPhoneStore.State.UNSET) {
+                showRecoveryKeyPrompt()
+                return
+            }
             if (record.state == RecoveryPhoneStore.State.UNVERIFIED) {
                 showError("Recovery phone setup is incomplete. Finish phone verification in Settings before using Forgot PIN.")
                 return
@@ -632,7 +636,8 @@ class LockGateActivity : FragmentActivity() {
     private fun showRecoveryKeyPrompt() {
         val record = RecoveryPhoneStore(this).read()
         if (record.state == RecoveryPhoneStore.State.UNVERIFIED ||
-            (record.otpRequired && record.currentE164 == null)) {
+            (record.state != RecoveryPhoneStore.State.UNSET &&
+                record.otpRequired && record.currentE164 == null)) {
             showError("Recovery phone setup is incomplete. Recovery is blocked until the registered phone is verified.")
             return
         }
