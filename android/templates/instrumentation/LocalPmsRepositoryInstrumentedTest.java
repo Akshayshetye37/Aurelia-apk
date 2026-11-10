@@ -88,6 +88,19 @@ public final class LocalPmsRepositoryInstrumentedTest {
       recoveryDek = crypto.unwrapDataKeyWithRecovery(bundle.getString("recovery"), recoveryBytes);
       assertArrayEquals(pinDek, recoveryDek);
 
+      String changedPinBundle = manager.changePin(pin, newPin, enrollment.getEnvelopeJson());
+      JSONObject changedPin = new JSONObject(changedPinBundle);
+      assertTrue("changing PIN must preserve independent recovery wrapper", changedPin.has("recovery"));
+      byte[] changedPinDek = crypto.unwrapDataKey(changedPin.getString("pin"), newPin);
+      byte[] unchangedRecoveryDek = crypto.unwrapDataKeyWithRecovery(changedPin.getString("recovery"), recoveryBytes);
+      try {
+        assertArrayEquals(pinDek, changedPinDek);
+        assertArrayEquals(pinDek, unchangedRecoveryDek);
+      } finally {
+        Arrays.fill(changedPinDek, (byte) 0);
+        Arrays.fill(unchangedRecoveryDek, (byte) 0);
+      }
+
       manager.lock();
       assertTrue(manager.unlock(pin, enrollment.getEnvelopeJson()));
       String recoveredBundle = manager.recoverWithRecoveryKey(recoveryCode, newPin, enrollment.getEnvelopeJson());
