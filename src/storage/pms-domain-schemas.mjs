@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-const stableId = z.string().trim().min(1).max(180).refine(value => !/[\u0000-\u001f]/.test(value), "ID contains control characters");
-const base = z.object({ id: stableId }).passthrough();
+const stableId = z.string().min(1).max(180).refine(value => value.trim().length > 0 && !/[\u0000-\u001f]/.test(value), "ID must be non-empty and contain no control characters");
+const base = z.object({ id: stableId.optional() }).passthrough();
 
 const inventory = base.superRefine((row, context) => {
   for (const field of ["q", "ro"]) {
