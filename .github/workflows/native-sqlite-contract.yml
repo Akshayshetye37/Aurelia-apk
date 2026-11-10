@@ -120,6 +120,16 @@ jobs:
             exit 1
           fi
 
+      - name: Fast compile Android instrumentation Java tests
+        timeout-minutes: 10
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace --max-workers=2 \
+            compileDebugAndroidTestJavaWithJavac
+
       - name: Compile native sources, unit tests and instrumentation APK
         timeout-minutes: 20
         working-directory: android
