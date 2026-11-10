@@ -717,7 +717,8 @@ public final class LocalPmsRepositoryInstrumentedTest {
           db.execSQL("CREATE INDEX pms_outbox_delivery_idx ON pms_outbox(status,retry_at,created_at)");
           db.execSQL("CREATE TABLE pms_migrations(migration_key TEXT PRIMARY KEY NOT NULL,migration_id TEXT NOT NULL,source_key TEXT NOT NULL,completed_at INTEGER NOT NULL,entity_count INTEGER NOT NULL)");
           db.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL,source_timestamp TEXT NOT NULL,created_at INTEGER NOT NULL,format_version INTEGER NOT NULL)");
-          db.execSQL("INSERT INTO pms_entities VALUES('folio','upgrade-folio',1,'{\\\"id\\\":\\\"upgrade-folio\\\"}',1)");
+          db.execSQL("INSERT INTO pms_entities(entity_type,entity_id,version,data_json,updated_at) VALUES(?,?,?,?,?)",
+            new Object[] { "folio", "upgrade-folio", 1, "{\"id\":\"upgrade-folio\"}", 1 });
           db.execSQL("INSERT INTO pms_outbox(event_id,tenant_id,property_id,device_id,entity_type,entity_id,sequence,event_type,schema_version,occurred_at,payload_json,status,attempts,created_at) VALUES('upgrade-event','tenant-test','property-test','device-test','folio','upgrade-folio',1,'folio.created',1,'2026-11-10T00:00:00.000Z','{}','PENDING',0,1)");
         }
         @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
