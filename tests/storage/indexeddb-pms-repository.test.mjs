@@ -42,7 +42,7 @@ test("shared repository contract: atomic multi-entity writes, outbox retry and r
 
 test("repository rejects non-UTC event timestamps at the IndexedDB boundary",async()=>{
  const r=repo("utc-boundary");
- const invalid={...event(1),occurredAt:"2026-11-09T17:30:00.000+05:30"};
+ const invalid={...event(1,"utc-folio"),occurredAt:"2026-11-09T17:30:00.000+05:30"};
  await assert.rejects(r.transactBusinessChange({entityType:"folio",entityId:"utc-folio",expectedVersion:0,event:invalid},()=>({balanceMinor:1})),/UTC ISO timestamp/);
  assert.equal(await r.getEntity("folio","utc-folio"),null);
 });
