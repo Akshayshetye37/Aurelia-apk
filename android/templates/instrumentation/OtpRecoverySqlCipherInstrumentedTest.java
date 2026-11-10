@@ -189,7 +189,7 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
     KeyStore store = KeyStore.getInstance("AndroidKeyStore");
     store.load(null);
     if (store.containsAlias(alias)) store.deleteEntry(alias);
-    javax.crypto.KeyGenerator generator = java.security.KeyGenerator.getInstance(
+    javax.crypto.KeyGenerator generator = javax.crypto.KeyGenerator.getInstance(
       android.security.keystore.KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
     generator.init(new android.security.keystore.KeyGenParameterSpec.Builder(
       alias,
