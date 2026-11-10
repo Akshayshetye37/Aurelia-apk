@@ -373,3 +373,27 @@ test("legacy migration identity is a full SHA-256 digest and deterministic", asy
   assert.equal(second, first);
   assert.notEqual(await stableMigrationId(raw + " "), first);
 });
+
+test("canonical authority blocks direct legacy restore and migration entry points", async () => {
+  const storage = makeStorage({ [AURELIA_LEGACY_STATE_KEY]: JSON.stringify(state) });
+  const app = coordinator("direct-authority-entry-guards", storage);
+  const initialized = await app.initializeApplication();
+  const authority = await initialized.repository.getEntity("audit", "pms:authority");
+  await initialized.bridge.mutateEntity({
+    entityType: "audit", entityId: "pms:authority", expectedVersion: authority.version,
+    eventType: "test.authority_promoted",
+    mutate: data => Object.assign(data, {
+      schemaVersion: 1, status: "CANONICAL_AUTHORITATIVE", uiCutover: true,
+      projectionStatus: "VERIFIED", updatedAt: "2026-11-10T00:00:00.000Z"
+    })
+  });
+  await assert.rejects(
+    app.restoreLegacyStateFromCanonical(),
+    error => error.code === "PMS_CANONICAL_AUTHORITY_CUTOVER_REQUIRED"
+  );
+  await assert.rejects(
+    app.executeGuardedMigration(),
+    error => error.code === "PMS_CANONICAL_AUTHORITY_CUTOVER_REQUIRED"
+  );
+  assert.equal(storage.getItem(AURELIA_LEGACY_STATE_KEY), JSON.stringify(state));
+});
