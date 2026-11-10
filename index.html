@@ -5484,6 +5484,7 @@ import { PmsBootstrapCoordinator } from "./src/storage/pms-bootstrap-coordinator
 import { createLegacyMigrationStorage, createPreferenceStorage, readLegacyPhotoFallbackEntries, deleteLegacyPhotoFallbackEntries } from "./src/storage/legacy-web-storage.mjs";
 import { createPhotoArchive } from "./src/storage/photo-archive.mjs";
 import { createBackupVaultStore } from "./src/storage/backup-vault-store.mjs";
+import { PMS_LEGACY_SNAPSHOT_ENTITY_ID } from "./src/storage/pms-repository-contract.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
 import { PmsLocalFirstWriteCoordinator } from "./src/storage/pms-local-first-write-coordinator.mjs";
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
@@ -5563,7 +5564,7 @@ try {
     const withInventory = await boot.inventoryRepository.hydrateSnapshot(withSales, { enabled });
     return boot.expenseRepository.hydrateSnapshot(withInventory, { enabled });
   };
-  const canonicalAudit = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  const canonicalAudit = await storageBridge.fetchEntity("audit", PMS_LEGACY_SNAPSHOT_ENTITY_ID);
   if (canonicalAudit?.data?.snapshot) {
     const hydrated = await hydrateDomainRead(canonicalAudit.data.snapshot);
     window.__AURELIA_CANONICAL_BOOTSTRAP_RAW = JSON.stringify(hydrated);
@@ -5577,7 +5578,7 @@ try {
   const localFirstWrites = new PmsLocalFirstWriteCoordinator({
     persist: snapshot => storageBridge.persistCompatibilitySnapshot(snapshot),
     readBack: async () => {
-      const row = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+      const row = await storageBridge.fetchEntity("audit", PMS_LEGACY_SNAPSHOT_ENTITY_ID);
       return row?.data || null;
     },
     cache: null,
@@ -5597,7 +5598,7 @@ try {
      syncRestaurantSales: snapshot => boot.restaurantSaleRepository.syncSnapshot(snapshot),
      syncInventory: snapshot => boot.inventoryRepository.syncSnapshot(snapshot),
      readBack: async () => {
-       const row = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+       const row = await storageBridge.fetchEntity("audit", PMS_LEGACY_SNAPSHOT_ENTITY_ID);
        return row?.data || null;
      },
      settlePayment: input => {
