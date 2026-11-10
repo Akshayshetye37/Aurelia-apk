@@ -76,8 +76,22 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
       dbKey = null;
       manager.lock(); // session DEK is zeroed before recovery begins.
 
+      // Seed a validly shaped biometric wrapper and Keystore alias before recovery.
+      biometricVault.createOrReplaceKey();
+      KeyStore enrolledBiometricKeys = KeyStore.getInstance("AndroidKeyStore");
+      enrolledBiometricKeys.load(null);
+      assertTrue("test must begin with an enrolled biometric Keystore key",
+        enrolledBiometricKeys.containsAlias("aurelia.pms.biometric.dek.v1"));
+      byte[] fakeNonce = new byte[12];
+      byte[] fakeCiphertext = new byte[48];
+      Arrays.fill(fakeNonce, (byte) 0x31);
+      Arrays.fill(fakeCiphertext, (byte) 0x42);
+      biometricStore.write(new com.aurelia.pms.security.BiometricVaultManager.WrappedKey(fakeNonce, fakeCiphertext));
+      Arrays.fill(fakeNonce, (byte) 0);
+      Arrays.fill(fakeCiphertext, (byte) 0);
+
       // 2. Simulate process recreation after successful recovery-key unwrap but before envelope
-      // commit. A fresh manager has no in-memory DEK; the old durable envelope must still work.
+      // commit. Old PIN and biometric unlock remain intact because no replacement was committed.
       String uncommitted = manager.recoverWithRecoveryKey(recoveryCode, newPin, envelopeStore.read());
       JSONObject pending = new JSONObject(uncommitted);
       byte[] pendingDek = crypto.unwrapDataKey(pending.getString("pin"), newPin);
@@ -87,9 +101,11 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
       manager = newManager(context); // fresh process-scoped coordinator; Keystore/storage survive.
       assertTrue("old envelope must survive an interrupted, uncommitted rotation",
         manager.unlock(oldPin, envelopeStore.read()));
+      assertTrue("biometric wrapper must remain until recovery reaches commit",
+        biometricStore.exists());
       manager.lock();
 
-      // 3. Retry recovery and durably commit the replacement PIN wrapper.
+      // 3. Retry recovery. Revoke biometric access first, then atomically commit the new PIN.
       String replacement = manager.recoverWithRecoveryKey(recoveryCode, newPin, envelopeStore.read());
       JSONObject rotated = new JSONObject(replacement);
       assertEquals("recovery wrapper must be retained", originalEnvelope.getString("recovery"),
@@ -104,30 +120,15 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
         Arrays.fill(recoveryProbe, (byte) 0);
       }
 
-      // Seed a structurally valid biometric wrapper, then execute the same invalidation
-      // operation performed by LockGateActivity after the durable recovery swap.
-      biometricVault.createOrReplaceKey();
-      KeyStore enrolledBiometricKeys = KeyStore.getInstance("AndroidKeyStore");
-      enrolledBiometricKeys.load(null);
-      assertTrue("test must begin with an enrolled biometric Keystore key",
-        enrolledBiometricKeys.containsAlias("aurelia.pms.biometric.dek.v1"));
-      byte[] fakeNonce = new byte[12];
-      byte[] fakeCiphertext = new byte[48];
-      Arrays.fill(fakeNonce, (byte) 0x31);
-      Arrays.fill(fakeCiphertext, (byte) 0x42);
-      biometricStore.write(new com.aurelia.pms.security.BiometricVaultManager.WrappedKey(fakeNonce, fakeCiphertext));
-      Arrays.fill(fakeNonce, (byte) 0);
-      Arrays.fill(fakeCiphertext, (byte) 0);
-
-      envelopeStore.writeRecoveryReplacement(replacement);
-      manager.confirmRecoverySwapCommitted();
       biometricStore.delete();
       biometricVault.invalidateAfterRecovery();
-      assertFalse("biometric DEK wrapper must be invalidated after recovery", biometricStore.exists());
+      assertFalse("biometric DEK wrapper must be invalidated before recovery commit", biometricStore.exists());
       KeyStore biometricKeys = KeyStore.getInstance("AndroidKeyStore");
       biometricKeys.load(null);
-      assertFalse("biometric Keystore alias must be invalidated after recovery",
+      assertFalse("biometric Keystore alias must be invalidated before recovery commit",
         biometricKeys.containsAlias("aurelia.pms.biometric.dek.v1"));
+      envelopeStore.writeRecoveryReplacement(replacement);
+      manager.confirmRecoverySwapCommitted();
       manager.lock();
 
       // 4. PIN A must no longer authenticate the committed envelope.
