@@ -90,20 +90,21 @@ class AureliaCryptoEngine(
      */
     fun derivePinKey(pin: CharArray, salt: ByteArray): ByteArray {
         val argon2Key = deriveArgon2Key(pin, salt)
-        var pseudorandomKey: ByteArray? = null
         try {
             val extract = Mac.getInstance("HmacSHA256")
             extract.init(pinKekSecret())
-            pseudorandomKey = extract.doFinal(argon2Key)
-
-            val expand = Mac.getInstance("HmacSHA256")
-            expand.init(SecretKeySpec(pseudorandomKey, "HmacSHA256"))
-            expand.update(PIN_HKDF_INFO.toByteArray(Charsets.UTF_8))
-            expand.update(1.toByte())
-            return expand.doFinal().copyOf(KEY_BYTES)
+            val pseudorandomKey = extract.doFinal(argon2Key)
+            try {
+                val expand = Mac.getInstance("HmacSHA256")
+                expand.init(SecretKeySpec(pseudorandomKey, "HmacSHA256"))
+                expand.update(PIN_HKDF_INFO.toByteArray(Charsets.UTF_8))
+                expand.update(1.toByte())
+                return expand.doFinal().copyOf(KEY_BYTES)
+            } finally {
+                pseudorandomKey.fill(0)
+            }
         } finally {
             argon2Key.fill(0)
-            pseudorandomKey?.fill(0)
         }
     }
 
@@ -171,7 +172,7 @@ class AureliaCryptoEngine(
         val version = json.getInt("version")
         val legacy = version == LEGACY_VERSION
         require(legacy || version == VERSION) { "Unsupported envelope version." }
-        require(json.length() == if (legacy) 10 else 12) { "Unexpected envelope fields." }
+        require(json.length() == (if (legacy) 10 else 12)) { "Unexpected envelope fields." }
         if (!legacy) {
             require(json.getString("method") == "PIN" && json.getString("databaseId") == DATABASE_ID) {
                 "Envelope method or database binding is invalid."
