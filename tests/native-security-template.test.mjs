@@ -62,7 +62,9 @@ test('PIN policy is enforced by the cryptographic engine, not only by the launch
   assert.match(gate, /first\.size !in 4\.\.16/);
   assert.match(crypto, /PIN must contain 4–16 digits/);
   assert.match(gate, /Forgot PIN\?/);
-  assert.match(gate, /recovery service, which is not yet available/);
+  assert.match(gate, /showRecoveryPrompt/);
+  assert.match(manager, /recoverWithRecoveryKey/);
+  assert.match(crypto, /wrapDataKeyWithRecovery/);
 });
 test('payment device identity uses Android Keystore P-256 and domain-separated protocol transcripts', () => {
   const source = read('android/templates/security/PaymentDeviceKeyStore.kt');
