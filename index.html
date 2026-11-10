@@ -341,49 +341,16 @@ function guestContactActions(name,phone){
 </script>
 <script id="aurelia-safe-storage">
 (function(){
-  var mem = {};
-  var storageInitError = null;
-  function canLS(){
-    try{
-      var k="__aurelia_ls_test__";
-      window.localStorage.setItem(k,"1");
-      window.localStorage.removeItem(k);
-      return true;
-    }catch(e){storageInitError=e;return false}
-  }
-  var ok = canLS();
-  var embeddedPreview = false;
-  try{embeddedPreview=String(location.href).startsWith('about:srcdoc') || !!(window.frameElement && window.frameElement.hasAttribute('sandbox') && !window.frameElement.sandbox.contains('allow-same-origin'))}catch(e){embeddedPreview=String(location.href).startsWith('about:srcdoc')}
-  window.__aureliaStorage = {
-    getItem: function(k){
-      try{ if(ok) return localStorage.getItem(k); }catch(e){}
-      return mem[k] != null ? mem[k] : null;
-    },
-    setItem: function(k,v){
-      if(ok){
-        try{ localStorage.setItem(k,String(v)); return; }
-        catch(e){
-          /* Never disguise a quota/security failure as a durable write. */
-          throw new Error('Device storage write failed: '+(e&&e.name||'StorageError'));
-        }
-      }
-      mem[k]=String(v);
-    },
-    removeItem: function(k){
-      try{ if(ok) localStorage.removeItem(k); }catch(e){}
-      delete mem[k];
-    },
-    memoryOnly: !ok,
-    memoryOnlyReason: !ok ? (embeddedPreview ? 'embedded-preview-sandbox' : (storageInitError&&storageInitError.name||'storage-unavailable')) : null,
-    persistent: ok
-  };
-  window.AureliaStorageDiagnostics = Object.freeze({
-    persistent: ok,
-    mode: ok ? 'browser-local-storage' : 'session-memory-only',
-    reason: !ok ? (embeddedPreview ? 'The embedded HTML preview uses an opaque sandbox origin and blocks durable browser storage.' : (storageInitError&&storageInitError.message||'Browser storage is unavailable.')) : null,
-    embeddedPreview: embeddedPreview
+  var embeddedPreview=false;
+  try{embeddedPreview=String(location.href).startsWith('about:srcdoc')||!!(window.frameElement&&window.frameElement.hasAttribute('sandbox')&&!window.frameElement.sandbox.contains('allow-same-origin'))}
+  catch(e){embeddedPreview=String(location.href).startsWith('about:srcdoc')}
+  var indexedDbAvailable=!!window.indexedDB;
+  window.AureliaStorageDiagnostics=Object.freeze({
+    persistent:indexedDbAvailable,
+    mode:indexedDbAvailable?'indexeddb':'unavailable',
+    reason:indexedDbAvailable?null:'IndexedDB is unavailable in this runtime.',
+    embeddedPreview:embeddedPreview
   });
-  /* Memory fallback is explicit; failed durable writes are never silently downgraded. */
 })();
 </script>
 
@@ -708,16 +675,15 @@ let photoLegacyMigration=null;
 async function migrateLegacyPhotoFallback(db){
  if(photoStorageSandboxed())return;
  let entries=[];
- try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(PHOTO_FALLBACK_PREFIX)){const value=localStorage.getItem(k);if(typeof value==='string')entries.push([k.slice(PHOTO_FALLBACK_PREFIX.length),value])}}}
- catch(e){return}
+ try{entries=window.AureliaLegacyStorage?.readPhotoFallbackEntries?.()||[]}catch(e){throw new Error('Legacy photo migration could not read its quarantined source: '+(e?.message||''))}
  if(!entries.length)return;
  await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite'),store=tx.objectStore('originals');entries.forEach(([key,value])=>store.put(value,key));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Legacy photo migration failed'));tx.onabort=()=>reject(tx.error||new Error('Legacy photo migration was aborted'))});
  for(const [key,value] of entries){
   const stored=await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Legacy photo read-back failed'))});
   if(stored!==value)throw new Error('Legacy photo migration read-back mismatch; source photo was retained.');
  }
- // Delete old localStorage copies only after every IndexedDB value passed exact read-back.
- for(const [key] of entries)localStorage.removeItem(PHOTO_FALLBACK_PREFIX+key);
+ // Delete old photo copies only after every IndexedDB value passed exact read-back.
+ window.AureliaLegacyStorage.deletePhotoFallbackEntries(entries);
 }
 function photoDb(){return photoDbOpen().then(async db=>{if(!photoLegacyMigration)photoLegacyMigration=migrateLegacyPhotoFallback(db).catch(error=>{photoLegacyMigration=null;throw error});try{await photoLegacyMigration;return db}catch(error){db.close();throw error}})}
 async function photoPut(key,data){
@@ -1156,27 +1122,13 @@ function backupVaultDb(){
   req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('Could not open encrypted backup key storage.'));
  });
 }
-let backupVaultMemory=null;
-const BACKUP_VAULT_FALLBACK_KEY='aurelia-pms-backup-vault-v1:wrapped';
-function readBackupVaultFallback(){
- try{
-  const raw=localStorage.getItem(BACKUP_VAULT_FALLBACK_KEY);
-  if(!raw)return null;
-  const saved=JSON.parse(raw);
-  if(!saved||saved.id!==BACKUP_VAULT_ID||saved.format!==1||typeof saved.wrappedKey!=='string')return null;
-  return {...saved,key:backupVaultMemory&&backupVaultMemory.salt===saved.salt?backupVaultMemory.key:null};
- }catch(_){throw new Error('This preview blocks both IndexedDB and local storage. Open the PMS in Chrome or the native Android app to use encrypted backups.')}
-}
 async function readBackupVault(){
  try{
   const db=await backupVaultDb();
   try{return await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readonly'),req=tx.objectStore('vault').get(BACKUP_VAULT_ID);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}
   finally{db.close()}
  }catch(error){
-  const fallback=readBackupVaultFallback();
-  if(fallback)return fallback;
-  if(error&&/blocks both IndexedDB/.test(error.message))throw error;
-  return null;
+  throw new Error('Durable IndexedDB backup-key storage is unavailable; Web Storage fallback is prohibited. '+(error?.message||''));
  }
 }
 async function writeBackupVault(record){
@@ -1185,11 +1137,7 @@ async function writeBackupVault(record){
   try{await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readwrite');tx.objectStore('vault').put(record);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('Could not save backup recovery key.'))})}
   finally{db.close()}
  }catch(error){
-  try{
-   const {key,...wrappedOnly}=record;
-   localStorage.setItem(BACKUP_VAULT_FALLBACK_KEY,JSON.stringify(wrappedOnly));
-   backupVaultMemory={salt:record.salt,key:record.key};
-  }catch(_){throw new Error('Secure backup storage is blocked in this preview. Open the PMS in Chrome or the native Android app; no recovery key was saved.')}
+  throw new Error('Secure IndexedDB backup-key storage is unavailable; no Web Storage fallback was written. '+(error?.message||''));
  }
 }
 async function backupPasswordKey(password,salt,iterations){
@@ -5623,7 +5571,8 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 })();
 </script>
 <script type="module" id="aurelia-async-runtime-bootstrap">
-import { bootstrapper } from "./src/storage/pms-bootstrap-coordinator.mjs";
+import { PmsBootstrapCoordinator } from "./src/storage/pms-bootstrap-coordinator.mjs";
+import { createLegacyMigrationStorage, readLegacyPhotoFallbackEntries, deleteLegacyPhotoFallbackEntries } from "./src/storage/legacy-web-storage.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
 import { PmsLocalFirstWriteCoordinator } from "./src/storage/pms-local-first-write-coordinator.mjs";
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
@@ -5631,6 +5580,19 @@ import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCata
 import { commitReservationToRepository } from "./src/storage/repository-reservation-service.mjs";
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
+const legacyStorage = createLegacyMigrationStorage();
+window.__aureliaStorage = legacyStorage;
+window.AureliaLegacyStorage = Object.freeze({
+  readPhotoFallbackEntries: () => readLegacyPhotoFallbackEntries(),
+  deletePhotoFallbackEntries: entries => deleteLegacyPhotoFallbackEntries(entries)
+});
+window.AureliaStorageDiagnostics = Object.freeze({
+  persistent: legacyStorage.persistent,
+  mode: legacyStorage.persistent ? "legacy-migration-storage" : "unavailable",
+  reason: legacyStorage.memoryOnlyReason || null,
+  embeddedPreview: window.AureliaStorageDiagnostics?.embeddedPreview === true
+});
+const bootstrapper = new PmsBootstrapCoordinator({ storage: legacyStorage });
 
 const shield = document.getElementById("aurelia-runtime-shield");
 const status = document.getElementById("aurelia-runtime-shield-status");
