@@ -74,7 +74,7 @@ test('Razorpay webhook verifies exact raw bytes with constant-time comparison', 
 test('Cashfree creates hosted checkout session and sends required API version headers', async () => {
   const mock = mockFetch(async () => ({ status: 200, body: { order_id: 'order_123', payment_session_id: 'session_123', order_amount: 125, order_currency: 'INR', order_status: 'ACTIVE' } }));
   const adapter = new CashfreeAdapter({ credentials: { appId: 'app', secretKey: 'secret', webhookSecret: 'hook' }, environment: 'test', fetchImpl: mock.fetchImpl });
-  const result = await adapter.createOrder({ orderId: 'order_123', amountMinor: 12500, currency: 'INR', customer: { id: 'guest_123', phone: '9999999999' }, returnUrl: 'https://pms.example/return', idempotencyKey: 'request-123456' });
+  const result = await adapter.createOrder({ orderId: 'order_123', amountMinor: 12500, currency: 'INR', customer: { id: 'guest_123', phone: '9999999999' }, returnUrl: 'https://pms.example/return', idempotencyKey: 'request-test' });
   assert.equal(result.paymentSessionId, 'session_123');
   assert.equal(JSON.parse(mock.calls[0].options.body).order_amount, 125);
   assert.equal(mock.calls[0].options.headers['x-api-version'], '2026-01-01');
@@ -176,14 +176,14 @@ test('provider factory exposes only adapters with the complete checkout contract
   for (const operation of ['validateCredentials', 'createOrder', 'findOrderByReference', 'getPaymentStatus', 'verifyWebhook', 'createRefund', 'getRefundStatus']) {
     assert.equal(typeof adapter[operation], 'function');
   }
-  const partial = createProviderAdapter('ccavenue', { credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey: '0123456789ABCDEF0123456789ABCDEF' }, environment: 'test' });
+  const partial = createProviderAdapter('ccavenue', { credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }, environment: 'test' });
   for (const operation of providerCapabilities('ccavenue')) assert.equal(typeof partial[operation], 'function');
   assert.equal(providerQualificationStatus('ccavenue').partial, true);
 });
 
 test('provider-neutral checkout contract rejects amount or provider response binding drift', async () => {
   const { assertCheckoutRequest, normalizeCheckoutSession } = await import('../src/providers/checkout-contract.mjs');
-  const request = { provider: 'razorpay', environment: 'test', amountMinor: 1200, currency: 'INR', idempotencyKey: 'idem-key-123456' };
+  const request = { provider: 'razorpay', environment: 'test', amountMinor: 1200, currency: 'INR', idempotencyKey: 'idem-test' };
   assert.equal(assertCheckoutRequest(request), request);
   assert.throws(() => assertCheckoutRequest({ ...request, amountMinor: 12.5 }), /invalid_checkout_request/);
   assert.throws(() => normalizeCheckoutSession('razorpay', {
@@ -263,7 +263,7 @@ test('Cashfree rejects a checkout response whose order amount has more than two 
   await assert.rejects(adapter.createOrder({
     orderId: 'order_123', amountMinor: 12500, currency: 'INR',
     customer: { id: 'guest_123', phone: '9999999999' },
-    returnUrl: 'https://pms.example/return', idempotencyKey: 'request-123456'
+    returnUrl: 'https://pms.example/return', idempotencyKey: 'request-test'
   }), /cashfree_checkout_response_binding_mismatch/);
 });
 
@@ -353,7 +353,7 @@ test('provider-neutral checkout contract normalizes all six implemented adapter 
     ['paytm', 'staging', { orderId:'pt_order_1', amountMinor:12500, currency:'INR', checkout:{ mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com' } }, { mid:'merchant-mid', orderId:'pt_order_1', txnToken:'txn-token', checkoutHost:'https://securestage.paytmpayments.com' }]
   ];
   for (const [provider, environment, result, checkout] of fixtures) {
-    const request = { provider, environment, amountMinor:12500, currency:'INR', idempotencyKey:'checkout-idem-12345' };
+    const request = { provider, environment, amountMinor:12500, currency:'INR', idempotencyKey:'checkout-test' };
     assert.equal(assertCheckoutRequest(request), request);
     assert.deepEqual(normalizeCheckoutSession(provider, result, request).checkout, checkout);
   }
@@ -361,7 +361,7 @@ test('provider-neutral checkout contract normalizes all six implemented adapter 
 
 test('provider-neutral checkout contract rejects environment drift and unbound native payloads', async () => {
   const { assertCheckoutRequest, normalizeCheckoutSession } = await import('../src/providers/checkout-contract.mjs');
-  const base = { provider:'paytm', environment:'staging', amountMinor:12500, currency:'INR', idempotencyKey:'checkout-idem-12345' };
+  const base = { provider:'paytm', environment:'staging', amountMinor:12500, currency:'INR', idempotencyKey:'checkout-test' };
   assert.throws(() => assertCheckoutRequest({ ...base, environment:'test' }), /invalid_checkout_request/);
   assert.throws(() => normalizeCheckoutSession('phonepe', {
     orderId:'pp_order_1', amountMinor:12500, currency:'INR', checkoutUrl:'http://insecure.example/checkout'
