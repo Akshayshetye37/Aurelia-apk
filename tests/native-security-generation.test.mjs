@@ -73,7 +73,7 @@ test('native PIN and data-key material are not exposed through JavaScript interf
 test('PIN enrollment and confirmation fields both accept the full 4–16 digit policy', () => {
   const gate = read('android/templates/security/LockGateActivity.kt');
   assert.match(gate, /first\.size !in 4\.\.16/);
-  assert.equal((gate.match(/InputFilter\.LengthFilter\(16\)/g) || []).length, 2);
+  assert.equal((gate.match(/InputFilter\.LengthFilter\(16\)/g) || []).length, 4);
   assert.doesNotMatch(gate, /LengthFilter\(12\)/);
 });
 
@@ -165,7 +165,8 @@ test('existing encrypted database cannot enter first-time enrollment without its
   const gate = read('android/templates/security/LockGateActivity.kt');
   const manager = read('android/templates/security/AureliaAppManager.kt');
   assert.match(gate, /encryptedDatabaseExists\(\)/);
-  assert.match(gate, /databaseExists && \(!enrolled \|\| !envelopeExists\)/);
+  assert.match(gate, /databaseExists && !envelopeExists/);
+  assert.match(gate, /enrolled && !envelopeExists/);
   assert.match(manager, /fun enroll\(pin: CharArray\)/);
   assert.match(manager, /context\.getDatabasePath\("aurelia-pms-encrypted\.db"\)/);
   assert.match(manager, /databaseExists \|\| AureliaEnvelopeStore\(context\)\.exists\(\) \|\| AureliaSecurityRuntime\.isEnrolled\(\)/);
