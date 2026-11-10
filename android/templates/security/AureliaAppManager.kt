@@ -183,11 +183,17 @@ class AureliaAppManager(
             dataKey = recovered.copyOf()
             authenticated = true
             backgroundAtElapsed = 0L
-            recoveryLockout.registerSuccess()
+            // Keep the recovery throttle intact until the replacement envelope is durably swapped.
             return bundle.toString()
         } finally {
             recovered.fill(0)
         }
+    }
+
+    /** Clear recovery throttling only after the caller has durably committed the new PIN envelope. */
+    @Synchronized
+    fun confirmRecoverySwapCommitted() {
+        recoveryLockout.registerSuccess()
     }
 
     private fun pinEnvelope(envelopeJson: String): String {
