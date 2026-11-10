@@ -123,6 +123,21 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertTrue("wrong database key must fail closed", rejected);
   }
 
+  @Test public void forcedOutboxFailureRollsBackDomainRow() throws Exception {
+    repository.getWritableDatabase().execSQL(
+      "CREATE TRIGGER fail_outbox_insert BEFORE INSERT ON pms_outbox " +
+      "BEGIN SELECT RAISE(ABORT, 'injected_forced_transaction_failure'); END");
+    boolean failed = false;
+    try {
+      repository.transactBusinessChange("booking", "forced-rollback", 0, data("must-not-commit"),
+        event("forced-rollback-event", "booking", "forced-rollback", 1));
+    } catch (RuntimeException expected) { failed = true; }
+    assertTrue("injected outbox exception must abort the business transaction", failed);
+    assertNull("domain row must not survive a failed outbox append",
+      repository.getEntity("booking", "forced-rollback"));
+    repository.getWritableDatabase().execSQL("DROP TRIGGER fail_outbox_insert");
+  }
+
   @Test public void legacyPlaintextDatabaseIsCopiedVerifiedAndDeletedOnlyAfterEncryptedCommit() throws Exception {
     repository.close();
     context.deleteDatabase("aurelia-pms-encrypted.db");
