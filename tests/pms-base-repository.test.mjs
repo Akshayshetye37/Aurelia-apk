@@ -4,7 +4,7 @@ import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
 import { BaseRepo } from "../src/storage/pms-base-repository.mjs";
-import { GuestRepo, RoomRepo, ReservationRepo, FolioRepo } from "../src/storage/pms-domain-repositories.mjs";
+import { GuestRepo, RoomRepo, ReservationRepo, FolioRepo, PaymentRepo } from "../src/storage/pms-domain-repositories.mjs";
 
 let eventSequence = 0;
 async function makeRepo(entityType, databaseName) {
@@ -114,6 +114,17 @@ test("domain repository adapters bind guest, room, reservation and folio domains
     assert.equal(new RoomRepo({ bridge, authorize }).entityType, "room");
     assert.equal(new ReservationRepo({ bridge, authorize }).entityType, "booking");
     assert.equal(new FolioRepo({ bridge, authorize }).entityType, "folio");
+    assert.equal(new PaymentRepo({ bridge, authorize }).entityType, "payment");
+    const payments = new PaymentRepo({ bridge, authorize, now: () => "2026-11-10T00:00:00.000Z" });
+    const payment = await payments.create("payment-1", {
+      bookingId: "booking-1", folioId: "folio-1", transactionId: "txn-1",
+      provider: "razorpay", environment: "test", amountMinor: 5000, currency: "INR",
+      status: "created", idempotencyKey: "payment-1", createdAt: "2026-11-10T00:00:00.000Z"
+    });
+    const pending = await payments.transition("payment-1", payment.version, "pending");
+    assert.equal(pending.data.status, "pending");
+    await assert.rejects(payments.transition("payment-1", pending.version, "refunded"),
+      error => error.code === "PMS_INVALID_STATE_TRANSITION");
     assert.throws(() => new GuestRepo({ bridge, authorize, entityType: "room" }), /cannot be rebound/);
   } finally { adapter.close?.(); }
 });

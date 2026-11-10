@@ -98,6 +98,38 @@ const room = z.object({
   status_changed: z.union([z.string(), z.number(), z.boolean()]).optional()
 }).strict();
 
+const payment = z.object({
+  id: stableId,
+  bookingId: stableId,
+  folioId: z.string().min(1).max(180),
+  transactionId: z.string().min(1).max(180),
+  provider: z.enum(["razorpay", "cashfree", "payu", "phonepe", "paytm", "jiopay"]),
+  environment: z.enum(["test", "live", "uat", "staging", "production"]),
+  amountMinor: z.number().int().safe().positive(),
+  currency: z.literal("INR"),
+  status: z.enum(["created", "pending", "authorized", "captured", "failed", "refund_pending", "partially_refunded", "refunded", "unknown"]),
+  providerOrderId: z.string().max(180).optional(),
+  providerPaymentId: z.string().max(180).optional(),
+  idempotencyKey: z.string().min(1).max(180),
+  providerEventId: z.string().max(180).optional(),
+  refundIdempotencyKey: z.string().max(180).optional(),
+  refundAmountMinor: z.number().int().safe().nonnegative().optional(),
+  createdAt: z.string().max(40),
+  updatedAt: z.string().max(40).optional(),
+  metadata: z.record(z.unknown()).optional()
+}).strict().superRefine((row, context) => {
+  const environments = {
+    razorpay: ["test", "live"], cashfree: ["test", "live"], payu: ["test", "live"],
+    phonepe: ["uat", "production"], paytm: ["staging", "production"], jiopay: ["uat", "production"]
+  };
+  if (!environments[row.provider]?.includes(row.environment)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["environment"], message: "provider environment is invalid" });
+  }
+  if (row.refundAmountMinor !== undefined && row.refundAmountMinor > row.amountMinor) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["refundAmountMinor"], message: "refund cannot exceed captured amount" });
+  }
+});
+
 const inventory = base.superRefine((row, context) => {
   for (const field of ["q", "ro"]) {
     if (row[field] !== undefined && (!Number.isSafeInteger(Number(row[field])) || Number(row[field]) < 0)) {
@@ -114,7 +146,7 @@ const inventory = base.superRefine((row, context) => {
 
 const schemas = {
   booking,
-  folio: z.object({
+  payment,\n  folio: z.object({
     id: stableId,
     bookingId: stableId,
     paymentRows: z.array(z.unknown()),
@@ -163,6 +195,19 @@ const TRANSITIONS = Object.freeze({
   }),
   room: Object.freeze({
     s: Object.freeze({ ready: ["occ", "clean", "out", "maintenance"], occ: ["clean", "out", "maintenance"], clean: ["ready", "out", "maintenance"], out: ["ready", "maintenance"], maintenance: ["ready", "out"] })
+  }),
+  payment: Object.freeze({
+    status: Object.freeze({
+      created: ["pending", "authorized", "captured", "failed", "unknown"],
+      pending: ["authorized", "captured", "failed", "unknown"],
+      authorized: ["captured", "failed", "unknown"],
+      captured: ["refund_pending", "partially_refunded", "refunded"],
+      failed: [],
+      refund_pending: ["partially_refunded", "refunded", "captured", "unknown"],
+      partially_refunded: ["refund_pending", "refunded"],
+      refunded: [],
+      unknown: ["pending", "authorized", "captured", "failed", "refund_pending"]
+    })
   })
 });
 

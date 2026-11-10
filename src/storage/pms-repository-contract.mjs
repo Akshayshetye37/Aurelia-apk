@@ -5,7 +5,7 @@
 export const PMS_REPOSITORY_CONTRACT_VERSION = 1;
 export const PMS_LEGACY_SNAPSHOT_SOURCE_KEY = "aurelia_lodge_v2";
 export const PMS_LEGACY_SNAPSHOT_ENTITY_ID = "legacy_snapshot:" + PMS_LEGACY_SNAPSHOT_SOURCE_KEY;
-export const PMS_ENTITY_TYPES = Object.freeze(["booking","folio","guest","room","room_block","inventory","expense","ledger","restaurant_table","restaurant_sale","settings","audit"]);
+export const PMS_ENTITY_TYPES = Object.freeze(["booking","folio","payment","guest","room","room_block","inventory","expense","ledger","restaurant_table","restaurant_sale","settings","audit"]);
 export function assertPmsIdentity(value, label="identity") {
   if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/.test(value) || value.normalize("NFC") !== value) throw new TypeError("Invalid canonical " + label);
   return value;

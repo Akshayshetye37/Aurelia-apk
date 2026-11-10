@@ -29,3 +29,20 @@ export class ReservationRepo extends BaseRepo {
 export class FolioRepo extends BaseRepo {
   constructor(options) { super(optionsFor(options, "folio")); }
 }
+
+
+/** Versioned provider payment lifecycle repository. */
+export class PaymentRepo extends BaseRepo {
+  constructor(options) { super(optionsFor(options, "payment")); }
+
+  transition(id, expectedVersion, status, { eventPayload } = {}) {
+    return this.update(id, expectedVersion, current => ({
+      ...current,
+      status,
+      updatedAt: this.now()
+    }), {
+      eventType: "payment." + status,
+      eventPayload: eventPayload || { operation: "verified_payment_transition", status }
+    });
+  }
+}

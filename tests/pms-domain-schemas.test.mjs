@@ -69,3 +69,30 @@ test("folio schema enforces integer paise totals and a strict payment evidence e
     id: "folio-3", bookingId: 3, paymentRows: [], paidPaise: 0, balanceDuePaise: 0, unreviewed: true
   }), error => error.code === "PMS_DOMAIN_VALIDATION_FAILED");
 });
+
+test("payment schema enforces provider bindings, INR minor units and legal states", () => {
+  const payment = validatePmsDomainEntity("payment", {
+    id: "payment-1", bookingId: 7, folioId: "booking-7", transactionId: "txn-1",
+    provider: "razorpay", environment: "test", amountMinor: 12500, currency: "INR",
+    status: "created", idempotencyKey: "payment-1", createdAt: "2026-11-10T00:00:00.000Z"
+  });
+  assert.equal(payment.amountMinor, 12500);
+  assert.throws(() => validatePmsDomainEntity("payment", {
+    id: "payment-2", bookingId: 7, folioId: "booking-7", transactionId: "txn-2",
+    provider: "razorpay", environment: "production", amountMinor: 12500, currency: "INR",
+    status: "created", idempotencyKey: "payment-2", createdAt: "2026-11-10T00:00:00.000Z"
+  }), error => error.code === "PMS_DOMAIN_VALIDATION_FAILED");
+  assert.throws(() => validatePmsDomainEntity("payment", {
+    id: "payment-3", bookingId: 7, folioId: "booking-7", transactionId: "txn-3",
+    provider: "cashfree", environment: "test", amountMinor: 125.5, currency: "INR",
+    status: "created", idempotencyKey: "payment-3", createdAt: "2026-11-10T00:00:00.000Z"
+  }), error => error.code === "PMS_DOMAIN_VALIDATION_FAILED");
+  assert.throws(() => validatePmsDomainEntity("payment", {
+    id: "payment-4", bookingId: 7, folioId: "booking-7", transactionId: "txn-4",
+    provider: "cashfree", environment: "test", amountMinor: 12500, currency: "INR",
+    status: "created", idempotencyKey: "payment-4", createdAt: "2026-11-10T00:00:00.000Z", unknown: true
+  }), error => error.code === "PMS_DOMAIN_VALIDATION_FAILED");
+  assert.equal(assertPmsStateTransition("payment", { status: "created" }, { status: "pending" }), true);
+  assert.throws(() => assertPmsStateTransition("payment", { status: "captured" }, { status: "failed" }),
+    error => error.code === "PMS_INVALID_STATE_TRANSITION");
+});
