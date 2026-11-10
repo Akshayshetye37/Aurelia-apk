@@ -84,6 +84,10 @@ jobs:
           arch: x86_64
           profile: pixel_6
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          # Avoid the runner action's post-boot settings writes: API 35 can report
+          # sys.boot_completed before the Settings provider is ready, killing ADB.
+          # This test suite is non-UI; animation suppression is not required.
+          disable-animations: false
           script: cd android && ./gradlew --no-daemon connectedDebugAndroidTest
 
       - name: Verify instrumentation results contain no failures or ignored tests
