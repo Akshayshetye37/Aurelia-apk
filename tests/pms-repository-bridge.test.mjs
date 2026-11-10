@@ -72,3 +72,25 @@ test("bridge requires a verified contract-compatible engine and tenant context",
 test("bridge persists a caller-supplied event payload with the entity transaction",async()=>{const {repository,bridge}=setup();await bridge.mutateFolioState({entityId:"folio-event-payload",expectedVersion:0,eventType:"folio.payment_posted",eventPayload:{bookingId:"booking-9",amountPaise:12500,source:"manual"},mutate:folio=>{folio.paid=125;}});const events=await repository.claimOutboxBatch({deviceId:"device-test"});assert.deepEqual(events[0].payload,{bookingId:"booking-9",amountPaise:12500,source:"manual"});});
 
 test("compatibility snapshot writes are serialized, versioned, and emit immutable outbox records",async()=>{const {repository,bridge}=setup();const first={rooms:[{n:"101"}],b:[],g:[]};const [a,b]=await Promise.all([bridge.persistCompatibilitySnapshot(first),bridge.persistCompatibilitySnapshot({...first,tab:"rooms"})]);assert.equal(a.entity.version,1);assert.equal(b.entity.version,2);const stored=await repository.getEntity("audit","legacy_snapshot:aurelia_lodge_v2");assert.deepEqual(stored.data.snapshot,{...first,tab:"rooms"});const events=await repository.claimOutboxBatch({deviceId:"device-test",limit:10});assert.equal(events.length,2);assert.equal(events[0].eventType,"legacy.snapshot_saved");});
+
+test("booking and room lifecycle transitions are enforced before atomic commit", async () => {
+  const { repository, bridge } = setup();
+  await bridge.mutateEntity({ entityType: "booking", entityId: "booking-state", expectedVersion: 0,
+    eventType: "booking.created", mutate: row => { row.status = "reserved"; } });
+  await bridge.mutateEntity({ entityType: "booking", entityId: "booking-state", expectedVersion: 1,
+    eventType: "booking.confirmed", mutate: row => { row.status = "confirmed"; } });
+  await assert.rejects(bridge.mutateEntity({ entityType: "booking", entityId: "booking-state", expectedVersion: 2,
+    eventType: "booking.reverted", mutate: row => { row.status = "reserved"; } }),
+    error => error.code === "PMS_INVALID_STATE_TRANSITION");
+  assert.equal((await bridge.fetchEntity("booking", "booking-state")).data.status, "confirmed");
+
+  await bridge.mutateEntity({ entityType: "room", entityId: "101", expectedVersion: 0,
+    eventType: "room.created", mutate: row => { row.s = "ready"; } });
+  await bridge.mutateEntity({ entityType: "room", entityId: "101", expectedVersion: 1,
+    eventType: "room.occupied", mutate: row => { row.s = "occ"; } });
+  await assert.rejects(bridge.mutateEntity({ entityType: "room", entityId: "101", expectedVersion: 2,
+    eventType: "room.invalid_release", mutate: row => { row.s = "ready"; } }),
+    error => error.code === "PMS_INVALID_STATE_TRANSITION");
+  assert.equal((await bridge.fetchEntity("room", "101")).data.s, "occ");
+  assert.equal((await repository.claimOutboxBatch({ deviceId: "device-test", limit: 10 })).length, 4);
+});
