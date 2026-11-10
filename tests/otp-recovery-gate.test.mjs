@@ -9,7 +9,7 @@ test('OTP recovery gate is process-local, expires monotonically, and permits thr
   assert.match(gate, /SystemClock\.elapsedRealtime\(\)/);
   assert.match(gate, /MAX_ATTEMPTS = 3/);
   assert.match(gate, /TTL_MS = 10 \* 60_000L/);
-  assert.match(gate, /fun arm\(\)/);
+  assert.match(gate, /fun arm\(verification: RecoveryGrantVerifier\.Result\)/);
   assert.match(gate, /fun spendAttempt\(\): Boolean/);
   assert.match(gate, /fun clear\(\)/);
   assert.doesNotMatch(gate, /SharedPreferences|AtomicFile|File\(/);
