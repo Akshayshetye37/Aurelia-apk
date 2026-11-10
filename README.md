@@ -7,6 +7,7 @@
 - Code candidate reviewed: b53937ff5ee0306918f6d8fcbdb6877482c8312d
 - Draft PR #18: https://github.com/Akshayshetye37/Aurelia-apk/pull/18
 - Current release posture: PR remains draft/unmerged; canonical authority is PREPARED_COMPATIBILITY; uiCutover=false; cloud sync, provider activation, live collection, automatic settlement, automatic refunds and production release remain OFF.
+- LIVE GATEWAY COLLECTION OFF. Recovery support is not yet production-ready; native key recovery must pass physical-device qualification before release.
 
 ## Verified baseline — not a production approval
 
