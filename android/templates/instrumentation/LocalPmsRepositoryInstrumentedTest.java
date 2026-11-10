@@ -731,7 +731,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
   }
 
 
-  @Test public void sqliteRejectsNonCanonicalEntityIdentifiers() {
+  @Test public void sqliteRejectsNonCanonicalEntityIdentifiers() throws Exception {
     boolean rejected = false;
     try {
       repository.transactBusinessChange("folio", "bad id", 0, new JSONObject(),
