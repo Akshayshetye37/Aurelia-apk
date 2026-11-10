@@ -383,6 +383,9 @@ fs.copyFileSync(firebaseBootstrapTemplate, path.join(identityDir, 'RecoveryFireb
 const recoveryPhoneTemplate = path.join(androidDir, 'templates', 'RecoveryPhoneStore.kt');
 if (!fs.existsSync(recoveryPhoneTemplate)) throw new Error('RecoveryPhoneStore.kt template is missing.');
 fs.copyFileSync(recoveryPhoneTemplate, path.join(identityDir, 'RecoveryPhoneStore.kt'));
+const recoveryTenantTemplate = path.join(androidDir, 'templates', 'RecoveryTenantIdentity.kt');
+if (!fs.existsSync(recoveryTenantTemplate)) throw new Error('RecoveryTenantIdentity.kt template is missing.');
+fs.copyFileSync(recoveryTenantTemplate, path.join(identityDir, 'RecoveryTenantIdentity.kt'));
 const recoveryGrantClientTemplate = path.join(androidDir, 'templates', 'RecoveryGrantClient.kt');
 if (!fs.existsSync(recoveryGrantClientTemplate)) throw new Error('RecoveryGrantClient.kt template is missing.');
 fs.copyFileSync(recoveryGrantClientTemplate, path.join(identityDir, 'RecoveryGrantClient.kt'));
