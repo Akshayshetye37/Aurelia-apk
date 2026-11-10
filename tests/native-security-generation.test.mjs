@@ -55,7 +55,7 @@ test('PIN gate persists enrollment marker separately from the PIN envelope', () 
   assert.match(gate, /AureliaEnvelopeStore/);
   assert.match(gate, /databaseExists \|\| enrolled/);
   assert.match(gate, /!envelopeExists && !biometricStore\.exists\(\)/);
-  assert.match(gate, /enrollmentMode = !envelopeExists/);
+  assert.match(gate, /enrollmentMode = !envelopeExists && !databaseExists && !enrolled && !biometricStore\.exists\(\)/);
   assert.match(gate, /refusing DEK regeneration/);
 });
 
