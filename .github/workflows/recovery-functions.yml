@@ -2,7 +2,7 @@ name: Recovery Functions CI
 
 on:
   push:
-    branches: [work/p0-storage-hardening]
+    branches: [work/p0-storage-hardening, work/gate2-firebase-emulator]
     paths:
       - 'functions/**'
       - 'firestore.rules'
@@ -42,6 +42,49 @@ jobs:
         working-directory: functions
       - name: Run backend security contract tests
         run: npm test
+        working-directory: functions
+
+  recovery-functions-emulator-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Functions dependencies
+        run: npm install --ignore-scripts
+        working-directory: functions
+      - name: Generate isolated emulator signing material
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { generateKeyPairSync, randomBytes, writeFileSync } from "node:crypto";
+          const { privateKey } = generateKeyPairSync("ec", {
+            namedCurve: "prime256v1",
+            privateKeyEncoding: { type: "pkcs8", format: "pem" },
+            publicKeyEncoding: { type: "spki", format: "pem" }
+          });
+          const pepper = randomBytes(32).toString("hex");
+          const escapedKey = privateKey.trim().replace(/\\n/g, "\\\\n");
+          writeFileSync("functions/.secret.local",
+            `PHONE_PEPPER=${pepper}\nRECOVERY_SIGNING_KEY_PKCS8="${escapedKey}"\n`,
+            { mode: 0o600 });
+          writeFileSync(process.env.GITHUB_ENV,
+            `PHONE_PEPPER=${pepper}\nRECOVERY_SIGNING_KEY_PKCS8<<GATE2KEY\n${privateKey}GATE2KEY\n`,
+            { flag: "a", mode: 0o600 });
+          NODE
+      - name: Run grant issue, atomic consume, replay and binding tests against Firebase emulators
+        env:
+          GATE2_EMULATOR: "1"
+          FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
+          FUNCTIONS_EMULATOR_HOST: 127.0.0.1:5001
+          GCLOUD_PROJECT: demo-aurelia-recovery
+        run: |
+          npx --yes firebase-tools@14.12.1 emulators:exec \
+            --project demo-aurelia-recovery \
+            --only auth,firestore,functions \
+            "npm test"
         working-directory: functions
 
   otp-contract-tests:
