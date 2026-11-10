@@ -379,6 +379,9 @@ fs.copyFileSync(firebaseBootstrapTemplate, path.join(identityDir, 'RecoveryFireb
 const recoveryPhoneTemplate = path.join(androidDir, 'templates', 'RecoveryPhoneStore.kt');
 if (!fs.existsSync(recoveryPhoneTemplate)) throw new Error('RecoveryPhoneStore.kt template is missing.');
 fs.copyFileSync(recoveryPhoneTemplate, path.join(identityDir, 'RecoveryPhoneStore.kt'));
+const recoveryGrantClientTemplate = path.join(androidDir, 'templates', 'RecoveryGrantClient.kt');
+if (!fs.existsSync(recoveryGrantClientTemplate)) throw new Error('RecoveryGrantClient.kt template is missing.');
+fs.copyFileSync(recoveryGrantClientTemplate, path.join(identityDir, 'RecoveryGrantClient.kt'));
 
 
 
@@ -398,6 +401,9 @@ for (const file of [
   'AureliaSecurityRuntime.kt',
   'AureliaEnvelopeStore.kt',
   'RecoveryGate.kt',
+  'RecoveryGrantVerifier.kt',
+  'RecoveryGrantReplayStore.kt',
+  'RecoveryDeviceIdentity.kt',
   'PaymentDeviceKeyStore.kt',
   'PaymentDeviceClient.kt',
   'SettlementEnvelopeVerifier.kt',
@@ -450,6 +456,7 @@ const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-se
 function addFirebaseDependencies(contents, kotlinDsl) {
   const bom = 'com.google.firebase:firebase-bom:33.5.0';
   const auth = 'com.google.firebase:firebase-auth';
+  const functions = 'com.google.firebase:firebase-functions';
   const paymentDependencies = [
     'com.razorpay:checkout:1.6.41',
     'com.cashfree.pg:api:2.6.1'
@@ -458,7 +465,7 @@ function addFirebaseDependencies(contents, kotlinDsl) {
     throw new Error('App Gradle file has no dependencies block; refusing an incomplete native payment integration.');
   }
   let updated = contents;
-  const missing = [auth, ...paymentDependencies].filter(dependency => !updated.includes(dependency));
+  const missing = [auth, functions, ...paymentDependencies].filter(dependency => !updated.includes(dependency));
   if (missing.length) {
     const lines = kotlinDsl
       ? '\n' + missing.map(dependency => '    implementation("' + dependency + '")').join('\n')
