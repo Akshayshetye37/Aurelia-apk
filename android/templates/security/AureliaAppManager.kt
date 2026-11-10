@@ -3,6 +3,7 @@ package com.aurelia.pms.security
 import android.content.Context
 import android.os.SystemClock
 import java.security.SecureRandom
+import org.json.JSONObject
 
 /**
  * Process-scoped security coordinator. A new process always starts unauthenticated.
@@ -19,7 +20,7 @@ class AureliaAppManager(
     @Volatile private var backgroundAtElapsed = 0L
     @Volatile private var dataKey: ByteArray? = null
 
-    data class Enrollment(val envelopeJson: String, val biometricKeyRequired: Boolean = false)
+    data class Enrollment(val envelopeJson: String, val recoveryKey: CharArray, val biometricKeyRequired: Boolean = false)
 
     /** Generates a fresh DEK and wraps it under the new PIN. Caller persists the envelope atomically. */
     @Synchronized
@@ -31,15 +32,23 @@ class AureliaAppManager(
             throw SecurityException("Existing PMS database or enrollment material detected; refusing DEK regeneration.")
         }
         val dek = ByteArray(32).also(random::nextBytes)
+        val recoveryKey = crypto.createRecoveryKey()
         return try {
-            val envelope = crypto.wrapDataKey(dek, pin)
+            val pinEnvelope = crypto.wrapDataKey(dek, pin)
+            val recoveryEnvelope = crypto.wrapDataKeyWithRecovery(dek, recoveryKey)
+            val bundle = JSONObject()
+                .put("bundleVersion", 1)
+                .put("pin", pinEnvelope.json)
+                .put("recovery", recoveryEnvelope)
+                .toString()
             dataKey?.fill(0)
             dataKey = dek.copyOf()
             authenticated = true
             lockout.registerSuccess()
-            Enrollment(envelope.json)
+            Enrollment(bundle, crypto.encodeRecoveryKey(recoveryKey))
         } finally {
             dek.fill(0)
+            recoveryKey.fill(0)
         }
     }
 
@@ -48,7 +57,7 @@ class AureliaAppManager(
     fun unlock(pin: CharArray, envelopeJson: String): Boolean {
         lockout.assertUnlocked()
         val recovered = try {
-            crypto.unwrapDataKey(envelopeJson, pin)
+            crypto.unwrapDataKey(pinEnvelope(envelopeJson), pin)
         } catch (failure: Exception) {
             lockout.registerFailure()
             return false
@@ -71,7 +80,7 @@ class AureliaAppManager(
     fun changePin(currentPin: CharArray, newPin: CharArray, currentEnvelope: String): String {
         lockout.assertUnlocked()
         val dek = try {
-            crypto.unwrapDataKey(currentEnvelope, currentPin)
+            crypto.unwrapDataKey(pinEnvelope(currentEnvelope), currentPin)
         } catch (failure: Exception) {
             lockout.registerFailure()
             throw SecurityException("Current PIN verification failed.", failure)
@@ -83,6 +92,43 @@ class AureliaAppManager(
         } finally {
             dek.fill(0)
         }
+    }
+
+    /** Recovers the same DEK from the one-time 256-bit recovery key and rotates only the PIN wrapper. */
+    @Synchronized
+    fun recoverWithRecoveryKey(recoveryCode: CharArray, newPin: CharArray, envelopeBundle: String): String {
+        lockout.assertUnlocked()
+        val bundle = JSONObject(envelopeBundle)
+        require(bundle.getInt("bundleVersion") == 1 && bundle.has("recovery")) {
+            "A recovery-enabled envelope bundle is required."
+        }
+        val recoveryKey = crypto.decodeRecoveryKey(recoveryCode)
+        val recovered = try {
+            crypto.unwrapDataKeyWithRecovery(bundle.getString("recovery"), recoveryKey)
+        } catch (failure: Exception) {
+            lockout.registerFailure()
+            throw SecurityException("Recovery key verification failed.", failure)
+        } finally {
+            recoveryKey.fill(0)
+        }
+        try {
+            require(recovered.size == 32) { "Invalid recovered DEK." }
+            val replacementPinEnvelope = crypto.wrapDataKey(recovered, newPin)
+            bundle.put("pin", replacementPinEnvelope.json)
+            dataKey?.fill(0)
+            dataKey = recovered.copyOf()
+            authenticated = true
+            backgroundAtElapsed = 0L
+            lockout.registerSuccess()
+            return bundle.toString()
+        } finally {
+            recovered.fill(0)
+        }
+    }
+
+    private fun pinEnvelope(envelopeJson: String): String {
+        val parsed = JSONObject(envelopeJson)
+        return if (parsed.has("pin")) parsed.getString("pin") else envelopeJson
     }
 
     @Synchronized
