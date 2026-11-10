@@ -49,11 +49,13 @@ test('recovery Firebase app is isolated and stale sessions are cleared', () => {
   assert.match(factory, /it\.signOut\(\)/);
 });
 
-test('OTP verifier binds to trusted E.164 phone and returns no JWT', () => {
+test('OTP verifier binds to trusted E.164 phone and returns a short-lived ID token only in memory', () => {
   assert.match(identity, /trustedPhoneFromRecoveryRecord/);
-  assert.match(identity, /actualPhone == expectedPhone/);
-  assert.match(identity, /IdentityVerified\(val verifiedPhoneE164: String\)/);
-  assert.doesNotMatch(identity, /getIdToken|rawJwtToken/);
+  assert.match(identity, /actualPhone == expectedPhone|user\?\.phoneNumber == expectedPhone/);
+  assert.match(identity, /IdentityVerified\(val verifiedPhoneE164: String, val firebaseIdToken: String\)/);
+  assert.match(identity, /user\.getIdToken\(true\)/);
+  assert.match(identity, /recoveryAuth\.signOut\(\)/);
+  assert.doesNotMatch(identity, /SharedPreferences|Log\.|println\(/);
 });
 
 test('timeout preserves manual verification and stale callbacks are ignored', () => {
