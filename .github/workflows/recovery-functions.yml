@@ -7,7 +7,7 @@ on:
       - 'functions/**'
       - 'firestore.rules'
       - 'firebase.json'
-      - '.github/workflows/recovery-functions.yml'
+      - '.github/workflows/recovery-functions.yml'\n      - 'android/templates/**'\n      - 'tests/otp-recovery-*.test.mjs'\n      - 'scripts/patch-android.js'
   pull_request:
     paths:
       - 'functions/**'
@@ -37,3 +37,13 @@ jobs:
       - name: Run security contract tests
         run: npm test
         working-directory: functions
+
+  otp-contract-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run OTP source-contract regression tests
+        run: node --test tests/otp-recovery-gate.test.mjs tests/otp-recovery-end-to-end.test.mjs
