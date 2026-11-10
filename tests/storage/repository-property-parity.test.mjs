@@ -5,7 +5,10 @@ import { indexedDB } from "fake-indexeddb";
 import fc from "fast-check";
 import { IndexedDbPmsRepository } from "../../src/storage/indexeddb-pms-repository.mjs";
 
-const PROPERTY_SEED = 20261110;\n\nconst operationsArbitrary = fc.array(
+const PROPERTY_SEED = 20261110;
+console.log("[PMS parity] fast-check seed:", PROPERTY_SEED);
+
+const operationsArbitrary = fc.array(
   fc.record({
     idSuffix: fc.integer({ min: 0, max: 3 }),
     balanceMinor: fc.integer({ min: 0, max: 2_000_000_000 })
