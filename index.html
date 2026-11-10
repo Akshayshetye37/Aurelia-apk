@@ -1113,6 +1113,24 @@ async function rotateBackupRecoveryPassword(){
   toast('Recovery password changed. Existing backups remain encrypted.');
  }catch(e){toast(e.message||'Recovery password change failed')}
 }
+function constantTimeHexEqual(left,right){
+ if(typeof left!=='string'||typeof right!=='string'||!/^[a-f0-9]{64}$/.test(left)||!/^[a-f0-9]{64}$/.test(right))return false;
+ let difference=left.length^right.length;
+ for(let i=0;i<64;i++)difference|=left.charCodeAt(i)^right.charCodeAt(i);
+ return difference===0;
+}
+async function verifyBackupManifestPayload(decoded,manifest){
+ const parsed=JSON.parse(decoded),data=parsed.data||{};
+ const fields=['rooms','b','g','t','sales','exp','inv','led','aud'];
+ const counts=Object.fromEntries(fields.map(field=>[field,Array.isArray(data[field])?data[field].length:0]));
+ const countKeys=Object.keys(manifest.recordCounts||{});
+ if(new TextEncoder().encode(decoded).length!==manifest.payloadBytes||
+    !constantTimeHexEqual(await sha256Hex(decoded),manifest.payloadSha256)||
+    countKeys.length!==fields.length||
+    fields.some(field=>manifest.recordCounts[field]!==counts[field])){
+  throw new Error('Backup manifest verification failed.');
+ }
+}
 async function decryptBackupEnvelope(envelope,filename){
  if(envelope.format!=='AURELIA-PMS-ENCRYPTED-BACKUP'||![1,2].includes(envelope.v)||envelope.application!=='com.aurelia.pms'||envelope.cipher!=='AES-256-GCM'||envelope.kdf!=='PBKDF2-HMAC-SHA256'||envelope.iterations!==BACKUP_KDF_ITERATIONS||typeof envelope.name!=='string'||(filename&&envelope.name!==filename))throw new Error('Encrypted backup header is invalid or unsupported.');
  const salt=backupUnB64(envelope.salt),iv=backupUnB64(envelope.iv),wrapIv=backupUnB64(envelope.wrapIv),wrappedKey=backupUnB64(envelope.wrappedKey),ciphertext=backupUnB64(envelope.ciphertext);
@@ -1122,8 +1140,16 @@ async function decryptBackupEnvelope(envelope,filename){
  let vault=await readBackupVault(),key=null;
  if(vault&&vault.salt===envelope.salt&&vault.format===1)key=vault.key;
  if(key){
-  try{return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv,additionalData:aad},key,ciphertext))}
+  let cachedPlain=null;
+  try{cachedPlain=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv,additionalData:aad},key,ciphertext))}
   catch(_){key=null}
+  if(cachedPlain){
+   try{
+    const decoded=new TextDecoder().decode(cachedPlain);
+    if(envelope.v===2)await verifyBackupManifestPayload(decoded,envelope.manifest);
+    return decoded;
+   }finally{cachedPlain.fill(0)}
+  }
  }
  const password=prompt('Enter the Aurelia backup recovery password. This password is required to decrypt this backup:');
  if(password===null)throw new Error('Backup restore cancelled; no data was changed.');
@@ -1133,11 +1159,13 @@ async function decryptBackupEnvelope(envelope,filename){
   const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:wrapIv,additionalData:new TextEncoder().encode('com.aurelia.pms|backup-key-wrap|v1')},kek,wrappedKey);
   key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
   new Uint8Array(raw).fill(0);
-  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv,additionalData:aad},key,ciphertext);
-  if(!vault||vault.salt===envelope.salt)await writeBackupVault({id:BACKUP_VAULT_ID,key,salt:envelope.salt,wrapIv:envelope.wrapIv,wrappedKey:envelope.wrappedKey,iterations:envelope.iterations,format:1});
-  const decoded=new TextDecoder().decode(plain);
-  if(envelope.v===2){const parsed=JSON.parse(decoded),data=parsed.data||{},counts=Object.fromEntries(['rooms','b','g','t','sales','exp','inv','led','aud'].map(field=>[field,Array.isArray(data[field])?data[field].length:0]));if(new TextEncoder().encode(decoded).length!==envelope.manifest.payloadBytes||await sha256Hex(decoded)!==envelope.manifest.payloadSha256||JSON.stringify(counts)!==JSON.stringify(envelope.manifest.recordCounts))throw new Error('Backup manifest verification failed.');}
-  return decoded;
+  const plain=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv,additionalData:aad},key,ciphertext));
+  try{
+   if(!vault||vault.salt===envelope.salt)await writeBackupVault({id:BACKUP_VAULT_ID,key,salt:envelope.salt,wrapIv:envelope.wrapIv,wrappedKey:envelope.wrappedKey,iterations:envelope.iterations,format:1});
+   const decoded=new TextDecoder().decode(plain);
+   if(envelope.v===2)await verifyBackupManifestPayload(decoded,envelope.manifest);
+   return decoded;
+  }finally{plain.fill(0)}
  }catch(_){throw new Error('Recovery password is incorrect or the backup is damaged. No PMS records were changed.')}
 }
 async function decryptBackupPayload(payload,filename){
