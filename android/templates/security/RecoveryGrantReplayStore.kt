@@ -47,7 +47,7 @@ class RecoveryGrantReplayStore(context: Context) {
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, nonce))
-            cipher.updateAAD(AAD)
+            cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
             return String(cipher.doFinal(encrypted), Charsets.UTF_8)
         } finally {
             nonce.fill(0); encrypted.fill(0); packed.fill(0)
