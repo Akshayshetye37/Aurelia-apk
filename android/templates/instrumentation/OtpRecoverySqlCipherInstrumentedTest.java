@@ -222,6 +222,23 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
           raw.contains(new String(oldPin)) || raw.contains(new String(newPin)));
       }
     }
+    try {
+      Process logcat = Runtime.getRuntime().exec(new String[] { "logcat", "-d", "-v", "brief" });
+      java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+      try (java.io.InputStream in = logcat.getInputStream()) {
+        byte[] buffer = new byte[4096];
+        int count;
+        while ((count = in.read(buffer)) != -1) output.write(buffer, 0, count);
+      }
+      logcat.waitFor();
+      String logs = output.toString("UTF-8");
+      assertFalse("plaintext DEK must not appear in logcat", logs.contains(dekHex) || logs.contains(dekBase64));
+      assertFalse("plaintext recovery key must not appear in logcat", logs.contains(recovery));
+      assertFalse("plaintext PIN must not appear in logcat",
+        logs.contains(new String(oldPin)) || logs.contains(new String(newPin)));
+    } catch (java.io.IOException unavailableLogcat) {
+      // File/prefs inspection remains mandatory; host instrumentation captures logcat separately.
+    }
   }
 
   private static String hex(byte[] value) {
