@@ -51,6 +51,11 @@ async function signedGrant({ sub = tenant, did = device, grantNonce = nonce, jti
   return { jwt, jti };
 }
 
+function assertRejected(result, label) {
+  assert.equal(result.response.status, 200, `${label}: callable transport failed: ${JSON.stringify(result.body)}`);
+  assert.equal(result.body.error?.status, "PERMISSION_DENIED", `${label}: expected permission-denied, got ${JSON.stringify(result.body)}`);
+}
+
 async function seedGrant({ tenantId = tenant, expiresAt = Date.now() + 600_000 } = {}) {
   const { jwt, jti } = await signedGrant();
   await db.doc(`recoveryGrants/${jti}`).create({
@@ -80,15 +85,15 @@ test("Firebase Emulator grant runtime: issue, consume once, reject replay and in
   assert.equal(consumed.body.result?.consumed, true);
 
   const replay = await callable("consumeRecoveryGrant", { grant, deviceIdHash: device, nonce });
-  assert.notEqual(replay.body.result?.consumed, true, "a consumed grant must not be reusable");
+  assertRejected(replay, "replay consume");
 
   const wrongDeviceGrant = await seedGrant();
   const wrongDevice = await callable("consumeRecoveryGrant", { grant: wrongDeviceGrant, deviceIdHash: "b".repeat(64), nonce });
-  assert.notEqual(wrongDevice.body.result?.consumed, true, "wrong device must be rejected");
+  assertRejected(wrongDevice, "wrong device");
 
   const wrongNonceGrant = await seedGrant();
   const wrongNonce = await callable("consumeRecoveryGrant", { grant: wrongNonceGrant, deviceIdHash: device, nonce: "x".repeat(32) });
-  assert.notEqual(wrongNonce.body.result?.consumed, true, "wrong nonce must be rejected");
+  assertRejected(wrongNonce, "wrong nonce");
 
   const wrongTenant = await signedGrant({ sub: "tenant_gate2_other" });
   await db.doc(`recoveryGrants/${wrongTenant.jti}`).create({
@@ -96,9 +101,9 @@ test("Firebase Emulator grant runtime: issue, consume once, reject replay and in
     createdAt: new Date(), expiresAt: Date.now() + 600_000
   });
   const tenantResult = await callable("consumeRecoveryGrant", { grant: wrongTenant.jwt, deviceIdHash: device, nonce });
-  assert.notEqual(tenantResult.body.result?.consumed, true, "tenant claim/document mismatch must be rejected");
+  assertRejected(tenantResult, "wrong tenant");
 
   const expiredGrant = await seedGrant({ expiresAt: Date.now() - 1 });
   const expired = await callable("consumeRecoveryGrant", { grant: expiredGrant, deviceIdHash: device, nonce });
-  assert.notEqual(expired.body.result?.consumed, true, "expired server-side grant must be rejected");
+  assertRejected(expired, "expired grant");
 });
