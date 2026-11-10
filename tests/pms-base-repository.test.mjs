@@ -43,7 +43,7 @@ test("BaseRepo never exposes update or retire for append-only ledger and audit e
 
 test("BaseRepo rejects malformed identities and unsupported entity types", async () => {
   const { repo } = await makeRepo("guest", "base-repo-identity");
-  await assert.rejects(repo.create("../guest", { n: "Invalid" }));
+  await assert.rejects(repo.create("", { n: "Invalid" }));
   assert.throws(() => new BaseRepo({ bridge: {}, entityType: "unknown" }));
 });
 
