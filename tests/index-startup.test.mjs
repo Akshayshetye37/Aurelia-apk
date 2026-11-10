@@ -94,7 +94,7 @@ test('startup hydrates the UI projection from the verified canonical snapshot be
   const replayAt = html.indexOf('await replayApplicationScripts()');
   assert.ok(bootstrapAt >= 0 && roomHydrationAt > bootstrapAt && canonicalHydrationAt > roomHydrationAt && replayAt > canonicalHydrationAt);
   assert.match(html, /import\("\.\/src\/storage\/pms-room-read-cutover\.mjs"\)/);
-  assert.match(html, /function loadAll\(\)\{\s*let raw=window\.__AURELIA_CANONICAL_BOOTSTRAP_RAW\|\|null;\s*if\(!raw\)\{try\{raw=/);
+  assert.match(html, /function loadAll\(\)\{\s*let raw=window\.__AURELIA_CANONICAL_BOOTSTRAP_RAW\|\|null;\s*if\(!raw\)\{LOCAL_STATE_STATUS='missing';return\}/);
 });
 
 test('active room management commands use canonical room mutations', async () => {
@@ -144,4 +144,19 @@ test('guest profile removal uses a canonical retirement transaction', async () =
   assert.match(body, /await commitGuestCatalogState\(/);
   assert.match(body, /expectedPreviousGuest:cloneRuntimeState\(g\)/);
   assert.doesNotMatch(body, /S\.g\.splice\(i,1\);aud\(/);
+});
+
+test("business-state UI hydration and settlement read-back never consult Web Storage", () => {
+  const fs = require("node:fs");
+  const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const loadAt = html.indexOf("function loadAll(){");
+  const loadEnd = html.indexOf("/* autopilot */", loadAt);
+  const loadBody = html.slice(loadAt, loadEnd);
+  assert.doesNotMatch(loadBody, /localStorage|__aureliaStorage/);
+  const boundaryAt = html.indexOf("window.AureliaAccountingBoundary");
+  const boundaryEnd = html.indexOf("function loadAll()", boundaryAt);
+  const boundary = html.slice(boundaryAt, boundaryEnd);
+  assert.match(boundary, /readBack:async\(\)=>/);
+  assert.match(boundary, /AureliaRepositoryCompatibility\?\.readBack/);
+  assert.doesNotMatch(boundary, /localStorage|__aureliaStorage/);
 });
