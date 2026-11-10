@@ -10,7 +10,7 @@ test("secret scanner detects private keys and credential tokens without printing
   try {
     fs.writeFileSync(path.join(root, "safe.txt"), "example credential placeholder only");
     fs.writeFileSync(path.join(root, "leak.txt"),
-      "-----BEGIN PRIVATE KEY-----\n" + "gh" + "p_" + "A".repeat(40) + "\n");
+      "-----BEGIN " + "PRIVATE KEY-----" + "\n" + "gh" + "p_" + "A".repeat(40) + "\n");
     const findings = scanSecrets(root);
     assert.equal(findings.length, 2);
     assert.deepEqual(findings.map(x => x.rule), ["PEM private key", "GitHub personal access token"]);
