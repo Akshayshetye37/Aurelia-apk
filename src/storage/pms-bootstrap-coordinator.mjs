@@ -16,6 +16,7 @@ import { PmsRestaurantTableRepository } from "./pms-restaurant-table-repository.
 import { PmsRestaurantSaleRepository } from "./pms-restaurant-sale-repository.mjs";
 import { PmsInventoryRepository } from "./pms-inventory-repository.mjs";
 import { PmsExpenseRepository } from "./pms-expense-repository.mjs";
+import { GuestRepo, RoomRepo, ReservationRepo, FolioRepo, PaymentRepo } from "./pms-domain-repositories.mjs";
 import { assertCompatibilityUiAllowed, ensureCanonicalPrepared } from "./pms-authority-state.mjs";
 
 export const AURELIA_LEGACY_STATE_KEY = "aurelia_lodge_v2";
@@ -54,7 +55,8 @@ export class PmsBootstrapCoordinator {
     nativeRepositoryFactory = createNativeRepository,
     platform = null,
     now = () => new Date().toISOString(),
-    identityProvider = null
+    identityProvider = null,
+    permissionEvaluator = () => false
   } = {}) {
     this.storage = storage;
     this.indexedDBImpl = indexedDBImpl;
@@ -65,6 +67,8 @@ export class PmsBootstrapCoordinator {
     this.platform = platform;
     this.now = now;
     this.identityProvider = identityProvider;
+    if (typeof permissionEvaluator !== "function") throw new TypeError("A repository permission evaluator is required.");
+    this.permissionEvaluator = permissionEvaluator;
     this.environment = "UNINITIALIZED";
     this.status = "NOT_STARTED";
     this.initialization = null;
@@ -156,6 +160,12 @@ export class PmsBootstrapCoordinator {
     const restaurantSaleRepository = new PmsRestaurantSaleRepository({ bridge });
     const inventoryRepository = new PmsInventoryRepository({ bridge, now: this.now });
     const expenseRepository = new PmsExpenseRepository({ bridge });
+    const domainRepositoryOptions = { bridge, authorize: request => this.permissionEvaluator(request, identity) };
+    const guestRepository = new GuestRepo(domainRepositoryOptions);
+    const roomRepository = new RoomRepo(domainRepositoryOptions);
+    const reservationRepository = new ReservationRepo(domainRepositoryOptions);
+    const folioRepository = new FolioRepo(domainRepositoryOptions);
+    const paymentRepository = new PaymentRepo(domainRepositoryOptions);
 
     // If the legacy Web Storage copy was cleared or lost, recover it from the
     // last fully committed canonical snapshot before the UI is allowed to start.
@@ -193,7 +203,8 @@ export class PmsBootstrapCoordinator {
       success: true, environment: this.environment, storageEngine: this.storageEngine,
       persistentStorage: Object.freeze({ requested: Boolean(this.persistenceRequested), granted: this.persistenceGranted }),
       uiCutover: false, authority, recovery, migration, domainProjection,
-      repository: this.repository, identity, bridge, settingsRepository, restaurantTableRepository, restaurantSaleRepository, inventoryRepository, expenseRepository
+      repository: this.repository, identity, bridge, settingsRepository, restaurantTableRepository, restaurantSaleRepository, inventoryRepository, expenseRepository,
+      guestRepository, roomRepository, reservationRepository, folioRepository, paymentRepository
     });
   }
 
