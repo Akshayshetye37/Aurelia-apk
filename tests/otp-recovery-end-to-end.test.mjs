@@ -44,7 +44,12 @@ test('recovery phone tenant scope is generated and stored encrypted by Android K
   const identity = read('android/templates/RecoveryTenantIdentity.kt');
   assert.match(identity, /AndroidKeyStore/);
   assert.match(identity, /AES\/GCM\/NoPadding/);
-  assert.match(identity, /UUID\.randomUUID/);
+  assert.match(identity, /bindAuthorizedOwner/);
+  assert.match(identity, /claims\["role"\] != "owner"/);
+  assert.match(identity, /claims\["tenantId"\]/);
+  assert.doesNotMatch(identity, /UUID\.randomUUID/);
+  const patcher = read('scripts/patch-android.js');
+  assert.match(patcher, /RecoveryTenantIdentity\.kt/);
   assert.match(identity, /encrypted_record/);
   assert.doesNotMatch(identity, /Log\.|println\(|System\.out/);
 });
