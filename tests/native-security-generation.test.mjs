@@ -118,3 +118,13 @@ test('native PMS SQLite uses SQLCipher and ties its key lifetime to the unlock s
   assert.ok(patcher.includes('PmsPlaintextDatabaseMigration.java'));
   assert.ok(patcher.includes('CapacitorPmsStoragePlugin.closeForBackground()'));
 });
+
+test('biometric DEK wrapping prefers StrongBox and preserves existing wrapped-key access', () => {
+  const biometric = read('android/templates/security/BiometricVaultManager.kt');
+  assert.match(biometric, /setUserAuthenticationRequired\(true\)/);
+  assert.match(biometric, /AUTH_BIOMETRIC_STRONG/);
+  assert.match(biometric, /setIsStrongBoxBacked\(true\)/);
+  assert.match(biometric, /catch \(_:\s*StrongBoxUnavailableException\)/);
+  assert.match(biometric, /if \(store\.containsAlias\(ALIAS\)\) return/);
+  assert.doesNotMatch(biometric, /if \(store\.containsAlias\(ALIAS\)\) store\.deleteEntry\(ALIAS\)/);
+});
