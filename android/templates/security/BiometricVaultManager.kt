@@ -3,6 +3,7 @@ package com.aurelia.pms.security
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.security.keystore.StrongBoxUnavailableException
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -39,29 +40,45 @@ class BiometricVaultManager {
             "Biometric vault requires Android 7.0 or later for enrollment invalidation guarantees."
         }
         val store = KeyStore.getInstance(STORE).apply { load(null) }
-        if (store.containsAlias(ALIAS)) store.deleteEntry(ALIAS)
-        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, STORE)
-        val builder = KeyGenParameterSpec.Builder(
-            ALIAS,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-        )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setRandomizedEncryptionRequired(true)
-            .setUserAuthenticationRequired(true)
-            .setInvalidatedByBiometricEnrollment(true)
+        // Never destroy an enrolled biometric wrapping key during routine setup:
+        // doing so would make the already-wrapped DEK unrecoverable.
+        if (store.containsAlias(ALIAS)) return
 
-        if (Build.VERSION.SDK_INT >= 30) {
-            builder.setUserAuthenticationParameters(
-                0,
-                KeyProperties.AUTH_BIOMETRIC_STRONG
+        fun generate(preferStrongBox: Boolean) {
+            val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, STORE)
+            val builder = KeyGenParameterSpec.Builder(
+                ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
             )
-        } else {
-            @Suppress("DEPRECATION")
-            builder.setUserAuthenticationValidityDurationSeconds(-1)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setRandomizedEncryptionRequired(true)
+                .setUserAuthenticationRequired(true)
+                .setInvalidatedByBiometricEnrollment(true)
+
+            if (Build.VERSION.SDK_INT >= 30) {
+                builder.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+            } else {
+                @Suppress("DEPRECATION")
+                builder.setUserAuthenticationValidityDurationSeconds(-1)
+            }
+            if (preferStrongBox && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                builder.setIsStrongBoxBacked(true)
+            }
+            generator.init(builder.build())
+            generator.generateKey()
         }
-        generator.init(builder.build())
-        generator.generateKey()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                generate(true)
+            } catch (_: StrongBoxUnavailableException) {
+                if (store.containsAlias(ALIAS)) store.deleteEntry(ALIAS)
+                generate(false)
+            }
+        } else {
+            generate(false)
+        }
     }
 
     fun prepareEncryptOperation(): BiometricPrompt.CryptoObject {
