@@ -234,29 +234,29 @@ jobs:
               readlink "/proc/$pid/fd/2" 2>/dev/null || true
             fi
             echo '=== adb devices ==='
-            adb devices -l
+            timeout 15 adb devices -l
             echo '=== adb wait-for-device (bounded) ==='
             timeout 30 adb wait-for-device
             echo "wait_for_device_exit=$?"
             echo '=== boot properties ==='
-            adb shell getprop sys.boot_completed
-            adb shell getprop ro.build.fingerprint
-            adb shell getprop ro.build.version.sdk
+            timeout 15 adb shell getprop sys.boot_completed
+            timeout 15 adb shell getprop ro.build.fingerprint
+            timeout 15 adb shell getprop ro.build.version.sdk
             echo '=== instrumentation registry ==='
-            adb shell pm list instrumentation -f
+            timeout 15 adb shell pm list instrumentation -f
             echo '=== app/test package install state ==='
             echo 'app APK install path:'
-            adb shell pm path com.aurelia.pms
+            timeout 15 adb shell pm path com.aurelia.pms
             echo 'test APK install path:'
-            adb shell pm path com.aurelia.pms.test
-            adb shell dumpsys package com.aurelia.pms.test
+            timeout 15 adb shell pm path com.aurelia.pms.test
+            timeout 15 adb shell dumpsys package com.aurelia.pms.test
             echo '=== app/test process exit history ==='
-            adb shell dumpsys activity exit-info com.aurelia.pms
-            adb shell dumpsys activity exit-info com.aurelia.pms.test
+            timeout 15 adb shell dumpsys activity exit-info com.aurelia.pms
+            timeout 15 adb shell dumpsys activity exit-info com.aurelia.pms.test
           } > "$diag_dir/device-state.txt" 2>&1
-          adb logcat -b crash -d -v threadtime > "$diag_dir/logcat-crash.txt" 2>&1
-          adb logcat -b all -d -v threadtime > "$diag_dir/logcat-full.txt" 2>&1
-          adb logcat -b all -d -v threadtime '*:S' AndroidRuntime:E DEBUG:E libc:F linker:E ActivityManager:E ActivityTaskManager:E Instrumentation:E TestRunner:V SQLiteLog:E > "$diag_dir/logcat-startup-filtered.txt" 2>&1
+          timeout 20 adb logcat -b crash -d -v threadtime > "$diag_dir/logcat-crash.txt" 2>&1
+          timeout 20 adb logcat -b all -d -v threadtime > "$diag_dir/logcat-full.txt" 2>&1
+          timeout 20 adb logcat -b all -d -v threadtime '*:S' AndroidRuntime:E DEBUG:E libc:F linker:E ActivityManager:E ActivityTaskManager:E Instrumentation:E TestRunner:V SQLiteLog:E > "$diag_dir/logcat-startup-filtered.txt" 2>&1
           if [[ -f "$log_dir/emulator.stdout-stderr.log" ]]; then cp "$log_dir/emulator.stdout-stderr.log" "$diag_dir/emulator.stdout-stderr.log"; fi
           if [[ -f "$log_dir/connectedDebugAndroidTest.log" ]]; then cp "$log_dir/connectedDebugAndroidTest.log" "$diag_dir/connectedDebugAndroidTest.log"; fi
           if [[ -f "$log_dir/gradle-exit-code.txt" ]]; then cp "$log_dir/gradle-exit-code.txt" "$diag_dir/gradle-exit-code.txt"; fi
