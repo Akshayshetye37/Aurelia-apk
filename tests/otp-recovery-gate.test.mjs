@@ -52,3 +52,22 @@ test('Android generation copies the OTP recovery gate and encrypted phone store'
   assert.match(patcher, /'RecoveryGate\.kt'/);
   assert.match(patcher, /RecoveryPhoneStore\.kt/);
 });
+
+
+test('recovery grant client binds consume request to the issued nonce', () => {
+  const client = read('android/templates/RecoveryGrantClient.kt');
+  assert.match(client, /"grant" to grant, "nonce" to nonce, "deviceIdHash" to deviceHash/);
+  const backend = read('functions/src/index.ts');
+  const consume = backend.slice(backend.indexOf('export const consumeRecoveryGrant'), backend.indexOf('export const cancelRecoveryPhoneChange'));
+  assert.match(consume, /validateNonce\(request\.data\?\.nonce\)/);
+  assert.match(consume, /nonce !== clientNonce/);
+});
+
+test('recovery phone registration requires a fresh owner token bound to the tenant claim', () => {
+  const backend = read('functions/src/index.ts');
+  const registration = backend.slice(backend.indexOf('export const registerRecoveryPhone'), backend.indexOf('export const issueRecoveryGrant'));
+  assert.match(registration, /request\.auth/);
+  assert.match(registration, /auth\.token\.role !== "owner"/);
+  assert.match(registration, /ownerAge >= 300/);
+  assert.match(registration, /auth\.token\.tenantId !== tenantId/);
+});
