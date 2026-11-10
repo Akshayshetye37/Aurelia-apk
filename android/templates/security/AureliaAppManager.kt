@@ -100,6 +100,11 @@ class AureliaAppManager(
         try {
             require(dek.size == 32)
             val replacement = crypto.wrapDataKey(dek, newPin)
+            val parsed = JSONObject(currentEnvelope)
+            if (parsed.has("pin")) {
+                parsed.put("pin", replacement.json)
+                return parsed.toString()
+            }
             return replacement.json
         } finally {
             dek.fill(0)
