@@ -20,7 +20,7 @@ test('backend matches only verified Firebase phone identity and enforces fresh a
 
 test('backend stores only tenant-scoped phone HMAC and masked phone', () => {
   assert.match(functions, /createHmac\("sha256", PHONE_PEPPER\.value\(\)\)/);
-  assert.match(functions, /hash: newHash.toString("base64")/);
+  assert.match(functions, /hash:\\s*newHash\\.toString\\(["']base64["']\\)/);
   assert.match(functions, /masked: maskPhone/);
   assert.doesNotMatch(functions, /phoneE164:\s*proof\.phone|rawPhone:/);
 });
