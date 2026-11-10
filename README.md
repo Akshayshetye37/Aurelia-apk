@@ -9,6 +9,7 @@
 - PR #18: https://github.com/Akshayshetye37/Aurelia-apk/pull/18 (draft, open, unmerged; GitHub reports `mergeable=false`).
 - Canonical authority remains `PREPARED_COMPATIBILITY`; `uiCutover=false`.
 - Cloud sync, provider activation, live gateway collection, automatic settlement, automatic refund posting and production release remain OFF.
+- LIVE GATEWAY COLLECTION OFF.
 - Offline cash, manual card-on-delivery and staff-confirmed folio entries remain usable when gateway features are disabled.
 - Provider integration inventory in the project: Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue. Adapter/test-checkout coverage is not merchant production acceptance.
 - The branch API reports `protected=false` for this work branch. Base-branch protection could not be read with the connected GitHub permission; its state is unverified.
