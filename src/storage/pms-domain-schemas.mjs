@@ -15,7 +15,7 @@ const booking = base.superRefine((row, context) => {
   }
 });
 const room = base.superRefine((row, context) => {
-  if (row.s !== undefined && !["ready", "occ", "clean", "out"].includes(row.s)) {
+  if (row.s !== undefined && !["ready", "occ", "clean", "out", "maintenance"].includes(row.s)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["s"], message: "unsupported room lifecycle state" });
   }
 });
@@ -69,11 +69,11 @@ export function validatePmsDomainEntity(entityType, value) {
 
 const TRANSITIONS = Object.freeze({
   booking: Object.freeze({
-    st: Object.freeze({ res: ["in", "cancelled"], in: ["done"], checkedin: ["done"], "checked-in": ["done"], checked_in: ["done"], done: [], cancelled: [] }),
+    st: Object.freeze({ res: ["in", "done", "cancelled"], in: ["done"], checkedin: ["done"], "checked-in": ["done"], checked_in: ["done"], done: [], cancelled: [] }),
     status: Object.freeze({ reserved: ["confirmed", "cancelled"], confirmed: ["checked_in", "cancelled"], checked_in: ["checked_out"], checked_out: [], cancelled: [] })
   }),
   room: Object.freeze({
-    s: Object.freeze({ ready: ["occ", "clean", "out"], occ: ["clean", "out"], clean: ["ready", "out"], out: ["ready"] })
+    s: Object.freeze({ ready: ["occ", "clean", "out", "maintenance"], occ: ["clean", "out", "maintenance"], clean: ["ready", "out", "maintenance"], out: ["ready", "maintenance"], maintenance: ["ready", "out"] })
   })
 });
 
