@@ -61,3 +61,13 @@ test("all new backup destinations receive a portable AES-256-GCM envelope", () =
   assert.match(androidPatch, /AURELIA-PMS-ENCRYPTED-BACKUP/);
   assert.match(backupContract, /encrypted PMS backup envelope/);
 });
+
+
+test('cached backup keys cannot bypass manifest hash, size and record-count verification', () => {
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(html, /async function verifyBackupManifestPayload/);
+  assert.match(html, /constantTimeHexEqual\(await sha256Hex\(decoded\),manifest\.payloadSha256\)/);
+  assert.match(html, /if\(envelope\.v===2\)await verifyBackupManifestPayload\(decoded,envelope\.manifest\)/);
+  assert.match(html, /finally\{cachedPlain\.fill\(0\)\}/);
+  assert.match(html, /finally\{plain\.fill\(0\)\}/);
+});
