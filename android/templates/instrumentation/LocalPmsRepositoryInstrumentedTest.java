@@ -123,6 +123,45 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertTrue("wrong database key must fail closed", rejected);
   }
 
+  @Test public void integrityCheckAndWalRecoverySurviveDatabaseReopen() throws Exception {
+    repository.transactBusinessChange("guest", "wal-recovery-guest", 0, data("durable"),
+      event("wal-recovery-event", "guest", "wal-recovery-guest", 1));
+    try (android.database.Cursor integrity = repository.getWritableDatabase().rawQuery("PRAGMA integrity_check", null)) {
+      assertTrue(integrity.moveToFirst());
+      assertEquals("ok", integrity.getString(0));
+    }
+    try (android.database.Cursor foreignKeys = repository.getWritableDatabase().rawQuery("PRAGMA foreign_key_check", null)) {
+      assertFalse("foreign key check must return no violations", foreignKeys.moveToFirst());
+    }
+    repository.close();
+    databaseKey = key();
+    repository = new LocalPmsRepository(context, databaseKey);
+    repository.initialize();
+    assertEquals("durable", repository.getEntity("guest", "wal-recovery-guest")
+      .getJSONObject("data").getString("value"));
+    try (android.database.Cursor integrity = repository.getWritableDatabase().rawQuery("PRAGMA integrity_check", null)) {
+      assertTrue(integrity.moveToFirst());
+      assertEquals("ok", integrity.getString(0));
+    }
+  }
+
+  @Test public void corruptedEncryptedDatabaseFailsClosedWithoutAutomaticWipe() throws Exception {
+    repository.close();
+    File database = context.getDatabasePath("aurelia-pms-encrypted.db");
+    assertTrue(database.exists());
+    try (java.io.FileOutputStream output = new java.io.FileOutputStream(database, false)) {
+      output.write(new byte[] {0x41, 0x55, 0x52, 0x45, 0x4c, 0x49, 0x41, 0x00, 0x01, 0x02, 0x03});
+      output.getFD().sync();
+    }
+    LocalPmsRepository corrupted = new LocalPmsRepository(context, key());
+    boolean rejected = false;
+    try { corrupted.initialize(); } catch (RuntimeException expected) { rejected = true; }
+    finally { corrupted.close(); }
+    assertTrue("corrupt encrypted database must fail closed", rejected);
+    assertTrue("corrupt database must be retained for recovery, never auto-wiped", database.exists());
+    assertTrue("corrupt database bytes must remain available for forensic recovery", database.length() > 0);
+  }
+
   @Test public void forcedOutboxFailureRollsBackDomainRow() throws Exception {
     repository.getWritableDatabase().execSQL(
       "CREATE TRIGGER fail_outbox_insert BEFORE INSERT ON pms_outbox " +
