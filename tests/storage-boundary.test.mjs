@@ -19,7 +19,7 @@ function walk(dir) {
 function sourceFiles() {
   return [path.join(ROOT, "index.html"), ...walk(path.join(ROOT, "src"))]
     .filter(file => fs.existsSync(file))
-    .filter(file => !path.relative(ROOT, file).split(path.sep).join("/").startsWith("src/storage/"));
+    .filter(file => path.relative(ROOT, file).split(path.sep).join("/") !== "src/storage/legacy-web-storage.mjs");
 }
 function countHits(source) { return (source.match(BANNED) || []).length; }
 
@@ -33,6 +33,14 @@ test("direct browser storage APIs and the legacy business key are confined to sr
   assert.deepEqual(violations, [], "Move all browser storage access and legacy business-key references into src/storage.");
 });
 
+
+test("the sole legacy Web Storage adapter enforces migration and preference key allowlists", () => {
+  const adapter = fs.readFileSync(path.join(ROOT, "src/storage/legacy-web-storage.mjs"), "utf8");
+  assert.match(adapter, /ALLOWED_MIGRATION_KEYS = new Set\(\[LEGACY_STATE_KEY, MIGRATION_STATUS_KEY\]\)/);
+  assert.match(adapter, /ALLOWED_PREFERENCE_KEYS = new Set\(\["theme", "lang"\]\)/);
+  assert.match(adapter, /LEGACY_STORAGE_KEY_NOT_ALLOWED/);
+  assert.match(adapter, /PREFERENCE_STORAGE_KEY_NOT_ALLOWED/);
+});
 
 test("guest photo persistence stays inside the storage adapter and migrates legacy copies only after read-back", () => {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
