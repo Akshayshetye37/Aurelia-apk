@@ -270,6 +270,128 @@ public final class LocalPmsRepositoryInstrumentedTest {
     }
   }
 
+  @Test public void wrongPinThresholdLocksAndMissingEnvelopeCannotUnlock() throws Exception {
+    android.content.Context isolated = context.createDeviceProtectedStorageContext();
+    isolated.deleteDatabase("aurelia-pms-encrypted.db");
+    new com.aurelia.pms.security.AureliaEnvelopeStore(isolated).delete();
+    new File(isolated.getNoBackupFilesDir(), "aurelia-lock-state.v1").delete();
+    java.security.KeyStore keys = java.security.KeyStore.getInstance("AndroidKeyStore");
+    keys.load(null);
+    keys.deleteEntry("aurelia.pms.lock-state.v1");
+    keys.deleteEntry("aurelia.pms.pin-kek.v1");
+    com.aurelia.pms.security.AureliaAppManager manager = TestFixtures.newManager(isolated);
+    char[] pin = "481592".toCharArray();
+    char[] wrong = "000000".toCharArray();
+    char[] recovery = null;
+    try {
+      com.aurelia.pms.security.AureliaAppManager.Enrollment enrollment = manager.enroll(pin);
+      recovery = enrollment.getRecoveryKey();
+      for (int attempt = 0; attempt < 5; attempt++) {
+        assertFalse("each wrong PIN must be rejected", manager.unlock(wrong, enrollment.getEnvelopeJson()));
+      }
+      com.aurelia.pms.security.AppLockManager lockout = new com.aurelia.pms.security.AppLockManager(isolated);
+      assertEquals(5, lockout.lockoutFailureCount());
+      boolean locked = false;
+      try { manager.unlock(wrong, enrollment.getEnvelopeJson()); }
+      catch (SecurityException expected) { locked = true; }
+      assertTrue("the sixth attempt must be blocked by the persisted lockout", locked);
+      assertFalse("missing envelope must not unlock or regenerate the DEK", manager.unlock(pin, ""));
+    } finally {
+      Arrays.fill(pin, '\\0');
+      Arrays.fill(wrong, '\\0');
+      if (recovery != null) Arrays.fill(recovery, '\\0');
+      manager.lock();
+      new com.aurelia.pms.security.AureliaEnvelopeStore(isolated).delete();
+      new File(isolated.getNoBackupFilesDir(), "aurelia-lock-state.v1").delete();
+      keys.load(null);
+      keys.deleteEntry("aurelia.pms.lock-state.v1");
+      keys.deleteEntry("aurelia.pms.pin-kek.v1");
+      isolated.deleteDatabase("aurelia-pms-encrypted.db");
+    }
+  }
+
+  @Test public void authenticatedLockoutStateRejectsByteTampering() throws Exception {
+    File stateFile = new File(context.getNoBackupFilesDir(), "aurelia-lock-state.v1");
+    stateFile.delete();
+    java.security.KeyStore keys = java.security.KeyStore.getInstance("AndroidKeyStore");
+    keys.load(null);
+    keys.deleteEntry("aurelia.pms.lock-state.v1");
+    com.aurelia.pms.security.AppLockManager lockout = new com.aurelia.pms.security.AppLockManager(context);
+    try {
+      lockout.registerFailure();
+      byte[] stored;
+      try (FileInputStream input = new FileInputStream(stateFile)) {
+        java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+        byte[] buffer = new byte[1024]; int count;
+        while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+        stored = output.toByteArray();
+      }
+      stored[stored.length - 1] ^= 0x01;
+      try (java.io.FileOutputStream output = new java.io.FileOutputStream(stateFile, false)) {
+        output.write(stored); output.getFD().sync();
+      } finally { Arrays.fill(stored, (byte) 0); }
+      boolean rejected = false;
+      try { lockout.state(); }
+      catch (SecurityException expected) { rejected = true; }
+      assertTrue("a modified authenticated lockout blob must fail closed", rejected);
+    } finally {
+      stateFile.delete();
+      keys.load(null);
+      keys.deleteEntry("aurelia.pms.lock-state.v1");
+    }
+  }
+
+  @Test public void rebootDuringPinLockoutRestartsTheCooldown() throws Exception {
+    File stateFile = new File(context.getNoBackupFilesDir(), "aurelia-lock-state.v1");
+    stateFile.delete();
+    java.security.KeyStore keys = java.security.KeyStore.getInstance("AndroidKeyStore");
+    keys.load(null);
+    keys.deleteEntry("aurelia.pms.lock-state.v1");
+    java.util.concurrent.atomic.AtomicLong elapsed = new java.util.concurrent.atomic.AtomicLong(1_000L);
+    java.util.concurrent.atomic.AtomicInteger boot = new java.util.concurrent.atomic.AtomicInteger(7);
+    com.aurelia.pms.security.AppLockManager lockout =
+      new com.aurelia.pms.security.AppLockManager(context, () -> elapsed.get(), () -> boot.get());
+    try {
+      for (int attempt = 0; attempt < 5; attempt++) lockout.registerFailure();
+      long originalDeadline = lockout.state().getLockedUntilElapsed();
+      elapsed.addAndGet(5_000L);
+      boot.incrementAndGet();
+      com.aurelia.pms.security.AppLockManager.State restarted = lockout.state();
+      assertEquals(8, restarted.getBootCount());
+      assertTrue("reboot must start a fresh monotonic cooldown", restarted.getLockedUntilElapsed() > originalDeadline);
+      boolean blocked = false;
+      try { lockout.assertUnlocked(); }
+      catch (SecurityException expected) { blocked = true; }
+      assertTrue("PIN remains locked after reboot", blocked);
+    } finally {
+      stateFile.delete();
+      keys.load(null);
+      keys.deleteEntry("aurelia.pms.lock-state.v1");
+    }
+  }
+
+  @Test public void missingBiometricKeystoreKeyFailsClosedAndCanOnlyBeReplacedAfterPinAuthorization() throws Exception {
+    com.aurelia.pms.security.BiometricVaultManager vault = new com.aurelia.pms.security.BiometricVaultManager();
+    java.security.KeyStore keys = java.security.KeyStore.getInstance("AndroidKeyStore");
+    keys.load(null);
+    keys.deleteEntry("aurelia.pms.biometric.dek.v1");
+    try {
+      vault.createOrReplaceKey();
+      assertTrue(keys.containsAlias("aurelia.pms.biometric.dek.v1"));
+      keys.deleteEntry("aurelia.pms.biometric.dek.v1");
+      boolean unavailable = false;
+      try { vault.prepareDecryptOperation(new byte[12]); }
+      catch (IllegalStateException expected) { unavailable = true; }
+      assertTrue("missing biometric key must not silently create a replacement", unavailable);
+      vault.replaceInvalidatedKeyAfterPinAuthorization();
+      keys.load(null);
+      assertTrue("PIN-authorized recovery may create a replacement biometric wrapper", keys.containsAlias("aurelia.pms.biometric.dek.v1"));
+    } finally {
+      keys.load(null);
+      keys.deleteEntry("aurelia.pms.biometric.dek.v1");
+    }
+  }
+
   @Test public void existingDatabaseCannotEnrollAndGenerateReplacementDek() {
     com.aurelia.pms.security.AureliaAppManager manager =
       TestFixtures.newManager(context);
