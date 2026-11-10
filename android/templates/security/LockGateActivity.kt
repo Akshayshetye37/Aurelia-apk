@@ -521,11 +521,19 @@ class LockGateActivity : FragmentActivity() {
     private fun showRecoveryPrompt() {
         try {
             val record = RecoveryPhoneStore(this).read()
-            if (!record.otpRequired || record.currentE164 == null) {
+            if (record.state == RecoveryPhoneStore.State.UNVERIFIED) {
+                showError("Recovery phone setup is incomplete. Finish phone verification in Settings before using Forgot PIN.")
+                return
+            }
+            if (record.otpRequired && record.currentE164 == null) {
+                showError("Recovery phone policy is incomplete. Recovery is blocked until the registered phone is verified.")
+                return
+            }
+            if (!record.otpRequired) {
                 showRecoveryKeyPrompt()
                 return
             }
-            beginRecoveryOtp(record.currentE164)
+            beginRecoveryOtp(record.currentE164 ?: throw SecurityException("Verified recovery phone is missing."))
         } catch (failure: Exception) {
             showError("Recovery phone policy could not be verified. Recovery is blocked: ${failure.message}")
         }
@@ -611,6 +619,11 @@ class LockGateActivity : FragmentActivity() {
     /** This is the only path that renders the offline recovery-key input. */
     private fun showRecoveryKeyPrompt() {
         val record = RecoveryPhoneStore(this).read()
+        if (record.state == RecoveryPhoneStore.State.UNVERIFIED ||
+            (record.otpRequired && record.currentE164 == null)) {
+            showError("Recovery phone setup is incomplete. Recovery is blocked until the registered phone is verified.")
+            return
+        }
         if (record.otpRequired && record.currentE164 != null && !RecoveryGate.isOpen()) {
             showError("Verify the registered recovery phone before entering the recovery key.")
             return
