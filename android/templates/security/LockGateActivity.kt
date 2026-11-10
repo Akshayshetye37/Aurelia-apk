@@ -209,7 +209,7 @@ class LockGateActivity : FragmentActivity() {
             try {
                 biometricVault.replaceInvalidatedKeyAfterPinAuthorization()
                 offerBiometricEnrollment()
-            } catch (replacementFailure: Exception) {
+            } catch (_: Exception) {
                 showError("Biometric re-enrollment is unavailable. PIN access remains valid.")
                 openPms()
             }
@@ -301,6 +301,7 @@ class LockGateActivity : FragmentActivity() {
                                 unwrapped.fill(0)
                             }
                         } catch (failure: Exception) {
+                            if (failure is javax.crypto.AEADBadTagException) biometricStore.delete()
                             showError(failure.message ?: "Biometric key authentication failed.")
                         } finally {
                             wrapped.nonce.fill(0)
