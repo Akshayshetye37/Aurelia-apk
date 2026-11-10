@@ -365,7 +365,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -403,6 +403,13 @@ jobs:
           fetch-depth: 1
       - name: Scan repository for committed credentials
         run: node scripts/check-secrets.mjs
+      - name: Scan full git history with Gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_ENABLE_SUMMARY: "true"
 
   repository-parity:
     name: Repository contract parity (IndexedDB + SQLite)
