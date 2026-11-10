@@ -47,7 +47,7 @@ function assertStorage(storage) {
 
 export class PmsBootstrapCoordinator {
   constructor({
-    storage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
+    storage = null,
     indexedDBImpl = globalThis.indexedDB,
     databaseName = "aurelia-pms-canonical",
     repository = null,
