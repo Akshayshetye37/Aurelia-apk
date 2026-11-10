@@ -261,7 +261,8 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static long safeJsonInteger(JSONObject object,String key,long minimum)throws Exception{Object raw=object.get(key);if(!(raw instanceof Number))throw new IllegalArgumentException("invalid_integer_"+key);double number=((Number)raw).doubleValue();if(!Double.isFinite(number)||number!=Math.rint(number)||number<minimum||number>9007199254740991d)throw new IllegalArgumentException("invalid_integer_"+key);return ((Number)raw).longValue();}
   private static double parseDate(String value){try{java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX",java.util.Locale.US);f.setLenient(false);return f.parse(value).getTime();}catch(Exception e){return Double.NaN;}}
   private static void debugCheckpoint(String checkpoint) {
-    if (!BuildConfig.DEBUG) return;
+    // The hook class is copied only into src/debug by the Android patcher.
+    // Release variants cannot resolve this class and therefore have no injector.
     try {
       Class<?> hooks = Class.forName("com.aurelia.pms.debug.LocalPmsFaultInjection");
       hooks.getMethod("checkpoint", String.class).invoke(null, checkpoint);
