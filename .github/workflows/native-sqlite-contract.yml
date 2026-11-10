@@ -206,6 +206,13 @@ jobs:
           echo "$gradle_status" > "$log_dir/gradle-exit-code.txt"
           exit "$gradle_status"
 
+      - name: Require at least one completed instrumentation test
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import glob,sys,xml.etree.ElementTree as ET; paths=glob.glob("android/app/build/outputs/androidTest-results/connected/**/*.xml", recursive=True); total=sum(int(ET.parse(p).getroot().attrib.get("tests","0")) for p in paths); print(f"Instrumentation XML files: {len(paths)}; tests executed: {total}"); sys.exit(0 if total > 0 else "ERROR: zero native instrumentation tests executed")'
+
       - name: Capture emulator, instrumentation and APK diagnostics
         if: always()
         shell: bash
