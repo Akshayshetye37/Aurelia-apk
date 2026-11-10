@@ -28,7 +28,7 @@ class RecoveryPhoneStore(context: Context) {
         val effectiveAtEpochMs: Long,
         val otpRequired: Boolean
     ) {
-        fun maskedCurrent(): String? = currentE164?.let(::mask)
+        fun maskedCurrent(): String? = currentE164?.let(::maskRecoveryPhone)
     }
 
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -51,7 +51,7 @@ class RecoveryPhoneStore(context: Context) {
             try {
                 val cipher = Cipher.getInstance("AES/GCM/NoPadding")
                 cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(TAG_BITS, nonce))
-                cipher.updateAAD(AAD)
+                cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
                 val json = JSONObject(String(cipher.doFinal(ciphertext), Charsets.UTF_8))
                 val state = State.valueOf(json.getString("state"))
                 val current = json.optString("currentE164").takeIf { it.isNotEmpty() }
@@ -171,11 +171,6 @@ class RecoveryPhoneStore(context: Context) {
         return generator.generateKey()
     }
 
-    private fun mask(value: String): String {
-        val digits = value.filter(Char::isDigit)
-        return "+" + digits.take(2) + " " + "•".repeat((digits.length - 5).coerceAtLeast(0)) + digits.takeLast(3)
-    }
-
     private companion object {
         const val PREFS = "aurelia_recovery_phone_v1"
         const val BLOB = "encrypted_record"
@@ -187,4 +182,9 @@ class RecoveryPhoneStore(context: Context) {
         const val CHANGE_COOLDOWN_MS = 48L * 60L * 60L * 1000L
         val E164 = Regex("^\\+[1-9][0-9]{7,14}$")
     }
+}
+
+private fun maskRecoveryPhone(value: String): String {
+    val digits = value.filter(Char::isDigit)
+    return "+" + digits.take(2) + " " + "•".repeat((digits.length - 5).coerceAtLeast(0)) + digits.takeLast(3)
 }
