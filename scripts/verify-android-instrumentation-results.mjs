@@ -43,7 +43,7 @@ function walk(dir) {
 
 export function findIgnoredTests(root) {
   return walk(root).filter(file => /\.(?:java|kt)$/.test(file))
-    .filter(file => /@\s*Ignore\b/.test(fs.readFileSync(file, "utf8")));
+    .filter(file => /@\s*(?:[\w]+\.)*Ignore\b/.test(fs.readFileSync(file, "utf8")));
 }
 
 export function verifyInstrumentationResults(resultsDir, templateDir) {
