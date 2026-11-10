@@ -242,6 +242,21 @@ public final class LocalPmsRepositoryInstrumentedTest {
       try { crypto.unwrapDataKey(changed.toString(), pin); }
       catch (IllegalArgumentException | SecurityException expected) { rejected = true; }
       assertTrue("database identity tampering must fail before DEK release", rejected);
+
+      JSONObject changedKdf = new JSONObject(encoded).put("iterations", 4);
+      boolean kdfRejected = false;
+      try { crypto.unwrapDataKey(changedKdf.toString(), pin); }
+      catch (IllegalArgumentException | SecurityException expected) { kdfRejected = true; }
+      assertTrue("KDF parameter tampering must fail before DEK release", kdfRejected);
+
+      JSONObject changedCiphertext = new JSONObject(encoded);
+      String wrappedKey = changedCiphertext.getString("wrappedKey");
+      char first = wrappedKey.charAt(0);
+      changedCiphertext.put("wrappedKey", (first == 'A' ? "B" : "A") + wrappedKey.substring(1));
+      boolean byteFlipRejected = false;
+      try { crypto.unwrapDataKey(changedCiphertext.toString(), pin); }
+      catch (IllegalArgumentException | SecurityException expected) { byteFlipRejected = true; }
+      assertTrue("a flipped wrapped-key byte must fail authentication", byteFlipRejected);
       assertArrayEquals(dek, crypto.unwrapDataKey(encoded, pin));
     } finally {
       Arrays.fill(dek, (byte) 0);
