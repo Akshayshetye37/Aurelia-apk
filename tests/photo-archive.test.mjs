@@ -37,3 +37,11 @@ test("invalid photo restore archives are rejected without mutating the database"
   await assert.rejects(archive.restore({ invalid: "not-an-image" }), /invalid original image/i);
   assert.equal(await archive.get("stable"), "data:image/png;base64,CC==");
 });
+
+test("sandboxed preview never substitutes volatile memory for durable photo storage", async () => {
+  const archive = createPhotoArchive({ indexedDBImpl: null, nativeWindow: null, sandboxed: () => true });
+  await assert.rejects(archive.put("preview-photo", "data:image/png;base64,AA=="), /persistence is disabled/i);
+  assert.equal(await archive.get("preview-photo"), null);
+  assert.deepEqual(await archive.archive(), {});
+  await assert.rejects(archive.restore({ "preview-photo": "data:image/png;base64,AA==" }), /restore is disabled/i);
+});
