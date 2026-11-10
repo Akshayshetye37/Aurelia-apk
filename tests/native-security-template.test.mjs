@@ -326,3 +326,9 @@ test('recovery throttling resets only after the replacement PIN envelope is dura
   assert.match(manager, /fun confirmRecoverySwapCommitted\(\)[\s\S]*?recoveryLockout\.registerSuccess\(\)/);
   assert.match(gate, /writeRecoveryReplacement\(replacement\)[\s\S]*?confirmRecoverySwapCommitted\(\)/);
 });
+
+
+test('instrumented invalid-identifier test declares checked event-builder exception', () => {
+  const source = read('android/templates/instrumentation/LocalPmsRepositoryInstrumentedTest.java');
+  assert.match(source, /sqliteRejectsNonCanonicalEntityIdentifiers\\(\\) throws Exception/);
+});
