@@ -151,13 +151,15 @@ public final class LocalPmsRepositoryInstrumentedTest {
         .put("pin", pinWrapper).put("recovery", recoveryWrapper).toString();
       new com.aurelia.pms.security.AureliaEnvelopeStore(context).write(bundle);
 
-      String hex = new StringBuilder().append("5a".repeat(32)).toString();
+      StringBuilder hexBuilder = new StringBuilder();
+      for (int i = 0; i < 32; i++) hexBuilder.append("5a");
+      String hex = hexBuilder.toString();
       String base64 = android.util.Base64.encodeToString(canaryDek, android.util.Base64.NO_WRAP);
       java.util.ArrayList<File> roots = new java.util.ArrayList<>();
       roots.add(context.getFilesDir());
       roots.add(context.getNoBackupFilesDir());
       roots.add(context.getCacheDir());
-      roots.add(new File(context.getApplicationInfo().dataDir, "shared_prefs"));
+      roots.add(new File(context.getFilesDir().getParentFile(), "shared_prefs"));
       java.util.ArrayDeque<File> pending = new java.util.ArrayDeque<>(roots);
       while (!pending.isEmpty()) {
         File file = pending.removeFirst();
@@ -166,7 +168,13 @@ public final class LocalPmsRepositoryInstrumentedTest {
           File[] children = file.listFiles();
           if (children != null) pending.addAll(Arrays.asList(children));
         } else if (file.isFile() && file.length() <= 16L * 1024L * 1024L) {
-          String contents = new String(java.nio.file.Files.readAllBytes(file.toPath()), java.nio.charset.StandardCharsets.ISO_8859_1);
+          String contents;
+          try (java.io.FileInputStream fileInput = new java.io.FileInputStream(file)) {
+            java.io.ByteArrayOutputStream fileBytes = new java.io.ByteArrayOutputStream();
+            byte[] fileBuffer = new byte[4096]; int fileCount;
+            while ((fileCount = fileInput.read(fileBuffer)) != -1) fileBytes.write(fileBuffer, 0, fileCount);
+            contents = new String(fileBytes.toByteArray(), "ISO-8859-1");
+          }
           assertFalse("DEK hex canary must not be persisted: " + file.getName(), contents.contains(hex));
           assertFalse("DEK base64 canary must not be persisted: " + file.getName(), contents.contains(base64));
         }
