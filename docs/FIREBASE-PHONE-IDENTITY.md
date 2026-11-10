@@ -11,7 +11,7 @@ The repository generates the native Android project during Capacitor setup. `scr
 - A successful result proves that Firebase accepted a phone credential for that number. It does not prove ownership of the Master Key and does not authorize recovery by itself.
 - The coordinator must additionally verify the independently generated 32-byte Recovery Secret against the recovery envelope before unwrapping the Master Key.
 - Do not persist OTP, verification ID, resend token, ID token, Firebase credential, or raw key material. The challenge is intentionally process-scoped; after process death, restart OTP.
-- Firebase ID tokens are not encryption keys and are not needed by this phone-verification boundary.
+- After Firebase verifies the phone credential, the isolated Auth client obtains a fresh Firebase ID token in memory and signs out. The token is sent only to the trusted recovery backend for phone-claim and auth_time verification. It is never persisted, logged, or used as an encryption key.
 
 ## Important implementation note
 
@@ -41,3 +41,10 @@ Provide the actual Firebase Console-generated `google-services.json` to the Andr
 8. Run Android instrumentation tests with Firebase test phone numbers; do not use real SMS or production users in automated tests.
 
 Robolectric/unit tests cannot establish real Play Integrity, reCAPTCHA, SMS delivery, or Firebase backend behavior. Those require device/instrumentation testing against a configured Firebase test project.
+
+
+## OTP recovery grant integration status
+
+The Firebase phone identity callback now exposes the short-lived ID token only in the in-memory IdentityVerified result. RecoveryGrantClient calls the Firebase Functions v2 registration, grant-issuance and grant-consumption callables. The local RecoveryGrantVerifier checks the pinned ES256 key and the RecoveryGrantReplayStore provides local replay defense. The gate is armed only after local signature/claim verification and successful server-side jti consumption.
+
+The current application still uses a local-only tenant identity and does not yet provision the owner Firebase session/custom tenant role required by registerRecoveryPhone. The locked launcher also does not yet orchestrate OTP callbacks, grant verification, server consumption and gate arming. Therefore the client/backend primitives are scaffolding, not a usable end-to-end feature. Do not enable OTP recovery until the identity/tenant binding, signing-key pin, App Check/Play Integrity setup, Settings UI and Forgot PIN UI are completed and tested.
