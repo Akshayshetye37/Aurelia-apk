@@ -390,6 +390,7 @@ for (const file of [
   'AureliaCryptoEngine.kt',
   'AppLockManager.kt',
   'BiometricVaultManager.kt',
+  'BiometricEnvelopeStore.kt',
   'AureliaAppManager.kt',
   'AureliaSecurityRuntime.kt',
   'AureliaEnvelopeStore.kt',
