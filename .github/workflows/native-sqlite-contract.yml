@@ -45,6 +45,9 @@ jobs:
       - name: Run source regression suite
         run: npm test
 
+      - name: Enforce canonical storage boundary
+        run: node scripts/check-storage-boundaries.mjs
+
       - name: Prepare web application
         run: npm run build
 
