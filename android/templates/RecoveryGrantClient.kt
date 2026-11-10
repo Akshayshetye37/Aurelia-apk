@@ -1,5 +1,10 @@
 package com.aurelia.pms.identity
 
+import android.content.Context
+import java.security.PublicKey
+import com.aurelia.pms.security.RecoveryGate
+import com.aurelia.pms.security.RecoveryGrantReplayStore
+import com.aurelia.pms.security.RecoveryGrantVerifier
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.android.gms.tasks.Task
@@ -7,7 +12,7 @@ import java.security.SecureRandom
 import java.util.Base64
 
 /** Callable client for the trusted recovery authorization service. */
-class RecoveryGrantClient {
+class RecoveryGrantClient(private val context: Context) {
     private val functions = FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
 
     fun registerRecoveryPhone(phoneIdToken: String): Task<Map<*, *>> =
@@ -42,6 +47,29 @@ class RecoveryGrantClient {
             val data = task.result?.data as? Map<*, *>
             data?.get("consumed") == true
         }
+
+    fun verifyConsumeAndArm(
+        grant: String,
+        tenantId: String,
+        nonce: String,
+        deviceHash: String,
+        pinnedPublicKey: PublicKey,
+        onResult: (Boolean) -> Unit
+    ) {
+        val verified = RecoveryGrantVerifier.verify(
+            grant, pinnedPublicKey, tenantId, nonce, deviceHash,
+            RecoveryGrantReplayStore(context)::markUsed
+        )
+        if (verified !== RecoveryGrantVerifier.Result.Ok) {
+            onResult(false)
+            return
+        }
+        consumeRecoveryGrant(grant, nonce, deviceHash).addOnCompleteListener { task ->
+            val consumed = task.isSuccessful && task.result == true
+            if (consumed) RecoveryGate.arm(verified)
+            onResult(consumed)
+        }
+    }
 
     data class GrantRequest(val task: Task<String>, val nonce: String, val deviceIdHash: String)
 }
