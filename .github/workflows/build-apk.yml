@@ -183,7 +183,7 @@ jobs:
           set -euo pipefail
           apk="android/app/build/outputs/apk/release/app-release.apk"
           digest="$(sha256sum "$apk" | awk '{print $1}')"
-          printf '{"sourceSha":"%s","artifactSha256":"%s","workflowRunId":"%s","workflowAttempt":"%s"}\\n' \
+          printf '{"sourceSha":"%s","artifactSha256":"%s","workflowRunId":"%s","workflowAttempt":"%s"}\n' \
             "$GITHUB_SHA" "$digest" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
             > "$RUNNER_TEMP/aurelia-pms-release-record.json"
           test -s "$RUNNER_TEMP/aurelia-pms-release-record.json"
