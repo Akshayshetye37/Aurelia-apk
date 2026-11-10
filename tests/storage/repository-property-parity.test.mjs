@@ -5,7 +5,7 @@ import { indexedDB } from "fake-indexeddb";
 import fc from "fast-check";
 import { IndexedDbPmsRepository } from "../../src/storage/indexeddb-pms-repository.mjs";
 
-const operationsArbitrary = fc.array(
+const PROPERTY_SEED = 20261110;\n\nconst operationsArbitrary = fc.array(
   fc.record({
     idSuffix: fc.integer({ min: 0, max: 3 }),
     balanceMinor: fc.integer({ min: 0, max: 2_000_000_000 })
@@ -82,11 +82,11 @@ test("fast-check generated operation sequences preserve repository model, versio
   let run = 0;
   await fc.assert(fc.asyncProperty(operationsArbitrary, async operations => {
     await runSequence("property-run-" + run++, operations);
-  }), { numRuns: 24, seed: 20261110, endOnFailure: true });
+  }), { numRuns: 24, seed: PROPERTY_SEED, endOnFailure: true });
 });
 
 test("deterministic fast-check vectors are exported for the native SQLite engine", async () => {
-  const samples = fc.sample(operationsArbitrary, { seed: 20261110, numRuns: 12 });
+  const samples = fc.sample(operationsArbitrary, { seed: PROPERTY_SEED, numRuns: 12 });
   const cases = [];
   for (let i = 0; i < samples.length; i++) cases.push(await runSequence("native-" + i, samples[i]));
   const output = process.env.AURELIA_PROPERTY_FIXTURE_PATH;

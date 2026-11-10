@@ -1,4 +1,4 @@
-import test from "node:test";import fs from "node:fs";import path from "node:path";import assert from "node:assert/strict";import{indexedDB}from"fake-indexeddb";import{IndexedDbPmsRepository,parseLegacyPmsSnapshot}from"../../src/storage/indexeddb-pms-repository.mjs";
+import test from "node:test";import fs from "node:fs";import path from "node:path";import assert from "node:assert/strict";import{indexedDB}from"fake-indexeddb";import{IndexedDbPmsRepository,parseLegacyPmsSnapshot}from"../../src/storage/indexeddb-pms-repository.mjs";import{runContract}from"./run-pms-repository-contract.mjs";
 const state={rooms:[],b:[],g:[],t:[],exp:[],inv:[],led:[],aud:[],set:{name:"Aurelia"},menu:{},tab:"home",bk:{},today:9};
 const repo=n=>new IndexedDbPmsRepository({indexedDBImpl:indexedDB,databaseName:"pms-test-"+n,now:()=>"2026-11-07T00:00:00Z"});
 const event=(n,id="f1")=>({eventId:"event-"+n,tenantId:"t1",propertyId:"p1",deviceId:"d1",entityType:"folio",entityId:id,sequence:n,schemaVersion:1,eventType:"FOLIO_UPDATED",occurredAt:"2026-11-07T00:00:00Z",payload:{amountPaise:100}});
@@ -51,4 +51,9 @@ test("repository rejects non-canonical entity identifiers",async()=>{
  const r=repo("canonical-identifiers");
  await assert.rejects(r.transactBusinessChange({entityType:"folio",entityId:"bad id",expectedVersion:0,event:event(1,"bad id")},()=>({balanceMinor:1})),/canonical/);
  assert.equal(await r.getEntity("folio","bad id"),null);
+});
+
+test("shared runContract covers duplicate, missing, malformed, concurrent and interrupted writes",async()=>{
+ const result=await runContract(name=>repo("run-contract-"+name));
+ assert.deepEqual(result,{duplicate:true,missing:true,malformed:true,concurrent:true,interrupted:true});
 });
