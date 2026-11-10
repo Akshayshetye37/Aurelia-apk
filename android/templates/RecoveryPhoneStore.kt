@@ -123,8 +123,12 @@ class RecoveryPhoneStore(context: Context) {
 
     fun requiresOtp(): Boolean {
         val record = read()
-        return record.otpRequired && record.currentE164 != null &&
-            (record.state == State.VERIFIED || record.state == State.CHANGE_PENDING)
+        // Interrupted first-time registration must fail closed.
+        return record.otpRequired && (
+            (record.state == State.UNVERIFIED && record.pendingE164 != null) ||
+            (record.currentE164 != null &&
+                (record.state == State.VERIFIED || record.state == State.CHANGE_PENDING))
+        )
     }
 
     private fun write(record: Record) {
