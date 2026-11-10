@@ -36,7 +36,13 @@ class RecoveryPhoneStore(context: Context) {
 
     @Synchronized
     fun read(): Record {
-        val blob = prefs.getString(BLOB, null) ?: return Record(State.UNSET, null, null, 0L, true)
+        val blob = prefs.getString(BLOB, null) ?: run {
+            val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            if (store.containsAlias(KEY_ALIAS)) {
+                throw SecurityException("Recovery phone record is missing; refusing to disable OTP policy.")
+            }
+            return Record(State.UNSET, null, null, 0L, true)
+        }
         try {
             val packed = Base64.decode(blob, Base64.NO_WRAP)
             require(packed.size > NONCE_BYTES + TAG_BYTES) { "Invalid recovery phone record." }
@@ -113,13 +119,6 @@ class RecoveryPhoneStore(context: Context) {
         require(old.state == State.CHANGE_PENDING && old.pendingE164 != null)
         require(nowEpochMs >= old.effectiveAtEpochMs) { "Recovery phone change cooldown has not elapsed." }
         write(Record(State.VERIFIED, old.pendingE164, null, 0L, old.otpRequired))
-    }
-
-    @Synchronized
-    fun setOtpRequired(required: Boolean, pinStepUpVerified: Boolean) {
-        require(pinStepUpVerified) { "PIN step-up is required to change OTP recovery policy." }
-        val old = read()
-        write(old.copy(otpRequired = required))
     }
 
     fun requiresOtp(): Boolean {
