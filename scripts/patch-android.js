@@ -404,6 +404,14 @@ for (const file of [
   fs.copyFileSync(source, path.join(securitySourceDir, file));
 }
 
+// Fault injection is compiled into debug variants only. No hook source is
+// copied into src/main or src/release.
+const debugFaultTemplate = path.join(androidDir, 'templates', 'debug', 'LocalPmsFaultInjection.java');
+if (!fs.existsSync(debugFaultTemplate)) throw new Error('Debug fault-injection template is missing.');
+const debugFaultSourceDir = path.join(androidDir, 'app', 'src', 'debug', 'java', 'com', 'aurelia', 'pms', 'debug');
+fs.mkdirSync(debugFaultSourceDir, { recursive: true });
+fs.copyFileSync(debugFaultTemplate, path.join(debugFaultSourceDir, 'LocalPmsFaultInjection.java'));
+
 function addNativeSecurityDependencies(contents, kotlinDsl) {
   if (!/dependencies\s*\{/.test(contents)) {
     throw new Error('App Gradle file has no dependencies block; native security dependencies were not added.');
