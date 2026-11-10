@@ -632,7 +632,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
   @Test public void fastCheckGeneratedOperationSequencesMatchNativeSqliteState() throws Exception {
     JSONObject fixture;
     // androidTest assets belong to the instrumentation APK, not the target app APK.
-    try (java.io.InputStream input = InstrumentationRegistry.getContext().getAssets()
+    try (java.io.InputStream input = InstrumentationRegistry.getInstrumentation().getContext().getAssets()
         .open("pms-repository-property-sequences.json")) {
       java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
       byte[] buffer = new byte[4096];
