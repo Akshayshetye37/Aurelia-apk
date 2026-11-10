@@ -58,7 +58,8 @@ jobs:
         shell: bash
         run: |
           node --input-type=module <<'NODE'
-          import { generateKeyPairSync, randomBytes, writeFileSync } from "node:crypto";
+          import { generateKeyPairSync, randomBytes } from "node:crypto";
+          import { writeFileSync } from "node:fs";
           const { privateKey } = generateKeyPairSync("ec", {
             namedCurve: "prime256v1",
             privateKeyEncoding: { type: "pkcs8", format: "pem" },
