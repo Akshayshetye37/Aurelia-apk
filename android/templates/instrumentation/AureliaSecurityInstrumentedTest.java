@@ -3,13 +3,10 @@ package com.aurelia.pms.security;
 import static org.junit.Assert.*;
 
 import android.content.Context;
-
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 
@@ -24,7 +21,8 @@ public final class AureliaSecurityInstrumentedTest {
         assertRejected("123456");
         assertRejected("654321");
         assertRejected("111111");
-        assertRejected("999999");
+        assertRejected("121212");
+        assertRejected("123123");
         crypto.validatePin("481592".toCharArray());
         crypto.validatePin("82649173".toCharArray());
     }
@@ -36,8 +34,7 @@ public final class AureliaSecurityInstrumentedTest {
         try {
             assertEquals(9, new String(encoded).split("-").length);
             assertArrayEquals(recovery, crypto.decodeRecoveryKey(encoded));
-            char original = encoded[0];
-            encoded[0] = original == 'A' ? 'B' : 'A';
+            encoded[0] = encoded[0] == 'A' ? 'B' : 'A';
             try {
                 crypto.decodeRecoveryKey(encoded);
                 fail("Mutated recovery key must fail checksum verification.");
@@ -45,8 +42,8 @@ public final class AureliaSecurityInstrumentedTest {
                 // Expected checksum rejection.
             }
         } finally {
-            recovery = wipe(recovery);
-            java.util.Arrays.fill(encoded, '\\0');
+            java.util.Arrays.fill(recovery, (byte) 0);
+            java.util.Arrays.fill(encoded, Character.MIN_VALUE);
         }
     }
 
@@ -71,12 +68,12 @@ public final class AureliaSecurityInstrumentedTest {
         } finally {
             java.util.Arrays.fill(dek, (byte) 0);
             java.util.Arrays.fill(recoveryKey, (byte) 0);
-            java.util.Arrays.fill(pin, '\\0');
+            java.util.Arrays.fill(pin, Character.MIN_VALUE);
         }
     }
 
     @Test
-    public void replacementPinWrapperIsReadBackAgainstSameDekAndRecoveryWrapperIsUnchanged() throws Exception {
+    public void replacementPinWrapperPreservesRecoveryEnvelopeAndSameDek() throws Exception {
         byte[] dek = new byte[32];
         new SecureRandom().nextBytes(dek);
         byte[] recoveryKey = crypto.createRecoveryKey();
@@ -102,16 +99,16 @@ public final class AureliaSecurityInstrumentedTest {
         } finally {
             java.util.Arrays.fill(dek, (byte) 0);
             java.util.Arrays.fill(recoveryKey, (byte) 0);
-            java.util.Arrays.fill(oldPin, '\\0');
-            java.util.Arrays.fill(newPin, '\\0');
+            java.util.Arrays.fill(oldPin, Character.MIN_VALUE);
+            java.util.Arrays.fill(newPin, Character.MIN_VALUE);
         }
     }
 
     @Test
     public void recoveryEnvelopeStoreRetainsPreviousUntilSuccessfulUnlockAcknowledgement() {
         AureliaEnvelopeStore store = new AureliaEnvelopeStore(context);
-        String first = "{\\"test\\":\\"before\\"}";
-        String second = "{\\"test\\":\\"after\\"}";
+        String first = "before";
+        String second = "after";
         store.delete();
         try {
             store.write(first);
@@ -132,10 +129,5 @@ public final class AureliaSecurityInstrumentedTest {
         } catch (IllegalArgumentException expected) {
             // Expected policy rejection.
         }
-    }
-
-    private static byte[] wipe(byte[] value) {
-        java.util.Arrays.fill(value, (byte) 0);
-        return value;
     }
 }
