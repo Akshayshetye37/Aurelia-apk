@@ -3,8 +3,8 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { importPKCS8, jwtVerify, SignJWT } from "jose";
+import { createHmac, createPrivateKey, createPublicKey, randomUUID, timingSafeEqual } from "node:crypto";
+import { importPKCS8, importSPKI, jwtVerify, SignJWT } from "jose";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -119,6 +119,10 @@ export const registerRecoveryPhone = onCall(
           state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp(), otpRequired: true });
         return "VERIFIED" as const;
       }
+      if (current.pending?.hash) {
+        if (equalDigest(current.hash, hash)) return "CHANGE_PENDING" as const;
+        throw new HttpsError("failed-precondition", "A recovery phone change is already pending.");
+      }
       if (equalDigest(current.hash, hash)) {
         tx.set(ref, { ...current, state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp() }, { merge: true });
         return "VERIFIED" as const;
@@ -151,7 +155,7 @@ export const issueRecoveryGrant = onCall(
     const phoneSnapshot = await phoneRef.get();
     const phoneRecord = phoneSnapshot.data();
     const actualHash = digest(tenantId, proof.phone);
-    if (!phoneRecord || phoneRecord.state !== "VERIFIED" ||
+    if (!phoneRecord || !["VERIFIED", "CHANGE_PENDING"].includes(phoneRecord.state) ||
         phoneRecord.otpRequired === false || !equalDigest(phoneRecord.hash, actualHash)) throw GENERIC;
 
     // Firebase ID tokens can be replayed while fresh. Consume each auth event once.
@@ -177,13 +181,10 @@ export const consumeRecoveryGrant = onCall(
   { region: REGION, enforceAppCheck: true, secrets: [RECOVERY_SIGNING_KEY_PKCS8] },
   async request => {
     const grant = requiredString(request.data?.grant, 4096);
-    const publicKeyPem = requiredString(request.data?.verificationPublicKeyPem, 4096);
-    // The supplied public key is not trusted for authorization; it is only used
-    // to ensure the presented token is structurally the expected server-issued JWT.
-    // Server signature verification uses the configured private key's public half.
-    const privateKey = await importPKCS8(RECOVERY_SIGNING_KEY_PKCS8.value(), "ES256");
-    const { publicKey } = await import("jose");
-    const publicKeyObject = await publicKey(privateKey);
+    const privateKeyPem = RECOVERY_SIGNING_KEY_PKCS8.value();
+    const privateKeyObject = createPrivateKey(privateKeyPem);
+    const publicKeyPem = createPublicKey(privateKeyObject).export({ type: "spki", format: "pem" }).toString();
+    const publicKeyObject = await importSPKI(publicKeyPem, "ES256");
     const verified = await jwtVerify(grant, publicKeyObject, { issuer: ISSUER, audience: AUDIENCE });
     const { sub, jti, did, nonce, scope } = verified.payload;
     if (typeof sub !== "string" || typeof jti !== "string" || typeof did !== "string" ||
