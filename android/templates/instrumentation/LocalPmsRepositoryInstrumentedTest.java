@@ -300,6 +300,83 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertTrue("corrupt database bytes must remain available for forensic recovery", database.length() > 0);
   }
 
+  @Test public void lowStorageQualificationKeepsMigrationAndWritesAtomic() throws Exception {
+    if (!Boolean.parseBoolean(InstrumentationRegistry.getArguments().getString("runLowStorage", "false"))) return;
+    File filler = new File(context.getCacheDir(), "aurelia-low-storage-qualification.bin");
+    byte[] chunk = new byte[1024 * 1024];
+    Arrays.fill(chunk, (byte) 0x5a);
+    boolean migrationCommitted = false;
+    try {
+      try (java.io.FileOutputStream output = new java.io.FileOutputStream(filler)) {
+        android.os.StatFs stat = new android.os.StatFs(context.getFilesDir().getAbsolutePath());
+        long maxBytes = 1024L * 1024L * 1024L;
+        while (stat.getAvailableBytes() > 24L * 1024L * 1024L && filler.length() < maxBytes) {
+          output.write(chunk);
+          output.flush();
+          output.getFD().sync();
+          stat = new android.os.StatFs(context.getFilesDir().getAbsolutePath());
+        }
+      } catch (java.io.IOException expectedNearFull) {
+        // Reaching ENOSPC while creating the test filler is an acceptable setup outcome.
+      }
+      android.os.StatFs lowSpace = new android.os.StatFs(context.getFilesDir().getAbsolutePath());
+      assertTrue("test device must be near full before qualification", lowSpace.getAvailableBytes() <= 24L * 1024L * 1024L);
+
+      char[] largeChars = new char[8 * 1024 * 1024];
+      Arrays.fill(largeChars, 'x');
+      String largePayload = new String(largeChars);
+      Arrays.fill(largeChars, '\0');
+      String migration = new JSONObject()
+        .put("rooms", new JSONArray().put(new JSONObject()
+          .put("id", "low-storage-room").put("n", "101").put("s", "ready").put("notes", largePayload)))
+        .put("b", new JSONArray()).put("g", new JSONArray()).put("t", new JSONArray())
+        .put("exp", new JSONArray()).put("inv", new JSONArray()).put("led", new JSONArray())
+        .put("aud", new JSONArray()).put("set", new JSONObject()).put("menu", new JSONObject()).toString();
+      try {
+        repository.migrateLegacySnapshot("low-storage-migration", "aurelia_lodge_v2",
+          "2026-11-10T00:00:00.000Z", migration);
+        migrationCommitted = true;
+      } catch (RuntimeException expectedStorageFailure) {
+        assertEquals(0, repository.getWritableDatabase().compileStatement("SELECT COUNT(*) FROM pms_migrations").simpleQueryForLong());
+        assertNull(repository.getEntity("room", "low-storage-room"));
+      }
+
+      String folioId = "low-storage-folio";
+      boolean writeCommitted = false;
+      try {
+        repository.transactBusinessChange("folio", folioId, 0,
+          new JSONObject().put("id", folioId).put("payload", largePayload).put("balanceMinor", 1),
+          event("low-storage-folio-event", "folio", folioId, 1));
+        writeCommitted = true;
+      } catch (RuntimeException expectedStorageFailure) {
+        assertNull(repository.getEntity("folio", folioId));
+        try (android.database.Cursor outbox = repository.getWritableDatabase().rawQuery(
+            "SELECT COUNT(*) FROM pms_outbox WHERE event_id=?", new String[] { "low-storage-folio-event" })) {
+          assertTrue(outbox.moveToFirst());
+          assertEquals(0, outbox.getInt(0));
+        }
+      }
+      if (writeCommitted) {
+        assertNotNull(repository.getEntity("folio", folioId));
+        try (android.database.Cursor outbox = repository.getWritableDatabase().rawQuery(
+            "SELECT COUNT(*) FROM pms_outbox WHERE event_id=?", new String[] { "low-storage-folio-event" })) {
+          assertTrue(outbox.moveToFirst());
+          assertEquals(1, outbox.getInt(0));
+        }
+      }
+      try (android.database.Cursor integrity = repository.getWritableDatabase().rawQuery("PRAGMA integrity_check", null)) {
+        assertTrue(integrity.moveToFirst());
+        assertEquals("ok", integrity.getString(0));
+      }
+      try (android.database.Cursor foreignKeys = repository.getWritableDatabase().rawQuery("PRAGMA foreign_key_check", null)) {
+        assertFalse(foreignKeys.moveToFirst());
+      }
+    } finally {
+      Arrays.fill(chunk, (byte) 0);
+      filler.delete();
+    }
+  }
+
   @Test public void debugFaultCheckpointCanKillProcessForDeviceMatrix() throws Exception {
     android.os.Bundle args = InstrumentationRegistry.getArguments();
     String checkpoint = args.getString("faultCheckpoint");
