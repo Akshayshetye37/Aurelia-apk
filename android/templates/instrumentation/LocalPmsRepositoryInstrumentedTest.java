@@ -248,6 +248,15 @@ public final class LocalPmsRepositoryInstrumentedTest {
   }
 
 
+  @Test public void sqliteRejectsNonCanonicalEntityIdentifiers() {
+    boolean rejected = false;
+    try {
+      repository.transactBusinessChange("folio", "bad id", 0, new JSONObject(),
+        event("bad-id-event", "folio", "bad id", 1));
+    } catch (RuntimeException expected) { rejected = true; }
+    assertTrue("SQLite must reject non-canonical entity identifiers", rejected);
+  }
+
   @Test public void sqliteRejectsNonUtcOutboxTimestamps() throws Exception {
     JSONObject invalid = event("offset-event", "folio", "offset-folio", 1);
     invalid.put("occurredAt", "2026-11-09T17:30:00.000+05:30");
