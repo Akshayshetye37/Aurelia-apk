@@ -90,7 +90,7 @@ test('real Android SQLite instrumentation source is copied and configured by the
 
 test('manual Android QA workflow executes instrumentation rather than relying on JS fake-plugin tests', () => {
   const workflow = read('.github/workflows/build-pms-debug-apk.yml');
-  assert.ok(workflow.includes("reactivecircus/android-emulator-runner@v2"));
+  assert.ok(workflow.includes("reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d"));
   assert.match(workflow, /connectedDebugAndroidTest/);
   assert.match(workflow, /Preserve Android instrumentation reports/);
 });
