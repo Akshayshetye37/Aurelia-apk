@@ -51,7 +51,7 @@ class LockGateActivity : FragmentActivity() {
         }
         // The authenticated envelope is authoritative. A missing marker can be
         // restored only after PIN/recovery unlock, never by creating a new DEK.
-        enrollmentMode = !envelopeExists
+        enrollmentMode = !envelopeExists && !databaseExists && !enrolled && !biometricStore.exists()
         render()
     }
 
