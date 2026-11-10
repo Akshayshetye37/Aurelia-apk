@@ -1,43 +1,49 @@
 # Aurelia PMS — Production readiness blockers
 
-**Status: NOT PRODUCTION READY.** This document records only unresolved production blockers, their sub-problems, required resolution and the implementation/test technology expected for each.
+**Status: NOT PRODUCTION READY.** This document records the verified implementation baseline, unresolved production blockers, required resolution and the implementation/test technology expected for each. CI status is time-sensitive and is tied to the exact branch-head SHA shown below.
 
 - Repository: https://github.com/Akshayshetye37/Aurelia-apk
 - Active branch: work/p0-storage-hardening
-- Code candidate reviewed: b53937ff5ee0306918f6d8fcbdb6877482c8312d
+- Exact branch head checked: `b71b7917736ea7502851c260af7907ef8e1ffcac` (2026-11-10 14:29 IST).
+- Draft PR #18 head: `b71b7917736ea7502851c260af7907ef8e1ffcac`; base: `feature/multi-provider-payment-backend`.
 - Draft PR #18: https://github.com/Akshayshetye37/Aurelia-apk/pull/18
-- Current release posture: PR remains draft/unmerged; canonical authority is PREPARED_COMPATIBILITY; uiCutover=false; cloud sync, provider activation, live collection, automatic settlement, automatic refunds and production release remain OFF.
+- Current release posture: PR #18 remains draft/unmerged; GitHub reports it is not mergeable; canonical authority is PREPARED_COMPATIBILITY; `uiCutover=false`; cloud sync, provider activation, live collection, automatic settlement, automatic refunds and production release remain OFF.
+- Branch protection: the branch API reports `protected=false` and protection checks disabled for `work/p0-storage-hardening`. The integration could not read base-branch protection (403), so base-branch protection remains unverified.
 - LIVE GATEWAY COLLECTION OFF. Recovery support is not yet production-ready; native key recovery must pass physical-device qualification before release.
 - Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available when gateway features are disabled.
 - Provider integration inventory: Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue. Provider adapters/test checkout do not mean merchant production acceptance.
 
 ## Verified baseline — not a production approval
 
-On code candidate b53937ff5ee0306918f6d8fcbdb6877482c8312d:
+Exact branch head: `b71b7917736ea7502851c260af7907ef8e1ffcac`. Latest observed workflow: [native SQLite run #170](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42786247933), started 2026-11-10 14:24 IST. At the time inspected, it was still **in progress**.
 
-- Source/web CI: **543 tests passed, 0 failed**.
-- Production web build and asset privacy checks: passed.
-- R1 release-default checks: passed.
-- Native Kotlin dependency alignment, native compilation, ABI/APK-content checks, Android 34 AVD creation and emulator process startup: passed.
-- Native emulator boot completion: still in progress at the last workflow inspection.
-- Real SQLite instrumentation, nonzero test-count gate, XML report, diagnostics and artifact upload: **not yet completed**.
+- Source regression suite (`npm test`): **passed** on this exact head.
+- Web production preparation (`npm run build`): **passed** on this exact head.
+- Android project generation, Capacitor sync and Android 34 system-image setup: **passed**.
+- Kotlin test-runtime dependency alignment: **passed**.
+- Native Java compilation, debug/release compile tasks, native unit-test task and app/instrumentation APK assembly: **passed**.
+- APK checks for SQLCipher x86_64 library, instrumentation test class and AndroidJUnitRunner symbols: **passed**.
+- Android 34 AVD creation and emulator process startup: **passed**.
+- Emulator boot completion (`sys.boot_completed=1`): **still running / not yet evidenced as passed**.
+- Real SQLite instrumentation, nonzero test-count gate, final XML report, diagnostics and artifact upload: **pending** because the boot gate has not completed.
+- Exact-head R1 and other independent quality/payment CI workflows were not confirmed in this inspection; do not claim them as passed.
 
-A source/mock test, successful native compilation or emulator process start is not proof that the SQLite instrumentation suite passed.
+A source/mock test, successful native compilation, APK inspection or emulator process start is not proof that the real SQLite instrumentation suite passed.
 
 ---
 
 ## 1. Native Android SQLite instrumentation is not yet qualified
 
-**Problem:** The native workflow has not completed real SQLite instrumentation on the current code candidate.
+**Problem:** The native workflow has not completed real SQLite instrumentation on the exact current branch head (`b71b791…`).
 
 **Sub-problems**
-- Emulator boot-completion check has not passed yet.
-- Real LocalPmsRepositoryInstrumentedTest execution has not started/completed.
-- No completed nonzero instrumentation test count is evidenced.
-- Instrumentation XML reports and diagnostic artifacts are not yet available.
+- Emulator boot-completion check is still running; `sys.boot_completed=1` has not yet been observed in a completed step.
+- Real `LocalPmsRepositoryInstrumentedTest` execution remains pending behind the emulator boot gate.
+- No completed nonzero instrumentation test count is evidenced for this SHA.
+- Final instrumentation XML reports and uploaded diagnostic artifacts are not yet available.
 
 **Required resolution**
-1. Finish Android 34 emulator boot and verify sys.boot_completed.
+1. Finish Android 34 emulator boot and verify `sys.boot_completed=1`.
 2. Install the app and instrumentation APK and execute the actual AndroidJUnitRunner suite.
 3. Fail CI if zero tests execute or any test fails.
 4. Generate and retain JUnit XML, logcat, emulator console, APK metadata and Gradle diagnostics.
@@ -63,7 +69,7 @@ A source/mock test, successful native compilation or emulator process start is n
 - Storage error mapping and database reopen/restart behavior must match.
 
 **Required resolution**
-1. Extract a shared adapter contract test harness.
+1. Extract a shared adapter contract test harness and run identical cases against both engines; the common interface alone does not prove behavioral parity.
 2. Run it against real IndexedDB (browser/Node IndexedDB implementation) and the actual Android SQLite plugin—not only fake plugin objects.
 3. Add parity assertions for return shapes, error codes, version behavior and transaction outcomes.
 4. Make both CI jobs run the same test cases and publish separate engine results.
@@ -235,7 +241,7 @@ A source/mock test, successful native compilation or emulator process start is n
 
 **Sub-problems**
 - Branch protection and required status checks/reviews need owner/admin configuration.
-- PR #18 is still draft and unmerged.
+- PR #18 is still draft and unmerged; GitHub currently reports it as not mergeable.
 - Production signing and release credentials are owner-controlled.
 - Explicit release authorization and rollback ownership are not recorded.
 
