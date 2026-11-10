@@ -40,6 +40,7 @@ test('recovery phone is encrypted with a non-authentication-bound Android Keysto
   assert.match(phone, /KeyProperties\.PURPOSE_ENCRYPT or KeyProperties\.PURPOSE_DECRYPT/);
   assert.doesNotMatch(phone, /setUserAuthenticationRequired\(true\)/);
   assert.match(phone, /CHANGE_COOLDOWN_MS = 48L/);
+  assert.match(phone, /refusing to disable OTP policy/);
   assert.match(phone, /enum class State \{ UNSET, UNVERIFIED, VERIFIED, CHANGE_PENDING \}/);
   assert.doesNotMatch(phone, /Log\.|println\(|System\.out/);
 });
