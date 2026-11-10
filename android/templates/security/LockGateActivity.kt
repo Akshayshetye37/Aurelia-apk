@@ -687,10 +687,12 @@ class LockGateActivity : FragmentActivity() {
                         return@setPositiveButton
                     }
                     val replacement = manager.recoverWithRecoveryKey(recoveryChars, newPinChars, readEnvelope())
-                    envelopeStore.writeRecoveryReplacement(replacement)
-                    manager.confirmRecoverySwapCommitted()
+                    // Revoke biometric access before committing the new PIN wrapper. If the
+                    // process dies before the atomic envelope swap, old PIN/recovery still work.
                     biometricStore.delete()
                     biometricVault.invalidateAfterRecovery()
+                    envelopeStore.writeRecoveryReplacement(replacement)
+                    manager.confirmRecoverySwapCommitted()
                     AureliaSecurityRuntime.markEnrolled()
                     manager.lock()
                     showError("PIN recovered. Biometrics were disabled; unlock with your new PIN to continue.")
