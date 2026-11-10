@@ -1,16 +1,32 @@
 <!--
-AURELIA PMS — CURRENT SOURCE AND RELEASE BOUNDARY (updated 2026-11-10)
+AURELIA PMS — PRODUCTION READINESS BLOCKERS (2026-11-10)
 Repository: https://github.com/Akshayshetye37/Aurelia-apk
-Active branch: work/p0-storage-hardening
-Verified code candidate: 0ff3ee721e915e5d573252c6b17e22f5df91a1fd
-Draft PR #18: https://github.com/Akshayshetye37/Aurelia-apk/pull/18 (open, draft, unmerged)
-CURRENT STATE: canonical authority remains PREPARED_COMPATIBILITY. uiCutover=false. Live gateway collection, automatic settlement, automatic refund posting, provider activation and production release remain OFF.
-STORAGE BOUNDARY: ordinary PMS writes persist to the canonical local repository and require exact read-back. The local-first write coordinator no longer writes a legacy Web Storage business cache. Web Storage is restricted to approved preferences. Browser business data uses IndexedDB; Android uses native SQLCipher-backed SQLite.
-LATEST NATIVE EVIDENCE BEFORE THIS CODE UPDATE: emulator boot completed, but the SQLite instrumentation step was still running when the branch advanced. No instrumentation pass, test count, XML report or artifact is claimed for that superseded run. Fresh exact-head CI is required for 0ff3ee721e915e5d573252c6b17e22f5df91a1fd.
-OPEN RELEASE GATES: shared IndexedDB/SQLite parity contract suite; physical-device process-death/reauthorization qualification; owner-authorized production-shaped snapshot migration and financial parity/rollback; second-device backup/restore; written accounting sign-off; branch protection/required checks; owner-authorized production signing and release.
-LEGACY DATA: quarantine old keys; do not delete them without verified migration, retention delay and explicit approval.
-SECURITY: payment credentials, webhook secrets and signing material remain backend-only. Browser callbacks are not payment proof. Never log or persist clear key material.
-Do not merge, activate cutover or enable payment/release flags based on synthetic or incomplete evidence.
+Branch: work/p0-storage-hardening | Draft PR #18: https://github.com/Akshayshetye37/Aurelia-apk/pull/18
+Code candidate reviewed: b53937ff5ee0306918f6d8fcbdb6877482c8312d
+RELEASE STATUS: NOT PRODUCTION READY. PR remains draft/unmerged. Canonical authority remains PREPARED_COMPATIBILITY; uiCutover=false. Cloud sync, provider activation, live gateway collection, automatic settlement, automatic refunds and production release remain OFF.
+
+VERIFIED ON CODE CANDIDATE b53937ff5ee0306918f6d8fcbdb6877482c8312d:
+- Source/web CI: 543 tests passed, 0 failed; production web build and asset privacy checks passed.
+- R1 release-default checks passed.
+- Native Kotlin dependency alignment, native compilation, ABI/APK content checks, Android 34 AVD creation and emulator process startup passed.
+- Native emulator boot completion is still pending. Real SQLite instrumentation, nonzero test-count gate, XML report, diagnostics and artifact upload have NOT yet passed. Do not report SQLite instrumentation as green.
+
+PRODUCTION BLOCKERS:
+1. Native SQLite: finish emulator boot; run real LocalPmsRepositoryInstrumentedTest; require nonzero test count; generate XML; upload diagnostics/reports; resolve any failures.
+2. Cross-platform storage parity: execute one shared repository contract suite against real IndexedDB and Android SQLite, covering CRUD, versions, batches, rollback, outbox, migration and error behavior.
+3. Full domain cutover: complete repository-backed read/write coverage and restart hydration for every PMS domain; eliminate remaining UI/in-memory bypasses; enforce canonical authority on every restore/import/recovery path. Keep uiCutover=false until proven.
+4. Physical-device qualification: test process death, app force-stop/reboot, reauthorization, schema upgrade, low storage, corruption handling and recovery on supported Android hardware.
+5. Real-data/accounting migration: obtain owner-authorized redacted production-shaped PMS data; reconcile bookings, folios, payment journal, invoices, receipts, refunds and daily totals; prove migration parity and rollback; obtain written accounting-owner acceptance.
+6. Backup/restore: qualify encrypted database plus attachments backup, restore on a second physical device, integrity/checksum/reference validation and recovery after wipe/restart.
+7. Security and identity: complete PIN/biometric/recovery lifecycle and physical-device key-envelope/re-authorisation tests; prove no clear DEK persistence/logging and fail-closed corruption behavior.
+8. Online payments (only if enabling providers): complete provider-specific merchant sandbox/UAT, webhook signature/replay/idempotency, status/refund reconciliation, canonical folio posting, deployment/IAM/secret controls and accounting acceptance. CCAvenue ordinary refunds/refund-status remain incomplete. Keep live collection OFF.
+9. Release governance: repository owner/admin must configure branch protection, required checks/reviews and release permissions; obtain owner-controlled production signing and explicit release approval.
+
+STORAGE/SECURITY RULES:
+- Browser business data uses IndexedDB; Android business data uses native SQLCipher-backed SQLite.
+- Web Storage is preference-only; never restore business data from a Web Storage cache.
+- Retain/quarantine legacy migration material until verified migration, retention delay and explicit approval. Do not delete old keys.
+- Never enable cutover, sync, provider activation or live payment flags from synthetic tests or incomplete evidence.
 -->
 
 <!-- Application metadata
