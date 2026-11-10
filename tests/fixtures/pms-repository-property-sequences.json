@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "operations": [
+        {
+          "id": "property-native-0-folio-1",
+          "balanceMinor": 100,
+          "createdAt": "2026-11-10T00:00:00.000Z",
+          "occurredAt": "2026-11-10T00:00:00.000Z"
+        },
+        {
+          "id": "property-native-0-folio-2",
+          "balanceMinor": 200,
+          "createdAt": "2026-11-10T00:00:01.000Z",
+          "occurredAt": "2026-11-10T00:00:01.000Z"
+        },
+        {
+          "id": "property-native-0-folio-1",
+          "balanceMinor": 150,
+          "createdAt": "2026-11-10T00:00:00.000Z",
+          "occurredAt": "2026-11-10T00:00:02.000Z"
+        }
+      ],
+      "expected": [
+        {
+          "id": "property-native-0-folio-1",
+          "version": 2,
+          "data": {
+            "id": "property-native-0-folio-1",
+            "balanceMinor": 150,
+            "currency": "INR",
+            "createdAt": "2026-11-10T00:00:00.000Z"
+          }
+        },
+        {
+          "id": "property-native-0-folio-2",
+          "version": 1,
+          "data": {
+            "id": "property-native-0-folio-2",
+            "balanceMinor": 200,
+            "currency": "INR",
+            "createdAt": "2026-11-10T00:00:01.000Z"
+          }
+        }
+      ]
+    }
+  ]
+}
