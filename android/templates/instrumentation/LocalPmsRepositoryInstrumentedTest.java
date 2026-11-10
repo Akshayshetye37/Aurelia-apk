@@ -79,11 +79,11 @@ public final class LocalPmsRepositoryInstrumentedTest {
     com.aurelia.pms.security.AureliaAppManager manager =
       new com.aurelia.pms.security.AureliaAppManager(
         new com.aurelia.pms.security.AureliaCryptoEngine(),
-        new com.aurelia.pms.security.AppLockManager(context));
+        new com.aurelia.pms.security.AppLockManager(context), context);
     char[] pin = "481592".toCharArray();
     try {
       boolean rejected = false;
-      try { manager.enroll(pin, true); }
+      try { manager.enroll(pin); }
       catch (SecurityException expected) { rejected = true; }
       assertTrue("existing database must never receive a newly generated DEK", rejected);
       assertFalse(manager.isSessionAuthorized());
@@ -95,12 +95,13 @@ public final class LocalPmsRepositoryInstrumentedTest {
       new com.aurelia.pms.security.AureliaAppManager(
         new com.aurelia.pms.security.AureliaCryptoEngine(),
         new com.aurelia.pms.security.AppLockManager(context),
+        context,
         new java.security.SecureRandom(),
         300_000L);
     char[] pin = "481592".toCharArray();
     byte[] sessionKey = null;
     try {
-      manager.enroll(pin, false);
+      manager.enroll(pin);
       sessionKey = manager.currentDataKeyCopy();
       assertEquals(32, sessionKey.length);
       manager.onBackground();
