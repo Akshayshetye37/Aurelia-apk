@@ -157,3 +157,13 @@ test('native lockout state cannot be reset by deleting its encrypted state file'
   assert.match(lockout, /existingKey\(\)/);
   assert.match(lockout, /refusing to reset retry counters/);
 });
+
+
+test('existing encrypted database cannot enter first-time enrollment without its envelope', () => {
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  const manager = read('android/templates/security/AureliaAppManager.kt');
+  assert.match(gate, /encryptedDatabaseExists\(\)/);
+  assert.match(gate, /databaseExists && \(!enrolled \|\| !envelopeExists\)/);
+  assert.match(manager, /fun enroll\(pin: CharArray, databaseExists: Boolean\)/);
+  assert.match(manager, /if \(databaseExists\) throw SecurityException/);
+});
