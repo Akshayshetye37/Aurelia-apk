@@ -15,7 +15,8 @@ test('Forgot PIN never displays recovery key until a verified OTP grant is consu
   assert.match(recovery, /consumeAndArm/);
   assert.match(recovery, /if \(armed && RecoveryGate\.isOpen\(\)\) showRecoveryKeyPrompt\(\)/);
   assert.match(recovery, /if \(record\.otpRequired && record\.currentE164 != null && !RecoveryGate\.isOpen\(\)\)/);
-  assert.match(recovery, /if \(!record\.otpRequired \|\| record\.currentE164 == null\) \{[\s\S]*?showRecoveryKeyPrompt\(\)/);
+  assert.match(recovery, /if \(record\.state == RecoveryPhoneStore\.State\.UNVERIFIED\)/);
+  assert.match(recovery, /if \(!record\.otpRequired\) \{[\s\S]*?showRecoveryKeyPrompt\(\)/);
 });
 
 test('Hotel Identity remains independent from the recovery phone and exposes a native recovery settings action', () => {
@@ -63,4 +64,14 @@ test('native recovery settings uses the encrypted phone record and secondary pho
   assert.match(activity, /oldPhoneToken/);
   const client = read('android/templates/RecoveryGrantClient.kt');
   assert.match(client, /currentPhoneIdToken/);
+});
+
+
+test('interrupted first-time recovery-phone registration fails closed', () => {
+  const phone = read('android/templates/RecoveryPhoneStore.kt');
+  const settings = read('android/templates/RecoveryPhoneSettingsActivity.kt');
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.match(phone, /record\.state == State\.UNVERIFIED && record\.pendingE164 != null/);
+  assert.match(settings, /store\.markUnverified\(candidate\)[\s\S]*?client\.registerRecoveryPhone/);
+  assert.match(gate, /record\.state == RecoveryPhoneStore\.State\.UNVERIFIED[\s\S]*?Recovery phone setup is incomplete/);
 });
