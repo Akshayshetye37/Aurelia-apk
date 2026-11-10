@@ -18,6 +18,11 @@ permissions:
 jobs:
   verify-and-build:
     if: ${{ false }}
+    environment: aurelia-production-release
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     name: Verify and build Aurelia PMS
     runs-on: ubuntu-22.04
     timeout-minutes: 40
@@ -171,6 +176,18 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | sed -n '1p'
           sha256sum "$apk" > "$apk.sha256"
 
+      - name: Record exact source and APK artifact identity
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="android/app/build/outputs/apk/release/app-release.apk"
+          digest="$(sha256sum "$apk" | awk '{print $1}')"
+          printf '{"sourceSha":"%s","artifactSha256":"%s","workflowRunId":"%s","workflowAttempt":"%s"}\\n' \
+            "$GITHUB_SHA" "$digest" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/aurelia-pms-release-record.json"
+          test -s "$RUNNER_TEMP/aurelia-pms-release-record.json"
+
       - name: Upload signed PMS APK and verification metadata
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -180,5 +197,12 @@ jobs:
             android/app/build/outputs/apk/release/app-release.apk
             android/app/build/outputs/apk/release/app-release.apk.sha256
             ${{ runner.temp }}/aurelia-pms-certificate.txt
+            ${{ runner.temp }}/aurelia-pms-release-record.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Attest signed PMS release APK provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
+        with:
+          subject-path: android/app/build/outputs/apk/release/app-release.apk
