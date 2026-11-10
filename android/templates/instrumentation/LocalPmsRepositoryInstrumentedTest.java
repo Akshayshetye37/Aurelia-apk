@@ -61,6 +61,30 @@ public final class LocalPmsRepositoryInstrumentedTest {
     return new JSONObject().put("value", value);
   }
 
+  @Test public void pinEnvelopeBindsUnlockMethodAndDatabaseIdentity() throws Exception {
+    com.aurelia.pms.security.AureliaCryptoEngine crypto = new com.aurelia.pms.security.AureliaCryptoEngine();
+    byte[] dek = new byte[32];
+    Arrays.fill(dek, (byte) 0x5a);
+    char[] pin = "481592".toCharArray();
+    try {
+      String encoded = crypto.wrapDataKey(dek, pin).getJson();
+      JSONObject envelope = new JSONObject(encoded);
+      assertEquals(3, envelope.getInt("version"));
+      assertEquals("PIN", envelope.getString("method"));
+      assertEquals("aurelia-pms-encrypted.db", envelope.getString("databaseId"));
+      JSONObject changed = new JSONObject(encoded);
+      changed.put("databaseId", "other-database.db");
+      boolean rejected = false;
+      try { crypto.unwrapDataKey(changed.toString(), pin); }
+      catch (IllegalArgumentException | SecurityException expected) { rejected = true; }
+      assertTrue("database identity tampering must fail before DEK release", rejected);
+      assertArrayEquals(dek, crypto.unwrapDataKey(encoded, pin));
+    } finally {
+      Arrays.fill(dek, (byte) 0);
+      Arrays.fill(pin, '\\0');
+    }
+  }
+
   @Test public void missingPersistedPinLockStateCannotResetRetryCounter() throws Exception {
     com.aurelia.pms.security.AppLockManager lockout =
       new com.aurelia.pms.security.AppLockManager(context);
