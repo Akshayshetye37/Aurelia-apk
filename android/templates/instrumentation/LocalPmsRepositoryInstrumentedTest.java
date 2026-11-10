@@ -210,6 +210,27 @@ public final class LocalPmsRepositoryInstrumentedTest {
     for (int i = 0; i < afterRestart.length(); i++) assertFalse(retryId.equals(afterRestart.getJSONObject(i).getString("eventId")));
   }
 
+
+  @Test public void auditRowsAreAppendOnlyAtTheDatabaseBoundary() throws Exception {
+    repository.transactBusinessChange("audit", "audit-immutable", 0, data("original"),
+      event("audit-immutable-event", "audit", "audit-immutable", 1));
+    SQLiteDatabase db = repository.getWritableDatabase();
+    boolean updateRejected = false;
+    try {
+      db.execSQL("UPDATE pms_entities SET data_json=? WHERE entity_type='audit' AND entity_id=?",
+        new Object[] { data("tampered").toString(), "audit-immutable" });
+    } catch (RuntimeException expected) { updateRejected = true; }
+    assertTrue("database trigger must reject audit UPDATE", updateRejected);
+    boolean deleteRejected = false;
+    try {
+      db.execSQL("DELETE FROM pms_entities WHERE entity_type='audit' AND entity_id=?",
+        new Object[] { "audit-immutable" });
+    } catch (RuntimeException expected) { deleteRejected = true; }
+    assertTrue("database trigger must reject audit DELETE", deleteRejected);
+    assertEquals("original", repository.getEntity("audit", "audit-immutable")
+      .getJSONObject("data").getString("value"));
+  }
+
   @Test public void forcedOutboxFailureRollsBackDomainRow() throws Exception {
     repository.getWritableDatabase().execSQL(
       "CREATE TRIGGER fail_outbox_insert BEFORE INSERT ON pms_outbox " +
