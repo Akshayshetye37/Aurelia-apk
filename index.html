@@ -332,7 +332,17 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
 #aurelia-runtime-shield h2{font:600 20px/1.3 system-ui,sans-serif;letter-spacing:.12em}
 #aurelia-runtime-shield p{max-width:34rem;color:#b9c7bb}
 #aurelia-runtime-shield[data-failed="true"] p{color:#ff9c9c}
-</style></head><body><div id="aurelia-runtime-shield" role="status" aria-live="polite"><h2>AURELIA LOCAL PMS</h2><p id="aurelia-runtime-shield-status">Verifying durable local storage and protected legacy data…</p></div>
+</style></head><body>
+<!-- Aurelia production-readiness status: keep this in sync with README.md. -->
+<section id="aurelia-production-readiness" aria-labelledby="aurelia-readiness-title" style="margin:12px auto;max-width:900px;padding:10px 14px;border:1px solid #d97706;border-radius:10px;background:#fffaf0;color:#24352d;font:13px/1.45 system-ui,sans-serif">
+  <h2 id="aurelia-readiness-title" style="margin:0 0 5px;font-size:14px">Aurelia PMS — release qualification</h2>
+  <p style="margin:0 0 6px"><strong>Production status: NOT APPROVED.</strong> Durable storage and native integration are under qualification. This notice does not disable offline PMS workflows.</p>
+  <p style="margin:0 0 6px">Canonical authority remains <code>PREPARED_COMPATIBILITY</code>; <code>uiCutover=false</code>. Cloud sync, provider activation, live gateway collection, automatic settlement and automatic refund posting remain OFF.</p>
+  <p style="margin:0 0 6px">Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available. Provider adapters and test checkout are not merchant production acceptance.</p>
+  <p style="margin:0 0 6px"><strong>Release gates still open:</strong> real Android SQLite instrumentation; IndexedDB/SQLite parity; full PMS canonical read/write cutover; physical Android lifecycle and key-recovery qualification; production-shaped migration/accounting sign-off; second-device encrypted backup/restore; security review; branch protection, signing and explicit release authorization.</p>
+  <p style="margin:0">Engineering readiness record: <a href="https://github.com/Akshayshetye37/Aurelia-apk/blob/work/p0-storage-hardening/README.md">README — production readiness blockers</a>. Do not treat compilation, mock tests or emulator startup as SQLite instrumentation approval.</p>
+</section>
+<div id="aurelia-runtime-shield" role="status" aria-live="polite"><h2>AURELIA LOCAL PMS</h2><p id="aurelia-runtime-shield-status">Verifying durable local storage and protected legacy data…</p></div>
 
 <script id="guest-contact-actions-early">
 /* Define guest contact markup before the first Stays render can run. */
