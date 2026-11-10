@@ -10,6 +10,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import org.json.JSONObject
 import android.widget.Toast
 import com.aurelia.pms.MainActivity
 
@@ -125,8 +126,15 @@ class LockGateActivity : Activity() {
                 showRecoveryKey(enrollment.recoveryKey)
             } else {
                 val envelope = readEnvelope()
-                if (manager.unlock(first, envelope)) openPms()
-                else showError("Incorrect PIN.")
+                if (manager.unlock(first, envelope)) {
+                    if (JSONObject(envelope).has("recovery")) {
+                        openPms()
+                    } else {
+                        val migrated = manager.enableRecoveryKey(first, envelope)
+                        writeEnvelope(migrated.envelopeJson)
+                        showRecoveryKey(migrated.recoveryKey)
+                    }
+                } else showError("Incorrect PIN.")
             }
         } catch (failure: SecurityException) {
             showError(failure.message ?: "Security verification failed.")
