@@ -52,7 +52,7 @@ test('provider statuses normalize conservatively', () => {
 test('binding includes tenant, folio, provider, environment, money and idempotency key', () => {
   const binding = {
     tenantId: 'hotel_123', folioId: 'folio_123', provider: 'razorpay',
-    environment: 'test', amountMinor: 12500, currency: 'INR', idempotencyKey: 'idem-key-123456'
+    environment: 'test', amountMinor: 12500, currency: 'INR', idempotencyKey: 'idem-test'
   };
   assert.equal(assertIntentBinding(binding, { ...binding }), true);
   assert.throws(() => assertIntentBinding(binding, { ...binding, amountMinor: 12501 }), /binding_mismatch/);
