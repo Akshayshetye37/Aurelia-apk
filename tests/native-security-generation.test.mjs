@@ -140,3 +140,20 @@ test('Android generation disables OS backup and blocks screenshots of PMS record
   assert.match(patcher, /FLAG_SECURE/);
   assert.match(patcher, /WindowManager\.LayoutParams\.FLAG_SECURE/);
 });
+
+
+test('OTP identity modules have no dependency on the DEK/key package', () => {
+  const otpFiles = [
+    read('android/templates/FirebasePhoneIdentity.kt'),
+    read('android/templates/RecoveryFirebaseAuthFactory.kt')
+  ].join('\n');
+  assert.match(otpFiles, /package com\.aurelia\.pms\.identity/);
+  assert.doesNotMatch(otpFiles, /com\.aurelia\.pms\.security|AureliaCryptoEngine|AureliaAppManager|AureliaEnvelopeStore|currentDataKeyCopy|LocalPmsRepository/);
+});
+
+test('native lockout state cannot be reset by deleting its encrypted state file', () => {
+  const lockout = read('android/templates/security/AppLockManager.kt');
+  assert.match(lockout, /if \(hasKeyAlias\(\)\) throw SecurityException/);
+  assert.match(lockout, /existingKey\(\)/);
+  assert.match(lockout, /refusing to reset retry counters/);
+});
