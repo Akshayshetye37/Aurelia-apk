@@ -293,3 +293,13 @@ test('Android generator installs native cryptographic and recovery instrumentati
   assert.match(securityTest, /replacementPinWrapperIsReadBackAgainstSameDek/);
   assert.match(securityTest, /recoveryEnvelopeStoreRetainsPrevious/);
 });
+
+test('missing enrollment envelope never silently creates a new key and offers only typed destructive reset', () => {
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  const runtime = read('android/templates/security/AureliaSecurityRuntime.kt');
+  assert.match(gate, /showUnrecoverableState/);
+  assert.match(gate, /RESET AURELIA DATA/);
+  assert.match(gate, /deleteRecursively/);
+  assert.match(gate, /clearEnrollmentMarkerForConfirmedDestructiveReset/);
+  assert.match(runtime, /clearEnrollmentMarkerForConfirmedDestructiveReset/);
+});

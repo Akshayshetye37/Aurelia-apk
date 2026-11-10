@@ -45,11 +45,9 @@ class LockGateActivity : FragmentActivity() {
         val enrolled = AureliaSecurityRuntime.isEnrolled()
         val envelopeExists = envelopeStore.exists()
         val databaseExists = encryptedDatabaseExists()
-        if (databaseExists && !envelopeExists) {
-            throw SecurityException("Encrypted PMS database exists but its key envelope is missing; data recovery is required.")
-        }
-        if (enrolled && !envelopeExists) {
-            throw SecurityException("Enrollment marker exists without a key envelope; refusing DEK regeneration.")
+        if ((databaseExists || enrolled) && !envelopeExists) {
+            showUnrecoverableState()
+            return
         }
         // The authenticated envelope is authoritative. A missing marker can be
         // restored only after PIN/recovery unlock, never by creating a new DEK.
@@ -431,6 +429,74 @@ class LockGateActivity : FragmentActivity() {
         }
     }
 
+    private fun showUnrecoverableState() {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(32, 48, 32, 48)
+            setBackgroundColor(android.graphics.Color.rgb(5, 17, 13))
+        }
+        root.addView(TextView(this).apply {
+            text = "Aurelia data cannot be unlocked"
+            textSize = 23f
+            setTextColor(android.graphics.Color.WHITE)
+            gravity = Gravity.CENTER
+        })
+        root.addView(TextView(this).apply {
+            text = "The encrypted database exists, but its key envelope is missing. No replacement key will be generated. If you have no usable PIN or recovery key, the only remaining option is an irreversible local-data reset."
+            textSize = 14f
+            setTextColor(android.graphics.Color.LTGRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, 20, 0, 24)
+        })
+        root.addView(Button(this).apply {
+            text = "Destructive reset"
+            setOnClickListener { showDestructiveResetPrompt() }
+        })
+        setContentView(root)
+    }
+
+    private fun showDestructiveResetPrompt() {
+        val confirmation = EditText(this).apply {
+            hint = "Type RESET AURELIA DATA"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Permanently erase local Aurelia data?")
+            .setMessage("This permanently deletes the encrypted PMS database, its local photo archive, PIN/recovery envelopes and biometric wrapper on this device. It cannot recover data and does not delete owner-held external backups. Type the exact phrase to continue.")
+            .setView(confirmation)
+            .setPositiveButton("Erase local data") { _, _ ->
+                if (confirmation.text.toString() != "RESET AURELIA DATA") {
+                    showError("Confirmation phrase did not match. No data was deleted.")
+                    return@setPositiveButton
+                }
+                try {
+                    manager.lock()
+                    val database = getDatabasePath("aurelia-pms-encrypted.db")
+                    val files = listOf(
+                        database,
+                        java.io.File(database.path + "-wal"),
+                        java.io.File(database.path + "-shm"),
+                        java.io.File(database.path + "-journal")
+                    )
+                    files.forEach { if (it.exists() && !it.delete()) throw SecurityException("Could not delete encrypted database files.") }
+                    val photos = java.io.File(filesDir, "aurelia_photo_archive")
+                    if (photos.exists() && !photos.deleteRecursively()) throw SecurityException("Could not delete local photo archive.")
+                    envelopeStore.delete()
+                    biometricStore.delete()
+                    AureliaSecurityRuntime.clearEnrollmentMarkerForConfirmedDestructiveReset()
+                    enrollmentMode = true
+                    render()
+                } catch (failure: Exception) {
+                    showError(failure.message ?: "Destructive reset failed. Data remains unavailable.")
+                } finally {
+                    confirmation.text.clear()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun showRecoveryPrompt() {
         val recovery = EditText(this).apply {
             hint = "54-character Base32 recovery key"
@@ -487,6 +553,7 @@ class LockGateActivity : FragmentActivity() {
                 }
             }
             .setNegativeButton("Cancel", null)
+            .setNeutralButton("Destructive reset") { _, _ -> showDestructiveResetPrompt() }
             .show()
     }
 

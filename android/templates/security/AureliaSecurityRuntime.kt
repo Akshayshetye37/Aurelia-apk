@@ -38,6 +38,12 @@ object AureliaSecurityRuntime {
     }
 
     @Synchronized
+    fun clearEnrollmentMarkerForConfirmedDestructiveReset() {
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        if (store.containsAlias(MARKER_ALIAS)) store.deleteEntry(MARKER_ALIAS)
+    }
+
+    @Synchronized
     fun manager(context: Context): AureliaAppManager {
         instance?.let { return it }
         return AureliaAppManager(
