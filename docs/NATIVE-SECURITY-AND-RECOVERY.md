@@ -96,7 +96,7 @@ Until these gates pass, this is an implementation foundation, not a production s
 |---|---|---|
 | OTP authorization | Firebase Phone Auth helper only; not connected to recovery | Trusted backend, App Check + Play Integrity, verified tenant phone binding, fresh auth_time, signed single-use jti token and replay tests |
 | Phone registration/change | Not implemented | PIN/biometric step-up, E.164 verification, cooling period, old-contact alerts and cancellation |
-| Auto-lock choices | Fixed process/session timeout foundation only | Immediately / 5-minute / Never settings, monotonic lifecycle timing, picker/prompt suppression and cache/SQLCipher teardown |
+| Auto-lock choices | Fixed Activity pause/resume timeout foundation; `FLAG_SECURE` is applied to both `LockGateActivity` and generated `MainActivity` | Immediately / 5-minute / Never settings via `ProcessLifecycleOwner`, transient picker/prompt suppression, Keystore-authenticated setting storage, and full SQLCipher/WebView/decrypted-cache teardown; secure recents snapshots still need physical-device qualification |
 | Session invalidation | Current process manager can clear its DEK | Revoke every app session after recovery and prove no restored WebView/session survives |
 | Security event log/alerts | Not implemented | Append-only hash chain, secret-free records, owner alerts and tamper tests |
 | Step-up / integrity | Not implemented end-to-end | Fresh auth for sensitive actions and Play Integrity policy for recovery/payment |
