@@ -227,7 +227,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   }
   private static void createAuditAppendOnlyTriggers(SQLiteDatabase db) {
     db.execSQL("CREATE TRIGGER IF NOT EXISTS pms_audit_no_update BEFORE UPDATE ON pms_entities WHEN OLD.entity_type='audit' AND OLD.entity_id<>'legacy_snapshot:aurelia_lodge_v2' BEGIN SELECT RAISE(ABORT,'audit_append_only'); END");
-    db.execSQL("CREATE TRIGGER IF NOT EXISTS pms_audit_no_delete BEFORE DELETE ON pms_entities WHEN OLD.entity_type='audit' BEGIN SELECT RAISE(ABORT,'audit_append_only'); END");
+    db.execSQL("CREATE TRIGGER IF NOT EXISTS pms_audit_no_delete BEFORE DELETE ON pms_entities WHEN OLD.entity_type='audit' AND OLD.entity_id<>'legacy_snapshot:aurelia_lodge_v2' BEGIN SELECT RAISE(ABORT,'audit_append_only'); END");
   }
 
   private static void writeEntityVersion(SQLiteDatabase db,String type,String id,long expectedVersion,JSONObject data,long now) {
