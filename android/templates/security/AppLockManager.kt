@@ -20,9 +20,16 @@ import javax.crypto.spec.GCMParameterSpec
  * Tamper-evident local retry state. Corruption or Keystore invalidation fails closed.
  * A reboot restarts the active cooldown instead of trusting the mutable wall clock.
  */
-class AppLockManager(context: Context) {
+class AppLockManager @JvmOverloads constructor(
+    context: Context,
+    private val elapsedRealtime: () -> Long = { SystemClock.elapsedRealtime() },
+    private val bootCountProvider: () -> Int = {
+        if (Build.VERSION.SDK_INT >= 24) {
+            Settings.Global.getInt(context.applicationContext.contentResolver, Settings.Global.BOOT_COUNT, -1)
+        } else -1
+    }
+) {
     private val file = AtomicFile(File(context.noBackupFilesDir, "aurelia-lock-state.v1"))
-    private val appContext = context.applicationContext
 
     companion object {
         private const val STORE = "AndroidKeyStore"
@@ -46,7 +53,7 @@ class AppLockManager(context: Context) {
         if (state.bootCount != currentBoot && state.lockedUntilElapsed > 0L) {
             // Do not let a reboot erase an active lockout or make wall-clock time authoritative.
             val restarted = state.copy(
-                lockedUntilElapsed = SystemClock.elapsedRealtime() + lockDuration(state.failures),
+                lockedUntilElapsed = elapsedRealtime() + lockDuration(state.failures),
                 bootCount = currentBoot
             )
             writeState(restarted)
@@ -62,7 +69,7 @@ class AppLockManager(context: Context) {
     @Synchronized
     fun assertUnlocked() {
         val current = state()
-        val remaining = current.lockedUntilElapsed - SystemClock.elapsedRealtime()
+        val remaining = current.lockedUntilElapsed - elapsedRealtime()
         if (remaining > 0L) {
             throw SecurityException("PIN retry is temporarily locked.")
         }
@@ -73,7 +80,7 @@ class AppLockManager(context: Context) {
         val current = state()
         val failures = (current.failures + 1).coerceAtMost(30)
         val until = if (failures >= MAX_ATTEMPTS) {
-            SystemClock.elapsedRealtime() + lockDuration(failures)
+            elapsedRealtime() + lockDuration(failures)
         } else 0L
         writeState(State(failures, until, bootCount()))
     }
@@ -88,9 +95,7 @@ class AppLockManager(context: Context) {
         return (BASE_LOCK_MS * (1L shl exponent)).coerceAtMost(MAX_LOCK_MS)
     }
 
-    private fun bootCount(): Int = if (Build.VERSION.SDK_INT >= 24) {
-        Settings.Global.getInt(appContext.contentResolver, Settings.Global.BOOT_COUNT, -1)
-    } else -1
+    private fun bootCount(): Int = bootCountProvider()
 
     private fun readState(): State {
         val bytes = try { file.openRead().use { it.readBytes() } }

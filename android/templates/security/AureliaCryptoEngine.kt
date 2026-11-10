@@ -136,7 +136,7 @@ class AureliaCryptoEngine(
             val nonce = ByteArray(NONCE_BYTES).also(random::nextBytes)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(kekBytes, "AES"), GCMParameterSpec(TAG_BITS, nonce))
-            cipher.updateAAD(aad(VERSION, "PIN", DATABASE_ID, salt))
+            cipher.updateAAD(aad(VERSION, "PIN", DATABASE_ID, salt, KDF, MEMORY_KIB, ITERATIONS, PARALLELISM))
             val wrapped = cipher.doFinal(dataKey)
             try {
                 val json = JSONObject()
@@ -191,7 +191,7 @@ class AureliaCryptoEngine(
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(kekBytes, "AES"), GCMParameterSpec(TAG_BITS, nonce))
-            cipher.updateAAD(if (legacy) legacyAad(salt) else aad(version, "PIN", DATABASE_ID, salt))
+            cipher.updateAAD(if (legacy) legacyAad(salt) else aad(version, "PIN", DATABASE_ID, salt, KDF, MEMORY_KIB, ITERATIONS, PARALLELISM))
             return cipher.doFinal(wrapped)
         } catch (badTag: AEADBadTagException) {
             throw SecurityException("PIN or envelope authentication failed.", badTag)
@@ -232,7 +232,7 @@ class AureliaCryptoEngine(
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(kek, "AES"), GCMParameterSpec(TAG_BITS, nonce))
-            cipher.updateAAD(aad(VERSION, "RECOVERY", DATABASE_ID, salt))
+            cipher.updateAAD(aad(VERSION, "RECOVERY", DATABASE_ID, salt, "HKDF-SHA256", 0, 1, 1))
             val wrapped = cipher.doFinal(dataKey)
             try {
                 return JSONObject()
@@ -302,8 +302,18 @@ class AureliaCryptoEngine(
     private fun legacyAad(salt: ByteArray): ByteArray =
         "$APP_ID|$LEGACY_VERSION|$KDF|$CIPHER|".toByteArray(Charsets.UTF_8) + salt
 
-    private fun aad(version: Int, method: String, databaseId: String, salt: ByteArray): ByteArray =
-        "$APP_ID|$version|$method|$databaseId|$KDF|$CIPHER|".toByteArray(Charsets.UTF_8) + salt
+    private fun aad(
+        version: Int,
+        method: String,
+        databaseId: String,
+        salt: ByteArray,
+        kdf: String,
+        memoryKiB: Int,
+        iterations: Int,
+        parallelism: Int
+    ): ByteArray =
+        "$APP_ID|$version|$method|$databaseId|$kdf|$memoryKiB|$iterations|$parallelism|$CIPHER|"
+            .toByteArray(Charsets.UTF_8) + salt
 
     private fun b64(bytes: ByteArray): String = Base64.encodeToString(bytes, Base64.NO_WRAP)
 
