@@ -10,6 +10,7 @@
  */
 import { buildPmsOutboxEvent, PMS_ENTITY_TYPES, assertPmsIdentity, assertPmsVersion } from "./pms-repository-contract.mjs";
 import { assertCompatibilityUiAllowed } from "./pms-authority-state.mjs";
+import { validatePmsDomainEntity } from "./pms-domain-schemas.mjs";
 
 const clone = value => value == null ? value :
   (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
@@ -107,6 +108,10 @@ export class PmsRepositoryBridge {
         if (result && typeof result.then === "function") {
           throw new TypeError("Mutation callback must be synchronous; prepare asynchronous work before calling mutateEntity");
         }
+        const validated = validatePmsDomainEntity(entityType, working);
+        if (validated.id !== entityId) throw new TypeError("Entity identity cannot be changed.");
+        Object.keys(working).forEach(key => delete working[key]);
+        Object.assign(working, validated);
         return working;
       }
     );
@@ -117,7 +122,7 @@ export class PmsRepositoryBridge {
     this.assertBound();
     if(!Array.isArray(changes)||changes.length<2||changes.length>20)throw new TypeError("A multi-entity mutation requires 2..20 changes");
     const seen=new Set(),eventIds=new Set(),prepared=[];
-    for(const input of changes){const entityType=assertPmsIdentity(input?.entityType,"entity type"),entityId=assertPmsIdentity(input?.entityId,"entity ID"),eventType=assertPmsIdentity(input?.eventType,"event type");assertPmsVersion(input?.expectedVersion,"expected version");if(typeof input.mutate!=="function")throw new TypeError("Every batch change requires a synchronous mutation callback");const key=entityType+":"+entityId;if(seen.has(key))throw new TypeError("Duplicate entity in multi-entity mutation");seen.add(key);const row=await this.fetchEntity(entityType,entityId),version=row?.version??0;if(version!==input.expectedVersion){const error=new Error("Entity version conflict");error.code="ENTITY_VERSION_CONFLICT";error.entityType=entityType;error.entityId=entityId;error.actualVersion=version;throw error;}const scope={tenantId:input.tenantId||this.context.tenantId,propertyId:input.propertyId||this.context.propertyId,deviceId:input.deviceId||this.context.deviceId};for(const [value,label] of [[scope.tenantId,"tenant ID"],[scope.propertyId,"property ID"],[scope.deviceId,"device ID"]])assertPmsIdentity(value,label);const working=row?clone(row.data):{id:entityId};const result=input.mutate(working);if(result&&typeof result.then==="function")throw new TypeError("Batch mutation callbacks must be synchronous");const event=buildPmsOutboxEvent({eventId:this.eventId(),...scope,entityType,entityId,sequence:version+1,eventType,schemaVersion:1,occurredAt:this.now(),payload:input.eventPayload||{entityType,entityId,operation:eventType}});if(eventIds.has(event.eventId))throw new TypeError("Duplicate outbox event ID");eventIds.add(event.eventId);prepared.push({entityType,entityId,expectedVersion:version,data:working,event,result});}
+    for(const input of changes){const entityType=assertPmsIdentity(input?.entityType,"entity type"),entityId=assertPmsIdentity(input?.entityId,"entity ID"),eventType=assertPmsIdentity(input?.eventType,"event type");assertPmsVersion(input?.expectedVersion,"expected version");if(typeof input.mutate!=="function")throw new TypeError("Every batch change requires a synchronous mutation callback");const key=entityType+":"+entityId;if(seen.has(key))throw new TypeError("Duplicate entity in multi-entity mutation");seen.add(key);const row=await this.fetchEntity(entityType,entityId),version=row?.version??0;if(version!==input.expectedVersion){const error=new Error("Entity version conflict");error.code="ENTITY_VERSION_CONFLICT";error.entityType=entityType;error.entityId=entityId;error.actualVersion=version;throw error;}const scope={tenantId:input.tenantId||this.context.tenantId,propertyId:input.propertyId||this.context.propertyId,deviceId:input.deviceId||this.context.deviceId};for(const [value,label] of [[scope.tenantId,"tenant ID"],[scope.propertyId,"property ID"],[scope.deviceId,"device ID"]])assertPmsIdentity(value,label);const working=row?clone(row.data):{id:entityId};const result=input.mutate(working);if(result&&typeof result.then==="function")throw new TypeError("Batch mutation callbacks must be synchronous");const validated=validatePmsDomainEntity(entityType,working);if(validated.id!==entityId)throw new TypeError("Entity identity cannot be changed.");Object.keys(working).forEach(key=>delete working[key]);Object.assign(working,validated);const event=buildPmsOutboxEvent({eventId:this.eventId(),...scope,entityType,entityId,sequence:version+1,eventType,schemaVersion:1,occurredAt:this.now(),payload:input.eventPayload||{entityType,entityId,operation:eventType}});if(eventIds.has(event.eventId))throw new TypeError("Duplicate outbox event ID");eventIds.add(event.eventId);prepared.push({entityType,entityId,expectedVersion:version,data:working,event,result});}
     const committed=await this.repo.transactBusinessBatch(prepared.map(({entityType,entityId,expectedVersion,data,event})=>({entityType,entityId,expectedVersion,data,event})));
     return Object.freeze({entities:committed.map(clone),results:prepared.map(x=>clone(x.result))});
   }
