@@ -1588,7 +1588,7 @@ async function restoreGo(){
   (Array.isArray(d.aud)?d.aud:[]).forEach(x=>{if(x&&typeof x==='object'&&!S.aud.some(y=>JSON.stringify(y)===JSON.stringify(x)))S.aud.push(x)});
   // Persist once after all collections have been prepared, then verify durable read-back.
   await persistCanonicalStrict();
-  const stored=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
+  const storedRecord=await window.AureliaRepositoryCompatibility?.readBack?.();const stored=storedRecord?.snapshot||null;
   if(!stored||DK.some(k=>JSON.stringify(stored[k])!==JSON.stringify(S[k])))throw new Error('Imported records did not pass durable storage read-back verification.');
   S.rst=null;S.rstMode=null;render();closeS();
   toast('JSON import: '+roomsAdded+' rooms, '+ga+' guests, '+ba+' bookings, '+expensesAdded+' expenses, '+inventoryAdded+' stock items; '+sk+' invalid/duplicate rows skipped.'+(roomsCreatedForBooking?' Created '+roomsCreatedForBooking+' placeholder room(s); review their room type and rate.':''));
@@ -1599,7 +1599,7 @@ async function restoreGo(){
    id=importOldId;
    try{
     await persistCanonicalStrict();
-    const rollback=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
+    const rollbackRecord=await window.AureliaRepositoryCompatibility?.readBack?.();const rollback=rollbackRecord?.snapshot||null;
     if(!rollback||DK.some(k=>JSON.stringify(rollback[k])!==JSON.stringify(S[k])))throw new Error('Rollback read-back verification failed.');
    }catch(rollbackError){
     console.error('JSON import rollback failed',rollbackError);
@@ -1637,7 +1637,7 @@ async function restoreGo(){
   ['rooms','b','g','t','exp','inv','aud'].forEach(k=>{if(!Array.isArray(S[k]))throw new Error('Restored '+k+' data is invalid')});
   id=Math.max(id,0,...S.b.map(b=>+b.id||0));
   await persistCanonicalStrict();
-  const saved=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
+  const savedRecord=await window.AureliaRepositoryCompatibility?.readBack?.();const saved=savedRecord?.snapshot||null;
   if(!saved||DK.some(k=>JSON.stringify(saved[k])!==JSON.stringify(S[k])))throw new Error('Saved application state did not pass read-back verification.');
   S.rst=null;S.rstMode=null;location.reload();return true;
  }catch(e){
@@ -1647,7 +1647,7 @@ async function restoreGo(){
   DK.forEach(k=>{if(liveBefore[k]!==undefined)S[k]=liveBefore[k]});id=oldId;
   try{
    await persistCanonicalStrict();
-   const rollbackSaved=JSON.parse((window.__aureliaStorage||localStorage).getItem(SK)||'null');
+   const rollbackRecord=await window.AureliaRepositoryCompatibility?.readBack?.();const rollbackSaved=rollbackRecord?.snapshot||null;
    if(!rollbackSaved||DK.some(k=>JSON.stringify(rollbackSaved[k])!==JSON.stringify(S[k])))throw new Error('State rollback read-back verification failed');
   }catch(rollbackError){console.error('State rollback failed',rollbackError);rollbackFailures.push('application data')}
   if(rollbackFailures.length){
@@ -1928,17 +1928,18 @@ window.AureliaAccountingBoundary = Object.freeze({
  findBooking:(state,bookingReference)=>state.b.find(b=>(b.folioId||'booking-'+String(b.id))===String(bookingReference)),
  getBalanceDue:booking=>dueB(booking),
  persistStrict:()=>persistStrict(),
- readBack:()=>{
-  const raw=(window.__aureliaStorage||localStorage).getItem(SK);
-  if(!raw)throw new Error('No durable PMS state is available for settlement read-back.');
-  return JSON.parse(raw);
+ readBack:async()=>{
+  const readBack=window.AureliaRepositoryCompatibility?.readBack;
+  if(typeof readBack!=='function')throw new Error('Canonical PMS repository read-back is unavailable.');
+  const stored=await readBack();
+  if(!stored?.snapshot)throw new Error('No committed canonical PMS snapshot is available for settlement read-back.');
+  return stored.snapshot;
  },
  audit:(action,detail)=>aud(action,detail),
  isEmergencyStopped:()=>false
 });
 function loadAll(){
  let raw=window.__AURELIA_CANONICAL_BOOTSTRAP_RAW||null;
- if(!raw){try{raw=(window.__aureliaStorage||localStorage).getItem(SK)}catch(e){LOCAL_STATE_STATUS='invalid';return}}
  if(!raw){LOCAL_STATE_STATUS='missing';return}
  try{
   const o=JSON.parse(raw);
