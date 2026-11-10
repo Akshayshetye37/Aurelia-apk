@@ -107,17 +107,22 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     validateIdentity(type,"entity type"); validateIdentity(id,"entity ID");
     if(expectedVersion<0||nextData==null||event==null)throw new IllegalArgumentException("invalid_pms_transaction");
     validateEvent(event,type,id,expectedVersion+1);
+    debugCheckpoint("before_write");
     SQLiteDatabase db=getWritableDatabase(); db.beginTransactionNonExclusive();
+    boolean committed=false;
     try {
       long actual=entityVersion(db,type,id);
       if(actual!=expectedVersion)throw conflict("ENTITY_VERSION_CONFLICT");
       long now=System.currentTimeMillis();
       writeEntityVersion(db,type,id,expectedVersion,nextData,now);
+      debugCheckpoint("mid_transaction");
       ContentValues out=new ContentValues();out.put("event_id",event.getString("eventId"));out.put("tenant_id",event.getString("tenantId"));out.put("property_id",event.getString("propertyId"));out.put("device_id",event.getString("deviceId"));out.put("entity_type",type);out.put("entity_id",id);out.put("sequence",expectedVersion+1);out.put("event_type",event.getString("eventType"));out.put("schema_version",event.getInt("schemaVersion"));out.put("occurred_at",event.getString("occurredAt"));out.put("payload_json",event.opt("payload")==null?"null":serializeJsonValue(event.opt("payload")));out.put("status","PENDING");out.put("attempts",0);out.put("created_at",now);
-      db.insertOrThrow("pms_outbox",null,out); db.setTransactionSuccessful();
+      db.insertOrThrow("pms_outbox",null,out);
+      debugCheckpoint("before_commit");
+      db.setTransactionSuccessful(); committed=true;
       JSONObject result=new JSONObject();result.put("key",type+":"+id);result.put("type",type);result.put("id",id);result.put("version",actual+1);result.put("data",nextData);result.put("updatedAt",isoTimestamp(now));return result;
     } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("pms_transaction_failed",e);}
-    finally{db.endTransaction();}
+    finally{db.endTransaction();if(committed)debugCheckpoint("after_commit_before_checkpoint");}
   }
 
   /** Commits multiple entity versions and all corresponding outbox events atomically. */
@@ -127,16 +132,20 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     try {
       for(int i=0;i<changes.length();i++){JSONObject c=changes.getJSONObject(i),event=c.getJSONObject("event");String type=c.getString("entityType"),id=c.getString("entityId"),key=type+":"+id;validateIdentity(type,"entity type");validateIdentity(id,"entity ID");safeJsonInteger(c,"expectedVersion",0);if(!(c.opt("data") instanceof JSONObject))throw new IllegalArgumentException("invalid_batch_entity_data");validateEvent(event,type,id,c.getLong("expectedVersion")+1);if(!keys.add(key))throw new IllegalArgumentException("duplicate_business_batch_entity");if(!eventIds.add(event.getString("eventId")))throw new IllegalArgumentException("duplicate_business_batch_event");}
     } catch(RuntimeException e){throw e;}catch(Exception e){throw failure("invalid_business_batch",e);}
+    debugCheckpoint("before_write");
     SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
+    boolean committed=false;
     try {
       JSONArray results=new JSONArray();long now=System.currentTimeMillis();
       for(int i=0;i<changes.length();i++){JSONObject c=changes.getJSONObject(i),event=c.getJSONObject("event");String type=c.getString("entityType"),id=c.getString("entityId");long expected=c.getLong("expectedVersion"),actual=entityVersion(db,type,id);if(actual!=expected)throw conflict("ENTITY_VERSION_CONFLICT");}
       for(int i=0;i<changes.length();i++){JSONObject c=changes.getJSONObject(i),event=c.getJSONObject("event");String type=c.getString("entityType"),id=c.getString("entityId");long version=c.getLong("expectedVersion")+1;JSONObject data=c.getJSONObject("data");writeEntityVersion(db,type,id,c.getLong("expectedVersion"),data,now);
+        debugCheckpoint("mid_transaction");
         ContentValues out=new ContentValues();out.put("event_id",event.getString("eventId"));out.put("tenant_id",event.getString("tenantId"));out.put("property_id",event.getString("propertyId"));out.put("device_id",event.getString("deviceId"));out.put("entity_type",type);out.put("entity_id",id);out.put("sequence",version);out.put("event_type",event.getString("eventType"));out.put("schema_version",event.getInt("schemaVersion"));out.put("occurred_at",event.getString("occurredAt"));out.put("payload_json",event.opt("payload")==null?"null":serializeJsonValue(event.opt("payload")));out.put("status","PENDING");out.put("attempts",0);out.put("created_at",now);db.insertOrThrow("pms_outbox",null,out);
         JSONObject row=new JSONObject();row.put("key",type+":"+id);row.put("type",type);row.put("id",id);row.put("version",version);row.put("data",data);row.put("updatedAt",isoTimestamp(now));results.put(row);}
-      db.setTransactionSuccessful();return results;
+      debugCheckpoint("before_commit");
+      db.setTransactionSuccessful();committed=true;return results;
     } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("pms_business_batch_failed",e);}
-    finally{db.endTransaction();}
+    finally{db.endTransaction();if(committed)debugCheckpoint("after_commit_before_checkpoint");}
   }
 
   /** Imports the exact original localStorage payload and every top-level key atomically. */
@@ -161,7 +170,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       if(longForQuery(db,"SELECT COUNT(*) FROM pms_entities",null)!=0)throw new IllegalStateException("canonical_repository_not_empty");
       java.util.Iterator<String> keys=parsed.keys();int imported=0;long now=System.currentTimeMillis();
       while(keys.hasNext()){String key=keys.next();validateIdentity(key,"legacy entity key");ContentValues row=new ContentValues();row.put("entity_type","legacy");row.put("entity_id",key);row.put("version",1);Object value=parsed.opt(key);
-        row.put("data_json",serializeJsonValue(value));row.put("updated_at",now);db.insertOrThrow("pms_entities",null,row);imported++;}
+        row.put("data_json",serializeJsonValue(value));row.put("updated_at",now);db.insertOrThrow("pms_entities",null,row);imported++;if(imported==1)debugCheckpoint("mid_migration");}
       ContentValues snap=new ContentValues();snap.put("snapshot_id",migrationId);snap.put("source_key",sourceKey);snap.put("raw_json",rawJson);snap.put("source_timestamp",sourceTimestamp);snap.put("created_at",now);snap.put("format_version",1);db.insertOrThrow("pms_migration_snapshots",null,snap);
       ContentValues marker=new ContentValues();marker.put("migration_key",MIGRATION_KEY);marker.put("migration_id",migrationId);marker.put("source_key",sourceKey);marker.put("completed_at",now);marker.put("entity_count",imported);db.insertOrThrow("pms_migrations",null,marker);
       db.setTransactionSuccessful();return migrationResult(false,migrationId,imported);
@@ -251,6 +260,22 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static void validateEvent(JSONObject e,String type,String id,long sequence){try{for(String k:new String[]{"eventId","tenantId","propertyId","deviceId","eventType"})validateIdentity(e.getString(k),k);if(!type.equals(e.getString("entityType"))||!id.equals(e.getString("entityId"))||safeJsonInteger(e,"sequence",1)!=sequence||safeJsonInteger(e,"schemaVersion",1)<1||!e.getString("occurredAt").endsWith("Z")||!Double.isFinite(parseDate(e.getString("occurredAt"))))throw new IllegalArgumentException("invalid_pms_outbox_event");if(e.has("payload")&&serializeJsonValue(e.get("payload"))==null)throw new IllegalArgumentException("invalid_payload");}catch(RuntimeException x){throw x;}catch(Exception x){throw new IllegalArgumentException("invalid_pms_outbox_event",x);}}
   private static long safeJsonInteger(JSONObject object,String key,long minimum)throws Exception{Object raw=object.get(key);if(!(raw instanceof Number))throw new IllegalArgumentException("invalid_integer_"+key);double number=((Number)raw).doubleValue();if(!Double.isFinite(number)||number!=Math.rint(number)||number<minimum||number>9007199254740991d)throw new IllegalArgumentException("invalid_integer_"+key);return ((Number)raw).longValue();}
   private static double parseDate(String value){try{java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX",java.util.Locale.US);f.setLenient(false);return f.parse(value).getTime();}catch(Exception e){return Double.NaN;}}
+  private static void debugCheckpoint(String checkpoint) {
+    if (!BuildConfig.DEBUG) return;
+    try {
+      Class<?> hooks = Class.forName("com.aurelia.pms.debug.LocalPmsFaultInjection");
+      hooks.getMethod("checkpoint", String.class).invoke(null, checkpoint);
+    } catch (ClassNotFoundException absentInRelease) {
+      // The debug-only source set is intentionally absent from release builds.
+    } catch (java.lang.reflect.InvocationTargetException injected) {
+      Throwable cause = injected.getCause();
+      if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+      throw new IllegalStateException("debug fault injection failed", cause);
+    } catch (Exception failure) {
+      throw new IllegalStateException("debug fault injection unavailable", failure);
+    }
+  }
+
   private static void validateIdentity(String value,String label){if(value==null||!value.matches("[A-Za-z0-9][A-Za-z0-9._:-]{0,179}")||!java.text.Normalizer.isNormalized(value,java.text.Normalizer.Form.NFC))throw new IllegalArgumentException("invalid_canonical_"+label.replace(' ','_'));}
   private static RuntimeException conflict(String code){return new IllegalStateException(code);}
   private static RuntimeException failure(String code,Exception cause){return new IllegalStateException(code,cause);}
