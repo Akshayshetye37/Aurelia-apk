@@ -28,6 +28,9 @@ jobs:
           fetch-depth: 1
       - name: Assert checkout is the event SHA
         run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+      - name: Scan repository for committed credentials
+        run: node scripts/check-secrets.mjs
+
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
