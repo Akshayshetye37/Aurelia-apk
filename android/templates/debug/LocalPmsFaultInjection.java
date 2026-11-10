@@ -25,6 +25,7 @@ public final class LocalPmsFaultInjection {
     public static void checkpoint(String checkpoint) {
         if (armedCheckpoint == null || !armedCheckpoint.equals(checkpoint)) return;
         clear();
+        android.util.Log.e("AureliaFaultInjection", "DEBUG_FAULT_TRIGGERED:" + checkpoint);
         if (killProcess) Process.killProcess(Process.myPid());
         throw new IllegalStateException("debug_fault_injected:" + checkpoint);
     }
