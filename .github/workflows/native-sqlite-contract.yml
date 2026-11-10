@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: aurelia-native-sqlite-${{ github.ref }}
+  group: aurelia-native-sqlite-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
