@@ -1694,6 +1694,11 @@ if (!fs.existsSync(instrumentationTemplate)) throw new Error('LocalPmsRepository
 const instrumentationSourceDir = path.join(androidDir, 'app', 'src', 'androidTest', 'java', 'com', 'aurelia', 'pms');
 fs.mkdirSync(instrumentationSourceDir, { recursive: true });
 fs.copyFileSync(instrumentationTemplate, path.join(instrumentationSourceDir, 'LocalPmsRepositoryInstrumentedTest.java'));
+const sharedContractFixture = path.join(__dirname, '..', 'tests', 'fixtures', 'pms-repository-contract.json');
+if (!fs.existsSync(sharedContractFixture)) throw new Error('Shared repository contract fixture is missing.');
+const instrumentationAssetsDir = path.join(androidDir, 'app', 'src', 'androidTest', 'assets');
+fs.mkdirSync(instrumentationAssetsDir, { recursive: true });
+fs.copyFileSync(sharedContractFixture, path.join(instrumentationAssetsDir, 'pms-repository-contract.json'));
 
 function ensurePmsInstrumentation(contents, kotlinDsl) {
   if (!/defaultConfig\s*\{/.test(contents)) throw new Error('Android defaultConfig block is missing; instrumentation runner cannot be configured.');
