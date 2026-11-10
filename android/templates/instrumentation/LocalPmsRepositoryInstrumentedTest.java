@@ -703,6 +703,44 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertNull(repository.getEntity("folio", "offset-folio"));
   }
 
+  @Test public void versionFiveRepositoryMigratesRowsIntoConstrainedVersionSixTables() throws Exception {
+    if (repository != null) repository.close();
+    repository = null;
+    context.deleteDatabase("aurelia-pms-encrypted.db");
+    final byte[] migrationKey = key();
+    net.zetetic.database.sqlcipher.SQLiteOpenHelper versionFive =
+      new net.zetetic.database.sqlcipher.SQLiteOpenHelper(
+        context, "aurelia-pms-encrypted.db", migrationKey, null, 5, 0, null, null, true) {
+        @Override public void onCreate(SQLiteDatabase db) {
+          db.execSQL("CREATE TABLE pms_entities(entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,version INTEGER NOT NULL,data_json TEXT NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(entity_type,entity_id))");
+          db.execSQL("CREATE TABLE pms_outbox(event_id TEXT PRIMARY KEY NOT NULL,tenant_id TEXT NOT NULL,property_id TEXT NOT NULL,device_id TEXT NOT NULL,entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,sequence INTEGER NOT NULL,event_type TEXT NOT NULL,schema_version INTEGER NOT NULL,occurred_at TEXT NOT NULL,payload_json TEXT NOT NULL,status TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,retry_at TEXT,lease_owner TEXT,lease_until INTEGER,last_error_code TEXT,created_at INTEGER NOT NULL,acknowledged_at INTEGER,UNIQUE(entity_type,entity_id,sequence))");
+          db.execSQL("CREATE INDEX pms_outbox_delivery_idx ON pms_outbox(status,retry_at,created_at)");
+          db.execSQL("CREATE TABLE pms_migrations(migration_key TEXT PRIMARY KEY NOT NULL,migration_id TEXT NOT NULL,source_key TEXT NOT NULL,completed_at INTEGER NOT NULL,entity_count INTEGER NOT NULL)");
+          db.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL,source_timestamp TEXT NOT NULL,created_at INTEGER NOT NULL,format_version INTEGER NOT NULL)");
+          db.execSQL("INSERT INTO pms_entities VALUES('folio','upgrade-folio',1,'{\\\"id\\\":\\\"upgrade-folio\\\"}',1)");
+          db.execSQL("INSERT INTO pms_outbox(event_id,tenant_id,property_id,device_id,entity_type,entity_id,sequence,event_type,schema_version,occurred_at,payload_json,status,attempts,created_at) VALUES('upgrade-event','tenant-test','property-test','device-test','folio','upgrade-folio',1,'folio.created',1,'2026-11-10T00:00:00.000Z','{}','PENDING',0,1)");
+        }
+        @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+          throw new IllegalStateException("unexpected_version_five_upgrade_callback");
+        }
+      };
+    versionFive.getWritableDatabase();
+    versionFive.close();
+    Arrays.fill(migrationKey, (byte) 0);
+
+    databaseKey = key();
+    repository = new LocalPmsRepository(context, databaseKey);
+    repository.initialize();
+    JSONObject migrated = repository.getEntity("folio", "upgrade-folio");
+    assertNotNull(migrated);
+    assertEquals(1L, migrated.getLong("version"));
+    assertEquals(1, repository.claimOutboxBatch("device-test", 10, 60_000L).length());
+    try (Cursor foreignKeys = repository.getReadableDatabase().rawQuery("PRAGMA foreign_key_list(pms_outbox)", null)) {
+      assertTrue("version-six migration must install the entity foreign key", foreignKeys.moveToFirst());
+      assertEquals("pms_entities", foreignKeys.getString(2));
+    }
+  }
+
   @Test public void databaseConstraintsRejectInvalidJsonTypesAndOrphanOutboxRows() throws Exception {
     SQLiteDatabase db = repository.getWritableDatabase();
     boolean invalidJsonRejected = false;
