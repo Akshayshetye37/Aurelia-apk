@@ -111,6 +111,13 @@ export const registerRecoveryPhone = onCall(
     const newProof = await verifyPhoneToken(request.data?.phoneIdToken);
     const newHash = digest(tenantId, newProof.phone);
     const ref = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
+    const existing = (await ref.get()).data();
+    let oldHash: Buffer | null = null;
+    if (existing?.hash && !equalDigest(existing.hash, newHash)) {
+      const oldProof = await verifyPhoneToken(request.data?.currentPhoneIdToken);
+      oldHash = digest(tenantId, oldProof.phone);
+      if (!equalDigest(existing.hash, oldHash)) throw GENERIC;
+    }
     const result = await db.runTransaction(async tx => {
       const snapshot = await tx.get(ref);
       const current = snapshot.data();
@@ -133,9 +140,7 @@ export const registerRecoveryPhone = onCall(
 
       // A replacement requires proof of BOTH the currently registered number
       // and the proposed number. A new number alone cannot hijack the record.
-      const oldProof = await verifyPhoneToken(request.data?.currentPhoneIdToken);
-      const oldHash = digest(tenantId, oldProof.phone);
-      if (!equalDigest(current.hash, oldHash)) throw GENERIC;
+      if (!oldHash || !equalDigest(current.hash, oldHash)) throw GENERIC;
       tx.update(ref, {
         state: "CHANGE_PENDING",
         pending: {
