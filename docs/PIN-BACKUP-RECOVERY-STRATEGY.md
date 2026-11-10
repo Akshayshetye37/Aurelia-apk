@@ -53,6 +53,8 @@ If a custom OTP service is selected: use a six-digit code, five-minute expiry, o
 
 ## 4. Optional assisted recovery — off by default
 
+If assisted recovery is ever approved, use Cloud KMS/HSM-backed key release and independent owner authorization; never let the SMS provider or Firebase Auth account itself become a DEK wrapping key.
+
 Assisted recovery is a separate opt-in feature. If approved, derive a recovery wrapper key using HKDF(`localHalf || serverHalf`). Release the server half only after OTP plus a 48-hour delay, owner notifications and a cancel option. This introduces server-availability and SIM-swap risk and requires an explicit warning. The server half must never be sufficient to decrypt the DEK by itself.
 
 ## 5. Biometrics and mandatory PIN
