@@ -2,6 +2,7 @@ package com.aurelia.pms.security
 
 import android.content.Context
 import android.os.SystemClock
+import com.aurelia.pms.identity.RecoveryPhoneStore
 import java.security.SecureRandom
 import org.json.JSONObject
 
@@ -153,11 +154,15 @@ class AureliaAppManager(
         require(bundle.getInt("bundleVersion") == 1 && bundle.has("pin") && bundle.has("recovery")) {
             "A recovery-enabled envelope bundle is required."
         }
+        // Decode/checksum first: malformed input is a free typo and does not
+        // consume either the OTP grant attempt or the persistent crypto lockout.
         val recoveryKey = try {
             crypto.decodeRecoveryKey(recoveryCode)
         } catch (failure: Exception) {
-            recoveryLockout.registerFailure()
             throw SecurityException("Recovery key format or checksum is invalid.", failure)
+        }
+        if (RecoveryPhoneStore(context).requiresOtp()) {
+            check(RecoveryGate.spendAttempt()) { "A fresh OTP verification is required to continue recovery." }
         }
         val recovered = try {
             crypto.unwrapDataKeyWithRecovery(bundle.getString("recovery"), recoveryKey)
@@ -192,6 +197,7 @@ class AureliaAppManager(
     @Synchronized
     fun confirmRecoverySwapCommitted() {
         recoveryLockout.registerSuccess()
+        RecoveryGate.clear()
     }
 
     private fun pinEnvelope(envelopeJson: String): String {
@@ -207,6 +213,7 @@ class AureliaAppManager(
 
     @Synchronized
     fun onBackground() {
+        RecoveryGate.clear()
         if (authenticated) backgroundAtElapsed = SystemClock.elapsedRealtime()
     }
 
@@ -240,6 +247,7 @@ class AureliaAppManager(
     fun lock() = clearSession()
 
     private fun clearSession() {
+        RecoveryGate.clear()
         authenticated = false
         backgroundAtElapsed = 0L
         dataKey?.fill(0)
