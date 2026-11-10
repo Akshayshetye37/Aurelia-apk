@@ -44,6 +44,7 @@ test("guest photo persistence stays inside the storage adapter and migrates lega
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
   const photo = fs.readFileSync(path.join(ROOT, "src/storage/photo-archive.mjs"), "utf8");
   assert.match(html, /AureliaPhotoArchive/);
+  assert.match(html, /AureliaBackupVaultStore/);
   assert.doesNotMatch(html, /localStorage|sessionStorage|indexedDB|IDBDatabase/);
   assert.match(photo, /migrateLegacyPhotos/);
   assert.match(photo, /Restored photo archive failed exact read-back verification/);
