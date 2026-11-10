@@ -1103,12 +1103,11 @@ async function setupBackupRecoveryPassword(){
   if(password!==confirmPassword)throw new Error('The two recovery passwords do not match.');
   const salt=crypto.getRandomValues(new Uint8Array(16)),wrapIv=crypto.getRandomValues(new Uint8Array(12)),rawKey=crypto.getRandomValues(new Uint8Array(32));
   const kek=await backupPasswordKey(password,salt,BACKUP_ARGON2ID);
-  let wrapped;
-  try{wrapped=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv,additionalData:backupWrapAad(2,BACKUP_ARGON2ID)},kek,rawKey))}
-  finally{rawKey.fill(0)}
-  const dataKey=await crypto.subtle.importKey('raw',rawKey,{name:'AES-GCM'},false,['encrypt','decrypt']).catch(async()=>{
-   throw new Error('Backup key material was cleared before import; configure the recovery vault again.');
-  });
+  let wrapped,dataKey;
+  try{
+   wrapped=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv,additionalData:backupWrapAad(2,BACKUP_ARGON2ID)},kek,rawKey));
+   dataKey=await crypto.subtle.importKey('raw',rawKey,{name:'AES-GCM'},false,['encrypt','decrypt']);
+  }finally{rawKey.fill(0)}
   await writeBackupVault({id:BACKUP_VAULT_ID,key:dataKey,salt:backupB64(salt),wrapIv:backupB64(wrapIv),wrappedKey:backupB64(wrapped),
     kdf:BACKUP_ARGON2ID.kdf,memoryKiB:BACKUP_ARGON2ID.memoryKiB,iterations:BACKUP_ARGON2ID.iterations,
     parallelism:BACKUP_ARGON2ID.parallelism,format:2});
@@ -1135,10 +1134,11 @@ async function rotateBackupRecoveryPassword(){
   catch(_){throw new Error('Current recovery password is incorrect. No key or backup was changed.')}
   const salt=crypto.getRandomValues(new Uint8Array(16)),wrapIv=crypto.getRandomValues(new Uint8Array(12));
   const newKek=await backupPasswordKey(next,salt,BACKUP_ARGON2ID);
-  let wrapped;
-  try{wrapped=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv,additionalData:backupWrapAad(2,BACKUP_ARGON2ID)},newKek,raw))}
-  finally{new Uint8Array(raw).fill(0)}
-  const key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
+  let wrapped,key;
+  try{
+   wrapped=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv,additionalData:backupWrapAad(2,BACKUP_ARGON2ID)},newKek,raw));
+   key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
+  }finally{new Uint8Array(raw).fill(0)}
   await writeBackupVault({id:BACKUP_VAULT_ID,key,salt:backupB64(salt),wrapIv:backupB64(wrapIv),wrappedKey:backupB64(wrapped),
     kdf:BACKUP_ARGON2ID.kdf,memoryKiB:BACKUP_ARGON2ID.memoryKiB,iterations:BACKUP_ARGON2ID.iterations,
     parallelism:BACKUP_ARGON2ID.parallelism,format:2});
@@ -1254,10 +1254,11 @@ async function encryptBackupPayload(payload,name){
   catch(_){throw new Error('Recovery password is incorrect. Legacy vault was not changed.')}
   const salt=crypto.getRandomValues(new Uint8Array(16)),wrapIv=crypto.getRandomValues(new Uint8Array(12));
   const kek=await backupPasswordKey(password,salt,BACKUP_ARGON2ID);
-  let wrapped;
-  try{wrapped=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv,additionalData:backupWrapAad(2,BACKUP_ARGON2ID)},kek,raw))}
-  finally{new Uint8Array(raw).fill(0)}
-  const key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
+  let wrapped,key;
+  try{
+   wrapped=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv,additionalData:backupWrapAad(2,BACKUP_ARGON2ID)},kek,raw));
+   key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
+  }finally{new Uint8Array(raw).fill(0)}
   await writeBackupVault({id:BACKUP_VAULT_ID,key,salt:backupB64(salt),wrapIv:backupB64(wrapIv),wrappedKey:backupB64(wrapped),
    kdf:BACKUP_ARGON2ID.kdf,memoryKiB:BACKUP_ARGON2ID.memoryKiB,iterations:BACKUP_ARGON2ID.iterations,
    parallelism:BACKUP_ARGON2ID.parallelism,format:2});
