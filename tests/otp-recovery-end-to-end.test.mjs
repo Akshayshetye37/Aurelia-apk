@@ -15,6 +15,7 @@ test('Forgot PIN never displays recovery key until a verified OTP grant is consu
   assert.match(recovery, /consumeAndArm/);
   assert.match(recovery, /if \(armed && RecoveryGate\.isOpen\(\)\) showRecoveryKeyPrompt\(\)/);
   assert.match(recovery, /if \(record\.otpRequired && record\.currentE164 != null && !RecoveryGate\.isOpen\(\)\)/);
+  assert.match(recovery, /if \(record\.state == RecoveryPhoneStore\.State\.UNSET\) \{[\s\S]*?showRecoveryKeyPrompt\(\)/);
   assert.match(recovery, /if \(record\.state == RecoveryPhoneStore\.State\.UNVERIFIED\)/);
   assert.match(recovery, /if \(!record\.otpRequired\) \{[\s\S]*?showRecoveryKeyPrompt\(\)/);
 });
@@ -81,4 +82,14 @@ test('user leaving the launcher invalidates OTP callbacks and clears the recover
   const gate = read('android/templates/security/LockGateActivity.kt');
   assert.match(gate, /override fun onUserLeaveHint\(\)[\s\S]*?recoveryFlowActive = false[\s\S]*?recoveryPhoneIdentity\?\.reset\(\)[\s\S]*?RecoveryGate\.clear\(\)/);
   assert.match(gate, /if \(!recoveryFlowActive \|\| isFinishing\)[\s\S]*?RecoveryGate\.clear\(\)/);
+});
+
+
+test('an installation with no recovery phone retains offline recovery-key access', () => {
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  const start = gate.indexOf('private fun showRecoveryPrompt');
+  const end = gate.indexOf('private fun encryptedDatabaseExists', start);
+  const flow = gate.slice(start, end);
+  assert.match(flow, /record\.state == RecoveryPhoneStore\.State\.UNSET[\s\S]*?showRecoveryKeyPrompt\(\)/);
+  assert.match(gate, /record\.state != RecoveryPhoneStore\.State\.UNSET[\s\S]*?record\.otpRequired && record\.currentE164 == null/);
 });
