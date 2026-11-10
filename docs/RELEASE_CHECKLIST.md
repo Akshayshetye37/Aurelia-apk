@@ -58,7 +58,7 @@
 7. Record source SHA, artifact SHA-256, certificate fingerprint, workflow run and attestation reference.
 8. Obtain all named approvals before publishing.
 9. Execute the staged rollout with monitoring and rollback owner present.
-10. Roll back immediately on database integrity failure, unexplained accounting variance, key-envelope failure, duplicate/incorrect payment posting, signature/provenance mismatch or material PII exposure.
+10. Roll back immediately on database integrity failure, unexplained accounting variance, key-envelope failure, payment ledger mismatch, signature/provenance mismatch or material PII exposure.
 
 ## Rollback procedure
 
