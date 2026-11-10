@@ -86,6 +86,8 @@ test('real Android SQLite instrumentation source is copied and configured by the
   assert.match(instrumentation, /businessBatchRollsBackEveryEntityWhenAnyOutboxInsertFails/);
   assert.match(instrumentation, /migrationPreservesExactRawSnapshotAndIsReplaySafe/);
   assert.match(instrumentation, /migrationRefusesNonEmptyRepositoryWithoutCreatingSnapshot/);
+  assert.match(instrumentation, /sharedRepositoryContractFixtureRunsAgainstNativeSqlite/);
+  assert.match(patcher, /pms-repository-contract\.json/);
 });
 
 test('manual Android QA workflow executes instrumentation rather than relying on JS fake-plugin tests', () => {
