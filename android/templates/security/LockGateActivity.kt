@@ -536,7 +536,8 @@ class LockGateActivity : FragmentActivity() {
         try {
             recoveryOtpDialogShown = false
             val auth = RecoveryFirebaseAuthFactory.create(this)
-            val identity = FirebasePhoneIdentity(auth) { state ->
+            lateinit var identity: FirebasePhoneIdentity
+            identity = FirebasePhoneIdentity(auth) { state ->
                 runOnUiThread {
                     when (state) {
                         PhoneIdentityState.Requesting -> showError("Sending OTP to your registered recovery number…")
