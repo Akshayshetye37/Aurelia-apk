@@ -284,6 +284,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
     char[] wrong = "000000".toCharArray();
     char[] recovery = null;
     try {
+      assertFalse("missing envelope must not unlock or regenerate the DEK", manager.unlock(pin, ""));
       com.aurelia.pms.security.AureliaAppManager.Enrollment enrollment = manager.enroll(pin);
       recovery = enrollment.getRecoveryKey();
       for (int attempt = 0; attempt < 5; attempt++) {
@@ -295,7 +296,6 @@ public final class LocalPmsRepositoryInstrumentedTest {
       try { manager.unlock(wrong, enrollment.getEnvelopeJson()); }
       catch (SecurityException expected) { locked = true; }
       assertTrue("the sixth attempt must be blocked by the persisted lockout", locked);
-      assertFalse("missing envelope must not unlock or regenerate the DEK", manager.unlock(pin, ""));
     } finally {
       Arrays.fill(pin, '\\0');
       Arrays.fill(wrong, '\\0');
