@@ -53,8 +53,8 @@ test('PIN gate persists enrollment marker separately from the PIN envelope', () 
   assert.match(store, /AndroidKeyStore/);
   assert.match(store, /AES\/GCM\/NoPadding/);
   assert.match(gate, /AureliaEnvelopeStore/);
-  assert.match(gate, /databaseExists && !envelopeExists/);
-  assert.match(gate, /enrolled && !envelopeExists/);
+  assert.match(gate, /databaseExists \|\| enrolled/);
+  assert.match(gate, /!envelopeExists && !biometricStore\.exists\(\)/);
   assert.match(gate, /enrollmentMode = !envelopeExists/);
   assert.match(gate, /refusing DEK regeneration/);
 });
@@ -167,8 +167,8 @@ test('existing encrypted database cannot enter first-time enrollment without its
   const gate = read('android/templates/security/LockGateActivity.kt');
   const manager = read('android/templates/security/AureliaAppManager.kt');
   assert.match(gate, /encryptedDatabaseExists\(\)/);
-  assert.match(gate, /databaseExists && !envelopeExists/);
-  assert.match(gate, /enrolled && !envelopeExists/);
+  assert.match(gate, /databaseExists \|\| enrolled/);
+  assert.match(gate, /!envelopeExists && !biometricStore\.exists\(\)/);
   assert.match(manager, /fun enroll\(pin: CharArray\)/);
   assert.match(manager, /context\.getDatabasePath\("aurelia-pms-encrypted\.db"\)/);
   assert.match(manager, /databaseExists \|\| AureliaEnvelopeStore\(context\)\.exists\(\) \|\| AureliaSecurityRuntime\.isEnrolled\(\)/);
