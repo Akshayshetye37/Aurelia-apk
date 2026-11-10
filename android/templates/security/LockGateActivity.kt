@@ -127,8 +127,8 @@ class LockGateActivity : FragmentActivity() {
         val secondField = confirmField?.text
         val second = secondField?.let { CharArray(it.length).also { chars -> it.getChars(0, it.length, chars, 0) } }
         try {
-            if (first.size !in 6..16 || first.any { it !in '0'..'9' }) {
-                showError("PIN must be 6–16 digits and not repeated or sequential.")
+            if (first.size !in (if (enrollmentMode) 6..16 else 4..16) || first.any { it !in '0'..'9' }) {
+                showError(if (enrollmentMode) "New PIN must contain 6–16 digits." else "Enter your existing PIN.")
                 return
             }
             if (enrollmentMode) {
