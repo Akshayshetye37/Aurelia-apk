@@ -55,6 +55,10 @@ class AppLockManager(context: Context) {
         return state
     }
 
+    /** Stable test seam; callers cannot mutate the authenticated retry state. */
+    @androidx.annotation.VisibleForTesting(otherwise = androidx.annotation.VisibleForTesting.PRIVATE)
+    fun lockoutFailureCount(): Int = state().failures
+
     @Synchronized
     fun assertUnlocked() {
         val current = state()
