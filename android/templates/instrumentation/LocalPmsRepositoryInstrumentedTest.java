@@ -249,6 +249,60 @@ public final class LocalPmsRepositoryInstrumentedTest {
     }
   }
 
+  @Test public void pinFailureMatrixFailsClosedForMissingTamperedAndRepeatedWrongCredentials() throws Exception {
+    android.content.Context isolated = context.createDeviceProtectedStorageContext();
+    isolated.deleteDatabase("aurelia-pms-encrypted.db");
+    new com.aurelia.pms.security.AureliaEnvelopeStore(isolated).delete();
+    new File(isolated.getNoBackupFilesDir(), "aurelia-lock-state.v1").delete();
+    java.security.KeyStore store = java.security.KeyStore.getInstance("AndroidKeyStore");
+    store.load(null);
+    store.deleteEntry("aurelia.pms.lock-state.v1");
+    store.deleteEntry("aurelia.pms.enrollment.marker.v1");
+
+    com.aurelia.pms.security.AureliaAppManager manager = TestFixtures.newManager(isolated);
+    char[] pin = "481592".toCharArray();
+    char[] wrongPin = "481593".toCharArray();
+    try {
+      com.aurelia.pms.security.AureliaAppManager.Enrollment enrollment = manager.enroll(pin);
+      String validEnvelope = enrollment.getEnvelopeJson();
+      manager.lock();
+
+      // Missing envelope and a flipped authenticated ciphertext byte must never release the DEK.
+      assertFalse("missing envelope must be rejected", manager.unlock(pin, "{}"));
+      assertEquals(1, new com.aurelia.pms.security.AppLockManager(isolated).lockoutFailureCount());
+
+      manager.lock();
+      JSONObject tampered = new JSONObject(validEnvelope);
+      String pinWrapper = tampered.getString("pin");
+      int flipAt = Math.max(0, pinWrapper.length() - 3);
+      char original = pinWrapper.charAt(flipAt);
+      tampered.put("pin", pinWrapper.substring(0, flipAt) +
+        (original == 'A' ? 'B' : 'A') + pinWrapper.substring(flipAt + 1));
+      assertFalse("modified envelope byte must be rejected", manager.unlock(pin, tampered.toString()));
+
+      manager.lock();
+      for (int attempt = 1; attempt <= 5; attempt++) {
+        assertFalse("wrong PIN attempt " + attempt + " must fail", manager.unlock(wrongPin, validEnvelope));
+      }
+      assertEquals("fifth wrong PIN must persist the lockout count", 5,
+        new com.aurelia.pms.security.AppLockManager(isolated).lockoutFailureCount());
+      boolean locked = false;
+      try { manager.unlock(wrongPin, validEnvelope); }
+      catch (SecurityException expected) { locked = true; }
+      assertTrue("subsequent PIN attempt must be blocked during lockout", locked);
+    } finally {
+      manager.lock();
+      Arrays.fill(pin, '\\0');
+      Arrays.fill(wrongPin, '\\0');
+      new com.aurelia.pms.security.AureliaEnvelopeStore(isolated).delete();
+      new File(isolated.getNoBackupFilesDir(), "aurelia-lock-state.v1").delete();
+      store.load(null);
+      store.deleteEntry("aurelia.pms.lock-state.v1");
+      store.deleteEntry("aurelia.pms.enrollment.marker.v1");
+      isolated.deleteDatabase("aurelia-pms-encrypted.db");
+    }
+  }
+
   @Test public void missingPersistedPinLockStateCannotResetRetryCounter() throws Exception {
     com.aurelia.pms.security.AppLockManager lockout =
       new com.aurelia.pms.security.AppLockManager(context);
