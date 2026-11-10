@@ -726,13 +726,20 @@ class LockGateActivity : FragmentActivity() {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
-    override fun onStop() {
-        // Invalidate in-flight callbacks as well as the current grant. A delayed
-        // network response must never re-arm recovery after this gate backgrounds.
+    override fun onUserLeaveHint() {
+        // A user-initiated departure (Home/Recents) invalidates in-flight recovery.
         recoveryFlowActive = false
         recoveryOtpDialogShown = false
         recoveryPhoneIdentity?.reset()
         recoveryPhoneIdentity = null
+        RecoveryGate.clear()
+        super.onUserLeaveHint()
+    }
+
+    override fun onStop() {
+        // Firebase Phone Auth may temporarily launch its own verification activity.
+        // Clear any armed grant, but let that SDK round-trip finish unless the user
+        // explicitly left this app (handled by onUserLeaveHint).
         RecoveryGate.clear()
         super.onStop()
     }
