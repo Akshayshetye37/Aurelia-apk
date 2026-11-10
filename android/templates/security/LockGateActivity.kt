@@ -563,25 +563,30 @@ class LockGateActivity : FragmentActivity() {
                         PhoneIdentityState.AutoRetrievalTimedOut -> promptForRecoveryOtp(identity)
                         PhoneIdentityState.Verifying -> Unit
                         is PhoneIdentityState.IdentityVerified -> {
-                            val tenant = RecoveryTenantIdentity.getOrCreate(this)
-                            val client = RecoveryGrantClient(this)
-                            val grantRequest = client.issueRecoveryGrant(state.firebaseIdToken, tenant)
-                            grantRequest.task.addOnCompleteListener { task ->
-                                if (!task.isSuccessful) {
-                                    showError("OTP was verified, but recovery authorization failed. Request a fresh OTP.")
-                                    return@addOnCompleteListener
-                                }
-                                val grant = task.result
-                                client.consumeAndArm(grant, grantRequest.nonce, grantRequest.deviceIdHash) { armed ->
-                                    runOnUiThread {
-                                        if (!recoveryFlowActive || isFinishing) {
-                                            RecoveryGate.clear()
-                                            return@runOnUiThread
+                            try {
+                                val tenant = RecoveryTenantIdentity.getOrCreate(this)
+                                val client = RecoveryGrantClient(this)
+                                val grantRequest = client.issueRecoveryGrant(state.firebaseIdToken, tenant)
+                                grantRequest.task.addOnCompleteListener { task ->
+                                    if (!task.isSuccessful) {
+                                        showError("OTP was verified, but recovery authorization failed. Request a fresh OTP.")
+                                        return@addOnCompleteListener
+                                    }
+                                    val grant = task.result
+                                    client.consumeAndArm(grant, grantRequest.nonce, grantRequest.deviceIdHash) { armed ->
+                                        runOnUiThread {
+                                            if (!recoveryFlowActive || isFinishing) {
+                                                RecoveryGate.clear()
+                                                return@runOnUiThread
+                                            }
+                                            if (armed && RecoveryGate.isOpen()) showRecoveryKeyPrompt()
+                                            else showError("Recovery authorization expired or was already used. Request a fresh OTP.")
                                         }
-                                        if (armed && RecoveryGate.isOpen()) showRecoveryKeyPrompt()
-                                        else showError("Recovery authorization expired or was already used. Request a fresh OTP.")
                                     }
                                 }
+                            } catch (failure: Exception) {
+                                RecoveryGate.clear()
+                                showError("Recovery tenant binding must be re-verified by the property owner in Settings: ${failure.message}")
                             }
                         }
                         is PhoneIdentityState.Failed -> {
