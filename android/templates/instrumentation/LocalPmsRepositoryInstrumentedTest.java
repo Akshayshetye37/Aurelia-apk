@@ -4,7 +4,7 @@ import com.aurelia.pms.debug.LocalPmsFaultInjection;
 
 import android.content.Context;
 import android.content.ContentValues;
-import android.database.sqlite.SQLiteDatabase;
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
 import java.io.File;
 import java.io.FileInputStream;
 import java.util.Arrays;
