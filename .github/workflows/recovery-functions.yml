@@ -7,13 +7,19 @@ on:
       - 'functions/**'
       - 'firestore.rules'
       - 'firebase.json'
-      - '.github/workflows/recovery-functions.yml'\n      - 'android/templates/**'\n      - 'tests/otp-recovery-*.test.mjs'\n      - 'scripts/patch-android.js'
+      - '.github/workflows/recovery-functions.yml'
+      - 'android/templates/**'
+      - 'tests/otp-recovery-*.test.mjs'
+      - 'scripts/patch-android.js'
   pull_request:
     paths:
       - 'functions/**'
       - 'firestore.rules'
       - 'firebase.json'
       - '.github/workflows/recovery-functions.yml'
+      - 'android/templates/**'
+      - 'tests/otp-recovery-*.test.mjs'
+      - 'scripts/patch-android.js'
 
 permissions:
   contents: read
@@ -34,7 +40,7 @@ jobs:
       - name: Compile TypeScript
         run: npm run build
         working-directory: functions
-      - name: Run security contract tests
+      - name: Run backend security contract tests
         run: npm test
         working-directory: functions
 
