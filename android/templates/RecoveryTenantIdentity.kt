@@ -27,7 +27,13 @@ object RecoveryTenantIdentity {
     fun getOrCreate(context: Context): String {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val blob = prefs.getString(BLOB, null)
-        if (blob != null) return decrypt(blob)
+        if (blob != null) {
+            val bound = decrypt(blob)
+            if (bound.startsWith("local_")) {
+                throw SecurityException("Legacy local-only tenant binding must be re-verified by the property owner in Settings.")
+            }
+            return bound
+        }
         throw SecurityException("This installation is not bound to an authenticated owner tenant.")
     }
 
@@ -54,14 +60,19 @@ object RecoveryTenantIdentity {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val existing = prefs.getString(BLOB, null)
         if (existing != null) {
-            check(decrypt(existing) == tenant) {
+            val previous = decrypt(existing)
+            if (previous == tenant) return
+            check(previous.startsWith("local_")) {
                 "This device is already bound to a different owner tenant."
             }
-            return
+            // Upgrade only the known legacy LOCAL_ONLY namespace, and only
+            // after the current Firebase token has asserted role=owner + tenantId.
         }
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        check(!store.containsAlias(ALIAS)) {
-            "Recovery tenant record is missing; refusing to create a replacement namespace."
+        if (existing == null) {
+            check(!store.containsAlias(ALIAS)) {
+                "Recovery tenant record is missing; refusing to create a replacement namespace."
+            }
         }
         val nonce = ByteArray(12).also(SecureRandom()::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
