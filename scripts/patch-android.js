@@ -376,6 +376,9 @@ fs.copyFileSync(firebaseTemplate, path.join(identityDir, 'FirebasePhoneIdentity.
 const firebaseBootstrapTemplate = path.join(androidDir, 'templates', 'RecoveryFirebaseAuthFactory.kt');
 if (!fs.existsSync(firebaseBootstrapTemplate)) throw new Error('RecoveryFirebaseAuthFactory.kt template is missing.');
 fs.copyFileSync(firebaseBootstrapTemplate, path.join(identityDir, 'RecoveryFirebaseAuthFactory.kt'));
+const recoveryPhoneTemplate = path.join(androidDir, 'templates', 'RecoveryPhoneStore.kt');
+if (!fs.existsSync(recoveryPhoneTemplate)) throw new Error('RecoveryPhoneStore.kt template is missing.');
+fs.copyFileSync(recoveryPhoneTemplate, path.join(identityDir, 'RecoveryPhoneStore.kt'));
 
 
 
@@ -394,6 +397,7 @@ for (const file of [
   'AureliaAppManager.kt',
   'AureliaSecurityRuntime.kt',
   'AureliaEnvelopeStore.kt',
+  'RecoveryGate.kt',
   'PaymentDeviceKeyStore.kt',
   'PaymentDeviceClient.kt',
   'SettlementEnvelopeVerifier.kt',
