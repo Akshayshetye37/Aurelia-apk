@@ -76,8 +76,11 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
       dbKey = null;
       manager.lock(); // session DEK is zeroed before recovery begins.
 
-      // Seed a validly shaped biometric wrapper and Keystore alias before recovery.
-      biometricVault.createOrReplaceKey();
+      // Seed a validly shaped biometric wrapper and a test-only Keystore alias.
+      // Hosted emulators have no enrolled fingerprint/face, so they cannot create
+      // production keys requiring per-use biometric authentication. This fixture
+      // tests durable wrapper + alias revocation only, not BiometricPrompt auth.
+      createTestBiometricKeyWithoutEnrolledBiometrics();
       KeyStore enrolledBiometricKeys = KeyStore.getInstance("AndroidKeyStore");
       enrolledBiometricKeys.load(null);
       assertTrue("test must begin with an enrolled biometric Keystore key",
@@ -179,6 +182,24 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
       context.deleteDatabase(DB);
       deleteTestLockState(context);
     }
+  }
+
+  private static void createTestBiometricKeyWithoutEnrolledBiometrics() throws Exception {
+    final String alias = "aurelia.pms.biometric.dek.v1";
+    KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+    store.load(null);
+    if (store.containsAlias(alias)) store.deleteEntry(alias);
+    java.security.KeyGenerator generator = java.security.KeyGenerator.getInstance(
+      android.security.keystore.KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
+    generator.init(new android.security.keystore.KeyGenParameterSpec.Builder(
+      alias,
+      android.security.keystore.KeyProperties.PURPOSE_ENCRYPT |
+        android.security.keystore.KeyProperties.PURPOSE_DECRYPT)
+      .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+      .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+      .setRandomizedEncryptionRequired(true)
+      .build());
+    generator.generateKey();
   }
 
   private static com.aurelia.pms.security.AureliaAppManager newManager(Context context) {
