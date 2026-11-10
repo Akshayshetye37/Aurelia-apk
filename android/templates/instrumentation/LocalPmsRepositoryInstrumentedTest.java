@@ -316,12 +316,18 @@ public final class LocalPmsRepositoryInstrumentedTest {
       .put("b", new JSONArray()).put("g", new JSONArray()).put("t", new JSONArray())
       .put("exp", new JSONArray()).put("inv", new JSONArray()).put("led", new JSONArray())
       .put("aud", new JSONArray()).put("set", new JSONObject()).put("menu", new JSONObject()).toString();
+    boolean migrationCommitted = false;
     try {
       repository.migrateLegacySnapshot("low-storage-migration", "aurelia_lodge_v2",
         "2026-11-10T00:00:00.000Z", migration);
+      migrationCommitted = true;
     } catch (RuntimeException expectedStorageFailure) {
       assertEquals(0, repository.getWritableDatabase().compileStatement("SELECT COUNT(*) FROM pms_migrations").simpleQueryForLong());
       assertNull(repository.getEntity("room", "low-storage-room"));
+    }
+    if (migrationCommitted) {
+      assertNotNull(repository.getEntity("room", "low-storage-room"));
+      assertEquals(1, repository.getWritableDatabase().compileStatement("SELECT COUNT(*) FROM pms_migrations").simpleQueryForLong());
     }
 
     String folioId = "low-storage-folio";
