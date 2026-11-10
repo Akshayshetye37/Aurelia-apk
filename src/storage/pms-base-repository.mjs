@@ -87,7 +87,7 @@ export class BaseRepo {
     }
     assertPmsVersion(expectedVersion, "expected version");
     if (typeof mutate !== "function") throw new TypeError("A synchronous update callback is required.");
-    const { entityId } = this.#validate(id, { id });
+    const entityId = assertPmsIdentity(String(id), "entity ID");
     await this.#assertPermission(permissionAction, entityId, { expectedVersion });
     const result = await this.bridge.mutateEntity({
       entityType: this.entityType, entityId, expectedVersion, eventType, eventPayload,

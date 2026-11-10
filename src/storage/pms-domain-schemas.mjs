@@ -51,7 +51,9 @@ const booking = z.object({
   original_amount_paid: amountMajor,
   paymentSnapshot: z.unknown().optional(),
   dc: z.unknown().optional(),
-  protectedNew: z.boolean().optional()
+  protectedNew: z.boolean().optional(),
+  retired: z.boolean().optional(),
+  retiredAt: z.string().max(40).optional()
 }).strict().superRefine((row, context) => {
   if (row.out <= row.in) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["out"], message: "check-out offset must be after check-in offset" });
@@ -76,6 +78,8 @@ const guest = z.object({
   img: z.string().max(20_000_000).optional(),
   imgKey: z.string().max(180).optional(),
   demo: z.boolean().optional(),
+  retired: z.boolean().optional(),
+  retiredAt: z.string().max(40).optional(),
   // Explicitly retained import aliases; unknown top-level keys are rejected.
   name: z.string().max(180).optional(),
   guestName: z.string().max(180).optional(),
@@ -95,7 +99,9 @@ const room = z.object({
     "room rate must have at most two decimal places"),
   s: z.enum(["ready", "occ", "clean", "out", "maintenance"]),
   demo: z.boolean().optional(),
-  status_changed: z.union([z.string(), z.number(), z.boolean()]).optional()
+  status_changed: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  retired: z.boolean().optional(),
+  retiredAt: z.string().max(40).optional()
 }).strict();
 
 const payment = z.object({
@@ -116,6 +122,8 @@ const payment = z.object({
   refundAmountMinor: z.number().int().safe().nonnegative().optional(),
   createdAt: z.string().max(40),
   updatedAt: z.string().max(40).optional(),
+  retired: z.boolean().optional(),
+  retiredAt: z.string().max(40).optional(),
   metadata: z.record(z.unknown()).optional()
 }).strict().superRefine((row, context) => {
   const environments = {
@@ -153,6 +161,8 @@ const schemas = {
     paidPaise: z.number().int().safe().nonnegative(),
     balanceDuePaise: z.number().int().safe().nonnegative(),
     updatedAt: z.string().max(40).optional(),
+    retired: z.boolean().optional(),
+    retiredAt: z.string().max(40).optional(),
     legacySourceEvidence: z.object({
       legacyPaidTotal: z.unknown(),
       legacyPaymentRows: z.array(z.unknown())
