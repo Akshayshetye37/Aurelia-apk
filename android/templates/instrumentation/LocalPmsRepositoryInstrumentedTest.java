@@ -345,10 +345,11 @@ public final class LocalPmsRepositoryInstrumentedTest {
   @Test public void backgroundSessionBlocksDekCopiesUntilForegroundReauthorization() throws Exception {
     // This test deliberately creates a fresh enrollment. Clear only its isolated
     // instrumentation state; production enrollment protection remains unchanged.
-    context.deleteDatabase("aurelia-pms-encrypted.db");
-    new com.aurelia.pms.security.AureliaEnvelopeStore(context).delete();
-    new File(context.getNoBackupFilesDir(), "aurelia-lock-state.v1").delete();
-    new File(context.getNoBackupFilesDir(), "aurelia-recovery-lock-state.v1").delete();
+    android.content.Context isolated = context.createDeviceProtectedStorageContext();
+    isolated.deleteDatabase("aurelia-pms-encrypted.db");
+    new com.aurelia.pms.security.AureliaEnvelopeStore(isolated).delete();
+    new File(isolated.getNoBackupFilesDir(), "aurelia-lock-state.v1").delete();
+    new File(isolated.getNoBackupFilesDir(), "aurelia-recovery-lock-state.v1").delete();
     java.security.KeyStore enrollmentStore = java.security.KeyStore.getInstance("AndroidKeyStore");
     enrollmentStore.load(null);
     enrollmentStore.deleteEntry("aurelia.pms.enrollment.marker.v1");
@@ -357,8 +358,8 @@ public final class LocalPmsRepositoryInstrumentedTest {
     com.aurelia.pms.security.AureliaAppManager manager =
       new com.aurelia.pms.security.AureliaAppManager(
         new com.aurelia.pms.security.AureliaCryptoEngine(),
-        new com.aurelia.pms.security.AppLockManager(context),
-        context,
+        new com.aurelia.pms.security.AppLockManager(isolated),
+        isolated,
         new java.security.SecureRandom(),
         300_000L);
     char[] pin = "481592".toCharArray();
@@ -385,14 +386,14 @@ public final class LocalPmsRepositoryInstrumentedTest {
       Arrays.fill(pin, '\0');
       if (sessionKey != null) Arrays.fill(sessionKey, (byte) 0);
       manager.lock();
-      new com.aurelia.pms.security.AureliaEnvelopeStore(context).delete();
-      context.deleteDatabase("aurelia-pms-encrypted.db");
+      new com.aurelia.pms.security.AureliaEnvelopeStore(isolated).delete();
+      isolated.deleteDatabase("aurelia-pms-encrypted.db");
       enrollmentStore.load(null);
       enrollmentStore.deleteEntry("aurelia.pms.enrollment.marker.v1");
       enrollmentStore.deleteEntry("aurelia.pms.lock-state.v1");
       enrollmentStore.deleteEntry("aurelia.pms.recovery-lock-state.v1");
-      new File(context.getNoBackupFilesDir(), "aurelia-lock-state.v1").delete();
-      new File(context.getNoBackupFilesDir(), "aurelia-recovery-lock-state.v1").delete();
+      new File(isolated.getNoBackupFilesDir(), "aurelia-lock-state.v1").delete();
+      new File(isolated.getNoBackupFilesDir(), "aurelia-recovery-lock-state.v1").delete();
     }
   }
 
