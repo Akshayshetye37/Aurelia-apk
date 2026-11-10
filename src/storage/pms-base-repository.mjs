@@ -5,16 +5,37 @@ const clone = value => value == null ? value :
   (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
 
 export class BaseRepo {
-  constructor({ bridge, entityType, now = () => new Date().toISOString() } = {}) {
+  constructor({ bridge, entityType, authorize, now = () => new Date().toISOString() } = {}) {
     if (!bridge || typeof bridge.fetchEntity !== "function" ||
         typeof bridge.listEntities !== "function" || typeof bridge.mutateEntity !== "function") {
       throw new TypeError("BaseRepo requires a bound transactional PMS repository bridge.");
     }
     assertPmsIdentity(entityType, "entity type");
     if (!PMS_ENTITY_TYPES.includes(entityType)) throw new TypeError("Unsupported PMS entity type: " + entityType);
+    if (typeof authorize !== "function") {
+      throw new TypeError("BaseRepo requires an explicit repository permission evaluator.");
+    }
     this.bridge = bridge;
     this.entityType = entityType;
+    this.authorize = authorize;
     this.now = now;
+  }
+
+  async #assertPermission(action, entityId, context = {}) {
+    const allowed = await this.authorize(Object.freeze({
+      action,
+      entityType: this.entityType,
+      entityId: entityId ?? null,
+      ...context
+    }));
+    if (allowed !== true) {
+      throw Object.assign(new Error("Repository permission denied for " + action + " on " + this.entityType + "."), {
+        code: "PMS_REPOSITORY_PERMISSION_DENIED",
+        action,
+        entityType: this.entityType,
+        entityId: entityId ?? null
+      });
+    }
   }
 
   #validate(id, value) {
@@ -25,6 +46,7 @@ export class BaseRepo {
 
   async get(id) {
     const entityId = assertPmsIdentity(String(id), "entity ID");
+    await this.#assertPermission("read", entityId);
     const row = await this.bridge.fetchEntity(this.entityType, entityId);
     if (!row) return null;
     if (row.type !== this.entityType || row.id !== entityId ||
@@ -35,6 +57,7 @@ export class BaseRepo {
   }
 
   async list() {
+    await this.#assertPermission("list", null);
     const rows = await this.bridge.listEntities(this.entityType);
     if (!Array.isArray(rows)) throw new Error("Canonical " + this.entityType + " repository returned an invalid list.");
     const seen = new Set();
@@ -50,6 +73,7 @@ export class BaseRepo {
 
   async create(id, value, { eventType = this.entityType + ".created", eventPayload } = {}) {
     const { entityId, data } = this.#validate(id, value);
+    await this.#assertPermission("create", entityId);
     const result = await this.bridge.mutateEntity({
       entityType: this.entityType, entityId, expectedVersion: 0, eventType, eventPayload,
       mutate: current => Object.assign(current, data)
@@ -57,13 +81,14 @@ export class BaseRepo {
     return Object.freeze({ id: result.entity.id, version: result.entity.version, data: validatePmsDomainEntity(this.entityType, result.entity.data) });
   }
 
-  async update(id, expectedVersion, mutate, { eventType = this.entityType + ".updated", eventPayload } = {}) {
+  async update(id, expectedVersion, mutate, { eventType = this.entityType + ".updated", eventPayload, permissionAction = "update" } = {}) {
     if (PMS_IMMUTABLE_ENTITY_TYPES.has(this.entityType)) {
       throw Object.assign(new Error(this.entityType + " entities are append-only and cannot be updated."), { code: "PMS_ENTITY_IMMUTABLE" });
     }
     assertPmsVersion(expectedVersion, "expected version");
     if (typeof mutate !== "function") throw new TypeError("A synchronous update callback is required.");
     const { entityId } = this.#validate(id, { id });
+    await this.#assertPermission(permissionAction, entityId, { expectedVersion });
     const result = await this.bridge.mutateEntity({
       entityType: this.entityType, entityId, expectedVersion, eventType, eventPayload,
       mutate: current => {
@@ -99,6 +124,6 @@ export class BaseRepo {
     if (PMS_IMMUTABLE_ENTITY_TYPES.has(this.entityType)) {
       throw Object.assign(new Error(this.entityType + " entities are append-only and cannot be retired."), { code: "PMS_ENTITY_IMMUTABLE" });
     }
-    return this.update(id, expectedVersion, current => ({ ...current, retired: true, retiredAt: this.now() }), { eventType });
+    return this.update(id, expectedVersion, current => ({ ...current, retired: true, retiredAt: this.now() }), { eventType, permissionAction: "retire" });
   }
 }
