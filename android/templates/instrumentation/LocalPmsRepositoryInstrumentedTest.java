@@ -81,7 +81,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
       assertArrayEquals(dek, crypto.unwrapDataKey(encoded, pin));
     } finally {
       Arrays.fill(dek, (byte) 0);
-      Arrays.fill(pin, '\\0');
+      Arrays.fill(pin, '\0');
     }
   }
 
@@ -118,7 +118,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
       catch (SecurityException expected) { rejected = true; }
       assertTrue("existing database must never receive a newly generated DEK", rejected);
       assertFalse(manager.isSessionAuthorized());
-    } finally { Arrays.fill(pin, '\\0'); manager.lock(); }
+    } finally { Arrays.fill(pin, '\0'); manager.lock(); }
   }
 
   @Test public void backgroundSessionBlocksDekCopiesUntilForegroundReauthorization() {
