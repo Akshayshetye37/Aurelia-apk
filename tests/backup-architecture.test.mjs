@@ -47,13 +47,22 @@ test("merchant credentials remain backend-only while local payments and folio in
 test("all new backup destinations receive a portable AES-256-GCM envelope", () => {
   assert.match(html, /AURELIA-PMS-ENCRYPTED-BACKUP/);
   assert.match(html, /AES-256-GCM/);
-  assert.match(html, /PBKDF2-HMAC-SHA256/);
-  assert.match(html, /BACKUP_KDF_ITERATIONS=600000/);
+  assert.match(html, /PBKDF2-HMAC-SHA256/); // v1 restore compatibility only
+  assert.match(html, /ARGON2ID/);
+  assert.match(html, /BACKUP_ARGON2ID=Object\.freeze\(\{kdf:'ARGON2ID',memoryKiB:65536,iterations:3,parallelism:1\}\)/);
+  assert.match(html, /BACKUP_V1_KDF_ITERATIONS=600000/);
+  assert.match(html, /backup-key-wrap\\|v2\\|/);
+  const argonBridge = fs.readFileSync(new URL("../src/storage/backup-crypto-bridge.mjs", import.meta.url), "utf8");
+  assert.match(argonBridge, /from "hash-wasm"/);
+  assert.match(argonBridge, /memorySize: parameters\.memoryKiB/);
+  assert.match(html, /format:2/);
   assert.match(html, /encryptBackupPayload\(snap\.payload,snap\.name\)/);
   assert.match(html, /decryptBackupPayload\(payload,fileName\)/);
-  assert.match(html, /manifest=\{formatVersion:2,name,payloadSha256/);
+  assert.match(html, /manifest=\{formatVersion:2,name,kdf:BACKUP_ARGON2ID\.kdf,memoryKiB/);
   assert.match(html, /backup-v2\|\x27\+JSON\.stringify\(envelope\.manifest\)/);
   assert.match(html, /envelope\.v===2/);
+  assert.match(html, /envelope\.kdf==='ARGON2ID'/);
+  assert.match(html, /envelope\.v===1/);
   assert.match(html, /Backup manifest verification failed/);
   assert.match(html, /payloadBytes/);
   assert.match(html, /recordCounts/);

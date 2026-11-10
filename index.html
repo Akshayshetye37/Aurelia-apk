@@ -1059,33 +1059,64 @@ const cloneLiveSnapshot=()=>{const out={};DK.forEach(k=>{try{out[k]=typeof struc
 /* Encrypted backup vault. The non-extractable data key is persisted in IndexedDB;
    a recovery-password-wrapped copy makes encrypted exports portable to a new device. */
 const BACKUP_VAULT_ID='primary';
-const BACKUP_KDF_ITERATIONS=600000;
+const BACKUP_V1_KDF_ITERATIONS=600000;
+const BACKUP_ARGON2ID=Object.freeze({kdf:'ARGON2ID',memoryKiB:65536,iterations:3,parallelism:1});
 function backupB64(bytes){let s='';new Uint8Array(bytes).forEach(b=>s+=String.fromCharCode(b));return btoa(s)}
 function backupUnB64(value){return Uint8Array.from(atob(value),c=>c.charCodeAt(0))}
 async function readBackupVault(){return window.AureliaBackupVaultStore.read()}
 async function writeBackupVault(record){return window.AureliaBackupVaultStore.write(record)}
-async function backupPasswordKey(password,salt,iterations){
- const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveKey']);
- return crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt,iterations},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+function backupV1PasswordKey(password,salt,iterations){
+ const material=crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveKey']);
+ return material.then(key=>crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt,iterations},key,{name:'AES-GCM',length:256},false,['encrypt','decrypt']));
+}
+async function backupPasswordKey(password,salt,parameters){
+ if(parameters?.kdf==='PBKDF2-HMAC-SHA256')return backupV1PasswordKey(password,salt,parameters.iterations);
+ if(parameters?.kdf!=='ARGON2ID'||parameters.memoryKiB!==BACKUP_ARGON2ID.memoryKiB||
+    parameters.iterations!==BACKUP_ARGON2ID.iterations||parameters.parallelism!==BACKUP_ARGON2ID.parallelism){
+  throw new Error('Unsupported or unapproved backup KDF parameters.');
+ }
+ if(!window.AureliaBackupArgon2Ready||typeof window.AureliaBackupArgon2id!=='function'){
+  throw new Error('Argon2id backup cryptography is unavailable; no PBKDF2 fallback will be used for new backups.');
+ }
+ await window.AureliaBackupArgon2Ready;
+ const raw=await window.AureliaBackupArgon2id(password,salt,parameters);
+ try{return await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt'])}
+ finally{raw.fill(0)}
+}
+function backupVaultParameters(vault){
+ return vault.format===1
+  ?{kdf:'PBKDF2-HMAC-SHA256',iterations:vault.iterations||BACKUP_V1_KDF_ITERATIONS}
+  :{kdf:vault.kdf,memoryKiB:vault.memoryKiB,iterations:vault.iterations,parallelism:vault.parallelism};
+}
+function backupWrapAad(version,parameters){
+ return new TextEncoder().encode(version===1
+  ?'com.aurelia.pms|backup-key-wrap|v1'
+  :'com.aurelia.pms|backup-key-wrap|v2|'+parameters.kdf+'|'+parameters.memoryKiB+'|'+parameters.iterations+'|'+parameters.parallelism);
 }
 async function setupBackupRecoveryPassword(){
  try{
-  if(!crypto?.subtle)throw new Error('This Android WebView does not support secure backup encryption.');
-  if(await readBackupVault())throw new Error('A recovery password is already configured. Use Change recovery password below and verify the current password.');
+  if(!crypto?.subtle)throw new Error('Secure backup encryption is unavailable in this WebView.');
+  const existing=await readBackupVault();
+  if(existing)throw new Error(existing.format===1?'A legacy backup vault exists. Use Change recovery password to upgrade it to Argon2id.':'A recovery password is already configured. Use Change recovery password below and verify the current password.');
   const password=$('#backup-recovery-password')?.value||'',confirmPassword=$('#backup-recovery-confirm')?.value||'';
   if(password.length<14)throw new Error('Use a recovery password with at least 14 characters.');
   if(password!==confirmPassword)throw new Error('The two recovery passwords do not match.');
-  const salt=crypto.getRandomValues(new Uint8Array(16)),wrapIv=crypto.getRandomValues(new Uint8Array(12));
-  const kek=await backupPasswordKey(password,salt,BACKUP_KDF_ITERATIONS);
-  const rawKey=crypto.getRandomValues(new Uint8Array(32));
-  const wrapped=await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv,additionalData:new TextEncoder().encode('com.aurelia.pms|backup-key-wrap|v1')},kek,rawKey);
-  const dataKey=await crypto.subtle.importKey('raw',rawKey,{name:'AES-GCM'},false,['encrypt','decrypt']);
-  rawKey.fill(0);
-  await writeBackupVault({id:BACKUP_VAULT_ID,key:dataKey,salt:backupB64(salt),wrapIv:backupB64(wrapIv),wrappedKey:backupB64(wrapped),iterations:BACKUP_KDF_ITERATIONS,format:1});
+  const salt=crypto.getRandomValues(new Uint8Array(16)),wrapIv=crypto.getRandomValues(new Uint8Array(12)),rawKey=crypto.getRandomValues(new Uint8Array(32));
+  const kek=await backupPasswordKey(password,salt,BACKUP_ARGON2ID);
+  let wrapped;
+  try{wrapped=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv,additionalData:backupWrapAad(2,BACKUP_ARGON2ID)},kek,rawKey))}
+  finally{rawKey.fill(0)}
+  const dataKey=await crypto.subtle.importKey('raw',rawKey,{name:'AES-GCM'},false,['encrypt','decrypt']).catch(async()=>{
+   throw new Error('Backup key material was cleared before import; configure the recovery vault again.');
+  });
+  await writeBackupVault({id:BACKUP_VAULT_ID,key:dataKey,salt:backupB64(salt),wrapIv:backupB64(wrapIv),wrappedKey:backupB64(wrapped),
+    kdf:BACKUP_ARGON2ID.kdf,memoryKiB:BACKUP_ARGON2ID.memoryKiB,iterations:BACKUP_ARGON2ID.iterations,
+    parallelism:BACKUP_ARGON2ID.parallelism,format:2});
+  wrapped.fill(0);salt.fill(0);wrapIv.fill(0);
   S.bk.verified=false;S.bk.hash='';
   $('#backup-recovery-password').value='';$('#backup-recovery-confirm').value='';
-  const status=$('#backup-vault-status');if(status)status.textContent='Encrypted backup vault is ready on this device. Keep your recovery password somewhere safe.';
-  toast('Encrypted backup vault configured. Create your first backup now.');
+  const status=$('#backup-vault-status');if(status)status.textContent='Argon2id encrypted backup vault is ready. Keep the recovery password somewhere safe.';
+  toast('Argon2id backup vault configured. Create your first backup now.');
   autoBackup();
  }catch(e){toast(e.message||'Could not configure encrypted backups')}
 }
@@ -1098,19 +1129,23 @@ async function rotateBackupRecoveryPassword(){
   if(next.length<14)throw new Error('Use at least 14 characters for the new recovery password.');
   if(next!==confirmNext)throw new Error('The new recovery passwords do not match.');
   const oldSalt=backupUnB64(vault.salt),oldIv=backupUnB64(vault.wrapIv),oldWrapped=backupUnB64(vault.wrappedKey);
-  const oldKek=await backupPasswordKey(current,oldSalt,vault.iterations||BACKUP_KDF_ITERATIONS);
+  const oldParameters=backupVaultParameters(vault),oldKek=await backupPasswordKey(current,oldSalt,oldParameters);
   let raw;
-  try{raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:oldIv,additionalData:new TextEncoder().encode('com.aurelia.pms|backup-key-wrap|v1')},oldKek,oldWrapped)}
+  try{raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:oldIv,additionalData:backupWrapAad(vault.format,oldParameters)},oldKek,oldWrapped)}
   catch(_){throw new Error('Current recovery password is incorrect. No key or backup was changed.')}
   const salt=crypto.getRandomValues(new Uint8Array(16)),wrapIv=crypto.getRandomValues(new Uint8Array(12));
-  const newKek=await backupPasswordKey(next,salt,BACKUP_KDF_ITERATIONS);
-  const wrapped=await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv,additionalData:new TextEncoder().encode('com.aurelia.pms|backup-key-wrap|v1')},newKek,raw);
+  const newKek=await backupPasswordKey(next,salt,BACKUP_ARGON2ID);
+  let wrapped;
+  try{wrapped=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv,additionalData:backupWrapAad(2,BACKUP_ARGON2ID)},newKek,raw))}
+  finally{new Uint8Array(raw).fill(0)}
   const key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
-  new Uint8Array(raw).fill(0);
-  await writeBackupVault({id:BACKUP_VAULT_ID,key,salt:backupB64(salt),wrapIv:backupB64(wrapIv),wrappedKey:backupB64(wrapped),iterations:BACKUP_KDF_ITERATIONS,format:1});
+  await writeBackupVault({id:BACKUP_VAULT_ID,key,salt:backupB64(salt),wrapIv:backupB64(wrapIv),wrappedKey:backupB64(wrapped),
+    kdf:BACKUP_ARGON2ID.kdf,memoryKiB:BACKUP_ARGON2ID.memoryKiB,iterations:BACKUP_ARGON2ID.iterations,
+    parallelism:BACKUP_ARGON2ID.parallelism,format:2});
+  wrapped.fill(0);salt.fill(0);wrapIv.fill(0);
   ['backup-current-password','backup-new-password','backup-new-confirm'].forEach(id=>{const el=$('#'+id);if(el)el.value=''});
-  const status=$('#backup-vault-status');if(status)status.textContent='Recovery password changed. Existing backup files still require their original recovery password; new backups will use the new password.';
-  toast('Recovery password changed. Existing backups remain encrypted.');
+  const status=$('#backup-vault-status');if(status)status.textContent='Recovery password rotated to Argon2id. Existing exported backups remain restorable with their original password.';
+  toast('Recovery password changed. New backups use Argon2id; older backups remain restorable.');
  }catch(e){toast(e.message||'Recovery password change failed')}
 }
 function constantTimeHexEqual(left,right){
@@ -1132,13 +1167,38 @@ async function verifyBackupManifestPayload(decoded,manifest){
  }
 }
 async function decryptBackupEnvelope(envelope,filename){
- if(envelope.format!=='AURELIA-PMS-ENCRYPTED-BACKUP'||![1,2].includes(envelope.v)||envelope.application!=='com.aurelia.pms'||envelope.cipher!=='AES-256-GCM'||envelope.kdf!=='PBKDF2-HMAC-SHA256'||envelope.iterations!==BACKUP_KDF_ITERATIONS||typeof envelope.name!=='string'||(filename&&envelope.name!==filename))throw new Error('Encrypted backup header is invalid or unsupported.');
- const salt=backupUnB64(envelope.salt),iv=backupUnB64(envelope.iv),wrapIv=backupUnB64(envelope.wrapIv),wrappedKey=backupUnB64(envelope.wrappedKey),ciphertext=backupUnB64(envelope.ciphertext);
- if(salt.length!==16||iv.length!==12||wrapIv.length!==12||wrappedKey.length!==48||ciphertext.length<16||ciphertext.length>25*1024*1024)throw new Error('Encrypted backup has invalid cryptographic fields or size.');
- const aad=new TextEncoder().encode(envelope.v===2?'com.aurelia.pms|backup-v2|'+JSON.stringify(envelope.manifest):'com.aurelia.pms|backup-v1|'+envelope.name);
- if(envelope.v===2&&(!envelope.manifest||envelope.manifest.formatVersion!==2||envelope.manifest.name!==envelope.name||!Number.isSafeInteger(envelope.manifest.payloadBytes)||envelope.manifest.payloadBytes<1||! /^[a-f0-9]{64}$/.test(envelope.manifest.payloadSha256||'')||!envelope.manifest.recordCounts||typeof envelope.manifest.recordCounts!=='object'))throw new Error('Encrypted backup manifest is invalid.');
- let vault=await readBackupVault(),key=null;
- if(vault&&vault.salt===envelope.salt&&vault.format===1)key=vault.key;
+ const validHeader=envelope.format==='AURELIA-PMS-ENCRYPTED-BACKUP'&&[1,2].includes(envelope.v)&&
+  envelope.application==='com.aurelia.pms'&&envelope.cipher==='AES-256-GCM'&&typeof envelope.name==='string'&&
+  (!filename||envelope.name===filename);
+ if(!validHeader)throw new Error('Encrypted backup header is invalid or unsupported.');
+ const legacy=envelope.v===1;
+ const parameters=legacy
+  ?{kdf:'PBKDF2-HMAC-SHA256',iterations:envelope.iterations}
+  :{kdf:envelope.kdf,memoryKiB:envelope.memoryKiB,iterations:envelope.iterations,parallelism:envelope.parallelism};
+ if(legacy){
+  if(parameters.iterations!==BACKUP_V1_KDF_ITERATIONS)throw new Error('Legacy backup KDF parameters are unsupported.');
+ }else if(parameters.kdf!=='ARGON2ID'||parameters.memoryKiB!==BACKUP_ARGON2ID.memoryKiB||
+  parameters.iterations!==BACKUP_ARGON2ID.iterations||parameters.parallelism!==BACKUP_ARGON2ID.parallelism){
+  throw new Error('Backup KDF parameters are invalid or unapproved.');
+ }
+ const salt=backupUnB64(envelope.salt),iv=backupUnB64(envelope.iv),wrapIv=backupUnB64(envelope.wrapIv),
+  wrappedKey=backupUnB64(envelope.wrappedKey),ciphertext=backupUnB64(envelope.ciphertext);
+ if(salt.length!==16||iv.length!==12||wrapIv.length!==12||wrappedKey.length!==48||
+  ciphertext.length<16||ciphertext.length>25*1024*1024)throw new Error('Encrypted backup has invalid cryptographic fields or size.');
+ if(!legacy){
+  const manifest=envelope.manifest;
+  if(!manifest||manifest.formatVersion!==2||manifest.name!==envelope.name||
+   manifest.kdf!==parameters.kdf||manifest.memoryKiB!==parameters.memoryKiB||
+   manifest.iterations!==parameters.iterations||manifest.parallelism!==parameters.parallelism||
+   !Number.isSafeInteger(manifest.payloadBytes)||manifest.payloadBytes<1||
+   !/^[a-f0-9]{64}$/.test(manifest.payloadSha256||'')||!manifest.recordCounts||typeof manifest.recordCounts!=='object'){
+   throw new Error('Encrypted backup manifest is invalid.');
+  }
+ }
+ const aad=new TextEncoder().encode(legacy?'com.aurelia.pms|backup-v1|'+envelope.name:
+  'com.aurelia.pms|backup-v2|'+JSON.stringify(envelope.manifest));
+ const vault=await readBackupVault();
+ let key=vault&&vault.salt===envelope.salt?vault.key:null;
  if(key){
   let cachedPlain=null;
   try{cachedPlain=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv,additionalData:aad},key,ciphertext))}
@@ -1146,7 +1206,7 @@ async function decryptBackupEnvelope(envelope,filename){
   if(cachedPlain){
    try{
     const decoded=new TextDecoder().decode(cachedPlain);
-    if(envelope.v===2)await verifyBackupManifestPayload(decoded,envelope.manifest);
+    if(!legacy)await verifyBackupManifestPayload(decoded,envelope.manifest);
     return decoded;
    }finally{cachedPlain.fill(0)}
   }
@@ -1154,19 +1214,26 @@ async function decryptBackupEnvelope(envelope,filename){
  const password=prompt('Enter the Aurelia backup recovery password. This password is required to decrypt this backup:');
  if(password===null)throw new Error('Backup restore cancelled; no data was changed.');
  if(password.length<1)throw new Error('A recovery password is required.');
+ let kek,raw;
  try{
-  const kek=await backupPasswordKey(password,salt,envelope.iterations);
-  const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:wrapIv,additionalData:new TextEncoder().encode('com.aurelia.pms|backup-key-wrap|v1')},kek,wrappedKey);
+  kek=await backupPasswordKey(password,salt,parameters);
+  raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:wrapIv,additionalData:backupWrapAad(envelope.v,parameters)},kek,wrappedKey);
   key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
-  new Uint8Array(raw).fill(0);
+  new Uint8Array(raw).fill(0);raw=null;
   const plain=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv,additionalData:aad},key,ciphertext));
   try{
-   if(!vault||vault.salt===envelope.salt)await writeBackupVault({id:BACKUP_VAULT_ID,key,salt:envelope.salt,wrapIv:envelope.wrapIv,wrappedKey:envelope.wrappedKey,iterations:envelope.iterations,format:1});
    const decoded=new TextDecoder().decode(plain);
-   if(envelope.v===2)await verifyBackupManifestPayload(decoded,envelope.manifest);
+   if(!legacy)await verifyBackupManifestPayload(decoded,envelope.manifest);
+   if(!vault||vault.salt===envelope.salt){
+    await writeBackupVault(legacy
+     ?{id:BACKUP_VAULT_ID,key,salt:envelope.salt,wrapIv:envelope.wrapIv,wrappedKey:envelope.wrappedKey,iterations:parameters.iterations,format:1}
+     :{id:BACKUP_VAULT_ID,key,salt:envelope.salt,wrapIv:envelope.wrapIv,wrappedKey:envelope.wrappedKey,
+       kdf:parameters.kdf,memoryKiB:parameters.memoryKiB,iterations:parameters.iterations,parallelism:parameters.parallelism,format:2});
+   }
    return decoded;
   }finally{plain.fill(0)}
  }catch(_){throw new Error('Recovery password is incorrect or the backup is damaged. No PMS records were changed.')}
+ finally{if(raw)new Uint8Array(raw).fill(0)}
 }
 async function decryptBackupPayload(payload,filename){
  let raw;
@@ -1176,26 +1243,51 @@ async function decryptBackupPayload(payload,filename){
  throw new Error('This file is not a supported Aurelia PMS backup.');
 }
 async function encryptBackupPayload(payload,name){
- const vault=await readBackupVault();
+ let vault=await readBackupVault();
  if(!vault)throw new Error('Set the encrypted backup recovery password in Backup & Restore before creating backups.');
+ if(vault.format===1){
+  const password=prompt('Enter the existing recovery password once to upgrade this backup vault to Argon2id. New backups will then be automatic.');
+  if(password===null)throw new Error('Backup creation cancelled; the legacy vault was not changed.');
+  const oldParameters=backupVaultParameters(vault),oldSalt=backupUnB64(vault.salt),oldKek=await backupPasswordKey(password,oldSalt,oldParameters);
+  let raw;
+  try{raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:backupUnB64(vault.wrapIv),additionalData:backupWrapAad(1,oldParameters)},oldKek,backupUnB64(vault.wrappedKey))}
+  catch(_){throw new Error('Recovery password is incorrect. Legacy vault was not changed.')}
+  const salt=crypto.getRandomValues(new Uint8Array(16)),wrapIv=crypto.getRandomValues(new Uint8Array(12));
+  const kek=await backupPasswordKey(password,salt,BACKUP_ARGON2ID);
+  let wrapped;
+  try{wrapped=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv,additionalData:backupWrapAad(2,BACKUP_ARGON2ID)},kek,raw))}
+  finally{new Uint8Array(raw).fill(0)}
+  const key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
+  await writeBackupVault({id:BACKUP_VAULT_ID,key,salt:backupB64(salt),wrapIv:backupB64(wrapIv),wrappedKey:backupB64(wrapped),
+   kdf:BACKUP_ARGON2ID.kdf,memoryKiB:BACKUP_ARGON2ID.memoryKiB,iterations:BACKUP_ARGON2ID.iterations,
+   parallelism:BACKUP_ARGON2ID.parallelism,format:2});
+  wrapped.fill(0);salt.fill(0);wrapIv.fill(0);vault=await readBackupVault();
+ }
  let key=vault.key;
  if(!key){
   const password=prompt('Enter your Aurelia backup recovery password to unlock the encrypted backup vault:');
   if(password===null)throw new Error('Backup creation cancelled.');
-  try{
-   const kek=await backupPasswordKey(password,backupUnB64(vault.salt),vault.iterations||BACKUP_KDF_ITERATIONS);
-   const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:backupUnB64(vault.wrapIv),additionalData:new TextEncoder().encode('com.aurelia.pms|backup-key-wrap|v1')},kek,backupUnB64(vault.wrappedKey));
-   key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
-   new Uint8Array(raw).fill(0);
-  }catch(_){throw new Error('Recovery password is incorrect. No backup was created.')}
+  const parameters=backupVaultParameters(vault),kek=await backupPasswordKey(password,backupUnB64(vault.salt),parameters);
+  let raw;
+  try{raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:backupUnB64(vault.wrapIv),additionalData:backupWrapAad(vault.format,parameters)},kek,backupUnB64(vault.wrappedKey))}
+  catch(_){throw new Error('Recovery password is incorrect. No backup was created.')}
+  try{key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt'])}
+  finally{new Uint8Array(raw).fill(0)}
+  await writeBackupVault({...vault,key});
  }
+ if(vault.format!==2||vault.kdf!=='ARGON2ID')throw new Error('Backup vault upgrade to Argon2id did not complete.');
  const iv=crypto.getRandomValues(new Uint8Array(12));
  const parsed=JSON.parse(payload),data=parsed.data||{};
  const recordCounts=Object.fromEntries(['rooms','b','g','t','sales','exp','inv','led','aud'].map(field=>[field,Array.isArray(data[field])?data[field].length:0]));
- const manifest={formatVersion:2,name,payloadSha256:await sha256Hex(payload),payloadBytes:new TextEncoder().encode(payload).length,recordCounts};
+ const manifest={formatVersion:2,name,kdf:BACKUP_ARGON2ID.kdf,memoryKiB:BACKUP_ARGON2ID.memoryKiB,
+  iterations:BACKUP_ARGON2ID.iterations,parallelism:BACKUP_ARGON2ID.parallelism,
+  payloadSha256:await sha256Hex(payload),payloadBytes:new TextEncoder().encode(payload).length,recordCounts};
  const aad=new TextEncoder().encode('com.aurelia.pms|backup-v2|'+JSON.stringify(manifest));
  const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad},key,new TextEncoder().encode(payload));
- return JSON.stringify({format:'AURELIA-PMS-ENCRYPTED-BACKUP',v:2,application:'com.aurelia.pms',name,cipher:'AES-256-GCM',kdf:'PBKDF2-HMAC-SHA256',iterations:vault.iterations,salt:vault.salt,wrapIv:vault.wrapIv,wrappedKey:vault.wrappedKey,manifest,iv:backupB64(iv),ciphertext:backupB64(ciphertext)});
+ return JSON.stringify({format:'AURELIA-PMS-ENCRYPTED-BACKUP',v:2,application:'com.aurelia.pms',name,cipher:'AES-256-GCM',
+  kdf:BACKUP_ARGON2ID.kdf,memoryKiB:BACKUP_ARGON2ID.memoryKiB,iterations:BACKUP_ARGON2ID.iterations,
+  parallelism:BACKUP_ARGON2ID.parallelism,salt:vault.salt,wrapIv:vault.wrapIv,wrappedKey:vault.wrappedKey,
+  manifest,iv:backupB64(iv),ciphertext:backupB64(ciphertext)});
 }
 async function hasBackupVault(){try{return !!(await readBackupVault())}catch(_){return false}}
 
@@ -1218,7 +1310,7 @@ async function pruneBrowserBackups(directoryHandle,protectedHandle,maximum=3){
   try{
    const file=await handle.getFile(),raw=JSON.parse(await file.text());
    const data=raw&&raw.data;
-   let valid=!!(raw&&((raw.format==='AURELIA-PMS-ENCRYPTED-BACKUP'&&[1,2].includes(raw.v)&&raw.application==='com.aurelia.pms'&&raw.cipher==='AES-256-GCM'&&raw.kdf==='PBKDF2-HMAC-SHA256'&&raw.iterations===BACKUP_KDF_ITERATIONS&&typeof raw.wrappedKey==='string'&&typeof raw.ciphertext==='string')||(raw.v===4&&data&&Array.isArray(data.rooms)&&Array.isArray(data.b)&&data.set&&typeof data.set==='object')));
+   let valid=!!(raw&&((raw.format==='AURELIA-PMS-ENCRYPTED-BACKUP'&&[1,2].includes(raw.v)&&raw.application==='com.aurelia.pms'&&raw.cipher==='AES-256-GCM'&&((raw.v===1&&raw.kdf==='PBKDF2-HMAC-SHA256'&&raw.iterations===BACKUP_V1_KDF_ITERATIONS)||(raw.v===2&&raw.kdf==='ARGON2ID'&&raw.memoryKiB===BACKUP_ARGON2ID.memoryKiB&&raw.iterations===BACKUP_ARGON2ID.iterations&&raw.parallelism===BACKUP_ARGON2ID.parallelism))&&typeof raw.wrappedKey==='string'&&typeof raw.ciphertext==='string')||(raw.v===4&&data&&Array.isArray(data.rooms)&&Array.isArray(data.b)&&data.set&&typeof data.set==='object')));
    if(valid&&raw.integrity){
     valid=raw.integrity.algorithm==='SHA-256'&&/^[a-f0-9]{64}$/i.test(raw.integrity.digest||'');
     if(valid){const copy={...raw};delete copy.integrity;valid=await sha256Hex(JSON.stringify(copy))===raw.integrity.digest}
@@ -5527,6 +5619,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
   }, 12000);
 })();
 </script>
+<script type="module" src="./src/storage/backup-crypto-bridge.mjs"></script>
 <script type="module" id="aurelia-async-runtime-bootstrap">
 import { PmsBootstrapCoordinator } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { createLegacyMigrationStorage, createPreferenceStorage, readLegacyPhotoFallbackEntries, deleteLegacyPhotoFallbackEntries } from "./src/storage/legacy-web-storage.mjs";

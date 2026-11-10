@@ -1,6 +1,15 @@
 const BACKUP_VAULT_DB = "aurelia-pms-backup-vault-v1";
 const BACKUP_VAULT_ID = "primary";
 
+function validRecord(record) {
+  if (!record || record.id !== BACKUP_VAULT_ID || ![1, 2].includes(record.format) ||
+      typeof record.wrappedKey !== "string" || typeof record.salt !== "string" ||
+      typeof record.wrapIv !== "string" || !Number.isSafeInteger(record.iterations) || record.iterations < 1) return false;
+  if (record.format === 1) return record.iterations === 600000;
+  return record.kdf === "ARGON2ID" && record.memoryKiB === 65536 &&
+    record.iterations === 3 && record.parallelism === 1;
+}
+
 export function createBackupVaultStore({ indexedDBImpl = globalThis.indexedDB } = {}) {
   async function open() {
     return new Promise((resolve, reject) => {
@@ -8,9 +17,7 @@ export function createBackupVaultStore({ indexedDBImpl = globalThis.indexedDB } 
         if (!indexedDBImpl || typeof indexedDBImpl.open !== "function") throw new Error("IndexedDB unavailable");
         const request = indexedDBImpl.open(BACKUP_VAULT_DB, 1);
         request.onupgradeneeded = () => {
-          if (!request.result.objectStoreNames.contains("vault")) {
-            request.result.createObjectStore("vault", { keyPath: "id" });
-          }
+          if (!request.result.objectStoreNames.contains("vault")) request.result.createObjectStore("vault", { keyPath: "id" });
         };
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error || new Error("Could not open encrypted backup key storage."));
@@ -28,11 +35,7 @@ export function createBackupVaultStore({ indexedDBImpl = globalThis.indexedDB } 
         request.onsuccess = () => resolve(request.result || null);
         request.onerror = () => reject(request.error || new Error("Could not read encrypted backup key."));
       });
-      if (record && (record.id !== BACKUP_VAULT_ID || record.format !== 1 ||
-          typeof record.wrappedKey !== "string" || typeof record.salt !== "string" ||
-          typeof record.wrapIv !== "string" || !Number.isSafeInteger(record.iterations))) {
-        throw Object.assign(new Error("Encrypted backup vault record is malformed."), { code: "BACKUP_VAULT_INVALID" });
-      }
+      if (record && !validRecord(record)) throw Object.assign(new Error("Encrypted backup vault record is malformed."), { code: "BACKUP_VAULT_INVALID" });
       return record;
     } catch (error) {
       throw new Error("Durable IndexedDB backup-key storage is unavailable; Web Storage fallback is prohibited. " + (error?.message || ""));
@@ -40,10 +43,7 @@ export function createBackupVaultStore({ indexedDBImpl = globalThis.indexedDB } 
   }
 
   async function write(record) {
-    if (!record || typeof record !== "object" || record.id !== BACKUP_VAULT_ID ||
-        record.format !== 1 || typeof record.wrappedKey !== "string" ||
-        typeof record.salt !== "string" || typeof record.wrapIv !== "string" ||
-        !Number.isSafeInteger(record.iterations) || record.iterations < 1) {
+    if (!validRecord(record) || !record.key) {
       throw Object.assign(new TypeError("Invalid encrypted backup vault record."), { code: "BACKUP_VAULT_INVALID" });
     }
     let db;
@@ -62,12 +62,12 @@ export function createBackupVaultStore({ indexedDBImpl = globalThis.indexedDB } 
         request.onsuccess = () => resolve(request.result || null);
         request.onerror = () => reject(request.error || new Error("Backup vault read-back failed."));
       });
-      if (!stored || stored.id !== record.id || stored.format !== record.format ||
+      if (!validRecord(stored) || stored.id !== record.id || stored.format !== record.format ||
           stored.wrappedKey !== record.wrappedKey || stored.salt !== record.salt ||
-          stored.wrapIv !== record.wrapIv || stored.iterations !== record.iterations) {
-        throw Object.assign(new Error("Encrypted backup vault failed exact read-back verification."), {
-          code: "BACKUP_VAULT_READBACK_FAILED"
-        });
+          stored.wrapIv !== record.wrapIv || stored.iterations !== record.iterations ||
+          stored.kdf !== record.kdf || stored.memoryKiB !== record.memoryKiB ||
+          stored.parallelism !== record.parallelism || !stored.key) {
+        throw Object.assign(new Error("Encrypted backup vault failed exact read-back verification."), { code: "BACKUP_VAULT_READBACK_FAILED" });
       }
       return true;
     } catch (error) {
