@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Recovery identity, phone HMACs, one-time grants and abuse counters are
+    // server-authoritative. Firebase Admin SDK functions bypass these rules.
+    match /tenants/{tenantId}/security/{document=**} {
+      allow read, write: if false;
+    }
+    match /recoveryGrants/{grantId} {
+      allow read, write: if false;
+    }
+    match /usedPhoneProofs/{proofId} {
+      allow read, write: if false;
+    }
+    match /rateLimits/{limitId} {
+      allow read, write: if false;
+    }
+  }
+}
