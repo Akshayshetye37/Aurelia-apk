@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createLegacyMigrationStorage,
+  createPreferenceStorage,
   readLegacyPhotoFallbackEntries,
   deleteLegacyPhotoFallbackEntries
 } from "../src/storage/legacy-web-storage.mjs";
@@ -52,4 +53,25 @@ test("legacy photo fallback deletion requires exact IndexedDB read-back source b
   deleteLegacyPhotoFallbackEntries(entries, { storage });
   assert.equal(storage.getItem("aurelia_photo_fallback:photo-1"), null);
   assert.equal(storage.getItem("theme"), "dark");
+});
+
+test("preference Web Storage strictly permits only theme and lang", () => {
+  const storage = makeStorage();
+  const preferences = createPreferenceStorage({ storage });
+  assert.equal(preferences.setItem("theme", "dark"), true);
+  assert.equal(preferences.setItem("lang", "en"), true);
+  assert.equal(preferences.getItem("theme"), "dark");
+  assert.equal(preferences.getItem("lang"), "en");
+  assert.throws(() => preferences.setItem("aurelia_lodge_v2", "{}"), error => error.code === "PREFERENCE_STORAGE_KEY_NOT_ALLOWED");
+  assert.throws(() => preferences.getItem("backup-key"), error => error.code === "PREFERENCE_STORAGE_KEY_NOT_ALLOWED");
+  assert.throws(() => preferences.removeItem("payment"), error => error.code === "PREFERENCE_STORAGE_KEY_NOT_ALLOWED");
+});
+
+test("production preference boundary logs and ignores non-preference keys", () => {
+  const storage = makeStorage();
+  const preferences = createPreferenceStorage({ storage, mode: "production" });
+  assert.equal(preferences.setItem("business-state", "{}"), false);
+  assert.equal(preferences.getItem("business-state"), null);
+  assert.equal(preferences.removeItem("payment"), false);
+  assert.equal(storage.values.size, 0);
 });
