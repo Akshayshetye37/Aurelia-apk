@@ -6,6 +6,20 @@ const stableId = z.union([
 ]);
 const base = z.object({ id: stableId.optional() }).passthrough();
 
+const booking = base.superRefine((row, context) => {
+  if (row.st !== undefined && !["res", "in", "done", "checkedin", "checked-in", "checked_in"].includes(row.st)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["st"], message: "unsupported booking lifecycle state" });
+  }
+  if (row.status !== undefined && !["reserved", "confirmed", "checked_in", "checked_out", "cancelled"].includes(row.status)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["status"], message: "unsupported booking lifecycle state" });
+  }
+});
+const room = base.superRefine((row, context) => {
+  if (row.s !== undefined && !["ready", "occ", "clean", "out"].includes(row.s)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["s"], message: "unsupported room lifecycle state" });
+  }
+});
+
 const inventory = base.superRefine((row, context) => {
   for (const field of ["q", "ro"]) {
     if (row[field] !== undefined && (!Number.isSafeInteger(Number(row[field])) || Number(row[field]) < 0)) {
@@ -21,10 +35,10 @@ const inventory = base.superRefine((row, context) => {
 });
 
 const schemas = {
-  booking: base,
+  booking,
   folio: base,
   guest: base,
-  room: base,
+  room,
   room_block: base,
   inventory,
   expense: base,
@@ -51,4 +65,34 @@ export function validatePmsDomainEntity(entityType, value) {
     throw error;
   }
   return parsed.data;
+}
+
+const TRANSITIONS = Object.freeze({
+  booking: Object.freeze({
+    st: Object.freeze({ res: ["in"], in: ["done"], checkedin: ["done"], "checked-in": ["done"], checked_in: ["done"], done: [] }),
+    status: Object.freeze({ reserved: ["confirmed", "cancelled"], confirmed: ["checked_in", "cancelled"], checked_in: ["checked_out"], checked_out: [], cancelled: [] })
+  }),
+  room: Object.freeze({
+    s: Object.freeze({ ready: ["occ", "clean", "out"], occ: ["clean", "out"], clean: ["ready", "out"], out: ["ready"] })
+  })
+});
+
+export const PMS_STATE_TRANSITIONS = TRANSITIONS;
+
+export function assertPmsStateTransition(entityType, previous, next) {
+  const domains = TRANSITIONS[entityType];
+  if (!domains || !previous) return true;
+  for (const [field, transitions] of Object.entries(domains)) {
+    const from = previous[field], to = next?.[field];
+    if (from === to) continue;
+    if (from === undefined && to === undefined) continue;
+    if (from === undefined || to === undefined || !transitions[from]?.includes(to)) {
+      const error = new Error("Invalid " + entityType + " state transition for " + field + ": " + String(from) + " -> " + String(to));
+      error.code = "PMS_INVALID_STATE_TRANSITION";
+      error.entityType = entityType;
+      error.field = field;
+      throw error;
+    }
+  }
+  return true;
 }
