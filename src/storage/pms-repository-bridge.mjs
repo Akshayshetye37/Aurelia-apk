@@ -3,7 +3,7 @@
  *
  * IndexedDB and native SQLite are asynchronous engines. Domain entry points
  * therefore return Promises; pretending they are synchronous would either block
- * the WebView or reintroduce an unsafe localStorage shadow-write path.
+ * the WebView or reintroduce an unsafe browser-storage shadow-write path.
  *
  * Every mutation delegates to transactBusinessChange(), whose adapter commits
  * the entity version and immutable outbox event in one engine transaction.
