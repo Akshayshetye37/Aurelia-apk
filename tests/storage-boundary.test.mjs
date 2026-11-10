@@ -27,7 +27,11 @@ test("direct browser storage APIs and the legacy business key are confined to sr
   const violations = [];
   for (const file of sourceFiles()) {
     const relative = path.relative(ROOT, file).split(path.sep).join("/");
-    const hits = countHits(fs.readFileSync(file, "utf8"));
+    const source = fs.readFileSync(file, "utf8");
+    const inStorageAdapterLayer = relative.startsWith("src/storage/");
+    const hits = inStorageAdapterLayer
+      ? (source.match(/\\b(?:localStorage|sessionStorage)\\b/g) || []).length
+      : countHits(source);
     if (hits > 0) violations.push(relative + ": " + hits + " forbidden storage reference(s)");
   }
   assert.deepEqual(violations, [], "Move all browser storage access and legacy business-key references into src/storage.");
