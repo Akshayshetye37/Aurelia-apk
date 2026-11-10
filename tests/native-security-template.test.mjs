@@ -57,6 +57,7 @@ test('recovery code is not silently enabled by the local native security foundat
 });
 test('PIN policy is enforced by the cryptographic engine, not only by the launch form', () => {
   const crypto = read('android/templates/security/AureliaCryptoEngine.kt');
+  const manager = read('android/templates/security/AureliaAppManager.kt');
   const gate = read('android/templates/security/LockGateActivity.kt');
   assert.match(crypto, /pin\.size in 4\.\.16 && pin\.all \{ it in '0'\.\.'9' \}/);
   assert.match(gate, /first\.size !in 4\.\.16/);
