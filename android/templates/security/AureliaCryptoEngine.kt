@@ -203,6 +203,102 @@ class AureliaCryptoEngine(
         }
     }
 
+    fun createRecoveryKey(): ByteArray = ByteArray(KEY_BYTES).also(random::nextBytes)
+
+    fun encodeRecoveryKey(recoveryKey: ByteArray): CharArray {
+        require(recoveryKey.size == KEY_BYTES) { "Recovery key must be 256 bits." }
+        return Base64.encodeToString(
+            recoveryKey,
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+        ).toCharArray()
+    }
+
+    fun decodeRecoveryKey(recoveryKey: CharArray): ByteArray {
+        require(recoveryKey.size in 40..48) { "Invalid recovery key length." }
+        val decoded = Base64.decode(
+            String(recoveryKey),
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+        )
+        require(decoded.size == KEY_BYTES) { "Recovery key must be 256 bits." }
+        return decoded
+    }
+
+    /** Wraps the same database DEK under a separate high-entropy recovery key. */
+    fun wrapDataKeyWithRecovery(dataKey: ByteArray, recoveryKey: ByteArray): String {
+        require(dataKey.size == KEY_BYTES && recoveryKey.size == KEY_BYTES)
+        val salt = createSalt()
+        val nonce = ByteArray(NONCE_BYTES).also(random::nextBytes)
+        val kek = deriveRecoveryKek(recoveryKey, salt)
+        try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(kek, "AES"), GCMParameterSpec(TAG_BITS, nonce))
+            cipher.updateAAD(aad(VERSION, "RECOVERY", DATABASE_ID, salt))
+            val wrapped = cipher.doFinal(dataKey)
+            try {
+                return JSONObject()
+                    .put("version", VERSION)
+                    .put("method", "RECOVERY")
+                    .put("databaseId", DATABASE_ID)
+                    .put("kdf", "HKDF-SHA256")
+                    .put("cipher", CIPHER)
+                    .put("salt", b64(salt))
+                    .put("nonce", b64(nonce))
+                    .put("wrappedKey", b64(wrapped))
+                    .toString()
+            } finally {
+                wrapped.fill(0)
+            }
+        } finally {
+            salt.fill(0)
+            nonce.fill(0)
+            kek.fill(0)
+        }
+    }
+
+    fun unwrapDataKeyWithRecovery(envelopeJson: String, recoveryKey: ByteArray): ByteArray {
+        require(recoveryKey.size == KEY_BYTES) { "Recovery key must be 256 bits." }
+        require(envelopeJson.toByteArray(Charsets.UTF_8).size <= 4096) { "Recovery envelope too large." }
+        val json = JSONObject(envelopeJson)
+        require(json.length() == 8 && json.getInt("version") == VERSION) { "Unsupported recovery envelope." }
+        require(json.getString("method") == "RECOVERY" &&
+            json.getString("databaseId") == DATABASE_ID &&
+            json.getString("kdf") == "HKDF-SHA256" &&
+            json.getString("cipher") == CIPHER) { "Recovery envelope binding is invalid." }
+        val salt = decode(json.getString("salt"), SALT_BYTES)
+        val nonce = decode(json.getString("nonce"), NONCE_BYTES)
+        val wrapped = Base64.decode(json.getString("wrappedKey"), Base64.NO_WRAP)
+        require(wrapped.size == KEY_BYTES + TAG_BITS / 8) { "Invalid recovery wrapped-key length." }
+        val kek = deriveRecoveryKek(recoveryKey, salt)
+        try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(kek, "AES"), GCMParameterSpec(TAG_BITS, nonce))
+            cipher.updateAAD(aad(VERSION, "RECOVERY", DATABASE_ID, salt))
+            return cipher.doFinal(wrapped)
+        } catch (badTag: AEADBadTagException) {
+            throw SecurityException("Recovery key or envelope authentication failed.", badTag)
+        } finally {
+            salt.fill(0)
+            nonce.fill(0)
+            wrapped.fill(0)
+            kek.fill(0)
+        }
+    }
+
+    private fun deriveRecoveryKek(recoveryKey: ByteArray, salt: ByteArray): ByteArray {
+        val extract = Mac.getInstance("HmacSHA256")
+        extract.init(SecretKeySpec(salt, "HmacSHA256"))
+        val pseudorandomKey = extract.doFinal(recoveryKey)
+        try {
+            val expand = Mac.getInstance("HmacSHA256")
+            expand.init(SecretKeySpec(pseudorandomKey, "HmacSHA256"))
+            expand.update("Aurelia PMS recovery KEK v1".toByteArray(Charsets.UTF_8))
+            expand.update(1.toByte())
+            return expand.doFinal().copyOf(KEY_BYTES)
+        } finally {
+            pseudorandomKey.fill(0)
+        }
+    }
+
     private fun legacyAad(salt: ByteArray): ByteArray =
         "$APP_ID|$LEGACY_VERSION|$KDF|$CIPHER|".toByteArray(Charsets.UTF_8) + salt
 
