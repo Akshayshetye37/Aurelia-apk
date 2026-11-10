@@ -38,18 +38,6 @@ function comparableBooking(value) {
   return copy;
 }
 
-function refreshLegacyCache(storage, snapshot) {
-  if (!storage) return null;
-  try {
-    if (storage.memoryOnly === true) return false;
-    const serialized = JSON.stringify(snapshot);
-    storage.setItem("aurelia_lodge_v2", serialized);
-    return storage.getItem("aurelia_lodge_v2") === serialized;
-  } catch (error) {
-    console.warn("[Aurelia Local Cache] Canonical state committed; compatibility cache refresh failed.", error);
-    return false;
-  }
-}
 
 /**
  * Posts a manually/staff-confirmed payment to canonical local storage.
@@ -72,7 +60,6 @@ export async function settlePaymentToRepository({
   idempotencyKey,
   evidenceId = null,
   verificationConfirmed = false,
-  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" ||
@@ -178,7 +165,7 @@ export async function settlePaymentToRepository({
         "A matching payment exists but its evidence is not marked approved; reconcile the folio before proceeding.");
     }
     Object.assign(booking, clone(workingBooking));
-    const cacheRefreshed = refreshLegacyCache(legacyStorage, canonicalState);
+    const cacheRefreshed = false;
     return Object.freeze({ ...result, duplicate: true, canonical: true, cacheRefreshed,
       bookingVersion: bookingRow?.version ?? 0, folioVersion: folioRow?.version ?? 0 });
   }
