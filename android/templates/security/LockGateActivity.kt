@@ -72,7 +72,7 @@ class LockGateActivity : FragmentActivity() {
         }
         root.addView(title, LinearLayout.LayoutParams(-1, -2))
         val hint = TextView(this).apply {
-            text = if (enrollmentMode) "Create a 4–16 digit PIN. Keep it private." else "Enter your PIN to open the PMS."
+            text = if (enrollmentMode) "Create a 6–16 digit PIN. Avoid repeated or sequential digits." else "Enter your PIN to open the PMS."
             textSize = 14f
             setTextColor(android.graphics.Color.LTGRAY)
             gravity = Gravity.CENTER
@@ -93,7 +93,7 @@ class LockGateActivity : FragmentActivity() {
                 this.hint = "Confirm PIN"
                 setTextColor(android.graphics.Color.WHITE)
                 setHintTextColor(android.graphics.Color.GRAY)
-                // Must match the primary PIN field and the 4–16 digit security engine.
+                // Must match the primary PIN field and the 6–16 digit security engine.
                 filters = arrayOf(android.text.InputFilter.LengthFilter(16))
             }
             root.addView(confirmField, LinearLayout.LayoutParams(-1, -2))
@@ -127,8 +127,8 @@ class LockGateActivity : FragmentActivity() {
         val secondField = confirmField?.text
         val second = secondField?.let { CharArray(it.length).also { chars -> it.getChars(0, it.length, chars, 0) } }
         try {
-            if (first.size !in 4..16 || first.any { it !in '0'..'9' }) {
-                showError("PIN must be 4–16 digits.")
+            if (first.size !in 6..16 || first.any { it !in '0'..'9' }) {
+                showError("PIN must be 6–16 digits and not repeated or sequential.")
                 return
             }
             if (enrollmentMode) {
@@ -143,6 +143,7 @@ class LockGateActivity : FragmentActivity() {
             } else {
                 val envelope = readEnvelope()
                 if (manager.unlock(first, envelope)) {
+                    if (envelopeStore.hasPreviousEnvelope()) envelopeStore.confirmRecoveryPinUnlock()
                     AureliaSecurityRuntime.markEnrolled()
                     if (JSONObject(envelope).has("recovery")) {
                         continueAfterPinUnlock()
@@ -170,12 +171,12 @@ class LockGateActivity : FragmentActivity() {
             text = String(recoveryKey)
             textSize = 18f
             gravity = Gravity.CENTER
-            setTextIsSelectable(true)
+            setTextIsSelectable(false)
             setPadding(24, 20, 24, 20)
         }
         AlertDialog.Builder(this)
             .setTitle("Save your recovery key")
-            .setMessage("This 256-bit recovery key is shown once. Write it down and store it offline. Anyone with this key and your encrypted backup can recover the database.")
+            .setMessage("This 256-bit recovery key is shown once in checksummed Base32. Write it down and store it offline. Anyone with this key and your encrypted backup can recover the database.")
             .setView(code)
             .setPositiveButton("I saved it") { _, _ ->
                 code.text = ""
@@ -338,12 +339,12 @@ class LockGateActivity : FragmentActivity() {
 
     private fun showRecoveryPrompt() {
         val recovery = EditText(this).apply {
-            hint = "43-character recovery key"
+            hint = "54-character Base32 recovery key"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            filters = arrayOf(android.text.InputFilter.LengthFilter(48))
+            filters = arrayOf(android.text.InputFilter.LengthFilter(62))
         }
         val newPin = EditText(this).apply {
-            hint = "New 4–16 digit PIN"
+            hint = "New 6–16 digit PIN"
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
             filters = arrayOf(android.text.InputFilter.LengthFilter(16))
         }
@@ -368,15 +369,18 @@ class LockGateActivity : FragmentActivity() {
                 val newPinChars = CharArray(newPin.text.length).also { newPin.text.getChars(0, newPin.text.length, it, 0) }
                 val confirmChars = CharArray(confirm.text.length).also { confirm.text.getChars(0, confirm.text.length, it, 0) }
                 try {
-                    if (newPinChars.size !in 4..16 || newPinChars.any { it !in '0'..'9' } ||
+                    if (newPinChars.size !in 6..16 || newPinChars.any { it !in '0'..'9' } ||
                         !newPinChars.contentEquals(confirmChars)) {
-                        showError("New PIN must be 4–16 digits and match its confirmation.")
+                        showError("New PIN must be 6–16 digits, avoid repeated/sequential digits, and match confirmation.")
                         return@setPositiveButton
                     }
                     val replacement = manager.recoverWithRecoveryKey(recoveryChars, newPinChars, readEnvelope())
-                    writeEnvelope(replacement)
+                    envelopeStore.writeRecoveryReplacement(replacement)
+                    biometricStore.delete()
                     AureliaSecurityRuntime.markEnrolled()
-                    continueAfterPinUnlock()
+                    manager.lock()
+                    showError("PIN recovered. Biometrics were disabled; unlock with your new PIN to continue.")
+                    render()
                 } catch (failure: Exception) {
                     showError(failure.message ?: "Recovery verification failed.")
                 } finally {

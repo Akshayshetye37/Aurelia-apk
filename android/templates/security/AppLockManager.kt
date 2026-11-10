@@ -20,17 +20,20 @@ import javax.crypto.spec.GCMParameterSpec
  * Tamper-evident local retry state. Corruption or Keystore invalidation fails closed.
  * A reboot restarts the active cooldown instead of trusting the mutable wall clock.
  */
-class AppLockManager(context: Context) {
-    private val file = AtomicFile(File(context.noBackupFilesDir, "aurelia-lock-state.v1"))
+class AppLockManager(
+    context: Context,
+    stateFileName: String = "aurelia-lock-state.v1",
+    private val keyAlias: String = "aurelia.pms.lock-state.v1",
+    private val stateMagic: String = "AURELIA-LOCK-V1"
+) {
+    private val file = AtomicFile(File(context.noBackupFilesDir, stateFileName))
     private val appContext = context.applicationContext
 
     companion object {
         private const val STORE = "AndroidKeyStore"
-        private const val ALIAS = "aurelia.pms.lock-state.v1"
         private const val MAX_ATTEMPTS = 5
         private const val BASE_LOCK_MS = 60_000L
         private const val MAX_LOCK_MS = 60 * 60 * 1000L
-        private const val MAGIC = "AURELIA-LOCK-V1"
     }
 
     data class State(
@@ -101,7 +104,7 @@ class AppLockManager(context: Context) {
         val plain = decrypt(bytes)
         return try {
             val json = JSONObject(String(plain, Charsets.UTF_8))
-            require(json.getString("magic") == MAGIC)
+            require(json.getString("magic") == stateMagic)
             val failures = json.getInt("failures")
             require(failures in 0..30)
             val deadline = json.getLong("lockedUntilElapsed")
@@ -116,7 +119,7 @@ class AppLockManager(context: Context) {
 
     private fun writeState(state: State) {
         val plain = JSONObject()
-            .put("magic", MAGIC)
+            .put("magic", stateMagic)
             .put("failures", state.failures)
             .put("lockedUntilElapsed", state.lockedUntilElapsed)
             .put("bootCount", state.bootCount)
@@ -139,7 +142,7 @@ class AppLockManager(context: Context) {
     private fun encrypt(plain: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-        cipher.updateAAD(MAGIC.toByteArray(Charsets.UTF_8))
+        cipher.updateAAD(stateMagic.toByteArray(Charsets.UTF_8))
         val ciphertext = cipher.doFinal(plain)
         return byteArrayOf(cipher.iv.size.toByte()) + cipher.iv + ciphertext
     }
@@ -152,29 +155,29 @@ class AppLockManager(context: Context) {
         val ciphertext = input.copyOfRange(1 + ivSize, input.size)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, existingKey(), GCMParameterSpec(128, iv))
-        cipher.updateAAD(MAGIC.toByteArray(Charsets.UTF_8))
+        cipher.updateAAD(stateMagic.toByteArray(Charsets.UTF_8))
         return try { cipher.doFinal(ciphertext) } finally { iv.fill(0); ciphertext.fill(0) }
     }
 
     private fun hasKeyAlias(): Boolean {
         val store = KeyStore.getInstance(STORE).apply { load(null) }
-        return store.containsAlias(ALIAS)
+        return store.containsAlias(keyAlias)
     }
 
     private fun existingKey(): SecretKey {
         val store = KeyStore.getInstance(STORE).apply { load(null) }
-        return store.getKey(ALIAS, null) as? SecretKey
+        return store.getKey(keyAlias, null) as? SecretKey
             ?: throw SecurityException("PIN lock-state key is missing; refusing to reset retry counters.")
     }
 
     @Synchronized
     private fun getOrCreateKey(): SecretKey {
         val store = KeyStore.getInstance(STORE).apply { load(null) }
-        (store.getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        (store.getKey(keyAlias, null) as? SecretKey)?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, STORE)
         generator.init(
             KeyGenParameterSpec.Builder(
-                ALIAS,
+                keyAlias,
                 KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
             )
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)

@@ -51,9 +51,14 @@ class AureliaCryptoEngine(
     )
 
     fun validatePin(pin: CharArray) {
-        require(pin.size in 4..16 && pin.all { it in '0'..'9' }) {
-            "PIN must contain 4–16 digits."
+        require(pin.size in 6..16 && pin.all { it in '0'..'9' }) {
+            "PIN must contain 6–16 digits."
         }
+        val value = String(pin)
+        require(value.toSet().size > 1) { "Repeated-digit PINs are not allowed." }
+        val ascending = value.zipWithNext().all { (a, b) -> b.code - a.code == 1 }
+        val descending = value.zipWithNext().all { (a, b) -> a.code - b.code == 1 }
+        require(!ascending && !descending) { "Sequential PINs are not allowed." }
     }
 
     fun createSalt(): ByteArray = ByteArray(SALT_BYTES).also(random::nextBytes)
@@ -205,22 +210,68 @@ class AureliaCryptoEngine(
 
     fun createRecoveryKey(): ByteArray = ByteArray(KEY_BYTES).also(random::nextBytes)
 
+    private val recoveryAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+    /** RFC 4648 Base32 plus a 10-bit SHA-256 checksum. */
     fun encodeRecoveryKey(recoveryKey: ByteArray): CharArray {
         require(recoveryKey.size == KEY_BYTES) { "Recovery key must be 256 bits." }
-        return Base64.encodeToString(
-            recoveryKey,
-            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
-        ).toCharArray()
+        return (base32Encode(recoveryKey) + recoveryChecksum(recoveryKey)).chunked(6).joinToString("-").toCharArray()
     }
 
     fun decodeRecoveryKey(recoveryKey: CharArray): ByteArray {
-        require(recoveryKey.size in 40..48) { "Invalid recovery key length." }
-        val decoded = Base64.decode(
-            String(recoveryKey),
-            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
-        )
-        require(decoded.size == KEY_BYTES) { "Recovery key must be 256 bits." }
+        val normalized = String(recoveryKey).filterNot { it == '-' || it.isWhitespace() }.uppercase()
+        require(normalized.length == 54 && normalized.all { recoveryAlphabet.indexOf(it) >= 0 }) {
+            "Invalid Base32 recovery key format."
+        }
+        val decoded = base32Decode(normalized.substring(0, 52))
+        if (normalized.substring(52) != recoveryChecksum(decoded)) {
+            decoded.fill(0)
+            throw SecurityException("Recovery key checksum verification failed.")
+        }
         return decoded
+    }
+
+    private fun base32Encode(input: ByteArray): String {
+        val out = StringBuilder(52)
+        var buffer = 0
+        var bits = 0
+        for (byte in input) {
+            buffer = (buffer shl 8) or (byte.toInt() and 0xff)
+            bits += 8
+            while (bits >= 5) {
+                bits -= 5
+                out.append(recoveryAlphabet[(buffer shr bits) and 31])
+            }
+        }
+        if (bits > 0) out.append(recoveryAlphabet[(buffer shl (5 - bits)) and 31])
+        return out.toString()
+    }
+
+    private fun base32Decode(value: String): ByteArray {
+        val out = ByteArray(KEY_BYTES)
+        var buffer = 0
+        var bits = 0
+        var offset = 0
+        for (character in value) {
+            buffer = (buffer shl 5) or recoveryAlphabet.indexOf(character)
+            bits += 5
+            if (bits >= 8) {
+                bits -= 8
+                if (offset < out.size) out[offset++] = (buffer shr bits).toByte()
+            }
+        }
+        require(offset == KEY_BYTES && bits == 4 && (buffer and 15) == 0) {
+            out.fill(0)
+            "Invalid Base32 recovery key padding."
+        }
+        return out
+    }
+
+    private fun recoveryChecksum(key: ByteArray): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(key)
+        val value = ((digest[0].toInt() and 0xff) shl 2) or ((digest[1].toInt() and 0xc0) shr 6)
+        digest.fill(0)
+        return "" + recoveryAlphabet[(value shr 5) and 31] + recoveryAlphabet[value and 31]
     }
 
     /** Wraps the same database DEK under a separate high-entropy recovery key. */

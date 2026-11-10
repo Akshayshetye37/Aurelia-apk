@@ -19,6 +19,9 @@ class AureliaAppManager(
     @Volatile private var authenticated = false
     @Volatile private var backgroundAtElapsed = 0L
     @Volatile private var dataKey: ByteArray? = null
+    private val recoveryLockout by lazy {
+        AppLockManager(context, "aurelia-recovery-lock-state.v1", "aurelia.pms.recovery-lock-state.v1", "AURELIA-RECOVERY-LOCK-V1")
+    }
 
     data class Enrollment(val envelopeJson: String, val recoveryKey: CharArray, val biometricKeyRequired: Boolean = false)
 
@@ -144,15 +147,22 @@ class AureliaAppManager(
     /** Recovers the same DEK from the one-time 256-bit recovery key and rotates only the PIN wrapper. */
     @Synchronized
     fun recoverWithRecoveryKey(recoveryCode: CharArray, newPin: CharArray, envelopeBundle: String): String {
+        recoveryLockout.assertUnlocked()
+        crypto.validatePin(newPin)
         val bundle = JSONObject(envelopeBundle)
-        require(bundle.getInt("bundleVersion") == 1 && bundle.has("recovery")) {
+        require(bundle.getInt("bundleVersion") == 1 && bundle.has("pin") && bundle.has("recovery")) {
             "A recovery-enabled envelope bundle is required."
         }
-        val recoveryKey = crypto.decodeRecoveryKey(recoveryCode)
+        val recoveryKey = try {
+            crypto.decodeRecoveryKey(recoveryCode)
+        } catch (failure: Exception) {
+            recoveryLockout.registerFailure()
+            throw SecurityException("Recovery key format or checksum is invalid.", failure)
+        }
         val recovered = try {
             crypto.unwrapDataKeyWithRecovery(bundle.getString("recovery"), recoveryKey)
         } catch (failure: Exception) {
-            lockout.registerFailure()
+            recoveryLockout.registerFailure()
             throw SecurityException("Recovery key verification failed.", failure)
         } finally {
             recoveryKey.fill(0)
@@ -160,12 +170,20 @@ class AureliaAppManager(
         try {
             require(recovered.size == 32) { "Invalid recovered DEK." }
             val replacementPinEnvelope = crypto.wrapDataKey(recovered, newPin)
+            val testKey = crypto.unwrapDataKey(replacementPinEnvelope.json, newPin)
+            try {
+                require(java.security.MessageDigest.isEqual(recovered, testKey)) {
+                    "New PIN envelope did not reproduce the existing DEK."
+                }
+            } finally {
+                testKey.fill(0)
+            }
             bundle.put("pin", replacementPinEnvelope.json)
             dataKey?.fill(0)
             dataKey = recovered.copyOf()
             authenticated = true
             backgroundAtElapsed = 0L
-            lockout.registerSuccess()
+            recoveryLockout.registerSuccess()
             return bundle.toString()
         } finally {
             recovered.fill(0)

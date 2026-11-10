@@ -66,12 +66,19 @@ The supplied example OTP/KMS design is not safe to copy as written:
 - If no recovery secret or other previously provisioned key-wrapping path exists, forgotten-PIN recovery cannot recover the encrypted data. The safe fallback is destructive reset of local encrypted data only after explicit user confirmation, not silent key recreation.
 - No server endpoint accepts a new DEK, plaintext DEK, PIN, PIN-derived KEK or client-asserted replacement envelope as proof of recovery.
 
-The current native gate implements initial PIN enrollment and PIN unlock only. Its envelope file is protected by a separate Android Keystore key and AtomicFile. It does not implement forgotten-PIN reset, phone registration, Firebase OTP recovery, recovery-key provisioning, or backend-issued recovery authorization. Those remain disabled until this contract is implemented and tested.
+The native branch implements offline recovery-key provisioning and local forgotten-PIN recovery. Recovery keys use RFC 4648 Base32 with a 10-bit SHA-256 checksum. PIN policy is enforced in the crypto engine (6–16 digits; repeated and sequential patterns rejected). Recovery unwraps the existing DEK, creates a replacement PIN wrapper, test-unwraps it and compares the result in constant time, then persists through AtomicFile while retaining the prior encrypted envelope as .prev until a subsequent successful PIN unlock. Recovery attempts use a separate Keystore-authenticated retry-state file and alias. Recovery disables the biometric wrapper so it must be explicitly re-enrolled.
+
+The local recovery implementation still requires native tests and physical-device qualification. Incomplete and disabled items: Settings-based verified-phone registration, Firebase App Check/Play Integrity enforcement, backend token verification and signed one-time recovery authorization, 24–72 hour phone-change cooling period and notifications, OTP challenge service, step-up authentication, append-only hash-chained security event log, lifecycle-wide auto-lock/cache clearing, and assisted recovery. FirebasePhoneIdentity is only an isolated phone-auth primitive, not a complete recovery service. OTP recovery remains disabled in production.
 
 ## Acceptance gates before production
 
 - Kotlin compilation against the generated Android project.
 - Argon2id known-answer tests and memory/latency benchmarks on minimum supported devices.
+- Base32 recovery-key round-trip, malformed-padding and checksum-tamper tests.
+- Weak/repeated/sequential PIN rejection at the crypto-engine boundary.
+- Recovery-key lockout persistence and reboot-mid-lockout tests.
+- Recovery DEK equality, database reopen and process-death-at-each-swap-step tests.
+- Verify .prev is retained until first successful new-PIN unlock.
 - AES-GCM round-trip, wrong-PIN, nonce uniqueness, tag-tamper and metadata-tamper tests.
 - AtomicFile interruption/corruption and Keystore invalidation tests.
 - Retry escalation, reboot, process-death and wall-clock manipulation tests.

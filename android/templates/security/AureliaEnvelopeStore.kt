@@ -26,7 +26,7 @@ class AureliaEnvelopeStore(context: Context) {
         private const val TAG_BITS = 128
     }
 
-    fun exists(): Boolean = file.baseFile.exists() || File(file.baseFile.path + ".bak").exists()
+    fun exists(): Boolean = file.baseFile.exists() || File(file.baseFile.path + ".bak").exists() || File(file.baseFile.path + ".prev").exists()
 
     @Synchronized
     fun write(envelopeJson: String) {
@@ -45,6 +45,31 @@ class AureliaEnvelopeStore(context: Context) {
             encrypted.fill(0)
         }
     }
+
+    /** Atomic recovery swap with a synced prior encrypted envelope retained as .prev. */
+    @Synchronized
+    fun writeRecoveryReplacement(envelopeJson: String) {
+        require(file.baseFile.exists()) { "Previous PIN envelope is missing; refusing recovery swap." }
+        val previous = File(file.baseFile.path + ".prev")
+        val oldBytes = file.baseFile.readBytes()
+        try {
+            java.io.FileOutputStream(previous, false).use { output ->
+                output.write(oldBytes)
+                output.fd.sync()
+            }
+        } finally { oldBytes.fill(0) }
+        write(envelopeJson)
+        require(read() == envelopeJson) { "Recovery envelope read-back verification failed." }
+    }
+
+    @Synchronized
+    fun confirmRecoveryPinUnlock() {
+        val previous = File(file.baseFile.path + ".prev")
+        if (previous.exists() && !previous.delete()) throw SecurityException("Could not retire previous PIN envelope.")
+    }
+
+    @Synchronized
+    fun hasPreviousEnvelope(): Boolean = File(file.baseFile.path + ".prev").exists()
 
     @Synchronized
     fun delete() {

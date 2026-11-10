@@ -239,3 +239,20 @@ test('native device acknowledgement re-verifies immutable signed settlement enve
   assert.match(acknowledge, /canonicalJson\(lease\.command\.getJSONObject\("payload"\)\.getJSONObject\("settlement"\)\)/);
   assert.match(acknowledge, /Settlement authorization changed after lease verification/);
 });
+
+test('PIN policy and recovery wrapper invariants are enforced natively', () => {
+  const crypto = read('android/templates/security/AureliaCryptoEngine.kt');
+  const manager = read('android/templates/security/AureliaAppManager.kt');
+  const store = read('android/templates/security/AureliaEnvelopeStore.kt');
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.match(crypto, /pin\.size in 6\.\.16/);
+  assert.match(crypto, /Repeated-digit PINs are not allowed/);
+  assert.match(crypto, /Sequential PINs are not allowed/);
+  assert.match(crypto, /base32Encode/);
+  assert.match(crypto, /recoveryChecksum/);
+  assert.match(manager, /recoveryLockout/);
+  assert.match(manager, /MessageDigest\.isEqual/);
+  assert.match(store, /writeRecoveryReplacement/);
+  assert.match(store, /confirmRecoveryPinUnlock/);
+  assert.match(gate, /biometricStore\.delete\(\)/);
+});
