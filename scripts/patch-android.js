@@ -1779,6 +1779,14 @@ fs.copyFileSync(securityInstrumentationTemplate, path.join(securityInstrumentati
 const otpRecoveryInstrumentationTemplate = path.join(androidDir, 'templates', 'instrumentation', 'OtpRecoverySqlCipherInstrumentedTest.java');
 if (!fs.existsSync(otpRecoveryInstrumentationTemplate)) throw new Error('OTP recovery SQLCipher instrumentation template is missing.');
 fs.copyFileSync(otpRecoveryInstrumentationTemplate, path.join(instrumentationSourceDir, 'OtpRecoverySqlCipherInstrumentedTest.java'));
+// Capacitor's generated starter test asserts its placeholder application ID
+// (com.getcapacitor.app), which is intentionally replaced by Aurelia's ID.
+// It is unrelated to Aurelia's native contract and must not poison this suite.
+const capacitorExampleTest = path.join(
+  androidDir, 'app', 'src', 'androidTest', 'java', 'com', 'getcapacitor', 'myapp',
+  'ExampleInstrumentedTest.java'
+);
+if (fs.existsSync(capacitorExampleTest)) fs.rmSync(capacitorExampleTest);
 const sharedContractFixture = path.join(__dirname, '..', 'tests', 'fixtures', 'pms-repository-contract.json');
 if (!fs.existsSync(sharedContractFixture)) throw new Error('Shared repository contract fixture is missing.');
 const instrumentationAssetsDir = path.join(androidDir, 'app', 'src', 'androidTest', 'assets');
