@@ -162,6 +162,54 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertTrue("corrupt database bytes must remain available for forensic recovery", database.length() > 0);
   }
 
+  @Test public void sharedRepositoryContractFixtureRunsAgainstNativeSqlite() throws Exception {
+    java.io.InputStream input = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+      .getContext().getAssets().open("pms-repository-contract.json");
+    java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+    byte[] buffer = new byte[4096]; int count;
+    while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count);
+    input.close();
+    JSONObject fixture = new JSONObject(bytes.toString("UTF-8"));
+    JSONObject entity = fixture.getJSONObject("entity");
+    String type = entity.getString("type"), id = entity.getString("id");
+    JSONObject initial = entity.getJSONObject("data");
+    assertTrue(initial.getInt("amountMinor") > 0);
+    assertEquals("INR", initial.getString("currency"));
+    assertTrue(initial.getString("createdAt").endsWith("Z"));
+    repository.transactBusinessChange(type, id, 0, initial, event("contract-event-1", type, id, 1));
+    assertEquals(1, repository.getEntity(type, id).getLong("version"));
+    JSONObject updated = fixture.getJSONObject("update");
+    repository.transactBusinessChange(type, id, 1, updated, event("contract-event-2", type, id, 2));
+    boolean staleRejected = false;
+    try { repository.transactBusinessChange(type, id, 1, initial, event("contract-event-stale", type, id, 2)); }
+    catch (RuntimeException expected) { staleRejected = true; }
+    assertTrue("optimistic version conflict must reject stale mutation", staleRejected);
+
+    JSONArray batch = new JSONArray(); JSONArray fixtureBatch = fixture.getJSONArray("batch");
+    for (int i = 0; i < fixtureBatch.length(); i++) {
+      JSONObject row = fixtureBatch.getJSONObject(i); String batchType = row.getString("type"), batchId = row.getString("id");
+      batch.put(new JSONObject().put("entityType", batchType).put("entityId", batchId)
+        .put("expectedVersion", 0).put("data", row.getJSONObject("data"))
+        .put("event", event("contract-batch-" + i, batchType, batchId, 1)));
+    }
+    assertEquals(2, repository.transactBusinessBatch(batch).length());
+
+    JSONObject retry = fixture.getJSONObject("outbox"); String retryId = retry.getString("retryEventId");
+    String retryEntityId = "contract-retry-folio";
+    repository.transactBusinessChange("folio", retryEntityId, 0,
+      new JSONObject().put("id", retryEntityId).put("balanceMinor", 100).put("currency", "INR"),
+      event(retryId, "folio", retryEntityId, 1));
+    JSONArray claimed = repository.claimOutboxBatch(retry.getString("deviceId"), 50, 60000L);
+    boolean found = false; for (int i = 0; i < claimed.length(); i++) if (retryId.equals(claimed.getJSONObject(i).getString("eventId"))) found = true;
+    assertTrue("outbox event must be claimable", found);
+    assertTrue(repository.retryOutbox(retry.getString("deviceId"), retryId,
+      retry.getString("retryAt"), "NETWORK"));
+    repository.close(); databaseKey = key(); repository = new LocalPmsRepository(context, databaseKey); repository.initialize();
+    assertEquals(2, repository.getEntity(type, id).getLong("version"));
+    JSONArray afterRestart = repository.claimOutboxBatch(retry.getString("deviceId"), 50, 60000L);
+    for (int i = 0; i < afterRestart.length(); i++) assertFalse(retryId.equals(afterRestart.getJSONObject(i).getString("eventId")));
+  }
+
   @Test public void forcedOutboxFailureRollsBackDomainRow() throws Exception {
     repository.getWritableDatabase().execSQL(
       "CREATE TRIGGER fail_outbox_insert BEFORE INSERT ON pms_outbox " +
