@@ -23,32 +23,32 @@ manifest = manifest.replace(/<application\b([^>]*)>/, (match, attributes) => {
 const xmlDir = path.join(appDir, 'res', 'xml');
 fs.mkdirSync(xmlDir, { recursive: true });
 fs.writeFileSync(path.join(xmlDir, 'aurelia_backup_rules.xml'),
-  '<?xml version="1.0" encoding="utf-8"?>\\n' +
-  '<full-backup-content>\\n' +
-  '    <exclude domain="root" path="." />\\n' +
-  '    <exclude domain="file" path="." />\\n' +
-  '    <exclude domain="database" path="." />\\n' +
-  '    <exclude domain="sharedpref" path="." />\\n' +
-  '    <exclude domain="external" path="." />\\n' +
-  '</full-backup-content>\\n');
+  '<?xml version="1.0" encoding="utf-8"?>\n' +
+  '<full-backup-content>\n' +
+  '    <exclude domain="root" path="." />\n' +
+  '    <exclude domain="file" path="." />\n' +
+  '    <exclude domain="database" path="." />\n' +
+  '    <exclude domain="sharedpref" path="." />\n' +
+  '    <exclude domain="external" path="." />\n' +
+  '</full-backup-content>\n');
 fs.writeFileSync(path.join(xmlDir, 'aurelia_data_extraction_rules.xml'),
-  '<?xml version="1.0" encoding="utf-8"?>\\n' +
-  '<data-extraction-rules>\\n' +
-  '    <cloud-backup>\\n' +
-  '        <exclude domain="root" path="." />\\n' +
-  '        <exclude domain="file" path="." />\\n' +
-  '        <exclude domain="database" path="." />\\n' +
-  '        <exclude domain="sharedpref" path="." />\\n' +
-  '        <exclude domain="external" path="." />\\n' +
-  '    </cloud-backup>\\n' +
-  '    <device-transfer>\\n' +
-  '        <exclude domain="root" path="." />\\n' +
-  '        <exclude domain="file" path="." />\\n' +
-  '        <exclude domain="database" path="." />\\n' +
-  '        <exclude domain="sharedpref" path="." />\\n' +
-  '        <exclude domain="external" path="." />\\n' +
-  '    </device-transfer>\\n' +
-  '</data-extraction-rules>\\n');
+  '<?xml version="1.0" encoding="utf-8"?>\n' +
+  '<data-extraction-rules>\n' +
+  '    <cloud-backup>\n' +
+  '        <exclude domain="root" path="." />\n' +
+  '        <exclude domain="file" path="." />\n' +
+  '        <exclude domain="database" path="." />\n' +
+  '        <exclude domain="sharedpref" path="." />\n' +
+  '        <exclude domain="external" path="." />\n' +
+  '    </cloud-backup>\n' +
+  '    <device-transfer>\n' +
+  '        <exclude domain="root" path="." />\n' +
+  '        <exclude domain="file" path="." />\n' +
+  '        <exclude domain="database" path="." />\n' +
+  '        <exclude domain="sharedpref" path="." />\n' +
+  '        <exclude domain="external" path="." />\n' +
+  '    </device-transfer>\n' +
+  '</data-extraction-rules>\n');
 
 // Pay Bridge package visibility and signature-protected IPC permission.
 // This is intentionally only discovery/permission groundwork: the PMS does not
