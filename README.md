@@ -8,6 +8,8 @@
 - Draft PR #18: https://github.com/Akshayshetye37/Aurelia-apk/pull/18
 - Current release posture: PR remains draft/unmerged; canonical authority is PREPARED_COMPATIBILITY; uiCutover=false; cloud sync, provider activation, live collection, automatic settlement, automatic refunds and production release remain OFF.
 - LIVE GATEWAY COLLECTION OFF. Recovery support is not yet production-ready; native key recovery must pass physical-device qualification before release.
+- Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available when gateway features are disabled.
+- Provider integration inventory: Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue. Provider adapters/test checkout do not mean merchant production acceptance.
 
 ## Verified baseline — not a production approval
 
