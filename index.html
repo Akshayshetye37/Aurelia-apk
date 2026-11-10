@@ -344,11 +344,10 @@ function guestContactActions(name,phone){
   var embeddedPreview=false;
   try{embeddedPreview=String(location.href).startsWith('about:srcdoc')||!!(window.frameElement&&window.frameElement.hasAttribute('sandbox')&&!window.frameElement.sandbox.contains('allow-same-origin'))}
   catch(e){embeddedPreview=String(location.href).startsWith('about:srcdoc')}
-  var indexedDbAvailable=!!window.indexedDB&&!embeddedPreview;
   window.AureliaStorageDiagnostics=Object.freeze({
-    persistent:indexedDbAvailable,
-    mode:indexedDbAvailable?'indexeddb':'unavailable',
-    reason:embeddedPreview?'embedded-preview-sandbox':(indexedDbAvailable?null:'IndexedDB is unavailable in this runtime.'),
+    persistent:false,
+    mode:'pending-storage-verification',
+    reason:embeddedPreview?'embedded-preview-sandbox':'durable storage verification pending',
     embeddedPreview:embeddedPreview
   });
 })();
@@ -661,75 +660,10 @@ const dateDDMMYYYY=value=>{const d=value instanceof Date?value:new Date(value);i
 const offsetDDMMYYYY=offset=>{const d=D(Number(offset)||0);return String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+d.getFullYear()};
 const offOf=s=>{const a=new Date();a.setHours(0,0,0,0);return Math.round((new Date(s+'T00:00:00')-a)/864e5)};
 const day0=()=>{const d=new Date();d.setHours(0,0,0,0);return Math.round(d/864e5)};
-const PHOTO_DB='aurelia_photo_archive_v1';
-const PHOTO_FALLBACK_PREFIX='aurelia_photo_fallback:';
-/* Sandboxed previews are session-only and are never a substitute for durable device storage. */
-const PHOTO_MEMORY_FALLBACK=new Map();
-function photoStorageSandboxed(){try{return String(location.href).startsWith('about:srcdoc')||!!(window.frameElement&&window.frameElement.hasAttribute('sandbox')&&!window.frameElement.sandbox.contains('allow-same-origin'))}catch(e){return String(location.href).startsWith('about:srcdoc')}}
-const PHOTO_NATIVE_PENDING=new Map();
-let PHOTO_NATIVE_SEQ=0;
-window.aureliaNativePhotoResult=function(id,ok,payload){const p=PHOTO_NATIVE_PENDING.get(String(id));if(!p)return;PHOTO_NATIVE_PENDING.delete(String(id));if(ok){if(p.type==='photoArchive'&&typeof payload==='string'){try{payload=JSON.parse(payload)}catch(e){p.reject(e);return}}p.resolve(payload)}else p.reject(new Error(payload||'Native photo storage failed'))};
-function photoNative(type,extra={}){return new Promise((resolve,reject)=>{if(!window.AureliaNative){reject(new Error('Native photo storage is only available in the Android app'));return}const requestId='photo-'+Date.now()+'-'+(++PHOTO_NATIVE_SEQ);PHOTO_NATIVE_PENDING.set(requestId,{resolve,reject,type});if(!nat({type,requestId,...extra})){PHOTO_NATIVE_PENDING.delete(requestId);reject(new Error('Could not contact native photo storage'))}setTimeout(()=>{const p=PHOTO_NATIVE_PENDING.get(requestId);if(p){PHOTO_NATIVE_PENDING.delete(requestId);p.reject(new Error('Native photo storage timed out'))}},30000)})}
-function photoDbOpen(){return new Promise((resolve,reject)=>{try{if(!window.indexedDB||typeof indexedDB.open!=='function')throw new Error('IndexedDB unavailable');const q=indexedDB.open(PHOTO_DB,1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('originals'))q.result.createObjectStore('originals')};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Photo storage unavailable'))}catch(e){reject(e)}})}
-let photoLegacyMigration=null;
-async function migrateLegacyPhotoFallback(db){
- if(photoStorageSandboxed())return;
- let entries=[];
- try{entries=window.AureliaLegacyStorage?.readPhotoFallbackEntries?.()||[]}catch(e){throw new Error('Legacy photo migration could not read its quarantined source: '+(e?.message||''))}
- if(!entries.length)return;
- await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite'),store=tx.objectStore('originals');entries.forEach(([key,value])=>store.put(value,key));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Legacy photo migration failed'));tx.onabort=()=>reject(tx.error||new Error('Legacy photo migration was aborted'))});
- for(const [key,value] of entries){
-  const stored=await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Legacy photo read-back failed'))});
-  if(stored!==value)throw new Error('Legacy photo migration read-back mismatch; source photo was retained.');
- }
- // Delete old photo copies only after every IndexedDB value passed exact read-back.
- window.AureliaLegacyStorage.deletePhotoFallbackEntries(entries);
-}
-function photoDb(){return photoDbOpen().then(async db=>{if(!photoLegacyMigration)photoLegacyMigration=migrateLegacyPhotoFallback(db).catch(error=>{photoLegacyMigration=null;throw error});try{await photoLegacyMigration;return db}catch(error){db.close();throw error}})}
-async function photoPut(key,data){
- if(window.AureliaNative)return photoNative('photoStore',{key,data}).then(()=>true);
- if(photoStorageSandboxed()){PHOTO_MEMORY_FALLBACK.set(key,data);return true}
- let db;
- try{
-  db=await photoDb();
-  await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite');tx.objectStore('originals').put(data,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not store original photo'));tx.onabort=()=>reject(tx.error||new Error('Photo storage transaction aborted'))});
-  return true;
- }catch(e){throw new Error('Durable photo storage is unavailable; no volatile fallback was written. '+(e?.message||''))}
- finally{db?.close()}
-}
-async function photoGet(key){
- if(!key)return null;
- if(window.AureliaNative)return photoNative('photoLoad',{key}).catch(()=>null);
- if(PHOTO_MEMORY_FALLBACK.has(key))return PHOTO_MEMORY_FALLBACK.get(key);
- if(photoStorageSandboxed())return null;
- const db=await photoDb();
- try{return await new Promise((resolve,reject)=>{const q=db.transaction('originals').objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result||null);q.onerror=()=>reject(q.error||new Error('Could not read original photo'))})}
- finally{db.close()}
-}
-async function photoArchive(){
- if(window.AureliaNative)return photoNative('photoArchive');
- if(photoStorageSandboxed()){const memory={};PHOTO_MEMORY_FALLBACK.forEach((value,key)=>memory[key]=value);return memory}
- const out={},db=await photoDb();
- try{
-  await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').getAllKeys(),v=tx.objectStore('originals').getAll();tx.oncomplete=()=>{q.result.forEach((key,index)=>out[key]=v.result[index]);resolve()};tx.onerror=()=>reject(tx.error||new Error('Could not prepare photo archive'));tx.onabort=()=>reject(tx.error||new Error('Photo archive read was aborted'))});
-  return out;
- }finally{db.close()}
-}
-async function photoRestore(archive){
- if(!archive||typeof archive!=='object'||Array.isArray(archive))throw new Error('Backup photo archive is invalid');
- const entries=Object.entries(archive);
- for(const [key,value] of entries)if(!key||typeof value!=='string'||!/^data:image\//i.test(value))throw new Error('Photo archive contains an invalid original image');
- if(window.AureliaNative){await photoNative('photoRestore',{archive});return entries.length}
- if(photoStorageSandboxed()){PHOTO_MEMORY_FALLBACK.clear();for(const [key,value] of entries)PHOTO_MEMORY_FALLBACK.set(key,value);return entries.length}
- const db=await photoDb();
- try{
-  await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite'),store=tx.objectStore('originals');store.clear();entries.forEach(([key,value])=>store.put(value,key));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not restore original photos'));tx.onabort=()=>reject(tx.error||new Error('Photo restore was cancelled'))});
-  const stored=await Promise.all(entries.map(([key])=>new Promise((resolve,reject)=>{const tx=db.transaction('originals','readonly'),q=tx.objectStore('originals').get(key);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||new Error('Restored photo read-back failed'))})));
-  if(entries.some((entry,index)=>stored[index]!==entry[1]))throw new Error('Restored photo archive failed exact read-back verification');
- }finally{db.close()}
- PHOTO_MEMORY_FALLBACK.clear();
- return entries.length;
-}
+async function photoPut(key,data){return window.AureliaPhotoArchive.put(key,data)}
+async function photoGet(key){return window.AureliaPhotoArchive.get(key)}
+async function photoArchive(){return window.AureliaPhotoArchive.archive()}
+async function photoRestore(archive){return window.AureliaPhotoArchive.restore(archive)}
 function openOriginalPhoto(key,label){photoGet(key).then(data=>{if(!data){toast('Original photo is not on this device. Restore a backup containing the photo archive.');return}openS('<h2 class="foil">'+esc(label||'Original ID photo')+'</h2><img src="'+data+'" alt="Original ID photo" style="display:block;width:100%;max-height:70vh;object-fit:contain;border-radius:14px;background:#000"><p class="lab">Full-resolution original loaded on demand from the private photo archive.</p><button class="btn ghost" onclick="closeS()">Close</button>')}).catch(()=>toast('Could not load the original photo'))}
 const shrink=(f,cb)=>{if(!f)return;const r=new FileReader();r.onload=()=>{const original=String(r.result||'');if(!/^data:image\//i.test(original)){toast('This file is not a readable image');return}const im=new Image();im.onload=()=>{try{const thumbScale=Math.min(1,360/Math.max(im.width,im.height)),tc=document.createElement('canvas');tc.width=Math.max(1,Math.round(im.width*thumbScale));tc.height=Math.max(1,Math.round(im.height*thumbScale));const tctx=tc.getContext('2d');if(!tctx)throw new Error('Thumbnail canvas unavailable');tctx.drawImage(im,0,0,tc.width,tc.height);const thumb=tc.toDataURL('image/jpeg',.48);const archiveScale=Math.min(1,2000/Math.max(im.width,im.height)),ac=document.createElement('canvas');ac.width=Math.max(1,Math.round(im.width*archiveScale));ac.height=Math.max(1,Math.round(im.height*archiveScale));const actx=ac.getContext('2d');if(!actx)throw new Error('Photo archive canvas unavailable');actx.drawImage(im,0,0,ac.width,ac.height);const archived=ac.toDataURL('image/jpeg',.82);const key='photo-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);photoPut(key,archived).then(()=>cb(thumb,key)).catch(e=>{console.error('Photo archive write failed',e);toast('Photo storage failed ('+(e&&e.name?e.name:'storage error')+'). Free device storage and try again.')})}catch(e){console.error(e);toast('Could not prepare this photo for storage. Try another image.')}};im.onerror=()=>toast('Could not decode this photo. Try another image');im.src=original};r.onerror=()=>toast('Could not read this photo');r.readAsDataURL(f)};
 const DEMO_IMG='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><rect width="200" height="120" fill="#12301f"/><text x="100" y="66" fill="#d9b76e" font-size="14" text-anchor="middle">Sample ID</text></svg>');
@@ -5572,6 +5506,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 <script type="module" id="aurelia-async-runtime-bootstrap">
 import { PmsBootstrapCoordinator } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { createLegacyMigrationStorage, readLegacyPhotoFallbackEntries, deleteLegacyPhotoFallbackEntries } from "./src/storage/legacy-web-storage.mjs";
+import { createPhotoArchive } from "./src/storage/photo-archive.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
 import { PmsLocalFirstWriteCoordinator } from "./src/storage/pms-local-first-write-coordinator.mjs";
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
@@ -5580,9 +5515,9 @@ import { commitReservationToRepository } from "./src/storage/repository-reservat
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
 const legacyStorage = createLegacyMigrationStorage();
-window.AureliaLegacyStorage = Object.freeze({
-  readPhotoFallbackEntries: () => readLegacyPhotoFallbackEntries(),
-  deletePhotoFallbackEntries: entries => deleteLegacyPhotoFallbackEntries(entries)
+window.AureliaPhotoArchive = createPhotoArchive({
+  readLegacyPhotoFallbackEntries,
+  deleteLegacyPhotoFallbackEntries
 });
 window.AureliaStorageDiagnostics = Object.freeze({
   persistent: legacyStorage.persistent,
