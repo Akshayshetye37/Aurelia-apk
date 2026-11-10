@@ -190,7 +190,7 @@ jobs:
           accel="$(cat "$log_dir/acceleration-mode.txt")"
           echo "Starting emulator with KVM acceleration: $accel"
           nohup "$emulator" -avd aurelia-ci-api34 -accel "$accel" \
-            -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim \
+            -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim \
             -no-snapshot -no-snapshot-save -wipe-data -verbose \
             >"$log_dir/emulator.stdout-stderr.log" 2>&1 &
           echo "$!" > "$log_dir/emulator.pid"
@@ -252,13 +252,11 @@ jobs:
           echo "$gradle_status" > "$log_dir/gradle-exit-code.txt"
           exit "$gradle_status"
 
-      - name: Require at least one completed instrumentation test
+      - name: Enforce instrumentation test results and ban ignored tests
         if: always()
         timeout-minutes: 2
         shell: bash
-        run: |
-          set -euo pipefail
-          python3 -c 'import glob,sys,xml.etree.ElementTree as ET; paths=glob.glob("android/app/build/outputs/androidTest-results/connected/**/*.xml", recursive=True); total=sum(int(ET.parse(p).getroot().attrib.get("tests","0")) for p in paths); print(f"Instrumentation XML files: {len(paths)}; tests executed: {total}"); failures=sum(int(ET.parse(p).getroot().attrib.get("failures","0"))+int(ET.parse(p).getroot().attrib.get("errors","0")) for p in paths); print(f"Failures/errors: {failures}"); sys.exit(0 if total > 0 and failures == 0 else "ERROR: zero native instrumentation tests or failures")'
+        run: node scripts/verify-android-instrumentation-results.mjs android/app/build/outputs/androidTest-results/connected android/templates
 
       - name: Capture emulator, instrumentation and APK diagnostics
         if: always()
