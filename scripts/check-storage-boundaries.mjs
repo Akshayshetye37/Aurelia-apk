@@ -13,7 +13,6 @@ function walk(directory, root, files = []) {
     const full = path.join(directory, entry.name);
     const relative = path.relative(root, full).split(path.sep).join("/");
     if (entry.isDirectory()) {
-      if (relative === "src/storage" || relative.startsWith("src/storage/")) continue;
       if (["node_modules", "www", "android", "tests", "docs", ".git"].includes(entry.name)) continue;
       walk(full, root, files);
     } else if (EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
@@ -36,6 +35,9 @@ export function scanStorageBoundaries(root = process.cwd()) {
   for (const file of targets) {
     const source = fs.readFileSync(file.full, "utf8");
     for (const rule of FORBIDDEN) {
+      // All Web Storage access is confined to one adapter whose runtime key
+      // allowlist permits only legacy migration markers and approved preferences.
+      if (file.relative === "src/storage/legacy-web-storage.mjs" && rule.name === "Web Storage API") continue;
       if (rule.pattern.test(source)) violations.push(file.relative + ": " + rule.name);
     }
   }
@@ -43,7 +45,12 @@ export function scanStorageBoundaries(root = process.cwd()) {
     throw new Error("Storage boundary violation(s):\n" + violations.join("\n") +
       "\nRoute durable business persistence through the canonical IndexedDB/native SQLite repository.");
   }
-  return { scannedFiles: targets.length, allowedAdapterDirectory: "src/storage" };
+  const adapter = fs.readFileSync(path.join(root, "src/storage/legacy-web-storage.mjs"), "utf8");
+  if (!adapter.includes("ALLOWED_MIGRATION_KEYS") || !adapter.includes("ALLOWED_PREFERENCE_KEYS") ||
+      !adapter.includes("PREFERENCE_STORAGE_KEY_NOT_ALLOWED") || !adapter.includes("LEGACY_STORAGE_KEY_NOT_ALLOWED")) {
+    throw new Error("Legacy Web Storage adapter is missing its strict migration/preference key allowlists.");
+  }
+  return { scannedFiles: targets.length, allowedWebStorageAdapter: "src/storage/legacy-web-storage.mjs" };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
