@@ -15,7 +15,7 @@ const operationsArbitrary = fc.array(
 
 function createRepo(name) {
   return new IndexedDbPmsRepository({
-    indexedDB,
+    indexedDBImpl: indexedDB,
     databaseName: "pms-property-" + name,
     now: () => "2026-11-10T00:00:00.000Z"
   });
