@@ -13,7 +13,8 @@ test('Forgot PIN never displays recovery key until a verified OTP grant is consu
   assert.match(recovery, /RecoveryPhoneStore\(this\)\.read\(\)/);
   assert.match(recovery, /RecoveryGate\.isOpen\(\)/);
   assert.match(recovery, /consumeAndArm/);
-  assert.ok(recovery.indexOf('RecoveryGate.isOpen()') < recovery.indexOf('showRecoveryKeyPrompt()'));
+  assert.match(recovery, /if \(armed && RecoveryGate\.isOpen\(\)\) showRecoveryKeyPrompt\(\)/);
+  assert.match(recovery, /if \(record\.otpRequired && record\.currentE164 != null && !RecoveryGate\.isOpen\(\)\)/);
   assert.doesNotMatch(recovery, /54-character Base32 recovery key/);
 });
 
@@ -35,7 +36,8 @@ test('Recovery phone registration is bound to the existing phone before a number
   assert.match(register, /equalDigest\(current\.hash, oldHash\)/);
   assert.match(register, /state: "CHANGE_PENDING"/);
   assert.match(register, /effectiveAt/);
-  assert.doesNotMatch(register, /request\.auth\?\.token\.role !== "owner"/);
+  assert.match(register, /auth\.token\.role !== "owner"/);
+  assert.match(register, /auth\.token\.tenantId !== tenantId/);
 });
 
 test('recovery phone tenant scope is generated and stored encrypted by Android Keystore', () => {
@@ -53,5 +55,7 @@ test('native recovery settings uses the encrypted phone record and secondary pho
   assert.match(activity, /RecoveryFirebaseAuthFactory\.create/);
   assert.match(activity, /FirebasePhoneIdentity/);
   assert.match(activity, /registerRecoveryPhone/);
-  assert.match(activity, /currentPhoneIdToken/);
+  assert.match(activity, /oldPhoneToken/);
+  const client = read('android/templates/RecoveryGrantClient.kt');
+  assert.match(client, /currentPhoneIdToken/);
 });
