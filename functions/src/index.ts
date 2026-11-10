@@ -102,38 +102,51 @@ async function signGrant(tenantId: string, deviceIdHash: string, nonce: string, 
 export const registerRecoveryPhone = onCall(
   { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER] },
   async request => {
-    const tenantId = validateTenantId(request.auth?.token.tenantId);
-    if (request.auth?.token.role !== "owner") throw GENERIC;
-    const authTime = Number(request.auth?.token.auth_time ?? 0);
-    const ownerAge = Date.now() / 1000 - authTime;
-    if (!authTime || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
+    // This is an installation-scoped LOCAL_ONLY namespace, not a cloud tenant
+    // authorization claim. A random 128-bit ID is encrypted in Android Keystore.
+    const tenantId = validateTenantId(request.data?.tenantId);
+    validateDeviceHash(request.data?.deviceIdHash);
     await spendRateLimit(`reg:${tenantId}`, 5, 60 * 60_000);
 
-    const proof = await verifyPhoneToken(request.data?.phoneIdToken);
-    const hash = digest(tenantId, proof.phone);
+    const newProof = await verifyPhoneToken(request.data?.phoneIdToken);
+    const newHash = digest(tenantId, newProof.phone);
     const ref = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
     const result = await db.runTransaction(async tx => {
       const snapshot = await tx.get(ref);
       const current = snapshot.data();
       if (!current?.hash) {
-        tx.set(ref, { hash: hash.toString("base64"), masked: maskPhone(proof.phone),
-          state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp(), otpRequired: true });
+        tx.create(ref, {
+          hash: newHash.toString("base64"),
+          masked: maskPhone(newProof.phone),
+          state: "VERIFIED",
+          verifiedAt: FieldValue.serverTimestamp(),
+          otpRequired: true
+        });
         return "VERIFIED" as const;
       }
-      if (current.pending?.hash) {
-        if (equalDigest(current.hash, hash)) return "CHANGE_PENDING" as const;
-        throw new HttpsError("failed-precondition", "A recovery phone change is already pending.");
-      }
-      if (equalDigest(current.hash, hash)) {
-        tx.set(ref, { ...current, state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp() }, { merge: true });
+      if (equalDigest(current.hash, newHash)) {
+        if (current.pending?.hash) throw new HttpsError("failed-precondition", "A recovery phone change is already pending.");
+        tx.update(ref, { state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp() });
         return "VERIFIED" as const;
       }
-      tx.set(ref, { ...current, state: "CHANGE_PENDING",
-        pending: { hash: hash.toString("base64"), masked: maskPhone(proof.phone),
-          effectiveAt: Date.now() + 48 * 60 * 60_000 } }, { merge: true });
+      if (current.pending?.hash) throw new HttpsError("failed-precondition", "A recovery phone change is already pending.");
+
+      // A replacement requires proof of BOTH the currently registered number
+      // and the proposed number. A new number alone cannot hijack the record.
+      const oldProof = await verifyPhoneToken(request.data?.currentPhoneIdToken);
+      const oldHash = digest(tenantId, oldProof.phone);
+      if (!equalDigest(current.hash, oldHash)) throw GENERIC;
+      tx.update(ref, {
+        state: "CHANGE_PENDING",
+        pending: {
+          hash: newHash.toString("base64"),
+          masked: maskPhone(newProof.phone),
+          effectiveAt: Date.now() + 48 * 60 * 60_000
+        }
+      });
       return "CHANGE_PENDING" as const;
     });
-    return { state: result, masked: result === "VERIFIED" ? maskPhone(proof.phone) : undefined };
+    return { state: result, masked: result === "VERIFIED" ? maskPhone(newProof.phone) : undefined };
   }
 );
 
