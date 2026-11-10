@@ -337,6 +337,6 @@ test('instrumented invalid-identifier test declares checked event-builder except
 test('recovery never authorizes a PMS session before the new PIN is used', () => {
   const manager = read('android/templates/security/AureliaAppManager.kt');
   const recovery = manager.slice(manager.indexOf('fun recoverWithRecoveryKey'), manager.indexOf('fun confirmRecoverySwapCommitted'));
-  assert.doesNotMatch(recovery, /authenticated\\s*=\\s*true|dataKey\\s*=|recoveryLockout\\.registerSuccess\\(\\)/);
-  assert.match(recovery, /MessageDigest\\.isEqual/);
+  assert.doesNotMatch(recovery, /authenticated\s*=\s*true|dataKey\s*=|recoveryLockout\.registerSuccess\(\)/);
+  assert.match(recovery, /MessageDigest\.isEqual/);
 });
