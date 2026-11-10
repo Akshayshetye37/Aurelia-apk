@@ -789,20 +789,11 @@ function settlePayment(input){
   if(typeof commit!=='function')throw new Error('Canonical local payment repository is unavailable; no payment was recorded');
   return commit({...input,state:S,booking:b,balanceDueFor:dueB});
  }
- if(typeof window.aureliaSettlePayment!=='function')throw new Error('Settlement service is not ready; no payment was recorded');
- const persistSettlement=()=>{
-  if(input.deferPersistence===true){
-   if(input.source!=='reservation_advance')throw new Error('Deferred payment persistence is reserved for atomic reservation creation');
-   return;
-  }
-  if(RECOVERY_CHECK_PENDING)throw new Error('Payment storage is paused during recovery');
-  persist();
-  let raw,saved;
-  try{raw=(window.__aureliaStorage||localStorage).getItem(SK);saved=raw?JSON.parse(raw):null}catch(e){throw new Error('Could not verify the saved payment record')}
-  const savedBooking=saved&&Array.isArray(saved.b)?saved.b.find(x=>x.id===b.id):null;
-  if(!savedBooking||Number(savedBooking.p)!==Number(b.p)||JSON.stringify(savedBooking.pays||[])!==JSON.stringify(b.pays||[])||JSON.stringify(savedBooking.payments||[])!==JSON.stringify(b.payments||[])||Number(saved.today||0)!==Number(S.today||0)||JSON.stringify(saved.aud||[])!==JSON.stringify(S.aud||[]))throw new Error('Payment could not be verified in device storage');
- };
- return window.aureliaSettlePayment({...input,state:S,balanceDue:dueB(b),persist:persistSettlement,audit:(kind,detail)=>aud(kind,detail)});
+ if(input.source==='reservation_advance'&&input.deferPersistence===true){
+  if(typeof window.aureliaSettlePayment!=='function')throw new Error('Reservation advance calculation is unavailable; no payment was recorded');
+  return window.aureliaSettlePayment({...input,state:S,balanceDue:dueB(b),persist:()=>{},audit:(kind,detail)=>aud(kind,detail)});
+ }
+ throw new Error('Unsupported payment persistence path; use the canonical local payment repository.');
 }
 // Legacy unconfirmed addPay shortcut removed; manual payments use the staff-confirmed folio form.
 let mchips=id=>`<div class="chips" id="${id}">${PM.map((p,k)=>`<button class="chip ${k?'':'on'}" onclick="$$('#${id} .chip').forEach(c=>c.classList.remove('on'));this.classList.add('on')">${p}</button>`).join('')}</div>`;
@@ -1138,7 +1129,7 @@ function sv(){$$('[data-s]').forEach(e=>S.set[e.dataset.s]=e.value);S.set.name=S
 function demoRm(){ask('Remove demo data','Deletes the sample rooms, guests, bookings, stock, dishes, expenses and takings. Anything you added yourself stays.','Remove demo data','demoGo()')}
 function demoGo(){S.b=S.b.filter(x=>!x.demo);S.g=S.g.filter(x=>!x.demo);S.rooms=S.rooms.filter(x=>!x.demo);S.exp=S.exp.filter(x=>!x.demo);S.inv=S.inv.filter(x=>!x.demo);Object.keys(MENU).forEach(c=>{MENU[c]=MENU[c].filter(m=>!m[3]);if(!MENU[c].length)delete MENU[c]});S.t.forEach(t=>{if(t.demo){t.o=[];t.demo=0}});S.hist=[0,0,0,0,0,0];S.today=0;S.aud=[];aud('Demo data removed','');render();toast('Demo data removed')}
 function confirmResetAll(){if(!confirm('Erase all data on this device? A backup will be attempted first.'))return;try{if(typeof runBackup==='function')runBackup(true)}catch(e){}resetAll()}
-function resetAll(){try{(window.__aureliaStorage||localStorage).removeItem(SK)}catch(e){}location.reload()}
+function resetAll(){toast('Full device erasure is disabled until canonical SQLite/IndexedDB wipe and restore verification are implemented. No data was erased.');}
 /* backup engine */
 const DK=['rooms','b','t','today','hist','g','exp','inv','led','aud','fe','set','terms','sig','sales','au','inN','menu','day','cancelled','tableGuests','tableRooms','restaurant','financialLedger'],SK='aurelia_lodge_v2',hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=(h*33^s.charCodeAt(i))>>>0;return h.toString(36)};let BKB=null;
 const curHash=()=>hashS(JSON.stringify(DK.map(k=>S[k])));
@@ -1697,7 +1688,7 @@ function persistStrict(){
 
 // Awaitable canonical commit for workflows that can participate in an async
 // transaction. IndexedDB/SQLite commit and exact repository read-back are the
-// success boundary; localStorage is refreshed only as a legacy UI cache.
+// success boundary; Web Storage is not refreshed or used as a business-data cache.
 async function persistCanonicalStrict(){
  if(RECOVERY_CHECK_PENDING)throw new Error('Application recovery is still in progress; persistent writes are blocked.');
  const coordinator=window.AureliaLocalFirstWrites;
@@ -1948,8 +1939,7 @@ function loadAll(){
   useMenu(S.menu);S.aud.forEach(a=>a.at=new Date(a.at));S.led.forEach(l=>l[3]=new Date(l[3]));id=Math.max(id,...S.b.map(b=>b.id));LOCAL_STATE_STATUS='valid';
  }catch(e){
   LOCAL_STATE_STATUS='invalid';
-  try{(window.__aureliaStorage||localStorage).setItem(SK+'_recovery_quarantine_'+Date.now(),raw)}catch(_){}
-  console.warn('Saved application state failed validation; recovery will be attempted.',e);
+  console.error('Canonical bootstrap state failed validation; startup recovery is required.',e);
  }
 }
 /* autopilot */
@@ -5716,7 +5706,7 @@ try {
       const row = await storageBridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
       return row?.data || null;
     },
-    cache: window.__aureliaStorage || null,
+    cache: null,
     onFailure: error => {
       console.error("[Aurelia Local First] Canonical write failed; writes must remain frozen until startup recovery.", error);
     }
