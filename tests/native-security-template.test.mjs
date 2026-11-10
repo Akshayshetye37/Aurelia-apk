@@ -310,3 +310,9 @@ test('biometric-only unlock remains available if the PIN envelope is missing', (
   assert.match(gate, /!envelopeExists && !biometricStore\.exists\(\)/);
   assert.match(gate, /if \(biometricStore\.exists\(\)\)/);
 });
+
+test('AppLockManager preserves the Java Context constructor used by Android instrumentation', () => {
+  const source = read('android/templates/security/AppLockManager.kt');
+  assert.match(source, /constructor\(context: Context\) : this\(/);
+  assert.match(read('android/templates/instrumentation/LocalPmsRepositoryInstrumentedTest.java'), /new com\.aurelia\.pms\.security\.AppLockManager\(context\)/);
+});
