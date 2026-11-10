@@ -7,7 +7,7 @@ export const PMS_LEGACY_SNAPSHOT_SOURCE_KEY = "aurelia_lodge_v2";
 export const PMS_LEGACY_SNAPSHOT_ENTITY_ID = "legacy_snapshot:" + PMS_LEGACY_SNAPSHOT_SOURCE_KEY;
 export const PMS_ENTITY_TYPES = Object.freeze(["booking","folio","guest","room","room_block","inventory","expense","ledger","restaurant_table","restaurant_sale","settings","audit"]);
 export function assertPmsIdentity(value, label="identity") {
-  if (typeof value !== "string" || !value.trim() || value.length > 180 || /[\u0000-\u001f]/.test(value)) throw new TypeError("Invalid " + label);
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/.test(value) || value.normalize("NFC") !== value) throw new TypeError("Invalid canonical " + label);
   return value;
 }
 export function assertPmsVersion(value, label="version") {
