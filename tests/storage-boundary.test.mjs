@@ -30,7 +30,7 @@ test("direct browser storage APIs and the legacy business key are confined to sr
     const source = fs.readFileSync(file, "utf8");
     const inStorageAdapterLayer = relative.startsWith("src/storage/");
     const hits = inStorageAdapterLayer
-      ? (source.match(/\\b(?:localStorage|sessionStorage)\\b/g) || []).length
+      ? (source.match(/\b(?:localStorage|sessionStorage)\b/g) || []).length
       : countHits(source);
     if (hits > 0) violations.push(relative + ": " + hits + " forbidden storage reference(s)");
   }
