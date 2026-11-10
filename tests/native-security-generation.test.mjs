@@ -182,3 +182,27 @@ test('PIN wrapping combines Argon2id with a non-exportable Keystore HKDF secret 
   assert.match(crypto, /legacyAad\(salt\)/);
   assert.match(crypto, /version == LEGACY_VERSION/);
 });
+
+test('PIN, recovery and biometric methods independently wrap and release the same DEK', () => {
+  const crypto = read('android/templates/security/AureliaCryptoEngine.kt');
+  const manager = read('android/templates/security/AureliaAppManager.kt');
+  const biometric = read('android/templates/security/BiometricVaultManager.kt');
+  const store = read('android/templates/security/BiometricEnvelopeStore.kt');
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  const patcher = read('scripts/patch-android.js');
+  assert.match(crypto, /wrapDataKeyWithRecovery/);
+  assert.match(crypto, /unwrapDataKeyWithRecovery/);
+  assert.match(crypto, /"RECOVERY"/);
+  assert.match(manager, /fun enableRecoveryKey/);
+  assert.match(manager, /fun recoverWithRecoveryKey/);
+  assert.match(manager, /fun unlockWithDataKey/);
+  assert.match(biometric, /setUserAuthenticationRequired\(true\)/);
+  assert.match(biometric, /AUTH_BIOMETRIC_STRONG/);
+  assert.match(biometric, /updateAAD/);
+  assert.match(biometric, /replaceInvalidatedKeyAfterPinAuthorization/);
+  assert.match(store, /aurelia-biometric-dek\.v1/);
+  assert.match(gate, /class LockGateActivity : FragmentActivity\(\)/);
+  assert.match(gate, /unlockWithBiometrics\(\)/);
+  assert.match(gate, /recoverWithRecoveryKey/);
+  assert.match(patcher, /BiometricEnvelopeStore\.kt/);
+});
