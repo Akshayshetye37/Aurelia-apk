@@ -20,12 +20,12 @@ test('sends authenticated, idempotent intent request without retrying', async ()
   const result = await client.createIntent({
     folioId: 'folio_123', amountMinor: 12500, currency: 'INR',
     provider: 'razorpay', environment: 'test'
-  }, { idempotencyKey: 'aurelia-test-key-123' });
+  }, { idempotencyKey: 'test-key' });
   assert.equal(result.intentId, 'created');
   assert.equal(calls.length, 1);
   assert.equal(calls[0][1].headers.Authorization, 'Bearer ' + token);
-  assert.equal(calls[0][1].headers['Idempotency-Key'], 'aurelia-test-key-123');
-  assert.equal(JSON.parse(calls[0][1].body).idempotencyKey, 'aurelia-test-key-123');
+  assert.equal(calls[0][1].headers['Idempotency-Key'], 'test-key');
+  assert.equal(JSON.parse(calls[0][1].body).idempotencyKey, 'test-key');
 });
 
 test('rejects malformed requests before network dispatch', async () => {
@@ -38,7 +38,7 @@ test('rejects malformed requests before network dispatch', async () => {
   await assert.rejects(client.createIntent({
     folioId: 'folio_123', amountMinor: 10, currency: 'USD',
     provider: 'razorpay', environment: 'test'
-  }, { idempotencyKey: 'aurelia-test-key-123' }), /invalid_payment_intent_request/);
+  }, { idempotencyKey: 'test-key' }), /invalid_payment_intent_request/);
   assert.equal(called, false);
 });
 
@@ -74,14 +74,14 @@ test('allows all six wired providers through the authenticated test-mode API cli
     const result = await client.createIntent({
       folioId: 'folio_123', amountMinor: 1000, currency: 'INR',
       provider, environment: 'test'
-    }, { idempotencyKey: 'aurelia-test-key-123' });
+    }, { idempotencyKey: 'test-key' });
     assert.equal(result.accepted, true);
   }
   assert.equal(calls.length, 6);
   assert.throws(() => client.createIntent({
     folioId: 'folio_123', amountMinor: 1000, currency: 'INR',
     provider: 'ccavenue', environment: 'test'
-  }, { idempotencyKey: 'aurelia-test-key-123' }), /invalid_payment_intent_request/);
+  }, { idempotencyKey: 'test-key' }), /invalid_payment_intent_request/);
 });
 
 test('tenant live collection control updates are narrow, authenticated and reason-bound', async () => {
@@ -128,15 +128,15 @@ test('refund creation is authenticated, idempotent and never silently retried', 
     fetchImpl: async (...args) => { call = args; return response(202, { refundId: 'rf_0123456789abcdef0', state: 'PENDING' }); }
   });
   const result = await client.createRefund('123e4567-e89b-12d3-a456-426614174000', {
-    amountMinor: 12500, idempotencyKey: 'refund-request-123', reason: 'Guest cancellation'
+    amountMinor: 12500, idempotencyKey: 'refund-test', reason: 'Guest cancellation'
   });
   assert.equal(result.state, 'PENDING');
   assert.equal(call[0], 'https://payments.example.com/v1/payments/intents/123e4567-e89b-12d3-a456-426614174000/refunds');
   assert.equal(call[1].method, 'POST');
   assert.equal(call[1].headers.Authorization, 'Bearer ' + token);
-  assert.equal(call[1].headers['Idempotency-Key'], 'refund-request-123');
+  assert.equal(call[1].headers['Idempotency-Key'], 'refund-test');
   assert.deepEqual(JSON.parse(call[1].body), {
-    amountMinor: 12500, idempotencyKey: 'refund-request-123', reason: 'Guest cancellation'
+    amountMinor: 12500, idempotencyKey: 'refund-test', reason: 'Guest cancellation'
   });
 });
 
@@ -149,13 +149,13 @@ test('refund API rejects invalid amounts, identities, reasons and refund referen
   });
   const intentId = '123e4567-e89b-12d3-a456-426614174000';
   assert.throws(() => client.createRefund(intentId, {
-    amountMinor: 99, idempotencyKey: 'refund-request-123'
+    amountMinor: 99, idempotencyKey: 'refund-test'
   }), /invalid_payment_refund_request/);
   assert.throws(() => client.createRefund(intentId, {
     amountMinor: 100, idempotencyKey: 'short'
   }), /invalid_payment_refund_request/);
   assert.throws(() => client.createRefund(intentId, {
-    amountMinor: 100, idempotencyKey: 'refund-request-123', reason: 'x'
+    amountMinor: 100, idempotencyKey: 'refund-test', reason: 'x'
   }), /invalid_payment_refund_request/);
   assert.throws(() => client.getRefund(intentId, 'rf_invalid'), /invalid_payment_refund_lookup/);
   assert.equal(calls, 0);
