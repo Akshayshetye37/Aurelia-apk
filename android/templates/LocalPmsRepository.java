@@ -12,7 +12,7 @@ import org.json.JSONObject;
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String NAME = "aurelia-pms-encrypted.db";
-  private static final int VERSION = 3;
+  private static final int VERSION = 4;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   private final Context appContext;
@@ -70,6 +70,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     db.execSQL("CREATE INDEX pms_outbox_delivery_idx ON pms_outbox(status,retry_at,created_at)");
     db.execSQL("CREATE TABLE pms_migrations(migration_key TEXT PRIMARY KEY NOT NULL,migration_id TEXT NOT NULL,source_key TEXT NOT NULL,completed_at INTEGER NOT NULL,entity_count INTEGER NOT NULL)");
     db.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL,source_timestamp TEXT NOT NULL,created_at INTEGER NOT NULL,format_version INTEGER NOT NULL)");
+    createAuditAppendOnlyTriggers(db);
   }
   @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {
     if(oldVersion<2) db.execSQL("ALTER TABLE pms_outbox ADD COLUMN acknowledged_at INTEGER");
@@ -77,6 +78,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       db.execSQL("ALTER TABLE pms_migration_snapshots ADD COLUMN source_timestamp TEXT NOT NULL DEFAULT ''");
       db.execSQL("ALTER TABLE pms_migration_snapshots ADD COLUMN format_version INTEGER NOT NULL DEFAULT 1");
     }
+    if(oldVersion<4) createAuditAppendOnlyTriggers(db);
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
 
@@ -105,9 +107,8 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     try {
       long actual=entityVersion(db,type,id);
       if(actual!=expectedVersion)throw conflict("ENTITY_VERSION_CONFLICT");
-      long now=System.currentTimeMillis(); ContentValues entity=new ContentValues();
-      entity.put("entity_type",type);entity.put("entity_id",id);entity.put("version",actual+1);entity.put("data_json",nextData.toString());entity.put("updated_at",now);
-      db.insertWithOnConflict("pms_entities",null,entity,SQLiteDatabase.CONFLICT_REPLACE);
+      long now=System.currentTimeMillis();
+      writeEntityVersion(db,type,id,expectedVersion,nextData,now);
       ContentValues out=new ContentValues();out.put("event_id",event.getString("eventId"));out.put("tenant_id",event.getString("tenantId"));out.put("property_id",event.getString("propertyId"));out.put("device_id",event.getString("deviceId"));out.put("entity_type",type);out.put("entity_id",id);out.put("sequence",expectedVersion+1);out.put("event_type",event.getString("eventType"));out.put("schema_version",event.getInt("schemaVersion"));out.put("occurred_at",event.getString("occurredAt"));out.put("payload_json",event.opt("payload")==null?"null":serializeJsonValue(event.opt("payload")));out.put("status","PENDING");out.put("attempts",0);out.put("created_at",now);
       db.insertOrThrow("pms_outbox",null,out); db.setTransactionSuccessful();
       JSONObject result=new JSONObject();result.put("key",type+":"+id);result.put("type",type);result.put("id",id);result.put("version",actual+1);result.put("data",nextData);result.put("updatedAt",isoTimestamp(now));return result;
@@ -126,7 +127,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     try {
       JSONArray results=new JSONArray();long now=System.currentTimeMillis();
       for(int i=0;i<changes.length();i++){JSONObject c=changes.getJSONObject(i),event=c.getJSONObject("event");String type=c.getString("entityType"),id=c.getString("entityId");long expected=c.getLong("expectedVersion"),actual=entityVersion(db,type,id);if(actual!=expected)throw conflict("ENTITY_VERSION_CONFLICT");}
-      for(int i=0;i<changes.length();i++){JSONObject c=changes.getJSONObject(i),event=c.getJSONObject("event");String type=c.getString("entityType"),id=c.getString("entityId");long version=c.getLong("expectedVersion")+1;JSONObject data=c.getJSONObject("data");ContentValues entity=new ContentValues();entity.put("entity_type",type);entity.put("entity_id",id);entity.put("version",version);entity.put("data_json",data.toString());entity.put("updated_at",now);db.insertWithOnConflict("pms_entities",null,entity,SQLiteDatabase.CONFLICT_REPLACE);
+      for(int i=0;i<changes.length();i++){JSONObject c=changes.getJSONObject(i),event=c.getJSONObject("event");String type=c.getString("entityType"),id=c.getString("entityId");long version=c.getLong("expectedVersion")+1;JSONObject data=c.getJSONObject("data");writeEntityVersion(db,type,id,c.getLong("expectedVersion"),data,now);
         ContentValues out=new ContentValues();out.put("event_id",event.getString("eventId"));out.put("tenant_id",event.getString("tenantId"));out.put("property_id",event.getString("propertyId"));out.put("device_id",event.getString("deviceId"));out.put("entity_type",type);out.put("entity_id",id);out.put("sequence",version);out.put("event_type",event.getString("eventType"));out.put("schema_version",event.getInt("schemaVersion"));out.put("occurred_at",event.getString("occurredAt"));out.put("payload_json",event.opt("payload")==null?"null":serializeJsonValue(event.opt("payload")));out.put("status","PENDING");out.put("attempts",0);out.put("created_at",now);db.insertOrThrow("pms_outbox",null,out);
         JSONObject row=new JSONObject();row.put("key",type+":"+id);row.put("type",type);row.put("id",id);row.put("version",version);row.put("data",data);row.put("updatedAt",isoTimestamp(now));results.put(row);}
       db.setTransactionSuccessful();return results;
@@ -220,6 +221,28 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static long longForQuery(SQLiteDatabase db,String sql,String[] args){
     try(Cursor c=db.rawQuery(sql,args)){if(!c.moveToFirst())throw new IllegalStateException("pms_query_no_result");return c.getLong(0);}
   }
+  private static void createAuditAppendOnlyTriggers(SQLiteDatabase db) {
+    db.execSQL("CREATE TRIGGER IF NOT EXISTS pms_audit_no_update BEFORE UPDATE ON pms_entities WHEN OLD.entity_type='audit' BEGIN SELECT RAISE(ABORT,'audit_append_only'); END");
+    db.execSQL("CREATE TRIGGER IF NOT EXISTS pms_audit_no_delete BEFORE DELETE ON pms_entities WHEN OLD.entity_type='audit' BEGIN SELECT RAISE(ABORT,'audit_append_only'); END");
+  }
+
+  private static void writeEntityVersion(SQLiteDatabase db,String type,String id,long expectedVersion,JSONObject data,long now) {
+    ContentValues values=new ContentValues();
+    values.put("version",expectedVersion+1);
+    values.put("data_json",data.toString());
+    values.put("updated_at",now);
+    if(expectedVersion==0) {
+      values.put("entity_type",type);
+      values.put("entity_id",id);
+      db.insertOrThrow("pms_entities",null,values);
+      return;
+    }
+    int changed=db.update("pms_entities",values,
+      "entity_type=? AND entity_id=? AND version=?",
+      new String[]{type,id,String.valueOf(expectedVersion)});
+    if(changed!=1) throw conflict("ENTITY_VERSION_CONFLICT");
+  }
+
   private static long entityVersion(SQLiteDatabase db,String type,String id){try(Cursor c=db.rawQuery("SELECT version FROM pms_entities WHERE entity_type=? AND entity_id=?",new String[]{type,id})){return c.moveToFirst()?c.getLong(0):0;}}
   private static void validateEvent(JSONObject e,String type,String id,long sequence){try{for(String k:new String[]{"eventId","tenantId","propertyId","deviceId","eventType"})validateIdentity(e.getString(k),k);if(!type.equals(e.getString("entityType"))||!id.equals(e.getString("entityId"))||safeJsonInteger(e,"sequence",1)!=sequence||safeJsonInteger(e,"schemaVersion",1)<1||!Double.isFinite(parseDate(e.getString("occurredAt"))))throw new IllegalArgumentException("invalid_pms_outbox_event");if(e.has("payload")&&serializeJsonValue(e.get("payload"))==null)throw new IllegalArgumentException("invalid_payload");}catch(RuntimeException x){throw x;}catch(Exception x){throw new IllegalArgumentException("invalid_pms_outbox_event",x);}}
   private static long safeJsonInteger(JSONObject object,String key,long minimum)throws Exception{Object raw=object.get(key);if(!(raw instanceof Number))throw new IllegalArgumentException("invalid_integer_"+key);double number=((Number)raw).doubleValue();if(!Double.isFinite(number)||number!=Math.rint(number)||number<minimum||number>9007199254740991d)throw new IllegalArgumentException("invalid_integer_"+key);return ((Number)raw).longValue();}
