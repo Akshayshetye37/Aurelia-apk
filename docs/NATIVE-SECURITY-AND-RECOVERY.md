@@ -1,6 +1,6 @@
 # Native App Manager and PIN Recovery Security Contract
 
-**Status:** Native implementation foundation committed; hardware validation and full security acceptance remain outstanding.
+**Status:** Offline PIN + recovery-key wrapping and CryptoObject-backed biometric unlock are implemented in the native launcher. OTP/backend authorization, lifecycle auto-lock settings, event/alert, step-up and physical-device qualification remain incomplete; this is not production-ready.
 
 ## Native ownership boundary
 
@@ -41,7 +41,7 @@ The MainActivity lifecycle check is defense in depth. Android task restoration, 
 
 The biometric manager provisions an authentication-required Android Keystore AES key and exposes cipher operations through `BiometricPrompt.CryptoObject`. A successful biometric callback alone is not sufficient; the authenticated cipher operation must succeed.
 
-Biometric DEK wrapping is a separate opt-in path and is not yet integrated into the launch gate or end-to-end tested. Keystore hardware backing varies by device. Verify key security level, invalidation behavior and authentication policy on representative hardware before enabling it.
+Biometric DEK wrapping is integrated into `LockGateActivity`: enrollment occurs only after PIN/recovery authorization, and unlock uses `BiometricPrompt` with `BIOMETRIC_STRONG`, an authentication-required AES-GCM Keystore key and a `CryptoObject` decrypt operation. A successful callback without a successful decrypt is not accepted. StrongBox is attempted with a fallback when unavailable. The biometric wrapper is deleted after recovery and must be re-enrolled. Remaining gaps: no explicit app-level five-failure counter/telemetry, no qualified 72-hour mandatory-PIN policy, and no physical-device evidence yet for StrongBox/fallback and enrollment invalidation.
 
 ## Forgotten PIN and OTP recovery — critical rule
 
@@ -68,7 +68,7 @@ The supplied example OTP/KMS design is not safe to copy as written:
 
 The native branch implements offline recovery-key provisioning and local forgotten-PIN recovery. Recovery keys use RFC 4648 Base32 with a 10-bit SHA-256 checksum. PIN policy is enforced in the crypto engine (6–16 digits; repeated and sequential patterns rejected). Recovery unwraps the existing DEK, creates a replacement PIN wrapper, test-unwraps it and compares the result in constant time, then persists through AtomicFile while retaining the prior encrypted envelope as .prev until a subsequent successful PIN unlock. Recovery attempts use a separate Keystore-authenticated retry-state file and alias. Recovery disables the biometric wrapper so it must be explicitly re-enrolled. If the PIN/recovery envelope is missing but a biometric wrapper still exists, the launcher preserves the biometric-only unlock path. If no usable wrapper exists, the gate offers only an irreversible local reset after the owner types `RESET AURELIA DATA`; it deletes the encrypted PMS database, local photo archive, envelope and biometric wrapper, and never silently creates a replacement key.
 
-The local recovery implementation still requires native tests and physical-device qualification. Incomplete and disabled items: Settings-based verified-phone registration, Firebase App Check/Play Integrity enforcement, backend token verification and signed one-time recovery authorization, 24–72 hour phone-change cooling period and notifications, OTP challenge service, step-up authentication, append-only hash-chained security event log, lifecycle-wide auto-lock/cache clearing, and assisted recovery. FirebasePhoneIdentity is only an isolated phone-auth primitive, not a complete recovery service. OTP recovery remains disabled in production.
+The local recovery implementation still requires native tests and physical-device qualification. `FirebasePhoneIdentity` and `RecoveryFirebaseAuthFactory` are isolated client-side Firebase Phone Auth primitives only; they are not wired into forgotten-PIN recovery or backed by a trusted recovery service. They do not enforce App Check/Play Integrity, tenant phone binding, server-side `auth_time`, or a signed one-time `jti` token. OTP recovery remains unavailable and disabled in production. Incomplete items: Settings-based verified-phone registration and disable-with-PIN control; backend verification and one-time device/client-nonce-bound recovery authorization; phone-number change with cooling period, cancellation and alerts; step-up authentication; append-only hash-chained security event log; owner notifications; selectable Immediately/5-minute/Never auto-lock using `ProcessLifecycleOwner`; SQLCipher/WebView/decrypted-cache teardown; mandatory PIN every 72 hours; Play Integrity enforcement for recovery/payment; and optional assisted recovery. Staff roles are not implemented.
 
 ## Acceptance gates before production
 
@@ -77,14 +77,29 @@ The local recovery implementation still requires native tests and physical-devic
 - Base32 recovery-key round-trip, malformed-padding and checksum-tamper tests.
 - Weak/repeated/sequential PIN rejection at the crypto-engine boundary.
 - Recovery-key lockout persistence and reboot-mid-lockout tests.
-- Recovery DEK equality, database reopen and process-death-at-each-swap-step tests.
+- Recovery DEK equality, database reopen with existing data and process-death-at-each-swap-step tests (wrapper equality has instrumentation coverage; database preservation and crash-point coverage remain outstanding).
 - Verify .prev is retained until first successful new-PIN unlock.
 - AES-GCM round-trip, wrong-PIN, nonce uniqueness, tag-tamper and metadata-tamper tests.
 - AtomicFile interruption/corruption and Keystore invalidation tests.
 - Retry escalation, reboot, process-death and wall-clock manipulation tests.
 - Instrumented launcher tests proving no WebView/JavaScript executes before PIN success.
 - Task restoration, deep-link, notification and exported-component entry-path audit.
-- Biometric authentication and enrollment-invalidation tests on hardware-backed and software-backed devices.
+- Biometric authentication, five-failure fallback, enrollment-invalidation, StrongBox and fallback tests on hardware-backed and software-backed physical devices.
 - Security review of backup/restore and upgrade/migration behavior.
 
 Until these gates pass, this is an implementation foundation, not a production security certification. Live payment collection and automatic folio settlement remain unrelated and disabled.
+
+
+## Explicitly unimplemented controls (do not infer from the offline recovery foundation)
+
+| Control | Current state | Production gate |
+|---|---|---|
+| OTP authorization | Firebase Phone Auth helper only; not connected to recovery | Trusted backend, App Check + Play Integrity, verified tenant phone binding, fresh auth_time, signed single-use jti token and replay tests |
+| Phone registration/change | Not implemented | PIN/biometric step-up, E.164 verification, cooling period, old-contact alerts and cancellation |
+| Auto-lock choices | Fixed process/session timeout foundation only | Immediately / 5-minute / Never settings, monotonic lifecycle timing, picker/prompt suppression and cache/SQLCipher teardown |
+| Session invalidation | Current process manager can clear its DEK | Revoke every app session after recovery and prove no restored WebView/session survives |
+| Security event log/alerts | Not implemented | Append-only hash chain, secret-free records, owner alerts and tamper tests |
+| Step-up / integrity | Not implemented end-to-end | Fresh auth for sensitive actions and Play Integrity policy for recovery/payment |
+| Assisted recovery / staff roles | Not implemented; assisted recovery must remain off | Separate opt-in design review and constrained credential model |
+
+OTP must never substitute for the offline recovery key and must never create, unwrap or replace the DEK. No automatic wipe is permitted after failed attempts.
