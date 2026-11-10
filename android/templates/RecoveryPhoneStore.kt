@@ -138,7 +138,7 @@ class RecoveryPhoneStore(context: Context) {
         val nonce = ByteArray(NONCE_BYTES).also(random::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key(), GCMParameterSpec(TAG_BITS, nonce))
-        cipher.updateAAD(AAD)
+        cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
         val plaintext = json.toByteArray(Charsets.UTF_8)
         val encrypted = try {
             cipher.doFinal(plaintext)
