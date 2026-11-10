@@ -89,6 +89,8 @@ jobs:
             "emulator" \
             "system-images;android-34;google_apis;x86_64"
           mkdir -p "$RUNNER_TEMP/aurelia-emulator"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
 
       - name: Compile native sources, unit tests and instrumentation APK
         working-directory: android
@@ -209,7 +211,9 @@ jobs:
             echo '=== instrumentation registry ==='
             adb shell pm list instrumentation -f
             echo '=== app/test package install state ==='
+            echo 'app APK install path:'
             adb shell pm path com.aurelia.pms
+            echo 'test APK install path:'
             adb shell pm path com.aurelia.pms.test
             adb shell dumpsys package com.aurelia.pms.test
             echo '=== app/test process exit history ==='
