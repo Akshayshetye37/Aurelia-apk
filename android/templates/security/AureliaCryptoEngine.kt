@@ -55,7 +55,10 @@ class AureliaCryptoEngine(
             "PIN must contain 6–16 digits."
         }
         val value = String(pin)
-        require(value.toSet().size > 1) { "Repeated-digit PINs are not allowed." }
+        val repeatedPattern = (1..3).any { period ->
+            value.length % period == 0 && value.chunked(period).distinct().size == 1
+        }
+        require(!repeatedPattern) { "Repeated-digit or repeated-pattern PINs are not allowed." }
         val ascending = value.zipWithNext().all { (a, b) -> b.code - a.code == 1 }
         val descending = value.zipWithNext().all { (a, b) -> a.code - b.code == 1 }
         require(!ascending && !descending) { "Sequential PINs are not allowed." }

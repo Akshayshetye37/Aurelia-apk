@@ -61,7 +61,8 @@ test('PIN policy is enforced by the crypto engine while legacy PINs remain reada
   const gate = read('android/templates/security/LockGateActivity.kt');
   assert.match(crypto, /pin\.size in 6\.\.16/);
   assert.match(crypto, /validatePinForUnlock/);
-  assert.match(crypto, /Repeated-digit PINs are not allowed/);
+  assert.match(crypto, /Repeated-digit or repeated-pattern PINs are not allowed/);
+  assert.match(crypto, /value\.chunked\(period\)\.distinct\(\)/);
   assert.match(crypto, /Sequential PINs are not allowed/);
   assert.match(crypto, /base32Encode/);
   assert.match(crypto, /recoveryChecksum/);

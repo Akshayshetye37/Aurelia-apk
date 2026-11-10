@@ -246,7 +246,9 @@ class LockGateActivity : FragmentActivity() {
         val groups = String(recoveryKey).split("-")
         if (groups.size != 9) {
             recoveryKey.fill('\u0000')
+            manager.lock()
             showError("Recovery-key formatting failed. Do not continue enrollment.")
+            finish()
             return
         }
         val selected = (0 until groups.size).toMutableList().also { java.util.Collections.shuffle(it, java.security.SecureRandom()) }.take(3).sorted()
@@ -282,6 +284,7 @@ class LockGateActivity : FragmentActivity() {
             }
             .setNegativeButton("Cancel") { _, _ ->
                 recoveryKey.fill('\u0000')
+                manager.lock()
                 showError("Save and verify your recovery key before using the PMS.")
                 finish()
             }
