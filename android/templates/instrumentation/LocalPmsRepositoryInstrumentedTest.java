@@ -264,12 +264,14 @@ public final class LocalPmsRepositoryInstrumentedTest {
     char[] wrongPin = "481593".toCharArray();
     try {
       com.aurelia.pms.security.AureliaAppManager.Enrollment enrollment = manager.enroll(pin);
+      char[] recoveryKey = enrollment.getRecoveryKey();
       String validEnvelope = enrollment.getEnvelopeJson();
       manager.lock();
 
       // Missing envelope and a flipped authenticated ciphertext byte must never release the DEK.
       assertFalse("missing envelope must be rejected", manager.unlock(pin, "{}"));
       assertEquals(1, new com.aurelia.pms.security.AppLockManager(isolated).lockoutFailureCount());
+      new com.aurelia.pms.security.AppLockManager(isolated).registerSuccess();
 
       manager.lock();
       JSONObject tampered = new JSONObject(validEnvelope);
@@ -279,6 +281,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
       tampered.put("pin", pinWrapper.substring(0, flipAt) +
         (original == 'A' ? 'B' : 'A') + pinWrapper.substring(flipAt + 1));
       assertFalse("modified envelope byte must be rejected", manager.unlock(pin, tampered.toString()));
+      new com.aurelia.pms.security.AppLockManager(isolated).registerSuccess();
 
       manager.lock();
       for (int attempt = 1; attempt <= 5; attempt++) {
@@ -294,6 +297,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
       manager.lock();
       Arrays.fill(pin, '\\0');
       Arrays.fill(wrongPin, '\\0');
+      if (recoveryKey != null) Arrays.fill(recoveryKey, '\\0');
       new com.aurelia.pms.security.AureliaEnvelopeStore(isolated).delete();
       new File(isolated.getNoBackupFilesDir(), "aurelia-lock-state.v1").delete();
       store.load(null);
