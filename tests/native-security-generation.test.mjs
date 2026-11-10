@@ -169,3 +169,16 @@ test('existing encrypted database cannot enter first-time enrollment without its
   assert.match(manager, /databaseExists \|\| AureliaEnvelopeStore\(context\)\.exists\(\) \|\| AureliaSecurityRuntime\.isEnrolled\(\)/);
   assert.match(manager, /refusing DEK regeneration/);
 });
+
+test('PIN wrapping combines Argon2id with a non-exportable Keystore HKDF secret and binds the database identity', () => {
+  const crypto = read('android/templates/security/AureliaCryptoEngine.kt');
+  assert.match(crypto, /const val VERSION = 3/);
+  assert.match(crypto, /KEY_ALGORITHM_HMAC_SHA256/);
+  assert.match(crypto, /PIN_KEK_ALIAS/);
+  assert.match(crypto, /HKDF-Extract/);
+  assert.match(crypto, /HKDF-Expand/);
+  assert.match(crypto, /databaseId/);
+  assert.match(crypto, /aad\(VERSION, "PIN", DATABASE_ID, salt\)/);
+  assert.match(crypto, /legacyAad\(salt\)/);
+  assert.match(crypto, /version == LEGACY_VERSION/);
+});
