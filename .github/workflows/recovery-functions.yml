@@ -1,0 +1,39 @@
+name: Recovery Functions CI
+
+on:
+  push:
+    branches: [work/p0-storage-hardening]
+    paths:
+      - 'functions/**'
+      - 'firestore.rules'
+      - 'firebase.json'
+      - '.github/workflows/recovery-functions.yml'
+  pull_request:
+    paths:
+      - 'functions/**'
+      - 'firestore.rules'
+      - 'firebase.json'
+      - '.github/workflows/recovery-functions.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  recovery-functions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package.json
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+        working-directory: functions
+      - name: Compile TypeScript
+        run: npm run build
+        working-directory: functions
+      - name: Run security contract tests
+        run: npm test
+        working-directory: functions
