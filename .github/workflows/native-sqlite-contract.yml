@@ -112,6 +112,7 @@ jobs:
           fi
 
       - name: Compile native sources, unit tests and instrumentation APK
+        timeout-minutes: 20
         working-directory: android
         shell: bash
         run: |
@@ -198,6 +199,7 @@ jobs:
           timeout -k 2s 10s adb devices -l || true
 
       - name: Wait for Android emulator boot completion
+        timeout-minutes: 16
         shell: bash
         run: |
           set -euo pipefail
@@ -246,6 +248,7 @@ jobs:
 
       - name: Require at least one completed instrumentation test
         if: always()
+        timeout-minutes: 2
         shell: bash
         run: |
           set -euo pipefail
@@ -253,6 +256,7 @@ jobs:
 
       - name: Capture emulator, instrumentation and APK diagnostics
         if: always()
+        timeout-minutes: 5
         shell: bash
         run: |
           set +e
@@ -328,6 +332,7 @@ jobs:
 
       - name: Upload native instrumentation diagnostics
         if: always()
+        timeout-minutes: 5
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: aurelia-native-sqlite-${{ github.sha }}
