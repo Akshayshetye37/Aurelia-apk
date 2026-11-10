@@ -43,3 +43,34 @@ A case passes only when the tester attaches timestamped logs and reproducible st
 - Supported device matrix approval: PENDING
 - Security owner approval: PENDING
 - Release approval: NOT AUTHORIZED
+
+
+## Executable debug qualification harness
+
+The Android patcher copies `LocalPmsFaultInjection.java` into **`app/src/debug/java` only**. The release source set does not contain the hook implementation. The native repository calls checkpoints only behind the compile-time `BuildConfig.DEBUG` guard.
+
+Checkpoints:
+- `before_write`
+- `mid_transaction`
+- `before_commit`
+- `after_commit_before_checkpoint`
+- `mid_migration`
+
+On a dedicated physical device with the debug instrumentation APK installed:
+
+```bash
+ANDROID_SERIAL=<device-serial> scripts/run-android-fault-injection.sh
+CONFIRM_DESTRUCTIVE_LOW_STORAGE_TEST=YES ANDROID_SERIAL=<device-serial> scripts/run-android-low-storage-qualification.sh
+```
+
+The fault harness injects process death, force-stops the app, reboots the device, reopens the database and checks `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, and domain/outbox atomicity. The low-storage harness fills `/data` while leaving approximately 48 MiB free; it requires explicit confirmation and removes its filler file on exit. Set `AURELIA_MAX_FILL_MB` only after confirming the device is dedicated to qualification.
+
+## Physical-device result matrix
+
+Every supported model/API combination must have its own signed row. Do not mark a row PASS from emulator results.
+
+| Device model | Android version | API | StrongBox | Build SHA | Fault matrix | Low storage | WAL/integrity | Tester signature/date | Independent reviewer/date |
+|---|---|---:|---|---|---|---|---|---|---|
+| Pending physical device | Pending | Pending | Pending | — | NOT RUN | NOT RUN | NOT RUN | — | — |
+
+**Current evidence state:** instrumentation and harness code are implemented; no physical-device execution or signatures are recorded in this document.
