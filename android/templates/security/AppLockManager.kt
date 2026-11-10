@@ -90,7 +90,10 @@ class AppLockManager(context: Context) {
 
     private fun readState(): State {
         val bytes = try { file.openRead().use { it.readBytes() } }
-        catch (missing: java.io.FileNotFoundException) { return State(0, 0L, bootCount()) }
+        catch (missing: java.io.FileNotFoundException) {
+            if (hasKeyAlias()) throw SecurityException("PIN lock state is missing after enrollment; refusing to reset retry counters.")
+            return State(0, 0L, bootCount())
+        }
         val plain = decrypt(bytes)
         return try {
             val json = JSONObject(String(plain, Charsets.UTF_8))
@@ -144,9 +147,20 @@ class AppLockManager(context: Context) {
         val iv = input.copyOfRange(1, 1 + ivSize)
         val ciphertext = input.copyOfRange(1 + ivSize, input.size)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, iv))
+        cipher.init(Cipher.DECRYPT_MODE, existingKey(), GCMParameterSpec(128, iv))
         cipher.updateAAD(MAGIC.toByteArray(Charsets.UTF_8))
         return try { cipher.doFinal(ciphertext) } finally { iv.fill(0); ciphertext.fill(0) }
+    }
+
+    private fun hasKeyAlias(): Boolean {
+        val store = KeyStore.getInstance(STORE).apply { load(null) }
+        return store.containsAlias(ALIAS)
+    }
+
+    private fun existingKey(): SecretKey {
+        val store = KeyStore.getInstance(STORE).apply { load(null) }
+        return store.getKey(ALIAS, null) as? SecretKey
+            ?: throw SecurityException("PIN lock-state key is missing; refusing to reset retry counters.")
     }
 
     @Synchronized
