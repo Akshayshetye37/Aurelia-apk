@@ -36,8 +36,7 @@ class LockGateActivity : Activity() {
         envelopeStore = AureliaEnvelopeStore(this)
         val enrolled = AureliaSecurityRuntime.isEnrolled()
         val envelopeExists = envelopeStore.exists()
-        val databaseFile = getDatabasePath("aurelia-pms-encrypted.db")
-        val databaseExists = databaseFile.exists() || java.io.File(databaseFile.path + "-wal").exists() || java.io.File(databaseFile.path + "-shm").exists()
+        val databaseExists = encryptedDatabaseExists()
         if (databaseExists && (!enrolled || !envelopeExists)) {
             throw SecurityException("Encrypted PMS database exists but its key envelope is missing; data recovery is required.")
         }
@@ -120,7 +119,7 @@ class LockGateActivity : Activity() {
                     showError("PIN confirmation does not match.")
                     return
                 }
-                val enrollment = manager.enroll(first, databaseFile.exists() || java.io.File(databaseFile.path + "-wal").exists() || java.io.File(databaseFile.path + "-shm").exists())
+                val enrollment = manager.enroll(first, encryptedDatabaseExists())
                 writeEnvelope(enrollment.envelopeJson)
                 AureliaSecurityRuntime.markEnrolled()
                 openPms()
@@ -147,6 +146,13 @@ class LockGateActivity : Activity() {
             .setMessage("PIN recovery requires the recovery service, which is not yet available. Contact support or use a known backup. Do not uninstall the app or clear its data if you may need this device to access your encrypted data. No OTP has been sent.")
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    private fun encryptedDatabaseExists(): Boolean {
+        val databaseFile = getDatabasePath("aurelia-pms-encrypted.db")
+        return databaseFile.exists() ||
+            java.io.File(databaseFile.path + "-wal").exists() ||
+            java.io.File(databaseFile.path + "-shm").exists()
     }
 
     private fun writeEnvelope(value: String) = envelopeStore.write(value)
