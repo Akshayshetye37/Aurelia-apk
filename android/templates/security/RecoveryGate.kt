@@ -17,7 +17,10 @@ object RecoveryGate {
     @Volatile private var attemptsRemaining = 0
 
     @Synchronized
-    fun arm() {
+    fun arm(verification: RecoveryGrantVerifier.Result) {
+        check(verification === RecoveryGrantVerifier.Result.Ok) {
+            "A verified recovery grant is required to arm the recovery gate."
+        }
         deadlineElapsed = SystemClock.elapsedRealtime() + TTL_MS
         attemptsRemaining = MAX_ATTEMPTS
     }
