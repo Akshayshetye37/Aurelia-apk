@@ -1,28 +1,16 @@
 <!--
-AURELIA PMS — CURRENT SOURCE AND RELEASE BOUNDARY (updated 2026-11-09)
+AURELIA PMS — CURRENT SOURCE AND RELEASE BOUNDARY (updated 2026-11-10)
 Repository: https://github.com/Akshayshetye37/Aurelia-apk
-Project root: /
-Active engineering branch: work/p0-storage-hardening
-Source candidate before documentation-only commits: e430a9cd72d8e7ec7f653cbbb15e617595daf758 (see PR #18 for current branch tip)
-Draft PR: https://github.com/Akshayshetye37/Aurelia-apk/pull/18 (open, draft, unmerged)
-CURRENT STATE: canonical authority is PREPARED_COMPATIBILITY. uiCutover=false. Live gateway collection, automatic settlement, automatic refund posting, provider activation and production release remain OFF.
-CURRENT CHAT OVERVIEW / OPEN GATES:
-1) Emulator SQLite instrumentation is blocked: native compilation passed in runs 42646801316 and 42646788499, but Linux emulator startup/ADB failed and timed out. No connected instrumentation report exists; no SQLite assertions can be claimed as passed or failed.
-2) Physical Android qualification has not started; it is blocked until emulator instrumentation is green.
-3) No owner-authorized real/production-shaped snapshot has been migrated and parity/rollback verified.
-4) Domain-command routing is incomplete; not every business mutation uses the command/repository layer exclusively.
-5) Legacy direct business-data writes remain and require removal after command coverage.
-6) Accounting owner sign-off on representative real/realistic folios is missing.
-7) Repository governance is incomplete; PR #18 remains draft and branch protection/required checks need owner/admin configuration.
-8) UI cutover remains disabled until storage, migration, command routing and accounting gates pass.
-9) Live collection, automatic settlement and automatic refund posting remain OFF pending server-side qualification and explicit audited owner authorization.
-DEPENDENCY ORDER: close emulator instrumentation, then physical-device qualification and authorized snapshot migration/parity/rollback; only then complete domain-command routing and remove bypasses; obtain accounting sign-off and governance approval. Do not merge or activate any release gate based on synthetic or incomplete evidence.
-LATEST VERIFIED CI: R1 local-first run 42646800927 and settlement foundation run 42646800905 passed on candidate SHA e430a9c. Native runs above compiled successfully but failed at emulator boot before instrumentation could produce results.
-LOCAL IDENTITY / KEY BOUNDARY: SQLCipher receives a short-lived process-memory DEK/passphrase byte array; the DEK is not a non-exportable Android Keystore key. Android Keystore protects the persisted wrapped envelope at rest. Never log or persist clear key material.
-LOCAL-FIRST: ordinary PMS operations must use durable device-local storage. Browser/PWA uses IndexedDB; Android uses native SQLCipher-backed SQLite through Capacitor. Missing native storage must fail closed.
-PAYMENT TRUST: provider credentials, webhook secrets and signing material remain backend-only. Browser redirects/callbacks are not proof of payment capture.
-The app must be served/packaged with the complete project and ./src module tree. Embedded HTML previews are not supported as a durable PMS runtime.
-See README.md and docs/ for architecture, test evidence and release qualification details.
+Active branch: work/p0-storage-hardening
+Verified code candidate: 0ff3ee721e915e5d573252c6b17e22f5df91a1fd
+Draft PR #18: https://github.com/Akshayshetye37/Aurelia-apk/pull/18 (open, draft, unmerged)
+CURRENT STATE: canonical authority remains PREPARED_COMPATIBILITY. uiCutover=false. Live gateway collection, automatic settlement, automatic refund posting, provider activation and production release remain OFF.
+STORAGE BOUNDARY: ordinary PMS writes persist to the canonical local repository and require exact read-back. The local-first write coordinator no longer writes a legacy Web Storage business cache. Web Storage is restricted to approved preferences. Browser business data uses IndexedDB; Android uses native SQLCipher-backed SQLite.
+LATEST NATIVE EVIDENCE BEFORE THIS CODE UPDATE: emulator boot completed, but the SQLite instrumentation step was still running when the branch advanced. No instrumentation pass, test count, XML report or artifact is claimed for that superseded run. Fresh exact-head CI is required for 0ff3ee721e915e5d573252c6b17e22f5df91a1fd.
+OPEN RELEASE GATES: shared IndexedDB/SQLite parity contract suite; physical-device process-death/reauthorization qualification; owner-authorized production-shaped snapshot migration and financial parity/rollback; second-device backup/restore; written accounting sign-off; branch protection/required checks; owner-authorized production signing and release.
+LEGACY DATA: quarantine old keys; do not delete them without verified migration, retention delay and explicit approval.
+SECURITY: payment credentials, webhook secrets and signing material remain backend-only. Browser callbacks are not payment proof. Never log or persist clear key material.
+Do not merge, activate cutover or enable payment/release flags based on synthetic or incomplete evidence.
 -->
 
 <!-- Application metadata

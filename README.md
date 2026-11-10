@@ -1,96 +1,48 @@
 # Aurelia PMS
 
-## Current engineering status — 2026-11-09
+## Current engineering status — 2026-11-10
 
-**Release posture: NOT PRODUCTION READY.** This branch is an open draft engineering change. The canonical authority remains `PREPARED_COMPATIBILITY`. UI cutover, live gateway collection, automatic settlement, automatic refund posting, provider activation and production release remain disabled.
-
-### Current project location
+**Release posture: NOT PRODUCTION READY.** PR #18 remains a draft, open and unmerged. Canonical authority remains `PREPARED_COMPATIBILITY`; `uiCutover=false`. Live gateway collection, automatic settlement, automatic refund posting, provider activation and production release remain OFF.
 
 - Repository: https://github.com/Akshayshetye37/Aurelia-apk
-- Project root: `/` (repository root)
-- Active engineering branch: `work/p0-storage-hardening`
+- Active branch: `work/p0-storage-hardening`
+- Verified code candidate for this storage increment: `0ff3ee721e915e5d573252c6b17e22f5df91a1fd`
 - Draft PR: https://github.com/Akshayshetye37/Aurelia-apk/pull/18
-- Code candidate SHA before documentation-only updates: `e430a9cd72d8e7ec7f653cbbb15e617595daf758` (current branch tip is shown by PR #18)
-- Main application entry: `index.html`
-- Android native templates: `android/templates/`
-- Repository/storage implementation: `src/storage/`
-- Payment implementation: `src/payments/` and `payment-backend/`
-- Tests: `tests/` and `android/templates/instrumentation/`
-- Engineering/release documentation: `docs/`
+- Main application: `index.html`; storage/repository implementation: `src/storage/`; tests: `tests/`; Android instrumentation: `android/templates/instrumentation/`.
 
-### Chat overview — remaining problems and dependency order
+### Implemented in source
 
-This overview records the current decisions and evidence from this engineering conversation. It is not a production approval.
+- Browser business state is persisted through IndexedDB; Android uses native SQLCipher-backed SQLite. Missing required durable storage fails closed.
+- Direct browser storage APIs and legacy business-state key references are confined by a source-boundary regression test.
+- Web Storage wrapper is preference-only (`theme`, `lang`); it is not a business-state persistence layer.
+- Photo archive, encrypted backup vault and payment evidence/intent/journal stores are isolated behind storage adapters.
+- Local identity is IndexedDB-only, validates persisted data and rejects corrupt state rather than silently generating a replacement.
+- Canonical authority guards cover bootstrap/restore compatibility paths, operational mutation entry points and legacy manual settlement.
+- The local-first write coordinator serializes writes, persists through the canonical repository and requires exact read-back. It no longer writes the legacy `aurelia_lodge_v2` Web Storage cache.
+- Payment settlement uses backend-verified authorization bindings; gateway activation remains disabled.
+- Native SQLCipher configuration, encrypted migration, atomic entity/outbox writes, rollback tests and migration-checkpoint fault-injection tests are present.
 
-1. **Emulator SQLite instrumentation — OPEN / BLOCKED.** Native source compilation passed on both [run 42646801316](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42646801316) and [run 42646788499](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42646788499), but both failed before connected instrumentation reports were produced. Logs show ADB connection failures and emulator boot timeout on Linux without KVM acceleration. No SQLite instrumentation assertion result can be claimed. Correct the CI emulator startup only; do not alter application logic without a test-level failure.
-2. **Physical Android qualification — NOT STARTED / BLOCKED BY 1.** After emulator instrumentation passes, run the full matrix on physical hardware: fresh install, process death, background/foreground reauthorization, plaintext migration and parity, wrong-key fail-closed behavior, and interrupted/low-storage migration. Record model, Android version and exact SHA.
-3. **Owner-authorized production-shaped snapshot — MISSING / BLOCKER.** No authorized real or production-shaped snapshot has been supplied and processed. Run migration, full entity read-back, parity and rollback against such a snapshot; retain the source until evidence is accepted. Synthetic fixtures are not real-data evidence.
-4. **Domain-command read/write routing — INCOMPLETE / BLOCKED BY 1–3.** Complete commands for bookings, guests, rooms, folios, payments, audit and inventory. Commands must become the sole business write path while the legacy projection remains active. Demonstrate clean divergence checks.
-5. **Remaining legacy business writes — PRESENT / BLOCKED BY 4.** Inventory and remove direct localStorage or equivalent business-data writes only after domain commands cover the mutations. Keep only explicitly approved preference/cache use outside the repository layer; prove zero business-write bypasses.
-6. **Accounting sign-off — MISSING.** Use the existing read-only folio evidence exporter on representative manual-cash, staff-reviewed UPI and unpaid folios. Obtain written owner/accountant confirmation of balances, history and audit evidence before opening any gateway-to-folio posting path.
-7. **Repository governance — INCOMPLETE.** PR #18 remains draft and unmerged. Configure protected target-branch rules, required reviews and required status checks (PMS, R1, settlement, payment backend, Android compile and instrumentation) before release-critical merge.
-8. **UI cutover — DISABLED.** Keep `uiCutover=false` until items 1–5, clean divergence evidence and accounting sign-off are complete. Any future change must be isolated, reviewed and reversible.
-9. **Financial release gates — OFF.** Live collection, automatic settlement and automatic refund posting remain OFF. Any future activation requires completed storage/migration/routing/accounting qualification, webhook and reconciliation proof, and an explicit authenticated, audited owner release decision on the server side.
+### CI evidence and current candidate
 
-### Verified state at this update
+The preceding exact-code candidate `ab645ad1567ac2902d48c8807ded18013a11cdab` passed source/web and R1 checks (542 source tests; production web build and asset privacy checks passed). Its native run compiled native sources, passed ABI/APK-content checks, created and booted the Android emulator, and entered SQLite instrumentation. That run was superseded by the storage-cache correction before instrumentation completion; it is **not** a passing SQLite test result.
 
-- Exact candidate commit: `e430a9cd72d8e7ec7f653cbbb15e617595daf758`.
-- Both native workflows compiled native sources and unit tests successfully, but the emulator failed to boot; connected instrumentation tests did not produce reports. This is an infrastructure/startup failure, not a green test result and not evidence of a SQLite assertion failure.
-- R1 local-first checks and settlement foundation checks passed on this candidate SHA (see [R1 run 42646800927](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42646800927) and [settlement run 42646800905](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42646800905)).
-- No physical-device qualification, authorized snapshot migration, accounting sign-off or production release approval is claimed.
+The current code candidate is `0ff3ee721e915e5d573252c6b17e22f5df91a1fd`. Exact-head CI for this candidate must complete before any passing result is claimed. In particular, SQLite instrumentation is DONE only when real tests complete with a nonzero test count, XML reports are generated, diagnostics are captured and artifacts are uploaded.
 
-**Operating rule:** proceed in dependency order. Do not start physical-device qualification until emulator instrumentation is green. Do not begin domain routing or legacy-write removal until emulator, physical-device and snapshot gates are closed. Do not merge, enable UI cutover, enable financial gates or fabricate evidence.
+### Remaining release blockers
 
+1. **Cross-platform contract parity:** implement and run one shared SQLite/IndexedDB contract suite, including CRUD, version conflicts, transaction semantics and migration behavior.
+2. **Physical Android qualification:** test supported physical devices, process death during writes/migration, restart recovery, background/foreground reauthorization and key lifecycle.
+3. **Owner-authorized snapshot:** migrate an owner-supplied production-shaped PMS snapshot; verify complete entity parity, financial totals and rollback. Synthetic fixtures are not accounting evidence.
+4. **Backup/restore:** prove encrypted backup restore on a second physical device, including reauthorization and integrity checks.
+5. **Accounting acceptance:** obtain written accounting-owner sign-off on balances, payment history, receipts, audit and rollback evidence.
+6. **Governance:** repository owner/admin must configure branch protection and required checks/reviews. The PR remains draft.
+7. **Release authorization:** owner-controlled production signing and explicit release approval remain outstanding.
 
-**MANDATORY PRODUCT PRINCIPLE — Our app works primarily on the primary device's local storage.**
+Do not delete quarantined legacy keys until migration is verified, a retention delay has elapsed and explicit approval is recorded. Do not merge or enable any release flag until the applicable gates are closed.
 
-**Current remaining work:** [2026-11-09 end-to-end audit and implementation acceptance plan](./docs/REMAINING_WORK_AUDIT_2026-11-09.md). This is the current task list; it preserves local PMS operation as primary and treats internet/cloud as optional.
+**Local-first product rule:** ordinary PMS operation must work from durable device-local storage without internet/cloud availability. Optional cloud sync remains OFF by default.
 
-The app runs primarily on the primary device and stores its operational data in that device's persistent local database: native SQLite on Android and IndexedDB in a browser/PWA. This means durable on-device storage, not volatile RAM. **Internet access, cloud services and remote servers are optional—not prerequisites for ordinary local PMS operation.** The app must continue to support its locally available features when offline. Internet may be used when available for explicitly online features, such as provider-hosted payment processing; those features must not make local operations dependent on a server. Optional cloud sync is separate and OFF by default.
-
-**This principle is a release requirement, not merely a design preference.** Any implementation that requires internet/cloud/server availability for ordinary local PMS operation, or reports a successful local write before the device database commit and read-back succeed, violates this requirement.
-
-Aurelia is a local-first property management system (PMS) for reservations, guests, rooms, folios and property operations, with optional online payment-provider operations planned after the local-only release.
-
-## Current release scope — local-only PMS first
-
-The current branch release profile intentionally ships local-only PMS capabilities first:
-
-- `uiCutover=false`; do not switch the global UI until Workstream A acceptance is complete.
-- Cloud sync and the local sync feature flag are OFF.
-- Online gateway checkout, payment backend administration, provider activation, reconciliation and Pay Bridge are blocked at their application entry points.
-- CCAvenue is OFF and the enabled-provider allow-list is empty. No provider has been selected for the later single-provider phase.
-- Device-local cash/manual payment recording remains available. Live collection, automatic settlement and automatic refund posting remain locked.
-- A CI regression test checks the release defaults and protected entry-point guards.
-
-**Repository administration is still outstanding:** GitHub currently reports this branch as unprotected with required checks unenforced. The connected GitHub capability can inspect this setting but cannot write repository branch-protection settings. An owner/admin with repository administration permission must enable one required review, required CI checks and force-push restrictions before merge.
-
-The read-only accounting diagnostic already exists at `npm run diagnose:accounting -- <redacted-backup.json>`. It has not yet been run against a real authorized backup; no real-data discrepancy count is claimed. The existing documented booking shape is `booking.p` (legacy stored paid total), `booking.pays[]` (payment rows) and `booking.payments[]` (history mirror). Do not migrate or repair balances until the diagnostic report has been reviewed and approved by the accounting owner.
-
-## Project location
-
-- **GitHub repository:** https://github.com/Akshayshetye37/Aurelia-apk
-- **Project root:** repository root (`/`)
-- **Active engineering branch:** `work/p0-storage-hardening`
-- **Current candidate SHA:** `e430a9cd72d8e7ec7f653cbbb15e617595daf758`
-- **Draft PR #18:** https://github.com/Akshayshetye37/Aurelia-apk/pull/18
-- **Current CI evidence:** the two native runs linked above compiled but could not boot the emulator; instrumentation did not execute to completion. Do not treat them as passing.
-- **Recovery baselines:** [`backup/pre-release-html-update-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/pre-release-html-update-2026-11-07) and [`backup/phase-0-baseline-2026-11-07`](https://github.com/Akshayshetye37/Aurelia-apk/tree/backup/phase-0-baseline-2026-11-07).
-
-Useful project locations:
-
-| Path | Purpose |
-|---|---|
-| `index.html` | PMS application UI and startup/runtime gate |
-| `src/storage/` | Repository contract, IndexedDB/native storage clients, bootstrap and domain storage services |
-| `src/payments/` | Client payment intent and Pay Bridge orchestration |
-| `payment-backend/` | Trusted payment API, provider adapters, Firestore persistence and backend tests |
-| `android/` | Capacitor Android project and native source templates |
-| `tests/` | PMS, storage, payment and native-template regression tests |
-| `docs/` | Architecture, security, accounting and release qualification documents |
-| `.github/workflows/` | Automated source, backend and packaging checks |
-
-## Implementation status and production-readiness audit — 2026-11-09
+\n---\n\n## Implementation status and production-readiness audit — 2026-11-09
 
 **Historical audit target:** `410175355120c62a3b16a716169fdcf86ef7b6f9`. For current remaining work, use the [2026-11-09 remaining-work and end-to-end audit](./docs/REMAINING_WORK_AUDIT_2026-11-09.md), audited at `1431611075c8bebddda445facecd01367a610892`. That document supersedes this historical checklist wherever they conflict.
 
@@ -325,3 +277,4 @@ Do not weaken these controls to make a demo appear functional. A passing unit te
 **Active branch:** `feature/multi-provider-payment-backend`  
 **Latest CI:** [run 42490479012 — passed](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42490479012); 397 tests passed, web bundle and privacy checks passed. No APK/device qualification was performed.  
 **Status:** engineering foundations exist; production release not approved.
+\n\n> **Historical audit:** The checklist below predates the 2026-11-10 storage-boundary corrections. Treat it as historical context only; the current status and release blockers above take precedence.\n
