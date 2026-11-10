@@ -29,6 +29,7 @@ class RecoveryPhoneStore(context: Context) {
         val otpRequired: Boolean
     ) {
         fun maskedCurrent(): String? = currentE164?.let(::maskRecoveryPhone)
+        fun maskedPending(): String? = pendingE164?.let(::maskRecoveryPhone)
     }
 
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -79,8 +80,7 @@ class RecoveryPhoneStore(context: Context) {
         val old = read()
         // An edit to Hotel Identity never calls this method. This method is only
         // used by the explicit recovery-phone registration workflow.
-        write(Record(if (old.currentE164 == null) State.UNVERIFIED else old.state,
-            old.currentE164, old.pendingE164, old.effectiveAtEpochMs, old.otpRequired))
+        write(Record(State.UNVERIFIED, old.currentE164, typedE164, old.effectiveAtEpochMs, old.otpRequired))
     }
 
     @Synchronized
