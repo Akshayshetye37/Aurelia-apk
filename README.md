@@ -1,276 +1,237 @@
 # Aurelia PMS — Production readiness blockers
 
-**Status: NOT PRODUCTION READY.** This document records the verified implementation baseline, unresolved production blockers, required resolution and the implementation/test technology expected for each. CI status is time-sensitive and is tied to the exact branch-head SHA shown below.
+**Status: NOT PRODUCTION READY.** This file separates code already present from release gates that still require automated or physical-device evidence, owner data, or explicit authorization. CI evidence is valid only for the SHA it tested.
 
 - Repository: https://github.com/Akshayshetye37/Aurelia-apk
-- Active branch: work/p0-storage-hardening
-- Exact branch head checked: `b71b7917736ea7502851c260af7907ef8e1ffcac` (2026-11-10 14:29 IST).
-- Draft PR #18 head: `b71b7917736ea7502851c260af7907ef8e1ffcac`; base: `feature/multi-provider-payment-backend`.
-- Draft PR #18: https://github.com/Akshayshetye37/Aurelia-apk/pull/18
-- Current release posture: PR #18 remains draft/unmerged; GitHub reports it is not mergeable; canonical authority is PREPARED_COMPATIBILITY; `uiCutover=false`; cloud sync, provider activation, live collection, automatic settlement, automatic refunds and production release remain OFF.
-- Branch protection: the branch API reports `protected=false` and protection checks disabled for `work/p0-storage-hardening`. The integration could not read base-branch protection (403), so base-branch protection remains unverified.
-- LIVE GATEWAY COLLECTION OFF. Recovery support is not yet production-ready; native key recovery must pass physical-device qualification before release.
-- Offline cash, manual card-on-delivery and staff-confirmed folio entries remain available when gateway features are disabled.
-- Provider integration inventory: Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue. Provider adapters/test checkout do not mean merchant production acceptance.
+- Active branch: `work/p0-storage-hardening`
+- README update commit: `c3310362934deb3d532077a614d76c15607c88b8`
+- Current PR #18 head after this documentation update: `c3310362934deb3d532077a614d76c15607c88b8`
+- PR #18: https://github.com/Akshayshetye37/Aurelia-apk/pull/18 (draft, open, unmerged; GitHub reports `mergeable=false`).
+- Canonical authority remains `PREPARED_COMPATIBILITY`; `uiCutover=false`.
+- Cloud sync, provider activation, live gateway collection, automatic settlement, automatic refund posting and production release remain OFF.
+- Offline cash, manual card-on-delivery and staff-confirmed folio entries remain usable when gateway features are disabled.
+- Provider integration inventory in the project: Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue. Adapter/test-checkout coverage is not merchant production acceptance.
+- The branch API reports `protected=false` for this work branch. Base-branch protection could not be read with the connected GitHub permission; its state is unverified.
 
-## Verified baseline — not a production approval
+## Exact-head CI evidence
 
-Exact branch head: `b71b7917736ea7502851c260af7907ef8e1ffcac`. Latest observed workflow: [native SQLite run #170](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42786247933), started 2026-11-10 14:24 IST. At the time inspected, it was still **in progress**.
+Latest observed native workflow: [Aurelia native SQLite contract run #170](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42786247933).
 
-- Source regression suite (`npm test`): **passed** on this exact head.
-- Web production preparation (`npm run build`): **passed** on this exact head.
-- Android project generation, Capacitor sync and Android 34 system-image setup: **passed**.
-- Kotlin test-runtime dependency alignment: **passed**.
-- Native Java compilation, debug/release compile tasks, native unit-test task and app/instrumentation APK assembly: **passed**.
-- APK checks for SQLCipher x86_64 library, instrumentation test class and AndroidJUnitRunner symbols: **passed**.
-- Android 34 AVD creation and emulator process startup: **passed**.
-- Emulator boot completion (`sys.boot_completed=1`): **still running / not yet evidenced as passed**.
-- Real SQLite instrumentation, nonzero test-count gate, final XML report, diagnostics and artifact upload: **pending** because the boot gate has not completed.
-- Exact-head R1 and other independent quality/payment CI workflows were not confirmed in this inspection; do not claim them as passed.
+- Run was triggered against commit `b71b7917736ea7502851c260af7907ef8e1ffcac`; it is **not** evidence for the README update commit unless it is rerun or independently verified at that new SHA.
+- On `b71b7917736ea7502851c260af7907ef8e1ffcac`, `npm test` passed and `npm run build` passed.
+- On that same SHA, Android project generation, Capacitor sync, Android 34 SDK installation, Kotlin test-runtime alignment, native compilation, app/instrumentation APK assembly and SQLCipher x86_64 / test-runner APK-content checks passed.
+- Android 34 AVD creation and emulator process startup passed.
+- Emulator boot completion (`sys.boot_completed=1`) was still in progress at last inspection; SQLite instrumentation and the nonzero-test gate had not yet run.
+- Do not claim native SQLite instrumentation as passed until the connected AndroidJUnitRunner suite completes with a nonzero test count and retained XML/diagnostic artifacts.
+- Exact-head R1, payment-backend and other independent CI checks have not been evidenced in this inspection.
 
-A source/mock test, successful native compilation, APK inspection or emulator process start is not proof that the real SQLite instrumentation suite passed.
+## Implemented code foundations (not production approval)
 
----
+- Browser durable persistence uses IndexedDB; Android persistence uses the native SQLCipher-backed SQLite plugin. Required durable storage fails closed rather than silently presenting RAM-only persistence as durable.
+- Repository contract, browser/native adapters, repository bridge, domain validation schemas and append-only outbox/journal foundations exist under `src/storage/` and related modules.
+- The bridge validates IDs, versions and domain entities; mutations require an expected version and delegate to adapter transactions. Multi-entity changes are prepared and committed through the batch transaction API.
+- Android native implementation includes encrypted database configuration, foreign-key enforcement, WAL/FULL durability settings, integrity checks and migration code. These implementation claims still require native instrumentation and device qualification.
+- Local identity validation, migration/bootstrap coordination, backup vault, photo archive and payment evidence/intent storage modules exist.
+- Release authority guards are in place for selected bootstrap/restore and operational mutation paths. The entire PMS UI has not yet cut over to canonical domain reads/writes.
+- Provider activation and live financial automation are deliberately gated OFF. Staff-confirmed/manual offline folio operations are distinct from live gateway processing.
 
-## 1. Native Android SQLite instrumentation is not yet qualified
+## Remaining production blockers
 
-**Problem:** The native workflow has not completed real SQLite instrumentation on the exact current branch head (`b71b791…`).
+### 1. Real Android SQLite instrumentation is not qualified
 
-**Sub-problems**
-- Emulator boot-completion check is still running; `sys.boot_completed=1` has not yet been observed in a completed step.
-- Real `LocalPmsRepositoryInstrumentedTest` execution remains pending behind the emulator boot gate.
-- No completed nonzero instrumentation test count is evidenced for this SHA.
-- Final instrumentation XML reports and uploaded diagnostic artifacts are not yet available.
-
-**Required resolution**
-1. Finish Android 34 emulator boot and verify `sys.boot_completed=1`.
-2. Install the app and instrumentation APK and execute the actual AndroidJUnitRunner suite.
-3. Fail CI if zero tests execute or any test fails.
-4. Generate and retain JUnit XML, logcat, emulator console, APK metadata and Gradle diagnostics.
-5. Fix failures and rerun against the exact branch head; do not reuse a prior SHA's evidence.
-
-**Implementation / test technology**
-- GitHub Actions workflow: .github/workflows/native-sqlite-contract.yml (YAML).
-- Android build: Gradle, Java/Kotlin compilation and APK inspection.
-- Native database: Android SQLite/SQLCipher plugin implementation (Java/Kotlin).
-- Instrumentation: AndroidJUnitRunner, JUnit and LocalPmsRepositoryInstrumentedTest.java.
-- Evidence: JUnit XML, adb, logcat and uploaded GitHub Actions artifacts.
-
-## 2. Shared IndexedDB / SQLite repository contract is not proven
-
-**Problem:** Browser and Android adapters have separate implementation/tests; one identical contract suite has not been demonstrated against both real engines.
+**Problem:** A successful compile, APK assembly and emulator process start do not prove that SQLCipher transactions work on Android.
 
 **Sub-problems**
-- CRUD and entity-list behavior must be equivalent.
-- Optimistic version conflicts and duplicate-event rejection must match.
-- Multi-entity entity+outbox atomicity and rollback must match.
-- Outbox claim, lease expiry, acknowledgement, retry and conflict transitions must match.
-- Legacy migration, idempotency, snapshot read-back and interruption recovery must match.
-- Storage error mapping and database reopen/restart behavior must match.
+- Emulator must reach `sys.boot_completed=1` and accept ADB commands.
+- `LocalPmsRepositoryInstrumentedTest` must execute through AndroidJUnitRunner against the generated native app and SQLCipher database.
+- A nonzero completed test count, zero failures, JUnit XML and diagnostics must be retained.
+- The entire suite must run on the exact release-candidate SHA.
 
-**Required resolution**
-1. Extract a shared adapter contract test harness and run identical cases against both engines; the common interface alone does not prove behavioral parity.
-2. Run it against real IndexedDB (browser/Node IndexedDB implementation) and the actual Android SQLite plugin—not only fake plugin objects.
-3. Add parity assertions for return shapes, error codes, version behavior and transaction outcomes.
-4. Make both CI jobs run the same test cases and publish separate engine results.
-5. Add a compatibility gate for repository contract version changes.
+**Resolution**
+1. Complete the Android 34 emulator boot gate.
+2. Install app and test APKs and run `connectedDebugAndroidTest`.
+3. Fail the job when zero tests run or any test fails.
+4. Retain JUnit XML, logcat, emulator console, APK inspection, Gradle logs and diagnostics.
+5. Fix all failures and rerun at the exact branch head.
 
-**Implementation / test technology**
-- Contract and adapters: JavaScript ES modules in src/storage/ (pms-repository-contract.mjs, indexeddb-pms-repository.mjs, capacitor-pms-storage.mjs).
-- Android adapter: Java/Kotlin Capacitor plugin and SQLCipher/SQLite transactions.
-- Tests: Node.js node:test, browser IndexedDB test runtime and Android JUnit instrumentation.
-- CI: GitHub Actions YAML with shared test fixtures and result artifacts.
+**Implementation/test technology:** GitHub Actions YAML; Gradle; Java/Kotlin; Android SQLite/SQLCipher Capacitor plugin; AndroidJUnitRunner; JUnit; `LocalPmsRepositoryInstrumentedTest.java`; ADB/logcat and uploaded workflow artifacts.
 
-## 3. Full PMS domain cutover and canonical authority are incomplete
+### 2. IndexedDB and SQLite repository contract parity is not proven
 
-**Problem:** Storage foundations and several domain repositories exist, but production acceptance requires every business read/write path to use the canonical repository and survive restart without a legacy UI snapshot.
+**Problem:** A common repository interface does not prove equivalent behavior across real browser IndexedDB and native SQLite engines.
 
 **Sub-problems**
-- Inventory every screen/action that reads or mutates bookings, guests, rooms, folios, payments, expenses, inventory, restaurant tables/sales, settings and audit data.
-- Confirm each domain has canonical list/get/create/update/retire or append-only operations as appropriate.
-- Route related changes through one transaction (for example room+booking, sale+inventory, folio+journal+audit).
-- Verify all screens hydrate from canonical persisted rows after startup/restart.
-- Reject stale in-memory state, old import/restore, cache replay and compatibility writes after canonical authority is active.
-- Ensure ledger/audit/payment journal entries are append-only; no update/delete API for posted financial records.
-- Confirm schema validation and optimistic version checks are applied consistently, not just in selected bridge methods.
+- CRUD/list/get and return-value parity.
+- Optimistic version conflicts, duplicate event rejection and idempotency.
+- Atomic entity + outbox commits, multi-entity transactions and rollback.
+- Outbox claim/lease expiry/acknowledge/retry/conflict transitions.
+- Migration idempotency, interrupted migration recovery, database reopen and error mapping.
 
-**Required resolution**
-1. Produce a domain-by-domain mutation/read-path inventory.
-2. Route every path through the domain repository/command service and shared bridge.
-3. Apply Zod/domain schema validation and expected-version checks at the boundary.
-4. Add restart hydration, stale-version, duplicate-command, rollback and authority-guard tests per domain.
-5. Add static CI rules preventing direct Web Storage/business-state access and repository bypasses.
-6. Keep uiCutover=false until all domain paths and regression tests pass; then perform a separately reviewed cutover.
+**Resolution**
+1. Extract one reusable adapter contract suite and fixtures.
+2. Run identical cases against real IndexedDB and the actual Android SQLite plugin.
+3. Assert matching result shapes, error codes, version semantics and transaction outcomes.
+4. Make both CI jobs publish independently identifiable engine results.
+5. Gate incompatible repository-contract version changes.
 
-**Implementation / test technology**
-- UI and domain services: JavaScript ES modules in index.html and src/.
-- Persistence: PmsRepositoryBridge, PmsBaseRepository, domain repository modules and IndexedDB/Capacitor adapters.
-- Validation: Zod schemas in src/storage/pms-domain-schemas.mjs.
-- Tests: Node.js node:test, domain repository tests, static source-boundary tests and Android instrumentation.
-- Static enforcement: ESLint restrictions and/or repository boundary scripts in CI.
+**Implementation/test technology:** JavaScript ES modules; IndexedDB; Node `node:test` with `fake-indexeddb` for unit coverage plus real browser IndexedDB qualification; native Java/Kotlin SQLCipher; Android JUnit instrumentation; GitHub Actions.
 
-## 4. Physical Android device qualification is missing
+### 3. Complete PMS domain cutover and single canonical authority
 
-**Problem:** Emulator compile/startup is not physical-device acceptance.
+**Problem:** Storage primitives and several repository-backed mutation paths exist, but complete PMS read/write coverage has not been proven and `uiCutover=false` remains correct.
 
 **Sub-problems**
-- Process death during a business write or migration.
-- Force-stop, app restart, device reboot and background/foreground reauthorization.
-- Database close/reopen, WAL/checkpoint and schema-upgrade recovery.
-- Low storage, permission failures, corruption and unavailable database.
-- Keystore-wrapped key lifecycle, unlock/recovery and no clear-key persistence.
-- Attachment/photo durability and restore.
+- Inventory all screens and actions for bookings, guests, rooms, folios, payments, expenses, inventory, restaurant tables/sales, settings and audit records.
+- Prove canonical get/list/create/update/retire or append-only command coverage per domain.
+- Ensure related operations (room + booking; sale + inventory; folio + journal + audit) are one transaction.
+- Ensure startup/restart hydrates every screen from persisted canonical rows, not legacy snapshots or stale in-memory state.
+- Prevent old import/restore/cache replay and compatibility writes after cutover.
+- Keep posted ledger, journal, payment and audit records append-only.
+- Apply schemas and expected-version validation at every command boundary.
 
-**Required resolution**
-1. Define supported Android versions and device matrix.
-2. Run controlled fault-injection tests on physical devices.
-3. Kill/restart the process at transaction and migration checkpoints; verify atomic rollback or resumable recovery.
-4. Verify reauthorization and key access after process/device restart.
-5. Verify typed storage errors fail closed; never fall back to RAM and claim a durable save.
-6. Retain device model/OS/build, test logs, database integrity output and pass/fail evidence.
+**Resolution**
+1. Produce a domain-by-domain read/mutation inventory.
+2. Route every command through domain repository/command service and shared bridge.
+3. Add boundary validation and expected-version checks.
+4. Add per-domain restart hydration, stale-version, duplicate-command, rollback and authority-guard tests.
+5. Enforce source boundaries in lint/CI; keep `uiCutover=false` until all acceptance tests pass.
 
-**Implementation / test technology**
-- Android native Java/Kotlin, SQLCipher/SQLite, Android Keystore and Capacitor plugin.
-- Android JUnit instrumentation plus adb-driven physical-device test scripts.
-- App lifecycle tests and migration fault-injection hooks.
-- No physical-device completion may be claimed from emulator-only tests.
+**Implementation/test technology:** JavaScript ES modules; `index.html` and `src/`; `PmsRepositoryBridge`; domain repositories/command services; Zod; IndexedDB/native SQLite; Node tests; Android instrumentation; ESLint/static boundary checks.
 
-## 5. Production-shaped data migration and accounting parity are missing
+### 4. Physical Android device qualification is missing
 
-**Problem:** Synthetic fixtures do not prove that actual PMS records and financial balances migrate correctly.
+**Problem:** Emulator results cannot qualify actual device lifecycle, Keystore and storage durability.
 
 **Sub-problems**
-- No owner-authorized production-shaped/redacted PMS snapshot has been supplied and accepted for migration qualification.
-- Legacy booking/payment representations may disagree (payment rows, paid totals, due, invoice, receipt and daily totals).
-- Currency/minor-unit semantics and historical room rates/references must be preserved.
-- Duplicate, cancelled, archived and partially paid records need explicit mapping.
-- Financial rollback and discrepancy quarantine need real-data evidence.
+- Process death during writes and schema migrations; force-stop, restart and reboot.
+- WAL/checkpoint/close/reopen and upgrade recovery.
+- Low storage, permission failures, corrupt/unavailable database and fail-closed behavior.
+- Keystore wrapping/unwrapping, PIN/biometric/recovery unlock lifecycle and reauthorization.
+- Attachment and photo durability.
 
-**Required resolution**
-1. Obtain a redacted, owner-authorized snapshot and freeze its source checksum.
-2. Approve a versioned canonical schema and deterministic legacy mapping with the accounting owner.
-3. Reconcile every booking/folio: payment journal, paid, due, invoices, receipts, refunds and daily totals.
-4. Migrate into a clean target; compare record counts, stable IDs, references, checksums and financial totals.
-5. Test rollback and restart recovery using the same snapshot.
-6. Quarantine discrepancies; do not auto-correct unexplained historic balances.
+**Resolution**
+1. Define supported Android OS versions and physical device matrix.
+2. Inject process termination at transaction and migration checkpoints.
+3. Verify atomic rollback or resumable recovery after each restart.
+4. Validate key access and reauthorization after process/device reboot.
+5. Confirm no failure path silently falls back to RAM and claims save success.
+6. Retain device model, OS/build, test logs and database integrity evidence.
+
+**Implementation/test technology:** Android Java/Kotlin; SQLCipher/SQLite; Android Keystore; Capacitor; Android JUnit; ADB-driven physical-device tests; lifecycle/fault-injection test hooks.
+
+### 5. Production-shaped migration and accounting parity are missing
+
+**Problem:** Synthetic fixtures cannot verify actual PMS history or financial balances.
+
+**Sub-problems**
+- No owner-authorized redacted production-shaped PMS snapshot and source checksum has been accepted for qualification.
+- Historical booking/payment rows, paid totals, due balances, invoices, receipts and daily totals may not reconcile.
+- Currency/minor-unit semantics, historical rates, references and partially paid/cancelled/archived records require explicit mapping.
+- Discrepancies and migration rollback need real-data evidence.
+
+**Resolution**
+1. Obtain and checksum an owner-authorized redacted snapshot.
+2. Approve a versioned schema and deterministic legacy mapping with the accounting owner.
+3. Reconcile each booking/folio, payment, refund, receipt, invoice and daily total.
+4. Migrate into a clean target and compare counts, IDs, references, checksums and integer minor-unit totals.
+5. Test rollback/restart recovery on the same snapshot.
+6. Quarantine unexplained differences; do not silently correct historic balances.
 7. Obtain written accounting-owner sign-off.
 
-**Implementation / test technology**
-- Migration tooling: JavaScript migration modules and native SQLite migration transactions.
-- Data validation: deterministic scripts, JSON/CSV reconciliation, integer minor-unit arithmetic and checksums.
-- Tests: migration fixtures, transaction fault injection, restart/reopen tests and accounting parity reports.
-- Acceptance: signed human accounting review; automated tests alone are insufficient.
+**Implementation/test technology:** JavaScript migration modules; native SQLite migration transactions; deterministic JSON/CSV reconciliation; integer minor-unit arithmetic; checksums; migration fault-injection; human accounting approval.
 
-## 6. Encrypted backup and second-device restore are not qualified
+### 6. Encrypted backup and second-device restore are not qualified
 
-**Problem:** Backup/restore must preserve the canonical database and attachments and must be proven on another device.
+**Problem:** Backup is not production-ready until database and attachments can be restored on another physical device and verified.
 
 **Sub-problems**
-- Complete backup coverage of SQLite database, WAL/checkpoint state and attachments.
-- Backup format version, encryption, checksum and integrity validation.
-- Restore to a second device with correct reauthorization/key handling.
-- Interrupted restore, duplicate restore, wrong key and corrupt backup behavior.
-- Post-restore entity/reference and accounting parity.
+- Atomic inclusion of database and attachments, with safe WAL/checkpoint handling.
+- Versioned format, authenticated encryption, checksum and integrity validation.
+- Correct key reauthorization on a second device.
+- Interrupted, duplicate, wrong-key, tampered and corrupted restore behavior.
+- Post-restore entity, attachment-reference and accounting parity.
 
-**Required resolution**
-1. Define and version an atomic backup format.
-2. Include canonical database and attachment payloads; checkpoint/close safely before capture.
-3. Encrypt and authenticate backup contents; validate checksum and metadata before restore.
-4. Restore to a clean second physical device and verify unlock/reauthorization.
-5. Compare entity counts, IDs, relationships, attachment hashes and financial totals.
-6. Test interruption, wrong-key, tamper and rollback cases.
+**Resolution**
+1. Define a versioned atomic backup format.
+2. Close/checkpoint safely and include canonical database plus attachment payloads.
+3. Authenticate and encrypt backup contents; validate metadata/integrity before restore.
+4. Restore to a clean second physical device and prove unlock/reauthorization.
+5. Compare entity counts/IDs/references, attachment hashes and financial totals.
+6. Test interruption, tampering, wrong-key and rollback cases.
 
-**Implementation / test technology**
-- Android Java/Kotlin + SQLCipher/SQLite backup/restore.
-- Existing encrypted backup vault and storage modules in src/storage/.
-- Cryptographic integrity checks, Android Keystore envelope handling and Node/JUnit tests.
-- Physical-device evidence is required.
+**Implementation/test technology:** Android Java/Kotlin; SQLCipher/SQLite; encrypted backup vault modules under `src/storage/`; Keystore envelope handling; cryptographic integrity checks; Node and Android JUnit tests; physical-device acceptance.
 
-## 7. Device security and recovery lifecycle needs final qualification
+### 7. Device key security and recovery lifecycle is not qualified
 
-**Problem:** Storage encryption alone is not proof that all unlock and recovery paths are secure and recoverable.
+**Problem:** Encryption configuration alone is not proof that all unlock/recovery paths preserve the same data key and remain secure.
 
 **Sub-problems**
-- Verify PIN, biometric and recovery-key flows unwrap the same data key according to the approved key architecture.
-- Verify SMS/OTP alone cannot generate, replace or unwrap the data key.
-- Verify key rotation, lockout, retry state and process-death behavior.
-- Verify corrupted/missing wrapped key material fails closed without silent identity/database replacement.
-- Verify secrets and clear key bytes never enter logs, Web Storage, files or analytics.
+- PIN, biometric and recovery key must unwrap the same randomly generated DEK.
+- SMS/OTP alone must never derive, replace or unwrap the DEK.
+- Rotation, lockout, retries, process death and concurrent unlock behavior.
+- Corrupt/missing wrapped keys must fail closed, not silently create a new identity/database.
+- Clear key bytes and secrets must never appear in logs, Web Storage, files or analytics.
 
-**Required resolution**
-1. Complete the key-lifecycle threat model and acceptance matrix.
-2. Test each unlock/recovery path on supported physical devices.
-3. Add negative tests for OTP-only, replay, corrupted envelope, wrong PIN and unavailable Keystore.
-4. Inspect logs, backups and persistent storage for clear key material.
-5. Verify recovery restores access to the same encrypted database, not a newly generated empty identity.
+**Resolution**
+1. Finalize key-lifecycle threat model and acceptance matrix.
+2. Qualify all unlock/recovery methods on supported physical Android devices.
+3. Add negative tests for OTP-only, replay, corrupted envelopes, wrong PIN and unavailable Keystore.
+4. Inspect logs and persistent storage for clear key material.
+5. Prove recovery reopens the same encrypted database.
 
-**Implementation / test technology**
-- Android Keystore APIs and native Java/Kotlin crypto boundary.
-- SQLCipher key handoff with short-lived in-memory key buffers and zeroization.
-- Native JUnit instrumentation, security regression tests and manual device acceptance.
+**Implementation/test technology:** Android Keystore; native Java/Kotlin crypto boundary; SQLCipher key handoff; short-lived in-memory key buffers/zeroization; native JUnit and security regression tests.
 
-## 8. Online payment providers are not production-enabled (conditional feature gate)
+### 8. Online payment providers are not production-enabled (conditional)
 
-**Problem:** Provider adapters/test checkout do not constitute merchant acceptance or production payment readiness. This is a blocker only if live online payments are part of the intended production release; local cash/manual workflows can remain available with gateway features disabled.
+**Problem:** Adapter code or test checkout does not constitute merchant acceptance. This is a release blocker only when live online collection is required; offline/manual folio operations may remain available with gateway features disabled.
 
 **Sub-problems**
-- Merchant sandbox/UAT evidence for each enabled provider.
-- Webhook signature verification, replay protection, idempotency and concurrent delivery.
-- Authoritative status/refund polling and ambiguous timeout reconciliation.
+- Merchant-owned sandbox/UAT for each provider selected for activation.
+- Raw webhook signature verification, replay resistance, idempotency and concurrent delivery.
+- Authoritative capture/refund status and ambiguous timeout reconciliation.
 - Atomic canonical folio/journal posting and refund accounting.
-- Provider secrets, IAM, webhook ingress, monitoring and operational runbooks.
-- CCAvenue ordinary refund creation and authoritative refund-status operations remain incomplete.
+- Provider secrets, IAM, webhook ingress, monitoring, alerts and operational runbooks.
+- CCAvenue ordinary refund creation and authoritative refund-status operations remain incomplete per the current release inventory.
 
-**Required resolution**
-1. Qualify providers one at a time with merchant-owned sandbox credentials and real UAT evidence.
-2. Verify raw webhook signatures and replay/concurrency behavior.
-3. Reconcile capture/refund state against provider-authoritative status.
-4. Post capture/refund to the canonical folio/journal atomically and idempotently.
-5. Complete deployment, secret-management, IAM, monitoring and incident/reconciliation runbooks.
-6. Obtain accounting and owner approval before enabling live collection.
+**Resolution**
+1. Qualify one provider at a time with merchant credentials and UAT evidence.
+2. Verify signatures over raw request bodies plus replay/concurrency protection.
+3. Reconcile capture/refund state with provider-authoritative status.
+4. Post capture/refund atomically and idempotently to canonical folio/journal.
+5. Complete secrets/IAM/monitoring/incident and reconciliation runbooks.
+6. Obtain accounting-owner approval before enabling live collection.
 
-**Implementation / test technology**
-- Backend TypeScript/JavaScript payment services and provider adapters under payment-backend/.
-- HTTPS APIs, webhook handlers, managed secret storage and persistent inbox/outbox.
-- Provider contract tests, integration tests and merchant sandbox/UAT.
-- Never put provider credentials in index.html, browser storage or the APK.
+**Implementation/test technology:** Backend TypeScript/JavaScript under `payment-backend/`; HTTPS APIs; webhook handlers; managed secrets; persistent inbox/outbox; provider contract/integration tests; merchant sandbox/UAT.
 
-## 9. Repository governance and production release authorization are missing
+### 9. Governance, CI protection and production release authorization
 
-**Problem:** Green CI does not itself authorize a production release.
+**Problem:** Green tests alone do not approve a release. The work branch is reported unprotected and the PR remains draft/unmerged.
 
 **Sub-problems**
-- Branch protection and required status checks/reviews need owner/admin configuration.
-- PR #18 is still draft and unmerged; GitHub currently reports it as not mergeable.
+- Required checks/reviews and branch protection must be enabled by repository owner/admin.
+- PR #18 must receive evidence-based review and only then be marked ready/merged by authorized owner.
 - Production signing and release credentials are owner-controlled.
-- Explicit release authorization and rollback ownership are not recorded.
+- Release authorization, artifact provenance and rollback ownership are not recorded.
 
-**Required resolution**
-1. Repository owner/admin enables branch protection, required CI checks, review requirements and restricted bypass.
-2. Complete all engineering, device, data, accounting and security gates.
-3. Convert PR from draft only after evidence review; merge only with owner approval.
-4. Perform production signing through the authorized release process.
-5. Record release approval, artifact provenance, rollback procedure and operational owner.
+**Resolution**
+1. Configure branch protection/rulesets and required CI checks on the target branch; restrict bypass.
+2. Require review of the final exact-head test and security evidence.
+3. Complete engineering, device, data, accounting and backup gates.
+4. Use authorized protected signing/release process.
+5. Record release authorization, artifact checksum/provenance and rollback/operator runbook.
 
-**Implementation / test technology**
-- GitHub branch protection/rulesets, required GitHub Actions checks and PR review controls.
-- Android signing configuration and protected CI/release secrets.
-- Release artifact checksums/provenance and documented rollback runbook.
-- These governance actions require repository/release-owner authorization; source code alone cannot complete them.
+**Implementation/test technology:** GitHub rulesets/branch protection; required Actions checks; PR reviews; Android signing; protected CI secrets; checksums/provenance; rollback documentation.
 
 ---
 
-## Fail-closed release defaults
+## Fail-closed defaults
 
-Until every applicable gate is evidenced and approved:
-
-- uiCutover=false; canonical authority remains PREPARED_COMPATIBILITY.
-- Cloud sync OFF.
-- Provider activation OFF.
-- Live gateway collection OFF.
-- Automatic settlement OFF.
-- Automatic refund posting OFF.
+- `uiCutover=false`; authority remains `PREPARED_COMPATIBILITY`.
+- Cloud sync OFF; provider activation OFF; live gateway collection OFF.
+- Automatic settlement OFF; automatic refund posting OFF.
 - Production signing/release NOT AUTHORIZED.
-- Legacy business keys remain quarantined; do not delete them without verified migration, retention delay and explicit approval.
+- Legacy business keys remain quarantined. Do not delete them without verified migration, retention delay and explicit owner approval.
 
-**Definition of production-ready:** all required code, automated tests, real Android instrumentation, physical-device qualification, owner-authorized data/accounting parity, backup/restore evidence, security review, governance and release authorization are complete on the exact release candidate. No older SHA, mock-only test or synthetic dataset substitutes for that evidence.
+## Definition of production-ready
+
+All required code paths, automated tests, real Android instrumentation, physical-device qualification, owner-authorized migration/accounting parity, second-device backup/restore, security review, repository governance and release authorization must be complete on the **same exact release-candidate SHA**. No older SHA, mock-only test, compile-only result or synthetic dataset substitutes for that evidence.
