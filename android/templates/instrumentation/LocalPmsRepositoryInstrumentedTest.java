@@ -307,7 +307,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
     boolean kill = Boolean.parseBoolean(args.getString("killProcess", "false"));
     LocalPmsFaultInjection.arm(checkpoint, kill);
     if ("mid_migration".equals(checkpoint)) {
-      String migration = "{\"rooms\":[],\"b\":[],\"g\":[],\"t\":[],\"exp\":[],\"inv\":[],\"led\":[],\"aud\":[],\"set\":{},\"menu\":{}}";
+      String migration = "{\"rooms\":[{\"id\":\"fault-migration-room\",\"n\":\"101\",\"s\":\"ready\"}],\"b\":[],\"g\":[],\"t\":[],\"exp\":[],\"inv\":[],\"led\":[],\"aud\":[],\"set\":{},\"menu\":{}}";
       repository.migrateLegacySnapshot("device-fault-migration", "aurelia_lodge_v2",
         "2026-11-10T00:00:00.000Z", migration);
     } else {
@@ -348,7 +348,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
   }
 
   @Test public void debugFaultCheckpointsProveRollbackAndPostCommitDurability() throws Exception {
-    String migration = "{\"rooms\":[],\"b\":[],\"g\":[],\"t\":[],\"exp\":[],\"inv\":[],\"led\":[],\"aud\":[],\"set\":{},\"menu\":{}}";
+    String migration = "{\"rooms\":[{\"id\":\"fault-migration-room\",\"n\":\"101\",\"s\":\"ready\"}],\"b\":[],\"g\":[],\"t\":[],\"exp\":[],\"inv\":[],\"led\":[],\"aud\":[],\"set\":{},\"menu\":{}}";
     LocalPmsFaultInjection.arm("mid_migration", false);
     boolean migrationInjected = false;
     try {
