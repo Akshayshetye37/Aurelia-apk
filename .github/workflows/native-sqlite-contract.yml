@@ -30,7 +30,7 @@ jobs:
       - name: Download deterministic repository property vectors
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: aurelia-property-sequences-\${{ github.sha }}
+          name: aurelia-property-sequences-${{ github.sha }}
           path: tests/fixtures
 
       - name: Set up Node.js
@@ -380,14 +380,14 @@ jobs:
       - name: Run shared and generated IndexedDB repository contracts
         timeout-minutes: 5
         env:
-          AURELIA_PROPERTY_FIXTURE_PATH: \${{ runner.temp }}/aurelia-pms-property-sequences.json
+          AURELIA_PROPERTY_FIXTURE_PATH: ${{ runner.temp }}/aurelia-pms-property-sequences.json
         run: node --test tests/storage/indexeddb-pms-repository.test.mjs tests/storage/repository-property-parity.test.mjs
       - name: Upload deterministic property vectors for SQLite execution
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: aurelia-property-sequences-\${{ github.sha }}
-          path: \${{ runner.temp }}/aurelia-pms-property-sequences.json
+          name: aurelia-property-sequences-${{ github.sha }}
+          path: ${{ runner.temp }}/aurelia-pms-property-sequences.json
           if-no-files-found: error
           retention-days: 7
 
