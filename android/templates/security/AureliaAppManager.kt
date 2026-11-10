@@ -161,8 +161,15 @@ class AureliaAppManager(
         } catch (failure: Exception) {
             throw SecurityException("Recovery key format or checksum is invalid.", failure)
         }
-        if (RecoveryPhoneStore(context).requiresOtp()) {
-            check(RecoveryGate.spendAttempt()) { "A fresh OTP verification is required to continue recovery." }
+        val otpRequired = try {
+            RecoveryPhoneStore(context).requiresOtp()
+        } catch (failure: Exception) {
+            recoveryKey.fill(0)
+            throw SecurityException("Recovery phone policy could not be authenticated.", failure)
+        }
+        if (otpRequired && !RecoveryGate.spendAttempt()) {
+            recoveryKey.fill(0)
+            throw SecurityException("A fresh OTP verification is required to continue recovery.")
         }
         val recovered = try {
             crypto.unwrapDataKeyWithRecovery(bundle.getString("recovery"), recoveryKey)
