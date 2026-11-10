@@ -272,6 +272,11 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertTrue("injected outbox exception must abort the business transaction", failed);
     assertNull("domain row must not survive a failed outbox append",
       repository.getEntity("booking", "forced-rollback"));
+    try (android.database.Cursor outbox = repository.getWritableDatabase().rawQuery(
+        "SELECT COUNT(*) FROM pms_outbox WHERE event_id=?", new String[] { "forced-rollback-event" })) {
+      assertTrue(outbox.moveToFirst());
+      assertEquals("outbox row must roll back with the domain row", 0, outbox.getInt(0));
+    }
     repository.getWritableDatabase().execSQL("DROP TRIGGER fail_outbox_insert");
   }
 
