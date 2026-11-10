@@ -135,9 +135,10 @@ class LockGateActivity : FragmentActivity() {
                     return
                 }
                 val enrollment = manager.enroll(first)
-                writeEnvelope(enrollment.envelopeJson)
-                AureliaSecurityRuntime.markEnrolled()
-                showRecoveryKey(enrollment.recoveryKey)
+                showRecoveryKey(enrollment.recoveryKey) {
+                    writeEnvelope(enrollment.envelopeJson)
+                    AureliaSecurityRuntime.markEnrolled()
+                }
             } else {
                 val envelope = readEnvelope()
                 if (manager.unlock(first, envelope)) {
@@ -149,8 +150,9 @@ class LockGateActivity : FragmentActivity() {
                         continueAfterPinUnlock()
                     } else {
                         val migrated = manager.enableRecoveryKey(first, envelope)
-                        writeEnvelope(migrated.envelopeJson)
-                        showRecoveryKey(migrated.recoveryKey)
+                        showRecoveryKey(migrated.recoveryKey) {
+                            writeEnvelope(migrated.envelopeJson)
+                        }
                     }
                 } else showError("Incorrect PIN.")
             }
@@ -220,7 +222,7 @@ class LockGateActivity : FragmentActivity() {
             .show()
     }
 
-    private fun showRecoveryKey(recoveryKey: CharArray) {
+    private fun showRecoveryKey(recoveryKey: CharArray, onConfirmed: () -> Unit) {
         val code = TextView(this).apply {
             text = String(recoveryKey)
             textSize = 18f
@@ -234,13 +236,13 @@ class LockGateActivity : FragmentActivity() {
             .setView(code)
             .setPositiveButton("I saved it") { _, _ ->
                 code.text = ""
-                confirmRecoveryKeySaved(recoveryKey)
+                confirmRecoveryKeySaved(recoveryKey, onConfirmed)
             }
             .setCancelable(false)
             .show()
     }
 
-    private fun confirmRecoveryKeySaved(recoveryKey: CharArray) {
+    private fun confirmRecoveryKeySaved(recoveryKey: CharArray, onConfirmed: () -> Unit) {
         val groups = String(recoveryKey).split("-")
         if (groups.size != 9) {
             recoveryKey.fill('\u0000')
@@ -263,11 +265,19 @@ class LockGateActivity : FragmentActivity() {
                 val expected = selected.joinToString("") { groups[it] }
                 input.text.clear()
                 if (entered == expected) {
-                    recoveryKey.fill('\u0000')
-                    offerBiometricEnrollment()
+                    try {
+                        onConfirmed()
+                        recoveryKey.fill('\u0000')
+                        offerBiometricEnrollment()
+                    } catch (failure: Exception) {
+                        recoveryKey.fill('\u0000')
+                        manager.lock()
+                        showError(failure.message ?: "Could not persist the confirmed recovery key.")
+                        finish()
+                    }
                 } else {
                     showError("Recovery-key confirmation did not match. Enrollment remains blocked.")
-                    confirmRecoveryKeySaved(recoveryKey)
+                    confirmRecoveryKeySaved(recoveryKey, onConfirmed)
                 }
             }
             .setNegativeButton("Cancel") { _, _ ->
