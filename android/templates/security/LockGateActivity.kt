@@ -119,7 +119,7 @@ class LockGateActivity : Activity() {
                     showError("PIN confirmation does not match.")
                     return
                 }
-                val enrollment = manager.enroll(first, encryptedDatabaseExists())
+                val enrollment = manager.enroll(first)
                 writeEnvelope(enrollment.envelopeJson)
                 AureliaSecurityRuntime.markEnrolled()
                 openPms()
