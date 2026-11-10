@@ -1,3 +1,4 @@
+import { assertCompatibilityUiAllowed } from "./pms-authority-state.mjs";
 /**
  * Transactional repository adapter for room/stay lifecycle mutations.
  * Booking, room and the complete recovery snapshot share one SQLite/IndexedDB batch.
@@ -7,18 +8,7 @@ const clone = value => value == null ? value :
 function fail(code, message) { const error = new Error(message); error.code = code; return error; }
 function sameJson(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 function comparableEntity(value) { const copy = clone(value); if (copy && typeof copy === "object") { delete copy.id; delete copy.updatedAt; delete copy.legacySource; } return copy; }
-function refreshCache(storage, snapshot) {
-  if (!storage) return null;
-  try {
-    if (storage.memoryOnly === true) return false;
-    const value = JSON.stringify(snapshot);
-    storage.setItem("aurelia_lodge_v2", value);
-    return storage.getItem("aurelia_lodge_v2") === value;
-  } catch (error) {
-    console.warn("[Aurelia Local Cache] Operational transaction committed; compatibility cache refresh failed.", error);
-    return false;
-  }
-}
+
 function findBooking(snapshot, id) {
   return (snapshot?.b || []).find(row => String(row?.id) === String(id)) ||
     (snapshot?.cancelled || []).find(row => String(row?.id) === String(id)) || null;
@@ -30,12 +20,12 @@ function findRoom(snapshot, id) {
 /** Call after applying the intended mutation. The caller must restore its pre-mutation state on rejection. */
 export async function commitOperationalStateMutation({
   bridge, snapshot, bookingId, roomId, eventType,
-  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
     throw new TypeError("A bound transactional PMS repository bridge is required");
   }
+  await assertCompatibilityUiAllowed(bridge);
   if (!snapshot || !Array.isArray(snapshot.b) || !Array.isArray(snapshot.rooms)) {
     throw new TypeError("A complete PMS snapshot is required");
   }
@@ -104,7 +94,7 @@ export async function commitOperationalStateMutation({
     throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Lifecycle transaction committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
   }
   return Object.freeze({
-    canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
+    canonical: true, cacheRefreshed: false,
     booking: storedBooking, room: storedRoom, snapshotVersion: storedSnapshot.version,
     bookingVersion: result.entities[0].version, roomVersion: result.entities[1].version
   });
@@ -113,12 +103,12 @@ export async function commitOperationalStateMutation({
 /** Atomically persists standalone room housekeeping/availability changes. */
 export async function commitRoomStateMutation({
   bridge, snapshot, roomId, eventType = "room.status_changed",
-  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
     throw new TypeError("A bound transactional PMS repository bridge is required");
   }
+  await assertCompatibilityUiAllowed(bridge);
   if (!snapshot || !Array.isArray(snapshot.rooms) || roomId == null || String(roomId).trim() === "") {
     throw new TypeError("A complete snapshot and stable room ID are required");
   }
@@ -156,7 +146,7 @@ export async function commitRoomStateMutation({
     throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Room transaction committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
   }
   return Object.freeze({
-    canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
+    canonical: true, cacheRefreshed: false,
     room: storedRoom, snapshotVersion: storedSnapshot.version,
     roomVersion: committed.entities[0].version
   });
@@ -165,12 +155,12 @@ export async function commitRoomStateMutation({
 /** Creates or edits a room without changing its stable room-number key. */
 export async function commitRoomCatalogMutation({
   bridge, snapshot, roomId, operation,
-  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
     throw new TypeError("A bound transactional PMS repository bridge is required");
   }
+  await assertCompatibilityUiAllowed(bridge);
   if (!snapshot || !Array.isArray(snapshot.rooms) || roomId == null || String(roomId).trim() === "") {
     throw new TypeError("A complete snapshot and stable room ID are required");
   }
@@ -228,7 +218,7 @@ export async function commitRoomCatalogMutation({
     throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Room catalog transaction committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
   }
   return Object.freeze({
-    canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
+    canonical: true, cacheRefreshed: false,
     room: storedRoom, snapshotVersion: storedSnapshot.version,
     roomVersion: committed.entities[0].version
   });
@@ -237,12 +227,12 @@ export async function commitRoomCatalogMutation({
 /** Persists a guest profile and its full recovery snapshot under a stable guest ID. */
 export async function commitGuestStateMutation({
   bridge, snapshot, guestId, guestIndex, operation, expectedPreviousGuest = null,
-  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
     throw new TypeError("A bound transactional PMS repository bridge is required");
   }
+  await assertCompatibilityUiAllowed(bridge);
   if (!snapshot || !Array.isArray(snapshot.g) || !Number.isInteger(guestIndex) || guestIndex < 0 ||
       guestId == null || String(guestId).trim() === "") {
     throw new TypeError("A complete snapshot, guest index and stable guest ID are required");
@@ -312,7 +302,7 @@ export async function commitGuestStateMutation({
     throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Guest transaction committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
   }
   return Object.freeze({
-    canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
+    canonical: true, cacheRefreshed: false,
     guest: storedGuest, snapshot: storedSnapshot.data.snapshot, snapshotVersion: storedSnapshot.version,
     guestVersion: committed.entities[0].version
   });
@@ -321,12 +311,12 @@ export async function commitGuestStateMutation({
 /** Atomically persists an inventory item and the complete snapshot/stock ledger. */
 export async function commitInventoryItemMutation({
   bridge, snapshot, inventoryId, inventoryIndex, operation, expectedPreviousItem = null,
-  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
     throw new TypeError("A bound transactional PMS repository bridge is required");
   }
+  await assertCompatibilityUiAllowed(bridge);
   if (!snapshot || !Array.isArray(snapshot.inv) || !Number.isInteger(inventoryIndex) ||
       inventoryIndex < 0 || inventoryId == null || String(inventoryId).trim() === "") {
     throw new TypeError("A complete snapshot, inventory index and stable item ID are required");
@@ -388,7 +378,7 @@ export async function commitInventoryItemMutation({
     throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Inventory transaction committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
   }
   return Object.freeze({
-    canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
+    canonical: true, cacheRefreshed: false,
     item: storedItem, snapshotVersion: storedSnapshot.version,
     inventoryVersion: committed.entities[0].version
   });
@@ -397,12 +387,12 @@ export async function commitInventoryItemMutation({
 /** Commits an expense record and the full local recovery snapshot atomically. */
 export async function commitExpenseMutation({
   bridge, snapshot, expenseId, expenseIndex, operation, expectedPreviousExpense = null,
-  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
     throw new TypeError("A bound transactional PMS repository bridge is required");
   }
+  await assertCompatibilityUiAllowed(bridge);
   if (!snapshot || !Array.isArray(snapshot.exp) || !Number.isInteger(expenseIndex) ||
       expenseIndex < 0 || expenseId == null || String(expenseId).trim() === "") {
     throw new TypeError("A complete snapshot, expense index and stable expense ID are required");
@@ -463,7 +453,7 @@ export async function commitExpenseMutation({
     throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Expense transaction committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
   }
   return Object.freeze({
-    canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
+    canonical: true, cacheRefreshed: false,
     expense: storedExpense, snapshotVersion: storedSnapshot.version,
     expenseVersion: committed.entities[0].version
   });
@@ -472,12 +462,12 @@ export async function commitExpenseMutation({
 /** Atomically posts a restaurant table bill to an occupied guest folio. */
 export async function commitRestaurantFolioCharge({
   bridge, snapshot, bookingId, tableId, saleId, saleIndex,
-  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
     throw new TypeError("A bound transactional PMS repository bridge is required");
   }
+  await assertCompatibilityUiAllowed(bridge);
   if (!snapshot || !Array.isArray(snapshot.b) || !Array.isArray(snapshot.t) ||
       !Array.isArray(snapshot.sales) || !Number.isInteger(saleIndex) || saleIndex < 0 ||
       bookingId == null || tableId == null || saleId == null) {
@@ -568,7 +558,7 @@ export async function commitRestaurantFolioCharge({
     throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Restaurant folio transaction committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
   }
   return Object.freeze({
-    canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
+    canonical: true, cacheRefreshed: false,
     booking: storedBooking, table: storedTable, sale: storedSale,
     snapshotVersion: storedSnapshot.version, versions: committed.entities.map(row => row.version)
   });
@@ -577,12 +567,12 @@ export async function commitRestaurantFolioCharge({
 /** Atomically settles a restaurant table sale without touching a hotel folio. */
 export async function commitRestaurantTableSettlement({
   bridge, snapshot, tableId, saleId, saleIndex,
-  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
     throw new TypeError("A bound transactional PMS repository bridge is required");
   }
+  await assertCompatibilityUiAllowed(bridge);
   if (!snapshot || !Array.isArray(snapshot.t) || !Array.isArray(snapshot.sales) ||
       !Number.isInteger(saleIndex) || saleIndex < 0 || tableId == null || saleId == null) {
     throw new TypeError("A complete snapshot and stable table/sale IDs are required");
@@ -647,7 +637,7 @@ export async function commitRestaurantTableSettlement({
     throw fail("OPERATIONAL_CANONICAL_READBACK_MISMATCH", "Restaurant settlement committed but exact canonical read-back failed. Stop edits and reconcile before retrying.");
   }
   return Object.freeze({
-    canonical: true, cacheRefreshed: refreshCache(legacyStorage, snapshot),
+    canonical: true, cacheRefreshed: false,
     table: storedTable, sale: storedSale, snapshotVersion: storedSnapshot.version,
     versions: committed.entities.map(row => row.version)
   });

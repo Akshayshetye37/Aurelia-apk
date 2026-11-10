@@ -8,6 +8,7 @@
  */
 import { settlePayment, moneyToPaise } from "./settlement-service.mjs";
 import { PMS_LEGACY_SNAPSHOT_SOURCE_KEY, PMS_LEGACY_SNAPSHOT_ENTITY_ID } from "../storage/pms-repository-contract.mjs";
+import { assertCompatibilityUiAllowed } from "../storage/pms-authority-state.mjs";
 
 const clone = value => value == null ? value :
   (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
@@ -67,6 +68,7 @@ export async function settlePaymentToRepository({
       typeof bridge.mutateEntities !== "function") {
     throw new TypeError("A bound transactional PMS repository bridge is required");
   }
+  await assertCompatibilityUiAllowed(bridge);
   if (!state || !Array.isArray(state.b) || !booking || !state.b.includes(booking)) {
     throw new TypeError("Booking must belong to the supplied live PMS state");
   }

@@ -184,3 +184,21 @@ test("settlement normalizes legacy projection metadata before comparing booking 
   assert.equal(saved.data.legacySource, undefined);
   assert.equal(saved.data.p, 100);
 });
+
+test("canonical authority blocks legacy manual-payment writes before reading or mutating the folio", async () => {
+  const authority = {
+    type: "audit", id: "pms:authority", version: 1,
+    data: { schemaVersion: 1, status: "CANONICAL_AUTHORITATIVE", uiCutover: true, projectionStatus: "VERIFIED" }
+  };
+  let writes = 0;
+  const bridge = {
+    fetchEntity: async () => authority,
+    mutateEntities: async () => { writes += 1; throw new Error("compatibility payment must not run"); }
+  };
+  const booking = { id: "booking-locked" };
+  await assert.rejects(settlePaymentToRepository({
+    bridge, state: { b: [booking] }, booking, balanceDueFor: () => 100,
+    amount: 10, method: "Cash", verificationConfirmed: true
+  }), error => error.code === "PMS_CANONICAL_AUTHORITY_CUTOVER_REQUIRED");
+  assert.equal(writes, 0);
+});

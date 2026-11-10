@@ -37,11 +37,14 @@ test("check-in commits booking, room occupancy and recovery snapshot in one loca
   booking.checkInTime = "14:00";
   booking.actualCheckInAt = "2026-11-08T12:00:00.000Z";
   room.s = "occ";
+  let legacyWrites = 0;
   const result = await commitOperationalStateMutation({
     bridge, snapshot, bookingId: booking.id, roomId: room.n, eventType: "booking.checked_in",
-    legacyStorage: null, now: () => "2026-11-08T12:00:00.000Z"
+    legacyStorage: { setItem() { legacyWrites += 1; }, getItem() { return null; } }, now: () => "2026-11-08T12:00:00.000Z"
   });
   assert.equal(result.canonical, true);
+  assert.equal(result.cacheRefreshed, false);
+  assert.equal(legacyWrites, 0);
   assert.equal(result.booking.data.st, "in");
   assert.equal(result.room.data.s, "occ");
   const saved = (await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot;
@@ -455,4 +458,31 @@ test("guest retirement removes the active profile and commits a minimal tombston
   assert.equal(retired.data.idn, undefined);
   assert.equal(retired.data.img, undefined);
   assert.deepEqual((await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2")).data.snapshot.g, []);
+});
+
+test("canonical authority blocks every compatibility operational write entry point", async () => {
+  const authority = {
+    type: "audit", id: "pms:authority", version: 1,
+    data: { schemaVersion: 1, status: "CANONICAL_AUTHORITATIVE", uiCutover: true, projectionStatus: "VERIFIED" }
+  };
+  let writes = 0;
+  const bridge = {
+    fetchEntity: async () => authority,
+    mutateEntities: async () => { writes += 1; throw new Error("compatibility write must not run"); }
+  };
+  const operations = [
+    commitOperationalStateMutation,
+    commitRoomStateMutation,
+    commitRoomCatalogMutation,
+    commitGuestStateMutation,
+    commitInventoryItemMutation,
+    commitExpenseMutation,
+    commitRestaurantFolioCharge,
+    commitRestaurantTableSettlement
+  ];
+  for (const operation of operations) {
+    await assert.rejects(operation({ bridge }), error =>
+      error.code === "PMS_CANONICAL_AUTHORITY_CUTOVER_REQUIRED");
+  }
+  assert.equal(writes, 0);
 });

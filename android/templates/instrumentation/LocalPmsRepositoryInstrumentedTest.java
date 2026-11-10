@@ -280,4 +280,55 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertNull(repository.readMigrationSnapshot("migration-rejected"));
     assertEquals(1, repository.listEntities("folio").length());
   }
+
+  @Test public void migrationRollsBackEntityRowsWhenSnapshotCheckpointFailsAndSurvivesRestart() throws Exception {
+    String migrationId = "migration-snapshot-checkpoint";
+    String raw = "{"rooms":[{"n":"101","r":1200}],"b":[{"id":7,"p":500,"pays":[{"a":200,"m":"Cash"}]}],"g":[{"id":"g-1"}],"t":[],"exp":[],"inv":[],"led":[],"aud":[],"set":{"cur":"INR"},"menu":{}}";
+    repository.getWritableDatabase().execSQL(
+      "CREATE TRIGGER fail_migration_snapshot BEFORE INSERT ON pms_migration_snapshots " +
+      "BEGIN SELECT RAISE(ABORT, 'injected_snapshot_checkpoint_failure'); END");
+    boolean failed = false;
+    try {
+      repository.migrateLegacySnapshot(migrationId, "aurelia_lodge_v2", "2026-11-09T12:00:00.000Z", raw);
+    } catch (RuntimeException expected) { failed = true; }
+    assertTrue("snapshot checkpoint fault must abort migration", failed);
+    assertEquals(0, repository.listEntities("legacy").length());
+    assertNull(repository.readMigrationSnapshot(migrationId));
+    repository.getWritableDatabase().execSQL("DROP TRIGGER fail_migration_snapshot");
+    repository.close();
+    databaseKey = key();
+    repository = new LocalPmsRepository(context, databaseKey);
+    repository.initialize();
+    assertEquals(0, repository.listEntities("legacy").length());
+    assertNull(repository.readMigrationSnapshot(migrationId));
+    JSONObject retry = repository.migrateLegacySnapshot(migrationId, "aurelia_lodge_v2", "2026-11-09T12:00:00.000Z", raw);
+    assertFalse(retry.getBoolean("alreadyMigrated"));
+    assertEquals(10, repository.listEntities("legacy").length());
+  }
+
+  @Test public void migrationRollsBackEntityAndSnapshotRowsWhenCompletionMarkerCheckpointFails() throws Exception {
+    String migrationId = "migration-marker-checkpoint";
+    String raw = "{"rooms":[{"n":"101","r":1200}],"b":[{"id":7,"p":500,"pays":[{"a":200,"m":"Cash"}]}],"g":[{"id":"g-1"}],"t":[],"exp":[],"inv":[],"led":[],"aud":[],"set":{"cur":"INR"},"menu":{}}";
+    repository.getWritableDatabase().execSQL(
+      "CREATE TRIGGER fail_migration_marker BEFORE INSERT ON pms_migrations " +
+      "BEGIN SELECT RAISE(ABORT, 'injected_marker_checkpoint_failure'); END");
+    boolean failed = false;
+    try {
+      repository.migrateLegacySnapshot(migrationId, "aurelia_lodge_v2", "2026-11-09T12:00:00.000Z", raw);
+    } catch (RuntimeException expected) { failed = true; }
+    assertTrue("completion marker fault must abort migration", failed);
+    assertEquals(0, repository.listEntities("legacy").length());
+    assertNull(repository.readMigrationSnapshot(migrationId));
+    repository.getWritableDatabase().execSQL("DROP TRIGGER fail_migration_marker");
+    repository.close();
+    databaseKey = key();
+    repository = new LocalPmsRepository(context, databaseKey);
+    repository.initialize();
+    assertEquals(0, repository.listEntities("legacy").length());
+    assertNull(repository.readMigrationSnapshot(migrationId));
+    JSONObject retry = repository.migrateLegacySnapshot(migrationId, "aurelia_lodge_v2", "2026-11-09T12:00:00.000Z", raw);
+    assertFalse(retry.getBoolean("alreadyMigrated"));
+    assertEquals(10, repository.listEntities("legacy").length());
+  }
+
 }
