@@ -130,3 +130,13 @@ test('biometric DEK wrapping prefers StrongBox and preserves existing wrapped-ke
   assert.match(biometric, /if \(store\.containsAlias\(ALIAS\)\) return/);
   assert.ok(biometric.indexOf('if (store.containsAlias(ALIAS)) return') < biometric.indexOf('catch (_: StrongBoxUnavailableException)'), 'existing biometric DEK wrapper is preserved before fallback cleanup');
 });
+
+
+test('Android generation disables OS backup and blocks screenshots of PMS records', () => {
+  const patcher = read('scripts/patch-android.js');
+  assert.match(patcher, /android:allowBackup="false"/);
+  assert.match(patcher, /aurelia_backup_rules\.xml/);
+  assert.match(patcher, /aurelia_data_extraction_rules\.xml/);
+  assert.match(patcher, /FLAG_SECURE/);
+  assert.match(patcher, /WindowManager\.LayoutParams\.FLAG_SECURE/);
+});
