@@ -202,7 +202,8 @@ public final class LocalPmsRepositoryInstrumentedTest {
     char[] pin = "481592".toCharArray();
     byte[] sessionKey = null;
     try {
-      manager.enroll(pin);
+      com.aurelia.pms.security.AureliaAppManager.Enrollment enrollment = manager.enroll(pin);
+      Arrays.fill(enrollment.getRecoveryKey(), '\0');
       sessionKey = manager.currentDataKeyCopy();
       assertEquals(32, sessionKey.length);
       manager.onBackground();
