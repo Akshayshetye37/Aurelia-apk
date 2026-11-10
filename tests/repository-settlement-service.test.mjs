@@ -107,7 +107,7 @@ test("failed canonical transaction leaves the live folio untouched", async () =>
   assert.equal(await bridge.fetchEntity("folio", "folio-41"), null);
 });
 
-test("legacy UI cache is refreshed only after the canonical payment snapshot is committed", async () => {
+test("canonical payment commit never refreshes a legacy Web Storage cache", async () => {
   const { bridge, booking, state } = fixture();
   const values = new Map();
   const legacyStorage = {
@@ -119,10 +119,11 @@ test("legacy UI cache is refreshed only after the canonical payment snapshot is 
     bridge, state, booking, balanceDueFor, amount: 125, method: "Cash",
     source: "manual", verificationConfirmed: true, legacyStorage
   });
-  assert.equal(result.cacheRefreshed, true);
-  const cached = JSON.parse(values.get("aurelia_lodge_v2"));
-  assert.equal(cached.b[0].p, 125);
-  assert.equal(cached.b[0].pays.length, 1);
+  assert.equal(result.cacheRefreshed, false);
+  assert.equal(values.size, 0);
+  const canonical = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  assert.equal(canonical.data.snapshot.b[0].p, 125);
+  assert.equal(canonical.data.snapshot.b[0].pays.length, 1);
 });
 
 test("staff-reviewed UPI evidence and folio credit commit together and replay idempotently", async () => {
