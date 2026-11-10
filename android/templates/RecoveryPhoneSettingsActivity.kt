@@ -148,35 +148,47 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
     }
 
     private fun registerNewPhone(newPhoneToken: String) {
-        status.text = "Saving verified recovery phone…"
-        val tenant = RecoveryTenantIdentity.getOrCreate(this)
-        val deviceHash = RecoveryDeviceIdentity.deviceIdHash()
-        client.registerRecoveryPhone(newPhoneToken, tenant, deviceHash, oldPhoneToken)
-            .addOnCompleteListener { task ->
-                runOnUiThread {
-                    if (!task.isSuccessful) {
-                        status.text = "Could not register recovery phone. Verify the current number and try again."
-                        return@runOnUiThread
-                    }
-                    val state = (task.result?.get("state") as? String) ?: "UNSET"
-                    try {
-                        val record = store.read()
-                        if (record.currentE164 == null || record.currentE164 == candidate) {
-                            store.markVerified(candidate)
-                        } else if (state == "CHANGE_PENDING") {
-                            store.requestChange(candidate)
-                        }
-                        status.text = if (state == "CHANGE_PENDING") {
-                            "New number verified. The old number remains active for 48 hours."
-                        } else {
-                            "Recovery phone verified: ${mask(candidate)}"
-                        }
-                        phone.text.clear()
-                    } catch (failure: Exception) {
-                        status.text = "The server accepted verification, but local state could not be saved: ${failure.message}"
-                    }
+        status.text = "Checking authenticated property-owner identity…"
+        RecoveryTenantIdentity.bindAuthorizedOwner(this).addOnCompleteListener { tenantTask ->
+            runOnUiThread {
+                if (!tenantTask.isSuccessful) {
+                    status.text = "Recovery phone setup requires a recently authenticated property-owner account with a tenant binding."
+                    return@runOnUiThread
                 }
+                val tenant = tenantTask.result
+                val deviceHash = try { RecoveryDeviceIdentity.deviceIdHash() } catch (failure: Exception) {
+                    status.text = "Secure device binding is unavailable: ${failure.message}"
+                    return@runOnUiThread
+                }
+                status.text = "Saving verified recovery phone…"
+                client.registerRecoveryPhone(newPhoneToken, tenant, deviceHash, oldPhoneToken)
+                    .addOnCompleteListener { task ->
+                        runOnUiThread {
+                            if (!task.isSuccessful) {
+                                status.text = "Could not register recovery phone. Verify owner access and phone proof, then try again."
+                                return@runOnUiThread
+                            }
+                            val serverState = (task.result?.get("state") as? String) ?: "UNSET"
+                            try {
+                                val record = store.read()
+                                if (record.currentE164 == null || record.currentE164 == candidate) {
+                                    store.markVerified(candidate)
+                                } else if (serverState == "CHANGE_PENDING") {
+                                    store.requestChange(candidate)
+                                }
+                                status.text = if (serverState == "CHANGE_PENDING") {
+                                    "New number verified. The old number remains active for 48 hours."
+                                } else {
+                                    "Recovery phone verified: ${mask(candidate)}"
+                                }
+                                phone.text.clear()
+                            } catch (failure: Exception) {
+                                status.text = "Server accepted verification, but local state could not be saved: ${failure.message}"
+                            }
+                        }
+                    }
             }
+        }
     }
 
     private fun mask(value: String): String {
