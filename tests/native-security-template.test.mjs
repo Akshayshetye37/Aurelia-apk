@@ -322,7 +322,7 @@ test('recovery throttling resets only after the replacement PIN envelope is dura
   const manager = read('android/templates/security/AureliaAppManager.kt');
   const gate = read('android/templates/security/LockGateActivity.kt');
   const recovery = manager.slice(manager.indexOf('fun recoverWithRecoveryKey'), manager.indexOf('private fun pinEnvelope'));
-  assert.doesNotMatch(recovery, /recoveryLockout\\.registerSuccess\\(\\)/);
-  assert.match(manager, /fun confirmRecoverySwapCommitted\\(\\)[\\s\\S]*?recoveryLockout\\.registerSuccess\\(\\)/);
-  assert.match(gate, /writeRecoveryReplacement\\(replacement\\)[\\s\\S]*?confirmRecoverySwapCommitted\\(\\)/);
+  assert.doesNotMatch(recovery, /recoveryLockout\.registerSuccess\(\)/);
+  assert.match(manager, /fun confirmRecoverySwapCommitted\(\)[\s\S]*?recoveryLockout\.registerSuccess\(\)/);
+  assert.match(gate, /writeRecoveryReplacement\(replacement\)[\s\S]*?confirmRecoverySwapCommitted\(\)/);
 });
