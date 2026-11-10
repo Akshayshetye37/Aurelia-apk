@@ -29,6 +29,7 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
     Context base = ApplicationProvider.getApplicationContext();
     Context context = base.createDeviceProtectedStorageContext();
     context.deleteDatabase(DB);
+    context.deleteDatabase("aurelia-pms.db");
     com.aurelia.pms.security.AureliaEnvelopeStore envelopeStore =
       new com.aurelia.pms.security.AureliaEnvelopeStore(context);
     com.aurelia.pms.security.BiometricEnvelopeStore biometricStore =
@@ -75,14 +76,15 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
       dbKey = null;
       manager.lock(); // session DEK is zeroed before recovery begins.
 
-      // 2. Simulate process death after successful recovery-key unwrap but before envelope commit.
-      // The old durable envelope must remain usable and retry must not create a second DEK.
+      // 2. Simulate process recreation after successful recovery-key unwrap but before envelope
+      // commit. A fresh manager has no in-memory DEK; the old durable envelope must still work.
       String uncommitted = manager.recoverWithRecoveryKey(recoveryCode, newPin, envelopeStore.read());
       JSONObject pending = new JSONObject(uncommitted);
       byte[] pendingDek = crypto.unwrapDataKey(pending.getString("pin"), newPin);
       try { assertArrayEquals(originalDek, pendingDek); }
       finally { Arrays.fill(pendingDek, (byte) 0); }
       manager.lock();
+      manager = newManager(context); // fresh process-scoped coordinator; Keystore/storage survive.
       assertTrue("old envelope must survive an interrupted, uncommitted rotation",
         manager.unlock(oldPin, envelopeStore.read()));
       manager.lock();
