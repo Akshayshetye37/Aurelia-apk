@@ -230,6 +230,22 @@ public final class LocalPmsRepositoryInstrumentedTest {
         .put("event", event("contract-batch-" + i, batchType, batchId, 1)));
     }
     assertEquals(2, repository.transactBusinessBatch(batch).length());
+    JSONArray orderedBookings = new JSONArray();
+    orderedBookings.put(new JSONObject().put("id", "contract-booking-z").put("createdAt", "2026-11-10T00:01:00.000Z"));
+    orderedBookings.put(new JSONObject().put("id", "contract-booking-a").put("createdAt", "2026-11-10T00:02:00.000Z"));
+    for (int i = 0; i < orderedBookings.length(); i++) {
+      JSONObject row = orderedBookings.getJSONObject(i);
+      String orderedId = row.getString("id");
+      repository.transactBusinessChange("booking", orderedId, 0, row,
+        event("contract-order-event-" + i, "booking", orderedId, 1));
+    }
+    JSONArray nativeOrder = repository.listEntities("booking");
+    java.util.ArrayList<String> orderedIds = new java.util.ArrayList<>();
+    for (int i = 0; i < nativeOrder.length(); i++) {
+      String orderedId = nativeOrder.getJSONObject(i).getString("id");
+      if (orderedId.startsWith("contract-booking-")) orderedIds.add(orderedId);
+    }
+    assertEquals(Arrays.asList("contract-booking-001", "contract-booking-z", "contract-booking-a"), orderedIds);
 
     JSONObject retry = fixture.getJSONObject("outbox"); String retryId = retry.getString("retryEventId");
     String retryEntityId = "contract-retry-folio";
