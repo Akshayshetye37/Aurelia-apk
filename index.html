@@ -1044,36 +1044,12 @@ const cloneLiveSnapshot=()=>{const out={};DK.forEach(k=>{try{out[k]=typeof struc
 
 /* Encrypted backup vault. The non-extractable data key is persisted in IndexedDB;
    a recovery-password-wrapped copy makes encrypted exports portable to a new device. */
-const BACKUP_VAULT_DB='aurelia-pms-backup-vault-v1';
 const BACKUP_VAULT_ID='primary';
 const BACKUP_KDF_ITERATIONS=600000;
 function backupB64(bytes){let s='';new Uint8Array(bytes).forEach(b=>s+=String.fromCharCode(b));return btoa(s)}
 function backupUnB64(value){return Uint8Array.from(atob(value),c=>c.charCodeAt(0))}
-function backupVaultDb(){
- return new Promise((resolve,reject)=>{
-  const req=indexedDB.open(BACKUP_VAULT_DB,1);
-  req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('vault'))req.result.createObjectStore('vault',{keyPath:'id'})};
-  req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('Could not open encrypted backup key storage.'));
- });
-}
-async function readBackupVault(){
- try{
-  const db=await backupVaultDb();
-  try{return await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readonly'),req=tx.objectStore('vault').get(BACKUP_VAULT_ID);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}
-  finally{db.close()}
- }catch(error){
-  throw new Error('Durable IndexedDB backup-key storage is unavailable; Web Storage fallback is prohibited. '+(error?.message||''));
- }
-}
-async function writeBackupVault(record){
- try{
-  const db=await backupVaultDb();
-  try{await new Promise((resolve,reject)=>{const tx=db.transaction('vault','readwrite');tx.objectStore('vault').put(record);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('Could not save backup recovery key.'))})}
-  finally{db.close()}
- }catch(error){
-  throw new Error('Secure IndexedDB backup-key storage is unavailable; no Web Storage fallback was written. '+(error?.message||''));
- }
-}
+async function readBackupVault(){return window.AureliaBackupVaultStore.read()}
+async function writeBackupVault(record){return window.AureliaBackupVaultStore.write(record)}
 async function backupPasswordKey(password,salt,iterations){
  const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveKey']);
  return crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt,iterations},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
@@ -5507,6 +5483,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 import { PmsBootstrapCoordinator } from "./src/storage/pms-bootstrap-coordinator.mjs";
 import { createLegacyMigrationStorage, readLegacyPhotoFallbackEntries, deleteLegacyPhotoFallbackEntries } from "./src/storage/legacy-web-storage.mjs";
 import { createPhotoArchive } from "./src/storage/photo-archive.mjs";
+import { createBackupVaultStore } from "./src/storage/backup-vault-store.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
 import { PmsLocalFirstWriteCoordinator } from "./src/storage/pms-local-first-write-coordinator.mjs";
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
@@ -5519,6 +5496,7 @@ window.AureliaPhotoArchive = createPhotoArchive({
   readLegacyPhotoFallbackEntries,
   deleteLegacyPhotoFallbackEntries
 });
+window.AureliaBackupVaultStore = createBackupVaultStore();
 window.AureliaStorageDiagnostics = Object.freeze({
   persistent: legacyStorage.persistent,
   mode: legacyStorage.persistent ? "legacy-migration-storage" : "unavailable",
