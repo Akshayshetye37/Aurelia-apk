@@ -105,7 +105,8 @@ export const registerRecoveryPhone = onCall(
     const tenantId = validateTenantId(request.auth?.token.tenantId);
     if (request.auth?.token.role !== "owner") throw GENERIC;
     const authTime = Number(request.auth?.token.auth_time ?? 0);
-    if (!authTime || Date.now() / 1000 - authTime >= 300) throw GENERIC;
+    const ownerAge = Date.now() / 1000 - authTime;
+    if (!authTime || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
     await spendRateLimit(`reg:${tenantId}`, 5, 60 * 60_000);
 
     const proof = await verifyPhoneToken(request.data?.phoneIdToken);
@@ -127,7 +128,6 @@ export const registerRecoveryPhone = onCall(
         tx.set(ref, { ...current, state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp() }, { merge: true });
         return "VERIFIED" as const;
       }
-      if (current.pending?.hash) throw new HttpsError("failed-precondition", "A recovery phone change is already pending.");
       tx.set(ref, { ...current, state: "CHANGE_PENDING",
         pending: { hash: hash.toString("base64"), masked: maskPhone(proof.phone),
           effectiveAt: Date.now() + 48 * 60 * 60_000 } }, { merge: true });
@@ -211,8 +211,8 @@ export const cancelRecoveryPhoneChange = onCall(
   { region: REGION, enforceAppCheck: true },
   async request => {
     const tenantId = validateTenantId(request.auth?.token.tenantId);
-    if (request.auth?.token.role !== "owner" ||
-        Date.now() / 1000 - Number(request.auth.token.auth_time ?? 0) >= 300) throw GENERIC;
+    const ownerAge = Date.now() / 1000 - Number(request.auth?.token.auth_time ?? 0);
+    if (request.auth?.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
     const ref = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
     await db.runTransaction(async tx => {
       const snapshot = await tx.get(ref);
