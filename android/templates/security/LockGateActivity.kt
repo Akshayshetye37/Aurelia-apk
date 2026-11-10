@@ -690,6 +690,7 @@ class LockGateActivity : FragmentActivity() {
                     envelopeStore.writeRecoveryReplacement(replacement)
                     manager.confirmRecoverySwapCommitted()
                     biometricStore.delete()
+                    biometricVault.invalidateAfterRecovery()
                     AureliaSecurityRuntime.markEnrolled()
                     manager.lock()
                     showError("PIN recovered. Biometrics were disabled; unlock with your new PIN to continue.")
