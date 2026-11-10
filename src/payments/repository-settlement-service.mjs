@@ -253,7 +253,7 @@ export async function settlePaymentToRepository({
   // Refresh the old UI cache only after canonical commit. It is never the
   // authority for this operation; failure is reported separately so callers
   // do not retry and accidentally create a second payment.
-  const cacheRefreshed = refreshLegacyCache(legacyStorage, canonicalState);
+  const cacheRefreshed = false;
 
   // Keep the active UI references coherent only after durable commit/read-back.
   const liveBookings = state.b;
