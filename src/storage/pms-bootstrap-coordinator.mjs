@@ -6,7 +6,7 @@
  * UI cutover is a separate release gate requiring every mutation path to be
  * routed through the repository.
  */
-import { IndexedDbPmsRepository, parseLegacyPmsSnapshot } from "./indexeddb-pms-repository.mjs";
+import { createIndexedDbPmsRepository, parseLegacyPmsSnapshot } from "./pms-repository-engine-factory.mjs";
 import { getOrCreateBrowserLocalIdentity } from "./pms-local-identity.mjs";
 import { settlePaymentToRepository } from "../payments/repository-settlement-service.mjs";
 import { PmsRepositoryBridge } from "./pms-repository-bridge.mjs";
@@ -96,7 +96,7 @@ export class PmsBootstrapCoordinator {
       if (this.environment === "ANDROID_WEBVIEW") {
         this.repository = await this.nativeRepositoryFactory();
       } else {
-        this.repository = new IndexedDbPmsRepository({
+        this.repository = createIndexedDbPmsRepository({
           indexedDBImpl: this.indexedDBImpl,
           databaseName: this.databaseName
         });
