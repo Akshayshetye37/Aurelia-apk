@@ -92,7 +92,7 @@ test('Cashfree create refund preserves merchant refund_id separately from Cashfr
   });
   const result = await adapter.createRefund({
     orderId: 'order_123', refundId: 'merchant_ref_123', amountMinor: 1250,
-    paymentId: '918812', idempotencyKey: 'refund-idem-123456'
+    paymentId: '918812', idempotencyKey: 'refund-test'
   });
   assert.deepEqual(result, {
     provider: 'cashfree', refundId: 'merchant_ref_123', providerRefundId: '1553338',
@@ -103,7 +103,7 @@ test('Cashfree create refund preserves merchant refund_id separately from Cashfr
     /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   await adapter.createRefund({
     orderId: 'order_123', refundId: 'merchant_ref_123', amountMinor: 1250,
-    paymentId: '918812', idempotencyKey: 'refund-idem-123456'
+    paymentId: '918812', idempotencyKey: 'refund-test'
   });
   assert.equal(mock.calls[0].options.headers['x-idempotency-key'],
     mock.calls[1].options.headers['x-idempotency-key']);
@@ -120,7 +120,7 @@ test('Cashfree create refund rejects provider response identity or amount drift'
   });
   await assert.rejects(adapter.createRefund({
     orderId: 'order_123', refundId: 'merchant_ref_123', amountMinor: 1250,
-    idempotencyKey: 'refund-idem-123456'
+    idempotencyKey: 'refund-test'
   }), /cashfree_refund_response_binding_mismatch/);
 });
 
@@ -149,7 +149,7 @@ test('Cashfree create refund rejects a refund bound to a different captured paym
   });
   await assert.rejects(adapter.createRefund({
     orderId: 'order_123', refundId: 'merchant_ref_123', amountMinor: 1250,
-    paymentId: '918812', idempotencyKey: 'refund-idem-123456'
+    paymentId: '918812', idempotencyKey: 'refund-test'
   }), /cashfree_refund_response_binding_mismatch/);
 });
 
