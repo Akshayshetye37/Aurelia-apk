@@ -76,6 +76,18 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace compileDebugJavaWithJavac compileDebugKotlin compileDebugAndroidTestJavaWithJavac testDebugUnitTest assembleDebug
 
+      - name: Enable Linux KVM for Android emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -c /dev/kvm ]; then
+            echo "::error::KVM device is unavailable on this runner; refusing a slow software-emulated x86_64 test."
+            exit 1
+          fi
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          echo "KVM device is present and accessible."
+
       - name: Run offline SQLCipher recovery instrumentation on Android emulator
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
@@ -83,11 +95,13 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          # Avoid the runner action's post-boot settings writes: API 35 can report
-          # sys.boot_completed before the Settings provider is ready, killing ADB.
-          # This test suite is non-UI; animation suppression is not required.
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          # Hardware acceleration is required; software x86_64 emulation timed out
+          # on the previous runner because /dev/kvm was inaccessible.
+          disable-linux-hw-accel: false
+          # This non-UI suite does not need the action's post-boot animation writes.
           disable-animations: false
+          emulator-boot-timeout: 600
           script: cd android && ./gradlew --no-daemon connectedDebugAndroidTest
 
       - name: Verify instrumentation results contain no failures or ignored tests
