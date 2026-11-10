@@ -94,6 +94,36 @@ class AureliaAppManager(
         }
     }
 
+    /** Adds a recovery wrapper to a legacy PIN-only envelope without changing the DEK. */
+    @Synchronized
+    fun enableRecoveryKey(pin: CharArray, currentEnvelope: String): Enrollment {
+        lockout.assertUnlocked()
+        val dek = try {
+            crypto.unwrapDataKey(pinEnvelope(currentEnvelope), pin)
+        } catch (failure: Exception) {
+            lockout.registerFailure()
+            throw SecurityException("PIN verification failed while enabling recovery.", failure)
+        }
+        val recoveryKey = crypto.createRecoveryKey()
+        try {
+            require(dek.size == 32)
+            val bundle = JSONObject()
+                .put("bundleVersion", 1)
+                .put("pin", crypto.wrapDataKey(dek, pin).json)
+                .put("recovery", crypto.wrapDataKeyWithRecovery(dek, recoveryKey))
+                .toString()
+            dataKey?.fill(0)
+            dataKey = dek.copyOf()
+            authenticated = true
+            backgroundAtElapsed = 0L
+            lockout.registerSuccess()
+            return Enrollment(bundle, crypto.encodeRecoveryKey(recoveryKey))
+        } finally {
+            dek.fill(0)
+            recoveryKey.fill(0)
+        }
+    }
+
     /** Recovers the same DEK from the one-time 256-bit recovery key and rotates only the PIN wrapper. */
     @Synchronized
     fun recoverWithRecoveryKey(recoveryCode: CharArray, newPin: CharArray, envelopeBundle: String): String {
