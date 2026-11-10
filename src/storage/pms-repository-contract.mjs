@@ -18,7 +18,7 @@ export function buildPmsOutboxEvent({eventId,tenantId,propertyId,deviceId,entity
   for (const [v,n] of [[eventId,"event ID"],[tenantId,"tenant ID"],[propertyId,"property ID"],[deviceId,"device ID"],[entityType,"entity type"],[entityId,"entity ID"],[eventType,"event type"]]) assertPmsIdentity(v,n);
   assertPmsVersion(sequence,"sequence"); if(sequence<1)throw new TypeError("Invalid sequence");
   if(!Number.isSafeInteger(schemaVersion)||schemaVersion<1)throw new TypeError("Invalid schema version");
-  if(!Number.isFinite(Date.parse(occurredAt)))throw new TypeError("Invalid event timestamp");
+  if(typeof occurredAt!=="string"||!occurredAt.endsWith("Z")||!Number.isFinite(Date.parse(occurredAt)))throw new TypeError("Event timestamp must be a valid UTC ISO timestamp ending in Z");
   const encoded=JSON.stringify(payload); if(encoded===undefined)throw new TypeError("Payload must be JSON serializable");
   return Object.freeze({eventId,tenantId,propertyId,deviceId,entityType,entityId,sequence,eventType,schemaVersion,occurredAt,payload:JSON.parse(encoded)});
 }
