@@ -23,7 +23,9 @@ export function createLegacyMigrationStorage({ storage } = {}) {
     target.removeItem(probe);
     persistent = true;
   } catch (error) {
-    failure = error;
+    failure = !target
+      ? Object.assign(new Error("Legacy migration storage is unavailable."), { code: "LEGACY_STORAGE_UNAVAILABLE" })
+      : error;
     try { target?.removeItem?.(probe); } catch {}
   }
 
