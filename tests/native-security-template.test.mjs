@@ -65,7 +65,7 @@ test('PIN policy is enforced by the crypto engine while legacy PINs remain reada
   assert.match(crypto, /Sequential PINs are not allowed/);
   assert.match(crypto, /base32Encode/);
   assert.match(crypto, /recoveryChecksum/);
-  assert.match(gate, /first\.size !in 6\.\.16/);
+  assert.match(gate, /enrollmentMode\) 6\.\.16 else 4\.\.16/);
   assert.match(gate, /Forgot PIN\?/);
   assert.match(gate, /showRecoveryPrompt/);
   assert.match(manager, /recoverWithRecoveryKey/);
