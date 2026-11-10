@@ -1,10 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const functions = fs.readFileSync('functions/src/index.ts', 'utf8');
-const rules = fs.readFileSync('firestore.rules', 'utf8');
-const identity = fs.readFileSync('android/templates/FirebasePhoneIdentity.kt', 'utf8');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+
+const functions = read('functions/src/index.ts');
+const rules = read('firestore.rules');
+const identity = read('android/templates/FirebasePhoneIdentity.kt');
 
 test('backend matches only verified Firebase phone identity and enforces fresh auth_time', () => {
   assert.match(functions, /verifyIdToken\(token, true\)/);
