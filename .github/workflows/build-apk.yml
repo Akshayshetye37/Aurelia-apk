@@ -119,6 +119,14 @@ jobs:
           fi
           echo "Merged manifest passed the sensitive-permission check."
 
+      - name: Verify approved source commit signature
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          verified="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}" --jq '.commit.verification.verified')"
+          test "$verified" = "true" || { echo "::error::Release source commit is not GitHub-verified as signed."; exit 1; }
+
       - name: Validate release signing configuration
         if: github.event_name != 'pull_request'
         env:
@@ -183,8 +191,10 @@ jobs:
           set -euo pipefail
           apk="android/app/build/outputs/apk/release/app-release.apk"
           digest="$(sha256sum "$apk" | awk '{print $1}')"
-          printf '{"sourceSha":"%s","artifactSha256":"%s","workflowRunId":"%s","workflowAttempt":"%s"}\n' \
-            "$GITHUB_SHA" "$digest" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+          certificate="$(awk -F': ' '/Signer #1 certificate SHA-256 digest:/ {gsub(/:/, "", $2); print tolower($2); exit}' "$RUNNER_TEMP/aurelia-pms-certificate.txt")"
+          test -n "$certificate"
+          printf '{"sourceSha":"%s","artifactSha256":"%s","signingCertificateSha256":"%s","workflowRunId":"%s","workflowAttempt":"%s"}\n' \
+            "$GITHUB_SHA" "$digest" "$certificate" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
             > "$RUNNER_TEMP/aurelia-pms-release-record.json"
           test -s "$RUNNER_TEMP/aurelia-pms-release-record.json"
 
