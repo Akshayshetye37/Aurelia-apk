@@ -16,6 +16,12 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import android.widget.Toast
 import com.aurelia.pms.MainActivity
+import com.aurelia.pms.identity.FirebasePhoneIdentity
+import com.aurelia.pms.identity.PhoneIdentityState
+import com.aurelia.pms.identity.RecoveryFirebaseAuthFactory
+import com.aurelia.pms.identity.RecoveryGrantClient
+import com.aurelia.pms.identity.RecoveryPhoneStore
+import com.aurelia.pms.identity.RecoveryTenantIdentity
 
 /**
  * Exported launcher boundary. This Activity contains no WebView and starts the
@@ -31,6 +37,8 @@ class LockGateActivity : FragmentActivity() {
     private var enrollmentMode = false
     private var pinField: EditText? = null
     private var confirmField: EditText? = null
+    private var recoveryPhoneIdentity: FirebasePhoneIdentity? = null
+    private var recoveryOtpDialogShown = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -511,6 +519,101 @@ class LockGateActivity : FragmentActivity() {
     }
 
     private fun showRecoveryPrompt() {
+        try {
+            val record = RecoveryPhoneStore(this).read()
+            if (!record.otpRequired || record.currentE164 == null) {
+                showRecoveryKeyPrompt()
+                return
+            }
+            beginRecoveryOtp(record.currentE164)
+        } catch (failure: Exception) {
+            showError("Recovery phone policy could not be verified. Recovery is blocked: ${failure.message}")
+        }
+    }
+
+    /** Only the encrypted, previously verified E.164 is used; no phone input exists here. */
+    private fun beginRecoveryOtp(trustedPhone: String) {
+        try {
+            recoveryOtpDialogShown = false
+            val auth = RecoveryFirebaseAuthFactory.create(this)
+            val identity = FirebasePhoneIdentity(auth) { state ->
+                runOnUiThread {
+                    when (state) {
+                        PhoneIdentityState.Requesting -> showError("Sending OTP to your registered recovery number…")
+                        PhoneIdentityState.CodeSent,
+                        PhoneIdentityState.AutoRetrievalTimedOut -> promptForRecoveryOtp(identity)
+                        PhoneIdentityState.Verifying -> Unit
+                        is PhoneIdentityState.IdentityVerified -> {
+                            val tenant = RecoveryTenantIdentity.getOrCreate(this)
+                            val client = RecoveryGrantClient(this)
+                            val grantRequest = client.issueRecoveryGrant(state.firebaseIdToken, tenant)
+                            grantRequest.task.addOnCompleteListener { task ->
+                                if (!task.isSuccessful) {
+                                    showError("OTP was verified, but recovery authorization failed. Request a fresh OTP.")
+                                    return@addOnCompleteListener
+                                }
+                                val grant = task.result
+                                client.consumeAndArm(grant, grantRequest.nonce, grantRequest.deviceIdHash) { armed ->
+                                    runOnUiThread {
+                                        if (armed && RecoveryGate.isOpen()) showRecoveryKeyPrompt()
+                                        else showError("Recovery authorization expired or was already used. Request a fresh OTP.")
+                                    }
+                                }
+                            }
+                        }
+                        is PhoneIdentityState.Failed -> {
+                            recoveryOtpDialogShown = false
+                            showError("Recovery OTP failed: ${state.reason}. Request a new code.")
+                        }
+                        PhoneIdentityState.Idle -> Unit
+                    }
+                }
+            }
+            recoveryPhoneIdentity = identity
+            identity.requestOtp(trustedPhone, this)
+        } catch (failure: Exception) {
+            RecoveryGate.clear()
+            showError("Recovery OTP is unavailable: ${failure.message}")
+        }
+    }
+
+    private fun promptForRecoveryOtp(identity: FirebasePhoneIdentity) {
+        if (recoveryOtpDialogShown || isFinishing) return
+        recoveryOtpDialogShown = true
+        val code = EditText(this).apply {
+            hint = "6-digit SMS code"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            filters = arrayOf(android.text.InputFilter.LengthFilter(6))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Verify recovery phone")
+            .setMessage("Enter the code sent to your saved recovery number.")
+            .setView(code)
+            .setPositiveButton("Verify") { _, _ ->
+                recoveryOtpDialogShown = false
+                identity.submitOtp(code.text.toString().trim())
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                recoveryOtpDialogShown = false
+                identity.reset()
+                RecoveryGate.clear()
+            }
+            .setOnCancelListener {
+                recoveryOtpDialogShown = false
+                identity.reset()
+                RecoveryGate.clear()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    /** This is the only path that renders the offline recovery-key input. */
+    private fun showRecoveryKeyPrompt() {
+        val record = RecoveryPhoneStore(this).read()
+        if (record.otpRequired && record.currentE164 != null && !RecoveryGate.isOpen()) {
+            showError("Verify the registered recovery phone before entering the recovery key.")
+            return
+        }
         val recovery = EditText(this).apply {
             hint = "54-character Base32 recovery key"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -535,7 +638,7 @@ class LockGateActivity : FragmentActivity() {
         }
         AlertDialog.Builder(this)
             .setTitle("Recover and reset PIN")
-            .setMessage("Enter the offline recovery key and choose a new PIN. The database DEK is not regenerated.")
+            .setMessage("Your registered phone is verified. Enter your offline recovery key and choose a new PIN. One OTP authorizes up to three checksum-valid key attempts.")
             .setView(form)
             .setPositiveButton("Recover") { _, _ ->
                 val recoveryChars = CharArray(recovery.text.length).also { recovery.text.getChars(0, recovery.text.length, it, 0) }
@@ -558,16 +661,20 @@ class LockGateActivity : FragmentActivity() {
                 } catch (failure: Exception) {
                     showError(failure.message ?: "Recovery verification failed.")
                 } finally {
-                    recoveryChars.fill('\u0000')
-                    newPinChars.fill('\u0000')
-                    confirmChars.fill('\u0000')
+                    recoveryChars.fill('\\u0000')
+                    newPinChars.fill('\\u0000')
+                    confirmChars.fill('\\u0000')
                     recovery.text.clear()
                     newPin.text.clear()
                     confirm.text.clear()
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .setNeutralButton("Destructive reset") { _, _ -> showDestructiveResetPrompt() }
+            .setNegativeButton("Cancel") { _, _ -> RecoveryGate.clear() }
+            .setNeutralButton("Destructive reset") { _, _ ->
+                RecoveryGate.clear()
+                showDestructiveResetPrompt()
+            }
+            .setOnCancelListener { RecoveryGate.clear() }
             .show()
     }
 
@@ -591,6 +698,11 @@ class LockGateActivity : FragmentActivity() {
 
     private fun showError(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    override fun onStop() {
+        RecoveryGate.clear()
+        super.onStop()
     }
 
     override fun onBackPressed() {
