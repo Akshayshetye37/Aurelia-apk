@@ -344,11 +344,11 @@ function guestContactActions(name,phone){
   var embeddedPreview=false;
   try{embeddedPreview=String(location.href).startsWith('about:srcdoc')||!!(window.frameElement&&window.frameElement.hasAttribute('sandbox')&&!window.frameElement.sandbox.contains('allow-same-origin'))}
   catch(e){embeddedPreview=String(location.href).startsWith('about:srcdoc')}
-  var indexedDbAvailable=!!window.indexedDB;
+  var indexedDbAvailable=!!window.indexedDB&&!embeddedPreview;
   window.AureliaStorageDiagnostics=Object.freeze({
     persistent:indexedDbAvailable,
     mode:indexedDbAvailable?'indexeddb':'unavailable',
-    reason:indexedDbAvailable?null:'IndexedDB is unavailable in this runtime.',
+    reason:embeddedPreview?'embedded-preview-sandbox':(indexedDbAvailable?null:'IndexedDB is unavailable in this runtime.'),
     embeddedPreview:embeddedPreview
   });
 })();
