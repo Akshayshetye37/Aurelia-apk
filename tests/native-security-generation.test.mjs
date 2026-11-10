@@ -206,3 +206,16 @@ test('PIN, recovery and biometric methods independently wrap and release the sam
   assert.match(gate, /recoverWithRecoveryKey/);
   assert.match(patcher, /BiometricEnvelopeStore\.kt/);
 });
+
+test('fault injection checkpoints are debug-source-set only and cover write/migration boundaries', () => {
+  const repository = read('android/templates/LocalPmsRepository.java');
+  const patcher = read('scripts/patch-android.js');
+  const hook = read('android/templates/debug/LocalPmsFaultInjection.java');
+  assert.match(repository, /if \(!BuildConfig\.DEBUG\) return/);
+  for (const checkpoint of ['before_write', 'mid_transaction', 'before_commit', 'after_commit_before_checkpoint', 'mid_migration']) {
+    assert.match(repository, new RegExp(checkpoint));
+  }
+  assert.match(patcher, /app', 'src', 'debug', 'java'/);
+  assert.match(patcher, /LocalPmsFaultInjection\.java/);
+  assert.match(hook, /Process\.killProcess\(Process\.myPid\(\)\)/);
+});
