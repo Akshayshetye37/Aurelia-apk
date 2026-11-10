@@ -4,14 +4,15 @@
  * A payment is not considered committed until the booking, folio projection,
  * and complete recoverable PMS snapshot have been written in one repository
  * transaction (SQLite on Android / IndexedDB in browser and PWA). No
- * localStorage write participates in this transaction.
+ * browser key-value storage write participates in this transaction.
  */
 import { settlePayment, moneyToPaise } from "./settlement-service.mjs";
+import { PMS_LEGACY_SNAPSHOT_SOURCE_KEY, PMS_LEGACY_SNAPSHOT_ENTITY_ID } from "../storage/pms-repository-contract.mjs";
 
 const clone = value => value == null ? value :
   (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
 const SNAPSHOT_TYPE = "audit";
-const SNAPSHOT_ID = "legacy_snapshot:aurelia_lodge_v2";
+const SNAPSHOT_ID = PMS_LEGACY_SNAPSHOT_ENTITY_ID;
 
 function fail(code, message) {
   const error = new Error(message);
@@ -186,7 +187,7 @@ export async function settlePaymentToRepository({
     });
   }
   const snapshotPayload = {
-    sourceKey: "aurelia_lodge_v2",
+    sourceKey: PMS_LEGACY_SNAPSHOT_SOURCE_KEY,
     operation: "payment_posted",
     bookingId,
     folioId,
@@ -226,7 +227,7 @@ export async function settlePaymentToRepository({
       eventType: "pms.snapshot_payment_committed",
       eventPayload: snapshotPayload,
       mutate: entity => {
-        entity.sourceKey = "aurelia_lodge_v2";
+        entity.sourceKey = PMS_LEGACY_SNAPSHOT_SOURCE_KEY;
         entity.snapshot = clone(canonicalState);
         entity.updatedAt = committedAt;
       }
