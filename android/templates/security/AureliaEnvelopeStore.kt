@@ -47,6 +47,11 @@ class AureliaEnvelopeStore(context: Context) {
     }
 
     @Synchronized
+    fun delete() {
+        file.delete()
+    }
+
+    @Synchronized
     fun read(): String {
         val stored = file.openRead().use { it.readBytes() }
         val plain = try { decrypt(stored) } finally { stored.fill(0) }
