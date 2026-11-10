@@ -168,3 +168,13 @@ test("legacy UI cache is not refreshed after canonical business writes", async (
   assert.doesNotMatch(html, /localStorage\)\.getItem\(SK\)/);
   assert.match(html, /Full device erasure is disabled until canonical SQLite\/IndexedDB wipe/);
 });
+
+test("index contains no direct Web Storage access and uses the whitelisted migration adapter", async () => {
+  const fs = await import("node:fs");
+  const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.doesNotMatch(html, /localStorage|sessionStorage/);
+  assert.match(html, /createLegacyMigrationStorage/);
+  assert.match(html, /readPhotoFallbackEntries/);
+  assert.match(html, /deletePhotoFallbackEntries/);
+  assert.match(html, /PmsBootstrapCoordinator\(\{ storage: legacyStorage \}\)/);
+});
