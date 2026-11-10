@@ -1232,7 +1232,6 @@ async function encryptBackupPayload(payload,name){
    const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:backupUnB64(vault.wrapIv),additionalData:new TextEncoder().encode('com.aurelia.pms|backup-key-wrap|v1')},kek,backupUnB64(vault.wrappedKey));
    key=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
    new Uint8Array(raw).fill(0);
-   backupVaultMemory={salt:vault.salt,key};
   }catch(_){throw new Error('Recovery password is incorrect. No backup was created.')}
  }
  const iv=crypto.getRandomValues(new Uint8Array(12));
