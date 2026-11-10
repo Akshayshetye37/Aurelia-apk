@@ -372,9 +372,22 @@ jobs:
         timeout-minutes: 3
         run: node --test tests/storage/indexeddb-pms-repository.test.mjs
 
+  secret-scan:
+    name: Security / secret scan
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Scan repository for committed credentials
+        run: node scripts/check-secrets.mjs
+
   repository-parity:
     name: Repository contract parity (IndexedDB + SQLite)
-    needs: [indexeddb-contract, android-sqlite-instrumentation]
+    needs: [indexeddb-contract, android-sqlite-instrumentation, secret-scan]
     if: always()
     runs-on: ubuntu-22.04
     timeout-minutes: 2
@@ -383,8 +396,11 @@ jobs:
         env:
           INDEXEDDB_RESULT: ${{ needs.indexeddb-contract.result }}
           SQLITE_RESULT: ${{ needs.android-sqlite-instrumentation.result }}
+          SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
         run: |
           echo "IndexedDB contract: $INDEXEDDB_RESULT"
           echo "Android SQLite instrumentation: $SQLITE_RESULT"
+          echo "Secret scan: $SECRET_SCAN_RESULT"
           test "$INDEXEDDB_RESULT" = "success"
           test "$SQLITE_RESULT" = "success"
+          test "$SECRET_SCAN_RESULT" = "success"
