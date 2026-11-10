@@ -1,82 +1,93 @@
-# Aurelia PMS PIN, backup encryption and recovery strategy
+# Aurelia PMS — DEK wrappers, PIN, backup and recovery strategy
 
-## Decision
+**Architecture rule:** Generate one random 256-bit data-encryption key (DEK). Every unlock method independently wraps or unwraps that same DEK. PIN, offline recovery key and enrolled biometric Keystore key are independent wrappers. OTP authorizes continuation of a recovery workflow only; OTP never unwraps, derives, creates, rotates or replaces the DEK.
 
-Use one optional 4–16 digit numeric PIN for app lock and local backup-key protection. Use a backend-mediated SMS OTP only to authorize account recovery. The Android APK never generates, stores, or verifies OTPs and never contains SMS-provider or KMS credentials.
+**Implementation status:** Native Android code implements PIN + offline Base32 recovery-key wrappers around the same DEK, crypto-engine PIN policy, crash-safe PIN-envelope replacement with `.prev` retention, separate persisted recovery throttling, and CryptoObject-backed biometric unlock. Firebase Phone Auth is an isolated helper, not an enabled OTP recovery service. OTP recovery remains disabled in production. See [NATIVE-SECURITY-AND-RECOVERY.md](NATIVE-SECURITY-AND-RECOVERY.md).
 
-This is a staged architecture. The APK and backend must fail closed: until the recovery backend, business identity registry, SMS provider and KMS recovery adapter are configured and tested, forgotten-PIN recovery must say unavailable rather than imply that an OTP can recover a key.
+## 1. Key hierarchy and invariants
 
-## Threat model and key hierarchy
+- Generate the DEK once at enrollment using a cryptographically secure random generator.
+- PIN KEK wraps the DEK in an authenticated envelope. Enforce 6–16 numeric digits in the crypto engine; reject repeated patterns and ascending/descending sequences including `123456`. Legacy 4–5 digit PINs may be read only to force migration.
+- Offline recovery key is 256 bits, encoded as Base32 with a SHA-256 checksum. Its independent envelope wraps the same DEK. Show it once under `FLAG_SECURE`, confirm random groups, and provide no copy action.
+- Biometric unlock uses an Android Keystore AES-GCM key and `BiometricPrompt.CryptoObject`; the authenticated cipher unwraps the same DEK. Biometrics never authorize recovery.
+- Never persist plaintext DEK, PIN, recovery secret, OTP, or OTP bearer token in preferences, logs, analytics or backups.
+- No silent DEK regeneration, no auto-wipe after failed attempts, and no server endpoint that accepts client-supplied DEK/PIN/envelope as proof of recovery.
 
-- Generate a random 256-bit data-encryption key (DEK) per backup vault.
-- Encrypt backup payloads with AES-256-GCM, a fresh random 96-bit nonce per encryption, and authenticated metadata (application ID, schema, vault ID, backup ID and format version) as AAD.
-- Derive a 256-bit key-encryption key (KEK) from the PIN with Argon2id (unique random salt; parameters versioned and calibrated on supported devices). Do not use the PIN directly as an AES key.
-- Wrap the DEK with the KEK using AES-256-GCM and a separate random nonce. Keep KDF parameters, salt, nonce, wrapped DEK and format version in the envelope; never store the PIN.
-- Keep an independently protected recovery envelope for the DEK under a backend-controlled KMS/HSM key. The KMS key must be non-exportable; the backend may request unwrap/rewrap only after strong authorization and audit policy.
-- A PIN is a low-entropy secret. Argon2id slows offline guessing but does not make a weak PIN strong. Apply device-side throttling for local unlock and backend rate limits for recovery. Consider Android Keystore-backed device-bound protection in addition to PIN wrapping.
-- AES-GCM authentication is the integrity authority for encrypted payloads. A separate SHA-256 digest may be used for transport/read-back checks, not as a substitute for authenticated encryption.
+## 2. Forgotten-PIN recovery (offline key)
 
-## App lock
+1. Check the separate recovery retry state before accepting an attempt. It is Keystore-authenticated, persisted with `AtomicFile`, uses `elapsedRealtime` and boot-count handling, and is independent from PIN lockout.
+2. OTP, if enabled in a future release, is an authorization gate only. The offline recovery key remains required to decrypt local data.
+3. Decode and checksum-verify the Base32 key locally; unwrap the existing DEK from the recovery envelope.
+4. Validate the new PIN in the crypto engine. Create only a new PIN wrapper. Never rewrite the recovery wrapper or generate another DEK.
+5. Test-unwrap the new PIN envelope and constant-time compare it with the recovered DEK.
+6. Write the replacement using the crash-safe envelope store. Keep the old envelope as `.prev` until the first successful unlock using the new PIN.
+7. Clear recovery throttling only after the replacement envelope is durably committed. Recovery itself must not authorize an app session; require a fresh unlock with the new PIN.
+8. Disable/delete the biometric wrapper. Full session revocation, owner notification and security-event logging remain release blockers because their infrastructure is not implemented.
+9. If no usable PIN, recovery key or biometric wrapper exists, data is unrecoverable. The only fallback is typed confirmation `RESET AURELIA DATA` to erase local encrypted data. Never silently create a replacement DEK.
 
-- Optional 4–16 digit PIN; no PIN means app works without a lock.
-- When enabled, lock on configured policy: Immediately when backgrounded, after 5 minutes, or Never for background timeout.
-- A fresh process launch always requires PIN while PIN protection remains enabled, even when timeout is Never.
-- Use monotonic elapsed time for timeout decisions; background/foreground transitions must not rely on wall-clock changes.
-- Never persist the clear PIN. Compare a derived verifier using constant-time comparison; store verifier metadata protected by Android Keystore. Enforce exponential local retry delay and avoid leaking whether a PIN is close/correct.
-- Disable app lock only after successful current-PIN verification. A forgotten PIN follows account recovery, not a local bypass.
+## 3. OTP and registered recovery phone — future backend gate
 
-## PIN setup, change and removal
+Keep OTP disabled until backend, App Check, Play Integrity and physical-device tests are complete. Client-side Firebase Phone Auth alone is not an authorization service.
 
-1. Setup: create DEK, create PIN-derived KEK, wrap DEK, create backend recovery envelope only after business account is enrolled and KMS is configured. If recovery is not yet provisioned, clearly warn that no forgotten-PIN recovery is available; do not claim cloud recovery.
-2. Change PIN: verify old PIN, unwrap DEK, derive new KEK with fresh salt, wrap the same DEK, read-back verify, atomically persist new envelope, then retire old envelope. Existing backup ciphertext does not need re-encryption.
-3. Remove PIN: require current PIN; explicitly ask whether to decrypt and re-encrypt existing backups without PIN or retain them encrypted. If retaining them, the app must preserve a usable recovery method and clearly warn that the old PIN remains necessary. New backups may be unencrypted only after an explicit security downgrade confirmation. Never silently orphan historical backups.
-4. If multiple retained backups use distinct DEKs, rotate/rewrap every retained DEK or preserve their individual envelopes. Do not assume one vault key unless the format guarantees it.
+### Registration
 
-## Recovery protocol
+- Require fresh PIN or biometric step-up.
+- Normalize and validate E.164.
+- Verify Firebase Phone Auth with App Check and Play Integrity.
+- Backend verifies the Firebase ID token using Admin SDK and stores the verified number against the tenant only after verification. The client cannot nominate an arbitrary trusted number.
+- Allow disabling OTP only after PIN verification; disabling OTP does not disable the offline recovery-key requirement.
 
-1. Owner enters registered business mobile number or selects a known business account. Backend resolves the registered identity; do not trust a phone number supplied by an unauthenticated client as proof of ownership.
-2. Backend checks account state, risk signals and recovery eligibility, then generates a cryptographically random six-digit OTP. Store only a keyed HMAC of the OTP with challenge ID, business ID, phone reference, expiry (5 minutes), attempt count, resend count and creation metadata. Use Redis or another shared TTL store; never use process memory in production.
-3. Deliver through a configured SMS provider. OTP must not be logged, returned by API, embedded in analytics or persisted in plaintext.
-4. Enforce per-challenge, per-account, per-phone and per-IP limits; resend cooldown; maximum verification attempts; generic responses to reduce account enumeration; invalidate older challenges on resend; single-use challenge consumption.
-5. On successful OTP verification, issue a short-lived, single-use recovery authorization bound to business ID, device/session, challenge ID and intended action. OTP verification alone must not return a DEK or plaintext backup.
-6. Backend authorizes KMS/HSM to unwrap the recovery envelope and rewrap the DEK under a new PIN-derived KEK (or a new recovery envelope). The client proves possession of the new PIN-derived key by returning a wrapped-key challenge; backend never receives the PIN.
-7. Audit every request, delivery outcome, verification, lockout, KMS operation and completion without recording OTPs, PINs, tokens or key material. Notify the registered business contact after recovery. Revoke outstanding sessions/tokens where policy requires.
-8. If KMS/HSM or SMS delivery is unavailable, fail closed. No support-agent or OTP-only plaintext export bypass.
+### Number changes
 
-## Backend service requirements
+- Require PIN, OTP to the new number and a 24–72-hour cooling period.
+- Notify the old number and email on file, with a cancellation route. Keep the old number authoritative until the cooling period completes.
 
-- HTTPS only, strict request/response schemas, TLS termination, request size limits, security headers and explicit CORS allowlist.
-- Production shared TTL store (Redis), durable business registry, SMS provider adapter and cloud KMS/HSM adapter.
-- Secrets held in a managed secret store; no credentials in APK, Git, build logs or ordinary environment files committed to source.
-- Idempotency and concurrency protection for challenge consumption and key-envelope rotation.
-- Tenant isolation on every lookup; business ID comes from authenticated server-side session, not arbitrary request body.
-- Data retention and deletion policy for OTP challenges and audit events; no unnecessary phone-number copies.
-- Operational alerts for OTP abuse, SMS spend anomalies, KMS failures and unusual recovery frequency.
-- Security review, penetration testing and recovery drills before production enablement.
+### Recovery authorization
 
-## Backup destinations and restore
+- Backend checks token `phone_number` equals the tenant's stored verified number and `auth_time` is less than five minutes old.
+- Issue a signed, audience=`recovery`, 10-minute, single-use token with unique `jti`, bound to device ID and client nonce.
+- Token permits continuation only. The client must still possess the offline recovery key to unwrap the DEK locally.
+- Reject client-supplied phone number, PIN, DEK or envelope as proof. Reject expired, wrong-number, replayed and reused-`jti` requests.
 
-- The same authenticated encrypted envelope is copied to private local storage, owner-selected Google Drive, SAF shared folder and optional HTTPS cloud endpoint.
-- All destinations are copies; no destination stores a live shared database.
-- Restore into a staging database, authenticate/decrypt, verify schema and all referenced photo blobs, validate business identity and record consistency, create a safety snapshot where possible, then atomically activate. Never overwrite healthy live data before verification.
-- Support legacy unencrypted v4 backups only as an explicit migration flow with a warning. New backup creation follows the configured current security policy.
-- Each envelope carries versioned KDF, key-wrap and cipher metadata so future migration remains possible.
+If a custom OTP service is selected: use a six-digit code, five-minute expiry, one-time challenge, HMAC with a server pepper, constant-time comparison, durable attempt increments even on failed verification (max five), rate limits per phone/account/IP/device, country allowlist, server timestamps and numeric expiry. Use one challenge document per request. Never send SMS or call KMS inside a Firestore transaction. A failed OTP check must not roll back the attempt counter.
 
-## Rollout gates
+## 4. Optional assisted recovery — off by default
 
-### Gate A — local security
-Implement PIN setup/unlock/timeout, native secure persistence, Argon2id implementation, DEK wrap/unwrap, PIN rotation/removal migration, envelope versioning, legacy import, staging restore and automated cryptographic tests.
+Assisted recovery is a separate opt-in feature. If approved, derive a recovery wrapper key using HKDF(`localHalf || serverHalf`). Release the server half only after OTP plus a 48-hour delay, owner notifications and a cancel option. This introduces server-availability and SIM-swap risk and requires an explicit warning. The server half must never be sufficient to decrypt the DEK by itself.
 
-### Gate B — recovery backend
-Implement account enrollment/phone verification, OTP challenges, rate limiting, SMS delivery, single-use recovery authorization, KMS/HSM recovery envelopes, audit events and client API integration.
+## 5. Biometrics and mandatory PIN
 
-### Gate C — production validation
-Run Android API-level/device tests, wrong-PIN and throttling tests, process death/reboot tests, backup corruption/tampering tests, PIN rotation across all retained backups, lost-device restore, OTP abuse tests, KMS outage tests and end-to-end recovery drills. Enable recovery in production only after all gates pass.
+- `BIOMETRIC_STRONG` only; require a `CryptoObject` operation to succeed, not merely the success callback.
+- Keystore AES-GCM key, authentication required per use, invalidated by biometric enrollment changes; StrongBox preferred with tested fallback.
+- Enrollment requires PIN-authenticated DEK in memory. Recovery deletes the biometric wrapper; user must re-enroll.
+- On invalidation or biometric lockout, fall back to PIN and offer re-enrollment. Never use biometrics for recovery.
+- Force PIN at least every 72 hours. This policy and physical-device invalidation/failure-count qualification remain unimplemented.
 
-## Explicit non-goals
+## 6. Auto-lock and sensitive actions
 
-- No email OTP, TOTP or Firebase Phone Authentication as the recovery authority.
-- No client-side OTP generation/verification.
-- No hardcoded SMS/KMS credentials.
-- No claim that SMS OTP by itself decrypts AES-GCM data.
-- No production-ready claim while SMS, business registry or KMS adapters are unconfigured.
+Target settings: **Immediately** (lock on background), **After 5 min** (lock after five background minutes), and **Never** (no timer while process lives; process kill/reboot still locks). Use `ProcessLifecycleOwner`, `elapsedRealtime`, and ignore transient stops from BiometricPrompt/system pickers. Store the setting in a Keystore-authenticated blob; loosening it requires step-up and Never displays a warning. On lock close SQLCipher, zero the DEK, clear WebView/decrypted caches, set `FLAG_SECURE` and blank recents. Only the native gate's `FLAG_SECURE` and a fixed process/session timeout foundation exist; selectable policy and full teardown remain incomplete.
+
+Require fresh PIN/biometric for refunds, backup export, phone changes, security settings and recovery-key regeneration. This step-up framework is not implemented.
+
+## 7. Audit, alerts and integrity
+
+- Append-only, hash-chained security event log for failed unlocks, PIN changes, recovery, phone changes and lockout releases. Never log secrets.
+- Notify owner about recovery attempts, phone changes and unlocks after lockout.
+- Use Play Integrity to block recovery/payment on rooted or tampered devices; warn on debuggers.
+- No auto-wipe after failed attempts.
+- Staff roles are a later phase: staff PINs may wrap only limited-scope credentials and must not access recovery, security settings or exports.
+
+Audit, alert, integrity and staff controls are not implemented and must not be represented as complete.
+
+## 8. Required release tests
+
+- Recovery unwraps the same DEK and the existing SQLCipher database opens with prior data intact.
+- Kill the process at every stage of the PIN-envelope swap; verify old/new envelope and `.prev` recovery behavior.
+- Recovery lockout survives process death and reboot; test wrong/checksum-invalid keys and counter persistence.
+- OTP wrong-number, expired, replay, reused-`jti`, stale `auth_time`, wrong-device and nonce-binding cases.
+- Auto-lock timing across process kill/reboot and transient biometric/system-picker stops.
+- Biometric invalidation, five-failure fallback, StrongBox and fallback behavior on physical devices.
+- Known-DEK canary absent from logs, preferences, backups and crash diagnostics.
+- Security review of backup exclusions, app session revocation, event-chain tampering, alert delivery and integrity policy.
+
+**Release gate:** Do not enable OTP recovery or describe the app as production-ready until the backend and physical-device tests pass. Offline recovery foundations do not imply that OTP service, auto-lock policy, notifications or audit controls are implemented.
