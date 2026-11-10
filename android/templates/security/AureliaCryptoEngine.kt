@@ -272,7 +272,7 @@ class AureliaCryptoEngine(
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(kek, "AES"), GCMParameterSpec(TAG_BITS, nonce))
-            cipher.updateAAD(aad(VERSION, "RECOVERY", DATABASE_ID, salt))
+            cipher.updateAAD(aad(VERSION, "RECOVERY", DATABASE_ID, salt, "HKDF-SHA256", 0, 1, 1))
             return cipher.doFinal(wrapped)
         } catch (badTag: AEADBadTagException) {
             throw SecurityException("Recovery key or envelope authentication failed.", badTag)
