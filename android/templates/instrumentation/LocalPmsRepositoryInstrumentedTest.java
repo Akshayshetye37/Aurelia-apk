@@ -35,6 +35,20 @@ public final class LocalPmsRepositoryInstrumentedTest {
 
   private static byte[] key() { byte[] value = new byte[32]; Arrays.fill(value, (byte) 0x42); return value; }
 
+  /** Centralizes security-manager construction so constructor changes affect one test fixture. */
+  private static final class TestFixtures {
+    private TestFixtures() {}
+
+    static com.aurelia.pms.security.AureliaAppManager newManager(Context context) {
+      return new com.aurelia.pms.security.AureliaAppManager(
+        new com.aurelia.pms.security.AureliaCryptoEngine(),
+        new com.aurelia.pms.security.AppLockManager(context),
+        context,
+        new java.security.SecureRandom(),
+        300_000L);
+    }
+  }
+
   @Before public void setUp() {
     context = ApplicationProvider.getApplicationContext();
     boolean preserveDatabase = Boolean.parseBoolean(InstrumentationRegistry.getArguments().getString("preserveDatabase", "false"));
@@ -79,8 +93,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
 
     com.aurelia.pms.security.AureliaCryptoEngine crypto = new com.aurelia.pms.security.AureliaCryptoEngine();
     com.aurelia.pms.security.AureliaAppManager manager =
-      new com.aurelia.pms.security.AureliaAppManager(
-        crypto, new com.aurelia.pms.security.AppLockManager(isolated), isolated);
+      TestFixtures.newManager(isolated);
     char[] pin = "481592".toCharArray();
     char[] newPin = "592481".toCharArray();
     byte[] pinDek = null, recoveryDek = null, recoveryBytes = null;
@@ -241,7 +254,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
       new com.aurelia.pms.security.AppLockManager(context);
     File state = new File(context.getNoBackupFilesDir(), "aurelia-lock-state.v1");
     try {
-      assertEquals(0, lockout.state().failures);
+      assertEquals(0, lockout.lockoutFailureCount());
       lockout.registerFailure();
       assertTrue(state.exists());
       assertTrue(state.delete());
@@ -259,9 +272,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
 
   @Test public void existingDatabaseCannotEnrollAndGenerateReplacementDek() {
     com.aurelia.pms.security.AureliaAppManager manager =
-      new com.aurelia.pms.security.AureliaAppManager(
-        new com.aurelia.pms.security.AureliaCryptoEngine(),
-        new com.aurelia.pms.security.AppLockManager(context), context);
+      TestFixtures.newManager(context);
     char[] pin = "481592".toCharArray();
     try {
       boolean rejected = false;
