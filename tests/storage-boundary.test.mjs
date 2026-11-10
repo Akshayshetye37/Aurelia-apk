@@ -45,3 +45,9 @@ test("guest photo persistence stays inside the storage adapter and migrates lega
   assert.match(photo, /Legacy photo migration read-back mismatch/);
   assert.match(photo, /deleteLegacyPhotoFallbackEntries\(entries\)/);
 });
+
+
+test("local-first write coordinator never writes the legacy Web Storage business cache", () => {
+  const source = fs.readFileSync(path.join(ROOT, "src/storage/pms-local-first-write-coordinator.mjs"), "utf8");
+  assert.doesNotMatch(source, /(?:localStorage|sessionStorage|\.setItem\s*\(|aurelia_lodge_v2|cacheKey)/);
+});

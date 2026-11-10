@@ -12,7 +12,7 @@ function cacheStore() {
   };
 }
 
-test("ordinary PMS saves commit and read back canonically before refreshing the legacy cache", async () => {
+test("ordinary PMS saves commit and read back canonically without writing a legacy cache", async () => {
   const rows = [];
   const cache = cacheStore();
   const coordinator = new PmsLocalFirstWriteCoordinator({
@@ -24,7 +24,7 @@ test("ordinary PMS saves commit and read back canonically before refreshing the 
   const result = await coordinator.save(snapshot);
   assert.equal(result.committed, true);
   assert.deepEqual(rows, [snapshot]);
-  assert.equal(cache.getItem("aurelia_lodge_v2"), JSON.stringify(snapshot));
+  assert.equal(cache.values.size, 0);
 });
 
 test("concurrent saves are serialized in invocation order and retain each immutable snapshot", async () => {
@@ -56,6 +56,6 @@ test("canonical write or read-back failure freezes later writes and never refres
   await assert.rejects(coordinator.save({ later: true }), /exact read-back/);
   assert.equal(calls, 1);
   assert.equal(failures, 1);
-  assert.equal(cache.getItem("aurelia_lodge_v2"), null);
+  assert.equal(cache.values.size, 0);
   assert.equal(coordinator.status.failed, true);
 });

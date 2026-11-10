@@ -5581,7 +5581,6 @@ try {
       const row = await storageBridge.fetchEntity("audit", PMS_LEGACY_SNAPSHOT_ENTITY_ID);
       return row?.data || null;
     },
-    cache: null,
     onFailure: error => {
       console.error("[Aurelia Local First] Canonical write failed; writes must remain frozen until startup recovery.", error);
     }
