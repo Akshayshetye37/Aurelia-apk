@@ -179,10 +179,8 @@ class AureliaAppManager(
                 testKey.fill(0)
             }
             bundle.put("pin", replacementPinEnvelope.json)
-            dataKey?.fill(0)
-            dataKey = recovered.copyOf()
-            authenticated = true
-            backgroundAtElapsed = 0L
+            // A recovery result is not an authenticated PMS session. The caller must
+            // durably swap the envelope, then the owner must unlock with the new PIN.
             // Keep the recovery throttle intact until the replacement envelope is durably swapped.
             return bundle.toString()
         } finally {
