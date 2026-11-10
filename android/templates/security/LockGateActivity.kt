@@ -189,11 +189,11 @@ class LockGateActivity : FragmentActivity() {
     private fun confirmRecoveryKeySaved(recoveryKey: CharArray) {
         val groups = String(recoveryKey).split("-")
         if (groups.size != 9) {
-            recoveryKey.fill('\\u0000')
+            recoveryKey.fill('\u0000')
             showError("Recovery-key formatting failed. Do not continue enrollment.")
             return
         }
-        val selected = (0 until groups.size).shuffled(java.security.SecureRandom()).take(3).sorted()
+        val selected = (0 until groups.size).toMutableList().also { java.util.Collections.shuffle(it, java.security.SecureRandom()) }.take(3).sorted()
         val input = EditText(this).apply {
             hint = "Enter the three requested groups"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
@@ -209,7 +209,7 @@ class LockGateActivity : FragmentActivity() {
                 val expected = selected.joinToString("") { groups[it] }
                 input.text.clear()
                 if (entered == expected) {
-                    recoveryKey.fill('\\u0000')
+                    recoveryKey.fill('\u0000')
                     offerBiometricEnrollment()
                 } else {
                     showError("Recovery-key confirmation did not match. Enrollment remains blocked.")
@@ -217,7 +217,7 @@ class LockGateActivity : FragmentActivity() {
                 }
             }
             .setNegativeButton("Cancel") { _, _ ->
-                recoveryKey.fill('\\u0000')
+                recoveryKey.fill('\u0000')
                 showError("Save and verify your recovery key before using the PMS.")
                 finish()
             }
