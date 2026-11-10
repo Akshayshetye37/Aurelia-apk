@@ -176,12 +176,50 @@ class LockGateActivity : FragmentActivity() {
         }
         AlertDialog.Builder(this)
             .setTitle("Save your recovery key")
-            .setMessage("This 256-bit recovery key is shown once in checksummed Base32. Write it down and store it offline. Anyone with this key and your encrypted backup can recover the database.")
+            .setMessage("This 256-bit recovery key is shown once in checksummed Base32. Write it down and store it offline. You must confirm selected groups. Anyone with this key and your encrypted backup can recover the database.")
             .setView(code)
             .setPositiveButton("I saved it") { _, _ ->
                 code.text = ""
-                recoveryKey.fill('\u0000')
-                offerBiometricEnrollment()
+                confirmRecoveryKeySaved(recoveryKey)
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun confirmRecoveryKeySaved(recoveryKey: CharArray) {
+        val groups = String(recoveryKey).split("-")
+        if (groups.size != 9) {
+            recoveryKey.fill('\\u0000')
+            showError("Recovery-key formatting failed. Do not continue enrollment.")
+            return
+        }
+        val selected = (0 until groups.size).shuffled(java.security.SecureRandom()).take(3).sorted()
+        val input = EditText(this).apply {
+            hint = "Enter the three requested groups"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+            filters = arrayOf(android.text.InputFilter.LengthFilter(20))
+        }
+        val prompt = "Re-enter groups " + selected.joinToString(", ") { (it + 1).toString() } + " in order."
+        AlertDialog.Builder(this)
+            .setTitle("Confirm recovery-key backup")
+            .setMessage(prompt)
+            .setView(input)
+            .setPositiveButton("Confirm") { _, _ ->
+                val entered = input.text.toString().filterNot { it == '-' || it.isWhitespace() }.uppercase()
+                val expected = selected.joinToString("") { groups[it] }
+                input.text.clear()
+                if (entered == expected) {
+                    recoveryKey.fill('\\u0000')
+                    offerBiometricEnrollment()
+                } else {
+                    showError("Recovery-key confirmation did not match. Enrollment remains blocked.")
+                    confirmRecoveryKeySaved(recoveryKey)
+                }
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                recoveryKey.fill('\\u0000')
+                showError("Save and verify your recovery key before using the PMS.")
+                finish()
             }
             .setCancelable(false)
             .show()

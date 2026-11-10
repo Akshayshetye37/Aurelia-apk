@@ -262,3 +262,23 @@ test('PIN policy and recovery wrapper invariants are enforced natively', () => {
   assert.match(store, /confirmRecoveryPinUnlock/);
   assert.match(gate, /biometricStore\.delete\(\)/);
 });
+
+test('recovery key supports checksummed Base32 and legacy Base64 migration', () => {
+  const crypto = read('android/templates/security/AureliaCryptoEngine.kt');
+  assert.match(crypto, /recoveryChecksum/);
+  assert.match(crypto, /Base64\.URL_SAFE/);
+  assert.match(crypto, /previously issued 256-bit URL-safe Base64 keys/);
+});
+test('recovery key display requires offline backup confirmation and prevents text selection', () => {
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.match(gate, /confirmRecoveryKeySaved/);
+  assert.match(gate, /SecureRandom\(\)/);
+  assert.match(gate, /setTextIsSelectable\(false\)/);
+  assert.match(gate, /Enrollment remains blocked/);
+});
+test('recovery envelope rollback restores old encrypted bytes after failed promotion', () => {
+  const store = read('android/templates/security/AureliaEnvelopeStore.kt');
+  assert.match(store, /Recovery swap and rollback both failed/);
+  assert.match(store, /file\.startWrite\(\)/);
+  assert.match(store, /old\.fill\(0\)/);
+});

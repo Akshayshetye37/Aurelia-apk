@@ -224,7 +224,14 @@ class AureliaCryptoEngine(
     }
 
     fun decodeRecoveryKey(recoveryKey: CharArray): ByteArray {
-        val normalized = String(recoveryKey).filterNot { it == '-' || it.isWhitespace() }.uppercase()
+        val raw = String(recoveryKey).filterNot { it == '-' || it.isWhitespace() }
+        val normalized = raw.uppercase()
+        // Migration compatibility for previously issued 256-bit URL-safe Base64 keys.
+        if (normalized.length == 43 || normalized.length == 44) {
+            val legacy = Base64.decode(raw, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+            require(legacy.size == KEY_BYTES) { "Invalid legacy recovery key." }
+            return legacy
+        }
         require(normalized.length == 54 && normalized.all { recoveryAlphabet.indexOf(it) >= 0 }) {
             "Invalid Base32 recovery key format."
         }

@@ -58,8 +58,24 @@ class AureliaEnvelopeStore(context: Context) {
                 output.fd.sync()
             }
         } finally { oldBytes.fill(0) }
-        write(envelopeJson)
-        require(read() == envelopeJson) { "Recovery envelope read-back verification failed." }
+        try {
+            write(envelopeJson)
+            require(read() == envelopeJson) { "Recovery envelope read-back verification failed." }
+        } catch (failure: Exception) {
+            // Restore the exact previous encrypted bytes if promotion/read-back fails.
+            val old = previous.readBytes()
+            var stream: java.io.FileOutputStream? = null
+            try {
+                stream = file.startWrite()
+                stream.write(old)
+                stream.fd.sync()
+                file.finishWrite(stream)
+            } catch (restoreFailure: Exception) {
+                if (stream != null) file.failWrite(stream)
+                throw SecurityException("Recovery swap and rollback both failed; refusing PMS access.", restoreFailure)
+            } finally { old.fill(0) }
+            throw failure
+        }
     }
 
     @Synchronized
