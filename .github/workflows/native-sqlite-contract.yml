@@ -232,6 +232,7 @@ jobs:
 
       - name: Execute real SQLite contract tests
         if: success()
+        timeout-minutes: 20
         working-directory: android
         shell: bash
         run: |
