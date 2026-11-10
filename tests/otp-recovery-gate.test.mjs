@@ -71,3 +71,24 @@ test('recovery phone registration requires a fresh owner token bound to the tena
   assert.match(registration, /ownerAge >= 300/);
   assert.match(registration, /auth\.token\.tenantId !== tenantId/);
 });
+
+test('grant claim preflight binds expiry, tenant, device and nonce before server consumption', () => {
+  const client = read('android/templates/RecoveryGrantClient.kt');
+  assert.match(client, /inspectClaims\(grant, nonce, deviceHash, tenantId\)/);
+  assert.match(client, /payload\.optString\("sub"\) == tenantId/);
+  assert.match(client, /payload\.optString\("did"\) == deviceHash/);
+  assert.match(client, /payload\.optString\("nonce"\) == nonce/);
+  assert.match(client, /expiresAt > now/);
+  assert.match(client, /replayStore\.markUsed\(claims\.jti, claims\.expiresAt\)/);
+  assert.match(client, /RecoveryGate\.arm\(RecoveryGrantVerifier\.Result\.Ok\)/);
+  assert.match(client, /NOT cryptographic signature verification/);
+});
+
+test('local grant replay cache is Keystore encrypted, bounded to grant expiry and rejects duplicate jti', () => {
+  const store = read('android/templates/security/RecoveryGrantReplayStore.kt');
+  assert.match(store, /AndroidKeyStore/);
+  assert.match(store, /fun isUsed\(jti: String/);
+  assert.match(store, /expiresAtEpochSec - nowEpochSec <= 600/);
+  assert.match(store, /entries\.any \{ it\.first == jti \}/);
+  assert.match(store, /MAX_ENTRIES = 20/);
+});
