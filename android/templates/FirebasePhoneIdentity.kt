@@ -25,7 +25,7 @@ sealed interface PhoneIdentityState {
     data object CodeSent : PhoneIdentityState
     data object AutoRetrievalTimedOut : PhoneIdentityState
     data object Verifying : PhoneIdentityState
-    data class IdentityVerified(val verifiedPhoneE164: String) : PhoneIdentityState
+    data class IdentityVerified(val verifiedPhoneE164: String, val firebaseIdToken: String) : PhoneIdentityState
     data class Failed(val reason: FailureReason) : PhoneIdentityState
 }
 
@@ -208,42 +208,55 @@ class FirebasePhoneIdentity(
         requestGeneration: Long
     ) {
         try {
-            recoveryAuth.signInWithCredential(credential).addOnCompleteListener { task ->
-                // Task.result throws when Firebase authentication failed. Read it only on success.
-                val actualPhone = if (task.isSuccessful) task.result?.user?.phoneNumber else null
-                val success = task.isSuccessful && actualPhone == expectedPhone
-
-                // Always attempt to clear the isolated recovery session before reporting a result.
-                // A sign-out failure is itself a failed verification, never a success.
-                val signedOut = try {
-                    recoveryAuth.signOut()
-                    true
-                } catch (_: Exception) {
-                    false
-                }
-                authOperationInFlight = false
-
-                if (requestGeneration != generation) {
-                    invalidateChallenge()
+            recoveryAuth.signInWithCredential(credential).addOnCompleteListener { signInTask ->
+                val user = if (signInTask.isSuccessful) signInTask.result?.user else null
+                val phoneMatches = user?.phoneNumber == expectedPhone
+                if (!phoneMatches || user == null) {
+                    finishAuthentication(requestGeneration, expectedPhone, null, false)
                     return@addOnCompleteListener
                 }
-
-                clearChallenge()
-                when {
-                    !signedOut -> emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
-                    success -> emit(PhoneIdentityState.IdentityVerified(expectedPhone))
-                    task.isSuccessful -> emit(PhoneIdentityState.Failed(FailureReason.PHONE_MISMATCH))
-                    else -> emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
+                // The short-lived ID token is returned in memory for the trusted
+                // backend. It is never persisted or logged. Sign-out happens only
+                // after token retrieval has completed.
+                user.getIdToken(true).addOnCompleteListener { tokenTask ->
+                    val token = if (tokenTask.isSuccessful) tokenTask.result?.token else null
+                    finishAuthentication(requestGeneration, expectedPhone, token, true)
                 }
             }
         } catch (_: Exception) {
-            // signInWithCredential can fail synchronously (for example, SDK/config errors).
             runCatching { recoveryAuth.signOut() }
             authOperationInFlight = false
             if (requestGeneration == generation) {
                 clearChallenge()
                 emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
             }
+        }
+    }
+
+    private fun finishAuthentication(
+        requestGeneration: Long,
+        expectedPhone: String,
+        idToken: String?,
+        phoneMatched: Boolean
+    ) {
+        // Always clear the isolated recovery session before exposing success.
+        val signedOut = try {
+            recoveryAuth.signOut()
+            true
+        } catch (_: Exception) {
+            false
+        }
+        authOperationInFlight = false
+        if (requestGeneration != generation) {
+            invalidateChallenge()
+            return
+        }
+        clearChallenge()
+        when {
+            !signedOut -> emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
+            !phoneMatched -> emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
+            idToken.isNullOrBlank() -> emit(PhoneIdentityState.Failed(FailureReason.PROVIDER_FAILURE))
+            else -> emit(PhoneIdentityState.IdentityVerified(expectedPhone, idToken))
         }
     }
 
