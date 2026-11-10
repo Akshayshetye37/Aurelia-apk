@@ -41,6 +41,9 @@ jobs:
       - name: Run complete PMS test suite
         run: npm test
 
+      - name: Enforce canonical storage boundary
+        run: node scripts/check-storage-boundaries.mjs
+
       - name: Build production web bundle
         run: npm run build
 
