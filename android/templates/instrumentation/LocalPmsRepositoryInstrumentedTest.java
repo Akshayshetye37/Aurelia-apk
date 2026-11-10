@@ -155,6 +155,10 @@ public final class LocalPmsRepositoryInstrumentedTest {
       for (int i = 0; i < 32; i++) hexBuilder.append("5a");
       String hex = hexBuilder.toString();
       String base64 = android.util.Base64.encodeToString(canaryDek, android.util.Base64.NO_WRAP);
+      StringBuilder recoveryHexBuilder = new StringBuilder();
+      for (int i = 0; i < 32; i++) recoveryHexBuilder.append("6b");
+      String recoveryHex = recoveryHexBuilder.toString();
+      String recoveryBase64 = android.util.Base64.encodeToString(recoveryKey, android.util.Base64.NO_WRAP);
       java.util.ArrayList<File> roots = new java.util.ArrayList<>();
       roots.add(context.getFilesDir());
       roots.add(context.getNoBackupFilesDir());
@@ -178,6 +182,8 @@ public final class LocalPmsRepositoryInstrumentedTest {
           }
           assertFalse("DEK hex canary must not be persisted: " + file.getName(), contents.contains(hex));
           assertFalse("DEK base64 canary must not be persisted: " + file.getName(), contents.contains(base64));
+          assertFalse("recovery-key hex canary must not be persisted: " + file.getName(), contents.contains(recoveryHex));
+          assertFalse("recovery-key base64 canary must not be persisted: " + file.getName(), contents.contains(recoveryBase64));
         }
       }
 
@@ -193,6 +199,8 @@ public final class LocalPmsRepositoryInstrumentedTest {
         String logs = output.toString("UTF-8");
         assertFalse("DEK hex canary must not appear in logcat", logs.contains(hex));
         assertFalse("DEK base64 canary must not appear in logcat", logs.contains(base64));
+        assertFalse("recovery-key hex canary must not appear in logcat", logs.contains(recoveryHex));
+        assertFalse("recovery-key base64 canary must not appear in logcat", logs.contains(recoveryBase64));
       } catch (java.io.IOException unavailableLogcat) {
         // File/prefs checks remain mandatory; device-level logcat capture is retained by the host harness.
       }
