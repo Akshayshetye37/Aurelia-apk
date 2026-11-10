@@ -1,5 +1,7 @@
 package com.aurelia.pms;
 
+import com.aurelia.pms.debug.LocalPmsFaultInjection;
+
 import android.content.Context;
 import android.content.ContentValues;
 import android.database.sqlite.SQLiteDatabase;
@@ -292,6 +294,52 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertTrue("corrupt encrypted database must fail closed", rejected);
     assertTrue("corrupt database must be retained for recovery, never auto-wiped", database.exists());
     assertTrue("corrupt database bytes must remain available for forensic recovery", database.length() > 0);
+  }
+
+  @Test public void debugFaultCheckpointsProveRollbackAndPostCommitDurability() throws Exception {
+    String[] rollbackPoints = { "before_write", "mid_transaction", "before_commit" };
+    for (String checkpoint : rollbackPoints) {
+      String id = "fault-" + checkpoint.replace('_', '-');
+      LocalPmsFaultInjection.arm(checkpoint, false);
+      boolean injected = false;
+      try {
+        repository.transactBusinessChange("folio", id, 0, data("must-rollback"),
+          event(id + "-event", "folio", id, 1));
+      } catch (IllegalStateException expected) {
+        injected = expected.getMessage().contains("debug_fault_injected:" + checkpoint);
+      } finally { LocalPmsFaultInjection.clear(); }
+      assertTrue("fault checkpoint must execute: " + checkpoint, injected);
+      assertNull("domain row must roll back at " + checkpoint, repository.getEntity("folio", id));
+      try (android.database.Cursor outbox = repository.getWritableDatabase().rawQuery(
+          "SELECT COUNT(*) FROM pms_outbox WHERE event_id=?", new String[] { id + "-event" })) {
+        assertTrue(outbox.moveToFirst());
+        assertEquals(0, outbox.getInt(0));
+      }
+    }
+
+    LocalPmsFaultInjection.arm("after_commit_before_checkpoint", false);
+    boolean postCommitInjected = false;
+    try {
+      repository.transactBusinessChange("folio", "fault-after-commit", 0, data("committed"),
+        event("fault-after-commit-event", "folio", "fault-after-commit", 1));
+    } catch (IllegalStateException expected) {
+      postCommitInjected = expected.getMessage().contains("debug_fault_injected:after_commit_before_checkpoint");
+    } finally { LocalPmsFaultInjection.clear(); }
+    assertTrue(postCommitInjected);
+    assertEquals("committed", repository.getEntity("folio", "fault-after-commit")
+      .getJSONObject("data").getString("value"));
+
+    String migration = "{\"rooms\":[],\"b\":[],\"g\":[],\"t\":[],\"exp\":[],\"inv\":[],\"led\":[],\"aud\":[],\"set\":{},\"menu\":{}}";
+    LocalPmsFaultInjection.arm("mid_migration", false);
+    boolean migrationInjected = false;
+    try {
+      repository.migrateLegacySnapshot("fault-migration-01", "aurelia_lodge_v2",
+        "2026-11-10T00:00:00.000Z", migration);
+    } catch (IllegalStateException expected) {
+      migrationInjected = expected.getMessage().contains("debug_fault_injected:mid_migration");
+    } finally { LocalPmsFaultInjection.clear(); }
+    assertTrue(migrationInjected);
+    assertEquals(1, repository.getWritableDatabase().compileStatement("SELECT COUNT(*) FROM pms_entities").simpleQueryForLong() > 0 ? 1 : 0);
   }
 
   @Test public void fastCheckGeneratedOperationSequencesMatchNativeSqliteState() throws Exception {
