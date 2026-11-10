@@ -80,7 +80,7 @@ test('enabled adapters do not inherit abstract lifecycle methods', () => {
 test('CCAvenue is factory-wired for documented checkout/status/webhook operations only', async () => {
   const { createProviderAdapter, providerCapabilities, providerQualificationStatus } = await import('../src/providers/factory.mjs');
   const adapter = createProviderAdapter('ccavenue', {
-    credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey: '0123456789ABCDEF0123456789ABCDEF' },
+    credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
     environment: 'test'
   });
   for (const operation of providerCapabilities('ccavenue')) assert.equal(typeof adapter[operation], 'function');
@@ -95,7 +95,7 @@ test('CCAvenue is factory-wired for documented checkout/status/webhook operation
 test('CCAvenue encryption round-trips and creates a server-encrypted hosted checkout request', async () => {
   const { createProviderAdapter } = await import('../src/providers/factory.mjs');
   const { encryptCcaVenue, decryptCcaVenue } = await import('../src/providers/ccavenue.mjs');
-  const workingKey = '0123456789ABCDEF0123456789ABCDEF';
+  const workingKey = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   const plain = 'merchant_id=123456&order_id=aur_test_order_1&currency=INR&amount=12.34';
   assert.equal(decryptCcaVenue(encryptCcaVenue(plain, workingKey), workingKey), plain);
   const adapter = createProviderAdapter('ccavenue', {
@@ -119,7 +119,7 @@ test('CCAvenue encryption round-trips and creates a server-encrypted hosted chec
 test('CCAvenue status is reconciled through the encrypted merchant Status API', async () => {
   const { createProviderAdapter } = await import('../src/providers/factory.mjs');
   const { encryptCcaVenue, decryptCcaVenue } = await import('../src/providers/ccavenue.mjs');
-  const workingKey = '0123456789ABCDEF0123456789ABCDEF';
+  const workingKey = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   const adapter = createProviderAdapter('ccavenue', {
     credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey },
     environment: 'test',
@@ -154,7 +154,7 @@ test('CCAvenue status is reconciled through the encrypted merchant Status API', 
 test('CCAvenue encrypted callback is only an event trigger and requires a valid encrypted payload', async () => {
   const { createProviderAdapter } = await import('../src/providers/factory.mjs');
   const { encryptCcaVenue } = await import('../src/providers/ccavenue.mjs');
-  const workingKey = '0123456789ABCDEF0123456789ABCDEF';
+  const workingKey = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   const adapter = createProviderAdapter('ccavenue', {
     credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey },
     environment: 'test'
@@ -173,7 +173,7 @@ test('CCAvenue encrypted callback is only an event trigger and requires a valid 
 test('CCAvenue Dynamic Event Notification JSON is accepted only as a trigger for server-side status lookup', async () => {
   const { createProviderAdapter } = await import('../src/providers/factory.mjs');
   const adapter = createProviderAdapter('ccavenue', {
-    credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey: '0123456789ABCDEF0123456789ABCDEF' },
+    credentials: { merchantId: '123456', accessCode: 'ACCESSCODE123', workingKey: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
     environment: 'test'
   });
   const event = { order_id: 'aur_test_order_1', tracking_id: '123456789012',
