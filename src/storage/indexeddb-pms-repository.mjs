@@ -15,7 +15,7 @@ function validateEvent(event,entityType,entityId,sequence){
  safeInt(sequence,"event sequence",1);
  if(event.sequence!==sequence)throw new TypeError("Outbox event sequence does not match next entity version");
  safeInt(event.schemaVersion,"event schema version",1);
- if(typeof event.occurredAt!=="string"||!Number.isFinite(Date.parse(event.occurredAt)))throw new TypeError("Invalid event timestamp");
+ if(typeof event.occurredAt!=="string"||!event.occurredAt.endsWith("Z")||!Number.isFinite(Date.parse(event.occurredAt)))throw new TypeError("Event timestamp must be a valid UTC ISO timestamp ending in Z");
  const encoded=JSON.stringify(event.payload);
  if(encoded===undefined)throw new TypeError("Outbox payload must be JSON serializable");
  return event;
