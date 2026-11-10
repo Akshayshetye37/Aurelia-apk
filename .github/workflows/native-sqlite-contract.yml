@@ -178,6 +178,24 @@ jobs:
           fi
           echo "SQLCipher x86_64 library and instrumentation test classes are present."
 
+      - name: Verify packaged Android backup exclusions
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_apk="android/app/build/outputs/apk/debug/app-debug.apk"
+          aapt="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          test -f "$app_apk"
+          test -x "$aapt"
+          "$aapt" dump xmltree "$app_apk" AndroidManifest.xml > "$RUNNER_TEMP/aurelia-packaged-manifest.txt"
+          manifest="$RUNNER_TEMP/aurelia-packaged-manifest.txt"
+          grep -q 'android:allowBackup' "$manifest"
+          grep -Eq 'android:allowBackup.*(0x0|false)' "$manifest"
+          grep -q 'android:fullBackupContent' "$manifest"
+          grep -q 'android:dataExtractionRules' "$manifest"
+          unzip -Z1 "$app_apk" | grep -q 'res/xml/aurelia_backup_rules.xml'
+          unzip -Z1 "$app_apk" | grep -q 'res/xml/aurelia_data_extraction_rules.xml'
+          echo "Packaged APK manifest disables backup and contains both exclusion rule resources."
+
       - name: Create Android 34 AVD
         shell: bash
         run: |
