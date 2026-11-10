@@ -206,9 +206,9 @@ manifest = manifest.replace(/<application([^>]*)>/, (match, attrs) => {
   return '<application' + attrs +
     ' android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/aurelia_network_security_config">';
 });
-const xmlDir = path.join(appDir, 'res', 'xml');
-fs.mkdirSync(xmlDir, { recursive: true });
-fs.writeFileSync(path.join(xmlDir, 'aurelia_network_security_config.xml'),
+const networkXmlDir = path.join(appDir, 'res', 'xml');
+fs.mkdirSync(networkXmlDir, { recursive: true });
+fs.writeFileSync(path.join(networkXmlDir, 'aurelia_network_security_config.xml'),
   '<?xml version="1.0" encoding="utf-8"?>' +
   '<network-security-config>' +
     '<base-config cleartextTrafficPermitted="false">' +
