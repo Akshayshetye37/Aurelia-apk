@@ -230,7 +230,10 @@ jobs:
             exit 1
           fi
           adb shell getprop ro.build.fingerprint
-          adb shell getprop ro.build.version.sdk
+          test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "34"
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
 
       - name: Execute real SQLite contract tests
         if: success()
@@ -252,7 +255,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -c 'import glob,sys,xml.etree.ElementTree as ET; paths=glob.glob("android/app/build/outputs/androidTest-results/connected/**/*.xml", recursive=True); total=sum(int(ET.parse(p).getroot().attrib.get("tests","0")) for p in paths); print(f"Instrumentation XML files: {len(paths)}; tests executed: {total}"); sys.exit(0 if total > 0 else "ERROR: zero native instrumentation tests executed")'
+          python3 -c 'import glob,sys,xml.etree.ElementTree as ET; paths=glob.glob("android/app/build/outputs/androidTest-results/connected/**/*.xml", recursive=True); total=sum(int(ET.parse(p).getroot().attrib.get("tests","0")) for p in paths); print(f"Instrumentation XML files: {len(paths)}; tests executed: {total}"); failures=sum(int(ET.parse(p).getroot().attrib.get("failures","0"))+int(ET.parse(p).getroot().attrib.get("errors","0")) for p in paths); print(f"Failures/errors: {failures}"); sys.exit(0 if total > 0 and failures == 0 else "ERROR: zero native instrumentation tests or failures")'
 
       - name: Capture emulator, instrumentation and APK diagnostics
         if: always()
