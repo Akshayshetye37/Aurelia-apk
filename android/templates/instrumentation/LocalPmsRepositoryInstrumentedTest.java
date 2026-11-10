@@ -800,6 +800,71 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertEquals(0, repository.claimOutboxBatch("device-test", 50, 60_000L).length());
   }
 
+  @Test public void missingOutboxEventCannotAcknowledgeAnExistingLease() throws Exception {
+    repository.transactBusinessChange("folio", "missing-ack-folio", 0, data("pending"),
+      event("present-ack-event", "folio", "missing-ack-folio", 1));
+    assertEquals(1, repository.claimOutboxBatch("device-test", 50, 60_000L).length());
+
+    JSONArray missing = new JSONArray().put(
+      new JSONObject().put("eventId", "absent-ack-event").put("sequence", 1));
+    boolean rejected = false;
+    try { repository.acknowledgeOutbox("device-test", missing); }
+    catch (RuntimeException expected) { rejected = true; }
+    assertTrue("an acknowledgement for a missing event must be rejected", rejected);
+
+    JSONArray actual = new JSONArray().put(
+      new JSONObject().put("eventId", "present-ack-event").put("sequence", 1));
+    assertEquals("failed acknowledgement must leave the original lease intact", 1,
+      repository.acknowledgeOutbox("device-test", actual).getInt("acknowledged"));
+  }
+
+  @Test public void concurrentOptimisticWritesCommitExactlyOneVersion() throws Exception {
+    final java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+    final java.util.concurrent.atomic.AtomicInteger committed = new java.util.concurrent.atomic.AtomicInteger();
+    final java.util.concurrent.atomic.AtomicInteger conflicts = new java.util.concurrent.atomic.AtomicInteger();
+    final java.util.concurrent.atomic.AtomicReference<Throwable> unexpected =
+      new java.util.concurrent.atomic.AtomicReference<>();
+    Runnable first = () -> runConcurrentWrite(start, committed, conflicts, unexpected,
+      "concurrent-event-a", "concurrent-value-a");
+    Runnable second = () -> runConcurrentWrite(start, committed, conflicts, unexpected,
+      "concurrent-event-b", "concurrent-value-b");
+    Thread a = new Thread(first, "pms-concurrent-write-a");
+    Thread b = new Thread(second, "pms-concurrent-write-b");
+    a.start(); b.start(); start.countDown();
+    a.join(10_000L); b.join(10_000L);
+    assertFalse("first writer must finish", a.isAlive());
+    assertFalse("second writer must finish", b.isAlive());
+    if (unexpected.get() != null) throw new AssertionError("unexpected concurrent repository failure", unexpected.get());
+    assertEquals(1, committed.get());
+    assertEquals(1, conflicts.get());
+    assertEquals(1, repository.getEntity("folio", "concurrent-folio").getLong("version"));
+    assertEquals(1, repository.claimOutboxBatch("device-test", 50, 60_000L).length());
+  }
+
+  private void runConcurrentWrite(
+      java.util.concurrent.CountDownLatch start,
+      java.util.concurrent.atomic.AtomicInteger committed,
+      java.util.concurrent.atomic.AtomicInteger conflicts,
+      java.util.concurrent.atomic.AtomicReference<Throwable> unexpected,
+      String eventId,
+      String value) {
+    try {
+      start.await();
+      repository.transactBusinessChange("folio", "concurrent-folio", 0, data(value),
+        event(eventId, "folio", "concurrent-folio", 1));
+      committed.incrementAndGet();
+    } catch (RuntimeException failure) {
+      if (failure.getMessage() != null && failure.getMessage().contains("ENTITY_VERSION_CONFLICT")) {
+        conflicts.incrementAndGet();
+      } else {
+        unexpected.compareAndSet(null, failure);
+      }
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      unexpected.compareAndSet(null, interrupted);
+    }
+  }
+
   @Test public void businessBatchRollsBackEveryEntityWhenAnyOutboxInsertFails() throws Exception {
     repository.transactBusinessChange("booking", "existing", 0, data("existing"),
       event("event-existing", "booking", "existing", 1));
