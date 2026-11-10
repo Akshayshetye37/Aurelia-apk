@@ -51,6 +51,12 @@ test("all new backup destinations receive a portable AES-256-GCM envelope", () =
   assert.match(html, /BACKUP_KDF_ITERATIONS=600000/);
   assert.match(html, /encryptBackupPayload\(snap\.payload,snap\.name\)/);
   assert.match(html, /decryptBackupPayload\(payload,fileName\)/);
+  assert.match(html, /manifest=\{formatVersion:2,name,payloadSha256/);
+  assert.match(html, /backup-v2\|\x27\+JSON\.stringify\(envelope\.manifest\)/);
+  assert.match(html, /envelope\.v===2/);
+  assert.match(html, /Backup manifest verification failed/);
+  assert.match(html, /payloadBytes/);
+  assert.match(html, /recordCounts/);
   assert.match(html, /setupBackupRecoveryPassword/);
   assert.match(androidPatch, /AURELIA-PMS-ENCRYPTED-BACKUP/);
   assert.match(backupContract, /encrypted PMS backup envelope/);
