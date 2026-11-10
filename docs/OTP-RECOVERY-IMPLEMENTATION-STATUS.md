@@ -33,7 +33,7 @@
 2. Configure the production Firebase project, deploy Functions, provision `PHONE_PEPPER` and `RECOVERY_SIGNING_KEY_PKCS8`, configure Phone Auth and SMS quotas, and enforce App Check with the intended attestation provider. `enforceAppCheck` alone does not prove Play Integrity enforcement is active.
 3. The secondary FirebaseApp isolates the client Auth session but currently uses the same Firebase project options. Phone Auth may create/use an Auth user in that project. Never delete that user. A dedicated recovery-only Firebase project is preferable if Admin token verification can securely validate its tokens.
 4. Owner email/push alerts, durable recovery event audit records, pending-change activation/cancellation UI, explicit resend UX, country allowlist, SMS spend cap and delivery monitoring remain incomplete.
-5. The server verifies the signed grant and atomically consumes its `jti` before returning success to the Android client. Local `RecoveryGrantVerifier`/`RecoveryGrantReplayStore` are defense-in-depth utilities, not currently invoked by the client flow; remove or wire them before claiming local signature/replay verification.
+5. The server verifies the signed grant and atomically consumes its `jti` before returning success to the Android client. Local `RecoveryGrantVerifier`/`RecoveryGrantReplayStore` are defense-in-depth utilities, not currently invoked by the client flow; do not describe local signature verification as implemented.
 6. Automated Android compilation and native instrumentation must pass on the latest branch SHA. Physical-device Firebase OTP, process-death, offline and failure-injection qualification are still required.
 
 ## Required end-to-end acceptance tests
