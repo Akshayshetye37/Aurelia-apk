@@ -45,7 +45,7 @@ class LockGateActivity : FragmentActivity() {
         val enrolled = AureliaSecurityRuntime.isEnrolled()
         val envelopeExists = envelopeStore.exists()
         val databaseExists = encryptedDatabaseExists()
-        if ((databaseExists || enrolled) && !envelopeExists) {
+        if ((databaseExists || enrolled) && !envelopeExists && !biometricStore.exists()) {
             showUnrecoverableState()
             return
         }
@@ -443,7 +443,7 @@ class LockGateActivity : FragmentActivity() {
             gravity = Gravity.CENTER
         })
         root.addView(TextView(this).apply {
-            text = "The encrypted database exists, but its key envelope is missing. No replacement key will be generated. If you have no usable PIN or recovery key, the only remaining option is an irreversible local-data reset."
+            text = "Enrollment or encrypted data exists, but no PIN/recovery envelope or usable biometric wrapper is available. No replacement key will be generated. If you have no usable unlock method, the only remaining option is an irreversible local-data reset."
             textSize = 14f
             setTextColor(android.graphics.Color.LTGRAY)
             gravity = Gravity.CENTER
