@@ -55,16 +55,22 @@ test('recovery code is not silently enabled by the local native security foundat
   assert.match(recovery, /KMS\/HSM/);
   assert.match(readme, /not production-ready|planned\/incomplete|recovery support is not yet production-ready/i);
 });
-test('PIN policy is enforced by the cryptographic engine, not only by the launch form', () => {
+test('PIN policy is enforced by the crypto engine while legacy PINs remain readable', () => {
   const crypto = read('android/templates/security/AureliaCryptoEngine.kt');
   const manager = read('android/templates/security/AureliaAppManager.kt');
   const gate = read('android/templates/security/LockGateActivity.kt');
-  assert.match(crypto, /pin\.size in 4\.\.16 && pin\.all \{ it in '0'\.\.'9' \}/);
-  assert.match(gate, /first\.size !in 4\.\.16/);
-  assert.match(crypto, /PIN must contain 4–16 digits/);
+  assert.match(crypto, /pin\.size in 6\.\.16/);
+  assert.match(crypto, /validatePinForUnlock/);
+  assert.match(crypto, /Repeated-digit PINs are not allowed/);
+  assert.match(crypto, /Sequential PINs are not allowed/);
+  assert.match(crypto, /base32Encode/);
+  assert.match(crypto, /recoveryChecksum/);
+  assert.match(gate, /first\.size !in 6\.\.16/);
   assert.match(gate, /Forgot PIN\?/);
   assert.match(gate, /showRecoveryPrompt/);
   assert.match(manager, /recoverWithRecoveryKey/);
+  assert.match(manager, /MessageDigest\.isEqual/);
+  assert.match(manager, /recoveryLockout/);
   assert.match(crypto, /wrapDataKeyWithRecovery/);
 });
 test('payment device identity uses Android Keystore P-256 and domain-separated protocol transcripts', () => {
