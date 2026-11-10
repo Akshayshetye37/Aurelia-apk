@@ -40,12 +40,13 @@ test("direct browser storage access outside src/storage never grows beyond the a
 });
 
 
-test("guest photo persistence never falls back to localStorage and migrates legacy copies only after read-back", () => {
+test("guest photo persistence stays inside the storage adapter and migrates legacy copies only after read-back", () => {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
-  assert.equal(html.includes("localStorage.setItem(PHOTO_FALLBACK_PREFIX"), false);
-  assert.equal(html.includes("localStorage.getItem(PHOTO_FALLBACK_PREFIX"), false);
-  assert.match(html, /migrateLegacyPhotoFallback/);
-  assert.match(html, /Restored photo archive failed exact read-back verification/);
-  assert.match(html, /Legacy photo migration read-back mismatch/);
-  assert.match(html, /deletePhotoFallbackEntries\(entries\)/);\n  assert.doesNotMatch(html, /localStorage|sessionStorage|indexedDB/);
+  const photo = fs.readFileSync(path.join(ROOT, "src/storage/photo-archive.mjs"), "utf8");
+  assert.match(html, /AureliaPhotoArchive/);
+  assert.doesNotMatch(html, /localStorage|sessionStorage|indexedDB|IDBDatabase/);
+  assert.match(photo, /migrateLegacyPhotos/);
+  assert.match(photo, /Restored photo archive failed exact read-back verification/);
+  assert.match(photo, /Legacy photo migration read-back mismatch/);
+  assert.match(photo, /deleteLegacyPhotoFallbackEntries\(entries\)/);
 });
