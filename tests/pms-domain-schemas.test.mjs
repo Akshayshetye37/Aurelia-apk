@@ -38,3 +38,34 @@ test("room lifecycle transition table rejects illegal occupancy and maintenance 
     error => error.code === "PMS_INVALID_STATE_TRANSITION");
   assert.equal(assertPmsStateTransition("room", { s: "maintenance" }, { s: "ready" }), true);
 });
+
+test("reservation schema is strict and validates canonical dates, lifecycle and identity", () => {
+  const booking = validatePmsDomainEntity("booking", {
+    id: 7, g: "Guest One", room: "101", in: 10, out: 12, st: "res",
+    rate: 1200, p: 200, ch: [], pays: [], folioId: "booking-7",
+    checkInTime: "14:00", checkOutTime: "11:00",
+    scheduledCheckIn: "2026-11-10T14:00", scheduledCheckOut: "2026-11-12T11:00"
+  });
+  assert.equal(booking.id, 7);
+  assert.equal(booking.st, "res");
+  assert.throws(() => validatePmsDomainEntity("booking", {
+    id: 8, g: "Guest Two", room: "102", in: 10, out: 12, st: "res", arbitrary: "not allowlisted"
+  }), error => error.code === "PMS_DOMAIN_VALIDATION_FAILED");
+  assert.throws(() => validatePmsDomainEntity("booking", {
+    id: 9, g: "Guest Three", room: "103", in: 12, out: 12, st: "res"
+  }), error => error.code === "PMS_DOMAIN_VALIDATION_FAILED");
+});
+
+test("folio schema enforces integer paise totals and a strict payment evidence envelope", () => {
+  const folio = validatePmsDomainEntity("folio", {
+    id: "folio-1", bookingId: 1, paymentRows: [{ a: 100, method: "Cash" }],
+    paidPaise: 10000, balanceDuePaise: 50000, updatedAt: "2026-11-10T00:00:00.000Z"
+  });
+  assert.equal(folio.paidPaise, 10000);
+  assert.throws(() => validatePmsDomainEntity("folio", {
+    id: "folio-2", bookingId: 2, paymentRows: [], paidPaise: 10.5, balanceDuePaise: 0
+  }), error => error.code === "PMS_DOMAIN_VALIDATION_FAILED");
+  assert.throws(() => validatePmsDomainEntity("folio", {
+    id: "folio-3", bookingId: 3, paymentRows: [], paidPaise: 0, balanceDuePaise: 0, unreviewed: true
+  }), error => error.code === "PMS_DOMAIN_VALIDATION_FAILED");
+});
