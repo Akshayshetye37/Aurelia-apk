@@ -79,8 +79,9 @@ async function runSequence(caseIndex, operations) {
 }
 
 test("fast-check generated operation sequences preserve repository model, versions, ordering and outbox", async () => {
+  let run = 0;
   await fc.assert(fc.asyncProperty(operationsArbitrary, async operations => {
-    await runSequence("property-run-" + Math.random().toString(36).slice(2), operations);
+    await runSequence("property-run-" + run++, operations);
   }), { numRuns: 24, seed: 20261110, endOnFailure: true });
 });
 
