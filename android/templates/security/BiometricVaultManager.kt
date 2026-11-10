@@ -3,6 +3,7 @@ package com.aurelia.pms.security
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.StrongBoxUnavailableException
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -25,6 +26,7 @@ class BiometricVaultManager {
         private const val ALIAS = "aurelia.pms.biometric.dek.v1"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val TAG_BITS = 128
+        private const val AAD = "com.aurelia.pms|3|BIOMETRIC|aurelia-pms-encrypted.db"
     }
 
     data class WrappedKey(val nonce: ByteArray, val ciphertext: ByteArray)
@@ -81,9 +83,27 @@ class BiometricVaultManager {
         }
     }
 
+    fun isKeyInvalidated(nonce: ByteArray): Boolean {
+        return try {
+            prepareDecryptOperation(nonce)
+            false
+        } catch (_: KeyPermanentlyInvalidatedException) {
+            true
+        }
+    }
+
+    /** Only call after successful PIN/recovery authorization of the same DEK. */
+    @Synchronized
+    fun replaceInvalidatedKeyAfterPinAuthorization() {
+        val store = KeyStore.getInstance(STORE).apply { load(null) }
+        if (store.containsAlias(ALIAS)) store.deleteEntry(ALIAS)
+        createOrReplaceKey()
+    }
+
     fun prepareEncryptOperation(): BiometricPrompt.CryptoObject {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, loadKey())
+        cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
         return BiometricPrompt.CryptoObject(cipher)
     }
 
@@ -91,6 +111,7 @@ class BiometricVaultManager {
         require(nonce.size == 12) { "Invalid biometric envelope nonce." }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, loadKey(), GCMParameterSpec(TAG_BITS, nonce))
+        cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
         return BiometricPrompt.CryptoObject(cipher)
     }
 
