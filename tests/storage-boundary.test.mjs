@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BANNED = /\b(?:localStorage|sessionStorage|indexedDB|IDBDatabase)\b|aurelia_lodge_v2/g;
-const baseline = JSON.parse(fs.readFileSync(new URL("./storage-baseline.json", import.meta.url), "utf8"));
 const sourceExtensions = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".html", ".vue", ".svelte"]);
 
 function walk(dir) {
@@ -24,19 +23,14 @@ function sourceFiles() {
 }
 function countHits(source) { return (source.match(BANNED) || []).length; }
 
-test("direct browser storage access outside src/storage never grows beyond the audited baseline", () => {
-  const observed = new Map();
+test("direct browser storage APIs and the legacy business key are confined to src/storage", () => {
+  const violations = [];
   for (const file of sourceFiles()) {
     const relative = path.relative(ROOT, file).split(path.sep).join("/");
-    observed.set(relative, countHits(fs.readFileSync(file, "utf8")));
+    const hits = countHits(fs.readFileSync(file, "utf8"));
+    if (hits > 0) violations.push(relative + ": " + hits + " forbidden storage reference(s)");
   }
-  for (const [file, allowed] of Object.entries(baseline)) {
-    assert.ok(observed.has(file), `baseline source file disappeared without an explicit baseline review: ${file}`);
-    assert.ok(observed.get(file) <= allowed, `${file}: ${observed.get(file)} direct storage hits exceed baseline ${allowed}`);
-  }
-  for (const [file, hits] of observed) {
-    assert.ok(hits <= (baseline[file] ?? 0), `${file}: new direct storage bypass detected (${hits} hits)`);
-  }
+  assert.deepEqual(violations, [], "Move all browser storage access and legacy business-key references into src/storage.");
 });
 
 
