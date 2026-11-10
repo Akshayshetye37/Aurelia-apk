@@ -1,25 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { createLegacyMigrationStorage } from "../src/storage/legacy-web-storage.mjs";
 
-const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
-const start = html.indexOf('<script id="aurelia-safe-storage">');
-const end = html.indexOf("</script>", start);
-assert.ok(start >= 0 && end > start, "safe storage adapter must exist");
-const adapter = html.slice(start, end);
-
-test("localStorage quota or security errors must propagate instead of falling back to volatile memory", () => {
-  const setStart = adapter.indexOf("setItem: function(k,v){");
-  const setEnd = adapter.indexOf("removeItem: function", setStart);
-  assert.ok(setStart >= 0 && setEnd > setStart, "storage setItem adapter must exist");
-  const setter = adapter.slice(setStart, setEnd);
-  assert.match(setter, /if\(ok\)\{/);
-  assert.match(setter, /localStorage\.setItem\(k,String\(v\)\)/);
-  assert.match(setter, /throw new Error\('Device storage write failed:/);
-  assert.ok(setter.indexOf("throw new Error") < setter.indexOf("mem[k]=String(v)"), "volatile fallback is allowed only when durable storage was unavailable at startup");
+test("Web Storage quota/security errors fail closed without a volatile write fallback", () => {
+  const values = new Map();
+  const quota = Object.assign(new Error("quota exceeded"), { name: "QuotaExceededError" });
+  const storage = {
+    getItem: key => values.get(key) ?? null,
+    setItem: () => { throw quota; },
+    removeItem: key => values.delete(key)
+  };
+  const adapter = createLegacyMigrationStorage({ storage });
+  assert.equal(adapter.persistent, false);
+  assert.equal(adapter.memoryOnly, true);
+  assert.match(adapter.memoryOnlyReason, /quota exceeded/i);
+  assert.throws(() => adapter.setItem("aurelia_lodge_v2", "{}"), error => error === quota);
+  assert.equal(values.size, 0);
 });
 
-test("strict accounting persistence cannot write outside the canonical asynchronous repository", () => {
+test("strict accounting persistence cannot write outside the canonical asynchronous repository", async () => {
+  const fs = await import("node:fs");
+  const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const p = html.indexOf("function persistStrict(){");
   const q = html.indexOf("\n}\n\n// Awaitable canonical commit", p);
   assert.ok(p >= 0 && q > p);
