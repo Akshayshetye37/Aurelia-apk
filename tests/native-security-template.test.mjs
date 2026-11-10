@@ -282,3 +282,14 @@ test('recovery envelope rollback restores old encrypted bytes after failed promo
   assert.match(store, /file\.startWrite\(\)/);
   assert.match(store, /old\.fill\(0\)/);
 });
+
+test('Android generator installs native cryptographic and recovery instrumentation tests', () => {
+  const patcher = read('scripts/patch-android.js');
+  const securityTest = read('android/templates/instrumentation/AureliaSecurityInstrumentedTest.java');
+  assert.match(patcher, /AureliaSecurityInstrumentedTest\.java/);
+  assert.match(securityTest, /pinPolicyRejectsShortRepeatedAndSequentialPins/);
+  assert.match(securityTest, /base32RecoveryKeyRoundTripsAndChecksumDetectsMutation/);
+  assert.match(securityTest, /pinAndRecoveryWrappersUnwrapTheIdenticalDek/);
+  assert.match(securityTest, /replacementPinWrapperIsReadBackAgainstSameDek/);
+  assert.match(securityTest, /recoveryEnvelopeStoreRetainsPrevious/);
+});

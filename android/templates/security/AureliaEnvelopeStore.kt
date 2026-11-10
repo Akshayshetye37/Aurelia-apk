@@ -90,6 +90,10 @@ class AureliaEnvelopeStore(context: Context) {
     @Synchronized
     fun delete() {
         file.delete()
+        val previous = File(file.baseFile.path + ".prev")
+        if (previous.exists() && !previous.delete()) {
+            throw SecurityException("Could not delete previous encrypted PIN envelope.")
+        }
     }
 
     @Synchronized

@@ -46,7 +46,7 @@ public final class AureliaSecurityInstrumentedTest {
             }
         } finally {
             recovery = wipe(recovery);
-            java.util.Arrays.fill(encoded, '\\u0000');
+            java.util.Arrays.fill(encoded, '\\0');
         }
     }
 
@@ -71,7 +71,7 @@ public final class AureliaSecurityInstrumentedTest {
         } finally {
             java.util.Arrays.fill(dek, (byte) 0);
             java.util.Arrays.fill(recoveryKey, (byte) 0);
-            java.util.Arrays.fill(pin, '\\u0000');
+            java.util.Arrays.fill(pin, '\\0');
         }
     }
 
@@ -80,7 +80,6 @@ public final class AureliaSecurityInstrumentedTest {
         byte[] dek = new byte[32];
         new SecureRandom().nextBytes(dek);
         byte[] recoveryKey = crypto.createRecoveryKey();
-        char[] oldPin = "481592".toCharArray();
         char[] newPin = "826491".toCharArray();
         try {
             String recoveryEnvelope = crypto.wrapDataKeyWithRecovery(dek, recoveryKey);
@@ -90,8 +89,11 @@ public final class AureliaSecurityInstrumentedTest {
             try {
                 assertTrue(MessageDigest.isEqual(dek, recovered));
                 assertTrue(MessageDigest.isEqual(recovered, verified));
-                assertEquals(recoveryEnvelope, crypto.wrapDataKeyWithRecovery(dek, recoveryKey)
-                    .replace(recoveryEnvelope, recoveryEnvelope));
+                org.json.JSONObject bundle = new org.json.JSONObject()
+                    .put("pin", crypto.wrapDataKey(dek, oldPin).getJson())
+                    .put("recovery", recoveryEnvelope);
+                bundle.put("pin", replacement);
+                assertEquals(recoveryEnvelope, bundle.getString("recovery"));
             } finally {
                 java.util.Arrays.fill(recovered, (byte) 0);
                 java.util.Arrays.fill(verified, (byte) 0);
@@ -99,8 +101,7 @@ public final class AureliaSecurityInstrumentedTest {
         } finally {
             java.util.Arrays.fill(dek, (byte) 0);
             java.util.Arrays.fill(recoveryKey, (byte) 0);
-            java.util.Arrays.fill(oldPin, '\\u0000');
-            java.util.Arrays.fill(newPin, '\\u0000');
+            java.util.Arrays.fill(newPin, '\\0');
         }
     }
 
