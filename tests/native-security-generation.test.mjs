@@ -70,10 +70,12 @@ test('native PIN and data-key material are not exposed through JavaScript interf
 });
 
 
-test('PIN enrollment and confirmation fields both accept the full 4–16 digit policy', () => {
+test('new PIN enrollment enforces 6–16 digits while legacy PINs remain migratable', () => {
   const gate = read('android/templates/security/LockGateActivity.kt');
-  assert.match(gate, /first\.size !in 4\.\.16/);
-  assert.equal((gate.match(/InputFilter\.LengthFilter\(16\)/g) || []).length, 4);
+  assert.match(gate, /enrollmentMode\) 6\.\.16 else 4\.\.16/);
+  assert.match(gate, /showMandatoryPinUpgrade/);
+  assert.match(gate, /New PIN must contain 6–16 digits/);
+  assert.ok((gate.match(/InputFilter\.LengthFilter\(16\)/g) || []).length >= 4);
   assert.doesNotMatch(gate, /LengthFilter\(12\)/);
 });
 

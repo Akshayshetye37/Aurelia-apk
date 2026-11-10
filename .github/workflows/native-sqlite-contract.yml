@@ -425,11 +425,11 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
-      - name: Checkout exact candidate
+      - name: Checkout exact candidate and full history for Gitleaks range scan
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
       - name: Scan repository for committed credentials
         run: node scripts/check-secrets.mjs
       - name: Scan full git history with Gitleaks
