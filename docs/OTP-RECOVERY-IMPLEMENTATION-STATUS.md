@@ -1,6 +1,6 @@
 # OTP-based Forgot PIN recovery — implementation status
 
-**Status: security foundation and backend scaffold added; end-to-end OTP recovery is not enabled. Do not deploy or describe OTP recovery as complete yet.**
+**Status: native OTP flow and owner-bound recovery-phone setup are wired in source; production enablement remains blocked on Firebase owner-tenant provisioning, project secrets/App Check configuration, and device qualification. Do not enable in production until the gates below pass.**
 
 ## Implemented in this branch
 
@@ -12,7 +12,10 @@
 - RecoveryGrantVerifier validates ES256 signature, header, issuer, audience, tenant, nonce, device binding, iat, exp, jti and maximum lifetime.
 - RecoveryGrantReplayStore provides additional Keystore-authenticated local replay tracking. Server-side atomic grant consumption is authoritative.
 - Device binding is derived from an app-scoped P-256 public key generated in Android Keystore, not an IMEI, serial number or other hardware identifier.
-- The isolated Firebase Phone Auth client now returns its short-lived ID token in memory after signing out the secondary Auth instance. The token is not persisted or logged.
+- The isolated Firebase Phone Auth client returns its short-lived ID token in memory after signing out the secondary Auth instance. The token is not persisted or logged.
+- Settings now exposes a separate Recovery phone security screen, copies and declares its native Activity, and routes the request through the native bridge. Hotel Identity phone edits remain unrelated.
+- Recovery-phone setup now requires a recently authenticated primary Firebase owner session with `role=owner` and a server-issued `tenantId` claim. The tenant claim is encrypted under Android Keystore; local random tenant IDs are no longer accepted as cloud authorization identities.
+- Forgot PIN now reads only the encrypted registered destination, runs Firebase Phone Auth, obtains an in-memory ID token, requests a server grant, atomically consumes the grant, and opens the offline recovery-key prompt only while the process-local gate is armed.
 - Firebase Functions v2 backend scaffold provides owner-only phone registration, tenant-scoped HMAC matching, fresh phone-token validation, durable rate-limit increments, one grant per Firebase phone-auth event, signed ten-minute grants, and atomic server-side jti consumption.
 - Firestore rules deny client access to recovery phone records, grants, used phone proofs and rate-limit documents.
 - Backend contract tests and a dedicated TypeScript build/test workflow have been added.
@@ -26,14 +29,12 @@
 
 ## Not yet integrated — production blockers
 
-1. The Hotel Identity Settings screen does not yet expose the separate **Use as recovery number** workflow. Saving or editing Hotel Identity must not update the recovery phone.
-2. The locked Forgot PIN screen does not yet run the full sequence of OTP send, manual/automatic OTP verification, Firebase ID-token exchange, grant signature verification, server-side grant consumption and RecoveryGate.arm(). Until that wiring exists, a verified-phone installation correctly fails closed rather than accepting the recovery key without OTP.
-3. The app currently has a local-only tenant identity (LOCAL_ONLY). The owner-authenticated registration function requires a trusted owner Firebase session and tenantId role claim. A real owner identity/tenant binding must be provisioned before registration can be used. Do not weaken the function to trust a client-supplied tenant ID.
-4. The Firebase project, Functions deployment, PHONE_PEPPER and RECOVERY_SIGNING_KEY_PKCS8 secrets, signing public-key pin, App Check provider and Play Integrity enforcement are not configured in this repository. enforceAppCheck alone is not proof that Play Integrity enforcement is active.
-5. The current secondary FirebaseApp is isolated as a client session but uses the default Firebase project options. Phone Auth can create/use a Firebase Auth user in that project. Do not delete that user. A dedicated recovery-only Firebase project is preferable if the production identity architecture can support Admin token verification across projects.
-6. Owner email/push alerts, recovery event audit records, pending-change activation/cancellation UI, send/resend limits, country allowlist, SMS spend cap and delivery monitoring still need integration.
-7. The grant public key must be pinned into the Android release build and matched to the backend signing key. No placeholder or remotely supplied key may be trusted.
-8. Automated Android compilation, native instrumentation, physical-device Firebase OTP and process-death tests must pass before enabling the feature.
+1. A production owner account must be provisioned with trusted `role=owner` and `tenantId` custom claims. This app does not self-assign owner claims, and the settings screen must fail closed until those claims exist.
+2. Configure the production Firebase project, deploy Functions, provision `PHONE_PEPPER` and `RECOVERY_SIGNING_KEY_PKCS8`, configure Phone Auth and SMS quotas, and enforce App Check with the intended attestation provider. `enforceAppCheck` alone does not prove Play Integrity enforcement is active.
+3. The secondary FirebaseApp isolates the client Auth session but currently uses the same Firebase project options. Phone Auth may create/use an Auth user in that project. Never delete that user. A dedicated recovery-only Firebase project is preferable if Admin token verification can securely validate its tokens.
+4. Owner email/push alerts, durable recovery event audit records, pending-change activation/cancellation UI, explicit resend UX, country allowlist, SMS spend cap and delivery monitoring remain incomplete.
+5. The server verifies the signed grant and atomically consumes its `jti` before returning success to the Android client. Local `RecoveryGrantVerifier`/`RecoveryGrantReplayStore` are defense-in-depth utilities, not currently invoked by the client flow; remove or wire them before claiming local signature/replay verification.
+6. Automated Android compilation and native instrumentation must pass on the latest branch SHA. Physical-device Firebase OTP, process-death, offline and failure-injection qualification are still required.
 
 ## Required end-to-end acceptance tests
 
