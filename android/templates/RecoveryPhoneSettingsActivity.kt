@@ -161,6 +161,12 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                     return@runOnUiThread
                 }
                 status.text = "Saving verified recovery phone…"
+                try {
+                    if (store.read().currentE164 == null) store.markUnverified(candidate)
+                } catch (failure: Exception) {
+                    status.text = "Could not stage recovery-phone policy safely: ${failure.message}"
+                    return@runOnUiThread
+                }
                 client.registerRecoveryPhone(newPhoneToken, tenant, deviceHash, oldPhoneToken)
                     .addOnCompleteListener { task ->
                         runOnUiThread {
