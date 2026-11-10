@@ -549,6 +549,7 @@ class LockGateActivity : FragmentActivity() {
                     }
                     val replacement = manager.recoverWithRecoveryKey(recoveryChars, newPinChars, readEnvelope())
                     envelopeStore.writeRecoveryReplacement(replacement)
+                    manager.confirmRecoverySwapCommitted()
                     biometricStore.delete()
                     AureliaSecurityRuntime.markEnrolled()
                     manager.lock()
