@@ -162,10 +162,10 @@ test("business-state UI hydration and settlement read-back never consult Web Sto
   assert.doesNotMatch(boundary, /localStorage|__aureliaStorage/);
 });
 
-test("legacy UI cache is not refreshed after canonical business writes", async () => {
+test("legacy UI business cache is not configured or refreshed after canonical writes", async () => {
   const fs = await import("node:fs");
   const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
-  assert.match(html, /cache: null,/);
+  assert.doesNotMatch(html, /cache:\s*null,/);
   assert.doesNotMatch(html, /localStorage\)\.getItem\(SK\)/);
   assert.match(html, /Full device erasure is disabled until canonical SQLite\/IndexedDB wipe/);
 });
