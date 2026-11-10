@@ -61,6 +61,21 @@ public final class LocalPmsRepositoryInstrumentedTest {
     return new JSONObject().put("value", value);
   }
 
+  @Test public void existingDatabaseCannotEnrollAndGenerateReplacementDek() {
+    com.aurelia.pms.security.AureliaAppManager manager =
+      new com.aurelia.pms.security.AureliaAppManager(
+        new com.aurelia.pms.security.AureliaCryptoEngine(),
+        new com.aurelia.pms.security.AppLockManager(context));
+    char[] pin = "481592".toCharArray();
+    try {
+      boolean rejected = false;
+      try { manager.enroll(pin, true); }
+      catch (SecurityException expected) { rejected = true; }
+      assertTrue("existing database must never receive a newly generated DEK", rejected);
+      assertFalse(manager.isSessionAuthorized());
+    } finally { Arrays.fill(pin, '\\0'); manager.lock(); }
+  }
+
   @Test public void backgroundSessionBlocksDekCopiesUntilForegroundReauthorization() {
     com.aurelia.pms.security.AureliaAppManager manager =
       new com.aurelia.pms.security.AureliaAppManager(
@@ -71,7 +86,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
     char[] pin = "481592".toCharArray();
     byte[] sessionKey = null;
     try {
-      manager.enroll(pin);
+      manager.enroll(pin, false);
       sessionKey = manager.currentDataKeyCopy();
       assertEquals(32, sessionKey.length);
       manager.onBackground();
