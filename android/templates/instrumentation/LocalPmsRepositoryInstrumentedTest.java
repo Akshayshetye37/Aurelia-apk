@@ -13,6 +13,8 @@ import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.Rule;
+import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import static org.junit.Assert.*;
 
@@ -22,6 +24,8 @@ import static org.junit.Assert.*;
  */
 @RunWith(AndroidJUnit4.class)
 public final class LocalPmsRepositoryInstrumentedTest {
+  // A blocked SQLite call must fail one test instead of hanging the instrumentation job.
+  @Rule public final Timeout perTestTimeout = Timeout.seconds(120);
   private Context context;
   private LocalPmsRepository repository;
   private byte[] databaseKey;
