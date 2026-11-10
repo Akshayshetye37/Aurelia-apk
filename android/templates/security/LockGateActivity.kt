@@ -287,7 +287,6 @@ class LockGateActivity : FragmentActivity() {
                 ContextCompat.getMainExecutor(this),
                 object : BiometricPrompt.AuthenticationCallback() {
                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                        var dek: ByteArray? = null
                         try {
                             val unwrapped = biometricVault.decryptAfterAuthentication(
                                 result.cryptoObject ?: cryptoObject, wrapped.ciphertext
@@ -301,7 +300,6 @@ class LockGateActivity : FragmentActivity() {
                         } catch (failure: Exception) {
                             showError(failure.message ?: "Biometric key authentication failed.")
                         } finally {
-                            dek?.fill(0)
                             wrapped.nonce.fill(0)
                             wrapped.ciphertext.fill(0)
                         }
