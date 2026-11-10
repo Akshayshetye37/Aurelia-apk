@@ -37,7 +37,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
 
   @Before public void setUp() {
     context = ApplicationProvider.getApplicationContext();
-    boolean preserveDatabase = InstrumentationRegistry.getArguments().getBoolean("preserveDatabase", false);
+    boolean preserveDatabase = Boolean.parseBoolean(InstrumentationRegistry.getArguments().getString("preserveDatabase", "false"));
     if (!preserveDatabase) {
       context.deleteDatabase("aurelia-pms.db");
       context.deleteDatabase("aurelia-pms-encrypted.db");
@@ -304,7 +304,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
     android.os.Bundle args = InstrumentationRegistry.getArguments();
     String checkpoint = args.getString("faultCheckpoint");
     if (checkpoint == null || checkpoint.isEmpty()) return;
-    boolean kill = args.getBoolean("killProcess", false);
+    boolean kill = Boolean.parseBoolean(args.getString("killProcess", "false"));
     LocalPmsFaultInjection.arm(checkpoint, kill);
     if ("mid_migration".equals(checkpoint)) {
       String migration = "{\"rooms\":[],\"b\":[],\"g\":[],\"t\":[],\"exp\":[],\"inv\":[],\"led\":[],\"aud\":[],\"set\":{},\"menu\":{}}";
