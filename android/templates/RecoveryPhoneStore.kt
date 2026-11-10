@@ -62,7 +62,7 @@ class RecoveryPhoneStore(context: Context) {
                 }
                 if (current != null) require(E164.matches(current))
                 if (pending != null) require(E164.matches(pending))
-                require(state == State.CHANGE_PENDING || pending == null)
+                require(state == State.CHANGE_PENDING || state == State.UNVERIFIED || pending == null)
                 return Record(state, current, pending, json.optLong("effectiveAtEpochMs"), json.optBoolean("otpRequired", true))
             } finally {
                 nonce.fill(0)
