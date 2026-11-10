@@ -46,8 +46,9 @@ test('empty booking and dining inventories cannot abort startup on sample-data m
 
 test('sandboxed CodeShack preview is identified as session-only, never reported as durable storage', () => {
   assert.ok(html.includes("String(location.href).startsWith('about:srcdoc')"));
-  assert.ok(html.includes("mode: ok ? 'browser-local-storage' : 'session-memory-only'"));
-  assert.ok(html.includes("embedded-preview-sandbox"));
+  assert.ok(html.includes("var indexedDbAvailable=!!window.indexedDB&&!embeddedPreview;"));
+  assert.ok(html.includes("mode:indexedDbAvailable?'indexeddb':'unavailable'"));
+  assert.ok(html.includes("reason:embeddedPreview?'embedded-preview-sandbox'"));
   assert.ok(html.includes("This is an embedded HTML preview, not the Aurelia app runtime."));
   assert.ok(html.includes("frame or sandbox blocks durable storage"));
   assert.ok(html.includes('Synchronous accounting persistence is disabled'), 'synchronous persistence must fail closed instead of claiming durability');
