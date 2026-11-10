@@ -1776,6 +1776,9 @@ if (!fs.existsSync(securityInstrumentationTemplate)) throw new Error('Aurelia se
 const securityInstrumentationSourceDir = path.join(androidDir, 'app', 'src', 'androidTest', 'java', 'com', 'aurelia', 'pms', 'security');
 fs.mkdirSync(securityInstrumentationSourceDir, { recursive: true });
 fs.copyFileSync(securityInstrumentationTemplate, path.join(securityInstrumentationSourceDir, 'AureliaSecurityInstrumentedTest.java'));
+const otpRecoveryInstrumentationTemplate = path.join(androidDir, 'templates', 'instrumentation', 'OtpRecoverySqlCipherInstrumentedTest.java');
+if (!fs.existsSync(otpRecoveryInstrumentationTemplate)) throw new Error('OTP recovery SQLCipher instrumentation template is missing.');
+fs.copyFileSync(otpRecoveryInstrumentationTemplate, path.join(instrumentationSourceDir, 'OtpRecoverySqlCipherInstrumentedTest.java'));
 const sharedContractFixture = path.join(__dirname, '..', 'tests', 'fixtures', 'pms-repository-contract.json');
 if (!fs.existsSync(sharedContractFixture)) throw new Error('Shared repository contract fixture is missing.');
 const instrumentationAssetsDir = path.join(androidDir, 'app', 'src', 'androidTest', 'assets');
