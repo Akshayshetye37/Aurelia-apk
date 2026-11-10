@@ -1,5 +1,6 @@
 package com.aurelia.pms.security
 
+import android.content.Context
 import android.os.SystemClock
 import java.security.SecureRandom
 
@@ -10,6 +11,7 @@ import java.security.SecureRandom
 class AureliaAppManager(
     private val crypto: AureliaCryptoEngine,
     private val lockout: AppLockManager,
+    private val context: Context,
     private val random: SecureRandom = SecureRandom(),
     private val sessionTimeoutMs: Long = 5 * 60 * 1000L
 ) {
@@ -21,8 +23,10 @@ class AureliaAppManager(
 
     /** Generates a fresh DEK and wraps it under the new PIN. Caller persists the envelope atomically. */
     @Synchronized
-    fun enroll(pin: CharArray, databaseExists: Boolean): Enrollment {
+    fun enroll(pin: CharArray): Enrollment {
         lockout.assertUnlocked()
+        val database = context.getDatabasePath("aurelia-pms-encrypted.db")
+        val databaseExists = database.exists() || java.io.File(database.path + "-wal").exists() || java.io.File(database.path + "-shm").exists()
         if (databaseExists) throw SecurityException("Encrypted database exists without a usable key envelope; refusing DEK regeneration.")
         val dek = ByteArray(32).also(random::nextBytes)
         return try {
