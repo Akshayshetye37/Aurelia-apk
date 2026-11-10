@@ -81,8 +81,10 @@ test('synchronous Firebase SDK failures cannot strand the OTP state machine', ()
   assert.match(identity, /authOperationInFlight = false[\s\S]*FailureReason\.PROVIDER_FAILURE/);
 });
 
-test('failed Firebase tasks do not read Task.result and recovery auth is signed out', () => {
-  assert.match(identity, /if \(task\.isSuccessful\) task\.result\?\.user\?\.phoneNumber else null/);
+test('Firebase auth task results are guarded, token retrieval precedes sign-out, and sign-out failure blocks success', () => {
+  assert.match(identity, /if \(signInTask\.isSuccessful\) signInTask\.result\?\.user else null/);
+  assert.match(identity, /user\.getIdToken\(true\)\.addOnCompleteListener/);
+  assert.match(identity, /finishAuthentication\(requestGeneration, expectedPhone, token, true\)/);
   assert.match(identity, /val signedOut = try \{[\s\S]*recoveryAuth\.signOut\(\)/);
   assert.match(identity, /!signedOut -> emit\(PhoneIdentityState\.Failed/);
 });
