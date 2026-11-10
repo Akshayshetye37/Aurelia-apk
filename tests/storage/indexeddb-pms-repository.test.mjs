@@ -23,9 +23,9 @@ test("shared repository contract: CRUD, optimistic conflicts, deterministic orde
  await r.transactBusinessChange({entityType:f.type,entityId:f.id,expectedVersion:1,event:contractEvent(f.type,f.id,2,"contract-booking-event-2")},()=>sharedContract.update);
  await assert.rejects(r.transactBusinessChange({entityType:f.type,entityId:f.id,expectedVersion:1,event:contractEvent(f.type,f.id,2,"contract-booking-event-stale")},()=>f.data),e=>e.code==="ENTITY_VERSION_CONFLICT");
  const ids=["contract-booking-z","contract-booking-a"];
- for(let i=0;i<ids.length;i++)await r.transactBusinessChange({entityType:"booking",entityId:ids[i],expectedVersion:0,event:contractEvent("booking",ids[i],1,"contract-order-"+i)},()=>({id:ids[i],amountMinor:0,currency:"INR"}));
- const listed=await r.listEntities("booking");const ordered=listed.map(x=>x.id);
- assert.deepEqual(ordered,[...ordered].sort((a,b)=>a.localeCompare(b)));
+ for(let i=0;i<ids.length;i++)await r.transactBusinessChange({entityType:"booking",entityId:ids[i],expectedVersion:0,event:contractEvent("booking",ids[i],1,"contract-order-"+i)},()=>({id:ids[i],amountMinor:0,currency:"INR",createdAt:i===0?"2026-11-10T00:01:00.000Z":"2026-11-10T00:02:00.000Z"}));
+ const listed=await r.listEntities("booking");const ordered=listed.filter(x=>ids.includes(x.id)).map(x=>x.id);
+ assert.deepEqual(ordered,ids,"createdAt ordering takes precedence over lexicographic ID ordering");
 });
 test("shared repository contract: atomic multi-entity writes, outbox retry and repository re-open",async()=>{
  const r=repo("shared-contract-restart");
