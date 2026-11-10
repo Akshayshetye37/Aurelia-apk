@@ -195,6 +195,8 @@ if (!manifest.includes('com.aurelia.pms.security.LockGateActivity')) {
   );
   const internalMain = '<activity ' + mainAttrs + '>' + mainBody + '</activity>';
   const gateActivity = '<activity android:name="com.aurelia.pms.security.LockGateActivity" android:exported="true" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.NoActionBar"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>';
+  const recoverySettingsActivity = '<activity android:name="com.aurelia.pms.identity.RecoveryPhoneSettingsActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.NoActionBar" />';
+  manifest = manifest.replace('</application>', recoverySettingsActivity + '</application>');
   manifest = manifest.replace(mainMatch[0], internalMain + '\n        ' + gateActivity);
 }
 // Enforce HTTPS at the Android application boundary. User-installed CAs are
@@ -382,6 +384,9 @@ fs.copyFileSync(recoveryPhoneTemplate, path.join(identityDir, 'RecoveryPhoneStor
 const recoveryGrantClientTemplate = path.join(androidDir, 'templates', 'RecoveryGrantClient.kt');
 if (!fs.existsSync(recoveryGrantClientTemplate)) throw new Error('RecoveryGrantClient.kt template is missing.');
 fs.copyFileSync(recoveryGrantClientTemplate, path.join(identityDir, 'RecoveryGrantClient.kt'));
+const recoveryPhoneSettingsTemplate = path.join(androidDir, 'templates', 'RecoveryPhoneSettingsActivity.kt');
+if (!fs.existsSync(recoveryPhoneSettingsTemplate)) throw new Error('RecoveryPhoneSettingsActivity.kt template is missing.');
+fs.copyFileSync(recoveryPhoneSettingsTemplate, path.join(identityDir, 'RecoveryPhoneSettingsActivity.kt'));
 
 
 
@@ -1294,7 +1299,10 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         final String type = obj.optString("type", "");
         final String requestId = obj.optString("requestId", "");
         operationType = type; operationRequestId = requestId;
-        if ("payBridgeConnect".equals(type)) {
+        if ("openRecoveryPhoneSettings".equals(type)) {
+          runOnUiThread(() -> startActivity(new Intent(MainActivity.this,
+              com.aurelia.pms.identity.RecoveryPhoneSettingsActivity.class)));
+        } else if ("payBridgeConnect".equals(type)) {
           if (payBridgeClient != null) payBridgeClient.retryNow();
         } else if ("payBridgeDisconnect".equals(type)) {
           if (payBridgeClient != null) payBridgeClient.disconnect();
