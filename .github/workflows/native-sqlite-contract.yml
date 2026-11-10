@@ -92,25 +92,6 @@ jobs:
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
 
-      - name: Compile native sources, unit tests and instrumentation APK
-        working-directory: android
-        shell: bash
-        run: |
-          set -uo pipefail
-          chmod +x gradlew
-          log_dir="$RUNNER_TEMP/aurelia-emulator"
-          mkdir -p "$log_dir"
-          set +e
-          ./gradlew --no-daemon --stacktrace --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8' \
-            compileDebugJavaWithJavac \
-            compileReleaseJavaWithJavac \
-            testDebugUnitTest \
-            assembleDebug \
-            assembleDebugAndroidTest 2>&1 | tee "$log_dir/compile-native-gradle.log"
-          gradle_status=${PIPESTATUS[0]}
-          echo "$gradle_status" > "$log_dir/compile-gradle-exit-code.txt"
-          exit "$gradle_status"
-
       - name: Verify Kotlin test-runtime dependency alignment
         shell: bash
         working-directory: android
@@ -129,6 +110,25 @@ jobs:
             echo "::error::Legacy Kotlin JDK stdlib versions remain in the androidTest runtime graph."
             exit 1
           fi
+
+      - name: Compile native sources, unit tests and instrumentation APK
+        working-directory: android
+        shell: bash
+        run: |
+          set -uo pipefail
+          chmod +x gradlew
+          log_dir="$RUNNER_TEMP/aurelia-emulator"
+          mkdir -p "$log_dir"
+          set +e
+          ./gradlew --no-daemon --stacktrace --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8' \
+            compileDebugJavaWithJavac \
+            compileReleaseJavaWithJavac \
+            testDebugUnitTest \
+            assembleDebug \
+            assembleDebugAndroidTest 2>&1 | tee "$log_dir/compile-native-gradle.log"
+          gradle_status=${PIPESTATUS[0]}
+          echo "$gradle_status" > "$log_dir/compile-gradle-exit-code.txt"
+          exit "$gradle_status"
 
       - name: Verify native ABI and instrumentation APK contents
         shell: bash
