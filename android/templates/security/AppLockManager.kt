@@ -29,6 +29,14 @@ class AppLockManager(
     private val file = AtomicFile(File(context.noBackupFilesDir, stateFileName))
     private val appContext = context.applicationContext
 
+    /** Java instrumentation and existing native callers use the original one-argument API. */
+    constructor(context: Context) : this(
+        context,
+        "aurelia-lock-state.v1",
+        "aurelia.pms.lock-state.v1",
+        "AURELIA-LOCK-V1"
+    )
+
     companion object {
         private const val STORE = "AndroidKeyStore"
         private const val MAX_ATTEMPTS = 5
