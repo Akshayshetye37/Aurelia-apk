@@ -86,7 +86,8 @@ export function assertPmsStateTransition(entityType, previous, next) {
     const from = previous[field], to = next?.[field];
     if (from === to) continue;
     if (from === undefined && to === undefined) continue;
-    if (from === undefined || to === undefined || !transitions[from]?.includes(to)) {
+    if (from === undefined && to !== undefined && Object.prototype.hasOwnProperty.call(transitions, to)) continue;
+    if (to === undefined || !transitions[from]?.includes(to)) {
       const error = new Error("Invalid " + entityType + " state transition for " + field + ": " + String(from) + " -> " + String(to));
       error.code = "PMS_INVALID_STATE_TRANSITION";
       error.entityType = entityType;
