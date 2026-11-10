@@ -203,8 +203,13 @@ class LockGateActivity : FragmentActivity() {
             // PIN is already authenticated. A corrupt or invalidated biometric
             // wrapper may be replaced without changing the database DEK.
             biometricStore.delete()
-            biometricVault.replaceInvalidatedKeyAfterPinAuthorization()
-            offerBiometricEnrollment()
+            try {
+                biometricVault.replaceInvalidatedKeyAfterPinAuthorization()
+                offerBiometricEnrollment()
+            } catch (replacementFailure: Exception) {
+                showError("Biometric re-enrollment is unavailable. PIN access remains valid.")
+                openPms()
+            }
         }
     }
 
@@ -224,7 +229,8 @@ class LockGateActivity : FragmentActivity() {
 
     private fun enrollBiometrics() {
         try {
-            biometricVault.createOrReplaceKey()
+            // The caller has just authenticated with PIN/recovery; replace an invalidated alias safely.
+            biometricVault.replaceInvalidatedKeyAfterPinAuthorization()
             val cryptoObject = biometricVault.prepareEncryptOperation()
             val prompt = BiometricPrompt(
                 this,
@@ -283,11 +289,15 @@ class LockGateActivity : FragmentActivity() {
                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                         var dek: ByteArray? = null
                         try {
-                            dek = biometricVault.decryptAfterAuthentication(
+                            val unwrapped = biometricVault.decryptAfterAuthentication(
                                 result.cryptoObject ?: cryptoObject, wrapped.ciphertext
                             )
-                            manager.unlockWithDataKey(dek)
-                            openPms()
+                            try {
+                                manager.unlockWithDataKey(unwrapped)
+                                openPms()
+                            } finally {
+                                unwrapped.fill(0)
+                            }
                         } catch (failure: Exception) {
                             showError(failure.message ?: "Biometric key authentication failed.")
                         } finally {
@@ -363,7 +373,7 @@ class LockGateActivity : FragmentActivity() {
                     }
                     val replacement = manager.recoverWithRecoveryKey(recoveryChars, newPinChars, readEnvelope())
                     writeEnvelope(replacement)
-                    openPms()
+                    continueAfterPinUnlock()
                 } catch (failure: Exception) {
                     showError(failure.message ?: "Recovery verification failed.")
                 } finally {
