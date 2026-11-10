@@ -205,3 +205,43 @@ export const consumeRecoveryGrant = onCall(
     return { consumed: true };
   }
 );
+
+/** Explicit cancellation retains the old verified recovery destination. */
+export const cancelRecoveryPhoneChange = onCall(
+  { region: REGION, enforceAppCheck: true },
+  async request => {
+    const tenantId = validateTenantId(request.auth?.token.tenantId);
+    if (request.auth?.token.role !== "owner" ||
+        Date.now() / 1000 - Number(request.auth.token.auth_time ?? 0) >= 300) throw GENERIC;
+    const ref = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
+    await db.runTransaction(async tx => {
+      const snapshot = await tx.get(ref);
+      const current = snapshot.data();
+      if (!current || current.state !== "CHANGE_PENDING" || !current.pending) throw GENERIC;
+      tx.update(ref, { state: "VERIFIED", pending: FieldValue.delete(),
+        changeCancelledAt: FieldValue.serverTimestamp() });
+    });
+    return { state: "VERIFIED" };
+  }
+);
+
+/** Owner can activate only after the server-side 48-hour deadline. */
+export const activateRecoveryPhoneChange = onCall(
+  { region: REGION, enforceAppCheck: true },
+  async request => {
+    const tenantId = validateTenantId(request.auth?.token.tenantId);
+    if (request.auth?.token.role !== "owner" ||
+        Date.now() / 1000 - Number(request.auth.token.auth_time ?? 0) >= 300) throw GENERIC;
+    const ref = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
+    await db.runTransaction(async tx => {
+      const snapshot = await tx.get(ref);
+      const current = snapshot.data();
+      if (!current || current.state !== "CHANGE_PENDING" || !current.pending ||
+          Number(current.pending.effectiveAt) > Date.now()) throw GENERIC;
+      tx.update(ref, { hash: current.pending.hash, masked: current.pending.masked,
+        state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp(),
+        pending: FieldValue.delete(), changeActivatedAt: FieldValue.serverTimestamp() });
+    });
+    return { state: "VERIFIED" };
+  }
+);
