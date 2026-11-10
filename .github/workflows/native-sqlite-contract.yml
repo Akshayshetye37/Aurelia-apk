@@ -101,7 +101,18 @@ jobs:
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
 
+      - name: Fast compile Android instrumentation Java tests
+        timeout-minutes: 10
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace --max-workers=2 \
+            compileDebugAndroidTestJavaWithJavac
+
       - name: Verify Kotlin test-runtime dependency alignment
+        timeout-minutes: 8
         shell: bash
         working-directory: android
         run: |
@@ -119,16 +130,6 @@ jobs:
             echo "::error::Legacy Kotlin JDK stdlib versions remain in the androidTest runtime graph."
             exit 1
           fi
-
-      - name: Fast compile Android instrumentation Java tests
-        timeout-minutes: 10
-        working-directory: android
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace --max-workers=2 \
-            compileDebugAndroidTestJavaWithJavac
 
       - name: Compile native sources, unit tests and instrumentation APK
         timeout-minutes: 20
