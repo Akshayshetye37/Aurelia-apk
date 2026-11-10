@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 function attributes(tag) {
   const values = {};
-  for (const match of tag.matchAll(/([A-Za-z_:][\\w:.-]*)\\s*=\\s*["']([^"']*)["']/g)) {
+  for (const match of tag.matchAll(/([A-Za-z_:][\w:.-]*)\s*=\s*["']([^"']*)["']/g)) {
     values[match[1]] = Number.isFinite(Number(match[2])) ? Number(match[2]) : match[2];
   }
   return values;
@@ -16,7 +16,7 @@ export function summarizeJUnitXml(xmlFiles) {
   }
   const totals = { files: xmlFiles.length, tests: 0, failures: 0, errors: 0, skipped: 0 };
   for (const xml of xmlFiles) {
-    const tags = [...xml.matchAll(/<(testsuites|testsuite)\\b[^>]*>/g)].map(m => ({
+    const tags = [...xml.matchAll(/<(testsuites|testsuite)\b[^>]*>/g)].map(m => ({
       name: m[1], attrs: attributes(m[0])
     }));
     if (tags.length === 0) throw new Error("JUnit XML has no testsuite element.");
@@ -42,8 +42,8 @@ function walk(dir) {
 }
 
 export function findIgnoredTests(root) {
-  return walk(root).filter(file => /\\.(?:java|kt)$/.test(file))
-    .filter(file => /@\\s*Ignore\\b/.test(fs.readFileSync(file, "utf8")));
+  return walk(root).filter(file => /\.(?:java|kt)$/.test(file))
+    .filter(file => /@\s*Ignore\b/.test(fs.readFileSync(file, "utf8")));
 }
 
 export function verifyInstrumentationResults(resultsDir, templateDir) {
