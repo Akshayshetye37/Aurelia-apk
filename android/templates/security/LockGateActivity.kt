@@ -45,13 +45,15 @@ class LockGateActivity : FragmentActivity() {
         val enrolled = AureliaSecurityRuntime.isEnrolled()
         val envelopeExists = envelopeStore.exists()
         val databaseExists = encryptedDatabaseExists()
-        if (databaseExists && (!enrolled || !envelopeExists)) {
+        if (databaseExists && !envelopeExists) {
             throw SecurityException("Encrypted PMS database exists but its key envelope is missing; data recovery is required.")
         }
-        if (enrolled != envelopeExists) {
-            throw SecurityException("PIN enrollment state is inconsistent; refusing setup or unlock.")
+        if (enrolled && !envelopeExists) {
+            throw SecurityException("Enrollment marker exists without a key envelope; refusing DEK regeneration.")
         }
-        enrollmentMode = !enrolled
+        // The authenticated envelope is authoritative. A missing marker can be
+        // restored only after PIN/recovery unlock, never by creating a new DEK.
+        enrollmentMode = !envelopeExists
         render()
     }
 
@@ -141,6 +143,7 @@ class LockGateActivity : FragmentActivity() {
             } else {
                 val envelope = readEnvelope()
                 if (manager.unlock(first, envelope)) {
+                    AureliaSecurityRuntime.markEnrolled()
                     if (JSONObject(envelope).has("recovery")) {
                         continueAfterPinUnlock()
                     } else {
@@ -371,6 +374,7 @@ class LockGateActivity : FragmentActivity() {
                     }
                     val replacement = manager.recoverWithRecoveryKey(recoveryChars, newPinChars, readEnvelope())
                     writeEnvelope(replacement)
+                    AureliaSecurityRuntime.markEnrolled()
                     continueAfterPinUnlock()
                 } catch (failure: Exception) {
                     showError(failure.message ?: "Recovery verification failed.")
