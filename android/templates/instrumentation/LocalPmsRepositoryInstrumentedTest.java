@@ -137,6 +137,64 @@ public final class LocalPmsRepositoryInstrumentedTest {
     }
   }
 
+  @Test public void knownDekCanaryNeverAppearsInAppFilesOrLogcat() throws Exception {
+    byte[] canaryDek = new byte[32];
+    byte[] recoveryKey = new byte[32];
+    Arrays.fill(canaryDek, (byte) 0x5a);
+    Arrays.fill(recoveryKey, (byte) 0x6b);
+    char[] pin = "481592".toCharArray();
+    try {
+      com.aurelia.pms.security.AureliaCryptoEngine crypto = new com.aurelia.pms.security.AureliaCryptoEngine();
+      String pinWrapper = crypto.wrapDataKey(canaryDek, pin).getJson();
+      String recoveryWrapper = crypto.wrapDataKeyWithRecovery(canaryDek, recoveryKey);
+      String bundle = new JSONObject().put("bundleVersion", 1)
+        .put("pin", pinWrapper).put("recovery", recoveryWrapper).toString();
+      new com.aurelia.pms.security.AureliaEnvelopeStore(context).write(bundle);
+
+      String hex = new StringBuilder().append("5a".repeat(32)).toString();
+      String base64 = android.util.Base64.encodeToString(canaryDek, android.util.Base64.NO_WRAP);
+      java.util.ArrayList<File> roots = new java.util.ArrayList<>();
+      roots.add(context.getFilesDir());
+      roots.add(context.getNoBackupFilesDir());
+      roots.add(context.getCacheDir());
+      roots.add(new File(context.getApplicationInfo().dataDir, "shared_prefs"));
+      java.util.ArrayDeque<File> pending = new java.util.ArrayDeque<>(roots);
+      while (!pending.isEmpty()) {
+        File file = pending.removeFirst();
+        if (!file.exists()) continue;
+        if (file.isDirectory()) {
+          File[] children = file.listFiles();
+          if (children != null) pending.addAll(Arrays.asList(children));
+        } else if (file.isFile() && file.length() <= 16L * 1024L * 1024L) {
+          String contents = new String(java.nio.file.Files.readAllBytes(file.toPath()), java.nio.charset.StandardCharsets.ISO_8859_1);
+          assertFalse("DEK hex canary must not be persisted: " + file.getName(), contents.contains(hex));
+          assertFalse("DEK base64 canary must not be persisted: " + file.getName(), contents.contains(base64));
+        }
+      }
+
+      try {
+        Process logcat = Runtime.getRuntime().exec(new String[] { "logcat", "-d", "-v", "brief" });
+        java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+        try (java.io.InputStream input = logcat.getInputStream()) {
+          byte[] buffer = new byte[4096];
+          int count;
+          while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+        }
+        logcat.waitFor();
+        String logs = output.toString("UTF-8");
+        assertFalse("DEK hex canary must not appear in logcat", logs.contains(hex));
+        assertFalse("DEK base64 canary must not appear in logcat", logs.contains(base64));
+      } catch (java.io.IOException unavailableLogcat) {
+        // File/prefs checks remain mandatory; device-level logcat capture is retained by the host harness.
+      }
+    } finally {
+      Arrays.fill(canaryDek, (byte) 0);
+      Arrays.fill(recoveryKey, (byte) 0);
+      Arrays.fill(pin, '\0');
+      new com.aurelia.pms.security.AureliaEnvelopeStore(context).delete();
+    }
+  }
+
   @Test public void pinEnvelopeBindsUnlockMethodAndDatabaseIdentity() throws Exception {
     com.aurelia.pms.security.AureliaCryptoEngine crypto = new com.aurelia.pms.security.AureliaCryptoEngine();
     byte[] dek = new byte[32];
