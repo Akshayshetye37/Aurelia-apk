@@ -14,7 +14,7 @@ async function makeRepo(entityType, databaseName) {
     eventId: () => "base-repo-event-" + (++eventSequence)
   });
   bridge.bindActiveEngine(adapter, { tenantId: "tenant-base-repo", propertyId: "property-base-repo", deviceId: "device-base-repo" });
-  return { repo: new BaseRepo({ bridge, entityType, now: () => "2026-11-10T00:00:00.000Z" }), adapter };
+  return { repo: new BaseRepo({ bridge, entityType, authorize: () => true, now: () => "2026-11-10T00:00:00.000Z" }), adapter };
 }
 
 test("BaseRepo validates writes, persists through the canonical bridge and enforces optimistic versions", async () => {
@@ -73,5 +73,27 @@ test("the shared bridge validates every domain mutation before persistence", asy
       mutate: row => Object.assign(row, { n: "Coffee", q: 4, ro: 1, u: 3.5 })
     });
     assert.equal(good.entity.version, 1);
+  } finally { adapter.close?.(); }
+});
+
+test("BaseRepo requires an explicit permission evaluator and checks each operation", async () => {
+  const adapter = new IndexedDbPmsRepository({ indexedDBImpl: indexedDB, databaseName: "base-repo-permissions" });
+  await adapter.database();
+  const calls = [];
+  const bridge = new PmsRepositoryBridge({
+    tenantId: "tenant-base-repo", propertyId: "property-base-repo", deviceId: "device-base-repo",
+    eventId: () => "base-repo-permission-event"
+  });
+  bridge.bindActiveEngine(adapter, { tenantId: "tenant-base-repo", propertyId: "property-base-repo", deviceId: "device-base-repo" });
+  assert.throws(() => new BaseRepo({ bridge, entityType: "guest" }), /explicit repository permission evaluator/);
+  const denied = new BaseRepo({
+    bridge, entityType: "guest",
+    authorize: request => { calls.push(request); return request.action !== "create"; }
+  });
+  try {
+    await assert.rejects(denied.create("guest-denied", { n: "Denied" }),
+      error => error.code === "PMS_REPOSITORY_PERMISSION_DENIED" && error.action === "create");
+    assert.equal(await bridge.fetchEntity("guest", "guest-denied"), null);
+    assert.deepEqual(calls.map(call => call.action), ["create"]);
   } finally { adapter.close?.(); }
 });
