@@ -92,6 +92,13 @@ class BiometricVaultManager {
         }
     }
 
+    /** Remove both the persisted DEK wrapper and its device-bound key after recovery. */
+    @Synchronized
+    fun invalidateAfterRecovery() {
+        val store = KeyStore.getInstance(STORE).apply { load(null) }
+        if (store.containsAlias(ALIAS)) store.deleteEntry(ALIAS)
+    }
+
     /** Only call after successful PIN/recovery authorization of the same DEK. */
     @Synchronized
     fun replaceInvalidatedKeyAfterPinAuthorization() {
