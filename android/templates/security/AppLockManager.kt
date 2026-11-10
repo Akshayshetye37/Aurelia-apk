@@ -103,7 +103,13 @@ class AppLockManager @JvmOverloads constructor(
             if (hasKeyAlias()) throw SecurityException("PIN lock state is missing after enrollment; refusing to reset retry counters.")
             return State(0, 0L, bootCount())
         }
-        val plain = decrypt(bytes)
+        val plain = try {
+            decrypt(bytes)
+        } catch (failure: Exception) {
+            throw SecurityException("Local lock state authentication failed; refusing unlock.", failure)
+        } finally {
+            bytes.fill(0)
+        }
         return try {
             val json = JSONObject(String(plain, Charsets.UTF_8))
             require(json.getString("magic") == MAGIC)
