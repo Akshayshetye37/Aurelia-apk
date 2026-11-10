@@ -39,6 +39,7 @@ class LockGateActivity : FragmentActivity() {
     private var confirmField: EditText? = null
     private var recoveryPhoneIdentity: FirebasePhoneIdentity? = null
     private var recoveryOtpDialogShown = false
+    @Volatile private var recoveryFlowActive = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -542,11 +543,16 @@ class LockGateActivity : FragmentActivity() {
     /** Only the encrypted, previously verified E.164 is used; no phone input exists here. */
     private fun beginRecoveryOtp(trustedPhone: String) {
         try {
+            recoveryFlowActive = true
             recoveryOtpDialogShown = false
             val auth = RecoveryFirebaseAuthFactory.create(this)
             lateinit var identity: FirebasePhoneIdentity
             identity = FirebasePhoneIdentity(auth) { state ->
                 runOnUiThread {
+                    if (!recoveryFlowActive || isFinishing) {
+                        RecoveryGate.clear()
+                        return@runOnUiThread
+                    }
                     when (state) {
                         PhoneIdentityState.Requesting -> showError("Sending OTP to your registered recovery number…")
                         PhoneIdentityState.CodeSent,
@@ -564,6 +570,10 @@ class LockGateActivity : FragmentActivity() {
                                 val grant = task.result
                                 client.consumeAndArm(grant, grantRequest.nonce, grantRequest.deviceIdHash) { armed ->
                                     runOnUiThread {
+                                        if (!recoveryFlowActive || isFinishing) {
+                                            RecoveryGate.clear()
+                                            return@runOnUiThread
+                                        }
                                         if (armed && RecoveryGate.isOpen()) showRecoveryKeyPrompt()
                                         else showError("Recovery authorization expired or was already used. Request a fresh OTP.")
                                     }
@@ -604,11 +614,13 @@ class LockGateActivity : FragmentActivity() {
             }
             .setNegativeButton("Cancel") { _, _ ->
                 recoveryOtpDialogShown = false
+                recoveryFlowActive = false
                 identity.reset()
                 RecoveryGate.clear()
             }
             .setOnCancelListener {
                 recoveryOtpDialogShown = false
+                recoveryFlowActive = false
                 identity.reset()
                 RecoveryGate.clear()
             }
@@ -715,6 +727,12 @@ class LockGateActivity : FragmentActivity() {
     }
 
     override fun onStop() {
+        // Invalidate in-flight callbacks as well as the current grant. A delayed
+        // network response must never re-arm recovery after this gate backgrounds.
+        recoveryFlowActive = false
+        recoveryOtpDialogShown = false
+        recoveryPhoneIdentity?.reset()
+        recoveryPhoneIdentity = null
         RecoveryGate.clear()
         super.onStop()
     }
