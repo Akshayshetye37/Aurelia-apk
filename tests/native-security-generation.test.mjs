@@ -53,8 +53,10 @@ test('PIN gate persists enrollment marker separately from the PIN envelope', () 
   assert.match(store, /AndroidKeyStore/);
   assert.match(store, /AES\/GCM\/NoPadding/);
   assert.match(gate, /AureliaEnvelopeStore/);
-  assert.match(gate, /enrolled != envelopeExists/);
-  assert.match(gate, /refusing setup or unlock/);
+  assert.match(gate, /databaseExists && !envelopeExists/);
+  assert.match(gate, /enrolled && !envelopeExists/);
+  assert.match(gate, /enrollmentMode = !envelopeExists/);
+  assert.match(gate, /refusing DEK regeneration/);
 });
 
 test('native PIN and data-key material are not exposed through JavaScript interfaces', () => {
