@@ -117,7 +117,10 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       db.execSQL("DROP TRIGGER IF EXISTS pms_audit_no_delete");
       createAuditAppendOnlyTriggers(db);
     }
-    if(oldVersion<6) upgradeRepositoryConstraints(db);
+    if(oldVersion<6) {
+      upgradeRepositoryConstraints(db);
+      createAuditAppendOnlyTriggers(db);
+    }
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
 
