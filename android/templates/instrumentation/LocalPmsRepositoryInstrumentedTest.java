@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.util.Arrays;
 import androidx.test.core.app.ApplicationProvider;
+import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -36,8 +37,11 @@ public final class LocalPmsRepositoryInstrumentedTest {
 
   @Before public void setUp() {
     context = ApplicationProvider.getApplicationContext();
-    context.deleteDatabase("aurelia-pms.db");
-    context.deleteDatabase("aurelia-pms-encrypted.db");
+    boolean preserveDatabase = InstrumentationRegistry.getArguments().getBoolean("preserveDatabase", false);
+    if (!preserveDatabase) {
+      context.deleteDatabase("aurelia-pms.db");
+      context.deleteDatabase("aurelia-pms-encrypted.db");
+    }
     databaseKey = key();
     repository = new LocalPmsRepository(context, databaseKey);
     repository.initialize();
@@ -294,6 +298,53 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertTrue("corrupt encrypted database must fail closed", rejected);
     assertTrue("corrupt database must be retained for recovery, never auto-wiped", database.exists());
     assertTrue("corrupt database bytes must remain available for forensic recovery", database.length() > 0);
+  }
+
+  @Test public void debugFaultCheckpointCanKillProcessForDeviceMatrix() throws Exception {
+    android.os.Bundle args = InstrumentationRegistry.getArguments();
+    String checkpoint = args.getString("faultCheckpoint");
+    if (checkpoint == null || checkpoint.isEmpty()) return;
+    boolean kill = args.getBoolean("killProcess", false);
+    LocalPmsFaultInjection.arm(checkpoint, kill);
+    if ("mid_migration".equals(checkpoint)) {
+      String migration = "{\"rooms\":[],\"b\":[],\"g\":[],\"t\":[],\"exp\":[],\"inv\":[],\"led\":[],\"aud\":[],\"set\":{},\"menu\":{}}";
+      repository.migrateLegacySnapshot("device-fault-migration", "aurelia_lodge_v2",
+        "2026-11-10T00:00:00.000Z", migration);
+    } else {
+      String id = "device-fault-" + checkpoint.replace('_', '-');
+      repository.transactBusinessChange("folio", id, 0, data("synthetic-fault-data"),
+        event(id + "-event", "folio", id, 1));
+    }
+    LocalPmsFaultInjection.clear();
+    fail("configured fault checkpoint did not terminate the instrumentation process: " + checkpoint);
+  }
+
+  @Test public void verifyRecoveryAfterInjectedCrash() throws Exception {
+    android.os.Bundle args = InstrumentationRegistry.getArguments();
+    String checkpoint = args.getString("faultCheckpoint");
+    assertNotNull("fault checkpoint argument is required", checkpoint);
+    try (android.database.Cursor integrity = repository.getWritableDatabase().rawQuery("PRAGMA integrity_check", null)) {
+      assertTrue(integrity.moveToFirst());
+      assertEquals("ok", integrity.getString(0));
+    }
+    try (android.database.Cursor foreignKeys = repository.getWritableDatabase().rawQuery("PRAGMA foreign_key_check", null)) {
+      assertFalse("foreign-key violations must not survive process death", foreignKeys.moveToFirst());
+    }
+    if ("mid_migration".equals(checkpoint)) {
+      assertEquals(0, repository.getWritableDatabase().compileStatement("SELECT COUNT(*) FROM pms_entities").simpleQueryForLong());
+      assertEquals(0, repository.getWritableDatabase().compileStatement("SELECT COUNT(*) FROM pms_migrations").simpleQueryForLong());
+      assertEquals(0, repository.getWritableDatabase().compileStatement("SELECT COUNT(*) FROM pms_migration_snapshots").simpleQueryForLong());
+      return;
+    }
+    String id = "device-fault-" + checkpoint.replace('_', '-');
+    boolean expectedCommitted = "after_commit_before_checkpoint".equals(checkpoint);
+    JSONObject row = repository.getEntity("folio", id);
+    assertEquals("domain row must reflect transaction durability", expectedCommitted, row != null);
+    try (android.database.Cursor outbox = repository.getWritableDatabase().rawQuery(
+        "SELECT COUNT(*) FROM pms_outbox WHERE event_id=?", new String[] { id + "-event" })) {
+      assertTrue(outbox.moveToFirst());
+      assertEquals(expectedCommitted ? 1 : 0, outbox.getInt(0));
+    }
   }
 
   @Test public void debugFaultCheckpointsProveRollbackAndPostCommitDurability() throws Exception {
