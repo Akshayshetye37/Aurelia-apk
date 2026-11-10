@@ -1724,3 +1724,34 @@ if (fs.existsSync(appGradleGroovy)) {
 } else {
   throw new Error('Generated app Gradle file missing; native SQLite instrumentation cannot be configured.');
 }
+
+// Aurelia Kotlin stdlib alignment for all generated Android subprojects.
+// AndroidX / payment SDK graphs can request the legacy split JDK7/JDK8
+// stdlib artifacts at versions older than kotlin-stdlib. Since Kotlin 1.8,
+// these classes are merged into kotlin-stdlib; align the legacy module
+// coordinates to the already-selected stdlib release to avoid duplicate DEX
+// classes in app and androidTest variants across every generated subproject.
+const rootGradlePath = path.join(androidDir, 'build.gradle');
+if (!fs.existsSync(rootGradlePath)) {
+  throw new Error('Generated Android root build.gradle is missing; Kotlin runtime alignment cannot be applied.');
+}
+let rootGradle = fs.readFileSync(rootGradlePath, 'utf8');
+if (!rootGradle.includes('aurelia-kotlin-stdlib-alignment')) {
+  rootGradle += `
+
+// aurelia-kotlin-stdlib-alignment
+allprojects {
+  configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+      if (details.requested.group == 'org.jetbrains.kotlin' &&
+          (details.requested.name == 'kotlin-stdlib-jdk7' ||
+           details.requested.name == 'kotlin-stdlib-jdk8')) {
+        details.useVersion '1.8.22'
+        details.because 'Kotlin 1.8 merged JDK7/JDK8 stdlib classes into kotlin-stdlib; avoid duplicate classes from older split artifacts.'
+      }
+    }
+  }
+}
+`;
+  fs.writeFileSync(rootGradlePath, rootGradle);
+}
