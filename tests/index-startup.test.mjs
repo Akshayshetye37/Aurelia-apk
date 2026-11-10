@@ -172,7 +172,8 @@ test("legacy UI cache is not refreshed after canonical business writes", async (
 test("index contains no direct Web Storage access and uses the whitelisted migration adapter", async () => {
   const fs = await import("node:fs");
   const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
-  assert.doesNotMatch(html, /\\b(?:window\\.)?localStorage\\s*(?:\\.|\\[)|\\bsessionStorage\\s*(?:\\.|\\[)/);\n  assert.doesNotMatch(html, /__aureliaStorage/);
+  assert.doesNotMatch(html, /\b(?:window\.)?localStorage\s*(?:\.|\[)|\bsessionStorage\s*(?:\.|\[)/);
+  assert.doesNotMatch(html, /__aureliaStorage/);
   assert.match(html, /createLegacyMigrationStorage/);
   assert.match(html, /readPhotoFallbackEntries/);
   assert.match(html, /deletePhotoFallbackEntries/);
