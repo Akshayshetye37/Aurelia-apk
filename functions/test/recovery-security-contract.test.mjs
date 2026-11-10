@@ -38,7 +38,8 @@ test('rate limit counters commit before rejected requests return', () => {
   assert.match(rate, /tx\.set\(ref, \{ count/);
   assert.match(rate, /return count <= max/);
   assert.match(rate, /if \(!allowed\) throw/);
-  assert.doesNotMatch(rate, /throw new HttpsError/);
+  assert.ok(rate.indexOf('tx.set(ref, { count') < rate.indexOf('if (!allowed)'));
+  assert.match(rate, /if \(!allowed\) throw new HttpsError/);
 });
 
 test('backend never deletes Firebase phone-auth users', () => {
