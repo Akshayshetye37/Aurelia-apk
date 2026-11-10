@@ -47,5 +47,5 @@ test("guest photo persistence never falls back to localStorage and migrates lega
   assert.match(html, /migrateLegacyPhotoFallback/);
   assert.match(html, /Restored photo archive failed exact read-back verification/);
   assert.match(html, /Legacy photo migration read-back mismatch/);
-  assert.ok(html.includes("localStorage.removeItem(PHOTO_FALLBACK_PREFIX"));
+  assert.match(html, /deletePhotoFallbackEntries\(entries\)/);\n  assert.doesNotMatch(html, /localStorage|sessionStorage|indexedDB/);
 });
