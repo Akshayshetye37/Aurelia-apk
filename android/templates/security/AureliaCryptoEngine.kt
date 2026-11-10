@@ -61,11 +61,16 @@ class AureliaCryptoEngine(
         require(!ascending && !descending) { "Sequential PINs are not allowed." }
     }
 
+    /** Existing 4–5 digit envelopes remain unlockable for a forced secure migration. */
+    private fun validatePinForUnlock(pin: CharArray) {
+        require(pin.size in 4..16 && pin.all { it in '0'..'9' }) { "Invalid PIN format." }
+    }
+
     fun createSalt(): ByteArray = ByteArray(SALT_BYTES).also(random::nextBytes)
 
     /** Argon2id stage shared by current and legacy envelope readers. */
-    private fun deriveArgon2Key(pin: CharArray, salt: ByteArray): ByteArray {
-        validatePin(pin)
+    private fun deriveArgon2Key(pin: CharArray, salt: ByteArray, allowLegacyPin: Boolean = false): ByteArray {
+        if (allowLegacyPin) validatePinForUnlock(pin) else validatePin(pin)
         require(salt.size == SALT_BYTES) { "Invalid KDF salt." }
         val password = Charsets.UTF_8.encode(CharBuffer.wrap(pin))
         val passwordBytes = ByteArray(password.remaining()).also(password::get)
@@ -93,8 +98,8 @@ class AureliaCryptoEngine(
      * binds the output to this application/PIN purpose. The Keystore key is
      * never exported, so a copied envelope cannot be brute-forced offline.
      */
-    fun derivePinKey(pin: CharArray, salt: ByteArray): ByteArray {
-        val argon2Key = deriveArgon2Key(pin, salt)
+    fun derivePinKey(pin: CharArray, salt: ByteArray, allowLegacyPin: Boolean = false): ByteArray {
+        val argon2Key = deriveArgon2Key(pin, salt, allowLegacyPin)
         try {
             val extract = Mac.getInstance("HmacSHA256")
             extract.init(pinKekSecret())
@@ -115,7 +120,7 @@ class AureliaCryptoEngine(
 
     /** Version-2 compatibility path only. Never use this to create new envelopes. */
     private fun deriveLegacyPinKey(pin: CharArray, salt: ByteArray): ByteArray =
-        deriveArgon2Key(pin, salt)
+        deriveArgon2Key(pin, salt, allowLegacyPin = true)
 
     private fun pinKekSecret(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -171,7 +176,7 @@ class AureliaCryptoEngine(
 
     /** Authenticates metadata and unwraps the DEK. Wrong PIN/tampering throws. */
     fun unwrapDataKey(envelopeJson: String, pin: CharArray): ByteArray {
-        validatePin(pin)
+        validatePinForUnlock(pin)
         require(envelopeJson.toByteArray(Charsets.UTF_8).size <= 4096) { "Envelope too large." }
         val json = JSONObject(envelopeJson)
         val version = json.getInt("version")
@@ -192,7 +197,7 @@ class AureliaCryptoEngine(
         val nonce = decode(json.getString("nonce"), NONCE_BYTES)
         val wrapped = Base64.decode(json.getString("wrappedKey"), Base64.NO_WRAP)
         require(wrapped.size == KEY_BYTES + TAG_BITS / 8) { "Invalid wrapped key length." }
-        val kekBytes = if (legacy) deriveLegacyPinKey(pin, salt) else derivePinKey(pin, salt)
+        val kekBytes = if (legacy) deriveLegacyPinKey(pin, salt) else derivePinKey(pin, salt, allowLegacyPin = true)
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(kekBytes, "AES"), GCMParameterSpec(TAG_BITS, nonce))
