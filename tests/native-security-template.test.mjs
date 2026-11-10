@@ -253,7 +253,7 @@ test('PIN policy and recovery wrapper invariants are enforced natively', () => {
   const store = read('android/templates/security/AureliaEnvelopeStore.kt');
   const gate = read('android/templates/security/LockGateActivity.kt');
   assert.match(crypto, /pin\.size in 6\.\.16/);
-  assert.match(crypto, /Repeated-digit PINs are not allowed/);
+  assert.match(crypto, /Repeated-digit or repeated-pattern PINs are not allowed/);
   assert.match(crypto, /Sequential PINs are not allowed/);
   assert.match(crypto, /base32Encode/);
   assert.match(crypto, /recoveryChecksum/);
@@ -291,7 +291,7 @@ test('Android generator installs native cryptographic and recovery instrumentati
   assert.match(securityTest, /pinPolicyRejectsShortRepeatedAndSequentialPins/);
   assert.match(securityTest, /base32RecoveryKeyRoundTripsAndChecksumDetectsMutation/);
   assert.match(securityTest, /pinAndRecoveryWrappersUnwrapTheIdenticalDek/);
-  assert.match(securityTest, /replacementPinWrapperIsReadBackAgainstSameDek/);
+  assert.match(securityTest, /replacementPinWrapperPreservesRecoveryEnvelopeAndSameDek/);
   assert.match(securityTest, /recoveryEnvelopeStoreRetainsPrevious/);
 });
 
