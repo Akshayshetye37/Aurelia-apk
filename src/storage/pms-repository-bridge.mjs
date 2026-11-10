@@ -9,6 +9,7 @@
  * the entity version and immutable outbox event in one engine transaction.
  */
 import { buildPmsOutboxEvent, PMS_ENTITY_TYPES, assertPmsIdentity, assertPmsVersion } from "./pms-repository-contract.mjs";
+import { assertCompatibilityUiAllowed } from "./pms-authority-state.mjs";
 
 const clone = value => value == null ? value :
   (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
@@ -126,6 +127,7 @@ export class PmsRepositoryBridge {
     const serialized = JSON.stringify(snapshot);
     if (typeof serialized !== "string") return Promise.reject(new TypeError("Compatibility snapshot must be JSON serializable"));
     const write = async () => {
+      await assertCompatibilityUiAllowed(this);
       if (!globalThis.crypto?.subtle || !globalThis.TextEncoder) throw new Error("Secure snapshot digest is unavailable");
       const bytes = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(serialized));
       const hash = Array.from(new Uint8Array(bytes), value => value.toString(16).padStart(2, "0")).join("");
