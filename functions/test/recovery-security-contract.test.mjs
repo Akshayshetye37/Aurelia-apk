@@ -20,7 +20,7 @@ test('backend matches only verified Firebase phone identity and enforces fresh a
 
 test('backend stores only tenant-scoped phone HMAC and masked phone', () => {
   assert.match(functions, /createHmac\("sha256", PHONE_PEPPER\.value\(\)\)/);
-  assert.match(functions, /hash: hash\.toString\("base64"\)/);
+  assert.match(functions, /hash: newHash.toString("base64")/);
   assert.match(functions, /masked: maskPhone/);
   assert.doesNotMatch(functions, /phoneE164:\s*proof\.phone|rawPhone:/);
 });
@@ -58,4 +58,13 @@ test('Firebase ID token is returned only in memory after the isolated Auth sessi
   assert.match(identity, /user\.getIdToken\(true\)/);
   assert.match(identity, /recoveryAuth\.signOut\(\)/);
   assert.doesNotMatch(identity, /SharedPreferences|Log\.|println\(/);
+});
+
+
+test('recovery phone registration is owner-authenticated and tenant-bound', () => {
+  const registration = functions.slice(functions.indexOf('export const registerRecoveryPhone'), functions.indexOf('export const issueRecoveryGrant'));
+  assert.match(registration, /request\.auth/);
+  assert.match(registration, /auth\.token\.role !== "owner"/);
+  assert.match(registration, /ownerAge >= 300/);
+  assert.match(registration, /auth\.token\.tenantId !== tenantId/);
 });
