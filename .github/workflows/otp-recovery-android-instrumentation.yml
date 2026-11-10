@@ -1,0 +1,102 @@
+name: OTP Recovery Android Instrumentation
+
+on:
+  push:
+    branches: [work/p0-storage-hardening]
+    paths:
+      - 'android/templates/**'
+      - 'scripts/patch-android.js'
+      - 'scripts/verify-android-instrumentation-results.mjs'
+      - '.github/workflows/otp-recovery-android-instrumentation.yml'
+  pull_request:
+    paths:
+      - 'android/templates/**'
+      - 'scripts/patch-android.js'
+      - 'scripts/verify-android-instrumentation-results.mjs'
+      - '.github/workflows/otp-recovery-android-instrumentation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: otp-recovery-android-instrumentation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sqlcipher-recovery-instrumentation:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 50
+    steps:
+      - name: Checkout exact candidate SHA
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Set up Java
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+
+      - name: Run repository regression suite
+        run: npm test
+
+      - name: Prepare web application
+        run: npm run build
+
+      - name: Generate Android project and restore native templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          mv android/templates "$template_dir"
+          rmdir android
+          npx cap add android
+          mkdir -p android/templates
+          cp -a "$template_dir/." android/templates/
+          test -f android/gradlew
+          test -f android/app/build.gradle
+
+      - name: Apply native security and instrumentation templates
+        run: node scripts/patch-android.js
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Compile Android and instrumentation sources
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace compileDebugJavaWithJavac compileDebugKotlin compileDebugAndroidTestJavaWithJavac testDebugUnitTest assembleDebug
+
+      - name: Run offline SQLCipher recovery instrumentation on Android emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: cd android && ./gradlew --no-daemon connectedDebugAndroidTest
+
+      - name: Verify instrumentation results contain no failures or ignored tests
+        if: always()
+        run: node scripts/verify-android-instrumentation-results.mjs android/app/build/outputs/androidTest-results/connected android/templates
+
+      - name: Upload instrumentation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: otp-recovery-sqlcipher-instrumentation-${{ github.sha }}
+          path: |
+            android/app/build/outputs/androidTest-results/connected/**
+            android/app/build/reports/androidTests/connected/**
+          if-no-files-found: warn
+          retention-days: 30
