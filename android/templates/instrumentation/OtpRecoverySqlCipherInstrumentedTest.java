@@ -112,7 +112,12 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
       envelopeStore.writeRecoveryReplacement(replacement);
       manager.confirmRecoverySwapCommitted();
       biometricStore.delete();
+      new com.aurelia.pms.security.BiometricVaultManager().invalidateAfterRecovery();
       assertFalse("biometric DEK wrapper must be invalidated after recovery", biometricStore.exists());
+      KeyStore biometricKeys = KeyStore.getInstance("AndroidKeyStore");
+      biometricKeys.load(null);
+      assertFalse("biometric Keystore alias must be invalidated after recovery",
+        biometricKeys.containsAlias("aurelia.pms.biometric.dek.v1"));
       manager.lock();
 
       // 4. PIN A must no longer authenticate the committed envelope.
