@@ -102,9 +102,13 @@ async function signGrant(tenantId: string, deviceIdHash: string, nonce: string, 
 export const registerRecoveryPhone = onCall(
   { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER] },
   async request => {
-    // This is an installation-scoped LOCAL_ONLY namespace, not a cloud tenant
-    // authorization claim. A random 128-bit ID is encrypted in Android Keystore.
+    // Phone possession is not owner authorization. Bind registration to a
+    // recently authenticated primary owner session and its server-issued tenant claim.
+    const auth = request.auth;
+    const ownerAge = Date.now() / 1000 - Number(auth?.token.auth_time ?? 0);
+    if (!auth || auth.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
     const tenantId = validateTenantId(request.data?.tenantId);
+    if (auth.token.tenantId !== tenantId) throw GENERIC;
     validateDeviceHash(request.data?.deviceIdHash);
     await spendRateLimit(`reg:${tenantId}`, 5, 60 * 60_000);
 
