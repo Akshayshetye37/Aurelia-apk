@@ -15,7 +15,7 @@ test('Forgot PIN never displays recovery key until a verified OTP grant is consu
   assert.match(recovery, /consumeAndArm/);
   assert.match(recovery, /if \(armed && RecoveryGate\.isOpen\(\)\) showRecoveryKeyPrompt\(\)/);
   assert.match(recovery, /if \(record\.otpRequired && record\.currentE164 != null && !RecoveryGate\.isOpen\(\)\)/);
-  assert.doesNotMatch(recovery, /54-character Base32 recovery key/);
+  assert.match(recovery, /if \(!record\.otpRequired \|\| record\.currentE164 == null\) \{[\s\S]*?showRecoveryKeyPrompt\(\)/);
 });
 
 test('Hotel Identity remains independent from the recovery phone and exposes a native recovery settings action', () => {
