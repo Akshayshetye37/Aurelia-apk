@@ -149,6 +149,7 @@ export class PmsBootstrapCoordinator {
       deviceId: identity.deviceId, now: this.now
     });
     bridge.bindActiveEngine(this.repository, identity);
+    this.bridge = bridge;
     await assertCompatibilityUiAllowed(bridge);
     const settingsRepository = new PmsSettingsRepository({ bridge });
     const restaurantTableRepository = new PmsRestaurantTableRepository({ bridge, now: this.now });
@@ -197,6 +198,7 @@ export class PmsBootstrapCoordinator {
   }
 
   async restoreLegacyStateFromCanonical() {
+    await assertCompatibilityUiAllowed(this.bridge);
     const existing = this.storage.getItem(AURELIA_LEGACY_STATE_KEY);
     if (existing != null && existing !== "") {
       return Object.freeze({ restored: false, source: "legacy-store-present" });
@@ -271,6 +273,7 @@ export class PmsBootstrapCoordinator {
   }
 
   async executeGuardedMigration() {
+    await assertCompatibilityUiAllowed(this.bridge);
     const rawAtStart = this.storage.getItem(AURELIA_LEGACY_STATE_KEY);
     if (rawAtStart == null || rawAtStart === "") {
       return Object.freeze({ status: "READY_EMPTY", migrated: false, entityCount: 0 });
