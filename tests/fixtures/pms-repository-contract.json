@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "timestamps": {
+    "createdAt": "2026-11-10T00:00:00.000Z",
+    "retryAt": "2999-01-01T00:00:00.000Z"
+  },
+  "entity": {
+    "type": "booking",
+    "id": "contract-booking-001",
+    "data": {
+      "id": "contract-booking-001",
+      "status": "confirmed",
+      "amountMinor": 1250,
+      "currency": "INR",
+      "createdAt": "2026-11-10T00:00:00.000Z"
+    }
+  },
+  "update": {
+    "status": "checked_in",
+    "amountMinor": 1250,
+    "currency": "INR",
+    "updatedAt": "2026-11-10T00:01:00.000Z"
+  },
+  "batch": [
+    {
+      "type": "folio",
+      "id": "contract-folio-001",
+      "data": {
+        "id": "contract-folio-001",
+        "balanceMinor": 1250,
+        "currency": "INR"
+      }
+    },
+    {
+      "type": "guest",
+      "id": "contract-guest-001",
+      "data": {
+        "id": "contract-guest-001",
+        "name": "Contract Fixture"
+      }
+    }
+  ],
+  "outbox": {
+    "deviceId": "contract-device-001",
+    "retryEventId": "contract-event-retry-001",
+    "retryAt": "2999-01-01T00:00:00.000Z"
+  },
+  "invariants": {
+    "moneyUnit": "integer-minor-units",
+    "timestampFormat": "UTC ISO-8601 with Z",
+    "entityListOrdering": "ascending entity ID"
+  }
+}
