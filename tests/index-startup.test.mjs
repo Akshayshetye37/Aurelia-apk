@@ -146,8 +146,8 @@ test('guest profile removal uses a canonical retirement transaction', async () =
   assert.doesNotMatch(body, /S\.g\.splice\(i,1\);aud\(/);
 });
 
-test("business-state UI hydration and settlement read-back never consult Web Storage", () => {
-  const fs = require("node:fs");
+test("business-state UI hydration and settlement read-back never consult Web Storage", async () => {
+  const fs = await import("node:fs");
   const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const loadAt = html.indexOf("function loadAll(){");
   const loadEnd = html.indexOf("/* autopilot */", loadAt);
