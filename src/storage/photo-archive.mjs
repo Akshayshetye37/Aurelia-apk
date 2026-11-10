@@ -18,7 +18,6 @@ export function createPhotoArchive({
   deleteLegacyPhotoFallbackEntries = () => {},
   sandboxed = isSandboxedPreview
 } = {}) {
-  const memoryFallback = new Map();
   const pendingNative = new Map();
   let nativeSequence = 0;
   let legacyMigration = null;
@@ -115,7 +114,7 @@ export function createPhotoArchive({
 
   async function put(key, data) {
     if (nativeWindow?.AureliaNative) return native("photoStore", { key, data }).then(() => true);
-    if (sandboxed()) { memoryFallback.set(key, data); return true; }
+    if (sandboxed()) throw new Error("Photo persistence is disabled in sandboxed preview; use the installed app to save originals.");
     let db;
     try {
       db = await database();
@@ -135,7 +134,6 @@ export function createPhotoArchive({
   async function get(key) {
     if (!key) return null;
     if (nativeWindow?.AureliaNative) return native("photoLoad", { key }).catch(() => null);
-    if (memoryFallback.has(key)) return memoryFallback.get(key);
     if (sandboxed()) return null;
     const db = await database();
     try {
@@ -149,11 +147,7 @@ export function createPhotoArchive({
 
   async function archive() {
     if (nativeWindow?.AureliaNative) return native("photoArchive");
-    if (sandboxed()) {
-      const memory = {};
-      memoryFallback.forEach((value, key) => { memory[key] = value; });
-      return memory;
-    }
+    if (sandboxed()) return {};
     const output = {};
     const db = await database();
     try {
@@ -182,11 +176,7 @@ export function createPhotoArchive({
       await native("photoRestore", { archive });
       return entries.length;
     }
-    if (sandboxed()) {
-      memoryFallback.clear();
-      for (const [key, value] of entries) memoryFallback.set(key, value);
-      return entries.length;
-    }
+    if (sandboxed()) throw new Error("Photo restore is disabled in sandboxed preview; restore from the installed app.");
     const db = await database();
     try {
       await new Promise((resolve, reject) => {
@@ -208,7 +198,6 @@ export function createPhotoArchive({
         throw new Error("Restored photo archive failed exact read-back verification");
       }
     } finally { db.close(); }
-    memoryFallback.clear();
     return entries.length;
   }
 
