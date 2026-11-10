@@ -546,13 +546,11 @@ public final class LocalPmsRepositoryInstrumentedTest {
     fail("configured fault checkpoint did not terminate the instrumentation process: " + checkpoint);
   }
 
-  @Test public void verifyRecoveryAfterInjectedCrash() throws Exception {
+  @Test public void verifyRepositoryIntegrityAndInjectedCrashRecovery() throws Exception {
     android.os.Bundle args = InstrumentationRegistry.getArguments();
     String checkpoint = args.getString("faultCheckpoint");
-    // This recovery assertion is a second-phase check in the dedicated process-kill
-    // matrix. The normal suite runs without faultCheckpoint and must not fail merely
-    // because it was not launched with the destructive test-runner argument.
-    if (checkpoint == null || checkpoint.isEmpty()) return;
+    // Always verify the opened database. The optional checkpoint-specific assertions
+    // run only in the dedicated second phase after a process-kill test invocation.
     try (android.database.Cursor integrity = repository.getWritableDatabase().rawQuery("PRAGMA integrity_check", null)) {
       assertTrue(integrity.moveToFirst());
       assertEquals("ok", integrity.getString(0));
@@ -560,6 +558,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
     try (android.database.Cursor foreignKeys = repository.getWritableDatabase().rawQuery("PRAGMA foreign_key_check", null)) {
       assertFalse("foreign-key violations must not survive process death", foreignKeys.moveToFirst());
     }
+    if (checkpoint == null || checkpoint.isEmpty()) return;
     if ("mid_migration".equals(checkpoint)) {
       assertEquals(0, repository.getWritableDatabase().compileStatement("SELECT COUNT(*) FROM pms_entities").simpleQueryForLong());
       assertEquals(0, repository.getWritableDatabase().compileStatement("SELECT COUNT(*) FROM pms_migrations").simpleQueryForLong());
