@@ -15,9 +15,19 @@ import java.util.Base64
 class RecoveryGrantClient(private val context: Context) {
     private val functions = FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
 
-    fun registerRecoveryPhone(phoneIdToken: String): Task<Map<*, *>> =
+    fun registerRecoveryPhone(
+        phoneIdToken: String,
+        tenantId: String,
+        deviceIdHash: String,
+        currentPhoneIdToken: String? = null
+    ): Task<Map<*, *>> =
         functions.getHttpsCallable("registerRecoveryPhone")
-            .call(mapOf("phoneIdToken" to phoneIdToken))
+            .call(mapOf(
+                "phoneIdToken" to phoneIdToken,
+                "tenantId" to tenantId,
+                "deviceIdHash" to deviceIdHash,
+                "currentPhoneIdToken" to currentPhoneIdToken
+            ))
             .continueWith { task ->
                 @Suppress("UNCHECKED_CAST")
                 task.result?.data as? Map<*, *> ?: throw IllegalStateException("Phone registration failed.")
@@ -44,29 +54,21 @@ class RecoveryGrantClient(private val context: Context) {
         functions.getHttpsCallable("consumeRecoveryGrant").call(
             mapOf("grant" to grant, "nonce" to nonce, "deviceIdHash" to deviceHash)
         ).continueWith { task ->
+            if (!task.isSuccessful) throw task.exception ?: IllegalStateException("Grant consumption failed.")
             val data = task.result?.data as? Map<*, *>
             data?.get("consumed") == true
         }
 
-    fun verifyConsumeAndArm(
+    /** Server verifies the ES256 signature, claims, expiry and one-time jti atomically. */
+    fun consumeAndArm(
         grant: String,
-        tenantId: String,
         nonce: String,
         deviceHash: String,
-        pinnedPublicKey: PublicKey,
         onResult: (Boolean) -> Unit
     ) {
-        val verified = RecoveryGrantVerifier.verify(
-            grant, pinnedPublicKey, tenantId, nonce, deviceHash,
-            RecoveryGrantReplayStore(context)::markUsed
-        )
-        if (verified !== RecoveryGrantVerifier.Result.Ok) {
-            onResult(false)
-            return
-        }
         consumeRecoveryGrant(grant, nonce, deviceHash).addOnCompleteListener { task ->
             val consumed = task.isSuccessful && task.result == true
-            if (consumed) RecoveryGate.arm(verified)
+            if (consumed) RecoveryGate.arm(RecoveryGrantVerifier.Result.Ok)
             onResult(consumed)
         }
     }
