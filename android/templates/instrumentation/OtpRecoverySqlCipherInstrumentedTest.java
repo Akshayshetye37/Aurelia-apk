@@ -35,6 +35,9 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
       new com.aurelia.pms.security.BiometricEnvelopeStore(context);
     envelopeStore.delete();
     biometricStore.delete();
+    com.aurelia.pms.security.BiometricVaultManager biometricVault =
+      new com.aurelia.pms.security.BiometricVaultManager();
+    biometricVault.invalidateAfterRecovery();
     deleteTestLockState(context);
 
     com.aurelia.pms.security.AureliaCryptoEngine crypto =
@@ -101,6 +104,11 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
 
       // Seed a structurally valid biometric wrapper, then execute the same invalidation
       // operation performed by LockGateActivity after the durable recovery swap.
+      biometricVault.createOrReplaceKey();
+      KeyStore enrolledBiometricKeys = KeyStore.getInstance("AndroidKeyStore");
+      enrolledBiometricKeys.load(null);
+      assertTrue("test must begin with an enrolled biometric Keystore key",
+        enrolledBiometricKeys.containsAlias("aurelia.pms.biometric.dek.v1"));
       byte[] fakeNonce = new byte[12];
       byte[] fakeCiphertext = new byte[48];
       Arrays.fill(fakeNonce, (byte) 0x31);
@@ -112,7 +120,7 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
       envelopeStore.writeRecoveryReplacement(replacement);
       manager.confirmRecoverySwapCommitted();
       biometricStore.delete();
-      new com.aurelia.pms.security.BiometricVaultManager().invalidateAfterRecovery();
+      biometricVault.invalidateAfterRecovery();
       assertFalse("biometric DEK wrapper must be invalidated after recovery", biometricStore.exists());
       KeyStore biometricKeys = KeyStore.getInstance("AndroidKeyStore");
       biometricKeys.load(null);
@@ -164,6 +172,7 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
       if (originalDek != null) Arrays.fill(originalDek, (byte) 0);
       envelopeStore.delete();
       biometricStore.delete();
+      biometricVault.invalidateAfterRecovery();
       context.deleteDatabase(DB);
       deleteTestLockState(context);
     }
