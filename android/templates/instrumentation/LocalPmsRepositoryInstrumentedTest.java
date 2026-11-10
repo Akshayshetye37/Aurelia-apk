@@ -703,6 +703,40 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertNull(repository.getEntity("folio", "offset-folio"));
   }
 
+  @Test public void databaseConstraintsRejectInvalidJsonTypesAndOrphanOutboxRows() throws Exception {
+    SQLiteDatabase db = repository.getWritableDatabase();
+    boolean invalidJsonRejected = false;
+    try {
+      db.execSQL("INSERT INTO pms_entities(entity_type,entity_id,version,data_json,updated_at) VALUES(?,?,?,?,?)",
+        new Object[] { "folio", "bad-json", 1, "{", System.currentTimeMillis() });
+    } catch (RuntimeException expected) { invalidJsonRejected = true; }
+    assertTrue("entity JSON must be valid at the SQLite boundary", invalidJsonRejected);
+
+    boolean unknownTypeRejected = false;
+    try {
+      db.execSQL("INSERT INTO pms_entities(entity_type,entity_id,version,data_json,updated_at) VALUES(?,?,?,?,?)",
+        new Object[] { "unknown-domain", "unknown-1", 1, "{}", System.currentTimeMillis() });
+    } catch (RuntimeException expected) { unknownTypeRejected = true; }
+    assertTrue("entity types must be constrained to the supported domain allowlist", unknownTypeRejected);
+
+    boolean orphanOutboxRejected = false;
+    try {
+      db.execSQL("INSERT INTO pms_outbox(event_id,tenant_id,property_id,device_id,entity_type,entity_id,sequence,event_type,schema_version,occurred_at,payload_json,status,attempts,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        new Object[] { "orphan-event", "tenant-test", "property-test", "device-test",
+          "folio", "missing-folio", 1, "folio.created", 1,
+          "2026-11-10T00:00:00.000Z", "{}", "PENDING", 0, System.currentTimeMillis() });
+    } catch (RuntimeException expected) { orphanOutboxRejected = true; }
+    assertTrue("outbox rows must reference an existing canonical entity", orphanOutboxRejected);
+
+    try (Cursor foreignKeys = db.rawQuery("PRAGMA foreign_key_list(pms_outbox)", null)) {
+      boolean entityForeignKeyFound = false;
+      while (foreignKeys.moveToNext()) {
+        if ("pms_entities".equals(foreignKeys.getString(2))) entityForeignKeyFound = true;
+      }
+      assertTrue("outbox composite entity foreign key must be installed", entityForeignKeyFound);
+    }
+  }
+
   @Test public void auditRowsAreAppendOnlyAtTheDatabaseBoundary() throws Exception {
     repository.transactBusinessChange("audit", "audit-immutable", 0, data("original"),
       event("audit-immutable-event", "audit", "audit-immutable", 1));
