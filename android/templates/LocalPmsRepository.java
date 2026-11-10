@@ -92,7 +92,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
 
   synchronized JSONArray listEntities(String type) {
     validateIdentity(type,"entity type"); JSONArray rows=new JSONArray();
-    try(Cursor c=getReadableDatabase().rawQuery("SELECT entity_id,version,data_json,updated_at FROM pms_entities WHERE entity_type=? ORDER BY entity_id",new String[]{type})) {
+    try(Cursor c=getReadableDatabase().rawQuery("SELECT entity_id,version,data_json,updated_at FROM pms_entities WHERE entity_type=? ORDER BY COALESCE(json_extract(data_json,'$.createdAt'),''),entity_id",new String[]{type})) {
       while(c.moveToNext()) { JSONObject row=new JSONObject(); row.put("key",type+":"+c.getString(0)); row.put("type",type); row.put("id",c.getString(0)); row.put("version",c.getLong(1)); row.put("data",new JSONTokener(c.getString(2)).nextValue()); row.put("updatedAt",isoTimestamp(c.getLong(3)));rows.put(row); }
       return rows;
     } catch(Exception e){throw failure("pms_entity_list_failed",e);}
