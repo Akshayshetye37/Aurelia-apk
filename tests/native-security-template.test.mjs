@@ -303,3 +303,9 @@ test('missing enrollment envelope never silently creates a new key and offers on
   assert.match(gate, /clearEnrollmentMarkerForConfirmedDestructiveReset/);
   assert.match(runtime, /clearEnrollmentMarkerForConfirmedDestructiveReset/);
 });
+
+test('biometric-only unlock remains available if the PIN envelope is missing', () => {
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.match(gate, /!envelopeExists && !biometricStore\.exists\(\)/);
+  assert.match(gate, /if \(biometricStore\.exists\(\)\)/);
+});
