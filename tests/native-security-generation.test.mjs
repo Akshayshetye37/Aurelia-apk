@@ -166,5 +166,6 @@ test('existing encrypted database cannot enter first-time enrollment without its
   assert.match(gate, /databaseExists && \(!enrolled \|\| !envelopeExists\)/);
   assert.match(manager, /fun enroll\(pin: CharArray\)/);
   assert.match(manager, /context\.getDatabasePath\("aurelia-pms-encrypted\.db"\)/);
-  assert.match(manager, /if \(databaseExists\) throw SecurityException/);
+  assert.match(manager, /databaseExists \|\| AureliaEnvelopeStore\(context\)\.exists\(\) \|\| AureliaSecurityRuntime\.isEnrolled\(\)/);
+  assert.match(manager, /refusing DEK regeneration/);
 });
