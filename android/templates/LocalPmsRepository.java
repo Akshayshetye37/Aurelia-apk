@@ -12,7 +12,7 @@ import org.json.JSONObject;
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String NAME = "aurelia-pms-encrypted.db";
-  private static final int VERSION = 5;
+  private static final int VERSION = 6;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   private final Context appContext;
@@ -65,12 +65,46 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
 
   @Override public void onCreate(SQLiteDatabase db) {
     db.execSQL("PRAGMA foreign_keys=ON");
-    db.execSQL("CREATE TABLE pms_entities(entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,version INTEGER NOT NULL CHECK(version>=1),data_json TEXT NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(entity_type,entity_id))");
-    db.execSQL("CREATE TABLE pms_outbox(event_id TEXT PRIMARY KEY NOT NULL,tenant_id TEXT NOT NULL,property_id TEXT NOT NULL,device_id TEXT NOT NULL,entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence>=1),event_type TEXT NOT NULL,schema_version INTEGER NOT NULL,occurred_at TEXT NOT NULL,payload_json TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('PENDING','IN_FLIGHT','ACKNOWLEDGED','RETRY','CONFLICT')),attempts INTEGER NOT NULL DEFAULT 0,retry_at TEXT,lease_owner TEXT,lease_until INTEGER,last_error_code TEXT,created_at INTEGER NOT NULL,acknowledged_at INTEGER,UNIQUE(entity_type,entity_id,sequence))");
-    db.execSQL("CREATE INDEX pms_outbox_delivery_idx ON pms_outbox(status,retry_at,created_at)");
-    db.execSQL("CREATE TABLE pms_migrations(migration_key TEXT PRIMARY KEY NOT NULL,migration_id TEXT NOT NULL,source_key TEXT NOT NULL,completed_at INTEGER NOT NULL,entity_count INTEGER NOT NULL)");
-    db.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL,source_timestamp TEXT NOT NULL,created_at INTEGER NOT NULL,format_version INTEGER NOT NULL)");
+    createConstrainedEntityTable(db, "pms_entities");
+    createConstrainedOutboxTable(db, "pms_outbox");
+    createOutboxIndexes(db);
+    db.execSQL("CREATE TABLE pms_migrations(migration_key TEXT PRIMARY KEY NOT NULL,migration_id TEXT NOT NULL,source_key TEXT NOT NULL,completed_at INTEGER NOT NULL CHECK(completed_at>=0),entity_count INTEGER NOT NULL CHECK(entity_count>=0))");
+    db.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL CHECK(json_valid(raw_json)),source_timestamp TEXT NOT NULL,created_at INTEGER NOT NULL CHECK(created_at>=0),format_version INTEGER NOT NULL CHECK(format_version>=1))");
     createAuditAppendOnlyTriggers(db);
+  }
+
+  private static String allowedEntityTypesSql() {
+    return "'booking','folio','payment','guest','room','room_block','inventory','expense','ledger','restaurant_table','restaurant_sale','settings','audit'";
+  }
+
+  private static void createConstrainedEntityTable(SQLiteDatabase db, String table) {
+    db.execSQL("CREATE TABLE " + table + "(entity_type TEXT NOT NULL CHECK(entity_type IN (" + allowedEntityTypesSql() + ")),entity_id TEXT NOT NULL CHECK(length(entity_id) BETWEEN 1 AND 180),version INTEGER NOT NULL CHECK(version>=1),data_json TEXT NOT NULL CHECK(json_valid(data_json)=1),updated_at INTEGER NOT NULL CHECK(updated_at>=0),PRIMARY KEY(entity_type,entity_id))");
+  }
+
+  private static void createConstrainedOutboxTable(SQLiteDatabase db, String table) {
+    db.execSQL("CREATE TABLE " + table + "(event_id TEXT PRIMARY KEY NOT NULL CHECK(length(event_id) BETWEEN 1 AND 180),tenant_id TEXT NOT NULL CHECK(length(tenant_id) BETWEEN 1 AND 180),property_id TEXT NOT NULL CHECK(length(property_id) BETWEEN 1 AND 180),device_id TEXT NOT NULL CHECK(length(device_id) BETWEEN 1 AND 180),entity_type TEXT NOT NULL CHECK(entity_type IN (" + allowedEntityTypesSql() + ")),entity_id TEXT NOT NULL CHECK(length(entity_id) BETWEEN 1 AND 180),sequence INTEGER NOT NULL CHECK(sequence>=1),event_type TEXT NOT NULL CHECK(length(event_type) BETWEEN 1 AND 180),schema_version INTEGER NOT NULL CHECK(schema_version>=1),occurred_at TEXT NOT NULL CHECK(substr(occurred_at,-1,1)='Z'),payload_json TEXT NOT NULL CHECK(json_valid(payload_json)=1),status TEXT NOT NULL CHECK(status IN ('PENDING','IN_FLIGHT','ACKNOWLEDGED','RETRY','CONFLICT')),attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts>=0),retry_at TEXT,lease_owner TEXT,lease_until INTEGER,last_error_code TEXT,created_at INTEGER NOT NULL CHECK(created_at>=0),acknowledged_at INTEGER,UNIQUE(entity_type,entity_id,sequence),FOREIGN KEY(entity_type,entity_id) REFERENCES pms_entities(entity_type,entity_id) ON UPDATE RESTRICT ON DELETE RESTRICT)");
+  }
+
+  private static void createOutboxIndexes(SQLiteDatabase db) {
+    db.execSQL("CREATE INDEX IF NOT EXISTS pms_outbox_delivery_idx ON pms_outbox(status,retry_at,created_at)");
+  }
+
+  private static void upgradeRepositoryConstraints(SQLiteDatabase db) {
+    db.execSQL("DROP TABLE IF EXISTS pms_entities_v6");
+    createConstrainedEntityTable(db, "pms_entities_v6");
+    db.execSQL("INSERT INTO pms_entities_v6(entity_type,entity_id,version,data_json,updated_at) SELECT entity_type,entity_id,version,data_json,updated_at FROM pms_entities");
+    db.execSQL("DROP TABLE pms_entities");
+    db.execSQL("ALTER TABLE pms_entities_v6 RENAME TO pms_entities");
+
+    db.execSQL("DROP TABLE IF EXISTS pms_outbox_v6");
+    createConstrainedOutboxTable(db, "pms_outbox_v6");
+    db.execSQL("INSERT INTO pms_outbox_v6(event_id,tenant_id,property_id,device_id,entity_type,entity_id,sequence,event_type,schema_version,occurred_at,payload_json,status,attempts,retry_at,lease_owner,lease_until,last_error_code,created_at,acknowledged_at) SELECT event_id,tenant_id,property_id,device_id,entity_type,entity_id,sequence,event_type,schema_version,occurred_at,payload_json,status,attempts,retry_at,lease_owner,lease_until,last_error_code,created_at,acknowledged_at FROM pms_outbox");
+    db.execSQL("DROP TABLE pms_outbox");
+    db.execSQL("ALTER TABLE pms_outbox_v6 RENAME TO pms_outbox");
+    createOutboxIndexes(db);
+    try (Cursor violations = db.rawQuery("PRAGMA foreign_key_check", null)) {
+      if (violations.moveToFirst()) throw new IllegalStateException("pms_outbox_foreign_key_migration_failed");
+    }
   }
   @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {
     if(oldVersion<2) db.execSQL("ALTER TABLE pms_outbox ADD COLUMN acknowledged_at INTEGER");
@@ -83,6 +117,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       db.execSQL("DROP TRIGGER IF EXISTS pms_audit_no_delete");
       createAuditAppendOnlyTriggers(db);
     }
+    if(oldVersion<6) upgradeRepositoryConstraints(db);
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
 
