@@ -28,7 +28,8 @@
       "data": {
         "id": "contract-folio-001",
         "balanceMinor": 1250,
-        "currency": "INR"
+        "currency": "INR",
+        "createdAt": "2026-11-10T00:01:00.000Z"
       }
     },
     {
@@ -36,7 +37,8 @@
       "id": "contract-guest-001",
       "data": {
         "id": "contract-guest-001",
-        "name": "Contract Fixture"
+        "name": "Contract Fixture",
+        "createdAt": "2026-11-10T00:02:00.000Z"
       }
     }
   ],
@@ -48,6 +50,6 @@
   "invariants": {
     "moneyUnit": "integer-minor-units",
     "timestampFormat": "UTC ISO-8601 with Z",
-    "entityListOrdering": "ascending entity ID"
+    "entityListOrdering": "ascending createdAt then entity ID"
   }
 }
