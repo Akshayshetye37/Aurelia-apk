@@ -7,7 +7,7 @@ const stableId = z.union([
 const base = z.object({ id: stableId.optional() }).passthrough();
 
 const booking = base.superRefine((row, context) => {
-  if (row.st !== undefined && !["res", "in", "done", "checkedin", "checked-in", "checked_in"].includes(row.st)) {
+  if (row.st !== undefined && !["res", "in", "done", "cancelled", "checkedin", "checked-in", "checked_in"].includes(row.st)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["st"], message: "unsupported booking lifecycle state" });
   }
   if (row.status !== undefined && !["reserved", "confirmed", "checked_in", "checked_out", "cancelled"].includes(row.status)) {
@@ -69,7 +69,7 @@ export function validatePmsDomainEntity(entityType, value) {
 
 const TRANSITIONS = Object.freeze({
   booking: Object.freeze({
-    st: Object.freeze({ res: ["in"], in: ["done"], checkedin: ["done"], "checked-in": ["done"], checked_in: ["done"], done: [] }),
+    st: Object.freeze({ res: ["in", "cancelled"], in: ["done"], checkedin: ["done"], "checked-in": ["done"], checked_in: ["done"], done: [], cancelled: [] }),
     status: Object.freeze({ reserved: ["confirmed", "cancelled"], confirmed: ["checked_in", "cancelled"], checked_in: ["checked_out"], checked_out: [], cancelled: [] })
   }),
   room: Object.freeze({
