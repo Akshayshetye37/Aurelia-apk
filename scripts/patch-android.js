@@ -1743,6 +1743,9 @@ if (!fs.existsSync(sharedContractFixture)) throw new Error('Shared repository co
 const instrumentationAssetsDir = path.join(androidDir, 'app', 'src', 'androidTest', 'assets');
 fs.mkdirSync(instrumentationAssetsDir, { recursive: true });
 fs.copyFileSync(sharedContractFixture, path.join(instrumentationAssetsDir, 'pms-repository-contract.json'));
+const propertySequenceFixture = path.join(__dirname, '..', 'tests', 'fixtures', 'pms-repository-property-sequences.json');
+if (!fs.existsSync(propertySequenceFixture)) throw new Error('Repository property sequence fixture is missing.');
+fs.copyFileSync(propertySequenceFixture, path.join(instrumentationAssetsDir, 'pms-repository-property-sequences.json'));
 
 function ensurePmsInstrumentation(contents, kotlinDsl) {
   if (!/defaultConfig\s*\{/.test(contents)) throw new Error('Android defaultConfig block is missing; instrumentation runner cannot be configured.');
