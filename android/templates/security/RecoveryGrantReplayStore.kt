@@ -22,8 +22,13 @@ class RecoveryGrantReplayStore(context: Context) {
         val nonce = ByteArray(12).also(java.security.SecureRandom()::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key(), GCMParameterSpec(128, nonce))
-        cipher.updateAAD(AAD)
-        val encrypted = cipher.doFinal(jti.toByteArray(Charsets.UTF_8))
+        cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
+        val plaintext = jti.toByteArray(Charsets.UTF_8)
+        val encrypted = try {
+            cipher.doFinal(plaintext)
+        } finally {
+            plaintext.fill(0)
+        }
         val packed = nonce + encrypted
         try {
             check(prefs.edit().putString(BLOB, Base64.encodeToString(packed, Base64.NO_WRAP)).commit())
