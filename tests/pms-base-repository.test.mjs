@@ -46,3 +46,32 @@ test("BaseRepo rejects malformed identities and unsupported entity types", async
   await assert.rejects(repo.create("../guest", { n: "Invalid" }));
   assert.throws(() => new BaseRepo({ bridge: {}, entityType: "unknown" }));
 });
+
+test("the shared bridge validates every domain mutation before persistence", async () => {
+  const { IndexedDbPmsRepository } = await import("../src/storage/indexeddb-pms-repository.mjs");
+  const { PmsRepositoryBridge } = await import("../src/storage/pms-repository-bridge.mjs");
+  const adapter = new IndexedDbPmsRepository({ indexedDBImpl: indexedDB, databaseName: "bridge-zod-write-guard" });
+  await adapter.database();
+  const bridge = new PmsRepositoryBridge({
+    tenantId: "tenant-base-repo", propertyId: "property-base-repo", deviceId: "device-base-repo",
+    eventId: () => "bridge-zod-event"
+  });
+  bridge.bindActiveEngine(adapter, { tenantId: "tenant-base-repo", propertyId: "property-base-repo", deviceId: "device-base-repo" });
+  try {
+    await assert.rejects(
+      bridge.mutateEntity({
+        entityType: "inventory", entityId: "bad-stock", expectedVersion: 0,
+        eventType: "inventory.created",
+        mutate: row => Object.assign(row, { n: "Invalid", q: 1.5, ro: 0 })
+      }),
+      error => error.code === "PMS_DOMAIN_VALIDATION_FAILED"
+    );
+    assert.equal(await bridge.fetchEntity("inventory", "bad-stock"), null);
+    const good = await bridge.mutateEntity({
+      entityType: "inventory", entityId: "good-stock", expectedVersion: 0,
+      eventType: "inventory.created",
+      mutate: row => Object.assign(row, { n: "Coffee", q: 4, ro: 1, u: 3.5 })
+    });
+    assert.equal(good.entity.version, 1);
+  } finally { adapter.close?.(); }
+});
