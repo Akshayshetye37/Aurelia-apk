@@ -1,6 +1,5 @@
 package com.aurelia.pms.security
 
-import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
@@ -11,6 +10,10 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import org.json.JSONObject
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import android.widget.Toast
 import com.aurelia.pms.MainActivity
 
@@ -20,9 +23,11 @@ import com.aurelia.pms.MainActivity
  *
  * This is a first native gate, not a claim that a compromised/rooted OS is safe.
  */
-class LockGateActivity : Activity() {
+class LockGateActivity : FragmentActivity() {
     private lateinit var manager: AureliaAppManager
     private lateinit var envelopeStore: AureliaEnvelopeStore
+    private lateinit var biometricVault: BiometricVaultManager
+    private lateinit var biometricStore: BiometricEnvelopeStore
     private var enrollmentMode = false
     private var pinField: EditText? = null
     private var confirmField: EditText? = null
@@ -35,6 +40,8 @@ class LockGateActivity : Activity() {
         )
         manager = AureliaSecurityRuntime.manager(this)
         envelopeStore = AureliaEnvelopeStore(this)
+        biometricVault = BiometricVaultManager()
+        biometricStore = BiometricEnvelopeStore(this)
         val enrolled = AureliaSecurityRuntime.isEnrolled()
         val envelopeExists = envelopeStore.exists()
         val databaseExists = encryptedDatabaseExists()
@@ -95,6 +102,13 @@ class LockGateActivity : Activity() {
         }
         root.addView(button, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 24 })
         if (!enrollmentMode) {
+            if (biometricStore.exists()) {
+                val biometric = Button(this).apply {
+                    text = "Unlock with biometrics"
+                    setOnClickListener { unlockWithBiometrics() }
+                }
+                root.addView(biometric, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 8 })
+            }
             val forgot = Button(this).apply {
                 text = "Forgot PIN?"
                 setOnClickListener { showRecoveryPrompt() }
@@ -128,7 +142,7 @@ class LockGateActivity : Activity() {
                 val envelope = readEnvelope()
                 if (manager.unlock(first, envelope)) {
                     if (JSONObject(envelope).has("recovery")) {
-                        openPms()
+                        continueAfterPinUnlock()
                     } else {
                         val migrated = manager.enableRecoveryKey(first, envelope)
                         writeEnvelope(migrated.envelopeJson)
@@ -163,10 +177,151 @@ class LockGateActivity : Activity() {
             .setPositiveButton("I saved it") { _, _ ->
                 code.text = ""
                 recoveryKey.fill('\u0000')
-                openPms()
+                offerBiometricEnrollment()
             }
             .setCancelable(false)
             .show()
+    }
+
+    private fun continueAfterPinUnlock() {
+        if (!biometricStore.exists()) {
+            offerBiometricEnrollment()
+            return
+        }
+        try {
+            val wrapped = biometricStore.read()
+            if (biometricVault.isKeyInvalidated(wrapped.nonce)) {
+                biometricStore.delete()
+                biometricVault.replaceInvalidatedKeyAfterPinAuthorization()
+                offerBiometricEnrollment()
+            } else {
+                openPms()
+            }
+            wrapped.nonce.fill(0)
+            wrapped.ciphertext.fill(0)
+        } catch (_: Exception) {
+            // PIN is already authenticated. A corrupt or invalidated biometric
+            // wrapper may be replaced without changing the database DEK.
+            biometricStore.delete()
+            biometricVault.replaceInvalidatedKeyAfterPinAuthorization()
+            offerBiometricEnrollment()
+        }
+    }
+
+    private fun offerBiometricEnrollment() {
+        if (!biometricVault.isStrongBiometricAvailable(this)) {
+            openPms()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Enable biometric unlock?")
+            .setMessage("Biometrics will wrap the same database key as your PIN. PIN and recovery remain available.")
+            .setPositiveButton("Enable") { _, _ -> enrollBiometrics() }
+            .setNegativeButton("Not now") { _, _ -> openPms() }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun enrollBiometrics() {
+        try {
+            biometricVault.createOrReplaceKey()
+            val cryptoObject = biometricVault.prepareEncryptOperation()
+            val prompt = BiometricPrompt(
+                this,
+                ContextCompat.getMainExecutor(this),
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        val dek = manager.currentDataKeyCopy()
+                        try {
+                            val wrapped = biometricVault.encryptAfterAuthentication(
+                                result.cryptoObject ?: cryptoObject, dek
+                            )
+                            biometricStore.write(wrapped)
+                            wrapped.nonce.fill(0)
+                            wrapped.ciphertext.fill(0)
+                            openPms()
+                        } catch (failure: Exception) {
+                            showError(failure.message ?: "Biometric enrollment failed.")
+                            openPms()
+                        } finally {
+                            dek.fill(0)
+                        }
+                    }
+
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        showError(errString.toString())
+                        openPms()
+                    }
+                }
+            )
+            prompt.authenticate(
+                BiometricPrompt.PromptInfo.Builder()
+                    .setTitle("Enable Aurelia biometric unlock")
+                    .setSubtitle("Wrap the existing database key")
+                    .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                    .setNegativeButtonText("Skip")
+                    .build(),
+                cryptoObject
+            )
+        } catch (failure: Exception) {
+            showError(failure.message ?: "Biometric unlock is unavailable.")
+            openPms()
+        }
+    }
+
+    private fun unlockWithBiometrics() {
+        val wrapped = try { biometricStore.read() } catch (failure: Exception) {
+            showError("Biometric wrapper is damaged. Unlock with PIN to recover it.")
+            return
+        }
+        try {
+            val cryptoObject = biometricVault.prepareDecryptOperation(wrapped.nonce)
+            val prompt = BiometricPrompt(
+                this,
+                ContextCompat.getMainExecutor(this),
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        var dek: ByteArray? = null
+                        try {
+                            dek = biometricVault.decryptAfterAuthentication(
+                                result.cryptoObject ?: cryptoObject, wrapped.ciphertext
+                            )
+                            manager.unlockWithDataKey(dek)
+                            openPms()
+                        } catch (failure: Exception) {
+                            showError(failure.message ?: "Biometric key authentication failed.")
+                        } finally {
+                            dek?.fill(0)
+                            wrapped.nonce.fill(0)
+                            wrapped.ciphertext.fill(0)
+                        }
+                    }
+
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        showError(errString.toString() + ". Use your PIN if biometric authentication is unavailable.")
+                        wrapped.nonce.fill(0)
+                        wrapped.ciphertext.fill(0)
+                    }
+                }
+            )
+            prompt.authenticate(
+                BiometricPrompt.PromptInfo.Builder()
+                    .setTitle("Unlock Aurelia PMS")
+                    .setSubtitle("Authenticate to unwrap the existing database key")
+                    .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                    .setNegativeButtonText("Use PIN")
+                    .build(),
+                cryptoObject
+            )
+        } catch (failure: android.security.keystore.KeyPermanentlyInvalidatedException) {
+            wrapped.nonce.fill(0)
+            wrapped.ciphertext.fill(0)
+            showError("Biometric enrollment changed. Unlock with PIN to re-wrap the same database key.")
+        } catch (failure: Exception) {
+            wrapped.nonce.fill(0)
+            wrapped.ciphertext.fill(0)
+            showError(failure.message ?: "Biometric unlock is unavailable. Use your PIN.")
+        }
     }
 
     private fun showRecoveryPrompt() {
