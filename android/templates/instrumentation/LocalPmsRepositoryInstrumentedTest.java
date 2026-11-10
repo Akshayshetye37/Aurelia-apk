@@ -159,6 +159,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
       roots.add(context.getFilesDir());
       roots.add(context.getNoBackupFilesDir());
       roots.add(context.getCacheDir());
+      roots.add(context.getDatabasePath("aurelia-pms-encrypted.db").getParentFile());
       roots.add(new File(context.getFilesDir().getParentFile(), "shared_prefs"));
       java.util.ArrayDeque<File> pending = new java.util.ArrayDeque<>(roots);
       while (!pending.isEmpty()) {
