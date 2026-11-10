@@ -5481,7 +5481,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 </script>
 <script type="module" id="aurelia-async-runtime-bootstrap">
 import { PmsBootstrapCoordinator } from "./src/storage/pms-bootstrap-coordinator.mjs";
-import { createLegacyMigrationStorage, readLegacyPhotoFallbackEntries, deleteLegacyPhotoFallbackEntries } from "./src/storage/legacy-web-storage.mjs";
+import { createLegacyMigrationStorage, createPreferenceStorage, readLegacyPhotoFallbackEntries, deleteLegacyPhotoFallbackEntries } from "./src/storage/legacy-web-storage.mjs";
 import { createPhotoArchive } from "./src/storage/photo-archive.mjs";
 import { createBackupVaultStore } from "./src/storage/backup-vault-store.mjs";
 import { storageBridge } from "./src/storage/pms-repository-bridge.mjs";
@@ -5492,6 +5492,7 @@ import { commitReservationToRepository } from "./src/storage/repository-reservat
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
 const legacyStorage = createLegacyMigrationStorage();
+window.AureliaPreferences = createPreferenceStorage({ mode: window.AURELIA_PRODUCTION === true ? "production" : "strict" });
 window.AureliaPhotoArchive = createPhotoArchive({
   readLegacyPhotoFallbackEntries,
   deleteLegacyPhotoFallbackEntries
