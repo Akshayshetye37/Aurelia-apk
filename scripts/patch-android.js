@@ -650,6 +650,8 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     // Explicit registration is required: the custom plugin is not discovered by package scanning.
     registerPlugin(CapacitorPmsStoragePlugin.class);
     super.onCreate(savedInstanceState);
+    // PMS guest, folio, payment and recovery screens can expose sensitive records.
+    getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
     getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
       @Override public void handleOnBackPressed() {
         if (bridge == null || bridge.getWebView() == null) {
