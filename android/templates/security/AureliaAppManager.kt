@@ -21,8 +21,9 @@ class AureliaAppManager(
 
     /** Generates a fresh DEK and wraps it under the new PIN. Caller persists the envelope atomically. */
     @Synchronized
-    fun enroll(pin: CharArray): Enrollment {
+    fun enroll(pin: CharArray, databaseExists: Boolean): Enrollment {
         lockout.assertUnlocked()
+        if (databaseExists) throw SecurityException("Encrypted database exists without a usable key envelope; refusing DEK regeneration.")
         val dek = ByteArray(32).also(random::nextBytes)
         return try {
             val envelope = crypto.wrapDataKey(dek, pin)
