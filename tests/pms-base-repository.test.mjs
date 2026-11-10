@@ -4,6 +4,7 @@ import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
 import { BaseRepo } from "../src/storage/pms-base-repository.mjs";
+import { GuestRepo, RoomRepo, ReservationRepo, FolioRepo } from "../src/storage/pms-domain-repositories.mjs";
 
 let eventSequence = 0;
 async function makeRepo(entityType, databaseName) {
@@ -95,5 +96,24 @@ test("BaseRepo requires an explicit permission evaluator and checks each operati
       error => error.code === "PMS_REPOSITORY_PERMISSION_DENIED" && error.action === "create");
     assert.equal(await bridge.fetchEntity("guest", "guest-denied"), null);
     assert.deepEqual(calls.map(call => call.action), ["create"]);
+  } finally { adapter.close?.(); }
+});
+
+test("domain repository adapters bind guest, room, reservation and folio domains", async () => {
+  const adapter = new IndexedDbPmsRepository({ indexedDBImpl: indexedDB, databaseName: "pms-domain-repository-bindings" });
+  await adapter.database();
+  const bridge = new PmsRepositoryBridge({
+    tenantId: "tenant-domain-repos", propertyId: "property-domain-repos", deviceId: "device-domain-repos"
+  });
+  bridge.bindActiveEngine(adapter, {
+    tenantId: "tenant-domain-repos", propertyId: "property-domain-repos", deviceId: "device-domain-repos"
+  });
+  const authorize = () => true;
+  try {
+    assert.equal(new GuestRepo({ bridge, authorize }).entityType, "guest");
+    assert.equal(new RoomRepo({ bridge, authorize }).entityType, "room");
+    assert.equal(new ReservationRepo({ bridge, authorize }).entityType, "booking");
+    assert.equal(new FolioRepo({ bridge, authorize }).entityType, "folio");
+    assert.throws(() => new GuestRepo({ bridge, authorize, entityType: "room" }), /cannot be rebound/);
   } finally { adapter.close?.(); }
 });

@@ -66,14 +66,46 @@ function records(snapshot, migrationId) {
   }, "set/menu");
 
   snapshot.rooms.forEach((row, index) => {
-    if (!row || typeof row !== "object") throw new Error("Malformed legacy room at index " + index);
-    const id = safeId(row.id ?? row.n, "room identity");
-    add("room", id, { ...clone(row), id }, "rooms");
+    if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("Malformed legacy room at index " + index);
+    const id = safeId(row.id ?? row.n ?? row.room ?? row.roomNo, "room identity");
+    const roomNumber = row.n ?? row.room ?? row.roomNo ?? id;
+    const rate = Number(row.r ?? row.rate ?? 0);
+    if (!Number.isFinite(rate) || rate < 0 || Math.abs(rate * 100 - Math.round(rate * 100)) > 1e-7) {
+      throw new Error("Legacy room rate is malformed; projection stopped.");
+    }
+    const data = {
+      id,
+      n: typeof roomNumber === "number" ? roomNumber : String(roomNumber),
+      t: String(row.t ?? row.type ?? "Room"),
+      r: rate,
+      s: row.s ?? "ready"
+    };
+    if (row.demo === true) data.demo = true;
+    if (row.status_changed !== undefined) data.status_changed = row.status_changed;
+    add("room", id, data, "rooms");
   });
   snapshot.g.forEach((row, index) => {
-    if (!row || typeof row !== "object") throw new Error("Malformed legacy guest at index " + index);
+    if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("Malformed legacy guest at index " + index);
     const id = safeId(row.id ?? "legacy-guest-" + index, "guest identity");
-    add("guest", id, { ...clone(row), id }, "g");
+    const name = safeId(row.n ?? row.name ?? row.guestName ?? row.fullName, "guest name");
+    const data = {
+      id,
+      n: name,
+      ph: String(row.ph ?? row.phone ?? ""),
+      em: String(row.em ?? row.email ?? ""),
+      idt: String(row.idt ?? row.idType ?? ""),
+      idn: String(row.idn ?? row.idNumber ?? ""),
+      occ: Array.isArray(row.occ) ? row.occ.map(person => ({
+        n: String(person?.n ?? ""), dob: String(person?.dob ?? ""), rel: String(person?.rel ?? "")
+      })) : [],
+      veh: Array.isArray(row.veh) ? row.veh.map(vehicle => ({
+        reg: String(vehicle?.reg ?? ""), ty: String(vehicle?.ty ?? "")
+      })) : []
+    };
+    if (typeof row.img === "string") data.img = row.img;
+    if (typeof row.imgKey === "string") data.imgKey = row.imgKey;
+    if (row.demo === true) data.demo = true;
+    add("guest", id, data, "g");
   });
   snapshot.b.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy booking at index " + index);

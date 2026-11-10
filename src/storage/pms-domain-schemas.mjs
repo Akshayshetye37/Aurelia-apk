@@ -14,11 +14,46 @@ const booking = base.superRefine((row, context) => {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["status"], message: "unsupported booking lifecycle state" });
   }
 });
-const room = base.superRefine((row, context) => {
-  if (row.s !== undefined && !["ready", "occ", "clean", "out", "maintenance"].includes(row.s)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["s"], message: "unsupported room lifecycle state" });
-  }
-});
+const guest = z.object({
+  id: stableId.optional(),
+  n: z.string().trim().min(1).max(180),
+  ph: z.string().max(80).optional(),
+  em: z.string().max(254).optional(),
+  idt: z.string().max(80).optional(),
+  idn: z.string().max(160).optional(),
+  occ: z.array(z.object({
+    n: z.string().max(180).optional(),
+    dob: z.string().max(32).optional(),
+    rel: z.string().max(80).optional()
+  }).strict()).optional(),
+  veh: z.array(z.object({
+    reg: z.string().max(40).optional(),
+    ty: z.string().max(80).optional()
+  }).strict()).optional(),
+  img: z.string().max(20_000_000).optional(),
+  imgKey: z.string().max(180).optional(),
+  demo: z.boolean().optional(),
+  // Explicitly retained import aliases; unknown top-level keys are rejected.
+  name: z.string().max(180).optional(),
+  guestName: z.string().max(180).optional(),
+  fullName: z.string().max(180).optional(),
+  phone: z.string().max(80).optional(),
+  email: z.string().max(254).optional(),
+  vehicles: z.array(z.unknown()).optional(),
+  dob: z.string().max(32).optional()
+}).strict();
+
+const room = z.object({
+  id: stableId.optional(),
+  n: z.union([z.string().trim().min(1).max(80), z.number().int().safe()]),
+  t: z.string().trim().min(1).max(120),
+  r: z.number().finite().nonnegative().refine(value =>
+    Math.abs(value * 100 - Math.round(value * 100)) <= 1e-7,
+    "room rate must have at most two decimal places"),
+  s: z.enum(["ready", "occ", "clean", "out", "maintenance"]),
+  demo: z.boolean().optional(),
+  status_changed: z.union([z.string(), z.number(), z.boolean()]).optional()
+}).strict();
 
 const inventory = base.superRefine((row, context) => {
   for (const field of ["q", "ro"]) {
@@ -37,7 +72,7 @@ const inventory = base.superRefine((row, context) => {
 const schemas = {
   booking,
   folio: base,
-  guest: base,
+  guest,
   room,
   room_block: base,
   inventory,
