@@ -248,6 +248,17 @@ public final class LocalPmsRepositoryInstrumentedTest {
   }
 
 
+  @Test public void sqliteRejectsNonUtcOutboxTimestamps() throws Exception {
+    JSONObject invalid = event("offset-event", "folio", "offset-folio", 1);
+    invalid.put("occurredAt", "2026-11-09T17:30:00.000+05:30");
+    boolean rejected = false;
+    try {
+      repository.transactBusinessChange("folio", "offset-folio", 0, data("must-not-commit"), invalid);
+    } catch (RuntimeException expected) { rejected = true; }
+    assertTrue("SQLite repository must reject timestamps that are not UTC Z values", rejected);
+    assertNull(repository.getEntity("folio", "offset-folio"));
+  }
+
   @Test public void auditRowsAreAppendOnlyAtTheDatabaseBoundary() throws Exception {
     repository.transactBusinessChange("audit", "audit-immutable", 0, data("original"),
       event("audit-immutable-event", "audit", "audit-immutable", 1));
