@@ -145,7 +145,9 @@ class LockGateActivity : FragmentActivity() {
                 if (manager.unlock(first, envelope)) {
                     if (envelopeStore.hasPreviousEnvelope()) envelopeStore.confirmRecoveryPinUnlock()
                     AureliaSecurityRuntime.markEnrolled()
-                    if (JSONObject(envelope).has("recovery")) {
+                    if (first.size < 6) {
+                        showMandatoryPinUpgrade(first, envelope)
+                    } else if (JSONObject(envelope).has("recovery")) {
                         continueAfterPinUnlock()
                     } else {
                         val migrated = manager.enableRecoveryKey(first, envelope)
@@ -164,6 +166,60 @@ class LockGateActivity : FragmentActivity() {
             pinField?.text?.clear()
             confirmField?.text?.clear()
         }
+    }
+
+    private fun showMandatoryPinUpgrade(currentPin: CharArray, currentEnvelope: String) {
+        val current = currentPin.copyOf()
+        val next = EditText(this).apply {
+            hint = "New 6–16 digit PIN"
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            filters = arrayOf(android.text.InputFilter.LengthFilter(16))
+        }
+        val confirm = EditText(this).apply {
+            hint = "Confirm new PIN"
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            filters = arrayOf(android.text.InputFilter.LengthFilter(16))
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(next)
+            addView(confirm)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Upgrade your PIN")
+            .setMessage("Your existing PIN is still accepted to preserve access. Set a stronger 6–16 digit PIN before opening Aurelia.")
+            .setView(form)
+            .setPositiveButton("Update PIN") { _, _ ->
+                val newPin = CharArray(next.text.length).also { next.text.getChars(0, next.text.length, it, 0) }
+                val repeated = CharArray(confirm.text.length).also { confirm.text.getChars(0, confirm.text.length, it, 0) }
+                try {
+                    if (!newPin.contentEquals(repeated)) {
+                        showError("PIN confirmation does not match.")
+                        showMandatoryPinUpgrade(current, currentEnvelope)
+                        return@setPositiveButton
+                    }
+                    val replacement = manager.changePin(current, newPin, currentEnvelope)
+                    envelopeStore.write(replacement)
+                    manager.lock()
+                    render()
+                } catch (failure: Exception) {
+                    showError(failure.message ?: "PIN upgrade failed.")
+                    showMandatoryPinUpgrade(current, currentEnvelope)
+                } finally {
+                    newPin.fill('\u0000')
+                    repeated.fill('\u0000')
+                    next.text.clear()
+                    confirm.text.clear()
+                    current.fill('\u0000')
+                }
+            }
+            .setNegativeButton("Exit") { _, _ ->
+                current.fill('\u0000')
+                manager.lock()
+                finish()
+            }
+            .setCancelable(false)
+            .show()
     }
 
     private fun showRecoveryKey(recoveryKey: CharArray) {
