@@ -176,7 +176,7 @@ test("index contains no direct Web Storage access and uses the whitelisted migra
   assert.doesNotMatch(html, /\b(?:window\.)?localStorage\s*(?:\.|\[)|\bsessionStorage\s*(?:\.|\[)/);
   assert.doesNotMatch(html, /__aureliaStorage/);
   assert.match(html, /createLegacyMigrationStorage/);
-  assert.match(html, /readPhotoFallbackEntries/);
-  assert.match(html, /deletePhotoFallbackEntries/);
+  assert.match(html, /readLegacyPhotoFallbackEntries/);
+  assert.match(html, /deleteLegacyPhotoFallbackEntries/);
   assert.match(html, /PmsBootstrapCoordinator\(\{ storage: legacyStorage \}\)/);
 });
