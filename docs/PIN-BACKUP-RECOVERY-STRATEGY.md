@@ -1,6 +1,6 @@
 # Aurelia PMS — DEK wrappers, PIN, backup and recovery strategy
 
-**Architecture rule:** Generate one random 256-bit data-encryption key (DEK). Every unlock method independently wraps or unwraps that same DEK. PIN, offline recovery key and enrolled biometric Keystore key are independent wrappers. OTP authorizes continuation of a recovery workflow only; OTP never unwraps, derives, creates, rotates or replaces the DEK.
+**Architecture rule:** Generate one random 256-bit data-encryption key (DEK). Every unlock method independently wraps or unwraps that same DEK. PIN, offline recovery key and enrolled biometric Keystore key are independent wrappers. OTP authorizes continuation of a recovery workflow only; OTP verification alone must not return a DEK and OTP never unwraps, derives, creates, rotates or replaces the DEK.
 
 **Implementation status:** Native Android code implements PIN + offline Base32 recovery-key wrappers around the same DEK, crypto-engine PIN policy, crash-safe PIN-envelope replacement with `.prev` retention, separate persisted recovery throttling, and CryptoObject-backed biometric unlock. Firebase Phone Auth is an isolated helper, not an enabled OTP recovery service. OTP recovery remains disabled in production. See [NATIVE-SECURITY-AND-RECOVERY.md](NATIVE-SECURITY-AND-RECOVERY.md).
 
