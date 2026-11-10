@@ -12,7 +12,7 @@ import org.json.JSONObject;
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String NAME = "aurelia-pms-encrypted.db";
-  private static final int VERSION = 4;
+  private static final int VERSION = 5;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   private final Context appContext;
@@ -78,7 +78,11 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       db.execSQL("ALTER TABLE pms_migration_snapshots ADD COLUMN source_timestamp TEXT NOT NULL DEFAULT ''");
       db.execSQL("ALTER TABLE pms_migration_snapshots ADD COLUMN format_version INTEGER NOT NULL DEFAULT 1");
     }
-    if(oldVersion<4) createAuditAppendOnlyTriggers(db);
+    if(oldVersion<5) {
+      db.execSQL("DROP TRIGGER IF EXISTS pms_audit_no_update");
+      db.execSQL("DROP TRIGGER IF EXISTS pms_audit_no_delete");
+      createAuditAppendOnlyTriggers(db);
+    }
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
 
@@ -222,7 +226,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     try(Cursor c=db.rawQuery(sql,args)){if(!c.moveToFirst())throw new IllegalStateException("pms_query_no_result");return c.getLong(0);}
   }
   private static void createAuditAppendOnlyTriggers(SQLiteDatabase db) {
-    db.execSQL("CREATE TRIGGER IF NOT EXISTS pms_audit_no_update BEFORE UPDATE ON pms_entities WHEN OLD.entity_type='audit' BEGIN SELECT RAISE(ABORT,'audit_append_only'); END");
+    db.execSQL("CREATE TRIGGER IF NOT EXISTS pms_audit_no_update BEFORE UPDATE ON pms_entities WHEN OLD.entity_type='audit' AND OLD.entity_id<>'legacy_snapshot:aurelia_lodge_v2' BEGIN SELECT RAISE(ABORT,'audit_append_only'); END");
     db.execSQL("CREATE TRIGGER IF NOT EXISTS pms_audit_no_delete BEFORE DELETE ON pms_entities WHEN OLD.entity_type='audit' BEGIN SELECT RAISE(ABORT,'audit_append_only'); END");
   }
 
