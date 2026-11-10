@@ -9,7 +9,7 @@ const identity = fs.readFileSync('android/templates/FirebasePhoneIdentity.kt', '
 test('backend matches only verified Firebase phone identity and enforces fresh auth_time', () => {
   assert.match(functions, /verifyIdToken\(token, true\)/);
   assert.match(functions, /sign_in_provider !== "phone"/);
-  assert.match(functions, /authTime < 300/);
+  assert.match(functions, /- authTime < 300/);
   assert.match(functions, /decoded\.phone_number/);
 });
 
