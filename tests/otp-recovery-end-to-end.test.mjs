@@ -75,3 +75,10 @@ test('interrupted first-time recovery-phone registration fails closed', () => {
   assert.match(settings, /store\.markUnverified\(candidate\)[\s\S]*?client\.registerRecoveryPhone/);
   assert.match(gate, /record\.state == RecoveryPhoneStore\.State\.UNVERIFIED[\s\S]*?Recovery phone setup is incomplete/);
 });
+
+
+test('user leaving the launcher invalidates OTP callbacks and clears the recovery gate', () => {
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.match(gate, /override fun onUserLeaveHint\(\)[\s\S]*?recoveryFlowActive = false[\s\S]*?recoveryPhoneIdentity\?\.reset\(\)[\s\S]*?RecoveryGate\.clear\(\)/);
+  assert.match(gate, /if \(!recoveryFlowActive \|\| isFinishing\)[\s\S]*?RecoveryGate\.clear\(\)/);
+});
