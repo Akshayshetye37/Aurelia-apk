@@ -33,7 +33,7 @@ jobs:
           node-version: 22
 
       - name: Set up Java
-        uses: actions/setup-java@dded0888837ed1f3179029e8f20f4cbcd4ed3a4a
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
         with:
           distribution: temurin
           java-version: '21'
