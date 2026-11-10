@@ -30,7 +30,7 @@ function refreshCache(storage, snapshot) {
 
 export async function commitReservationToRepository({
   bridge, snapshot, guestIndex, bookingId, roomId, balanceDueFor,
-  legacyStorage = globalThis.window?.__aureliaStorage || globalThis.localStorage,
+  legacyStorage = globalThis.window?.__aureliaStorage || null,
   now = () => new Date().toISOString()
 } = {}) {
   if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
