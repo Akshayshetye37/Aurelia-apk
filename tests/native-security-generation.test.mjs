@@ -164,6 +164,7 @@ test('existing encrypted database cannot enter first-time enrollment without its
   const manager = read('android/templates/security/AureliaAppManager.kt');
   assert.match(gate, /encryptedDatabaseExists\(\)/);
   assert.match(gate, /databaseExists && \(!enrolled \|\| !envelopeExists\)/);
-  assert.match(manager, /fun enroll\(pin: CharArray, databaseExists: Boolean\)/);
+  assert.match(manager, /fun enroll\(pin: CharArray\)/);
+  assert.match(manager, /context\.getDatabasePath\("aurelia-pms-encrypted\.db"\)/);
   assert.match(manager, /if \(databaseExists\) throw SecurityException/);
 });
