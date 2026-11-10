@@ -178,6 +178,26 @@ jobs:
           fi
           echo "SQLCipher x86_64 library and instrumentation test classes are present."
 
+      - name: Verify backup exclusions in the built APK manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_apk="android/app/build/outputs/apk/debug/app-debug.apk"
+          analyzer="$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer"
+          if [[ ! -x "$analyzer" ]]; then
+            analyzer="$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 4 -type f -name apkanalyzer -perm -u+x | sort | tail -n 1)"
+          fi
+          test -f "$app_apk"
+          test -x "$analyzer"
+          manifest="$RUNNER_TEMP/aurelia-apk-manifest.xml"
+          "$analyzer" manifest print "$app_apk" > "$manifest"
+          grep -Eq 'android:allowBackup="false"' "$manifest"
+          grep -Eq 'android:fullBackupContent="@xml/aurelia_backup_rules"' "$manifest"
+          grep -Eq 'android:dataExtractionRules="@xml/aurelia_data_extraction_rules"' "$manifest"
+          unzip -Z1 "$app_apk" | grep -Eq '^res/xml/[^/]*aurelia_backup_rules'
+          unzip -Z1 "$app_apk" | grep -Eq '^res/xml/[^/]*aurelia_data_extraction_rules'
+          echo "Built APK manifest confirms cloud and device-transfer backup exclusions."
+
       - name: Create Android 34 AVD
         shell: bash
         run: |
