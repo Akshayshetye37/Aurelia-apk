@@ -111,6 +111,25 @@ jobs:
           echo "$gradle_status" > "$log_dir/compile-gradle-exit-code.txt"
           exit "$gradle_status"
 
+      - name: Verify Kotlin test-runtime dependency alignment
+        shell: bash
+        working-directory: android
+        run: |
+          set -euo pipefail
+          log_dir="$RUNNER_TEMP/aurelia-emulator"
+          ./gradlew --no-daemon --stacktrace \
+            :capacitor-cordova-android-plugins:dependencyInsight \
+            --dependency org.jetbrains.kotlin:kotlin-stdlib-jdk8 \
+            --configuration debugAndroidTestRuntimeClasspath 2>&1 | tee "$log_dir/kotlin-jdk8-dependency-insight.log"
+          ./gradlew --no-daemon --stacktrace \
+            :capacitor-cordova-android-plugins:dependencyInsight \
+            --dependency org.jetbrains.kotlin:kotlin-stdlib-jdk7 \
+            --configuration debugAndroidTestRuntimeClasspath 2>&1 | tee "$log_dir/kotlin-jdk7-dependency-insight.log"
+          if grep -E 'kotlin-stdlib-jdk(7|8):1\\.6\\.21' "$log_dir"/kotlin-jdk*-dependency-insight.log; then
+            echo "::error::Legacy Kotlin JDK stdlib versions remain in the androidTest runtime graph."
+            exit 1
+          fi
+
       - name: Verify native ABI and instrumentation APK contents
         shell: bash
         run: |
@@ -279,6 +298,9 @@ jobs:
           if [[ -f "$log_dir/connectedDebugAndroidTest.log" ]]; then cp "$log_dir/connectedDebugAndroidTest.log" "$diag_dir/connectedDebugAndroidTest.log"; fi
           if [[ -f "$log_dir/compile-native-gradle.log" ]]; then cp "$log_dir/compile-native-gradle.log" "$diag_dir/compile-native-gradle.log"; fi
           if [[ -f "$log_dir/compile-gradle-exit-code.txt" ]]; then cp "$log_dir/compile-gradle-exit-code.txt" "$diag_dir/compile-gradle-exit-code.txt"; fi
+          for report in "$log_dir"/kotlin-*-dependency-insight.log; do
+            [[ -f "$report" ]] && cp "$report" "$diag_dir/"
+          done
           if [[ -f "$log_dir/gradle-exit-code.txt" ]]; then cp "$log_dir/gradle-exit-code.txt" "$diag_dir/gradle-exit-code.txt"; fi
           for apk in android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; do
             [[ -f "$apk" ]] || continue
