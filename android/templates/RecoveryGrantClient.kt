@@ -5,11 +5,6 @@ import java.security.PublicKey
 import com.aurelia.pms.security.RecoveryGate
 import com.aurelia.pms.security.RecoveryGrantReplayStore
 import com.aurelia.pms.security.RecoveryGrantVerifier
-import android.content.Context
-import java.security.PublicKey
-import com.aurelia.pms.security.RecoveryGate
-import com.aurelia.pms.security.RecoveryGrantReplayStore
-import com.aurelia.pms.security.RecoveryGrantVerifier
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.android.gms.tasks.Task
@@ -52,29 +47,6 @@ class RecoveryGrantClient(private val context: Context) {
             val data = task.result?.data as? Map<*, *>
             data?.get("consumed") == true
         }
-
-    fun verifyConsumeAndArm(
-        grant: String,
-        tenantId: String,
-        nonce: String,
-        deviceHash: String,
-        pinnedPublicKey: PublicKey,
-        onResult: (Boolean) -> Unit
-    ) {
-        val verified = RecoveryGrantVerifier.verify(
-            grant, pinnedPublicKey, tenantId, nonce, deviceHash,
-            RecoveryGrantReplayStore(context)::markUsed
-        )
-        if (verified !== RecoveryGrantVerifier.Result.Ok) {
-            onResult(false)
-            return
-        }
-        consumeRecoveryGrant(grant, nonce, deviceHash).addOnCompleteListener { task ->
-            val consumed = task.isSuccessful && task.result == true
-            if (consumed) RecoveryGate.arm(verified)
-            onResult(consumed)
-        }
-    }
 
     fun verifyConsumeAndArm(
         grant: String,
