@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const stableId = z.string().trim().min(1).max(180).refine(value => !/[\\u0000-\\u001f]/.test(value), "ID contains control characters");
+const stableId = z.string().trim().min(1).max(180).refine(value => !/[\u0000-\u001f]/.test(value), "ID contains control characters");
 const base = z.object({ id: stableId }).passthrough();
 
 const inventory = base.superRefine((row, context) => {
