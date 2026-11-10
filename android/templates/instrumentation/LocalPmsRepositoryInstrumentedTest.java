@@ -283,7 +283,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
 
   @Test public void migrationRollsBackEntityRowsWhenSnapshotCheckpointFailsAndSurvivesRestart() throws Exception {
     String migrationId = "migration-snapshot-checkpoint";
-    String raw = "{"rooms":[{"n":"101","r":1200}],"b":[{"id":7,"p":500,"pays":[{"a":200,"m":"Cash"}]}],"g":[{"id":"g-1"}],"t":[],"exp":[],"inv":[],"led":[],"aud":[],"set":{"cur":"INR"},"menu":{}}";
+    String raw = "{\"rooms\":[{\"n\":\"101\",\"r\":1200}],\"b\":[{\"id\":7,\"p\":500,\"pays\":[{\"a\":200,\"m\":\"Cash\"}]}],\"g\":[{\"id\":\"g-1\"}],\"t\":[],\"exp\":[],\"inv\":[],\"led\":[],\"aud\":[],\"set\":{\"cur\":\"INR\"},\"menu\":{}}";
     repository.getWritableDatabase().execSQL(
       "CREATE TRIGGER fail_migration_snapshot BEFORE INSERT ON pms_migration_snapshots " +
       "BEGIN SELECT RAISE(ABORT, 'injected_snapshot_checkpoint_failure'); END");
@@ -308,7 +308,7 @@ public final class LocalPmsRepositoryInstrumentedTest {
 
   @Test public void migrationRollsBackEntityAndSnapshotRowsWhenCompletionMarkerCheckpointFails() throws Exception {
     String migrationId = "migration-marker-checkpoint";
-    String raw = "{"rooms":[{"n":"101","r":1200}],"b":[{"id":7,"p":500,"pays":[{"a":200,"m":"Cash"}]}],"g":[{"id":"g-1"}],"t":[],"exp":[],"inv":[],"led":[],"aud":[],"set":{"cur":"INR"},"menu":{}}";
+    String raw = "{\"rooms\":[{\"n\":\"101\",\"r\":1200}],\"b\":[{\"id\":7,\"p\":500,\"pays\":[{\"a\":200,\"m\":\"Cash\"}]}],\"g\":[{\"id\":\"g-1\"}],\"t\":[],\"exp\":[],\"inv\":[],\"led\":[],\"aud\":[],\"set\":{\"cur\":\"INR\"},\"menu\":{}}";
     repository.getWritableDatabase().execSQL(
       "CREATE TRIGGER fail_migration_marker BEFORE INSERT ON pms_migrations " +
       "BEGIN SELECT RAISE(ABORT, 'injected_marker_checkpoint_failure'); END");
