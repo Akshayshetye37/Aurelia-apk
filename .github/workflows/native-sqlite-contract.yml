@@ -75,7 +75,8 @@ jobs:
       - name: Sync Capacitor Android project
         run: npx cap sync android
 
-      - name: Install Android 34 emulator image
+      - name: Install Android SDK build components
+        timeout-minutes: 10
         shell: bash
         run: |
           set -euo pipefail
@@ -94,9 +95,7 @@ jobs:
             "platforms;android-34" \
             "platforms;android-35" \
             "build-tools;34.0.0" \
-            "build-tools;35.0.0" \
-            "emulator" \
-            "system-images;android-34;google_apis;x86_64"
+            "build-tools;35.0.0"
           mkdir -p "$RUNNER_TEMP/aurelia-emulator"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
@@ -150,6 +149,18 @@ jobs:
           gradle_status=${PIPESTATUS[0]}
           echo "$gradle_status" > "$log_dir/compile-gradle-exit-code.txt"
           exit "$gradle_status"
+
+      - name: Install Android 34 emulator image
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$SDKMANAGER" ]]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -perm -u+x | sort | tail -n 1)"
+          fi
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" --install "emulator" "system-images;android-34;google_apis;x86_64"
 
       - name: Verify native ABI and instrumentation APK contents
         shell: bash
