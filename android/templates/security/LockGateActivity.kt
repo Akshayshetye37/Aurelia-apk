@@ -36,6 +36,11 @@ class LockGateActivity : Activity() {
         envelopeStore = AureliaEnvelopeStore(this)
         val enrolled = AureliaSecurityRuntime.isEnrolled()
         val envelopeExists = envelopeStore.exists()
+        val databaseFile = getDatabasePath("aurelia-pms-encrypted.db")
+        val databaseExists = databaseFile.exists() || java.io.File(databaseFile.path + "-wal").exists() || java.io.File(databaseFile.path + "-shm").exists()
+        if (databaseExists && (!enrolled || !envelopeExists)) {
+            throw SecurityException("Encrypted PMS database exists but its key envelope is missing; data recovery is required.")
+        }
         if (enrolled != envelopeExists) {
             throw SecurityException("PIN enrollment state is inconsistent; refusing setup or unlock.")
         }
@@ -115,7 +120,7 @@ class LockGateActivity : Activity() {
                     showError("PIN confirmation does not match.")
                     return
                 }
-                val enrollment = manager.enroll(first)
+                val enrollment = manager.enroll(first, databaseFile.exists() || java.io.File(databaseFile.path + "-wal").exists() || java.io.File(databaseFile.path + "-shm").exists())
                 writeEnvelope(enrollment.envelopeJson)
                 AureliaSecurityRuntime.markEnrolled()
                 openPms()
