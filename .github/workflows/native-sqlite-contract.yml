@@ -19,7 +19,7 @@ concurrency:
 jobs:
   android-sqlite-instrumentation:
     runs-on: ubuntu-22.04
-    timeout-minutes: 55
+    timeout-minutes: 75
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -75,11 +75,17 @@ jobs:
             SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -perm -u+x | sort | tail -n 1)"
           fi
           test -x "$SDKMANAGER"
+          set +o pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null
+          license_status=${PIPESTATUS[1]}
+          set -o pipefail
+          test "$license_status" -eq 0
           "$SDKMANAGER" --install \
             "platform-tools" \
             "platforms;android-34" \
+            "platforms;android-35" \
             "build-tools;34.0.0" \
+            "build-tools;35.0.0" \
             "emulator" \
             "system-images;android-34;google_apis;x86_64"
           mkdir -p "$RUNNER_TEMP/aurelia-emulator"
@@ -100,11 +106,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
+          AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+          if [[ ! -x "$AVDMANAGER" ]]; then
+            AVDMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -type f -name avdmanager -perm -u+x | sort | tail -n 1)"
+          fi
+          test -x "$AVDMANAGER"
+          echo no | "$AVDMANAGER" create avd \
             --force --name aurelia-ci-api34 \
             --package "system-images;android-34;google_apis;x86_64" \
             --device pixel_2
-          "$ANDROID_HOME/emulator/emulator" -accel-check
+          "$ANDROID_HOME/emulator/emulator" -accel-check || true
+          if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+            echo on > "$RUNNER_TEMP/aurelia-emulator/acceleration-mode.txt"
+          else
+            echo off > "$RUNNER_TEMP/aurelia-emulator/acceleration-mode.txt"
+          fi
 
       - name: Start emulator and capture console output
         shell: bash
@@ -112,7 +128,9 @@ jobs:
           set -euo pipefail
           emulator="$ANDROID_HOME/emulator/emulator"
           log_dir="$RUNNER_TEMP/aurelia-emulator"
-          nohup "$emulator" -avd aurelia-ci-api34 \
+          accel="$(cat "$log_dir/acceleration-mode.txt")"
+          echo "Starting emulator with KVM acceleration: $accel"
+          nohup "$emulator" -avd aurelia-ci-api34 -accel "$accel" \
             -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim \
             -no-snapshot -verbose \
             >"$log_dir/emulator.stdout-stderr.log" 2>&1 &
@@ -129,8 +147,8 @@ jobs:
           deadline=$((SECONDS + 900))
           booted=false
           while (( SECONDS < deadline )); do
-            state="$(adb get-state 2>&1 || true)"
-            boot="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            state="$(timeout 15 adb get-state 2>&1 || true)"
+            boot="$(timeout 15 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             echo "Emulator health: adb_state=$state sys.boot_completed=$boot elapsed=$((900 - (deadline - SECONDS)))s"
             if [[ "$state" == "device" && "$boot" == "1" ]]; then
               booted=true
