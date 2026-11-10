@@ -27,7 +27,9 @@ class AureliaAppManager(
         lockout.assertUnlocked()
         val database = context.getDatabasePath("aurelia-pms-encrypted.db")
         val databaseExists = database.exists() || java.io.File(database.path + "-wal").exists() || java.io.File(database.path + "-shm").exists()
-        if (databaseExists) throw SecurityException("Encrypted database exists without a usable key envelope; refusing DEK regeneration.")
+        if (databaseExists || AureliaEnvelopeStore(context).exists() || AureliaSecurityRuntime.isEnrolled()) {
+            throw SecurityException("Existing PMS database or enrollment material detected; refusing DEK regeneration.")
+        }
         val dek = ByteArray(32).also(random::nextBytes)
         return try {
             val envelope = crypto.wrapDataKey(dek, pin)
