@@ -61,6 +61,63 @@ public final class LocalPmsRepositoryInstrumentedTest {
     return new JSONObject().put("value", value);
   }
 
+  @Test public void pinAndRecoveryWrappersReleaseTheSameDekAndRecoveryRotatesOnlyPin() throws Exception {
+    android.content.Context isolated = context.createDeviceProtectedStorageContext();
+    isolated.deleteDatabase("aurelia-pms-encrypted.db");
+    new File(isolated.getNoBackupFilesDir(), "aurelia-pin-envelope.v2").delete();
+    new File(isolated.getNoBackupFilesDir(), "aurelia-lock-state.v1").delete();
+    java.security.KeyStore keyStore = java.security.KeyStore.getInstance("AndroidKeyStore");
+    keyStore.load(null);
+    keyStore.deleteEntry("aurelia.pms.enrollment.marker.v1");
+    keyStore.deleteEntry("aurelia.pms.lock-state.v1");
+
+    com.aurelia.pms.security.AureliaCryptoEngine crypto = new com.aurelia.pms.security.AureliaCryptoEngine();
+    com.aurelia.pms.security.AureliaAppManager manager =
+      new com.aurelia.pms.security.AureliaAppManager(
+        crypto, new com.aurelia.pms.security.AppLockManager(isolated), isolated);
+    char[] pin = "481592".toCharArray();
+    char[] newPin = "592481".toCharArray();
+    byte[] pinDek = null, recoveryDek = null, recoveryBytes = null;
+    char[] recoveryCode = null;
+    try {
+      com.aurelia.pms.security.AureliaAppManager.Enrollment enrollment = manager.enroll(pin);
+      recoveryCode = enrollment.getRecoveryKey();
+      JSONObject bundle = new JSONObject(enrollment.getEnvelopeJson());
+      pinDek = crypto.unwrapDataKey(bundle.getString("pin"), pin);
+      recoveryBytes = crypto.decodeRecoveryKey(recoveryCode);
+      recoveryDek = crypto.unwrapDataKeyWithRecovery(bundle.getString("recovery"), recoveryBytes);
+      assertArrayEquals(pinDek, recoveryDek);
+
+      manager.lock();
+      assertTrue(manager.unlock(pin, enrollment.getEnvelopeJson()));
+      String recoveredBundle = manager.recoverWithRecoveryKey(recoveryCode, newPin, enrollment.getEnvelopeJson());
+      JSONObject rotated = new JSONObject(recoveredBundle);
+      byte[] rotatedDek = crypto.unwrapDataKey(rotated.getString("pin"), newPin);
+      byte[] retainedRecoveryDek = crypto.unwrapDataKeyWithRecovery(rotated.getString("recovery"), recoveryBytes);
+      try {
+        assertArrayEquals(pinDek, rotatedDek);
+        assertArrayEquals(pinDek, retainedRecoveryDek);
+      } finally {
+        Arrays.fill(rotatedDek, (byte) 0);
+        Arrays.fill(retainedRecoveryDek, (byte) 0);
+      }
+      assertTrue(manager.isSessionAuthorized());
+    } finally {
+      manager.lock();
+      Arrays.fill(pin, '\0');
+      Arrays.fill(newPin, '\0');
+      if (recoveryCode != null) Arrays.fill(recoveryCode, '\0');
+      if (pinDek != null) Arrays.fill(pinDek, (byte) 0);
+      if (recoveryDek != null) Arrays.fill(recoveryDek, (byte) 0);
+      if (recoveryBytes != null) Arrays.fill(recoveryBytes, (byte) 0);
+      new File(isolated.getNoBackupFilesDir(), "aurelia-lock-state.v1").delete();
+      keyStore.load(null);
+      keyStore.deleteEntry("aurelia.pms.lock-state.v1");
+      keyStore.deleteEntry("aurelia.pms.enrollment.marker.v1");
+      isolated.deleteDatabase("aurelia-pms-encrypted.db");
+    }
+  }
+
   @Test public void pinEnvelopeBindsUnlockMethodAndDatabaseIdentity() throws Exception {
     com.aurelia.pms.security.AureliaCryptoEngine crypto = new com.aurelia.pms.security.AureliaCryptoEngine();
     byte[] dek = new byte[32];
