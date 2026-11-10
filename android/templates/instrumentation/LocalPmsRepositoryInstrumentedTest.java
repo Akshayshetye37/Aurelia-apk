@@ -61,18 +61,25 @@ public final class LocalPmsRepositoryInstrumentedTest {
     return new JSONObject().put("value", value);
   }
 
-  @Test public void missingPersistedPinLockStateCannotResetRetryCounter() {
+  @Test public void missingPersistedPinLockStateCannotResetRetryCounter() throws Exception {
     com.aurelia.pms.security.AppLockManager lockout =
       new com.aurelia.pms.security.AppLockManager(context);
-    assertEquals(0, lockout.state().failures);
-    lockout.registerFailure();
     File state = new File(context.getNoBackupFilesDir(), "aurelia-lock-state.v1");
-    assertTrue(state.exists());
-    assertTrue(state.delete());
-    boolean rejected = false;
-    try { lockout.state(); }
-    catch (SecurityException expected) { rejected = true; }
-    assertTrue("deleting persisted lockout state must not reset the retry counter", rejected);
+    try {
+      assertEquals(0, lockout.state().failures);
+      lockout.registerFailure();
+      assertTrue(state.exists());
+      assertTrue(state.delete());
+      boolean rejected = false;
+      try { lockout.state(); }
+      catch (SecurityException expected) { rejected = true; }
+      assertTrue("deleting persisted lockout state must not reset the retry counter", rejected);
+    } finally {
+      state.delete();
+      java.security.KeyStore store = java.security.KeyStore.getInstance("AndroidKeyStore");
+      store.load(null);
+      store.deleteEntry("aurelia.pms.lock-state.v1");
+    }
   }
 
   @Test public void existingDatabaseCannotEnrollAndGenerateReplacementDek() {
