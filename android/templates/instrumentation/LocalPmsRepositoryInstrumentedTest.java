@@ -223,6 +223,65 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertTrue("corrupt database bytes must remain available for forensic recovery", database.length() > 0);
   }
 
+  @Test public void fastCheckGeneratedOperationSequencesMatchNativeSqliteState() throws Exception {
+    JSONObject fixture;
+    try (java.io.InputStream input = context.getAssets().open("pms-repository-property-sequences.json")) {
+      java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+      byte[] buffer = new byte[4096];
+      int count;
+      while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count);
+      fixture = new JSONObject(bytes.toString("UTF-8"));
+    }
+    assertEquals(1, fixture.getInt("schemaVersion"));
+    JSONArray cases = fixture.getJSONArray("cases");
+    assertTrue("fast-check must generate non-empty operation cases", cases.length() > 0);
+    int totalOperations = 0;
+    for (int caseIndex = 0; caseIndex < cases.length(); caseIndex++) {
+      JSONObject testCase = cases.getJSONObject(caseIndex);
+      JSONArray operations = testCase.getJSONArray("operations");
+      java.util.HashMap<String, Long> versions = new java.util.HashMap<>();
+      for (int operationIndex = 0; operationIndex < operations.length(); operationIndex++) {
+        JSONObject operation = operations.getJSONObject(operationIndex);
+        String id = operation.getString("id");
+        long expectedVersion = versions.getOrDefault(id, 0L);
+        JSONObject data = new JSONObject()
+          .put("id", id)
+          .put("balanceMinor", operation.getLong("balanceMinor"))
+          .put("currency", "INR")
+          .put("createdAt", operation.getString("createdAt"));
+        repository.transactBusinessChange("folio", id, expectedVersion, data,
+          event("property-native-" + caseIndex + "-" + operationIndex, "folio", id, expectedVersion + 1));
+        versions.put(id, expectedVersion + 1);
+        totalOperations++;
+      }
+      JSONArray expected = testCase.getJSONArray("expected");
+      JSONArray actual = repository.listEntities("folio");
+      java.util.ArrayList<JSONObject> actualCase = new java.util.ArrayList<>();
+      String prefix = "property-native-" + caseIndex + "-folio-";
+      for (int i = 0; i < actual.length(); i++) {
+        JSONObject row = actual.getJSONObject(i);
+        if (row.getString("id").startsWith(prefix)) actualCase.add(row);
+      }
+      assertEquals("generated case " + caseIndex + " final entity count", expected.length(), actualCase.size());
+      for (int i = 0; i < expected.length(); i++) {
+        JSONObject expectedRow = expected.getJSONObject(i);
+        JSONObject actualRow = actualCase.get(i);
+        assertEquals(expectedRow.getString("id"), actualRow.getString("id"));
+        assertEquals(expectedRow.getLong("version"), actualRow.getLong("version"));
+        JSONObject expectedData = expectedRow.getJSONObject("data");
+        JSONObject actualData = actualRow.getJSONObject("data");
+        assertEquals(expectedData.getLong("balanceMinor"), actualData.getLong("balanceMinor"));
+        assertEquals(expectedData.getString("currency"), actualData.getString("currency"));
+        assertEquals(expectedData.getString("createdAt"), actualData.getString("createdAt"));
+      }
+    }
+    try (android.database.Cursor outbox = repository.getWritableDatabase().rawQuery(
+        "SELECT COUNT(*) FROM pms_outbox WHERE event_id LIKE 'property-native-%'", null)) {
+      assertTrue(outbox.moveToFirst());
+      assertEquals(totalOperations, outbox.getInt(0));
+    }
+  }
+
   @Test public void sharedRepositoryContractFixtureRunsAgainstNativeSqlite() throws Exception {
     java.io.InputStream input = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
       .getContext().getAssets().open("pms-repository-contract.json");
