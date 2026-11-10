@@ -42,7 +42,8 @@ object AureliaSecurityRuntime {
         instance?.let { return it }
         return AureliaAppManager(
             AureliaCryptoEngine(),
-            AppLockManager(context.applicationContext)
+            AppLockManager(context.applicationContext),
+            context.applicationContext
         ).also { instance = it }
     }
 }
