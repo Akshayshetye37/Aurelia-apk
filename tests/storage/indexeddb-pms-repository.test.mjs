@@ -46,3 +46,9 @@ test("repository rejects non-UTC event timestamps at the IndexedDB boundary",asy
  await assert.rejects(r.transactBusinessChange({entityType:"folio",entityId:"utc-folio",expectedVersion:0,event:invalid},()=>({balanceMinor:1})),/UTC ISO timestamp/);
  assert.equal(await r.getEntity("folio","utc-folio"),null);
 });
+
+test("repository rejects non-canonical entity identifiers",async()=>{
+ const r=repo("canonical-identifiers");
+ await assert.rejects(r.transactBusinessChange({entityType:"folio",entityId:"bad id",expectedVersion:0,event:event(1,"bad id")},()=>({balanceMinor:1})),/canonical/);
+ assert.equal(await r.getEntity("folio","bad id"),null);
+});
