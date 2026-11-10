@@ -14,7 +14,7 @@ wait_for_boot() {
   adb_cmd shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
 }
 run_instrumentation() {
-  timeout 120s adb_cmd shell am instrument -w "$@"
+  timeout 120s adb "${DEVICE_ARGS[@]}" shell am instrument -w "$@"
 }
 
 checkpoints=(
@@ -27,6 +27,7 @@ checkpoints=(
 
 for checkpoint in "${checkpoints[@]}"; do
   echo "=== Injecting process death at ${checkpoint} ==="
+  adb_cmd logcat -c
   injection_log="$(mktemp)"
   set +e
   run_instrumentation \
@@ -42,14 +43,19 @@ for checkpoint in "${checkpoints[@]}"; do
     echo "Fault hook did not terminate the instrumentation process at ${checkpoint}." >&2
     exit 1
   fi
-  if [[ $injection_status -eq 0 ]]; then
-    echo "Expected instrumentation process termination at ${checkpoint}, but command exited successfully." >&2
+  fault_evidence="$(mktemp)"
+  adb_cmd logcat -d -s AureliaFaultInjection:E >"$fault_evidence"
+  if ! grep -q "DEBUG_FAULT_TRIGGERED:${checkpoint}" "$fault_evidence"; then
+    cat "$injection_log"
+    cat "$fault_evidence"
+    rm -f "$injection_log" "$fault_evidence"
+    echo "No checkpoint evidence was emitted for ${checkpoint}." >&2
     exit 1
   fi
-  rm -f "$injection_log"
+  rm -f "$injection_log" "$fault_evidence"
 
   adb_cmd shell am force-stop "$APP_ID" || true
-  adb_cmd reboot
+  adb_cmd reboot || true
   wait_for_boot
 
   expected=false
