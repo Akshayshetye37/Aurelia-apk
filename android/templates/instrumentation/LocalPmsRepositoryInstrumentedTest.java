@@ -297,6 +297,17 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertTrue("SQLite must reject non-canonical entity identifiers", rejected);
   }
 
+  @Test public void mutableRecoverySnapshotRemainsWritableWhileAuditRowsAreAppendOnly() throws Exception {
+    repository.transactBusinessChange("audit", "legacy_snapshot:aurelia_lodge_v2", 0,
+      new JSONObject().put("snapshot", new JSONObject().put("tab", "home")),
+      event("snapshot-write-1", "audit", "legacy_snapshot:aurelia_lodge_v2", 1));
+    repository.transactBusinessChange("audit", "legacy_snapshot:aurelia_lodge_v2", 1,
+      new JSONObject().put("snapshot", new JSONObject().put("tab", "rooms")),
+      event("snapshot-write-2", "audit", "legacy_snapshot:aurelia_lodge_v2", 2));
+    assertEquals("rooms", repository.getEntity("audit", "legacy_snapshot:aurelia_lodge_v2")
+      .getJSONObject("data").getJSONObject("snapshot").getString("tab"));
+  }
+
   @Test public void sqliteRejectsNonUtcOutboxTimestamps() throws Exception {
     JSONObject invalid = event("offset-event", "folio", "offset-folio", 1);
     invalid.put("occurredAt", "2026-11-09T17:30:00.000+05:30");
