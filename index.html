@@ -663,7 +663,7 @@ const offOf=s=>{const a=new Date();a.setHours(0,0,0,0);return Math.round((new Da
 const day0=()=>{const d=new Date();d.setHours(0,0,0,0);return Math.round(d/864e5)};
 const PHOTO_DB='aurelia_photo_archive_v1';
 const PHOTO_FALLBACK_PREFIX='aurelia_photo_fallback:';
-/* Some sandboxed HTML previews deny IndexedDB and localStorage. Keep a session-only fallback there; it is not a substitute for device storage or a persistent backup. */
+/* Sandboxed previews are session-only and are never a substitute for durable device storage. */
 const PHOTO_MEMORY_FALLBACK=new Map();
 function photoStorageSandboxed(){try{return String(location.href).startsWith('about:srcdoc')||!!(window.frameElement&&window.frameElement.hasAttribute('sandbox')&&!window.frameElement.sandbox.contains('allow-same-origin'))}catch(e){return String(location.href).startsWith('about:srcdoc')}}
 const PHOTO_NATIVE_PENDING=new Map();
@@ -694,7 +694,7 @@ async function photoPut(key,data){
   db=await photoDb();
   await new Promise((resolve,reject)=>{const tx=db.transaction('originals','readwrite');tx.objectStore('originals').put(data,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not store original photo'));tx.onabort=()=>reject(tx.error||new Error('Photo storage transaction aborted'))});
   return true;
- }catch(e){throw new Error('Durable photo storage is unavailable; no localStorage fallback was written. '+(e?.message||''))}
+ }catch(e){throw new Error('Durable photo storage is unavailable; no volatile fallback was written. '+(e?.message||''))}
  finally{db?.close()}
 }
 async function photoGet(key){
@@ -5581,7 +5581,6 @@ import { commitReservationToRepository } from "./src/storage/repository-reservat
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
 const legacyStorage = createLegacyMigrationStorage();
-window.__aureliaStorage = legacyStorage;
 window.AureliaLegacyStorage = Object.freeze({
   readPhotoFallbackEntries: () => readLegacyPhotoFallbackEntries(),
   deletePhotoFallbackEntries: entries => deleteLegacyPhotoFallbackEntries(entries)
