@@ -262,9 +262,10 @@ public final class LocalPmsRepositoryInstrumentedTest {
     com.aurelia.pms.security.AureliaAppManager manager = TestFixtures.newManager(isolated);
     char[] pin = "481592".toCharArray();
     char[] wrongPin = "481593".toCharArray();
+    char[] recoveryKey = null;
     try {
       com.aurelia.pms.security.AureliaAppManager.Enrollment enrollment = manager.enroll(pin);
-      char[] recoveryKey = enrollment.getRecoveryKey();
+      recoveryKey = enrollment.getRecoveryKey();
       String validEnvelope = enrollment.getEnvelopeJson();
       manager.lock();
 
@@ -295,9 +296,9 @@ public final class LocalPmsRepositoryInstrumentedTest {
       assertTrue("subsequent PIN attempt must be blocked during lockout", locked);
     } finally {
       manager.lock();
-      Arrays.fill(pin, '\\0');
-      Arrays.fill(wrongPin, '\\0');
-      if (recoveryKey != null) Arrays.fill(recoveryKey, '\\0');
+      Arrays.fill(pin, '\0');
+      Arrays.fill(wrongPin, '\0');
+      if (recoveryKey != null) Arrays.fill(recoveryKey, '\0');
       new com.aurelia.pms.security.AureliaEnvelopeStore(isolated).delete();
       new File(isolated.getNoBackupFilesDir(), "aurelia-lock-state.v1").delete();
       store.load(null);
