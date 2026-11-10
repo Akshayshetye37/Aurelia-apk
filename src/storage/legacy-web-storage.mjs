@@ -113,3 +113,46 @@ export function deleteLegacyPhotoFallbackEntries(entries, { storage } = {}) {
     }
   }
 }
+
+const ALLOWED_PREFERENCE_KEYS = new Set(["theme", "lang"]);
+
+export function createPreferenceStorage({ storage, mode = "strict" } = {}) {
+  if (!["strict", "production"].includes(mode)) throw new TypeError("Preference storage mode must be strict or production.");
+  const target = resolveStorage(storage);
+  const invalidKey = key => {
+    if (ALLOWED_PREFERENCE_KEYS.has(key)) return false;
+    const error = Object.assign(new Error("Web Storage is restricted to approved preferences: theme and lang."), {
+      code: "PREFERENCE_STORAGE_KEY_NOT_ALLOWED"
+    });
+    if (mode === "production") {
+      console.warn("[Aurelia Preferences] Ignored non-preference Web Storage key.", String(key));
+      return true;
+    }
+    throw error;
+  };
+  return Object.freeze({
+    getItem(key) {
+      if (invalidKey(key) || !target) return null;
+      return target.getItem(key);
+    },
+    setItem(key, value) {
+      if (invalidKey(key)) return false;
+      if (!target) throw Object.assign(new Error("Preference storage is unavailable."), { code: "PREFERENCE_STORAGE_UNAVAILABLE" });
+      const serialized = String(value);
+      target.setItem(key, serialized);
+      if (target.getItem(key) !== serialized) {
+        throw Object.assign(new Error("Preference value failed exact read-back verification."), { code: "PREFERENCE_STORAGE_READBACK_FAILED" });
+      }
+      return true;
+    },
+    removeItem(key) {
+      if (invalidKey(key)) return false;
+      if (!target) return false;
+      target.removeItem(key);
+      if (target.getItem(key) !== null) {
+        throw Object.assign(new Error("Preference removal failed exact read-back verification."), { code: "PREFERENCE_STORAGE_DELETE_FAILED" });
+      }
+      return true;
+    }
+  });
+}
