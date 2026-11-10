@@ -18,6 +18,7 @@ concurrency:
 
 jobs:
   android-sqlite-instrumentation:
+    needs: [indexeddb-contract]
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     env:
@@ -26,6 +27,11 @@ jobs:
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Download deterministic repository property vectors
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aurelia-property-sequences-\${{ github.sha }}
+          path: tests/fixtures
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -368,9 +374,22 @@ jobs:
         timeout-minutes: 8
         run: |
           if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
-      - name: Run shared IndexedDB repository contract
+      - name: Install pinned fast-check property test dependency
         timeout-minutes: 3
-        run: node --test tests/storage/indexeddb-pms-repository.test.mjs
+        run: npm install --no-save --package-lock=false fast-check@3.23.2
+      - name: Run shared and generated IndexedDB repository contracts
+        timeout-minutes: 5
+        env:
+          AURELIA_PROPERTY_FIXTURE_PATH: \${{ runner.temp }}/aurelia-pms-property-sequences.json
+        run: node --test tests/storage/indexeddb-pms-repository.test.mjs tests/storage/repository-property-parity.test.mjs
+      - name: Upload deterministic property vectors for SQLite execution
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aurelia-property-sequences-\${{ github.sha }}
+          path: \${{ runner.temp }}/aurelia-pms-property-sequences.json
+          if-no-files-found: error
+          retention-days: 7
 
   secret-scan:
     name: Security / secret scan
