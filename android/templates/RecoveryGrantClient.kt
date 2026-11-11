@@ -1,6 +1,7 @@
 package com.aurelia.pms.identity
 
 import android.content.Context
+import com.aurelia.pms.AureliaAppCheck
 import com.aurelia.pms.security.RecoveryGate
 import com.aurelia.pms.security.RecoveryGrantReplayStore
 import com.aurelia.pms.security.RecoveryGrantVerifier
@@ -13,7 +14,8 @@ import java.util.Base64
 
 /** Server signature validation/atomic jti consumption is authoritative; this client performs claim preflight and local replay suppression only. */
 class RecoveryGrantClient(private val context: Context) {
-    private val functions = FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
+    private val firebaseApp = FirebaseApp.getInstance().also { AureliaAppCheck.requireInstalled(it) }
+    private val functions = FirebaseFunctions.getInstance(firebaseApp, "asia-south1")
     private val replayStore = RecoveryGrantReplayStore(context)
 
     fun registerRecoveryPhone(phoneIdToken: String, tenantId: String, deviceIdHash: String, currentPhoneIdToken: String? = null): Task<Map<*, *>> =
