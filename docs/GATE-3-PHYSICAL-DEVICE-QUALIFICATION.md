@@ -62,5 +62,5 @@ Gate 3 is PASS only when every required real-device case above has evidence tied
 ## Current implementation status
 
 - Gate 2: PASS on the predecessor SHA recorded in the branch history.
-- Play Integrity client bootstrap is being wired in this branch for both Firebase app instances.
+- Play Integrity client bootstrap is implemented in source for both Firebase app instances; native compilation and instrumentation CI are pending.
 - The Firebase test project, Play Console linkage, SHA-256 registration, Functions secrets, test-owner custom claims, real SMS and physical-device evidence require external Firebase/Google Console access and a physical handset. They cannot be truthfully marked complete by repository CI.
