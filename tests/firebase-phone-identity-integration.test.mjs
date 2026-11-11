@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
+const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const patchScript = fs.readFileSync(path.join(root, 'scripts/patch-android.js'), 'utf8');
 const identity = fs.readFileSync(path.join(root, 'android/templates/FirebasePhoneIdentity.kt'), 'utf8');
 const factory = fs.readFileSync(path.join(root, 'android/templates/RecoveryFirebaseAuthFactory.kt'), 'utf8');
