@@ -39,7 +39,7 @@ export function scanProductionBundle(directory = path.resolve(process.cwd(), "ww
 }
 
 export function assertNoCleartextNetworkEndpoint(source, label = "application source") {
-  const pattern = /\bhttp:\/\/(?!schemas\.android\.com(?:[:/]|\\b)|www\.w3\.org(?:[:/]|\\b))/i;
+  const pattern = /(?:^|[^A-Za-z0-9])http:\/\/(?!schemas\.android\.com|www\.w3\.org)/i;
   if (pattern.test(source)) throw new Error("Cleartext HTTP endpoint detected in " + label + ". Application network endpoints must use HTTPS.");
 }
 
