@@ -97,9 +97,9 @@ test('Gate 3 installs Play Integrity App Check for the default and isolated reco
   const recoveryFactory = read('android/templates/RecoveryFirebaseAuthFactory.kt');
   const grantClient = read('android/templates/RecoveryGrantClient.kt');
   const ignore = read('.gitignore');
-  assert.match(ignore, /^\\*\\*\\/google-services\\.json$/m);
-  assert.match(ignore, /^\\*\\*\\/\\.secret\\.local$/m);
-  assert.match(grantClient, /AureliaAppCheck\\.requireInstalled\\(it\\)/);
+  assert.ok(ignore.includes('**/google-services.json'));
+  assert.ok(ignore.includes('**/.secret.local'));
+  assert.ok(grantClient.includes('AureliaAppCheck.requireInstalled(it)'));
   assert.match(patchScript, /com\.google\.firebase:firebase-appcheck-playintegrity/);
   assert.match(patchScript, /AureliaAppCheck\.kt/);
   assert.match(patchScript, /AureliaApplication\.kt/);
