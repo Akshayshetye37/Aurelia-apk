@@ -101,10 +101,19 @@ test("Firebase Emulator grant runtime: issue, consume once, reject replay and in
     masked: "+1 ••••••123", state: "VERIFIED", otpRequired: true
   });
 
-  const idToken = await phoneIdToken();
-  const issued = await callable("issueRecoveryGrant", {
-    tenantId: tenant, deviceIdHash: device, nonce, phoneIdToken: idToken
-  }, idToken);
+  // The Auth Emulator can advance validSince across a second boundary
+  // after token preflight but before the Functions process checks revocation.
+  // Retry the complete sign-in + callable exchange only for that auth failure;
+  // every attempt uses a newly issued phone-auth event/token.
+  let issued;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const idToken = await phoneIdToken();
+    issued = await callable("issueRecoveryGrant", {
+      tenantId: tenant, deviceIdHash: device, nonce, phoneIdToken: idToken
+    }, idToken);
+    if (issued.response.status !== 401 || attempt === 4) break;
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+  }
   assert.equal(issued.response.status, 200, JSON.stringify(issued.body));
   const grant = issued.body.result?.grant;
   assert.equal(typeof grant, "string");
