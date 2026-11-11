@@ -88,3 +88,22 @@ test('Firebase auth task results are guarded, token retrieval precedes sign-out,
   assert.match(identity, /val signedOut = try \{[\s\S]*recoveryAuth\.signOut\(\)/);
   assert.match(identity, /!signedOut -> emit\(PhoneIdentityState\.Failed/);
 });
+
+
+test('Gate 3 installs Play Integrity App Check for the default and isolated recovery Firebase apps', () => {
+  const appCheck = read('android/templates/AureliaAppCheck.kt');
+  const application = read('android/templates/AureliaApplication.kt');
+  const recoveryFactory = read('android/templates/RecoveryFirebaseAuthFactory.kt');
+  assert.match(patchScript, /com\\.google\\.firebase:firebase-appcheck-playintegrity/);
+  assert.match(patchScript, /AureliaAppCheck\\.kt/);
+  assert.match(patchScript, /AureliaApplication\\.kt/);
+  assert.match(patchScript, /android:name="com\\.aurelia\\.pms\\.AureliaApplication"/);
+  assert.match(appCheck, /PlayIntegrityAppCheckProviderFactory\\.getInstance\\(\\)/);
+  assert.match(appCheck, /installAppCheckProviderFactory/);
+  assert.match(appCheck, /setTokenAutoRefreshEnabled\\(true\\)/);
+  assert.doesNotMatch(appCheck, /DebugAppCheckProviderFactory|debug token|FIREBASE_APP_CHECK_DEBUG_TOKEN/);
+  assert.match(application, /AureliaAppCheck\\.install/);
+  assert.match(recoveryFactory, /AureliaAppCheck\\.install\\(recoveryApp\\)/);
+  assert.ok(recoveryFactory.indexOf('AureliaAppCheck.install(recoveryApp)') <
+    recoveryFactory.indexOf('FirebaseAuth.getInstance(recoveryApp)'));
+});
