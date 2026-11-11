@@ -11,6 +11,7 @@ on:
       - '.github/workflows/otp-recovery-android-instrumentation.yml'
       - 'android/templates/**'
       - 'tests/otp-recovery-*.test.mjs'
+      - 'tests/firebase-phone-identity-integration.test.mjs'
       - 'scripts/patch-android.js'
       - 'docs/GATE-3-PHYSICAL-DEVICE-QUALIFICATION.md'
   pull_request:
