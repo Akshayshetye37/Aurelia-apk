@@ -209,6 +209,10 @@ jobs:
             --force --name aurelia-ci-api34 \
             --package "system-images;android-34;google_apis;x86_64" \
             --device pixel_2
+          avd_config="$HOME/.android/avd/aurelia-ci-api34.avd/config.ini"
+          test -f "$avd_config"
+          # Explicit guest sizing avoids relying on the AVD's low-memory default.
+          sed -i -E 's/^hw\.ramSize=.*/hw.ramSize=4096/; s/^hw\.cpu\.ncore=.*/hw.cpu.ncore=4/; s/^vm\.heapSize=.*/vm.heapSize=512/' "$avd_config"
           "$ANDROID_HOME/emulator/emulator" -accel-check || true
           if [[ -r /dev/kvm && -w /dev/kvm ]]; then
             echo on > "$RUNNER_TEMP/aurelia-emulator/acceleration-mode.txt"
@@ -225,6 +229,7 @@ jobs:
           accel="$(cat "$log_dir/acceleration-mode.txt")"
           echo "Starting emulator with KVM acceleration: $accel"
           nohup "$emulator" -avd aurelia-ci-api34 -accel "$accel" \
+            -memory 4096 -cores 4 \
             -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim \
             -no-snapshot -no-snapshot-save -wipe-data -verbose \
             >"$log_dir/emulator.stdout-stderr.log" 2>&1 &
@@ -237,7 +242,7 @@ jobs:
           timeout -k 2s 10s adb devices -l || true
 
       - name: Wait for Android emulator boot completion
-        timeout-minutes: 16
+        timeout-minutes: 22
         shell: bash
         run: |
           set -euo pipefail
@@ -272,6 +277,22 @@ jobs:
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
+          echo "Checking system_server package-manager readiness before APK installation."
+          package_manager_ready=false
+          package_deadline=$((SECONDS + 180))
+          while (( SECONDS < package_deadline )); do
+            if timeout -k 2s 15s adb shell pm list packages >/dev/null 2>&1; then
+              package_manager_ready=true
+              break
+            fi
+            echo "Package manager is not responsive yet; retrying after 10 seconds."
+            sleep 10
+          done
+          if [[ "$package_manager_ready" != true ]]; then
+            echo "::error::Android boot completed but package manager did not become responsive within 180 seconds."
+            timeout -k 2s 10s adb logcat -b crash -d -v threadtime | tail -n 200 || true
+            exit 1
+          fi
 
       - name: Execute real SQLite contract tests
         if: success()
