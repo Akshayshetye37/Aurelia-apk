@@ -99,12 +99,12 @@ test('Gate 3 installs Play Integrity App Check for the default and isolated reco
   assert.match(patchScript, /AureliaAppCheck\.kt/);
   assert.match(patchScript, /AureliaApplication\.kt/);
   assert.match(patchScript, /android:name="com\.aurelia\.pms\.AureliaApplication"/);
-  assert.match(appCheck, /PlayIntegrityAppCheckProviderFactory\.getInstance\\(\\)/);
+  assert.match(appCheck, /PlayIntegrityAppCheckProviderFactory\.getInstance\(\)/);
   assert.match(appCheck, /installAppCheckProviderFactory/);
-  assert.match(appCheck, /setTokenAutoRefreshEnabled\\(true\\)/);
+  assert.match(appCheck, /setTokenAutoRefreshEnabled\(true\)/);
   assert.doesNotMatch(appCheck, /DebugAppCheckProviderFactory|debug token|FIREBASE_APP_CHECK_DEBUG_TOKEN/);
   assert.match(application, /AureliaAppCheck\.install/);
-  assert.match(recoveryFactory, /AureliaAppCheck\.install\\(recoveryApp\\)/);
+  assert.match(recoveryFactory, /AureliaAppCheck\.install\(recoveryApp\)/);
   assert.ok(recoveryFactory.indexOf('AureliaAppCheck.install(recoveryApp)') <
     recoveryFactory.indexOf('FirebaseAuth.getInstance(recoveryApp)'));
 });
