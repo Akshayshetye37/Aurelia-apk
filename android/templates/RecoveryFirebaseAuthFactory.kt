@@ -1,6 +1,7 @@
 package com.aurelia.pms.identity
 
 import android.content.Context
+import com.aurelia.pms.AureliaAppCheck
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 
@@ -32,6 +33,11 @@ object RecoveryFirebaseAuthFactory {
                 RECOVERY_APP_NAME
             ) ?: throw IllegalStateException("Unable to initialize isolated recovery FirebaseApp.")
         }
+
+        check(AureliaAppCheck.install(recoveryApp)) {
+            "Firebase App Check could not be initialized for the isolated recovery session."
+        }
+        AureliaAppCheck.requireInstalled(recoveryApp)
 
         return FirebaseAuth.getInstance(recoveryApp).also {
             // Clear any recovery-only session left by a process termination.
