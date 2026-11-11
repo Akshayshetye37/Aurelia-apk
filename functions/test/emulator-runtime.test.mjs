@@ -18,10 +18,12 @@ const privatePem = process.env.RECOVERY_SIGNING_KEY_PKCS8;
 const dbApp = getApps()[0] ?? initializeApp({ projectId });
 const db = getFirestore(dbApp);
 
-async function callable(name, data) {
+async function callable(name, data, authToken) {
+  const headers = { "content-type": "application/json" };
+  if (authToken) headers.authorization = `Bearer ${authToken}`;
   const response = await fetch(`http://${host}/${projectId}/asia-south1/${name}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify({ data })
   });
   return { response, body: await response.json() };
@@ -102,7 +104,7 @@ test("Firebase Emulator grant runtime: issue, consume once, reject replay and in
   const idToken = await phoneIdToken();
   const issued = await callable("issueRecoveryGrant", {
     tenantId: tenant, deviceIdHash: device, nonce, phoneIdToken: idToken
-  });
+  }, idToken);
   assert.equal(issued.response.status, 200, JSON.stringify(issued.body));
   const grant = issued.body.result?.grant;
   assert.equal(typeof grant, "string");
