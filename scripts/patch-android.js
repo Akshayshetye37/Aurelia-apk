@@ -15,6 +15,11 @@ manifest = manifest.replace(/<application\b([^>]*)>/, (match, attributes) => {
     .replace(/\s+android:allowBackup="[^"]*"/g, '')
     .replace(/\s+android:fullBackupContent="[^"]*"/g, '')
     .replace(/\s+android:dataExtractionRules="[^"]*"/g, '');
+  const configuredApplication = next.match(/\s+android:name="([^"]*)"/);
+  if (configuredApplication && configuredApplication[1] !== 'com.aurelia.pms.AureliaApplication') {
+    throw new Error('Unexpected Android Application class; refusing to bypass Aurelia App Check bootstrap.');
+  }
+  if (!configuredApplication) next += ' android:name="com.aurelia.pms.AureliaApplication"';
   return '<application' + next +
     ' android:allowBackup="false"' +
     ' android:fullBackupContent="@xml/aurelia_backup_rules"' +
@@ -375,6 +380,13 @@ const firebaseTemplate = path.join(androidDir, 'templates', 'FirebasePhoneIdenti
 if (!fs.existsSync(firebaseTemplate)) throw new Error('FirebasePhoneIdentity.kt template is missing.');
 const identityDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms', 'identity');
 fs.mkdirSync(identityDir, { recursive: true });
+const appPackageDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms');
+fs.mkdirSync(appPackageDir, { recursive: true });
+for (const file of ['AureliaAppCheck.kt', 'AureliaApplication.kt']) {
+  const template = path.join(androidDir, 'templates', file);
+  if (!fs.existsSync(template)) throw new Error(file + ' template is missing; App Check cannot be bypassed.');
+  fs.copyFileSync(template, path.join(appPackageDir, file));
+}
 fs.copyFileSync(firebaseTemplate, path.join(identityDir, 'FirebasePhoneIdentity.kt'));
 
 const firebaseBootstrapTemplate = path.join(androidDir, 'templates', 'RecoveryFirebaseAuthFactory.kt');
@@ -467,6 +479,7 @@ function addFirebaseDependencies(contents, kotlinDsl) {
   const bom = 'com.google.firebase:firebase-bom:33.5.0';
   const auth = 'com.google.firebase:firebase-auth';
   const functions = 'com.google.firebase:firebase-functions';
+  const appCheckPlayIntegrity = 'com.google.firebase:firebase-appcheck-playintegrity';
   const paymentDependencies = [
     'com.razorpay:checkout:1.6.41',
     'com.cashfree.pg:api:2.6.1'
@@ -475,7 +488,7 @@ function addFirebaseDependencies(contents, kotlinDsl) {
     throw new Error('App Gradle file has no dependencies block; refusing an incomplete native payment integration.');
   }
   let updated = contents;
-  const missing = [auth, functions, ...paymentDependencies].filter(dependency => !updated.includes(dependency));
+  const missing = [auth, functions, appCheckPlayIntegrity, ...paymentDependencies].filter(dependency => !updated.includes(dependency));
   if (missing.length) {
     const lines = kotlinDsl
       ? '\n' + missing.map(dependency => '    implementation("' + dependency + '")').join('\n')
