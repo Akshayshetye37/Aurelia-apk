@@ -340,3 +340,20 @@ test('recovery never authorizes a PMS session before the new PIN is used', () =>
   assert.doesNotMatch(recovery, /authenticated\s*=\s*true|dataKey\s*=|recoveryLockout\.registerSuccess\(\)/);
   assert.match(recovery, /MessageDigest\.isEqual/);
 });
+
+
+test('all application endpoints are HTTPS-only and Android rejects cleartext traffic', async () => {
+  const policy = await import('../scripts/check-release-boundaries.mjs');
+  const capacitor = JSON.parse(read('capacitor.config.json'));
+  const generator = read('scripts/patch-android.js');
+  assert.equal(capacitor.server.androidScheme, 'https');
+  assert.match(generator, /android:usesCleartextTraffic="false"/);
+  assert.match(generator, /android:networkSecurityConfig="@xml\\/aurelia_network_security_config"/);
+  assert.match(generator, /cleartextTrafficPermitted="false"/);
+  assert.doesNotThrow(() => policy.assertNoCleartextNetworkEndpoint('https://api.example.com/v1'));
+  assert.doesNotThrow(() => policy.assertNoCleartextNetworkEndpoint('http://schemas.android.com/apk/res/android'));
+  assert.throws(() => policy.assertNoCleartextNetworkEndpoint('http://api.example.com/v1'), /must use HTTPS/);
+  assert.doesNotThrow(() => policy.assertHttpsPlatformConfiguration(root));
+  const result = policy.scanAppSources(root);
+  assert.ok(result.scannedFiles > 0);
+});
