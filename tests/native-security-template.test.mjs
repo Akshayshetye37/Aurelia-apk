@@ -348,7 +348,7 @@ test('all application endpoints are HTTPS-only and Android rejects cleartext tra
   const generator = read('scripts/patch-android.js');
   assert.equal(capacitor.server.androidScheme, 'https');
   assert.match(generator, /android:usesCleartextTraffic="false"/);
-  assert.match(generator, /android:networkSecurityConfig="@xml\\/aurelia_network_security_config"/);
+  assert.ok(generator.includes('android:networkSecurityConfig="@xml/aurelia_network_security_config"'));
   assert.match(generator, /cleartextTrafficPermitted="false"/);
   assert.doesNotThrow(() => policy.assertNoCleartextNetworkEndpoint('https://api.example.com/v1'));
   assert.doesNotThrow(() => policy.assertNoCleartextNetworkEndpoint('http://schemas.android.com/apk/res/android'));
