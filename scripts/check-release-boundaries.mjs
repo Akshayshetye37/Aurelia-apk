@@ -33,7 +33,9 @@ export function scanProductionBundle(directory = path.resolve(process.cwd(), "ww
   const files = walk(directory);
   if (!files.length) throw new Error("Prepared production bundle contains no inspectable text assets.");
   for (const file of files) {
-    assertNoRemoteQrEndpoint(fs.readFileSync(file, "utf8"), path.relative(directory, file));
+    const source = fs.readFileSync(file, "utf8");
+    assertNoRemoteQrEndpoint(source, path.relative(directory, file));
+    assertNoCleartextNetworkEndpoint(source, path.relative(directory, file));
   }
   return { scannedFiles: files.length };
 }
