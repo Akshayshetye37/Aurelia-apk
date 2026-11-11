@@ -56,7 +56,8 @@ export class PaymentApiClient {
     let response;
     try {
       response = await this.fetch(this.baseUrl + path, {
-        method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        method, headers, redirect: 'error',
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: controller.signal
       });
     } catch (error) {
