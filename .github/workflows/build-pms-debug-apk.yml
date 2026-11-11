@@ -144,9 +144,7 @@ jobs:
           {
             echo "### Exact debug APK signing certificate fingerprints"
             echo 'Register the SHA-1 in Firebase Android app settings and the SHA-256 in Firebase App Check for this exact APK.'
-            echo '\`\`\`text'
             cat "$RUNNER_TEMP/aurelia-pms-signing-certificate.txt"
-            echo '\`\`\`'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload standalone PMS debug APK
