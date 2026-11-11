@@ -59,7 +59,7 @@ async function phoneIdToken() {
     assert.equal(typeof signedInBody.idToken, "string", "Auth Emulator did not return an ID token");
 
     try {
-      await getAuth(dbApp).verifyIdToken(signedInBody.idToken);
+      await getAuth(dbApp).verifyIdToken(signedInBody.idToken, true);
       return signedInBody.idToken;
     } catch (error) {
       if (error?.code !== "auth/id-token-revoked" || attempt === 4) throw error;
