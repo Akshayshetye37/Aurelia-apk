@@ -18,8 +18,18 @@ const privatePem = process.env.RECOVERY_SIGNING_KEY_PKCS8;
 const dbApp = getApps()[0] ?? initializeApp({ projectId });
 const db = getFirestore(dbApp);
 
+function emulatorAppCheckToken() {
+  // Functions Emulator enables skipTokenVerification. Supply a syntactically
+  // valid, unsigned App Check JWT so enforceAppCheck remains enabled in source
+  // while the local emulator accepts the test request.
+  const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ sub: "1:1234567890:android:gate2-emulator" })).toString("base64url");
+  return `${header}.${payload}.`;
+}
+
 async function callable(name, data, authToken) {
   const headers = { "content-type": "application/json" };
+  if (enabled) headers["X-Firebase-AppCheck"] = emulatorAppCheckToken();
   if (authToken) headers.authorization = `Bearer ${authToken}`;
   const response = await fetch(`http://${host}/${projectId}/asia-south1/${name}`, {
     method: "POST",
