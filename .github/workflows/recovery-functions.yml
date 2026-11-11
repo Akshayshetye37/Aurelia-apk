@@ -11,6 +11,7 @@ on:
       - 'android/templates/**'
       - 'tests/otp-recovery-*.test.mjs'
       - 'scripts/patch-android.js'
+      - 'docs/GATE-3-PHYSICAL-DEVICE-QUALIFICATION.md'
   pull_request:
     paths:
       - 'functions/**'
