@@ -45,6 +45,16 @@ Robolectric/unit tests cannot establish real Play Integrity, reCAPTCHA, SMS deli
 
 ## OTP recovery grant integration status
 
-The Firebase phone identity callback now exposes the short-lived ID token only in the in-memory IdentityVerified result. RecoveryGrantClient calls the Firebase Functions v2 registration, grant-issuance and grant-consumption callables. The local RecoveryGrantVerifier checks the pinned ES256 key and the RecoveryGrantReplayStore provides local replay defense. The gate is armed only after local signature/claim verification and successful server-side jti consumption.
+The Firebase phone identity callback exposes the short-lived ID token only in the in-memory IdentityVerified result. RecoveryGrantClient calls the Firebase Functions v2 registration, grant-issuance and grant-consumption callables. The runtime client performs strict JWT claim preflight and uses RecoveryGrantReplayStore for local replay suppression; this is not client-side signature verification. The backend verifies the ES256 signature and atomically consumes jti before the client can arm RecoveryGate. The RecoveryGrantVerifier utility is not currently invoked by RecoveryGrantClient and must not be described as part of the runtime verification path.
 
 The current application still uses a local-only tenant identity and does not yet provision the owner Firebase session/custom tenant role required by registerRecoveryPhone. The locked launcher also does not yet orchestrate OTP callbacks, grant verification, server consumption and gate arming. Therefore the client/backend primitives are scaffolding, not a usable end-to-end feature. Do not enable OTP recovery until the identity/tenant binding, signing-key pin, App Check/Play Integrity setup, Settings UI and Forgot PIN UI are completed and tested.
+
+
+## App Check / Play Integrity bootstrap
+
+- The generated app module includes `firebase-appcheck-playintegrity` through the existing Firebase BoM.
+- `AureliaApplication` installs the Play Integrity provider on the default FirebaseApp before application activities use Firebase.
+- `RecoveryFirebaseAuthFactory` installs App Check on the isolated recovery FirebaseApp before creating its FirebaseAuth client.
+- `RecoveryGrantClient` refuses callable access unless App Check was installed on the default FirebaseApp.
+- There is no debug-provider or debug-token fallback in the application source. Missing Firebase config or App Check initialization blocks recovery while preserving offline PMS startup.
+- The Firebase Console project must register the exact Android package and signing-certificate SHA-256 with Play Integrity, and the Play Integrity API must be linked to the same Google Cloud project. See `docs/GATE-3-PHYSICAL-DEVICE-QUALIFICATION.md` for the physical-device procedure.
