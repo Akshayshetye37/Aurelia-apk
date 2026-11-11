@@ -33,9 +33,21 @@ async function phoneIdToken() {
   });
   const sentBody = await sent.json();
   assert.equal(sent.status, 200, JSON.stringify(sentBody));
+  // The Auth Emulator generates a fresh SMS code for every request. Retrieve
+  // that code from its documented local-only verification-code endpoint rather
+  // than assuming the fixed test-phone code used by production projects.
+  const codesResponse = await fetch(
+    `http://127.0.0.1:9099/emulator/v1/projects/${projectId}/verificationCodes`
+  );
+  const codesBody = await codesResponse.json();
+  assert.equal(codesResponse.status, 200, JSON.stringify(codesBody));
+  const verification = codesBody.verificationCodes?.find((entry) => entry.phoneNumber === phone);
+  const code = verification?.code ?? verification?.sessionCode;
+  assert.equal(typeof code, "string", `No emulator SMS code found for ${phone}: ${JSON.stringify(codesBody)}`);
+
   const signedIn = await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPhoneNumber?key=fake-api-key", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ sessionInfo: sentBody.sessionInfo, code: "123456" })
+    body: JSON.stringify({ sessionInfo: sentBody.sessionInfo, code })
   });
   const signedInBody = await signedIn.json();
   assert.equal(signedIn.status, 200, JSON.stringify(signedInBody));
