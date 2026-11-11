@@ -3,10 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const workflow = fs.readFileSync(
-  path.join(process.cwd(), '.github/workflows/build-pms-debug-apk.yml'),
-  'utf8'
-);
+const workflow = fs.readFileSync(path.join(process.cwd(), '.github/workflows/build-pms-debug-apk.yml'), 'utf8');
+const gitignore = fs.readFileSync(path.join(process.cwd(), '.gitignore'), 'utf8');
 
 test('staging Android build requires Firebase config from a GitHub Actions secret', () => {
   assert.match(workflow, /FIREBASE_GOOGLE_SERVICES_JSON:\s*\$\{\{\s*secrets\.FIREBASE_GOOGLE_SERVICES_JSON\s*\}\}/);
