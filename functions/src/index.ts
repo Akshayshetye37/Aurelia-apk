@@ -36,19 +36,7 @@ function equalDigest(encoded: unknown, actual: Buffer): boolean {
 
 async function verifyPhoneToken(tokenValue: unknown): Promise<PhoneProof> {
   const token = requiredString(tokenValue, 8192);
-  let decoded: Awaited<ReturnType<ReturnType<typeof getAuth>["verifyIdToken"]>>;
-  try {
-    decoded = await getAuth().verifyIdToken(token, true);
-  } catch (error) {
-    // Emulator-only diagnostic: expose the Admin SDK failure class without
-    // logging credentials, token contents, phone numbers, or user identifiers.
-    if (process.env.GATE2_EMULATOR === "1") {
-      console.error("GATE2_PHONE_TOKEN_VERIFY_FAILED", {
-        code: (error as { code?: unknown })?.code ?? "unknown"
-      });
-    }
-    throw error;
-  }
+  const decoded = await getAuth().verifyIdToken(token, true);
   const authTime = Number(decoded.auth_time);
   const fresh = Number.isFinite(authTime) && Math.floor(Date.now() / 1000) - authTime >= 0 &&
     Math.floor(Date.now() / 1000) - authTime < 300;
