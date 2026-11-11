@@ -24,6 +24,7 @@ test('sends authenticated, idempotent intent request without retrying', async ()
   assert.equal(result.intentId, 'created');
   assert.equal(calls.length, 1);
   assert.equal(calls[0][1].headers.Authorization, 'Bearer ' + token);
+  assert.equal(calls[0][1].redirect, 'error');
   assert.equal(calls[0][1].headers['Idempotency-Key'], 'test-key');
   assert.equal(JSON.parse(calls[0][1].body).idempotencyKey, 'test-key');
 });
