@@ -26,7 +26,7 @@
 1. Instrumentation test must prove same-DEK recovery, durable PIN-wrapper rotation, old-PIN rejection, biometric invalidation and reopening the existing SQLCipher database with existing data.
 2. Firebase Emulator/test-project runtime tests must exercise grant issue, consume, duplicate proof, replay and rate limits.
 3. A physical Android device must complete real Firebase SMS delivery, wrong/expired OTP, grant failures, process-death behavior, recovery-key attempts and database reopen. Record model, Android version and exact app SHA.
-4. Test Firebase project must have Phone Auth, SMS quota, deployed Functions, PHONE_PEPPER, RECOVERY_SIGNING_KEY_PKCS8, and enforced App Check attestation. Verify missing secrets/config fail closed.
+4. The client now installs Play Integrity App Check for both Firebase app instances. The dedicated test project must still register the exact package/signing SHA-256, link Play Integrity, enable Phone Auth, provide SMS quota, deploy Functions, configure PHONE_PEPPER and RECOVERY_SIGNING_KEY_PKCS8, and enforce App Check. Verify missing secrets/config fail closed.
 5. Production owner claims and production Firebase deployment remain unprovisioned/unverified.
 6. Source-contract tests are not runtime E2E evidence. Production recovery remains disabled until every minimum acceptance step passes.
 
