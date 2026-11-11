@@ -2,7 +2,7 @@ name: OTP Recovery Android Instrumentation
 
 on:
   push:
-    branches: [work/p0-storage-hardening]
+    branches: [work/p0-storage-hardening, work/gate2-firebase-emulator]
     paths:
       - 'android/templates/**'
       - 'scripts/patch-android.js'
