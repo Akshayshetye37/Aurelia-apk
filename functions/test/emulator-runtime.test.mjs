@@ -91,7 +91,7 @@ async function signedGrant({ sub = tenant, did = device, grantNonce = nonce, jti
 }
 
 function assertRejected(result, label) {
-  assert.equal(result.response.status, 200, `${label}: callable transport failed: ${JSON.stringify(result.body)}`);
+  assert.equal(result.response.status, 403, `${label}: expected callable permission-denied HTTP 403, got ${result.response.status}: ${JSON.stringify(result.body)}`);
   assert.equal(result.body.error?.status, "PERMISSION_DENIED", `${label}: expected permission-denied, got ${JSON.stringify(result.body)}`);
 }
 
