@@ -7,6 +7,7 @@ on:
       - 'android/templates/**'
       - 'scripts/patch-android.js'
       - 'scripts/verify-android-instrumentation-results.mjs'
+      - 'tests/firebase-phone-identity-integration.test.mjs'
       - '.github/workflows/otp-recovery-android-instrumentation.yml'
   pull_request:
     paths:
