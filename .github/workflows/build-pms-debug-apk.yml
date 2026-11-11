@@ -60,6 +60,41 @@ jobs:
           test -f android/gradlew
           test -f android/app/build.gradle
 
+      - name: Configure Aurelia staging Firebase SDK
+        env:
+          FIREBASE_GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const raw = process.env.FIREBASE_GOOGLE_SERVICES_JSON;
+          if (!raw) {
+            throw new Error('Missing GitHub Actions secret FIREBASE_GOOGLE_SERVICES_JSON. Add the staging google-services.json contents as this secret before running the build.');
+          }
+          let config;
+          try {
+            config = JSON.parse(raw);
+          } catch {
+            throw new Error('FIREBASE_GOOGLE_SERVICES_JSON is not valid JSON.');
+          }
+          const clients = Array.isArray(config.client) ? config.client : [];
+          const validClient = clients.some(client =>
+            client?.client_info?.android_client_info?.package_name === 'com.aurelia.pms' &&
+            client?.client_info?.mobilesdk_app_id === '1:761295649001:android:065c781ce7176b3dedd878'
+          );
+          if (
+            config?.project_info?.project_id !== 'aurelia-staging-992db' ||
+            config?.project_info?.project_number !== '761295649001' ||
+            !validClient
+          ) {
+            throw new Error('Firebase config does not match the registered Aurelia-Staging Android app; refusing to write Firebase config.');
+          }
+          fs.mkdirSync('android/app', { recursive: true });
+          fs.writeFileSync('android/app/google-services.json', raw, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+          console.log('Validated Aurelia-Staging Firebase config for com.aurelia.pms. Do not print or upload google-services.json.');
+          NODE
+
       - name: Apply PMS Android configuration
         run: node scripts/patch-android.js
 
@@ -103,6 +138,16 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | tee "$RUNNER_TEMP/aurelia-pms-badging.txt"
           grep -F "package: name='com.aurelia.pms'" "$RUNNER_TEMP/aurelia-pms-badging.txt"
           sha256sum "$apk" > "$apk.sha256"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/aurelia-pms-signing-certificate.txt"
+          grep -F "Signer #1 certificate SHA-1 digest:" "$RUNNER_TEMP/aurelia-pms-signing-certificate.txt"
+          grep -F "Signer #1 certificate SHA-256 digest:" "$RUNNER_TEMP/aurelia-pms-signing-certificate.txt"
+          {
+            echo "### Exact debug APK signing certificate fingerprints"
+            echo 'Register the SHA-1 in Firebase Android app settings and the SHA-256 in Firebase App Check for this exact APK.'
+            echo '\`\`\`text'
+            cat "$RUNNER_TEMP/aurelia-pms-signing-certificate.txt"
+            echo '\`\`\`'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload standalone PMS debug APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
