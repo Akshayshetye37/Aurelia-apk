@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 import { importPKCS8, SignJWT } from "jose";
 
 const enabled = process.env.GATE2_EMULATOR === "1";
@@ -27,31 +28,45 @@ async function callable(name, data) {
 }
 
 async function phoneIdToken() {
-  const sent = await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=fake-api-key", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ phoneNumber: phone, recaptchaToken: "emulator-test" })
-  });
-  const sentBody = await sent.json();
-  assert.equal(sent.status, 200, JSON.stringify(sentBody));
-  // The Auth Emulator generates a fresh SMS code for every request. Retrieve
-  // that code from its documented local-only verification-code endpoint rather
-  // than assuming the fixed test-phone code used by production projects.
-  const codesResponse = await fetch(
-    `http://127.0.0.1:9099/emulator/v1/projects/${projectId}/verificationCodes`
-  );
-  const codesBody = await codesResponse.json();
-  assert.equal(codesResponse.status, 200, JSON.stringify(codesBody));
-  const verification = codesBody.verificationCodes?.find((entry) => entry.phoneNumber === phone);
-  const code = verification?.code ?? verification?.sessionCode;
-  assert.equal(typeof code, "string", `No emulator SMS code found for ${phone}: ${JSON.stringify(codesBody)}`);
+  // The Auth Emulator currently has a narrow sign-in timestamp/revocation race:
+  // a newly issued token can be marked revoked if validSince crosses a second
+  // boundary after auth_time. Preflight with the same Admin SDK verifier used
+  // by production code and retry only that emulator-specific revoked-token case.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const sent = await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=fake-api-key", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ phoneNumber: phone, recaptchaToken: "emulator-test" })
+    });
+    const sentBody = await sent.json();
+    assert.equal(sent.status, 200, JSON.stringify(sentBody));
 
-  const signedIn = await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPhoneNumber?key=fake-api-key", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ sessionInfo: sentBody.sessionInfo, code })
-  });
-  const signedInBody = await signedIn.json();
-  assert.equal(signedIn.status, 200, JSON.stringify(signedInBody));
-  return signedInBody.idToken;
+    // Codes are per-request and the emulator may retain earlier attempts.
+    const codesResponse = await fetch(
+      `http://127.0.0.1:9099/emulator/v1/projects/${projectId}/verificationCodes`
+    );
+    const codesBody = await codesResponse.json();
+    assert.equal(codesResponse.status, 200, JSON.stringify(codesBody));
+    const matchingCodes = codesBody.verificationCodes?.filter((entry) => entry.phoneNumber === phone) ?? [];
+    const code = matchingCodes.at(-1)?.code ?? matchingCodes.at(-1)?.sessionCode;
+    assert.equal(typeof code, "string", `No emulator SMS code found for ${phone}: ${JSON.stringify(codesBody)}`);
+
+    const signedIn = await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPhoneNumber?key=fake-api-key", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sessionInfo: sentBody.sessionInfo, code })
+    });
+    const signedInBody = await signedIn.json();
+    assert.equal(signedIn.status, 200, JSON.stringify(signedInBody));
+    assert.equal(typeof signedInBody.idToken, "string", "Auth Emulator did not return an ID token");
+
+    try {
+      await getAuth(dbApp).verifyIdToken(signedInBody.idToken);
+      return signedInBody.idToken;
+    } catch (error) {
+      if (error?.code !== "auth/id-token-revoked" || attempt === 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+    }
+  }
+  throw new Error("Unable to obtain a non-revoked Auth Emulator phone ID token after 5 fresh sign-ins");
 }
 
 async function signedGrant({ sub = tenant, did = device, grantNonce = nonce, jti = randomUUID() } = {}) {
