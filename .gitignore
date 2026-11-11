@@ -7,6 +7,8 @@ local.properties
 *.jks
 secrets/
 credentials/
+**/google-services.json
+**/.secret.local
 
 # Node / web tooling
 node_modules/
