@@ -18,7 +18,7 @@ test('staging Firebase config is written only to the ephemeral generated Android
   assert.match(workflow, /android\/app\/google-services\.json/);
   assert.match(workflow, /mode:\s*0o600/);
   assert.match(workflow, /Do not print or upload google-services\.json/);
-  assert.match(workflow, /\*\*\/google-services\.json/);
+  assert.match(gitignore, /\*\*\/google-services\.json/);
 });
 
 test('debug APK build exports its exact signing certificate fingerprints for Firebase setup', () => {
