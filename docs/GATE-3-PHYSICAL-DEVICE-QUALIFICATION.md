@@ -23,6 +23,7 @@ Use a non-production Firebase project only.
 - Enable Firebase Phone Authentication and configure allowed SMS regions and quota deliberately.
 - Create/initialize the Firestore database.
 - Register Play Integrity App Check and verify the test APK signing SHA-256.
+- Link the Play Integrity API to the same Cloud project. For a Gate 3 APK installed outside Google Play, configure the App Check app's advanced settings for distribution exclusively outside Play: do not require `PLAY_RECOGNIZED` or `LICENSED`; require the `MEETS_DEVICE_INTEGRITY` level. Do not weaken the requirement to basic integrity merely to make a failing device pass.
 - Deploy the recovery callable functions to the test project.
 - Configure Functions secrets `PHONE_PEPPER` and `RECOVERY_SIGNING_KEY_PKCS8` in that project only. Keep private key material and service-account credentials out of Git and out of the APK.
 - Provision a test owner account with server-issued custom claims `role=owner` and `tenantId`. Do not accept a typed/local tenant ID as authorization.
