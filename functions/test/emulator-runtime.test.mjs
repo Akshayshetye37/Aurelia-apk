@@ -110,7 +110,7 @@ test("Firebase Emulator grant runtime: issue, consume once, reject replay and in
     const idToken = await phoneIdToken();
     issued = await callable("issueRecoveryGrant", {
       tenantId: tenant, deviceIdHash: device, nonce, phoneIdToken: idToken
-    }, idToken);
+    }); // issueRecoveryGrant authenticates the phone proof from data; it does not require callable-owner auth.
     if (issued.response.status !== 401 || attempt === 4) break;
     await new Promise((resolve) => setTimeout(resolve, 1100));
   }
