@@ -29,6 +29,18 @@ The only general network permission retained is `INTERNET`, which is a normal pe
 
 Do not add a dangerous or special permission merely in anticipation of a future feature. If a future core feature genuinely requires one, document its purpose, request it in context, provide a functional alternative when denied, and review current Google Play policy before adding it.
 
+## Network transport security
+
+All application network endpoints must use HTTPS with the platform's normal TLS certificate-chain and hostname validation. Do not add cleartext fallbacks, trust-all certificate managers, permissive hostname verifiers, or downgrade redirects.
+
+- Capacitor's Android scheme is `https`.
+- The generated Android manifest sets `android:usesCleartextTraffic="false"` and references `aurelia_network_security_config.xml`.
+- The network security configuration denies cleartext traffic globally. Native transports must retain platform TLS validation and must not follow redirects to another scheme.
+- Cloud API base URLs must be HTTPS origins. Payment API requests reject redirects so an endpoint cannot silently move a request to a different origin or scheme.
+- Emulator HTTP endpoints are permitted only in isolated test harnesses and emulator configuration; they must never be embedded in production application source or release assets.
+
+CI scans application source and native templates for cleartext HTTP endpoints and verifies the Capacitor and Android generation policy. Android APK/device verification remains a separate qualification step.
+
 ## Navigation
 
 Android Back is handled in this order: close an open modal/sheet, return from a nested in-app section, navigate to Home, then allow Android to finish the Activity. External links and phone actions use Android system intents. No Accessibility Service or overlay is needed for navigation.
