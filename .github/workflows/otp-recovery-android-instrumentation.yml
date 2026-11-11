@@ -8,6 +8,7 @@ on:
       - 'scripts/patch-android.js'
       - 'scripts/verify-android-instrumentation-results.mjs'
       - 'tests/firebase-phone-identity-integration.test.mjs'
+      - 'docs/GATE-3-PHYSICAL-DEVICE-QUALIFICATION.md'
       - '.github/workflows/otp-recovery-android-instrumentation.yml'
   pull_request:
     paths:
