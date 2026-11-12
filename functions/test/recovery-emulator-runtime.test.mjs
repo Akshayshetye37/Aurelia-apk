@@ -241,3 +241,41 @@ test('owner alert delivery failure leaves the recovery request blocked', async (
     messaging.send = original;
   }
 });
+
+
+test('only an owner device whose FCM endpoint accepted the alert may start the cooldown', async () => {
+  const tenantId = 'tenant-emulator-partial-fcm';
+  const ownerUid = 'owner-emulator-partial-fcm';
+  const phone = '+15555550102';
+  const recoveryDeviceHash = 'g'.repeat(64);
+  const secondOwnerDeviceHash = 'h'.repeat(64);
+  await seedTenant({
+    tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, secondOwnerDeviceHash]
+  });
+  const original = messaging.send;
+  messaging.send = async message => {
+    if (message.token.includes(secondOwnerDeviceHash)) throw new Error('simulated endpoint rejection');
+    sentMessages.push(message);
+    return 'emulator-fcm-accepted';
+  };
+  try {
+    const phoneToken = await phoneAuthToken(phone);
+    const result = await callable(functions.issueRecoveryGrant, {
+      tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'p'.repeat(43), phoneIdToken: phoneToken
+    });
+    assert.equal(result.status, 'COOLDOWN');
+    const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+    const event = (await db.doc(`recoverySecurityEvents/${cooldown.alertEventId}`).get()).data();
+    assert.deepEqual(event.fcmAcceptedDeviceHashes, [recoveryDeviceHash]);
+    await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+      tenantId, deviceIdHash: secondOwnerDeviceHash, eventId: cooldown.alertEventId
+    }, ownerAuth(ownerUid, tenantId)), 'an endpoint that rejected FCM cannot acknowledge delivery');
+    const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
+      tenantId, deviceIdHash: recoveryDeviceHash, eventId: cooldown.alertEventId
+    }, ownerAuth(ownerUid, tenantId));
+    assert.equal(acknowledged.acknowledged, true);
+  } finally {
+    messaging.send = original;
+  }
+});
