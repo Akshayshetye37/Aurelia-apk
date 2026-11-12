@@ -53,6 +53,8 @@ object RecoveryGrantVerifier {
         tenantId: String,
         nonce: String,
         deviceIdHash: String,
+        ownerUid: String,
+        expectedKid: String,
         nowEpochSec: Long = System.currentTimeMillis() / 1000
     ): Result {
         return try {
@@ -75,23 +77,41 @@ object RecoveryGrantVerifier {
             signature.update("${parts[0]}.${parts[1]}".toByteArray(StandardCharsets.US_ASCII))
             if (!signature.verify(rawToDer(rawSignature))) return Result.Fail("signature")
 
+            // Signature is verified above using the APK-pinned key. Only now trust
+            // the header key identifier and registered claims.
+            val kid = header.optString("kid")
+            if (kid.isBlank() || kid != expectedKid) return Result.Fail("kid")
+
             val claims = JSONObject(String(payloadBytes, StandardCharsets.UTF_8))
-            val issuedAt = claims.optLong("iat", -1)
-            val expiresAt = claims.optLong("exp", -1)
-            val jti = claims.optString("jti")
+            fun requiredString(name: String): String? =
+                if (!claims.has(name) || claims.isNull(name)) null else claims.optString(name).takeIf { it.isNotBlank() }
+
+            val uid = requiredString("uid") ?: return Result.Fail("uid")
+            val tenant = requiredString("tenant") ?: return Result.Fail("tenant")
+            val jti = requiredString("jti") ?: return Result.Fail("jti")
+            val grantNonce = requiredString("nonce") ?: return Result.Fail("nonce")
+            val did = requiredString("did") ?: return Result.Fail("did")
+            val issuer = requiredString("iss") ?: return Result.Fail("issuer")
+            val audience = requiredString("aud") ?: return Result.Fail("audience")
+            val subject = requiredString("sub") ?: return Result.Fail("subject")
+            val scope = requiredString("scope") ?: return Result.Fail("scope")
+            if (!claims.has("iat") || !claims.has("exp") ||
+                claims.isNull("iat") || claims.isNull("exp")) return Result.Fail("time")
+            val issuedAt = claims.getLong("iat")
+            val expiresAt = claims.getLong("exp")
+
+            if (issuer != "aurelia-recovery") return Result.Fail("issuer")
+            if (audience != "aurelia-recovery-client") return Result.Fail("audience")
+            if (issuedAt !in 0..(nowEpochSec + 30) || expiresAt <= nowEpochSec ||
+                expiresAt <= issuedAt || expiresAt - issuedAt > 300) return Result.Fail("time")
+
             val nonceMatches = MessageDigest.isEqual(
-                claims.optString("nonce").toByteArray(StandardCharsets.UTF_8),
+                grantNonce.toByteArray(StandardCharsets.UTF_8),
                 nonce.toByteArray(StandardCharsets.UTF_8)
             )
-            val valid = claims.optString("iss") == "aurelia-recovery" &&
-                claims.optString("aud") == "aurelia-recovery-client" &&
-                claims.optString("scope") == "recovery:continue" &&
-                claims.optString("sub") == tenantId &&
-                claims.optString("did") == deviceIdHash &&
-                nonceMatches && issuedAt in 0..(nowEpochSec + 30) &&
-                expiresAt > nowEpochSec && expiresAt > issuedAt &&
-                expiresAt - issuedAt <= 300 && jti.matches(Regex("^[0-9a-fA-F-]{36}$"))
-            if (!valid) return Result.Fail("claims")
+            if (uid != ownerUid || tenant != tenantId || subject != tenantId ||
+                did != deviceIdHash || !nonceMatches || scope != "recovery:continue" ||
+                !jti.matches(Regex("^[0-9a-fA-F-]{36}$"))) return Result.Fail("bindings")
             Result.Verified(jti, expiresAt)
         } catch (_: Exception) {
             Result.Fail("malformed")

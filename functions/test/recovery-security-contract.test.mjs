@@ -100,6 +100,7 @@ test('recovery requires a 24-hour cooldown and a fresh phone-auth event before g
   assert.match(issuance, /pendingState === "ALERT_PENDING"/);
   const acknowledgement = functions.slice(functions.indexOf("export const acknowledgeRecoveryOwnerAlert"), functions.indexOf("export const issueRecoveryGrant"));
   assert.match(acknowledgement, /state: "APPROVED"/);
+  assert.match(acknowledgement, /requireFreshPrimaryOwner\(request\)/);
   assert.match(acknowledgement, /notificationDeliveredAt/);
   assert.match(acknowledgement, /alertedDeviceHashes\.includes\(deviceIdHash\)/);
   assert.match(issuance, /nowMs < eligibleAt/);
@@ -190,7 +191,7 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(functions, /notificationAcknowledgedAt/);
   assert.match(functions, /ackTokenHashes,/);
   assert.match(functions, /ackTokenHashes\?\.\[deviceIdHash\]/);
-  assert.match(functions, /createHash\("sha256"\)\.update\(ackToken\)/);
+  assert.match(functions, /ownerAckTokenDigest\(owner\.uid, eventId, deviceIdHash, ackToken\)/);
   assert.match(functions, /alertAckTokens\.get\(device\.deviceIdHash\)/);
   assert.match(functions, /tx\.update\(alertEventRef, \{/);
   assert.match(functions, /fcmAcceptedDeviceHashes: FieldValue\.delete\(\)/);
@@ -198,6 +199,11 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(functions, /eligibleAt = Date\.now\(\) \+ RECOVERY_COOLDOWN_MS/);
   assert.match(functions, /Owner alert was not acknowledged; recovery remains blocked/);
   assert.match(functions, /cancelRecoveryRequest = onCall/);
+  const cancel = functions.slice(functions.indexOf("export const cancelRecoveryRequest"), functions.indexOf("export const cancelRecoveryPhoneChange"));
+  assert.match(cancel, /requireFreshPrimaryOwner\(request\)/);
+  assert.doesNotMatch(cancel, /pending\.deviceIdHash !== deviceIdHash/);
+  assert.match(cancel, /state: "CANCELLED"/);
+  assert.match(functions, /ownerAuthFactor/);
   assert.match(messageService, /NotificationManagerCompat\.from\(this\)\.areNotificationsEnabled\(\)/);
   assert.match(messageService, /acknowledgeRecoveryOwnerAlert/);
   assert.match(messageService, /Tasks\.await/);

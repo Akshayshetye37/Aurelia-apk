@@ -1825,6 +1825,12 @@ fs.copyFileSync(securityInstrumentationTemplate, path.join(securityInstrumentati
 const otpRecoveryInstrumentationTemplate = path.join(androidDir, 'templates', 'instrumentation', 'OtpRecoverySqlCipherInstrumentedTest.java');
 if (!fs.existsSync(otpRecoveryInstrumentationTemplate)) throw new Error('OTP recovery SQLCipher instrumentation template is missing.');
 fs.copyFileSync(otpRecoveryInstrumentationTemplate, path.join(instrumentationSourceDir, 'OtpRecoverySqlCipherInstrumentedTest.java'));
+const recoveryGrantVerifierTestTemplate = path.join(androidDir, 'templates', 'instrumentation', 'RecoveryGrantVerifierInstrumentedTest.java');
+if (!fs.existsSync(recoveryGrantVerifierTestTemplate)) throw new Error('Recovery grant verifier instrumentation template is missing.');
+const recoveryGrantVerifierTestDir = path.join(androidDir, 'app', 'src', 'androidTest', 'java', 'com', 'aurelia', 'pms', 'security');
+fs.mkdirSync(recoveryGrantVerifierTestDir, { recursive: true });
+fs.copyFileSync(recoveryGrantVerifierTestTemplate, path.join(recoveryGrantVerifierTestDir, 'RecoveryGrantVerifierInstrumentedTest.java'));
+
 // Capacitor's generated starter test asserts its placeholder application ID
 // (com.getcapacitor.app), which is intentionally replaced by Aurelia's ID.
 // It is unrelated to Aurelia's native contract and must not poison this suite.
