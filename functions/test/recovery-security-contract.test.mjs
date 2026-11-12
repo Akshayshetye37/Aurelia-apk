@@ -96,7 +96,12 @@ test('recovery requires a 24-hour cooldown and a fresh phone-auth event before g
   const consumption = functions.slice(functions.indexOf('export const consumeRecoveryGrant'), functions.indexOf('export const cancelRecoveryPhoneChange'));
   assert.match(functions, /RECOVERY_COOLDOWN_MS = 24 \* 60 \* 60_000/);
   assert.match(issuance, /recoveryCooldowns\/\$\{tenantId\}/);
-  assert.match(issuance, /state: "PENDING"/);
+  assert.match(issuance, /state: "ALERT_PENDING"/);
+  assert.match(issuance, /pendingState === "ALERT_PENDING"/);
+  const acknowledgement = functions.slice(functions.indexOf("export const acknowledgeRecoveryOwnerAlert"), functions.indexOf("export const issueRecoveryGrant"));
+  assert.match(acknowledgement, /state: "PENDING"/);
+  assert.match(acknowledgement, /notificationDeliveredAt/);
+  assert.match(acknowledgement, /alertedDeviceHashes\.includes\(deviceIdHash\)/);
   assert.match(issuance, /nowMs < eligibleAt/);
   assert.match(issuance, /status: "COOLDOWN"/);
   assert.match(issuance, /status: "ISSUED"/);
