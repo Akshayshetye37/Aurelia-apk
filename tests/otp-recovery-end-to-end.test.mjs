@@ -124,5 +124,5 @@ test('blocked Android notification channels cannot acknowledge owner alerts or s
   assert.ok(blockedCheck >= 0, 'blocked notification channels must be detected');
   assert.ok(blockedCheck < notify, 'channel suppression must be checked before notify');
   assert.ok(notify < acknowledge, 'owner acknowledgement must follow notification posting');
-  assert.match(service, /if \(Build\.VERSION\.SDK_INT >= 26 && manager\.getNotificationChannel\(CHANNEL_ID\)/);
+  assert.match(service, /if \(manager\.getNotificationChannel\(CHANNEL_ID\)\?\.importance == NotificationManager\.IMPORTANCE_NONE\) return/);
 });
