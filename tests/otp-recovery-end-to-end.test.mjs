@@ -13,7 +13,7 @@ test('Forgot PIN never displays recovery key until a verified OTP grant is consu
   assert.match(recovery, /RecoveryPhoneStore\(this\)\.read\(\)/);
   assert.match(recovery, /RecoveryGate\.isOpen\(\)/);
   assert.match(recovery, /consumeAndArm/);
-  assert.match(recovery, /client\.consumeAndArm\(grant, grantRequest\.nonce, grantRequest\.deviceIdHash, tenant, grantRequest\.startedAtElapsedMs\)/);
+  assert.match(recovery, /client\.consumeAndArm\(outcome\.grant, grantRequest\.nonce, grantRequest\.deviceIdHash, tenant, grantRequest\.startedAtElapsedMs\)/);
   assert.match(recovery, /RecoveryGrantClient\.GrantIssueResult\.Cooldown/);
   assert.match(recovery, /24-hour hold/);
   assert.match(recovery, /RecoveryGrantClient\.GrantIssueResult\.Issued/);
