@@ -347,6 +347,7 @@ export const registerRecoveryPhone = onCall(
 export const confirmRecoveryOwnerBinding = onCall(
   { region: REGION, enforceAppCheck: true },
   async request => {
+    requireRecoveryEnabled();
     const owner = requireFreshPrimaryOwner(request);
     if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
     const record = (await db.doc(`tenants/${owner.tenantId}/security/recoveryPhone`).get()).data();
