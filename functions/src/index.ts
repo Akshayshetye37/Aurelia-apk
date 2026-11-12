@@ -31,27 +31,6 @@ function requireRecoveryEnabled(): void {
 
 type PhoneProof = { uid: string; phone: string; authTime: number };
 
-function requireFreshPrimaryOwner(request: CallableRequest<unknown>): { uid: string; tenantId: string } {
-  const auth = request.auth;
-  const now = Math.floor(Date.now() / 1000);
-  const authTime = Number(auth?.token.auth_time);
-  const factor = auth?.token.ownerAuthFactor;
-  const firebase = auth?.token.firebase as { sign_in_provider?: unknown; identities?: Record<string, unknown> } | undefined;
-  const provider = firebase?.sign_in_provider;
-  const identities = firebase?.identities;
-  const emailIdentity = Array.isArray(identities?.email) && identities!.email!.length > 0;
-  const emailLink = factor === "email_link" && provider === "password" && emailIdentity;
-  const passkey = factor === "passkey" && provider === "custom";
-  if (!auth || auth.token.role !== "owner" || !Number.isInteger(authTime) ||
-      authTime > now || now - authTime >= 300 || (!emailLink && !passkey)) throw GENERIC;
-  return { uid: auth.uid, tenantId: validateTenantId(auth.token.tenantId) };
-}
-
-function ownerAckTokenDigest(uid: string, requestId: string, deviceIdHash: string, token: string): Buffer {
-  return createHash("sha256").update(uid).update("|").update(requestId).update("|")
-    .update(deviceIdHash).update("|").update(token).digest();
-}
-
 function requireFreshOwner(request: CallableRequest<unknown>): { uid: string; tenantId: string } {
   const auth = request.auth;
   const ownerAge = Date.now() / 1000 - Number(auth?.token.auth_time ?? 0);
@@ -371,14 +350,15 @@ export const acknowledgeRecoveryOwnerAlert = onCall(
   { region: REGION, enforceAppCheck: true },
   async request => {
     requireRecoveryEnabled();
-    const owner = requireFreshPrimaryOwner(request);
-    const tenantId = owner.tenantId;
-    if (request.data?.tenantId !== tenantId) throw GENERIC;
+    const auth = request.auth;
+    if (!auth || auth.token.role !== "owner") throw GENERIC;
+    const tenantId = validateTenantId(request.data?.tenantId);
+    if (auth.token.tenantId !== tenantId) throw GENERIC;
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
     const eventId = requiredString(request.data?.eventId, 64);
     const ackToken = requiredString(request.data?.ackToken, 64);
     if (!/^[0-9a-f-]{36}$/i.test(eventId) || !/^[A-Za-z0-9_-]{43}$/.test(ackToken)) throw GENERIC;
-    await requireAttestedDevice(tenantId, deviceIdHash, owner.uid);
+    await requireAttestedDevice(tenantId, deviceIdHash, auth.uid);
     const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
     const eventRef = db.doc(`recoverySecurityEvents/${eventId}`);
     const eligibleAt = Date.now() + RECOVERY_COOLDOWN_MS;
@@ -392,17 +372,16 @@ export const acknowledgeRecoveryOwnerAlert = onCall(
           cooldown.alertEventId !== eventId ||
           !Array.isArray(cooldown.alertedDeviceHashes) ||
           !cooldown.alertedDeviceHashes.includes(deviceIdHash) ||
-          !event || event.tenantId !== tenantId || event.ownerUid !== owner.uid ||
-          event.requestId !== eventId || event.type !== "RECOVERY_COOLDOWN_STARTED" ||
-          event.acknowledgedAt || !equalDigest(event.ackTokenHashes?.[deviceIdHash],
-            ownerAckTokenDigest(owner.uid, eventId, deviceIdHash, ackToken))) throw GENERIC;
+          !event || event.tenantId !== tenantId ||
+          event.type !== "RECOVERY_COOLDOWN_STARTED" ||
+          !equalDigest(event.ackTokenHashes?.[deviceIdHash],
+            createHash("sha256").update(ackToken).digest())) throw GENERIC;
       tx.update(cooldownRef, {
-        state: "APPROVED", eligibleAt,
+        state: "PENDING", eligibleAt,
         notificationDeliveredAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
       });
       tx.update(eventRef, {
-        acknowledgedAt: FieldValue.serverTimestamp(),
         notificationAcknowledgedAt: FieldValue.serverTimestamp(),
         notificationDelivery: "APP_ACKNOWLEDGED"
       });
@@ -454,6 +433,8 @@ export const issueRecoveryGrant = onCall(
     // Persist only hashes. The raw per-device token is sent exclusively in that device's FCM payload.
     const alertAckTokens = new Map(ownerDevices.map(device =>
       [device.deviceIdHash, randomBytes(32).toString("base64url")] as const));
+    const alertAckTokenHashes = Object.fromEntries([...alertAckTokens].map(([hash, token]) =>
+      [hash, createHash("sha256").update(token).digest("base64")]));
     const actualHash = digest(tenantId, proof.phone);
     if (!phoneRecord || !["VERIFIED", "CHANGE_PENDING"].includes(phoneRecord.state) ||
         phoneRecord.otpRequired === false || phoneRecord.deviceIdHash !== deviceIdHash ||
@@ -475,23 +456,23 @@ export const issueRecoveryGrant = onCall(
       if (used.exists) throw GENERIC;
       const pending = cooldown.data();
       const pendingState = pending?.state;
+      const expiredIssuedGrant = pendingState === "ISSUED" &&
+        Number(pending?.grantExpiresAt) <= nowMs;
       if (!pending || pendingState === "CONSUMED") {
         tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
           expiresAt: nowMs + 5 * 60_000 });
         const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
         tx.set(cooldownRef, {
-          tenantId, ownerUid: phoneRecord.ownerUid, deviceIdHash, phoneHash: actualHash.toString("base64"),
+          tenantId, deviceIdHash, phoneHash: actualHash.toString("base64"),
           state: "ALERT_PENDING", requestedAt: FieldValue.serverTimestamp(),
           eligibleAt: null, alertEventId: eventRef.id, alertedDeviceHashes,
           updatedAt: FieldValue.serverTimestamp()
         });
-        const ackTokenHashes = Object.fromEntries([...alertAckTokens].map(([hash, token]) =>
-          [hash, ownerAckTokenDigest(phoneRecord.ownerUid, eventRef.id, hash, token).toString("base64")]));
         tx.create(eventRef, {
-          tenantId, ownerUid: phoneRecord.ownerUid, requestId: eventRef.id,
-          type: "RECOVERY_COOLDOWN_STARTED", deviceIdHash,
+          tenantId, type: "RECOVERY_COOLDOWN_STARTED", deviceIdHash,
           phoneHash: actualHash.toString("base64"), notificationDelivery: "PENDING",
-          ackTokenHashes, createdAt: FieldValue.serverTimestamp()
+          ackTokenHashes: alertAckTokenHashes,
+          createdAt: FieldValue.serverTimestamp()
         });
         return { status: "COOLDOWN" as const, eligibleAt: 0, notify: true, eventId: eventRef.id };
       }
@@ -511,39 +492,27 @@ export const issueRecoveryGrant = onCall(
         // Rotate per-device proofs before retrying FCM. Tokens from an earlier,
         // possibly delayed delivery can no longer acknowledge the new alert.
         tx.update(cooldownRef, { alertedDeviceHashes, updatedAt: FieldValue.serverTimestamp() });
-        const ackTokenHashes = Object.fromEntries([...alertAckTokens].map(([hash, token]) =>
-          [hash, ownerAckTokenDigest(phoneRecord.ownerUid, eventId, hash, token).toString("base64")]));
         tx.update(alertEventRef, {
-          ownerUid: phoneRecord.ownerUid, requestId: eventId, ackTokenHashes,
+          ackTokenHashes: alertAckTokenHashes,
           fcmAcceptedDeviceHashes: FieldValue.delete(),
           notificationDelivery: "PENDING",
           updatedAt: FieldValue.serverTimestamp()
         });
         return { status: "COOLDOWN" as const, eligibleAt: 0, notify: true, eventId };
       }
-      if (pendingState !== "APPROVED") throw GENERIC;
+      if (pendingState !== "PENDING" && !expiredIssuedGrant) throw GENERIC;
       const eligibleAt = Number(pending.eligibleAt);
       if (!Number.isFinite(eligibleAt)) throw GENERIC;
       if (nowMs < eligibleAt) return { status: "COOLDOWN" as const, eligibleAt, notify: false };
-      const previousJti = typeof pending.grantJti === "string" ? pending.grantJti : null;
-      const previousGrantRef = previousJti ? db.doc(`recoveryGrants/${previousJti}`) : null;
-      const previousGrantSnapshot = previousGrantRef ? await tx.get(previousGrantRef) : null;
-      if (previousGrantSnapshot?.exists &&
-          previousGrantSnapshot.data()?.state === "ISSUED" &&
-          Number(previousGrantSnapshot.data()?.expiresAt) > nowMs) throw GENERIC;
       tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
         expiresAt: nowMs + 5 * 60_000 });
-      tx.update(cooldownRef, {
-        state: "APPROVED", grantJti: jti, grantExpiresAt: nowMs + 5 * 60_000,
-        issuedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
-      });
-      if (previousGrantRef && previousGrantSnapshot?.exists &&
-          previousGrantSnapshot.data()?.state === "ISSUED") {
-        tx.update(previousGrantRef, { state: "EXPIRED", expiredAt: FieldValue.serverTimestamp() });
-      }
       tx.create(grantRef, {
-        tenantId, ownerUid: phoneRecord.ownerUid, deviceIdHash, nonce, state: "ISSUED",
+        tenantId, deviceIdHash, nonce, state: "ISSUED",
         createdAt: FieldValue.serverTimestamp(), expiresAt: nowMs + 5 * 60_000
+      });
+      tx.update(cooldownRef, {
+        state: "ISSUED", grantJti: jti, grantExpiresAt: nowMs + 5 * 60_000,
+        issuedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
       });
       return { status: "ISSUED" as const, eligibleAt };
     });
@@ -617,26 +586,17 @@ export const consumeRecoveryGrant = onCall(
     if (did !== deviceIdHash || nonce !== clientNonce) throw GENERIC;
     const ref = db.doc(`recoveryGrants/${jti}`);
     const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
-    const consumedJtiKey = createHash("sha256").update(`${tenantId}|${uid}|${jti}`).digest("hex");
-    const consumedJtiRef = db.doc(`usedRecoveryGrantJtis/${consumedJtiKey}`);
     await db.runTransaction(async tx => {
-      const [snapshot, cooldown, consumedJti] = await Promise.all([
-        tx.get(ref), tx.get(cooldownRef), tx.get(consumedJtiRef)
-      ]);
+      const [snapshot, cooldown] = await Promise.all([tx.get(ref), tx.get(cooldownRef)]);
       const data = snapshot.data();
       const pending = cooldown.data();
-      if (consumedJti.exists || !data || data.state !== "ISSUED" || data.tenantId !== tenantId ||
-          data.ownerUid !== uid || data.deviceIdHash !== deviceIdHash || data.nonce !== clientNonce ||
-          Number(data.expiresAt) <= Date.now() || !pending || pending.state !== "APPROVED" ||
-          pending.ownerUid !== uid || pending.grantJti !== jti ||
+      if (!data || data.state !== "ISSUED" || data.tenantId !== tenantId ||
+          data.deviceIdHash !== deviceIdHash || data.nonce !== clientNonce ||
+          Number(data.expiresAt) <= Date.now() || !pending ||
+          pending.state !== "ISSUED" || pending.grantJti !== jti ||
           pending.deviceIdHash !== deviceIdHash) throw GENERIC;
       tx.update(ref, { state: "CONSUMED", consumedAt: FieldValue.serverTimestamp() });
-      tx.update(cooldownRef, { state: "CONSUMED", consumedAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp() });
-      // This is deliberately the final write: identity, grant and recovery-state
-      // bindings have all been validated before the tenant+UID-scoped JTI is spent.
-      tx.create(consumedJtiRef, { tenantId, ownerUid: uid, grantJtiHash: createHash("sha256").update(jti).digest("hex"),
-        consumedAt: FieldValue.serverTimestamp() });
+      tx.delete(cooldownRef);
       const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
       tx.create(eventRef, {
         tenantId, type: "RECOVERY_GRANT_CONSUMED", deviceIdHash,
@@ -652,28 +612,25 @@ export const consumeRecoveryGrant = onCall(
 export const cancelRecoveryRequest = onCall(
   { region: REGION, enforceAppCheck: true },
   async request => {
-    const owner = requireFreshPrimaryOwner(request);
+    const owner = requireFreshOwner(request);
     if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
     await requireAttestedDevice(owner.tenantId, deviceIdHash, owner.uid);
     const cooldownRef = db.doc(`recoveryCooldowns/${owner.tenantId}`);
-    const cancelled = await db.runTransaction(async tx => {
+    await db.runTransaction(async tx => {
       const cooldownSnapshot = await tx.get(cooldownRef);
       const pending = cooldownSnapshot.data();
-      if (!pending || pending.state === "CANCELLED" || pending.state === "CONSUMED") return false;
-      if (!["ALERT_PENDING", "APPROVED", "PENDING", "ISSUED"].includes(pending.state)) throw GENERIC;
+      if (!pending) throw new HttpsError("not-found", "No pending recovery request.");
+      if (!["ALERT_PENDING", "PENDING", "ISSUED"].includes(pending.state) ||
+          pending.deviceIdHash !== deviceIdHash) throw GENERIC;
       const grantJti = typeof pending.grantJti === "string" ? pending.grantJti : null;
       const grantRef = grantJti ? db.doc(`recoveryGrants/${grantJti}`) : null;
       const eventId = typeof pending.alertEventId === "string" ? pending.alertEventId : null;
       const eventRef = eventId ? db.doc(`recoverySecurityEvents/${eventId}`) : null;
       const grantSnapshot = grantRef ? await tx.get(grantRef) : null;
       const eventSnapshot = eventRef ? await tx.get(eventRef) : null;
-      if (grantSnapshot?.exists && grantSnapshot.data()?.state === "CONSUMED") return false;
-      tx.update(cooldownRef, {
-        state: "CANCELLED", cancelledAt: FieldValue.serverTimestamp(),
-        cancelledByUid: owner.uid, cancelledByDeviceHash: deviceIdHash,
-        eligibleAt: null, updatedAt: FieldValue.serverTimestamp()
-      });
+      if (grantSnapshot?.exists && grantSnapshot.data()?.state === "CONSUMED") throw GENERIC;
+      tx.delete(cooldownRef);
       if (grantRef && grantSnapshot?.exists) {
         tx.update(grantRef, { state: "REVOKED", revokedAt: FieldValue.serverTimestamp() });
       }
@@ -685,9 +642,8 @@ export const cancelRecoveryRequest = onCall(
         tenantId: owner.tenantId, type: "RECOVERY_REQUEST_CANCELLED",
         deviceIdHash, createdAt: FieldValue.serverTimestamp()
       });
-      return true;
     });
-    return { cancelled };
+    return { cancelled: true };
   }
 );
 
