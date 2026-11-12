@@ -109,13 +109,14 @@ export const registerRecoveryPhone = onCall(
     if (!auth || auth.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
     const tenantId = validateTenantId(request.data?.tenantId);
     if (auth.token.tenantId !== tenantId) throw GENERIC;
-    validateDeviceHash(request.data?.deviceIdHash);
+    const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
     await spendRateLimit(`reg:${tenantId}`, 5, 60 * 60_000);
 
     const newProof = await verifyPhoneToken(request.data?.phoneIdToken);
     const newHash = digest(tenantId, newProof.phone);
     const ref = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
     const existing = (await ref.get()).data();
+    if (existing?.deviceIdHash && existing.deviceIdHash !== deviceIdHash) throw GENERIC;
     let oldHash: Buffer | null = null;
     if (existing?.hash && !equalDigest(existing.hash, newHash)) {
       const oldProof = await verifyPhoneToken(request.data?.currentPhoneIdToken);
@@ -125,9 +126,11 @@ export const registerRecoveryPhone = onCall(
     const result = await db.runTransaction(async tx => {
       const snapshot = await tx.get(ref);
       const current = snapshot.data();
+      if (current?.deviceIdHash && current.deviceIdHash !== deviceIdHash) throw GENERIC;
       if (!current?.hash) {
         tx.create(ref, {
           hash: newHash.toString("base64"),
+          deviceIdHash,
           masked: maskPhone(newProof.phone),
           state: "VERIFIED",
           verifiedAt: FieldValue.serverTimestamp(),
@@ -137,7 +140,7 @@ export const registerRecoveryPhone = onCall(
       }
       if (equalDigest(current.hash, newHash)) {
         if (current.pending?.hash) throw new HttpsError("failed-precondition", "A recovery phone change is already pending.");
-        tx.update(ref, { state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp() });
+        tx.update(ref, { deviceIdHash, state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp() });
         return "VERIFIED" as const;
       }
       if (current.pending?.hash) throw new HttpsError("failed-precondition", "A recovery phone change is already pending.");
@@ -178,7 +181,8 @@ export const issueRecoveryGrant = onCall(
     const phoneRecord = phoneSnapshot.data();
     const actualHash = digest(tenantId, proof.phone);
     if (!phoneRecord || !["VERIFIED", "CHANGE_PENDING"].includes(phoneRecord.state) ||
-        phoneRecord.otpRequired === false || !equalDigest(phoneRecord.hash, actualHash)) throw GENERIC;
+        phoneRecord.otpRequired === false || phoneRecord.deviceIdHash !== deviceIdHash ||
+        !equalDigest(phoneRecord.hash, actualHash)) throw GENERIC;
 
     // Firebase ID tokens can be replayed while fresh. Consume each auth event once.
     const proofId = createHmac("sha256", PHONE_PEPPER.value())
