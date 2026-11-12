@@ -197,7 +197,7 @@ export const registerRecoveryPhone = onCall(
 
 /** Register the owner's authenticated device as the mandatory recovery-alert destination. */
 export const registerRecoveryOwnerDevice = onCall(
-  { region: REGION, enforceAppCheck: true },
+  { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER] },
   async request => {
     requireRecoveryEnabled();
     const auth = request.auth;
