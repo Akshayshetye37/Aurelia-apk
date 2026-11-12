@@ -836,3 +836,73 @@ test('revoked owner notification device cannot acknowledge a pending alert', asy
   }, ownerAuth(ownerUid, tenantId)), 'revoked owner device cannot acknowledge');
   assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'ALERT_PENDING');
 });
+
+
+test('owner cancellation before grant issue permanently prevents grant creation', async () => {
+  const tenantId = 'tenant-emulator-cancel-before-issue';
+  const ownerUid = 'owner-emulator-cancel-before-issue';
+  const phone = '+15555550117';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
+  await assert.rejects(callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'f'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phone)
+  }), error => error.code === 'unavailable');
+  const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  const alert = sentMessages.find(message => message.data.tenantId === tenantId &&
+    message.data.deviceIdHash === ownerDeviceHash);
+  await callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
+    ackToken: alert.data.ackToken
+  }, ownerAuth(ownerUid, tenantId));
+  await callable(functions.cancelRecoveryRequest, {
+    tenantId, deviceIdHash: ownerDeviceHash
+  }, ownerAuth(ownerUid, tenantId));
+  await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
+  await assert.rejects(callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'g'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phone)
+  }), 'cancelled state prevents subsequent grant issue');
+  const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  assert.equal(state.state, 'CANCELLED');
+  assert.equal(state.grantJti, undefined);
+});
+
+test('owner cancellation before consume revokes the issued grant permanently', async () => {
+  const tenantId = 'tenant-emulator-cancel-before-consume';
+  const ownerUid = 'owner-emulator-cancel-before-consume';
+  const phone = '+15555550118';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
+  const nonce = 'h'.repeat(43);
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
+  await assert.rejects(callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'i'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phone)
+  }), error => error.code === 'unavailable');
+  const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  const alert = sentMessages.find(message => message.data.tenantId === tenantId &&
+    message.data.deviceIdHash === ownerDeviceHash);
+  await callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
+    ackToken: alert.data.ackToken
+  }, ownerAuth(ownerUid, tenantId));
+  await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
+  await sleep(1100);
+  const issued = await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce, phoneIdToken: await phoneAuthToken(phone)
+  });
+  assert.equal(issued.status, 'ISSUED');
+  const payload = JSON.parse(Buffer.from(issued.grant.split('.')[1], 'base64url').toString('utf8'));
+  const cancelled = await callable(functions.cancelRecoveryRequest, {
+    tenantId, deviceIdHash: ownerDeviceHash
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(cancelled.cancelled, true);
+  await assert.rejects(callable(functions.consumeRecoveryGrant, {
+    grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth(ownerUid, tenantId)), 'grant cannot be consumed after cancellation');
+  assert.equal((await db.doc(`recoveryGrants/${payload.jti}`).get()).data().state, 'REVOKED');
+});
