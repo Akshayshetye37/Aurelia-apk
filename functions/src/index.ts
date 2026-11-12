@@ -319,8 +319,7 @@ export const registerRecoveryOwnerDevice = onCall(
   async request => {
     requireRecoveryEnabled();
     const auth = request.auth;
-    const ownerAge = Date.now() / 1000 - Number(auth?.token.auth_time ?? 0);
-    if (!auth || auth.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
+    if (!auth || auth.token.role !== "owner") throw GENERIC;
     const tenantId = validateTenantId(request.data?.tenantId);
     if (auth.token.tenantId !== tenantId) throw GENERIC;
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
