@@ -10,18 +10,25 @@ import android.os.SystemClock
  * Checksum/format failures are handled before spendAttempt() and are free.
  */
 object RecoveryGate {
-    private const val TTL_MS = 10 * 60_000L
+    private const val TTL_MS = 5 * 60_000L
     private const val MAX_ATTEMPTS = 3
 
     @Volatile private var deadlineElapsed = 0L
     @Volatile private var attemptsRemaining = 0
 
+    /**
+     * Call only after the backend has verified the ES256 grant and atomically
+     * consumed its jti, and the encrypted local replay marker is durable.
+     * The local window can never outlive the signed grant expiry.
+     */
     @Synchronized
-    fun arm(verification: RecoveryGrantVerifier.Result) {
-        check(verification === RecoveryGrantVerifier.Result.Ok) {
-            "A verified recovery grant is required to arm the recovery gate."
+    fun armAfterServerConsumption(expiresAtEpochSec: Long) {
+        val nowEpochSec = System.currentTimeMillis() / 1000
+        val remainingMs = (expiresAtEpochSec - nowEpochSec) * 1000L
+        check(remainingMs in 1..TTL_MS) {
+            "A live, five-minute recovery grant consumed by the backend is required."
         }
-        deadlineElapsed = SystemClock.elapsedRealtime() + TTL_MS
+        deadlineElapsed = SystemClock.elapsedRealtime() + remainingMs
         attemptsRemaining = MAX_ATTEMPTS
     }
 
