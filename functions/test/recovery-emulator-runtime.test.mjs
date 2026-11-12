@@ -709,3 +709,32 @@ test('phone, tenant and device rate limits lock out repeated OTP grant attempts'
   }, null, '198.51.100.111'), error => error.code === 'resource-exhausted',
   'sixth hourly attempt is rate-limited and locked out');
 });
+
+test('owner acknowledgement token expires after fifteen minutes', async () => {
+  const tenantId = 'tenant-emulator-ack-expiry';
+  const ownerUid = 'owner-emulator-ack-expiry';
+  const phone = '+15555550112';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
+  await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'e'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phone)
+  });
+  const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
+  const cooldown = (await cooldownRef.get()).data();
+  const alert = sentMessages.find(message => message.data.tenantId === tenantId &&
+    message.data.deviceIdHash === ownerDeviceHash);
+  assert.ok(alert?.data.ackToken);
+  await db.doc(`recoverySecurityEvents/${cooldown.alertEventId}`).update({
+    ackTokenExpiresAt: Date.now() - 1
+  });
+  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
+    ackToken: alert.data.ackToken
+  }, ownerAuth(ownerUid, tenantId)), 'expired owner acknowledgement is rejected');
+  const unchanged = (await cooldownRef.get()).data();
+  assert.equal(unchanged.state, 'ALERT_PENDING');
+  assert.equal(unchanged.eligibleAt, null);
+});

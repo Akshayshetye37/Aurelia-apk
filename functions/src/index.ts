@@ -398,7 +398,8 @@ export const acknowledgeRecoveryOwnerAlert = onCall(
           !cooldown.alertedDeviceHashes.includes(deviceIdHash) ||
           !event || event.tenantId !== tenantId || event.ownerUid !== owner.uid ||
           event.requestId !== eventId || event.type !== "RECOVERY_COOLDOWN_STARTED" ||
-          event.acknowledgedAt || !equalDigest(event.ackTokenHashes?.[deviceIdHash],
+          event.acknowledgedAt || Number(event.ackTokenExpiresAt) <= Date.now() ||
+          !equalDigest(event.ackTokenHashes?.[deviceIdHash],
             ownerAckTokenDigest(owner.uid, eventId, deviceIdHash, ackToken))) throw GENERIC;
       tx.update(cooldownRef, {
         state: "APPROVED", eligibleAt,
@@ -497,7 +498,8 @@ export const issueRecoveryGrant = onCall(
           tenantId, ownerUid: phoneRecord.ownerUid, requestId: eventRef.id,
           type: "RECOVERY_COOLDOWN_STARTED", deviceIdHash,
           phoneHash: actualHash.toString("base64"), notificationDelivery: "PENDING",
-          ackTokenHashes, createdAt: FieldValue.serverTimestamp()
+          ackTokenHashes, ackTokenExpiresAt: nowMs + 15 * 60_000,
+          createdAt: FieldValue.serverTimestamp()
         });
         return { status: "COOLDOWN" as const, eligibleAt: 0, notify: true, eventId: eventRef.id };
       }
@@ -521,6 +523,7 @@ export const issueRecoveryGrant = onCall(
           [hash, ownerAckTokenDigest(phoneRecord.ownerUid, eventId, hash, token).toString("base64")]));
         tx.update(alertEventRef, {
           ownerUid: phoneRecord.ownerUid, requestId: eventId, ackTokenHashes,
+          ackTokenExpiresAt: nowMs + 15 * 60_000,
           fcmAcceptedDeviceHashes: FieldValue.delete(),
           notificationDelivery: "PENDING",
           updatedAt: FieldValue.serverTimestamp()
