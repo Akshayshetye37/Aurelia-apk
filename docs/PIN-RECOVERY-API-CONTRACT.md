@@ -10,7 +10,7 @@ Changing a number requires PIN, OTP to the new number, a 24–72 hour cooling pe
 
 ## Recovery authorization
 
-The backend checks that the token phone number equals the trusted phone stored for the tenant and that auth_time is less than five minutes old. It issues a signed token with a five-minute expiry, one-time jti, audience recovery, tenant binding, owner-registered device-key hash and client nonce. Consume jti atomically and reject replay, expiry, wrong audience, device, nonce, tenant or phone.
+The backend checks that the token phone number equals the trusted phone stored for the tenant and that auth_time is less than five minutes old. The first valid recovery OTP creates a server-side 24-hour hold and a secret-free security event; no grant is issued during the hold. After the hold, a fresh phone-auth event is mandatory. Only then does the backend issue a signed token with a five-minute expiry, one-time jti, audience recovery, tenant binding, owner-registered device-key hash and client nonce. Consume jti atomically and reject replay, expiry, wrong audience, device, nonce, tenant or phone.
 
 This token authorizes workflow continuation only. The offline recovery key is still required locally to unwrap the same DEK. Never accept a client-supplied number, PIN, DEK or envelope as proof of recovery. Never send SMS or call external KMS inside a Firestore transaction.
 
@@ -24,4 +24,4 @@ A separately opted-in recovery wrapper may derive HKDF(localHalf || serverHalf).
 
 ## Deployment gates
 
-No OTP recovery until verified phone registration, token validation, nonce/device binding, one-time jti storage, abuse controls, notifications, monitoring, App Check, Play Integrity and end-to-end physical-device tests pass. SMS OTP never creates, unwraps or replaces the DEK.
+All recovery callables default OFF through `RECOVERY_ENABLED=false`; enable only in a dedicated staging project. No production OTP recovery until verified phone registration, token validation, nonce/device binding, one-time jti storage, cooldown, exponential abuse controls, owner notifications, monitoring, App Check, Play Integrity, pinned signing key and end-to-end physical-device tests pass. SMS OTP never creates, unwraps or replaces the DEK.
