@@ -8,8 +8,8 @@ test('OTP recovery gate is process-local, expires monotonically, and permits thr
   const gate = read('android/templates/security/RecoveryGate.kt');
   assert.match(gate, /SystemClock\.elapsedRealtime\(\)/);
   assert.match(gate, /MAX_ATTEMPTS = 3/);
-  assert.match(gate, /TTL_MS = 10 \* 60_000L/);
-  assert.match(gate, /fun arm\(verification: RecoveryGrantVerifier\.Result\)/);
+  assert.match(gate, /TTL_MS = 5 \* 60_000L/);
+  assert.match(gate, /fun armAfterServerConsumption\(expiresAtEpochSec: Long\)/);
   assert.match(gate, /fun spendAttempt\(\): Boolean/);
   assert.match(gate, /fun clear\(\)/);
   assert.doesNotMatch(gate, /SharedPreferences|AtomicFile|File\(/);
@@ -80,7 +80,8 @@ test('grant claim preflight binds expiry, tenant, device and nonce before server
   assert.match(client, /payload\.optString\("nonce"\) == nonce/);
   assert.match(client, /expiresAt > now/);
   assert.match(client, /replayStore\.markUsed\(claims\.jti, claims\.expiresAt\)/);
-  assert.match(client, /RecoveryGate\.arm\(RecoveryGrantVerifier\.Result\.Ok\)/);
+  assert.match(client, /RecoveryGate\.armAfterServerConsumption\(claims\.expiresAt\)/);
+  assert.doesNotMatch(client, /RecoveryGrantVerifier\.Result\.Ok/);
   assert.match(client, /NOT cryptographic signature verification/);
 });
 
@@ -88,7 +89,7 @@ test('local grant replay cache is Keystore encrypted, bounded to grant expiry an
   const store = read('android/templates/security/RecoveryGrantReplayStore.kt');
   assert.match(store, /AndroidKeyStore/);
   assert.match(store, /fun isUsed\(jti: String/);
-  assert.match(store, /expiresAtEpochSec - nowEpochSec <= 600/);
+  assert.match(store, /expiresAtEpochSec - nowEpochSec <= 300/);
   assert.match(store, /entries\.any \{ it\.first == jti \}/);
   assert.match(store, /MAX_ENTRIES = 20/);
 });
