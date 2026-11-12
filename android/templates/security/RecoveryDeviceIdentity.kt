@@ -1,6 +1,7 @@
 package com.aurelia.pms.security
 
 import android.os.Build
+import android.util.Base64
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
@@ -9,7 +10,6 @@ import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.interfaces.ECPublicKey
 import java.security.cert.Certificate
-import java.util.Base64
 
 /** Recovery device identity is created only with a server challenge and hardware attestation. */
 object RecoveryDeviceIdentity {
@@ -79,7 +79,7 @@ object RecoveryDeviceIdentity {
             if (chain.size !in 2..8) throw SecurityException("Android hardware attestation chain is incomplete.")
             val publicKey = chain.first().publicKey as? ECPublicKey
                 ?: throw SecurityException("Attested device key is not P-256 EC.")
-            val encodedChain = chain.map { Base64.getEncoder().encodeToString(it.encoded) }
+            val encodedChain = chain.map { Base64.encodeToString(it.encoded, Base64.NO_WRAP) }
             AttestedIdentity(hash(publicKey.encoded), encodedChain)
         } catch (failure: Exception) {
             // Do not leave a key that cannot be enrolled and later mistaken for trusted.
