@@ -788,3 +788,27 @@ test('legacy local owner binding can only migrate when server recovery owner UID
   }, ownerAuth(ownerUid, tenantId));
   assert.equal(confirmed.confirmed, true);
 });
+
+test('attested but unenrolled owner device cannot cancel a recovery request', async () => {
+  const tenantId = 'tenant-emulator-unenrolled-cancel';
+  const ownerUid = 'owner-emulator-unenrolled-cancel';
+  const phone = '+15555550115';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  const enrolledOwnerHash = deviceHashFor(tenantId + ':enrolled-owner');
+  const unregisteredOwnerHash = deviceHashFor(tenantId + ':unregistered-owner');
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, enrolledOwnerHash] });
+  await db.doc(`recoveryDeviceAttestations/${tenantId}_${unregisteredOwnerHash}`).set({
+    tenantId, ownerUid, deviceIdHash: unregisteredOwnerHash, status: 'VERIFIED',
+    securityLevel: 'TRUSTED_ENVIRONMENT', verifiedBootState: 'VERIFIED',
+    deviceLocked: true, publicKeyHash: unregisteredOwnerHash
+  });
+  await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'c'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phone)
+  });
+  await assert.rejects(callable(functions.cancelRecoveryRequest, {
+    tenantId, deviceIdHash: unregisteredOwnerHash
+  }, ownerAuth(ownerUid, tenantId)), 'attested but unenrolled device cannot cancel');
+  assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'ALERT_PENDING');
+});

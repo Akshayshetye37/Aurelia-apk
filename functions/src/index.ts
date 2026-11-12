@@ -685,8 +685,19 @@ export const cancelRecoveryRequest = onCall(
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
     await requireAttestedDevice(owner.tenantId, deviceIdHash, owner.uid);
     const cooldownRef = db.doc(`recoveryCooldowns/${owner.tenantId}`);
+    const ownerDeviceRef = db.doc(`recoveryOwnerDevices/${owner.tenantId}_${deviceIdHash}`);
+    const attestationRef = db.doc(`recoveryDeviceAttestations/${owner.tenantId}_${deviceIdHash}`);
     const cancelled = await db.runTransaction(async tx => {
-      const cooldownSnapshot = await tx.get(cooldownRef);
+      const [cooldownSnapshot, ownerDeviceSnapshot, attestationSnapshot] = await Promise.all([
+        tx.get(cooldownRef), tx.get(ownerDeviceRef), tx.get(attestationRef)
+      ]);
+      const ownerDevice = ownerDeviceSnapshot.data();
+      const attestation = attestationSnapshot.data();
+      if (!ownerDevice || ownerDevice.ownerUid !== owner.uid ||
+          ownerDevice.deviceIdHash !== deviceIdHash || ownerDevice.active !== true ||
+          !attestation || attestation.ownerUid !== owner.uid || attestation.status !== "VERIFIED" ||
+          !["TRUSTED_ENVIRONMENT", "STRONG_BOX"].includes(attestation.securityLevel) ||
+          attestation.verifiedBootState !== "VERIFIED" || attestation.deviceLocked !== true) throw GENERIC;
       const pending = cooldownSnapshot.data();
       if (!pending || pending.state === "CANCELLED" || pending.state === "CONSUMED") return false;
       if (!["ALERT_PENDING", "APPROVED", "PENDING", "ISSUED"].includes(pending.state)) throw GENERIC;
