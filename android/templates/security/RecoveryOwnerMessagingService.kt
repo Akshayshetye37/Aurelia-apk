@@ -44,6 +44,9 @@ class RecoveryOwnerMessagingService : FirebaseMessagingService() {
             manager.createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, "Account security", NotificationManager.IMPORTANCE_HIGH)
             )
+            // Android may silently accept notify() while the user has blocked this channel.
+            // Never acknowledge delivery or start the 24-hour hold for a suppressed alert.
+            if (manager.getNotificationChannel(CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE) return
         }
         if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) return
 
