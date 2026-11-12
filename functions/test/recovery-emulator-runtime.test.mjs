@@ -233,6 +233,16 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
     grant: wrongTenant, nonce, deviceIdHash: recoveryDeviceHash
   }, ownerAuth(ownerUid, tenantId)), 'internally consistent wrong-tenant grant rejected without spending legitimate JTI');
 
+  const unknownKidGrant = await new SignJWT({
+    uid: ownerUid, tenant: tenantId, did: recoveryDeviceHash, nonce, scope: 'recovery:continue'
+  }).setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid: 'unknown-emulator-key' })
+    .setIssuer('aurelia-recovery').setAudience('aurelia-recovery-client')
+    .setSubject(tenantId).setJti(payload.jti)
+    .setIssuedAt(payload.iat).setExpirationTime(payload.exp).sign(privateKey);
+  await assert.rejects(callable(functions.consumeRecoveryGrant, {
+    grant: unknownKidGrant, nonce, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth(ownerUid, tenantId)), 'unknown key ID rejected without spending legitimate JTI');
+
   const missingTenantGrant = await new SignJWT({
     uid: ownerUid, did: recoveryDeviceHash, nonce, scope: 'recovery:continue'
   }).setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid: SIGNING_KEY_ID })
@@ -633,4 +643,69 @@ test('grant consumption racing with cancellation has exactly one winner', async 
     assert.equal(state.state, 'CANCELLED');
     assert.equal(grant.state, 'REVOKED');
   }
+});
+
+
+test('Firebase Auth emulator rejects wrong OTP and backend rejects expired phone-auth proof', async () => {
+  const tenantId = 'tenant-emulator-phone-expiry';
+  const ownerUid = 'owner-emulator-phone-expiry';
+  const phone = '+15555550110';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, deviceHashFor(tenantId + ':owner')] });
+
+  const sent = await fetch(`http://${AUTH_HOST}/identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=fake-api-key`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ phoneNumber: phone, recaptchaToken: 'emulator-recaptcha-token' })
+  });
+  assert.equal(sent.ok, true);
+  const session = await sent.json();
+  const codesResponse = await fetch(`http://${AUTH_HOST}/emulator/v1/projects/${PROJECT_ID}/verificationCodes`);
+  const codes = await codesResponse.json();
+  const entry = codes.verificationCodes.find(item =>
+    item.phoneNumber === phone && item.sessionInfo === session.sessionInfo);
+  assert.ok(entry?.code);
+  const wrongCode = entry.code === '000000' ? '999999' : '000000';
+  const wrongOtp = await fetch(`http://${AUTH_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPhoneNumber?key=fake-api-key`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessionInfo: session.sessionInfo, code: wrongCode })
+  });
+  assert.equal(wrongOtp.ok, false, 'incorrect OTP is rejected by Firebase Auth Emulator');
+
+  const stalePhoneToken = await phoneAuthToken(phone);
+  const realNow = Date.now;
+  Date.now = () => realNow() + 301_000;
+  try {
+    await assert.rejects(callable(functions.issueRecoveryGrant, {
+      tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'z'.repeat(43),
+      phoneIdToken: stalePhoneToken
+    }), 'phone-auth token older than five minutes is rejected');
+  } finally {
+    Date.now = realNow;
+  }
+  assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).exists, false,
+    'expired OTP proof must not create recovery state');
+});
+
+test('phone, tenant and device rate limits lock out repeated OTP grant attempts', async () => {
+  const tenantId = 'tenant-emulator-rate-limit';
+  const ownerUid = 'owner-emulator-rate-limit';
+  const phone = '+15555550111';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, deviceHashFor(tenantId + ':owner')] });
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const result = await callable(functions.issueRecoveryGrant, {
+      tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'r'.repeat(43),
+      phoneIdToken: await phoneAuthToken(phone)
+    });
+    assert.equal(result.status, 'COOLDOWN');
+    if (attempt < 5) await sleep(1100);
+  }
+  await sleep(1100);
+  await assert.rejects(callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'r'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phone)
+  }), error => error.code === 'resource-exhausted',
+  'sixth hourly attempt is rate-limited and locked out');
 });
