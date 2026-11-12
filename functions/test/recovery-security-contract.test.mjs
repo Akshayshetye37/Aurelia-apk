@@ -145,7 +145,11 @@ test('persisted recovery state is never re-encrypted under a silently regenerate
 test('every recovery callable enforces App Check and phone-change activation rejects future auth_time', () => {
   const callables = functions.match(/export const \w+ = onCall\([\s\S]*?\n\);/g) ?? [];
   assert.ok(callables.length >= 5);
-  for (const callable of callables) assert.match(callable, /enforceAppCheck: true/);
+  assert.match(functions, /defineString\("RECOVERY_ENABLED", \{ default: "false" \}\)/);
+  for (const callable of callables) {
+    assert.match(callable, /enforceAppCheck: true/);
+    assert.match(callable, /requireRecoveryEnabled\(\)/);
+  }
   const activation = functions.slice(functions.indexOf('export const activateRecoveryPhoneChange'));
   assert.match(activation, /ownerAge < 0/);
   assert.match(activation, /ownerAge >= 300/);
