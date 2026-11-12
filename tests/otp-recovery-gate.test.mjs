@@ -9,7 +9,8 @@ test('OTP recovery gate is process-local, expires monotonically, and permits thr
   assert.match(gate, /SystemClock\.elapsedRealtime\(\)/);
   assert.match(gate, /MAX_ATTEMPTS = 3/);
   assert.match(gate, /TTL_MS = 10 \* 60_000L/);
-  assert.match(gate, /fun arm\(verification: RecoveryGrantVerifier\.Result\)/);
+  assert.match(gate, /fun armAfterServerConsumption\(\)/);
+  assert.doesNotMatch(gate, /fun arm\(verification: RecoveryGrantVerifier\.Result\)/);
   assert.match(gate, /fun spendAttempt\(\): Boolean/);
   assert.match(gate, /fun clear\(\)/);
   assert.doesNotMatch(gate, /SharedPreferences|AtomicFile|File\(/);
@@ -80,7 +81,9 @@ test('grant claim preflight binds expiry, tenant, device and nonce before server
   assert.match(client, /payload\.optString\("nonce"\) == nonce/);
   assert.match(client, /expiresAt > now/);
   assert.match(client, /replayStore\.markUsed\(claims\.jti, claims\.expiresAt\)/);
-  assert.match(client, /RecoveryGate\.arm\(RecoveryGrantVerifier\.Result\.Ok\)/);
+  assert.match(client, /if \(consumed && recorded\) \{[\s\S]*?RecoveryGate\.armAfterServerConsumption\(\)/);
+  assert.doesNotMatch(client, /RecoveryGate\.arm\(RecoveryGrantVerifier\.Result\.Ok\)/);
+  assert.doesNotMatch(client, /import com\.aurelia\.pms\.security\.RecoveryGrantVerifier/);
   assert.match(client, /NOT cryptographic signature verification/);
 });
 

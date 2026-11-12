@@ -4,7 +4,6 @@ import android.content.Context
 import com.aurelia.pms.AureliaAppCheck
 import com.aurelia.pms.security.RecoveryGate
 import com.aurelia.pms.security.RecoveryGrantReplayStore
-import com.aurelia.pms.security.RecoveryGrantVerifier
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.android.gms.tasks.Task
@@ -69,7 +68,7 @@ class RecoveryGrantClient(private val context: Context) {
                 replayStore.markUsed(claims.jti, claims.expiresAt)
             }.getOrDefault(false) else false
             if (consumed && recorded) {
-                RecoveryGate.arm(RecoveryGrantVerifier.Result.Ok)
+                RecoveryGate.armAfterServerConsumption()
                 onResult(true)
             } else {
                 RecoveryGate.clear()

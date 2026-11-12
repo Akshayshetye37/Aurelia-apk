@@ -3,11 +3,15 @@ package com.aurelia.pms.security
 import android.os.SystemClock
 
 /**
- * Process-local authorization window. It is armed only after a signed backend
- * recovery grant has been verified. Process death closes the gate automatically.
+ * Process-local authorization window. It is armed only after the backend confirms
+ * successful grant consumption. The backend verifies the ES256 signature, issuer,
+ * audience, expiry and bindings, then atomically consumes jti before returning.
  *
- * One grant authorizes at most three checksum-valid recovery-key unwrap attempts.
- * Checksum/format failures are handled before spendAttempt() and are free.
+ * Android performs claim preflight and local replay suppression; this gate does not
+ * represent client-side cryptographic verification. Process death closes the gate.
+ *
+ * One consumed grant authorizes at most three checksum-valid recovery-key unwrap
+ * attempts. Checksum/format failures are handled before spendAttempt() and are free.
  */
 object RecoveryGate {
     private const val TTL_MS = 10 * 60_000L
@@ -17,10 +21,7 @@ object RecoveryGate {
     @Volatile private var attemptsRemaining = 0
 
     @Synchronized
-    fun arm(verification: RecoveryGrantVerifier.Result) {
-        check(verification === RecoveryGrantVerifier.Result.Ok) {
-            "A verified recovery grant is required to arm the recovery gate."
-        }
+    fun armAfterServerConsumption() {
         deadlineElapsed = SystemClock.elapsedRealtime() + TTL_MS
         attemptsRemaining = MAX_ATTEMPTS
     }
