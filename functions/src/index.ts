@@ -327,8 +327,16 @@ export const registerRecoveryOwnerDevice = onCall(
     await spendRateLimit(`notify:${tenantId}:${deviceIdHash}`, 10, 60 * 60_000);
     const token = requiredString(request.data?.fcmToken, 4096);
     if (token.length < 100) throw GENERIC;
+    const deviceRef = db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`);
+    const existingDevice = (await deviceRef.get()).data();
+    if (!existingDevice) {
+      const ownerAge = Date.now() / 1000 - Number(auth.token.auth_time ?? 0);
+      if (ownerAge < 0 || ownerAge >= 300) throw GENERIC;
+    } else if (existingDevice.ownerUid !== auth.uid || existingDevice.deviceIdHash !== deviceIdHash) {
+      throw GENERIC;
+    }
     const tokenHash = createHmac("sha256", PHONE_PEPPER.value()).update(token).digest("hex");
-    await db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`).set({
+    await deviceRef.set({
       tenantId, deviceIdHash, ownerUid: auth.uid, fcmToken: token,
       tokenHash, active: true, updatedAt: FieldValue.serverTimestamp()
     });
