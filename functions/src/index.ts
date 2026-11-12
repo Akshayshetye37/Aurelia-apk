@@ -48,17 +48,33 @@ async function verifyPhoneToken(tokenValue: unknown): Promise<PhoneProof> {
   return { uid: decoded.uid, phone: decoded.phone_number, authTime };
 }
 
-/** Rate-limit transaction commits even when the request is rejected. */
+/** Rate-limit counters and exponential lockouts commit even when a request is rejected. */
 async function spendRateLimit(key: string, max: number, windowMs: number): Promise<void> {
   const ref = db.doc(`rateLimits/${key}`);
   const now = Date.now();
   const allowed = await db.runTransaction(async tx => {
     const snapshot = await tx.get(ref);
-    const current = snapshot.data() ?? { count: 0, startedAt: now };
-    const reset = now - Number(current.startedAt) >= windowMs;
-    const count = reset ? 1 : Number(current.count) + 1;
-    tx.set(ref, { count, startedAt: reset ? now : current.startedAt, updatedAt: FieldValue.serverTimestamp() });
-    return count <= max;
+    const current = snapshot.data() ?? { count: 0, startedAt: now, strikes: 0, blockedUntil: 0 };
+    const countBefore = Number(current.count ?? 0);
+    const blockedUntil = Number(current.blockedUntil ?? 0);
+    if (now < blockedUntil) {
+      tx.set(ref, { ...current, count: countBefore + 1, lastAttemptAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp() });
+      return false;
+    }
+    const reset = now - Number(current.startedAt ?? now) >= windowMs;
+    const count = reset ? 1 : countBefore + 1;
+    const strikes = reset ? 0 : Number(current.strikes ?? 0);
+    if (count <= max) {
+      tx.set(ref, { count, startedAt: reset ? now : current.startedAt, strikes,
+        blockedUntil: 0, updatedAt: FieldValue.serverTimestamp() });
+      return true;
+    }
+    const nextStrike = strikes + 1;
+    const backoffMs = Math.min(60 * 60_000, 30_000 * (2 ** Math.min(nextStrike - 1, 7)));
+    tx.set(ref, { count, startedAt: reset ? now : current.startedAt, strikes: nextStrike,
+      blockedUntil: now + backoffMs, updatedAt: FieldValue.serverTimestamp() });
+    return false;
   });
   if (!allowed) throw new HttpsError("resource-exhausted", "Try again later.");
 }
