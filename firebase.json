@@ -2,9 +2,22 @@
   "functions": {
     "source": "functions",
     "runtime": "nodejs22",
-    "predeploy": ["npm --prefix functions run build"]
+    "predeploy": [
+      "npm --prefix functions run build"
+    ]
   },
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": false
+    }
   }
 }
