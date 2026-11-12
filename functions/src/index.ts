@@ -248,7 +248,7 @@ export const issueRecoveryGrant = onCall(
 
 /** Consume jti atomically before the Android app arms its in-memory recovery gate. */
 export const consumeRecoveryGrant = onCall(
-  { region: REGION, enforceAppCheck: true, secrets: [RECOVERY_SIGNING_KEY_PKCS8] },
+  { region: REGION, enforceAppCheck: true, secrets: [RECOVERY_SIGNING_KEY_PKCS8, PHONE_PEPPER] },
   async request => {
     const grant = requiredString(request.data?.grant, 4096);
     const privateKeyPem = RECOVERY_SIGNING_KEY_PKCS8.value();
