@@ -182,21 +182,57 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   const payload = JSON.parse(Buffer.from(issued.grant.split('.')[1], 'base64url').toString('utf8'));
   assert.ok(payload.exp > payload.iat);
   assert.ok(payload.exp - payload.iat <= 300, 'grant lifetime is at most five minutes');
+  assert.equal(payload.uid, ownerUid, 'grant is bound to the recovery phone owner');
+  assert.equal(payload.tenant, tenantId, 'grant carries an explicit tenant claim');
 
+  // Every rejected attempt below reuses the legitimate JTI. None may consume it.
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: issued.grant, nonce: 'x'.repeat(43), deviceIdHash: recoveryDeviceHash
-  }));
+  }, ownerAuth(ownerUid, tenantId)), 'wrong nonce rejected');
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: issued.grant, nonce, deviceIdHash: 'c'.repeat(64)
-  }));
+  }, ownerAuth(ownerUid, tenantId)), 'wrong device hash rejected');
+  await assert.rejects(callable(functions.consumeRecoveryGrant, {
+    grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth('different-authenticated-uid', tenantId)), 'wrong authenticated UID rejected');
+
+  const wrongTenant = await new SignJWT({
+    uid: ownerUid, tenant: 'tenant-emulator-other', did: recoveryDeviceHash,
+    nonce, scope: 'recovery:continue'
+  }).setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid: SIGNING_KEY_ID })
+    .setIssuer('aurelia-recovery').setAudience('aurelia-recovery-client')
+    .setSubject(tenantId).setJti(payload.jti)
+    .setIssuedAt(payload.iat).setExpirationTime(payload.exp).sign(privateKey);
+  await assert.rejects(callable(functions.consumeRecoveryGrant, {
+    grant: wrongTenant, nonce, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth(ownerUid, tenantId)), 'mismatched tenant claim rejected');
+
+  const tamperedParts = issued.grant.split('.');
+  const tamperedPayload = JSON.parse(Buffer.from(tamperedParts[1], 'base64url').toString('utf8'));
+  tamperedPayload.uid = 'attacker-controlled-uid';
+  const tamperedGrant = tamperedParts[0] + '.' +
+    Buffer.from(JSON.stringify(tamperedPayload)).toString('base64url') + '.' + tamperedParts[2];
+  await assert.rejects(callable(functions.consumeRecoveryGrant, {
+    grant: tamperedGrant, nonce, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth(ownerUid, tenantId)), 'tampered signed claim rejected');
+
+  const legacyGrant = await new SignJWT({
+    tenant: tenantId, did: recoveryDeviceHash, nonce, scope: 'recovery:continue'
+  }).setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid: SIGNING_KEY_ID })
+    .setIssuer('aurelia-recovery').setAudience('aurelia-recovery-client')
+    .setSubject(tenantId).setJti(payload.jti)
+    .setIssuedAt(payload.iat).setExpirationTime(payload.exp).sign(privateKey);
+  await assert.rejects(callable(functions.consumeRecoveryGrant, {
+    grant: legacyGrant, nonce, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth(ownerUid, tenantId)), 'legacy grant without uid rejected');
 
   const consumed = await callable(functions.consumeRecoveryGrant, {
     grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
-  });
+  }, ownerAuth(ownerUid, tenantId));
   assert.equal(consumed.consumed, true);
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
-  }));
+  }, ownerAuth(ownerUid, tenantId)), 'replayed JTI rejected');
 
   const grantRecord = (await db.doc(`recoveryGrants/${payload.jti}`).get()).data();
   assert.equal(grantRecord.state, 'CONSUMED');
@@ -209,24 +245,26 @@ test('expired or over-five-minute signed grants are rejected by backend verifica
   const nonce = 'e'.repeat(43);
   const now = Math.floor(Date.now() / 1000);
   const signingKey = privateKey;
+  const ownerUid = 'owner-emulator-expiry';
   const overlong = await new SignJWT({
-    did: deviceHash, nonce, scope: 'recovery:continue'
+    uid: ownerUid, tenant: tenantId, did: deviceHash, nonce, scope: 'recovery:continue'
   }).setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid: SIGNING_KEY_ID })
     .setIssuer('aurelia-recovery').setAudience('aurelia-recovery-client')
     .setSubject(tenantId).setJti('overlong-emulator-grant')
     .setIssuedAt(now).setExpirationTime(now + 301).sign(signingKey);
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: overlong, nonce, deviceIdHash: deviceHash
-  }));
+  }, ownerAuth(ownerUid, tenantId)));
   const expired = await new SignJWT({
-    did: deviceHash, nonce, scope: 'recovery:continue'
+    uid: ownerUid, tenant: tenantId, did: deviceHash, nonce, scope: 'recovery:continue'
   }).setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid: SIGNING_KEY_ID })
     .setIssuer('aurelia-recovery').setAudience('aurelia-recovery-client')
     .setSubject(tenantId).setJti('expired-emulator-grant')
     .setIssuedAt(now - 301).setExpirationTime(now - 1).sign(signingKey);
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: expired, nonce, deviceIdHash: deviceHash
-  }));
+  }, ownerAuth(ownerUid, tenantId)));
+
 });
 
 test('owner alert delivery failure leaves the recovery request blocked', async () => {

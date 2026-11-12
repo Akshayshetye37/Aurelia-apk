@@ -229,14 +229,15 @@ async function requireAttestedDevice(tenantId: string, deviceIdHash: string, own
       (ownerUid !== undefined && attestation.ownerUid !== ownerUid)) throw GENERIC;
 }
 
-async function signGrant(tenantId: string, deviceIdHash: string, nonce: string, jti: string) {
+async function signGrant(uid: string, tenantId: string, deviceIdHash: string, nonce: string, jti: string) {
   const keyId = RECOVERY_SIGNING_KEY_ID.value();
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(keyId)) {
     throw new HttpsError("failed-precondition", "Recovery signing key ID is invalid.");
   }
+  const ownerUid = requiredString(uid, 128);
   const privateKey = await importPKCS8(RECOVERY_SIGNING_KEY_PKCS8.value(), "ES256");
   const now = Math.floor(Date.now() / 1000);
-  return new SignJWT({ did: deviceIdHash, nonce, scope: "recovery:continue" })
+  return new SignJWT({ uid: ownerUid, tenant: tenantId, did: deviceIdHash, nonce, scope: "recovery:continue" })
     .setProtectedHeader({ alg: "ES256", typ: "JWT", kid: keyId })
     .setIssuer(ISSUER).setAudience(AUDIENCE).setSubject(tenantId)
     .setJti(jti).setIssuedAt(now).setExpirationTime(now + 300).sign(privateKey);
@@ -448,7 +449,7 @@ export const issueRecoveryGrant = onCall(
     const grantRef = db.doc(`recoveryGrants/${jti}`);
     const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
     const nowMs = Date.now();
-    const signedGrant = await signGrant(tenantId, deviceIdHash, nonce, jti);
+    const signedGrant = await signGrant(requiredString(phoneRecord.ownerUid, 128), tenantId, deviceIdHash, nonce, jti);
 
     const outcome = await db.runTransaction(async tx => {
       const [used, cooldown] = await Promise.all([tx.get(proofRef), tx.get(cooldownRef)]);
@@ -571,10 +572,15 @@ export const consumeRecoveryGrant = onCall(
         header.kid !== RECOVERY_SIGNING_KEY_ID.value() || Object.keys(header).length !== 3 ||
         !Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) ||
         expiresAt <= issuedAt || expiresAt - issuedAt > 300) throw GENERIC;
-    const { sub, jti, did, nonce, scope } = verified.payload;
-    if (typeof sub !== "string" || typeof jti !== "string" || typeof did !== "string" ||
+    const { sub, tenant, uid, jti, did, nonce, scope } = verified.payload;
+    // Signature and JWT time claims are verified above. Bind all identity claims
+    // to the authenticated caller before reading or mutating one-use grant state.
+    if (typeof sub !== "string" || typeof tenant !== "string" || tenant !== sub ||
+        typeof uid !== "string" || uid.length === 0 || uid.length > 128 ||
+        typeof request.auth?.uid !== "string" || uid !== request.auth.uid ||
+        typeof jti !== "string" || typeof did !== "string" ||
         typeof nonce !== "string" || scope !== "recovery:continue") throw GENERIC;
-    const tenantId = validateTenantId(sub);
+    const tenantId = validateTenantId(tenant);
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
     const clientNonce = validateNonce(request.data?.nonce);
     if (did !== deviceIdHash || nonce !== clientNonce) throw GENERIC;
