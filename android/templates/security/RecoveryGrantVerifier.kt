@@ -36,7 +36,7 @@ object RecoveryGrantVerifier {
                 com.aurelia.pms.R.string.recovery_grant_public_keys_json
             ))
             val encoded = pins.optString(kid).takeIf { it.isNotEmpty() } ?: return null
-            val der = Base64.getDecoder().decode(encoded)
+            val der = Base64.decode(encoded, Base64.DEFAULT)
             val key = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(der))
             val ec = key as? ECPublicKey ?: return null
             if (ec.params.order.bitLength() != 256) return null
@@ -44,7 +44,8 @@ object RecoveryGrantVerifier {
         }.getOrNull()
     }
 
-    private val UrlBase64 = object { fun decode(value: String) = Base64.decode(value, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING) }
+    private fun decodeUrlBase64(value: String): ByteArray =
+        Base64.decode(value, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
 
     fun verify(
         jwt: String,
@@ -58,10 +59,9 @@ object RecoveryGrantVerifier {
             if (jwt.length !in 100..4096) return Result.Fail("size")
             val parts = jwt.split('.')
             if (parts.size != 3 || parts.any { it.isEmpty() }) return Result.Fail("format")
-            val decoder = UrlBase64
-            val headerBytes = decoder.decode(parts[0])
-            val payloadBytes = decoder.decode(parts[1])
-            val rawSignature = decoder.decode(parts[2])
+            val headerBytes = decodeUrlBase64(parts[0])
+            val payloadBytes = decodeUrlBase64(parts[1])
+            val rawSignature = decodeUrlBase64(parts[2])
             if (rawSignature.size != 64) return Result.Fail("signature_length")
 
             val header = JSONObject(String(headerBytes, StandardCharsets.UTF_8))
