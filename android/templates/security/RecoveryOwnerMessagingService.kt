@@ -55,7 +55,7 @@ class RecoveryOwnerMessagingService : FirebaseMessagingService() {
         )
         val body = "A recovery request was started for your property account. If this was not you, open Aurelia immediately."
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentTitle("Aurelia recovery request")
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
