@@ -9,7 +9,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.aurelia.pms.identity.RecoveryTenantIdentity
@@ -17,9 +16,8 @@ import com.aurelia.pms.identity.RecoveryOwnerAlertActivity
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import java.util.concurrent.TimeUnit
 
-/** Posts the owner alert, then acknowledges it; the server starts the 24h hold only after this ack. */
+/** Posts the owner alert; explicit acknowledgement happens only after the owner opens it. */
 class RecoveryOwnerMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         if (FirebaseAuth.getInstance().currentUser == null) return
