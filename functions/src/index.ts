@@ -482,6 +482,7 @@ export const acknowledgeRecoveryOwnerAlert = onCall(
     const eventId = requiredString(request.data?.eventId, 64);
     const ackToken = requiredString(request.data?.ackToken, 64);
     if (!/^[0-9a-f-]{36}$/i.test(eventId) || !/^[A-Za-z0-9_-]{43}$/.test(ackToken)) throw GENERIC;
+    await requireRecoveryOwnerBinding(tenantId, owner.uid);
     await requireAttestedDevice(tenantId, deviceIdHash, owner.uid);
     const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
     const eventRef = db.doc(`recoverySecurityEvents/${eventId}`);
@@ -545,7 +546,9 @@ export const issueRecoveryGrant = onCall(
     const phoneRef = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
     const phoneSnapshot = await phoneRef.get();
     const phoneRecord = phoneSnapshot.data();
-    await requireAttestedDevice(tenantId, deviceIdHash, phoneRecord?.ownerUid);
+    if (!phoneRecord?.ownerUid) throw GENERIC;
+    await requireRecoveryOwnerBinding(tenantId, phoneRecord.ownerUid);
+    await requireAttestedDevice(tenantId, deviceIdHash, phoneRecord.ownerUid);
     const ownerDevicesSnapshot = await db.collection("recoveryOwnerDevices")
       .where("tenantId", "==", tenantId).limit(20).get();
     const ownerDevices: Array<{ deviceIdHash: string; fcmToken: string }> = [];
@@ -773,6 +776,7 @@ export const cancelRecoveryRequest = onCall(
     const owner = requireFreshPrimaryOwner(request);
     if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
+    await requireRecoveryOwnerBinding(owner.tenantId, owner.uid);
     await requireAttestedDevice(owner.tenantId, deviceIdHash, owner.uid);
     const cooldownRef = db.doc(`recoveryCooldowns/${owner.tenantId}`);
     const ownerDeviceRef = db.doc(`recoveryOwnerDevices/${owner.tenantId}_${deviceIdHash}`);
