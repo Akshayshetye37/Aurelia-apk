@@ -153,4 +153,7 @@ test('every recovery callable enforces App Check and phone-change activation rej
   const activation = functions.slice(functions.indexOf('export const activateRecoveryPhoneChange'));
   assert.match(activation, /ownerAge < 0/);
   assert.match(activation, /ownerAge >= 300/);
+  assert.match(activation, /recoveryCooldowns\/\$\{tenantId\}/);
+  assert.match(activation, /tx\.delete\(cooldownRef\)/);
+  assert.match(activation, /RECOVERY_PHONE_CHANGE_ACTIVATED/);
 });
