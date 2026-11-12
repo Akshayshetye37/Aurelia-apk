@@ -14,6 +14,7 @@ const GENERIC = new HttpsError("permission-denied", "Verification failed.");
 const ISSUER = "aurelia-recovery";
 const AUDIENCE = "aurelia-recovery-client";
 const REGION = "asia-south1";
+const RECOVERY_COOLDOWN_MS = 24 * 60 * 60_000;
 
 type PhoneProof = { uid: string; phone: string; authTime: number };
 
@@ -186,21 +187,62 @@ export const issueRecoveryGrant = onCall(
         phoneRecord.otpRequired === false || phoneRecord.deviceIdHash !== deviceIdHash ||
         !equalDigest(phoneRecord.hash, actualHash)) throw GENERIC;
 
-    // Firebase ID tokens can be replayed while fresh. Consume each auth event once.
+    // Prepare the signature before the transaction. A token is never returned
+    // unless the cooldown has elapsed and the grant/JTI is committed atomically.
     const proofId = createHmac("sha256", PHONE_PEPPER.value())
       .update(`${tenantId}|${proof.uid}|${proof.authTime}`).digest("hex");
     const proofRef = db.doc(`usedPhoneProofs/${proofId}`);
     const jti = randomUUID();
     const grantRef = db.doc(`recoveryGrants/${jti}`);
-    await db.runTransaction(async tx => {
-      const used = await tx.get(proofRef);
+    const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
+    const nowMs = Date.now();
+    const signedGrant = await signGrant(tenantId, deviceIdHash, nonce, jti);
+
+    const outcome = await db.runTransaction(async tx => {
+      const [used, cooldown] = await Promise.all([tx.get(proofRef), tx.get(cooldownRef)]);
       if (used.exists) throw GENERIC;
+      const pending = cooldown.data();
+      const pendingState = pending?.state;
+      const expiredIssuedGrant = pendingState === "ISSUED" &&
+        Number(pending?.grantExpiresAt) <= nowMs;
+      if (!pending || pendingState === "CONSUMED" || expiredIssuedGrant) {
+        const eligibleAt = nowMs + RECOVERY_COOLDOWN_MS;
+        tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
+          expiresAt: nowMs + 5 * 60_000 });
+        tx.set(cooldownRef, {
+          tenantId, deviceIdHash, phoneHash: actualHash.toString("base64"),
+          state: "PENDING", requestedAt: FieldValue.serverTimestamp(),
+          eligibleAt, updatedAt: FieldValue.serverTimestamp()
+        });
+        const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
+        tx.create(eventRef, {
+          tenantId, type: "RECOVERY_COOLDOWN_STARTED", deviceIdHash,
+          phoneHash: actualHash.toString("base64"), eligibleAt,
+          createdAt: FieldValue.serverTimestamp()
+        });
+        return { status: "COOLDOWN" as const, eligibleAt };
+      }
+      if (pendingState !== "PENDING" || pending.deviceIdHash !== deviceIdHash ||
+          !equalDigest(pending.phoneHash, actualHash)) throw GENERIC;
+      const eligibleAt = Number(pending.eligibleAt);
+      if (!Number.isFinite(eligibleAt) || nowMs < eligibleAt) {
+        throw new HttpsError("failed-precondition", "Recovery cooldown has not elapsed.");
+      }
       tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
-        expiresAt: Date.now() + 5 * 60_000 });
-      tx.create(grantRef, { tenantId, deviceIdHash, nonce, state: "ISSUED",
-        createdAt: FieldValue.serverTimestamp(), expiresAt: Date.now() + 5 * 60_000 });
+        expiresAt: nowMs + 5 * 60_000 });
+      tx.create(grantRef, {
+        tenantId, deviceIdHash, nonce, state: "ISSUED",
+        createdAt: FieldValue.serverTimestamp(), expiresAt: nowMs + 5 * 60_000
+      });
+      tx.update(cooldownRef, {
+        state: "ISSUED", grantJti: jti, grantExpiresAt: nowMs + 5 * 60_000,
+        issuedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
+      });
+      return { status: "ISSUED" as const, eligibleAt };
     });
-    return { grant: await signGrant(tenantId, deviceIdHash, nonce, jti) };
+
+    if (outcome.status === "COOLDOWN") return { status: "COOLDOWN", eligibleAt: outcome.eligibleAt };
+    return { status: "ISSUED", grant: signedGrant, eligibleAt: outcome.eligibleAt };
   }
 );
 
