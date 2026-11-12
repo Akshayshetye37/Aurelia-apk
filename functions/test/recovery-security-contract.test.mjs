@@ -218,7 +218,11 @@ test('every recovery callable enforces App Check and phone-change activation rej
   assert.match(functions, /defineString\("RECOVERY_ENABLED", \{ default: "false" \}\)/);
   for (const callable of callables) {
     assert.match(callable, /enforceAppCheck: true/);
-    assert.match(callable, /requireRecoveryEnabled\(\)/);
+    if (/cancelRecoveryRequest|cancelRecoveryPhoneChange/.test(callable)) {
+      assert.doesNotMatch(callable, /requireRecoveryEnabled\(\)/);
+    } else {
+      assert.match(callable, /requireRecoveryEnabled\(\)/);
+    }
   }
   const activation = functions.slice(functions.indexOf('export const activateRecoveryPhoneChange'));
   assert.match(activation, /ownerAge < 0/);
