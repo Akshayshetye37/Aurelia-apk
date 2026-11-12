@@ -205,7 +205,7 @@ export const issueRecoveryGrant = onCall(
       const pendingState = pending?.state;
       const expiredIssuedGrant = pendingState === "ISSUED" &&
         Number(pending?.grantExpiresAt) <= nowMs;
-      if (!pending || pendingState === "CONSUMED" || expiredIssuedGrant) {
+      if (!pending || pendingState === "CONSUMED") {
         const eligibleAt = nowMs + RECOVERY_COOLDOWN_MS;
         tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
           expiresAt: nowMs + 5 * 60_000 });
@@ -222,7 +222,8 @@ export const issueRecoveryGrant = onCall(
         });
         return { status: "COOLDOWN" as const, eligibleAt };
       }
-      if (pendingState !== "PENDING" || pending.deviceIdHash !== deviceIdHash ||
+      if ((pendingState !== "PENDING" && !expiredIssuedGrant) ||
+          pending.deviceIdHash !== deviceIdHash ||
           !equalDigest(pending.phoneHash, actualHash)) throw GENERIC;
       const eligibleAt = Number(pending.eligibleAt);
       if (!Number.isFinite(eligibleAt) || nowMs < eligibleAt) {
