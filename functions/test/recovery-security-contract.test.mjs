@@ -167,6 +167,10 @@ test('hardware attestation is challenge-bound, server-verified and rejects softw
 
 test('recovery cannot proceed until owner alert is posted and acknowledged by the attested device', () => {
   assert.match(functions, /registerRecoveryOwnerDevice = onCall/);
+  assert.match(functions, /recoveryOwnerDevices/);
+  assert.match(functions, /alertedDeviceHashes/);
+  assert.match(functions, /Promise\\.allSettled\\(ownerDevices\\.map/);
+  assert.match(functions, /cooldown\\.alertedDeviceHashes\\.includes\\(deviceIdHash\\)/);
   assert.match(functions, /getMessaging\(\)\.send/);
   assert.match(functions, /state: "ALERT_PENDING"/);
   assert.match(functions, /acknowledgeRecoveryOwnerAlert = onCall/);
@@ -179,6 +183,9 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(messageService, /RecoveryDeviceIdentity\.deviceIdHash\(\)/);
   assert.match(patcher, /android\.permission\.POST_NOTIFICATIONS/);
   assert.match(patcher, /firebase-messaging:24\.1\.1/);
+  const settings = read('android/templates/RecoveryPhoneSettingsActivity.kt');
+  assert.match(settings, /Register this device for owner security alerts/);
+  assert.match(settings, /registerThisDeviceForAlerts/);
 });
 
 test('backend grants carry a key ID for documented public-key rotation', () => {
