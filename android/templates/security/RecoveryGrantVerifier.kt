@@ -57,7 +57,7 @@ object RecoveryGrantVerifier {
                 claims.optString("did") == deviceIdHash &&
                 nonceMatches && issuedAt in 0..(nowEpochSec + 30) &&
                 expiresAt > nowEpochSec && expiresAt > issuedAt &&
-                expiresAt - issuedAt <= 600 && jti.matches(Regex("^[0-9a-fA-F-]{36}$"))
+                expiresAt - issuedAt <= 300 && jti.matches(Regex("^[0-9a-fA-F-]{36}$"))
             if (!valid) return Result.Fail("claims")
             if (!markJtiUsed(jti)) return Result.Fail("replay")
             Result.Ok
