@@ -1848,6 +1848,12 @@ function ensurePmsInstrumentation(contents, kotlinDsl) {
       : `\n    androidTestImplementation "${coordinate}"`;
     contents = contents.replace(/dependencies\s*\{/, match => match + line);
   }
+  if (!contents.includes('firebase-messaging')) {
+    const messaging = kotlinDsl
+      ? '\n    implementation("com.google.firebase:firebase-messaging:24.1.1")'
+      : '\n    implementation "com.google.firebase:firebase-messaging:24.1.1"';
+    contents = contents.replace(/dependencies\s*\{/, match => match + messaging);
+  }
   return contents;
 }
 if (fs.existsSync(appGradleGroovy)) {
