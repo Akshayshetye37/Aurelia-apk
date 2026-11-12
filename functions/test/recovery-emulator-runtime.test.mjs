@@ -36,7 +36,12 @@ messaging.send = async message => {
   return 'emulator-fcm-message-' + sentMessages.length;
 };
 
-function callable(fn, data, requestAuth = null, ip = '127.0.0.1') {
+function emulatorIpForTenant(tenantId) {
+  const suffix = (createHash('sha256').update(String(tenantId)).digest()[0] % 254) + 1;
+  return `198.51.100.${suffix}`;
+}
+
+function callable(fn, data, requestAuth = null, ip = data?.tenantId ? emulatorIpForTenant(data.tenantId) : '127.0.0.1') {
   assert.equal(typeof fn.run, 'function', 'Firebase callable exposes its runtime handler');
   return fn.run({
     data,
@@ -702,7 +707,7 @@ test('phone, tenant and device rate limits lock out repeated OTP grant attempts'
     const result = await callable(functions.issueRecoveryGrant, {
       tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'r'.repeat(43),
       phoneIdToken: await phoneAuthToken(phone)
-    }, null, '198.51.100.111');
+    }, null, '203.0.113.111');
     assert.equal(result.status, 'COOLDOWN');
     if (attempt < 5) await sleep(1100);
   }
@@ -710,7 +715,7 @@ test('phone, tenant and device rate limits lock out repeated OTP grant attempts'
   await assert.rejects(callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'r'.repeat(43),
     phoneIdToken: await phoneAuthToken(phone)
-  }, null, '198.51.100.111'), error => error.code === 'resource-exhausted',
+  }, null, '203.0.113.111'), error => error.code === 'resource-exhausted',
   'sixth hourly attempt is rate-limited and locked out');
 });
 
