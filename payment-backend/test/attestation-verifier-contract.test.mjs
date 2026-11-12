@@ -40,8 +40,10 @@ test('verifier rejects software keys and insecure verified-boot states', () => {
   assert.match(verifier, /leaf_public_key_binding_failed/);
 });
 
-test('verifier is loopback-only, request-bounded, and included in readiness', () => {
-  assert.match(verifier, /InetSocketAddress\("127\.0\.0\.1", 8091\)/);
+test('verifier binds to loopback locally and supports a private Cloud Run listener', () => {
+  assert.match(verifier, /ATTESTATION_BIND_HOST/);
+  assert.match(verifier, /System.getenv\("PORT"\)/);
+  assert.match(verifier, /InetSocketAddress\(System.getenv/);
   assert.match(verifier, /MAX_REQUEST_BYTES/);
   assert.match(server, /127\.0\.0\.1:8091\/healthz/);
   assert.match(server, /device_attestation_verifier_unavailable/);
