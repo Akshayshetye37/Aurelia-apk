@@ -103,7 +103,7 @@ test('Android arms recovery only after backend consumption without fabricating a
   assert.match(recoveryGate, /fun armAfterServerConsumption\(remainingGrantMs: Long\)/);
   assert.doesNotMatch(recoveryGate, /System\.currentTimeMillis\(\)/);
   assert.match(grantClient, /replayStore\.markUsed\(claims\.jti, claims\.expiresAt\)/);
-  assert.ok(grantClient.includes("runCatching {") && grantClient.includes("RecoveryGate.armAfterServerConsumption(claims.expiresAt)"));
+  assert.ok(grantClient.includes("runCatching {") && grantClient.includes("RecoveryGate.armAfterServerConsumption(remainingGrantMs)"));
 });
 
 test('persisted recovery state is never re-encrypted under a silently regenerated Keystore key', () => {
