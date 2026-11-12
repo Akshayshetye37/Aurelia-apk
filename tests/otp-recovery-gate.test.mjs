@@ -86,6 +86,7 @@ test('recovery phone registration requires a fresh owner token bound to the tena
 test('APK verifies the pinned ES256 signature before server grant consumption', () => {
   const client = read('android/templates/RecoveryGrantClient.kt');
   const verifier = read('android/templates/security/RecoveryGrantVerifier.kt');
+  const lockGate = read('android/templates/security/LockGateActivity.kt');
   const patcher = read('scripts/patch-android.js');
   assert.match(client, /RecoveryGrantVerifier\.keyId\(grant\)/);
   assert.match(client, /RecoveryGrantVerifier\.pinnedPublicKey\(context, kid\)/);
@@ -101,7 +102,7 @@ test('APK verifies the pinned ES256 signature before server grant consumption', 
   assert.match(client, /replayStore\.markUsed\(verified\.jti, verified\.expiresAtEpochSec\)/);
   assert.match(client, /RecoveryGate\.armAfterServerConsumption\(remainingGrantMs\)/);
   assert.match(client, /awaitingOwnerAlert/);
-  assert.match(gate, /24-hour hold has not started yet/);
+  assert.match(lockGate, /24-hour hold has not started yet/);
   assert.doesNotMatch(client, /inspectClaims/);
 });
 
