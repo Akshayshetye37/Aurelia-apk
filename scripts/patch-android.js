@@ -224,11 +224,11 @@ fs.writeFileSync(path.join(networkXmlDir, 'aurelia_network_security_config.xml')
 
 // Recovery owner-alert delivery requires the Android 13+ runtime notification permission.
 if (!manifest.includes('android.permission.POST_NOTIFICATIONS')) {
-  manifest = manifest.replace('</manifest>', '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\\n</manifest>');
+  manifest = manifest.replace('</manifest>', '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n</manifest>');
 }
 if (!manifest.includes('com.aurelia.pms.security.RecoveryOwnerMessagingService')) {
   const messagingService = '<service android:name="com.aurelia.pms.security.RecoveryOwnerMessagingService" android:exported="false"><intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter></service>';
-  manifest = manifest.replace('</application>', '    <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="aurelia_recovery_security" />\\n    ' + messagingService + '</application>');
+  manifest = manifest.replace('</application>', '    <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="aurelia_recovery_security" />\n    ' + messagingService + '</application>');
 }
 
 // Keep the future Pay Bridge discovery narrowly scoped; never request QUERY_ALL_PACKAGES.
