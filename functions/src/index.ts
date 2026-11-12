@@ -568,7 +568,7 @@ export const issueRecoveryGrant = onCall(
               deviceIdHash: device.deviceIdHash, eventId: outcome.eventId,
               ackToken: alertAckTokens.get(device.deviceIdHash)!
             },
-            android: { priority: "high", ttl: 60 * 60 * 1000 }
+            android: { priority: "high", ttl: 15 * 60 * 1000 }
           })));
           const acceptedHashes = sends.flatMap((result, index) =>
             result.status === "fulfilled" ? [ownerDevices[index].deviceIdHash] : []);
