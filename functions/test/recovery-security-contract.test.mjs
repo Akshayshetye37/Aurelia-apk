@@ -10,6 +10,9 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const functions = read('functions/src/index.ts');
 const rules = read('firestore.rules');
 const identity = read('android/templates/FirebasePhoneIdentity.kt');
+const grantClient = read('android/templates/RecoveryGrantClient.kt');
+const recoveryGate = read('android/templates/security/RecoveryGate.kt');
+const replayStore = read('android/templates/security/RecoveryGrantReplayStore.kt');
 
 test('backend matches only verified Firebase phone identity and enforces fresh auth_time', () => {
   assert.match(functions, /verifyIdToken\(token, true\)/);
@@ -60,11 +63,35 @@ test('Firebase ID token is returned only in memory after the isolated Auth sessi
   assert.doesNotMatch(identity, /SharedPreferences|Log\.|println\(/);
 });
 
-
 test('recovery phone registration is owner-authenticated and tenant-bound', () => {
   const registration = functions.slice(functions.indexOf('export const registerRecoveryPhone'), functions.indexOf('export const issueRecoveryGrant'));
   assert.match(registration, /request\.auth/);
   assert.match(registration, /auth\.token\.role !== "owner"/);
   assert.match(registration, /ownerAge >= 300/);
   assert.match(registration, /auth\.token\.tenantId !== tenantId/);
+});
+
+test('recovery grants have a five-minute lifetime on backend and client', () => {
+  assert.match(functions, /setExpirationTime\(now \+ 300\)/);
+  assert.match(functions, /expiresAt: Date\.now\(\) \+ 5 \* 60_000/);
+  assert.match(grantClient, /expiresAt - issuedAt <= 300/);
+  assert.match(replayStore, /expiresAtEpochSec - nowEpochSec <= 300/);
+  assert.match(replayStore, /exp - now <= 300/);
+  assert.match(recoveryGate, /TTL_MS = 5 \* 60_000L/);
+});
+
+test('Android arms recovery only after backend consumption without fabricating a signature-verifier result', () => {
+  assert.match(grantClient, /RecoveryGate\.armAfterServerConsumption\(/);
+  assert.doesNotMatch(grantClient, /RecoveryGrantVerifier\.Result\.Ok/);
+  assert.match(grantClient, /task\.isSuccessful && task\.result == true/);
+  assert.match(grantClient, /replayStore\.markUsed\(claims\.jti, claims\.expiresAt\)/);
+});
+
+test('every recovery callable enforces App Check and phone-change activation rejects future auth_time', () => {
+  const callables = functions.match(/export const \w+ = onCall\([\s\S]*?\n\);/g) ?? [];
+  assert.ok(callables.length >= 5);
+  for (const callable of callables) assert.match(callable, /enforceAppCheck: true/);
+  const activation = functions.slice(functions.indexOf('export const activateRecoveryPhoneChange'));
+  assert.match(activation, /ownerAge < 0/);
+  assert.match(activation, /ownerAge >= 300/);
 });
