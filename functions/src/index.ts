@@ -344,14 +344,25 @@ export const activateRecoveryPhoneChange = onCall(
     const ownerAge = Date.now() / 1000 - Number(request.auth?.token.auth_time ?? 0);
     if (request.auth?.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
     const ref = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
+    const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
     await db.runTransaction(async tx => {
-      const snapshot = await tx.get(ref);
+      const [snapshot] = await Promise.all([tx.get(ref), tx.get(cooldownRef)]);
       const current = snapshot.data();
       if (!current || current.state !== "CHANGE_PENDING" || !current.pending ||
           Number(current.pending.effectiveAt) > Date.now()) throw GENERIC;
       tx.update(ref, { hash: current.pending.hash, masked: current.pending.masked,
         state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp(),
         pending: FieldValue.delete(), changeActivatedAt: FieldValue.serverTimestamp() });
+      // A pending recovery cooldown is bound to the previous phone; invalidate it
+      // when the registered phone changes so the new number starts a fresh hold.
+      tx.delete(cooldownRef);
+      const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
+      tx.create(eventRef, {
+        tenantId, type: "RECOVERY_PHONE_CHANGE_ACTIVATED",
+        deviceIdHash: current.deviceIdHash,
+        phoneHash: current.pending.hash,
+        createdAt: FieldValue.serverTimestamp()
+      });
     });
     return { state: "VERIFIED" };
   }
