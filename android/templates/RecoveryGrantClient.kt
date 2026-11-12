@@ -26,6 +26,24 @@ class RecoveryGrantClient(private val context: Context) {
             task.result?.data as? Map<*, *> ?: throw IllegalStateException("Phone registration failed.")
         }
 
+    fun createRecoveryAttestationChallenge(tenantId: String, deviceHash: String?): Task<Map<*, *>> =
+        functions.getHttpsCallable("createRecoveryAttestationChallenge").call(mapOf(
+            "tenantId" to tenantId, "deviceIdHash" to deviceHash
+        )).continueWith { task ->
+            if (!task.isSuccessful) throw task.exception ?: IllegalStateException("Device attestation challenge failed.")
+            task.result?.data as? Map<*, *> ?: throw IllegalStateException("Device attestation challenge response is invalid.")
+        }
+
+    fun verifyRecoveryDeviceAttestation(
+        tenantId: String, challengeId: String, deviceHash: String, certificateChainBase64: List<String>
+    ): Task<Boolean> = functions.getHttpsCallable("verifyRecoveryDeviceAttestation").call(mapOf(
+        "tenantId" to tenantId, "challengeId" to challengeId,
+        "deviceIdHash" to deviceHash, "certificateChainBase64" to certificateChainBase64
+    )).continueWith { task ->
+        if (!task.isSuccessful) throw task.exception ?: IllegalStateException("Hardware attestation was rejected.")
+        (task.result?.data as? Map<*, *>)?.get("verified") == true
+    }
+
     fun registerOwnerNotificationDevice(tenantId: String, deviceHash: String, fcmToken: String): Task<Boolean> =
         functions.getHttpsCallable("registerRecoveryOwnerDevice").call(mapOf(
             "tenantId" to tenantId, "deviceIdHash" to deviceHash, "fcmToken" to fcmToken
