@@ -95,6 +95,10 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                 setOnClickListener { finish() }
             })
             addView(Button(this@RecoveryPhoneSettingsActivity).apply {
+                text = "Register this device for owner security alerts"
+                setOnClickListener { registerThisDeviceForAlerts() }
+            })
+            addView(Button(this@RecoveryPhoneSettingsActivity).apply {
                 text = "Cancel suspicious recovery request"
                 setOnClickListener {
                     AlertDialog.Builder(this@RecoveryPhoneSettingsActivity)
@@ -196,7 +200,7 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                                 status.text = "Device attestation binding is inconsistent."
                                 return@runOnUiThread
                             }
-                            registerOwnerAlertEndpoint(newPhoneToken, tenant, existingHash)
+                            registerOwnerAlertEndpoint(tenant, existingHash) { persistRecoveryPhone(newPhoneToken, tenant, existingHash) }
                             return@runOnUiThread
                         }
                         if (existingHash != null) {
@@ -225,7 +229,7 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                                     status.text = "Hardware key attestation failed. This device cannot be enrolled."
                                     return@runOnUiThread
                                 }
-                                registerOwnerAlertEndpoint(newPhoneToken, tenant, identity.deviceIdHash)
+                                registerOwnerAlertEndpoint(tenant, identity.deviceIdHash) { persistRecoveryPhone(newPhoneToken, tenant, identity.deviceIdHash) }
                             }
                         }
                     }
@@ -234,7 +238,7 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
         }
     }
 
-    private fun registerOwnerAlertEndpoint(newPhoneToken: String, tenant: String, deviceHash: String) {
+    private fun registerOwnerAlertEndpoint(tenant: String, deviceHash: String, onRegistered: () -> Unit) {
         withNotificationPermission {
             status.text = "Registering owner security notifications…"
             FirebaseMessaging.getInstance().token.addOnCompleteListener { tokenTask ->
@@ -250,9 +254,70 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                                     status.text = "Could not register owner security notifications. Recovery registration is blocked."
                                     return@runOnUiThread
                                 }
-                                persistRecoveryPhone(newPhoneToken, tenant, deviceHash)
+                                onRegistered()
                             }
                         }
+                }
+            }
+        }
+    }
+
+    private fun registerThisDeviceForAlerts() {
+        status.text = "Checking owner identity and hardware attestation…"
+        RecoveryTenantIdentity.bindAuthorizedOwner(this).addOnCompleteListener { ownerTask ->
+            runOnUiThread {
+                if (!ownerTask.isSuccessful) {
+                    status.text = "Sign in again as the property owner to register this device."
+                    return@runOnUiThread
+                }
+                val tenant = ownerTask.result
+                val existingHash = runCatching { RecoveryDeviceIdentity.deviceIdHashOrNull() }.getOrNull()
+                client.createRecoveryAttestationChallenge(tenant, existingHash).addOnCompleteListener { challengeTask ->
+                    runOnUiThread {
+                        if (!challengeTask.isSuccessful) {
+                            status.text = "Device attestation service is unavailable."
+                            return@runOnUiThread
+                        }
+                        val response = challengeTask.result
+                        if (response["verified"] == true && existingHash != null &&
+                            response["deviceIdHash"] == existingHash) {
+                            registerOwnerAlertEndpoint(tenant, existingHash) {
+                                status.text = "This device is registered for owner security alerts."
+                            }
+                            return@runOnUiThread
+                        }
+                        if (existingHash != null) {
+                            status.text = "Existing device key is not attested; supervised re-enrollment is required."
+                            return@runOnUiThread
+                        }
+                        val challengeId = response["challengeId"] as? String
+                        val challengeEncoded = response["challengeBase64"] as? String
+                        if (challengeId.isNullOrBlank() || challengeEncoded.isNullOrBlank()) {
+                            status.text = "Server attestation challenge is malformed."
+                            return@runOnUiThread
+                        }
+                        val identity = try {
+                            val challenge = Base64.getUrlDecoder().decode(challengeEncoded)
+                            try { RecoveryDeviceIdentity.createAttestedIdentity(challenge) }
+                            finally { challenge.fill(0) }
+                        } catch (_: Exception) {
+                            status.text = "Hardware-backed Android key attestation is unavailable."
+                            return@runOnUiThread
+                        }
+                        client.verifyRecoveryDeviceAttestation(
+                            tenant, challengeId, identity.deviceIdHash, identity.certificateChainBase64
+                        ).addOnCompleteListener { verifyTask ->
+                            runOnUiThread {
+                                if (!verifyTask.isSuccessful || verifyTask.result != true) {
+                                    status.text = "Hardware attestation failed; this device is not trusted."
+                                    return@runOnUiThread
+                                }
+                                registerOwnerAlertEndpoint(tenant, identity.deviceIdHash) {
+                                    status.text = "This device is registered for owner security alerts."
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
