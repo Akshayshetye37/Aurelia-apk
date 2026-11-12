@@ -229,7 +229,7 @@ jobs:
             exit 1
           fi
           "$ANDROID_HOME/emulator/emulator" -accel-check
-          printf 'on\\n' > "$RUNNER_TEMP/aurelia-emulator/acceleration-mode.txt"
+          printf 'on\n' > "$RUNNER_TEMP/aurelia-emulator/acceleration-mode.txt"
 
       - name: Start emulator and capture console output
         shell: bash
