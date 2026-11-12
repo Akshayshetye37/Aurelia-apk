@@ -316,3 +316,40 @@ test('recovery is blocked when no independent attested owner notification device
   );
   assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).exists, false);
 });
+
+
+test('an independent owner can acknowledge before the FCM send response returns', async () => {
+  const tenantId = 'tenant-emulator-early-owner-ack';
+  const ownerUid = 'owner-emulator-early-owner-ack';
+  const phone = '+15555550104';
+  const recoveryDeviceHash = '2'.repeat(64);
+  const independentDeviceHash = '3'.repeat(64);
+  await seedTenant({
+    tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, independentDeviceHash]
+  });
+  const original = messaging.send;
+  let acknowledgement;
+  messaging.send = async message => {
+    acknowledgement = await callable(functions.acknowledgeRecoveryOwnerAlert, {
+      tenantId,
+      deviceIdHash: message.data.deviceIdHash,
+      eventId: message.data.eventId,
+      ackToken: message.data.ackToken
+    }, ownerAuth(ownerUid, tenantId));
+    return 'emulator-fcm-accepted-after-owner-ack';
+  };
+  try {
+    const phoneToken = await phoneAuthToken(phone);
+    const result = await callable(functions.issueRecoveryGrant, {
+      tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'r'.repeat(43), phoneIdToken: phoneToken
+    });
+    assert.equal(result.status, 'COOLDOWN');
+    assert.equal(acknowledgement.acknowledged, true);
+    const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+    assert.equal(cooldown.state, 'PENDING');
+    assert.ok(cooldown.notificationDeliveredAt);
+  } finally {
+    messaging.send = original;
+  }
+});
