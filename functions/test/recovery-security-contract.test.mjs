@@ -98,6 +98,10 @@ test('Android arms recovery only after backend consumption without fabricating a
   assert.match(grantClient, /RecoveryGate\.armAfterServerConsumption\(/);
   assert.doesNotMatch(grantClient, /RecoveryGrantVerifier\.Result\.Ok/);
   assert.match(grantClient, /task\.isSuccessful && task\.result == true/);
+  assert.match(grantClient, /startedAtElapsedMs = SystemClock\.elapsedRealtime\(\)/);
+  assert.match(grantClient, /SystemClock\.elapsedRealtime\(\) - startedAtElapsedMs/);
+  assert.match(recoveryGate, /fun armAfterServerConsumption\(remainingGrantMs: Long\)/);
+  assert.doesNotMatch(recoveryGate, /System\.currentTimeMillis\(\)/);
   assert.match(grantClient, /replayStore\.markUsed\(claims\.jti, claims\.expiresAt\)/);
   assert.ok(grantClient.includes("runCatching {") && grantClient.includes("RecoveryGate.armAfterServerConsumption(claims.expiresAt)"));
 });
