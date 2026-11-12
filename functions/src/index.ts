@@ -392,17 +392,27 @@ export const issueRecoveryGrant = onCall(
     const ipKey = createHmac("sha256", PHONE_PEPPER.value()).update(ip).digest("hex");
     await spendRateLimit(`rec:ip:${ipKey}`, 20, 60 * 60_000);
 
-    const ownerDeviceRef = db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`);
-    const ownerDeviceSnapshot = await ownerDeviceRef.get();
-    const ownerDevice = ownerDeviceSnapshot.data();
-    if (!ownerDevice || ownerDevice.active !== true || ownerDevice.deviceIdHash !== deviceIdHash ||
-        typeof ownerDevice.fcmToken !== "string" || ownerDevice.fcmToken.length < 100) {
-      throw new HttpsError("failed-precondition", "Owner security notifications are not configured.");
-    }
     const phoneRef = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
     const phoneSnapshot = await phoneRef.get();
     const phoneRecord = phoneSnapshot.data();
     await requireAttestedDevice(tenantId, deviceIdHash, phoneRecord?.ownerUid);
+    const ownerDevicesSnapshot = await db.collection("recoveryOwnerDevices")
+      .where("tenantId", "==", tenantId).limit(20).get();
+    const ownerDevices: Array<{ deviceIdHash: string; fcmToken: string }> = [];
+    for (const document of ownerDevicesSnapshot.docs) {
+      const candidate = document.data();
+      if (candidate.ownerUid !== phoneRecord?.ownerUid || candidate.active !== true ||
+          typeof candidate.deviceIdHash !== "string" ||
+          typeof candidate.fcmToken !== "string" || candidate.fcmToken.length < 100) continue;
+      try {
+        await requireAttestedDevice(tenantId, candidate.deviceIdHash, phoneRecord?.ownerUid);
+        ownerDevices.push({ deviceIdHash: candidate.deviceIdHash, fcmToken: candidate.fcmToken });
+      } catch { /* Ignore stale or unattested alert endpoints; at least one trusted device is mandatory. */ }
+    }
+    if (ownerDevices.length === 0) {
+      throw new HttpsError("failed-precondition", "No attested owner notification device is registered.");
+    }
+    const alertedDeviceHashes = ownerDevices.map(device => device.deviceIdHash);
     const actualHash = digest(tenantId, proof.phone);
     if (!phoneRecord || !["VERIFIED", "CHANGE_PENDING"].includes(phoneRecord.state) ||
         phoneRecord.otpRequired === false || phoneRecord.deviceIdHash !== deviceIdHash ||
