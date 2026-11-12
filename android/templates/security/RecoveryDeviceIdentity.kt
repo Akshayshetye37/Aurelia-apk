@@ -65,6 +65,7 @@ object RecoveryDeviceIdentity {
                 try {
                     generate(true)
                 } catch (_: StrongBoxUnavailableException) {
+                    runCatching { store.deleteEntry(ALIAS) }
                     generate(false) // TEE is accepted; software-backed keys are rejected server-side.
                 }
             } else {
