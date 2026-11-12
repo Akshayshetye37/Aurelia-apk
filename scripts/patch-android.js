@@ -202,7 +202,16 @@ if (!manifest.includes('com.aurelia.pms.security.LockGateActivity')) {
   manifest = manifest.replace(mainMatch[0], internalMain + '\n        ' + gateActivity);
 }
 if (!manifest.includes('com.aurelia.pms.identity.RecoveryOwnerAlertActivity')) {
-  const recoveryAlertActivity = '<activity android:name="com.aurelia.pms.identity.RecoveryOwnerAlertActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.NoActionBar" />';
+  const googleServicesPath = path.join(appModuleDir, 'google-services.json');
+  let recoveryAlertActivity = '<activity android:name="com.aurelia.pms.identity.RecoveryOwnerAlertActivity" android:exported="false" android:excludeFromRecents="true" android:launchMode="singleTask" android:theme="@android:style/Theme.Material.Light.NoActionBar" />';
+  if (fs.existsSync(googleServicesPath)) {
+    const projectId = JSON.parse(fs.readFileSync(googleServicesPath, 'utf8')).project_info?.project_id;
+    if (!projectId || !/^[a-z0-9-]+$/.test(projectId)) throw new Error('Firebase project ID is invalid for owner email-link App Links.');
+    const appLinkFilters = ['firebaseapp.com', 'web.app'].map(domain =>
+      '<intent-filter android:autoVerify="true"><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="https" android:host="' + projectId + '.' + domain + '" android:pathPrefix="/__/auth" /></intent-filter>'
+    ).join('');
+    recoveryAlertActivity = '<activity android:name="com.aurelia.pms.identity.RecoveryOwnerAlertActivity" android:exported="true" android:excludeFromRecents="true" android:launchMode="singleTask" android:theme="@android:style/Theme.Material.Light.NoActionBar">' + appLinkFilters + '</activity>';
+  }
   manifest = manifest.replace('</application>', recoveryAlertActivity + '</application>');
 }
 if (!manifest.includes('com.aurelia.pms.identity.RecoveryPhoneSettingsActivity')) {
