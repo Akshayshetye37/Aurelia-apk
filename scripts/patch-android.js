@@ -1825,6 +1825,10 @@ fs.copyFileSync(securityInstrumentationTemplate, path.join(securityInstrumentati
 const otpRecoveryInstrumentationTemplate = path.join(androidDir, 'templates', 'instrumentation', 'OtpRecoverySqlCipherInstrumentedTest.java');
 if (!fs.existsSync(otpRecoveryInstrumentationTemplate)) throw new Error('OTP recovery SQLCipher instrumentation template is missing.');
 fs.copyFileSync(otpRecoveryInstrumentationTemplate, path.join(instrumentationSourceDir, 'OtpRecoverySqlCipherInstrumentedTest.java'));
+const recoveryProcessDeathTemplate = path.join(androidDir, 'templates', 'instrumentation', 'RecoveryProcessDeathInstrumentedTest.java');
+if (!fs.existsSync(recoveryProcessDeathTemplate)) throw new Error('Recovery process-death instrumentation template is missing.');
+fs.copyFileSync(recoveryProcessDeathTemplate, path.join(instrumentationSourceDir, 'RecoveryProcessDeathInstrumentedTest.java'));
+
 const recoveryGrantVerifierTestTemplate = path.join(androidDir, 'templates', 'instrumentation', 'RecoveryGrantVerifierInstrumentedTest.java');
 if (!fs.existsSync(recoveryGrantVerifierTestTemplate)) throw new Error('Recovery grant verifier instrumentation template is missing.');
 const recoveryGrantVerifierTestDir = path.join(androidDir, 'app', 'src', 'androidTest', 'java', 'com', 'aurelia', 'pms', 'security');

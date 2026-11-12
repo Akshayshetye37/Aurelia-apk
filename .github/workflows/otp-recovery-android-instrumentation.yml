@@ -165,14 +165,46 @@ jobs:
           $ANDROID_HOME/platform-tools/adb shell settings put global transition_animation_scale 0
           $ANDROID_HOME/platform-tools/adb shell settings put global animator_duration_scale 0
 
-      - name: Run offline SQLCipher recovery instrumentation
-        timeout-minutes: 30
+      - name: Run local recovery suites with a real process-death boundary
+        timeout-minutes: 35
         shell: bash
         run: |
           set -euo pipefail
           log_dir="$RUNNER_TEMP/aurelia-recovery-emulator"
+          results_root="$RUNNER_TEMP/aurelia-recovery-results"
+          mkdir -p "$results_root"
           cd android
-          timeout -k 10s 1500s ./gradlew --no-daemon connectedDebugAndroidTest 2>&1 | tee "$log_dir/connected-debug-android-test.log"
+          run_suite() {
+            local suite="$1"
+            local selector="$2"
+            rm -rf app/build/outputs/androidTest-results/connected app/build/reports/androidTests/connected
+            timeout -k 10s 1500s ./gradlew --no-daemon connectedDebugAndroidTest \
+              "-Pandroid.testInstrumentationRunnerArguments.class=$selector" 2>&1 | tee "$log_dir/$suite.log"
+            mkdir -p "$results_root/$suite"
+            cp -a app/build/outputs/androidTest-results/connected/. "$results_root/$suite/"
+          }
+          run_suite sqlcipher com.aurelia.pms.OtpRecoverySqlCipherInstrumentedTest
+          run_suite grant-verifier com.aurelia.pms.security.RecoveryGrantVerifierInstrumentedTest
+          run_suite process-death-phase-one com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop
+          before_pid="$(adb shell pidof com.aurelia.pms | tr -d '\r' || true)"
+          if [[ -z "$before_pid" ]]; then
+            echo "::error::The target app process was not alive after process-death phase one."
+            exit 1
+          fi
+          adb shell am force-stop com.aurelia.pms
+          after_stop="$(adb shell pidof com.aurelia.pms | tr -d '\r' || true)"
+          if [[ -n "$after_stop" ]]; then
+            echo "::error::adb force-stop did not terminate the target app process."
+            exit 1
+          fi
+          run_suite process-death-phase-two com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop
+          after_pid="$(adb shell pidof com.aurelia.pms | tr -d '\r' || true)"
+          if [[ -z "$after_pid" || "$after_pid" == "$before_pid" ]]; then
+            echo "::error::Phase two did not run in a newly started target app process."
+            exit 1
+          fi
+          mkdir -p app/build/outputs/androidTest-results/connected
+          cp -a "$results_root/." app/build/outputs/androidTest-results/connected/
 
       - name: Capture recovery emulator diagnostics
         if: always()
