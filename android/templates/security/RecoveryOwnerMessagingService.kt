@@ -12,12 +12,22 @@ import androidx.core.app.NotificationManagerCompat
 import com.aurelia.pms.R
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.aurelia.pms.identity.RecoveryTenantIdentity
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
 /** Posts the owner alert, then acknowledges it; the server starts the 24h hold only after this ack. */
 class RecoveryOwnerMessagingService : FirebaseMessagingService() {
+    override fun onNewToken(token: String) {
+        val user = FirebaseAuth.getInstance().currentUser ?: return
+        val tenant = runCatching { RecoveryTenantIdentity.getOrCreate(this) }.getOrNull() ?: return
+        val deviceHash = runCatching { RecoveryDeviceIdentity.deviceIdHash() }.getOrNull() ?: return
+        FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
+            .getHttpsCallable("registerRecoveryOwnerDevice")
+            .call(mapOf("tenantId" to tenant, "deviceIdHash" to deviceHash, "fcmToken" to token))
+    }
+
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
         if (data["type"] != "RECOVERY_COOLDOWN_STARTED") return
