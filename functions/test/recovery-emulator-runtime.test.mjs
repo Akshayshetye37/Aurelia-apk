@@ -142,8 +142,10 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   assert.equal(cooldown.eligibleAt, null, 'FCM acceptance alone must not start the cooldown');
 
   const eventId = cooldown.alertEventId;
+  const secondOwnerAlert = sentMessages.find(message => message.data.deviceIdHash === secondOwnerDeviceHash);
+  assert.ok(secondOwnerAlert?.data.ackToken, 'independent owner device receives its one-time acknowledgement token');
   const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
-    tenantId, deviceIdHash: secondOwnerDeviceHash, eventId
+    tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, ownerAuth(ownerUid, tenantId));
   assert.equal(acknowledged.acknowledged, true);
   assert.ok(acknowledged.eligibleAt >= Date.now() + 23 * 60 * 60_000);
@@ -269,14 +271,17 @@ test('only an owner device whose FCM endpoint accepted the alert may start the c
     const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
     const event = (await db.doc(`recoverySecurityEvents/${cooldown.alertEventId}`).get()).data();
     assert.deepEqual(event.fcmAcceptedDeviceHashes, [thirdOwnerDeviceHash]);
+    const thirdOwnerAlert = sentMessages.find(message => message.data.deviceIdHash === thirdOwnerDeviceHash);
+    assert.ok(thirdOwnerAlert?.data.ackToken, 'accepted independent endpoint receives its one-time acknowledgement token');
+    const invalidToken = 'x'.repeat(43);
     await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
-      tenantId, deviceIdHash: secondOwnerDeviceHash, eventId: cooldown.alertEventId
+      tenantId, deviceIdHash: secondOwnerDeviceHash, eventId: cooldown.alertEventId, ackToken: invalidToken
     }, ownerAuth(ownerUid, tenantId)), 'an endpoint that rejected FCM cannot acknowledge delivery');
     await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
-      tenantId, deviceIdHash: recoveryDeviceHash, eventId: cooldown.alertEventId
+      tenantId, deviceIdHash: recoveryDeviceHash, eventId: cooldown.alertEventId, ackToken: invalidToken
     }, ownerAuth(ownerUid, tenantId)), 'the recovery-requesting device cannot acknowledge its own alert');
     const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
-      tenantId, deviceIdHash: thirdOwnerDeviceHash, eventId: cooldown.alertEventId
+      tenantId, deviceIdHash: thirdOwnerDeviceHash, eventId: cooldown.alertEventId, ackToken: thirdOwnerAlert.data.ackToken
     }, ownerAuth(ownerUid, tenantId));
     assert.equal(acknowledged.acknowledged, true);
   } finally {
