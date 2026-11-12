@@ -4,7 +4,6 @@ import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.security.keystore.KeyPermanentlyInvalidatedException
-import android.security.keystore.StrongBoxUnavailableException
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -74,7 +73,8 @@ class BiometricVaultManager {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
                 generate(true)
-            } catch (_: StrongBoxUnavailableException) {
+            } catch (failure: Exception) {
+                if (failure.javaClass.name != "android.security.keystore.StrongBoxUnavailableException") throw failure
                 if (store.containsAlias(ALIAS)) store.deleteEntry(ALIAS)
                 generate(false)
             }
@@ -87,7 +87,8 @@ class BiometricVaultManager {
         return try {
             prepareDecryptOperation(nonce)
             false
-        } catch (_: KeyPermanentlyInvalidatedException) {
+        } catch (_: Exception) {
+            // Missing, invalidated or unusable Keystore entries all fail closed.
             true
         }
     }
