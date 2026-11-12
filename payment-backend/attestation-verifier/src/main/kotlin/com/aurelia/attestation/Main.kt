@@ -122,7 +122,7 @@ fun main() {
         expectedAttestationApplicationId = appId
     )
 
-    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 8091), 0)
+    val server = HttpServer.create(InetSocketAddress(System.getenv("ATTESTATION_BIND_HOST") ?: "127.0.0.1", System.getenv("PORT")?.toIntOrNull() ?: 8091), 0)
     server.executor = Executors.newFixedThreadPool(4)
 
     server.createContext("/healthz") { exchange ->
