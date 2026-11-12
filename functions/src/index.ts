@@ -91,7 +91,7 @@ async function signGrant(tenantId: string, deviceIdHash: string, nonce: string, 
   return new SignJWT({ did: deviceIdHash, nonce, scope: "recovery:continue" })
     .setProtectedHeader({ alg: "ES256", typ: "JWT" })
     .setIssuer(ISSUER).setAudience(AUDIENCE).setSubject(tenantId)
-    .setJti(jti).setIssuedAt(now).setExpirationTime(now + 600).sign(privateKey);
+    .setJti(jti).setIssuedAt(now).setExpirationTime(now + 300).sign(privateKey);
 }
 
 /**
@@ -190,7 +190,7 @@ export const issueRecoveryGrant = onCall(
       const used = await tx.get(proofRef);
       if (used.exists) throw GENERIC;
       tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
-        expiresAt: Date.now() + 10 * 60_000 });
+        expiresAt: Date.now() + 5 * 60_000 });
       tx.create(grantRef, { tenantId, deviceIdHash, nonce, state: "ISSUED",
         createdAt: FieldValue.serverTimestamp(), expiresAt: Date.now() + 10 * 60_000 });
     });
@@ -252,8 +252,8 @@ export const activateRecoveryPhoneChange = onCall(
   { region: REGION, enforceAppCheck: true },
   async request => {
     const tenantId = validateTenantId(request.auth?.token.tenantId);
-    if (request.auth?.token.role !== "owner" ||
-        Date.now() / 1000 - Number(request.auth.token.auth_time ?? 0) >= 300) throw GENERIC;
+    const ownerAge = Date.now() / 1000 - Number(request.auth?.token.auth_time ?? 0);
+    if (request.auth?.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
     const ref = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
     await db.runTransaction(async tx => {
       const snapshot = await tx.get(ref);
