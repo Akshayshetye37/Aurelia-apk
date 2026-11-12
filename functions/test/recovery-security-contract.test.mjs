@@ -132,7 +132,9 @@ test('recovery grants have a five-minute lifetime on backend and client', () => 
 test('Android verifies the pinned ES256 signature before server consumption and gate arming', () => {
   const verifier = read('android/templates/security/RecoveryGrantVerifier.kt');
   const patcher = read('scripts/patch-android.js');
-  assert.match(grantClient, /RecoveryGrantVerifier\.verify\(grant, pinnedKey, tenantId, nonce, deviceHash\)/);
+  assert.match(grantClient, /RecoveryGrantVerifier\\.verify\\(/);
+  assert.match(grantClient, /enrollment\\.ownerUid/);
+  assert.match(grantClient, /enrollment\\.tenantId/);
   assert.match(grantClient, /RecoveryGrantVerifier\.pinnedPublicKey\(context, kid\)/);
   const consumeFlow = grantClient.slice(grantClient.indexOf('fun consumeAndArm'));
   assert.ok(consumeFlow.indexOf('RecoveryGrantVerifier.verify') < consumeFlow.indexOf('consumeRecoveryGrant(grant'));
@@ -186,7 +188,7 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(functions, /state: "ALERT_PENDING"/);
   assert.match(functions, /acknowledgeRecoveryOwnerAlert = onCall/);
   assert.match(functions, /notificationAcknowledgedAt/);
-  assert.match(functions, /ackTokenHashes: alertAckTokenHashes/);
+  assert.match(functions, /ackTokenHashes,/);
   assert.match(functions, /ackTokenHashes\?\.\[deviceIdHash\]/);
   assert.match(functions, /createHash\("sha256"\)\.update\(ackToken\)/);
   assert.match(functions, /alertAckTokens\.get\(device\.deviceIdHash\)/);

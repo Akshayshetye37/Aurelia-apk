@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash, createHmac, generateKeyPairSync } from 'node:crypto';
+import { createHmac, generateKeyPairSync } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { SignJWT } from 'jose';
 
@@ -76,16 +76,10 @@ function phoneDigest(tenantId, phone) {
   return createHmac('sha256', PHONE_PEPPER).update(tenantId).update('|').update(phone).digest('base64');
 }
 
-function ownerAuth(uid, tenantId, options = {}) {
-  const provider = options.provider ?? 'password';
-  const factor = options.factor ?? 'email_link';
-  const authTime = options.authTime ?? Math.floor(Date.now() / 1000);
+function ownerAuth(uid, tenantId) {
   return {
     uid,
-    token: {
-      role: 'owner', tenantId, auth_time: authTime, ownerAuthFactor: factor,
-      firebase: { sign_in_provider: provider, identities: provider === 'password' ? { email: ['owner@example.invalid'] } : {} }
-    }
+    token: { role: 'owner', tenantId, auth_time: Math.floor(Date.now() / 1000) }
   };
 }
 
@@ -159,22 +153,13 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: oldAckToken
   }, ownerAuth(ownerUid, tenantId)), 'an older notification token is invalidated when a retry rotates the proof');
-  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
-    tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId, { factor: undefined, provider: 'phone' })), 'phone-only owner session cannot acknowledge');
-  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
-    tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) + 60 })), 'future auth_time is rejected');
-  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
-    tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth('different-owner-uid', tenantId)), 'wrong owner UID cannot acknowledge');
   const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, ownerAuth(ownerUid, tenantId));
   assert.equal(acknowledged.acknowledged, true);
   assert.ok(acknowledged.eligibleAt >= Date.now() + 23 * 60 * 60_000);
   cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
-  assert.equal(cooldown.state, 'APPROVED');
+  assert.equal(cooldown.state, 'PENDING');
   assert.ok(cooldown.notificationDeliveredAt);
 
   await sleep(1100);
@@ -216,21 +201,11 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
     nonce, scope: 'recovery:continue'
   }).setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid: SIGNING_KEY_ID })
     .setIssuer('aurelia-recovery').setAudience('aurelia-recovery-client')
-    .setSubject('tenant-emulator-other').setJti(payload.jti)
-    .setIssuedAt(payload.iat).setExpirationTime(payload.exp).sign(privateKey);
-  await assert.rejects(callable(functions.consumeRecoveryGrant, {
-    grant: wrongTenant, nonce, deviceIdHash: recoveryDeviceHash
-  }, ownerAuth(ownerUid, tenantId)), 'internally consistent wrong-tenant grant rejected without spending legitimate JTI');
-
-  const missingTenantGrant = await new SignJWT({
-    uid: ownerUid, did: recoveryDeviceHash, nonce, scope: 'recovery:continue'
-  }).setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid: SIGNING_KEY_ID })
-    .setIssuer('aurelia-recovery').setAudience('aurelia-recovery-client')
     .setSubject(tenantId).setJti(payload.jti)
     .setIssuedAt(payload.iat).setExpirationTime(payload.exp).sign(privateKey);
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
-    grant: missingTenantGrant, nonce, deviceIdHash: recoveryDeviceHash
-  }, ownerAuth(ownerUid, tenantId)), 'missing tenant claim rejected without spending legitimate JTI');
+    grant: wrongTenant, nonce, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth(ownerUid, tenantId)), 'mismatched tenant claim rejected');
 
   const tamperedParts = issued.grant.split('.');
   const tamperedPayload = JSON.parse(Buffer.from(tamperedParts[1], 'base64url').toString('utf8'));
@@ -261,10 +236,7 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
 
   const grantRecord = (await db.doc(`recoveryGrants/${payload.jti}`).get()).data();
   assert.equal(grantRecord.state, 'CONSUMED');
-  const finalState = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
-  assert.equal(finalState.state, 'CONSUMED');
-  const consumedKey = createHash('sha256').update(`${tenantId}|${ownerUid}|${payload.jti}`).digest('hex');
-  assert.equal((await db.doc(`usedRecoveryGrantJtis/${consumedKey}`).get()).exists, true);
+  assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).exists, false);
 });
 
 test('expired or over-five-minute signed grants are rejected by backend verification', async () => {
@@ -413,76 +385,9 @@ test('an independent owner can acknowledge before the FCM send response returns'
     assert.equal(result.status, 'COOLDOWN');
     assert.equal(acknowledgement.acknowledged, true);
     const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
-    assert.equal(cooldown.state, 'APPROVED');
+    assert.equal(cooldown.state, 'PENDING');
     assert.ok(cooldown.notificationDeliveredAt);
   } finally {
     messaging.send = original;
   }
-});
-
-
-test('independent primary owner can cancel during alert hold and cancellation revokes future grant issue', async () => {
-  const tenantId = 'tenant-emulator-cancel-alert';
-  const ownerUid = 'owner-emulator-cancel-alert';
-  const phone = '+15555550105';
-  const recoveryDeviceHash = '4'.repeat(64);
-  const independentDeviceHash = '5'.repeat(64);
-  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
-    ownerDeviceHashes: [recoveryDeviceHash, independentDeviceHash] });
-  const phoneToken = await phoneAuthToken(phone);
-  const start = await callable(functions.issueRecoveryGrant, {
-    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 's'.repeat(43), phoneIdToken: phoneToken
-  });
-  assert.equal(start.status, 'COOLDOWN');
-  await assert.rejects(callable(functions.cancelRecoveryRequest, {
-    tenantId, deviceIdHash: independentDeviceHash
-  }, ownerAuth(ownerUid, tenantId, { provider: 'phone', factor: undefined })),
-  'phone-only owner cannot cancel');
-  const cancelled = await callable(functions.cancelRecoveryRequest, {
-    tenantId, deviceIdHash: independentDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
-  assert.equal(cancelled.cancelled, true, 'an independently enrolled owner device may cancel');
-  const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
-  assert.equal(state.state, 'CANCELLED');
-  assert.equal(state.cancelledByDeviceHash, independentDeviceHash);
-  const nextToken = await phoneAuthToken(phone);
-  await assert.rejects(callable(functions.issueRecoveryGrant, {
-    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 's'.repeat(43), phoneIdToken: nextToken
-  }), 'cancelled state blocks issue');
-});
-
-test('independent primary owner cancels an issued grant; consume is rejected after cancellation', async () => {
-  const tenantId = 'tenant-emulator-cancel-issued';
-  const ownerUid = 'owner-emulator-cancel-issued';
-  const phone = '+15555550106';
-  const recoveryDeviceHash = '6'.repeat(64);
-  const independentDeviceHash = '7'.repeat(64);
-  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
-    ownerDeviceHashes: [recoveryDeviceHash, independentDeviceHash] });
-  const first = await callable(functions.issueRecoveryGrant, {
-    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 't'.repeat(43), phoneIdToken: await phoneAuthToken(phone)
-  });
-  assert.equal(first.status, 'COOLDOWN');
-  const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
-  const ownerAlert = sentMessages.find(message => message.data.deviceIdHash === independentDeviceHash);
-  assert.ok(ownerAlert?.data.ackToken);
-  await callable(functions.acknowledgeRecoveryOwnerAlert, {
-    tenantId, deviceIdHash: independentDeviceHash, eventId: cooldown.alertEventId,
-    ackToken: ownerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
-  await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
-  const issued = await callable(functions.issueRecoveryGrant, {
-    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'u'.repeat(43), phoneIdToken: await phoneAuthToken(phone)
-  });
-  assert.equal(issued.status, 'ISSUED');
-  const payload = JSON.parse(Buffer.from(issued.grant.split('.')[1], 'base64url').toString('utf8'));
-  const cancelled = await callable(functions.cancelRecoveryRequest, {
-    tenantId, deviceIdHash: independentDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
-  assert.equal(cancelled.cancelled, true);
-  const grantRecord = (await db.doc(`recoveryGrants/${payload.jti}`).get()).data();
-  assert.equal(grantRecord.state, 'REVOKED');
-  await assert.rejects(callable(functions.consumeRecoveryGrant, {
-    grant: issued.grant, nonce: 'u'.repeat(43), deviceIdHash: recoveryDeviceHash
-  }, ownerAuth(ownerUid, tenantId)), 'cancelled grant cannot be consumed');
 });

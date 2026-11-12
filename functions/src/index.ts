@@ -475,8 +475,6 @@ export const issueRecoveryGrant = onCall(
       if (used.exists) throw GENERIC;
       const pending = cooldown.data();
       const pendingState = pending?.state;
-      const expiredIssuedGrant = pendingState === "ISSUED" &&
-        Number(pending?.grantExpiresAt) <= nowMs;
       if (!pending || pendingState === "CONSUMED") {
         tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
           expiresAt: nowMs + 5 * 60_000 });
