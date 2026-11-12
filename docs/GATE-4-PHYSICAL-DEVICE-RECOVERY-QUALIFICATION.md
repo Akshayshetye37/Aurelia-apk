@@ -87,3 +87,6 @@ Gate 4 is PASS only when all required cases pass on every approved device/API co
 ## Independent owner-alert requirement
 
 The device requesting recovery must never count as its own owner-notification destination and must never acknowledge its own recovery event. At least one separately enrolled, hardware-attested owner device must accept the FCM event and acknowledge the posted notification. If no independent device exists, or all independent endpoints reject delivery, recovery remains in `ALERT_PENDING` with no cooldown start and no grant. Physical qualification must verify successful acknowledgement from the independent device, rejection of self-acknowledgement, partial FCM failure, and the no-independent-device fail-closed case.
+
+
+Owner acknowledgement proof is per-device and one-time. The FCM payload contains a random 256-bit token; only the token hash is persisted server-side. The acknowledgement callable requires the matching device token and atomically consumes the pending alert state. Verify a wrong-device token, random token, replayed token and an acknowledgement arriving before the FCM send operation returns are all rejected or safely handled as designed.
