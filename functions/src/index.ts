@@ -220,6 +220,15 @@ function validateNonce(value: unknown): string {
   return nonce;
 }
 
+async function requireAttestedDevice(tenantId: string, deviceIdHash: string, ownerUid?: string): Promise<void> {
+  const snapshot = await db.doc(`recoveryDeviceAttestations/${tenantId}_${deviceIdHash}`).get();
+  const attestation = snapshot.data();
+  if (!attestation || attestation.status !== "VERIFIED" ||
+      !["TRUSTED_ENVIRONMENT", "STRONG_BOX"].includes(attestation.securityLevel) ||
+      attestation.verifiedBootState !== "VERIFIED" || attestation.deviceLocked !== true ||
+      (ownerUid !== undefined && attestation.ownerUid !== ownerUid)) throw GENERIC;
+}
+
 async function signGrant(tenantId: string, deviceIdHash: string, nonce: string, jti: string) {
   const keyId = RECOVERY_SIGNING_KEY_ID.value();
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(keyId)) {
@@ -250,6 +259,7 @@ export const registerRecoveryPhone = onCall(
     const tenantId = validateTenantId(request.data?.tenantId);
     if (auth.token.tenantId !== tenantId) throw GENERIC;
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
+    await requireAttestedDevice(tenantId, deviceIdHash, auth.uid);
     await spendRateLimit(`reg:${tenantId}`, 5, 60 * 60_000);
 
     const newProof = await verifyPhoneToken(request.data?.phoneIdToken);
@@ -270,7 +280,7 @@ export const registerRecoveryPhone = onCall(
       if (!current?.hash) {
         tx.create(ref, {
           hash: newHash.toString("base64"),
-          deviceIdHash,
+          ownerUid: auth.uid, deviceIdHash,
           masked: maskPhone(newProof.phone),
           state: "VERIFIED",
           verifiedAt: FieldValue.serverTimestamp(),
@@ -280,7 +290,7 @@ export const registerRecoveryPhone = onCall(
       }
       if (equalDigest(current.hash, newHash)) {
         if (current.pending?.hash) throw new HttpsError("failed-precondition", "A recovery phone change is already pending.");
-        tx.update(ref, { deviceIdHash, state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp() });
+        tx.update(ref, { ownerUid: auth.uid, deviceIdHash, state: "VERIFIED", verifiedAt: FieldValue.serverTimestamp() });
         return "VERIFIED" as const;
       }
       if (current.pending?.hash) throw new HttpsError("failed-precondition", "A recovery phone change is already pending.");
@@ -314,6 +324,7 @@ export const registerRecoveryOwnerDevice = onCall(
     const tenantId = validateTenantId(request.data?.tenantId);
     if (auth.token.tenantId !== tenantId) throw GENERIC;
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
+    await requireAttestedDevice(tenantId, deviceIdHash, auth.uid);
     const token = requiredString(request.data?.fcmToken, 4096);
     if (token.length < 100) throw GENERIC;
     const phoneRef = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
@@ -355,6 +366,7 @@ export const issueRecoveryGrant = onCall(
     const phoneRef = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
     const phoneSnapshot = await phoneRef.get();
     const phoneRecord = phoneSnapshot.data();
+    await requireAttestedDevice(tenantId, deviceIdHash, phoneRecord?.ownerUid);
     const actualHash = digest(tenantId, proof.phone);
     if (!phoneRecord || !["VERIFIED", "CHANGE_PENDING"].includes(phoneRecord.state) ||
         phoneRecord.otpRequired === false || phoneRecord.deviceIdHash !== deviceIdHash ||
