@@ -26,6 +26,14 @@ class RecoveryGrantClient(private val context: Context) {
             task.result?.data as? Map<*, *> ?: throw IllegalStateException("Phone registration failed.")
         }
 
+    fun registerOwnerNotificationDevice(tenantId: String, deviceHash: String, fcmToken: String): Task<Boolean> =
+        functions.getHttpsCallable("registerRecoveryOwnerDevice").call(mapOf(
+            "tenantId" to tenantId, "deviceIdHash" to deviceHash, "fcmToken" to fcmToken
+        )).continueWith { task ->
+            if (!task.isSuccessful) throw task.exception ?: IllegalStateException("Owner notification registration failed.")
+            (task.result?.data as? Map<*, *>)?.get("registered") == true
+        }
+
     fun issueRecoveryGrant(phoneIdToken: String, tenantId: String): GrantRequest {
         // Start before the network request so local authorization cannot outlive
         // the five-minute grant even if the device wall clock is changed.
