@@ -1001,6 +1001,12 @@ test('one-time Firebase email link mints a fresh owner session only for the enro
     assert.ok(mintedClaims.ownerAuthFactorAuthTime >= now);
     assert.equal(mintedClaims.tenantId, tenantId);
 
+    const enrollmentResult = await callable(functions.exchangeOwnerEmailLink, {
+      tenantId, deviceIdHash: 'e'.repeat(64), email, emailLink, purpose: 'enrollment'
+    });
+    assert.equal(enrollmentResult.customToken, 'emulator-owner-custom-token',
+      'a canonical owner can establish a first local binding before a device is enrolled');
+
     auth.verifyIdToken = async () => ({
       uid: otherUid, email, email_verified: true, auth_time: now,
       firebase: { sign_in_provider: 'password' }

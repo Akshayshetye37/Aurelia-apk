@@ -13,7 +13,6 @@ import androidx.fragment.app.FragmentActivity
 import com.aurelia.pms.security.RecoveryDeviceIdentity
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.messaging.FirebaseMessaging
-import com.google.firebase.auth.FirebaseAuth
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.pm.PackageManager

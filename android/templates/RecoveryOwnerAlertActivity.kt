@@ -50,7 +50,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
                 return
             }
         }
-        purpose = if (hasAlertContext) "alert" else "enrollment"
+        if (hasAlertContext) purpose = "alert"
         buildContent()
         incomingLink?.let {
             emailLinkInput.setText(it)
