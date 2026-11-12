@@ -125,7 +125,7 @@ test('blocked Android notification channels cannot acknowledge owner alerts or s
   assert.ok(blockedCheck < notify, 'channel suppression must be checked before notify');
   assert.doesNotMatch(service, /acknowledgeRecoveryOwnerAlert/, 'FCM delivery must never auto-acknowledge');
   assert.match(service, /RecoveryOwnerAlertActivity\.EXTRA_ACK_TOKEN/);
-  assert.match(activity, /getHttpsCallable\("acknowledgeRecoveryOwnerAlert"\)/);
+  assert.match(activity, /withFreshOwnerSession\("acknowledgeRecoveryOwnerAlert"\)/);
   assert.match(activity, /getIdToken\(true\)/);
   assert.match(service, /if \(manager\.getNotificationChannel\(CHANNEL_ID\)\?\.importance == NotificationManager\.IMPORTANCE_NONE\) return/);
 });
