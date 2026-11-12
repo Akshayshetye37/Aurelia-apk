@@ -1,0 +1,43 @@
+name: Verify production recovery remains disabled
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: recovery-production-audit
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Assert all deployed recovery functions fail closed by default
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+        run: |
+          set -euo pipefail
+          test -n "$PROJECT_ID" && test -n "$REGION"
+          gcloud config set project "$PROJECT_ID"
+          mapfile -t services < <(gcloud run services list --project "$PROJECT_ID" --region "$REGION" --format='value(metadata.name)' | grep -Ei 'recovery|attestation' || true)
+          if [[ "${#services[@]}" -eq 0 ]]; then
+            echo "::error::No deployed recovery/attestation services found; production flag state cannot be evidenced."
+            exit 1
+          fi
+          for service in "${services[@]}"; do
+            json="$(gcloud run services describe "$service" --project "$PROJECT_ID" --region "$REGION" --format=json)"
+            enabled="$(echo "$json" | jq -r '[.spec.template.spec.containers[].env[]? | select(.name=="RECOVERY_ENABLED") | .value] | first // "false"')"
+            if [[ "$enabled" != "false" ]]; then
+              echo "::error::Production service $service has RECOVERY_ENABLED=$enabled; expected false or unset."
+              exit 1
+            fi
+            echo "PASS: $service has recovery disabled."
+          done

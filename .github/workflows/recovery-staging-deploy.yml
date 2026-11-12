@@ -68,6 +68,9 @@ jobs:
           done
           echo "Staging project, key ID, public pin, app config, signing keystore and Secret Manager versions are present."
 
+      - name: Install Firebase Functions dependencies
+        run: npm install --prefix functions --ignore-scripts
+
       - name: Deploy Firebase Functions with staging-only recovery enabled
         shell: bash
         env:
