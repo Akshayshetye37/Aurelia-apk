@@ -79,7 +79,8 @@ test('APK verifies the pinned ES256 signature before server grant consumption', 
   assert.match(client, /RecoveryGrantVerifier\.keyId\(grant\)/);
   assert.match(client, /RecoveryGrantVerifier\.pinnedPublicKey\(context, kid\)/);
   assert.match(client, /RecoveryGrantVerifier\.verify\(grant, pinnedKey, tenantId, nonce, deviceHash\)/);
-  assert.ok(client.indexOf('RecoveryGrantVerifier.verify') < client.indexOf('consumeRecoveryGrant(grant'));
+  const consumeFlow = client.slice(client.indexOf('fun consumeAndArm'));
+  assert.ok(consumeFlow.indexOf('RecoveryGrantVerifier.verify') < consumeFlow.indexOf('consumeRecoveryGrant(grant'));
   assert.match(verifier, /SHA256withECDSA/);
   assert.match(verifier, /header\.optString\("kid"\)/);
   assert.match(verifier, /recovery_grant_public_keys_json/);
