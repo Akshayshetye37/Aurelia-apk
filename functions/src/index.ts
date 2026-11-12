@@ -52,6 +52,11 @@ function requireFreshPrimaryOwner(request: CallableRequest<unknown>): { uid: str
   return { uid: auth.uid, tenantId: validateTenantId(auth.token.tenantId) };
 }
 
+async function requireRecoveryOwnerBinding(tenantId: string, ownerUid: string): Promise<void> {
+  const binding = (await db.doc(`tenants/${tenantId}/security/recoveryOwner`).get()).data();
+  if (!binding || binding.ownerUid !== ownerUid) throw GENERIC;
+}
+
 function ownerAckTokenDigest(uid: string, requestId: string, deviceIdHash: string, token: string): Buffer {
   return createHash("sha256").update(uid).update("|").update(requestId).update("|")
     .update(deviceIdHash).update("|").update(token).digest();
@@ -69,8 +74,9 @@ export const createRecoveryAttestationChallenge = onCall(
   { region: REGION, enforceAppCheck: true },
   async request => {
     requireRecoveryEnabled();
-    const owner = requireFreshOwner(request);
+    const owner = requireFreshPrimaryOwner(request);
     if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
+    await requireRecoveryOwnerBinding(owner.tenantId, owner.uid);
     const requestedHash = request.data?.deviceIdHash;
     if (requestedHash !== undefined && requestedHash !== null) {
       const deviceIdHash = validateDeviceHash(requestedHash);
@@ -95,8 +101,9 @@ export const verifyRecoveryDeviceAttestation = onCall(
   { region: REGION, enforceAppCheck: true, serviceAccount: RECOVERY_FUNCTIONS_SERVICE_ACCOUNT },
   async request => {
     requireRecoveryEnabled();
-    const owner = requireFreshOwner(request);
+    const owner = requireFreshPrimaryOwner(request);
     if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
+    await requireRecoveryOwnerBinding(owner.tenantId, owner.uid);
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
     const challengeId = requiredString(request.data?.challengeId, 64);
     if (!/^[0-9a-f-]{36}$/i.test(challengeId)) throw GENERIC;
@@ -282,11 +289,12 @@ export const registerRecoveryPhone = onCall(
     requireRecoveryEnabled();
     // Phone possession is not owner authorization. Bind registration to a
     // recently authenticated primary owner session and its server-issued tenant claim.
+    const owner = requireFreshPrimaryOwner(request);
     const auth = request.auth;
-    const ownerAge = Date.now() / 1000 - Number(auth?.token.auth_time ?? 0);
-    if (!auth || auth.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
+    if (!auth) throw GENERIC;
     const tenantId = validateTenantId(request.data?.tenantId);
-    if (auth.token.tenantId !== tenantId) throw GENERIC;
+    if (owner.tenantId !== tenantId) throw GENERIC;
+    await requireRecoveryOwnerBinding(tenantId, owner.uid);
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
     await requireAttestedDevice(tenantId, deviceIdHash, auth.uid);
     await spendRateLimit(`reg:${tenantId}`, 5, 60 * 60_000);
@@ -353,6 +361,8 @@ export const exchangeOwnerEmailLink = onCall(
     requireRecoveryEnabled();
     const tenantId = requiredString(request.data?.tenantId, 128);
     const deviceIdHash = requiredString(request.data?.deviceIdHash, 128);
+    const purpose = requiredString(request.data?.purpose, 16);
+    if (purpose !== "alert" && purpose !== "enrollment") throw GENERIC;
     const email = requiredString(request.data?.email, 254).trim().toLowerCase();
     const emailLink = requiredString(request.data?.emailLink, 4096);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw GENERIC;
@@ -391,15 +401,20 @@ export const exchangeOwnerEmailLink = onCall(
     if (decoded.uid !== authResult.localId || decoded.email !== email ||
         decoded.email_verified !== true || firebase?.sign_in_provider !== "password" ||
         !Number.isInteger(authTime) || authTime > now || now - authTime >= 300) throw GENERIC;
+    const ownerBinding = (await db.doc(`tenants/${tenantId}/security/recoveryOwner`).get()).data();
+    if (!ownerBinding || ownerBinding.ownerUid !== decoded.uid) throw GENERIC;
     const phoneRecord = (await db.doc(`tenants/${tenantId}/security/recoveryPhone`).get()).data();
-    if (!phoneRecord || phoneRecord.ownerUid !== decoded.uid) throw GENERIC;
-    await requireAttestedDevice(tenantId, deviceIdHash, decoded.uid);
+    if (phoneRecord && phoneRecord.ownerUid !== decoded.uid) throw GENERIC;
     const owner = await getAuth().getUser(decoded.uid);
     if (owner.disabled || owner.customClaims?.role !== "owner" ||
         owner.customClaims?.tenantId !== tenantId) throw GENERIC;
-    const enrolledDevice = (await db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`).get()).data();
-    if (!enrolledDevice || enrolledDevice.ownerUid !== decoded.uid ||
-        enrolledDevice.deviceIdHash !== deviceIdHash || enrolledDevice.active !== true) throw GENERIC;
+    if (purpose === "alert") {
+      if (!phoneRecord) throw GENERIC;
+      await requireAttestedDevice(tenantId, deviceIdHash, decoded.uid);
+      const enrolledDevice = (await db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`).get()).data();
+      if (!enrolledDevice || enrolledDevice.ownerUid !== decoded.uid ||
+          enrolledDevice.deviceIdHash !== deviceIdHash || enrolledDevice.active !== true) throw GENERIC;
+    }
     const factorIssuedAt = Math.floor(Date.now() / 1000);
     const customToken = await getAuth().createCustomToken(decoded.uid, {
       ...(owner.customClaims || {}),
@@ -417,8 +432,9 @@ export const confirmRecoveryOwnerBinding = onCall(
     requireRecoveryEnabled();
     const owner = requireFreshPrimaryOwner(request);
     if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
+    await requireRecoveryOwnerBinding(owner.tenantId, owner.uid);
     const record = (await db.doc(`tenants/${owner.tenantId}/security/recoveryPhone`).get()).data();
-    if (!record || record.ownerUid !== owner.uid) throw GENERIC;
+    if (record && record.ownerUid !== owner.uid) throw GENERIC;
     return { confirmed: true };
   }
 );
@@ -432,6 +448,7 @@ export const registerRecoveryOwnerDevice = onCall(
     if (!auth || auth.token.role !== "owner") throw GENERIC;
     const tenantId = validateTenantId(request.data?.tenantId);
     if (auth.token.tenantId !== tenantId) throw GENERIC;
+    await requireRecoveryOwnerBinding(tenantId, auth.uid);
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
     await requireAttestedDevice(tenantId, deviceIdHash, auth.uid);
     await spendRateLimit(`notify:${tenantId}:${deviceIdHash}`, 10, 60 * 60_000);
@@ -440,8 +457,7 @@ export const registerRecoveryOwnerDevice = onCall(
     const deviceRef = db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`);
     const existingDevice = (await deviceRef.get()).data();
     if (!existingDevice) {
-      const ownerAge = Date.now() / 1000 - Number(auth.token.auth_time ?? 0);
-      if (ownerAge < 0 || ownerAge >= 300) throw GENERIC;
+      requireFreshPrimaryOwner(request);
     } else if (existingDevice.ownerUid !== auth.uid || existingDevice.deviceIdHash !== deviceIdHash) {
       throw GENERIC;
     }
