@@ -58,7 +58,7 @@ jobs:
           gcloud artifacts repositories describe aurelia-recovery --location "$REGION" >/dev/null 2>&1 ||
             gcloud artifacts repositories create aurelia-recovery --repository-format=docker --location "$REGION" --description="Aurelia recovery security services"
           IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/aurelia-recovery/device-attestation:$GITHUB_SHA"
-          gcloud builds submit --tag "$IMAGE" --file payment-backend/Dockerfile.attestation .
+          gcloud builds submit --config cloudbuild-recovery-attestation.yaml --substitutions="_IMAGE=$IMAGE" .
 
       - name: Deploy verifier with IAM authentication only
         shell: bash
