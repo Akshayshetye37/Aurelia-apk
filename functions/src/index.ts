@@ -358,7 +358,9 @@ export const acknowledgeRecoveryOwnerAlert = onCall(
       const cooldown = cooldownSnapshot.data();
       const event = eventSnapshot.data();
       if (!cooldown || cooldown.state !== "ALERT_PENDING" ||
-          cooldown.alertEventId !== eventId || cooldown.deviceIdHash !== deviceIdHash ||
+          cooldown.alertEventId !== eventId ||
+          !Array.isArray(cooldown.alertedDeviceHashes) ||
+          !cooldown.alertedDeviceHashes.includes(deviceIdHash) ||
           !event || event.tenantId !== tenantId ||
           event.type !== "RECOVERY_COOLDOWN_STARTED") throw GENERIC;
       tx.update(cooldownRef, {
