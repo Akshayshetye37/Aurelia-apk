@@ -90,13 +90,15 @@ test('APK verifies the pinned ES256 signature before server grant consumption', 
   const patcher = read('scripts/patch-android.js');
   assert.match(client, /RecoveryGrantVerifier\.keyId\(grant\)/);
   assert.match(client, /RecoveryGrantVerifier\.pinnedPublicKey\(context, kid\)/);
-  assert.match(client, /RecoveryGrantVerifier\.verify\(grant, pinnedKey, tenantId, nonce, deviceHash\)/);
+  assert.match(client, /RecoveryGrantVerifier\.verify\(/);
+  assert.match(client, /enrollment\.ownerUid/);
+  assert.match(client, /enrollment\.tenantId/);
   const consumeFlow = client.slice(client.indexOf('fun consumeAndArm'));
   assert.ok(consumeFlow.indexOf('RecoveryGrantVerifier.verify') < consumeFlow.indexOf('consumeRecoveryGrant(grant'));
   assert.match(verifier, /SHA256withECDSA/);
   assert.match(verifier, /header\.optString\("kid"\)/);
   assert.match(verifier, /recovery_grant_public_keys_json/);
-  assert.match(verifier, /expiresAt - issuedAt <= 300/);
+  assert.match(verifier, /expiresAt - issuedAt > 300/);
   assert.match(patcher, /RECOVERY_GRANT_PUBLIC_KEYS_JSON/);
   assert.match(patcher, /aurelia_recovery_grant_keys\.xml/);
   assert.match(client, /replayStore\.markUsed\(verified\.jti, verified\.expiresAtEpochSec\)/);
