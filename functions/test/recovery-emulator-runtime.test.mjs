@@ -765,3 +765,21 @@ test('recovery phone ownership cannot be rebound by a different owner UID in the
   const record = (await db.doc(`tenants/${tenantId}/security/recoveryPhone`).get()).data();
   assert.equal(record.ownerUid, ownerUid);
 });
+
+
+test('legacy local owner binding can only migrate when server recovery owner UID matches', async () => {
+  const tenantId = 'tenant-emulator-legacy-owner-binding';
+  const ownerUid = 'owner-emulator-legacy-owner-binding';
+  const otherOwnerUid = 'other-owner-emulator-legacy-owner-binding';
+  const phone = '+15555550114';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, deviceHashFor(tenantId + ':owner')] });
+  await assert.rejects(callable(functions.confirmRecoveryOwnerBinding, {
+    tenantId
+  }, ownerAuth(otherOwnerUid, tenantId)), 'secondary owner cannot migrate a legacy local binding');
+  const confirmed = await callable(functions.confirmRecoveryOwnerBinding, {
+    tenantId
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(confirmed.confirmed, true);
+});

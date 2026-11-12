@@ -343,6 +343,18 @@ export const registerRecoveryPhone = onCall(
   }
 );
 
+/** Confirm a legacy local tenant record against the server's immutable recovery owner UID. */
+export const confirmRecoveryOwnerBinding = onCall(
+  { region: REGION, enforceAppCheck: true },
+  async request => {
+    const owner = requireFreshPrimaryOwner(request);
+    if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
+    const record = (await db.doc(`tenants/${owner.tenantId}/security/recoveryPhone`).get()).data();
+    if (!record || record.ownerUid !== owner.uid) throw GENERIC;
+    return { confirmed: true };
+  }
+);
+
 /** Register the owner's authenticated device as the mandatory recovery-alert destination. */
 export const registerRecoveryOwnerDevice = onCall(
   { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER] },

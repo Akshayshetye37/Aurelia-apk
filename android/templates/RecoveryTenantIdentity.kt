@@ -5,6 +5,9 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.FirebaseApp
+import com.google.firebase.functions.FirebaseFunctions
+import com.google.android.gms.tasks.Tasks
 import org.json.JSONObject
 import com.google.android.gms.tasks.Task
 import java.security.KeyStore
@@ -47,7 +50,7 @@ object RecoveryTenantIdentity {
             ?: throw SecurityException("Sign in as the property owner before registering a recovery phone.")
         val ownerUid = user.uid.takeIf { it.isNotBlank() && it.length <= 128 }
             ?: throw SecurityException("Authenticated owner UID is invalid.")
-        return user.getIdToken(true).continueWith { task ->
+        return user.getIdToken(true).continueWithTask { task ->
             if (!task.isSuccessful) throw task.exception ?: SecurityException("Owner identity verification failed.")
             val claims = task.result?.claims ?: throw SecurityException("Owner identity claims are missing.")
             if (claims["role"] != "owner") throw SecurityException("Only the property owner can register recovery security.")
@@ -56,8 +59,31 @@ object RecoveryTenantIdentity {
             require(tenant.matches(Regex("^[A-Za-z0-9_-]{8,128}$"))) {
                 "The authenticated tenant claim is invalid."
             }
-            synchronized(this) { persistOrConfirm(context, tenant, ownerUid) }
-            tenant
+            val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val existingBlob = prefs.getString(BLOB, null)
+            val previous = existingBlob?.let { decrypt(it, context) }
+            val previousTenant = previous?.let {
+                runCatching { JSONObject(it).getString("tenantId") }.getOrElse { it }
+            }
+            val previousRecord = previous?.let { runCatching { JSONObject(it) }.getOrNull() }
+            val previousUid = previousRecord?.optString("ownerUid")?.takeIf { !it.isNullOrBlank() }
+            if (existingBlob != null && previousTenant == tenant && previousUid == null) {
+                FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
+                    .getHttpsCallable("confirmRecoveryOwnerBinding")
+                    .call(mapOf("tenantId" to tenant))
+                    .continueWith { confirmTask ->
+                        if (!confirmTask.isSuccessful ||
+                            (confirmTask.result?.data as? Map<*, *>)?.get("confirmed") != true) {
+                            throw confirmTask.exception
+                                ?: SecurityException("Legacy recovery owner binding could not be confirmed.")
+                        }
+                        synchronized(this) { persistOrConfirm(context, tenant, ownerUid) }
+                        tenant
+                    }
+            } else {
+                synchronized(this) { persistOrConfirm(context, tenant, ownerUid) }
+                Tasks.forResult(tenant)
+            }
         }
     }
 

@@ -274,3 +274,10 @@ test('owner alert acknowledgement is explicit and never automatic on FCM deliver
   assert.match(activity, /cancelRecoveryRequest/);
   assert.match(activity, /getIdToken\(true\)/);
 });
+
+test('legacy local tenant-only recovery binding requires backend owner UID confirmation', () => {
+  const identity = read('android/templates/RecoveryTenantIdentity.kt');
+  assert.match(identity, /confirmRecoveryOwnerBinding/);
+  assert.match(functions, /confirmRecoveryOwnerBinding = onCall/);
+  assert.match(functions, /record\.ownerUid !== owner\.uid/);
+});
