@@ -119,16 +119,31 @@ test('recovery grants have a five-minute lifetime on backend and client', () => 
   assert.match(recoveryGate, /TTL_MS = 5 \* 60_000L/);
 });
 
-test('Android arms recovery only after backend consumption without fabricating a signature-verifier result', () => {
+test('Android verifies the pinned ES256 signature before server consumption and gate arming', () => {
+  const verifier = read('android/templates/security/RecoveryGrantVerifier.kt');
+  const pins = read('android/templates/security/RecoveryGrantKeySet.kt');
+  const patcher = read('scripts/patch-android.js');
+  assert.match(grantClient, /RecoveryGrantVerifier\.verify\(grant, pinnedKey, tenantId, nonce, deviceHash\)/);
+  assert.match(grantClient, /RecoveryGrantVerifier\.pinnedPublicKey\(context, kid\)/);
+  assert.ok(grantClient.indexOf('RecoveryGrantVerifier.verify') < grantClient.indexOf('consumeRecoveryGrant(grant'));
+  assert.match(verifier, /SHA256withECDSA/);
+  assert.match(verifier, /header\.optString\("kid"\)/);
+  assert.match(verifier, /expiresAt - issuedAt <= 300/);
+  assert.match(pins, /recovery_grant_public_keys_json/);
+  assert.match(patcher, /RECOVERY_GRANT_PUBLIC_KEYS_JSON/);
+  assert.match(patcher, /aurelia_recovery_grant_keys.xml/);
   assert.match(grantClient, /RecoveryGate\.armAfterServerConsumption\(/);
-  assert.doesNotMatch(grantClient, /RecoveryGrantVerifier\.Result\.Ok/);
+  assert.match(grantClient, /replayStore\.markUsed\(verified\.jti, verified\.expiresAtEpochSec\)/);
   assert.match(grantClient, /task\.isSuccessful && task\.result == true/);
   assert.match(grantClient, /startedAtElapsedMs = SystemClock\.elapsedRealtime\(\)/);
   assert.match(grantClient, /SystemClock\.elapsedRealtime\(\) - startedAtElapsedMs/);
   assert.match(recoveryGate, /fun armAfterServerConsumption\(remainingGrantMs: Long\)/);
   assert.doesNotMatch(recoveryGate, /System\.currentTimeMillis\(\)/);
-  assert.match(grantClient, /replayStore\.markUsed\(claims\.jti, claims\.expiresAt\)/);
-  assert.ok(grantClient.includes("runCatching {") && grantClient.includes("RecoveryGate.armAfterServerConsumption(remainingGrantMs)"));
+});
+
+test('backend grants carry a key ID for documented public-key rotation', () => {
+  assert.match(functions, /RECOVERY_SIGNING_KEY_ID = defineString/);
+  assert.match(functions, /kid: RECOVERY_SIGNING_KEY_ID\.value\(\)/);
 });
 
 test('decrypted recovery phone bytes are zeroized after parsing', () => {
