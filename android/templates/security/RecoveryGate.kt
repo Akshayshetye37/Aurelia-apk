@@ -8,6 +8,7 @@ import android.os.SystemClock
  * Process death closes the gate automatically.
  *
  * One grant authorizes at most three checksum-valid recovery-key unwrap attempts.
+ * A fresh phone OTP is required after the server-side 24-hour recovery hold.
  * The remaining duration is measured from a monotonic timestamp captured before
  * the grant request; wall-clock changes cannot extend the authorization window.
  */

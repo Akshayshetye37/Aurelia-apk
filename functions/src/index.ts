@@ -10,6 +10,7 @@ if (!getApps().length) initializeApp();
 const db = getFirestore();
 const PHONE_PEPPER = defineSecret("PHONE_PEPPER");
 const RECOVERY_SIGNING_KEY_PKCS8 = defineSecret("RECOVERY_SIGNING_KEY_PKCS8");
+// Production remains closed unless a separately qualified deployment explicitly enables recovery.
 const RECOVERY_ENABLED = defineString("RECOVERY_ENABLED", { default: "false" });
 const GENERIC = new HttpsError("permission-denied", "Verification failed.");
 const ISSUER = "aurelia-recovery";
