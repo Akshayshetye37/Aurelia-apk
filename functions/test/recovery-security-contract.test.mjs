@@ -15,6 +15,10 @@ const recoveryGate = read('android/templates/security/RecoveryGate.kt');
 const phoneStore = read('android/templates/RecoveryPhoneStore.kt');
 const tenantIdentity = read('android/templates/RecoveryTenantIdentity.kt');
 const replayStore = read('android/templates/security/RecoveryGrantReplayStore.kt');
+const deviceIdentity = read('android/templates/security/RecoveryDeviceIdentity.kt');
+const messageService = read('android/templates/security/RecoveryOwnerMessagingService.kt');
+const patcher = read('scripts/patch-android.js');
+const attestationVerifier = read('payment-backend/attestation-verifier/src/main/kotlin/com/aurelia/attestation/Main.kt');
 
 test('backend matches only verified Firebase phone identity and enforces fresh auth_time', () => {
   assert.match(functions, /verifyIdToken\(token, true\)/);
@@ -54,7 +58,7 @@ test('backend never deletes Firebase phone-auth users', () => {
 });
 
 test('Firestore client rules deny direct access to recovery secrets and grants', () => {
-  for (const collection of ['tenants', 'recoveryGrants', 'usedPhoneProofs', 'rateLimits', 'recoveryCooldowns', 'recoverySecurityEvents']) {
+  for (const collection of ['tenants', 'recoveryGrants', 'usedPhoneProofs', 'rateLimits', 'recoveryCooldowns', 'recoverySecurityEvents', 'recoveryOwnerDevices', 'recoveryAttestationChallenges', 'recoveryDeviceAttestations']) {
     assert.ok(rules.includes(collection));
   }
   assert.match(rules, /allow read, write: if false/);
@@ -139,6 +143,42 @@ test('Android verifies the pinned ES256 signature before server consumption and 
   assert.match(grantClient, /SystemClock\.elapsedRealtime\(\) - startedAtElapsedMs/);
   assert.match(recoveryGate, /fun armAfterServerConsumption\(remainingGrantMs: Long\)/);
   assert.doesNotMatch(recoveryGate, /System\.currentTimeMillis\(\)/);
+});
+
+test('hardware attestation is challenge-bound, server-verified and rejects software keys', () => {
+  assert.match(functions, /createRecoveryAttestationChallenge = onCall/);
+  assert.match(functions, /verifyRecoveryDeviceAttestation = onCall/);
+  assert.match(functions, /new GoogleAuth\(\)\.getIdTokenClient/);
+  assert.match(functions, /RECOVERY_ATTESTATION_VERIFIER_URL/);
+  assert.match(functions, /TRUSTED_ENVIRONMENT.*STRONG_BOX/);
+  assert.match(functions, /verifiedBootState !== "VERIFIED"/);
+  assert.match(functions, /deviceLocked !== true/);
+  assert.match(functions, /publicKeyHash !== deviceIdHash/);
+  assert.match(functions, /consumedAt: FieldValue\.serverTimestamp\(\)/);
+  assert.match(deviceIdentity, /setAttestationChallenge\(challenge\)/);
+  assert.match(deviceIdentity, /setIsStrongBoxBacked\(true\)/);
+  assert.match(deviceIdentity, /StrongBoxUnavailableException/);
+  assert.match(deviceIdentity, /certificateChainBase64/);
+  assert.match(attestationVerifier, /GoogleTrustAnchors/);
+  assert.match(attestationVerifier, /SecurityLevel\.TRUSTED_ENVIRONMENT/);
+  assert.match(attestationVerifier, /SecurityLevel\.STRONG_BOX/);
+  assert.match(attestationVerifier, /SoftwareAttestationUnsupported/);
+});
+
+test('recovery cannot proceed until owner alert is posted and acknowledged by the attested device', () => {
+  assert.match(functions, /registerRecoveryOwnerDevice = onCall/);
+  assert.match(functions, /getMessaging\(\)\.send/);
+  assert.match(functions, /state: "ALERT_PENDING"/);
+  assert.match(functions, /acknowledgeRecoveryOwnerAlert = onCall/);
+  assert.match(functions, /notificationAcknowledgedAt/);
+  assert.match(functions, /eligibleAt = Date\.now\(\) \+ RECOVERY_COOLDOWN_MS/);
+  assert.match(functions, /Owner alert was not acknowledged; recovery remains blocked/);
+  assert.match(functions, /cancelRecoveryRequest = onCall/);
+  assert.match(messageService, /NotificationManagerCompat\.from\(this\)\.areNotificationsEnabled\(\)/);
+  assert.match(messageService, /acknowledgeRecoveryOwnerAlert/);
+  assert.match(messageService, /RecoveryDeviceIdentity\.deviceIdHash\(\)/);
+  assert.match(patcher, /android\.permission\.POST_NOTIFICATIONS/);
+  assert.match(patcher, /firebase-messaging:24\.1\.1/);
 });
 
 test('backend grants carry a key ID for documented public-key rotation', () => {
