@@ -186,6 +186,8 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(functions, /state: "ALERT_PENDING"/);
   assert.match(functions, /acknowledgeRecoveryOwnerAlert = onCall/);
   assert.match(functions, /notificationAcknowledgedAt/);
+  assert.match(functions, /event\\.fcmAcceptedDeviceHashes\\.includes\\(deviceIdHash\\)/);
+  assert.match(messageService, /getNotificationChannel\\(CHANNEL_ID\\)\\?\\.importance == NotificationManager\\.IMPORTANCE_NONE/);
   assert.match(functions, /eligibleAt = Date\.now\(\) \+ RECOVERY_COOLDOWN_MS/);
   assert.match(functions, /Owner alert was not acknowledged; recovery remains blocked/);
   assert.match(functions, /cancelRecoveryRequest = onCall/);
