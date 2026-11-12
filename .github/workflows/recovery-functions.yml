@@ -10,6 +10,7 @@ on:
       - 'firebase.json'
       - '.github/workflows/recovery-functions.yml'
       - '.github/workflows/otp-recovery-android-instrumentation.yml'
+      - '.github/workflows/recovery-attestation-ci.yml'
       - 'android/templates/**'
       - 'tests/otp-recovery-*.test.mjs'
       - 'scripts/patch-android.js'
@@ -25,7 +26,7 @@ on:
 
 concurrency:
   group: recovery-functions-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
