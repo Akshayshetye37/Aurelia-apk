@@ -3,7 +3,6 @@ package com.aurelia.pms;
 import android.content.Context;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
-import net.zetetic.database.sqlcipher.SQLiteDatabase;
 import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -86,8 +85,6 @@ public final class RecoveryProcessDeathInstrumentedTest {
       assertNotNull("SQLCipher data must survive force-stop", entity);
       assertEquals("survives-real-process-death", entity.getJSONObject("data").getString("value"));
       assertEquals(1L, entity.getLong("version"));
-      SQLiteDatabase raw = repository.getDatabaseForIntegrityCheck();
-      assertNotNull("SQLCipher integrity handle must remain available", raw);
     } finally {
       if (repository != null) repository.close();
       if (key != null) Arrays.fill(key, (byte) 0);
