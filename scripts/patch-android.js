@@ -359,7 +359,7 @@ fs.mkdirSync(recoveryValuesDir, { recursive: true });
 const xmlEscape = value => value.replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 fs.writeFileSync(path.join(recoveryValuesDir, 'aurelia_recovery_grant_keys.xml'),
-  '<?xml version="1.0" encoding="utf-8"?>\\n<resources><string name="recovery_grant_public_keys_json" translatable="false">' +
+  '<?xml version="1.0" encoding="utf-8"?>\n<resources><string name="recovery_grant_public_keys_json" translatable="false">' +
   xmlEscape(JSON.stringify(recoveryPins)) + '</string></resources>');
 
 const appModuleDir = path.join(androidDir, 'app');
