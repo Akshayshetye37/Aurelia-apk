@@ -2,7 +2,7 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getMessaging } from "firebase-admin/messaging";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { createHash, createHmac, createPrivateKey, createPublicKey, randomUUID, randomBytes, timingSafeEqual } from "node:crypto";
 import { importPKCS8, importSPKI, jwtVerify, SignJWT } from "jose";
@@ -31,7 +31,7 @@ function requireRecoveryEnabled(): void {
 
 type PhoneProof = { uid: string; phone: string; authTime: number };
 
-function requireFreshOwner(request: Parameters<Parameters<typeof onCall>[1]>[0]): { uid: string; tenantId: string } {
+function requireFreshOwner(request: CallableRequest<unknown>): { uid: string; tenantId: string } {
   const auth = request.auth;
   const ownerAge = Date.now() / 1000 - Number(auth?.token.auth_time ?? 0);
   if (!auth || auth.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
