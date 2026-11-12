@@ -44,6 +44,12 @@ jobs:
         run: npm test
         working-directory: functions
 
+      - name: Set up Java 21 for Firebase emulators
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
+        with:
+          distribution: temurin
+          java-version: "21"
+
       - name: Install Firebase Emulator CLI
         run: npm install --global firebase-tools@13.31.2
 
