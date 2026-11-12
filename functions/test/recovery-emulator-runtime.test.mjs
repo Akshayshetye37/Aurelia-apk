@@ -803,10 +803,10 @@ test('attested but unenrolled owner device cannot cancel a recovery request', as
     securityLevel: 'TRUSTED_ENVIRONMENT', verifiedBootState: 'VERIFIED',
     deviceLocked: true, publicKeyHash: unregisteredOwnerHash
   });
-  await callable(functions.issueRecoveryGrant, {
+  await assert.rejects(callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'c'.repeat(43),
     phoneIdToken: await phoneAuthToken(phone)
-  });
+  }), error => error.code === 'unavailable', 'no acknowledgement keeps the request pending');
   await assert.rejects(callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: unregisteredOwnerHash
   }, ownerAuth(ownerUid, tenantId)), 'attested but unenrolled device cannot cancel');
