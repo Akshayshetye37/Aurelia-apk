@@ -541,6 +541,46 @@ export const consumeRecoveryGrant = onCall(
   }
 );
 
+/** The authenticated owner can cancel a pending recovery hold or unconsumed grant. */
+export const cancelRecoveryRequest = onCall(
+  { region: REGION, enforceAppCheck: true },
+  async request => {
+    requireRecoveryEnabled();
+    const owner = requireFreshOwner(request);
+    if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
+    const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
+    await requireAttestedDevice(owner.tenantId, deviceIdHash, owner.uid);
+    const cooldownRef = db.doc(`recoveryCooldowns/${owner.tenantId}`);
+    await db.runTransaction(async tx => {
+      const cooldownSnapshot = await tx.get(cooldownRef);
+      const pending = cooldownSnapshot.data();
+      if (!pending) throw new HttpsError("not-found", "No pending recovery request.");
+      if (!["ALERT_PENDING", "PENDING", "ISSUED"].includes(pending.state) ||
+          pending.deviceIdHash !== deviceIdHash) throw GENERIC;
+      const grantJti = typeof pending.grantJti === "string" ? pending.grantJti : null;
+      const grantRef = grantJti ? db.doc(`recoveryGrants/${grantJti}`) : null;
+      const eventId = typeof pending.alertEventId === "string" ? pending.alertEventId : null;
+      const eventRef = eventId ? db.doc(`recoverySecurityEvents/${eventId}`) : null;
+      const grantSnapshot = grantRef ? await tx.get(grantRef) : null;
+      const eventSnapshot = eventRef ? await tx.get(eventRef) : null;
+      if (grantSnapshot?.exists && grantSnapshot.data()?.state === "CONSUMED") throw GENERIC;
+      tx.delete(cooldownRef);
+      if (grantRef && grantSnapshot?.exists) {
+        tx.update(grantRef, { state: "REVOKED", revokedAt: FieldValue.serverTimestamp() });
+      }
+      if (eventRef && eventSnapshot?.exists) {
+        tx.update(eventRef, { notificationDelivery: "OWNER_CANCELLED", cancelledAt: FieldValue.serverTimestamp() });
+      }
+      const auditRef = db.collection("recoverySecurityEvents").doc(randomUUID());
+      tx.create(auditRef, {
+        tenantId: owner.tenantId, type: "RECOVERY_REQUEST_CANCELLED",
+        deviceIdHash, createdAt: FieldValue.serverTimestamp()
+      });
+    });
+    return { cancelled: true };
+  }
+);
+
 /** Explicit cancellation retains the old verified recovery destination. */
 export const cancelRecoveryPhoneChange = onCall(
   { region: REGION, enforceAppCheck: true },
