@@ -431,7 +431,6 @@ export const issueRecoveryGrant = onCall(
       const expiredIssuedGrant = pendingState === "ISSUED" &&
         Number(pending?.grantExpiresAt) <= nowMs;
       if (!pending || pendingState === "CONSUMED") {
-        const eligibleAt = nowMs + RECOVERY_COOLDOWN_MS;
         tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
           expiresAt: nowMs + 5 * 60_000 });
         const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
