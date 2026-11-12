@@ -35,6 +35,7 @@ class RecoveryOwnerMessagingService : FirebaseMessagingService() {
         val tenantId = data["tenantId"] ?: return
         val deviceIdHash = data["deviceIdHash"] ?: return
         val eventId = data["eventId"] ?: return
+        val ackToken = data["ackToken"] ?: return
         val localDeviceHash = runCatching { RecoveryDeviceIdentity.deviceIdHash() }.getOrNull() ?: return
         if (localDeviceHash != deviceIdHash) return
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -81,7 +82,7 @@ class RecoveryOwnerMessagingService : FirebaseMessagingService() {
             Tasks.await(
                 FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
                     .getHttpsCallable("acknowledgeRecoveryOwnerAlert")
-                    .call(mapOf("tenantId" to tenantId, "deviceIdHash" to deviceIdHash, "eventId" to eventId)),
+                    .call(mapOf("tenantId" to tenantId, "deviceIdHash" to deviceIdHash, "eventId" to eventId, "ackToken" to ackToken)),
                 10, TimeUnit.SECONDS
             )
         }
