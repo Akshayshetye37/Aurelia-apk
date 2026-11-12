@@ -175,6 +175,7 @@ export const registerRecoveryPhone = onCall(
       // and the proposed number. A new number alone cannot hijack the record.
       if (!oldHash || !equalDigest(current.hash, oldHash)) throw GENERIC;
       tx.update(ref, {
+        deviceIdHash,
         state: "CHANGE_PENDING",
         pending: {
           hash: newHash.toString("base64"),
