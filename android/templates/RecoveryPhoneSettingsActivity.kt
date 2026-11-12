@@ -2,6 +2,7 @@ package com.aurelia.pms.identity
 
 import android.app.AlertDialog
 import android.os.Bundle
+import android.content.Intent
 import android.text.InputType
 import android.view.Gravity
 import android.widget.Button
@@ -12,6 +13,7 @@ import androidx.fragment.app.FragmentActivity
 import com.aurelia.pms.security.RecoveryDeviceIdentity
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.auth.FirebaseAuth
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.pm.PackageManager
@@ -88,6 +90,15 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                 setTextColor(android.graphics.Color.WHITE)
             })
             addView(status)
+            addView(Button(this@RecoveryPhoneSettingsActivity).apply {
+                text = "Verify primary owner with email link"
+                setOnClickListener {
+                    val tenant = runCatching { RecoveryTenantIdentity.getBinding(this@RecoveryPhoneSettingsActivity).tenantId }.getOrNull().orEmpty()
+                    startActivity(Intent(this@RecoveryPhoneSettingsActivity, RecoveryOwnerAlertActivity::class.java)
+                        .putExtra(RecoveryOwnerAlertActivity.EXTRA_ENROLLMENT_MODE, true)
+                        .putExtra(RecoveryOwnerAlertActivity.EXTRA_TENANT_ID, tenant))
+                }
+            })
             addView(TextView(this@RecoveryPhoneSettingsActivity).apply {
                 text = "SMS OTP never unlocks the database. Your offline recovery key is still required. If both this device and that key are lost, the encrypted data is permanently unrecoverable."
                 textSize = 13f
