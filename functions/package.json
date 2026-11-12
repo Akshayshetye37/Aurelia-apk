@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc",
     "test": "node --test test/*.test.mjs",
-    "emulate": "npm run build && firebase emulators:start --only functions,firestore"
+    "emulate": "npm run build && firebase emulators:start --only functions,firestore",
+    "test:emulator": "node --test test/recovery-emulator-runtime.test.mjs"
   },
   "dependencies": {
     "firebase-admin": "^13.4.0",
