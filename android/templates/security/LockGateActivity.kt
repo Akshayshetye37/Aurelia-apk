@@ -580,7 +580,11 @@ class LockGateActivity : FragmentActivity() {
                                             recoveryFlowActive = false
                                             identity.reset()
                                             RecoveryGate.clear()
-                                            showError("For account safety, recovery is on a 24-hour hold after phone verification. After the hold, tap Forgot PIN and verify a fresh SMS code.")
+                                            if (outcome.awaitingOwnerAlert) {
+                                                showError("Recovery is blocked until a registered owner device posts and acknowledges the security alert. The 24-hour hold has not started yet.")
+                                            } else {
+                                                showError("For account safety, recovery is on a 24-hour hold after the owner alert was acknowledged. After the hold, tap Forgot PIN and verify a fresh SMS code.")
+                                            }
                                         }
                                         is RecoveryGrantClient.GrantIssueResult.Issued -> {
                                             client.consumeAndArm(outcome.grant, grantRequest.nonce, grantRequest.deviceIdHash, tenant, grantRequest.startedAtElapsedMs) { armed ->
