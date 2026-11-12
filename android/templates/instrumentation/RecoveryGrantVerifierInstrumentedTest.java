@@ -4,6 +4,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.util.Base64;
+import android.os.SystemClock;
+import androidx.test.core.app.ApplicationProvider;
+import com.aurelia.pms.identity.RecoveryGrantClient;
+import com.google.android.gms.tasks.Tasks;
+import java.util.concurrent.atomic.AtomicInteger;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
@@ -24,6 +29,24 @@ public final class RecoveryGrantVerifierInstrumentedTest {
   private static final String TENANT = "tenant-test-123";
   private static final String NONCE = "nonce-test-123";
   private static final String DID = "device-hash-test-123";
+
+
+  @Test public void invalidLocalGrantNeverCallsServerConsumeOrArmsRecoveryGate() {
+    AtomicInteger networkCalls = new AtomicInteger();
+    RecoveryGrantClient client = new RecoveryGrantClient(
+        ApplicationProvider.getApplicationContext(),
+        (grant, nonce, deviceHash) -> {
+          networkCalls.incrementAndGet();
+          return Tasks.forResult(true);
+        });
+    RecoveryGate.clear();
+    final boolean[] callback = new boolean[] { true };
+    client.consumeAndArm("malformed.grant.value", NONCE, DID, TENANT,
+        SystemClock.elapsedRealtime(), accepted -> callback[0] = accepted);
+    assertFalse("invalid grant must fail before network consumption", callback[0]);
+    assertEquals("invalid grant must not call the server consume endpoint", 0, networkCalls.get());
+    assertFalse("invalid grant must not arm the recovery gate", RecoveryGate.isOpen());
+  }
 
   @Test public void rejectsInvalidGrantsBeforeAnyRecoveryGateCanArm() throws Exception {
     KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");

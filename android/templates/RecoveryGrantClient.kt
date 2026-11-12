@@ -13,8 +13,11 @@ import java.security.SecureRandom
 import java.util.Base64
 
 /** APK-pinned ES256 verification precedes authoritative server JTI consumption and local replay persistence. */
-class RecoveryGrantClient(private val context: Context) {
-    private val functions = FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
+class RecoveryGrantClient(
+    private val context: Context,
+    private val consumeOverride: ((String, String, String) -> Task<Boolean>)? = null
+) {
+    private val functions by lazy { FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1") }
     private val replayStore = RecoveryGrantReplayStore(context)
 
     fun cancelRecoveryRequest(tenantId: String, deviceHash: String): Task<Boolean> =
@@ -88,13 +91,15 @@ class RecoveryGrantClient(private val context: Context) {
         return GrantRequest(task, nonce, deviceHash, startedAtElapsedMs)
     }
 
-    fun consumeRecoveryGrant(grant: String, nonce: String, deviceHash: String): Task<Boolean> =
-        functions.getHttpsCallable("consumeRecoveryGrant").call(
+    fun consumeRecoveryGrant(grant: String, nonce: String, deviceHash: String): Task<Boolean> {
+        consumeOverride?.let { return it(grant, nonce, deviceHash) }
+        return functions.getHttpsCallable("consumeRecoveryGrant").call(
             mapOf("grant" to grant, "nonce" to nonce, "deviceIdHash" to deviceHash)
         ).continueWith { task ->
             if (!task.isSuccessful) throw task.exception ?: IllegalStateException("Grant consumption failed.")
             (task.result?.data as? Map<*, *>)?.get("consumed") == true
         }
+    }
 
     /**
      * Verify the ES256 signature against the immutable APK key ring and validate
