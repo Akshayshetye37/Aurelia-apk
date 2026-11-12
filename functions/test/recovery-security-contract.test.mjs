@@ -30,7 +30,8 @@ test('backend stores only tenant-scoped phone HMAC and masked phone', () => {
 
 test('phone proof can issue only one grant and grant jti is consumed atomically', () => {
   assert.match(functions, /usedPhoneProofs/);
-  assert.match(functions, /tx\.create\(proofRef/);
+  const persistedGrant = functions.slice(functions.indexOf("tx.create(grantRef"), functions.indexOf("});", functions.indexOf("tx.create(grantRef")));
+  assert.ok(persistedGrant.includes("expiresAt: Date.now() + 5 * 60_000"));
   assert.match(functions, /state: "ISSUED"/);
   assert.match(functions, /data\.state !== "ISSUED"/);
   assert.match(functions, /state: "CONSUMED"/);
