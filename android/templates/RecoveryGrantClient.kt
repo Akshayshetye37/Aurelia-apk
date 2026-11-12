@@ -12,7 +12,7 @@ import org.json.JSONObject
 import java.security.SecureRandom
 import java.util.Base64
 
-/** Server signature validation/atomic jti consumption is authoritative; this client performs claim preflight and local replay suppression only. */
+/** APK-pinned ES256 verification precedes authoritative server JTI consumption and local replay persistence. */
 class RecoveryGrantClient(private val context: Context) {
     private val functions = FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
     private val replayStore = RecoveryGrantReplayStore(context)
@@ -97,9 +97,9 @@ class RecoveryGrantClient(private val context: Context) {
         }
 
     /**
-     * Claim preflight blocks malformed/expired/wrong-tenant/device/nonce grants.
-     * It is NOT cryptographic signature verification: server validates ES256 and
-     * atomically consumes jti. A durable local replay marker is required before arming.
+     * Verify the ES256 signature against the immutable APK key ring and validate
+     * all grant claims before server consumption. The backend then atomically
+     * consumes the JTI; a durable local replay marker is required before arming.
      */
     fun consumeAndArm(grant: String, nonce: String, deviceHash: String, tenantId: String, startedAtElapsedMs: Long, onResult: (Boolean) -> Unit) {
         val verified = try {
