@@ -16,7 +16,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.pm.PackageManager
 import android.os.Build
-import java.util.Base64
+import android.util.Base64
 
 /** Explicit Settings workflow; Hotel Identity fields never call this activity. */
 class RecoveryPhoneSettingsActivity : FragmentActivity() {
@@ -210,7 +210,7 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                             return@runOnUiThread
                         }
                         val identity = try {
-                            val challenge = Base64.getUrlDecoder().decode(challengeEncoded)
+                            val challenge = Base64.decode(challengeEncoded, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
                             try { RecoveryDeviceIdentity.createAttestedIdentity(challenge) }
                             finally { challenge.fill(0) }
                         } catch (_: Exception) {
