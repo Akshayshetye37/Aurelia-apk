@@ -72,6 +72,10 @@ async function phoneAuthToken(phoneNumber) {
   return body.idToken;
 }
 
+function deviceHashFor(label) {
+  return createHash('sha256').update(label).digest('hex');
+}
+
 function phoneDigest(tenantId, phone) {
   return createHmac('sha256', PHONE_PEPPER).update(tenantId).update('|').update(phone).digest('base64');
 }
@@ -475,8 +479,8 @@ test('independent primary owner cancels an issued grant; consume is rejected aft
   const tenantId = 'tenant-emulator-cancel-issued';
   const ownerUid = 'owner-emulator-cancel-issued';
   const phone = '+15555550106';
-  const recoveryDeviceHash = '6'.repeat(64);
-  const independentDeviceHash = '7'.repeat(64);
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  const independentDeviceHash = deviceHashFor(tenantId + ':owner');
   await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
     ownerDeviceHashes: [recoveryDeviceHash, independentDeviceHash] });
   const first = await callable(functions.issueRecoveryGrant, {
@@ -491,6 +495,7 @@ test('independent primary owner cancels an issued grant; consume is rejected aft
     ackToken: ownerAlert.data.ackToken
   }, ownerAuth(ownerUid, tenantId));
   await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
+  await sleep(1100);
   const issued = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'u'.repeat(43), phoneIdToken: await phoneAuthToken(phone)
   });
@@ -543,8 +548,8 @@ test('cancellation racing with grant issue wins the recovery-state transaction',
   const tenantId = 'tenant-emulator-cancel-issue-race';
   const ownerUid = 'owner-emulator-cancel-issue-race';
   const phone = '+15555550108';
-  const recoveryDeviceHash = 'a'.repeat(64);
-  const ownerDeviceHash = 'b'.repeat(64);
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
   await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
     ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
   await callable(functions.issueRecoveryGrant, {
@@ -559,6 +564,7 @@ test('cancellation racing with grant issue wins the recovery-state transaction',
     ackToken: alert.data.ackToken
   }, ownerAuth(ownerUid, tenantId));
   await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
+  await sleep(1100);
   const [issueResult, cancelResult] = await Promise.allSettled([
     callable(functions.issueRecoveryGrant, {
       tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'x'.repeat(43),
@@ -584,8 +590,8 @@ test('grant consumption racing with cancellation has exactly one winner', async 
   const tenantId = 'tenant-emulator-consume-cancel-race';
   const ownerUid = 'owner-emulator-consume-cancel-race';
   const phone = '+15555550109';
-  const recoveryDeviceHash = 'c'.repeat(64);
-  const ownerDeviceHash = 'd'.repeat(64);
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
   const nonce = 'y'.repeat(43);
   await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
     ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
@@ -600,6 +606,7 @@ test('grant consumption racing with cancellation has exactly one winner', async 
     ackToken: alert.data.ackToken
   }, ownerAuth(ownerUid, tenantId));
   await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
+  await sleep(1100);
   const issued = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce, phoneIdToken: await phoneAuthToken(phone)
   });
