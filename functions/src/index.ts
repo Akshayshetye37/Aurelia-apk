@@ -371,7 +371,9 @@ export const acknowledgeRecoveryOwnerAlert = onCall(
           !Array.isArray(cooldown.alertedDeviceHashes) ||
           !cooldown.alertedDeviceHashes.includes(deviceIdHash) ||
           !event || event.tenantId !== tenantId ||
-          event.type !== "RECOVERY_COOLDOWN_STARTED") throw GENERIC;
+          event.type !== "RECOVERY_COOLDOWN_STARTED" ||
+          !Array.isArray(event.fcmAcceptedDeviceHashes) ||
+          !event.fcmAcceptedDeviceHashes.includes(deviceIdHash)) throw GENERIC;
       tx.update(cooldownRef, {
         state: "PENDING", eligibleAt,
         notificationDeliveredAt: FieldValue.serverTimestamp(),
