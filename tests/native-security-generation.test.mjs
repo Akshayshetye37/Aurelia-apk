@@ -130,9 +130,10 @@ test('biometric DEK wrapping prefers StrongBox and preserves existing wrapped-ke
   assert.match(biometric, /setUserAuthenticationRequired\(true\)/);
   assert.match(biometric, /AUTH_BIOMETRIC_STRONG/);
   assert.match(biometric, /setIsStrongBoxBacked\(true\)/);
-  assert.match(biometric, /catch \(_:\s*StrongBoxUnavailableException\)/);
+  assert.match(biometric, /catch \(failure: Exception\)/);
+  assert.match(biometric, /android\.security\.keystore\.StrongBoxUnavailableException/);
   assert.match(biometric, /if \(store\.containsAlias\(ALIAS\)\) return/);
-  assert.ok(biometric.indexOf('if (store.containsAlias(ALIAS)) return') < biometric.indexOf('catch (_: StrongBoxUnavailableException)'), 'existing biometric DEK wrapper is preserved before fallback cleanup');
+  assert.ok(biometric.indexOf('if (store.containsAlias(ALIAS)) return') < biometric.indexOf('catch (failure: Exception)'), 'existing biometric DEK wrapper is preserved before fallback cleanup');
 });
 
 
