@@ -37,8 +37,7 @@ messaging.send = async message => {
 };
 
 function emulatorIpForTenant(tenantId) {
-  const suffix = (createHash('sha256').update(String(tenantId)).digest()[0] % 254) + 1;
-  return `198.51.100.${suffix}`;
+  return 'emulator-ip-' + createHash('sha256').update(String(tenantId)).digest('hex').slice(0, 32);
 }
 
 function callable(fn, data, requestAuth = null, ip = data?.tenantId ? emulatorIpForTenant(data.tenantId) : '127.0.0.1') {
