@@ -1,5 +1,6 @@
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getMessaging } from "firebase-admin/messaging";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
@@ -194,6 +195,31 @@ export const registerRecoveryPhone = onCall(
   }
 );
 
+/** Register the owner's authenticated device as the mandatory recovery-alert destination. */
+export const registerRecoveryOwnerDevice = onCall(
+  { region: REGION, enforceAppCheck: true },
+  async request => {
+    requireRecoveryEnabled();
+    const auth = request.auth;
+    const ownerAge = Date.now() / 1000 - Number(auth?.token.auth_time ?? 0);
+    if (!auth || auth.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
+    const tenantId = validateTenantId(request.data?.tenantId);
+    if (auth.token.tenantId !== tenantId) throw GENERIC;
+    const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
+    const token = requiredString(request.data?.fcmToken, 4096);
+    if (token.length < 100) throw GENERIC;
+    const phoneRef = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
+    const phone = (await phoneRef.get()).data();
+    if (phone?.deviceIdHash && phone.deviceIdHash !== deviceIdHash) throw GENERIC;
+    const tokenHash = createHmac("sha256", PHONE_PEPPER.value()).update(token).digest("hex");
+    await db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`).set({
+      tenantId, deviceIdHash, ownerUid: auth.uid, fcmToken: token,
+      tokenHash, active: true, updatedAt: FieldValue.serverTimestamp()
+    });
+    return { registered: true };
+  }
+);
+
 /** OTP proof may issue one grant per Firebase phone-auth event (uid + auth_time). */
 export const issueRecoveryGrant = onCall(
   { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER, RECOVERY_SIGNING_KEY_PKCS8] },
@@ -211,6 +237,13 @@ export const issueRecoveryGrant = onCall(
     const ipKey = createHmac("sha256", PHONE_PEPPER.value()).update(ip).digest("hex");
     await spendRateLimit(`rec:ip:${ipKey}`, 20, 60 * 60_000);
 
+    const ownerDeviceRef = db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`);
+    const ownerDeviceSnapshot = await ownerDeviceRef.get();
+    const ownerDevice = ownerDeviceSnapshot.data();
+    if (!ownerDevice || ownerDevice.active !== true || ownerDevice.deviceIdHash !== deviceIdHash ||
+        typeof ownerDevice.fcmToken !== "string" || ownerDevice.fcmToken.length < 100) {
+      throw new HttpsError("failed-precondition", "Owner security notifications are not configured.");
+    }
     const phoneRef = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
     const phoneSnapshot = await phoneRef.get();
     const phoneRecord = phoneSnapshot.data();
@@ -258,8 +291,10 @@ export const issueRecoveryGrant = onCall(
           pending.deviceIdHash !== deviceIdHash ||
           !equalDigest(pending.phoneHash, actualHash)) throw GENERIC;
       const eligibleAt = Number(pending.eligibleAt);
-      if (!Number.isFinite(eligibleAt) || nowMs < eligibleAt) {
-        throw new HttpsError("failed-precondition", "Recovery cooldown has not elapsed.");
+      if (!Number.isFinite(eligibleAt)) throw GENERIC;
+      if (nowMs < eligibleAt) {
+        return { status: "COOLDOWN" as const, eligibleAt,
+          notify: !pending.notificationDeliveredAt };
       }
       tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
         expiresAt: nowMs + 5 * 60_000 });
@@ -274,7 +309,48 @@ export const issueRecoveryGrant = onCall(
       return { status: "ISSUED" as const, eligibleAt };
     });
 
-    if (outcome.status === "COOLDOWN") return { status: "COOLDOWN", eligibleAt: outcome.eligibleAt };
+    if (outcome.status === "COOLDOWN") {
+      if (outcome.notify) {
+        try {
+          await getMessaging().send({
+            token: ownerDevice.fcmToken,
+            notification: {
+              title: "Aurelia recovery request",
+              body: "A recovery request was started for your property account. If this was not you, open Aurelia and cancel it immediately."
+            },
+            data: { type: "RECOVERY_COOLDOWN_STARTED", tenantId, eligibleAt: String(outcome.eligibleAt) },
+            android: { priority: "high", ttl: 60 * 60 * 1000 }
+          });
+          const deliveredAt = Date.now();
+          await db.runTransaction(async tx => {
+            const snapshot = await tx.get(cooldownRef);
+            const pending = snapshot.data();
+            if (!pending || pending.state !== "PENDING" ||
+                pending.deviceIdHash !== deviceIdHash ||
+                !equalDigest(pending.phoneHash, actualHash)) throw GENERIC;
+            tx.update(cooldownRef, {
+              notificationDeliveredAt: FieldValue.serverTimestamp(),
+              eligibleAt: deliveredAt + RECOVERY_COOLDOWN_MS,
+              updatedAt: FieldValue.serverTimestamp()
+            });
+            const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
+            tx.create(eventRef, {
+              tenantId, type: "RECOVERY_OWNER_NOTIFICATION_DELIVERED",
+              deviceIdHash, createdAt: FieldValue.serverTimestamp()
+            });
+          });
+          return { status: "COOLDOWN", eligibleAt: deliveredAt + RECOVERY_COOLDOWN_MS };
+        } catch {
+          const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
+          await eventRef.set({
+            tenantId, type: "RECOVERY_OWNER_NOTIFICATION_FAILED",
+            deviceIdHash, createdAt: FieldValue.serverTimestamp()
+          });
+          throw new HttpsError("unavailable", "Owner security notification could not be delivered; recovery remains blocked.");
+        }
+      }
+      return { status: "COOLDOWN", eligibleAt: outcome.eligibleAt };
+    }
     return { status: "ISSUED", grant: signedGrant, eligibleAt: outcome.eligibleAt };
   }
 );
