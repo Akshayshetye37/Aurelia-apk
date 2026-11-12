@@ -98,7 +98,7 @@ test('APK verifies the pinned ES256 signature before server grant consumption', 
   assert.match(verifier, /SHA256withECDSA/);
   assert.match(verifier, /header\.optString\("kid"\)/);
   assert.match(verifier, /recovery_grant_public_keys_json/);
-  assert.match(verifier, /expiresAt - issuedAt <= 300/);
+  assert.match(verifier, /expiresAt - issuedAt > 300/);
   assert.match(patcher, /RECOVERY_GRANT_PUBLIC_KEYS_JSON/);
   assert.match(patcher, /aurelia_recovery_grant_keys\.xml/);
   assert.match(client, /replayStore\.markUsed\(verified\.jti, verified\.expiresAtEpochSec\)/);

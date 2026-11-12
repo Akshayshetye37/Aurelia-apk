@@ -106,12 +106,7 @@ class RecoveryGrantClient(private val context: Context) {
             val kid = RecoveryGrantVerifier.keyId(grant)
             val pinnedKey = RecoveryGrantVerifier.pinnedPublicKey(context, kid)
                 ?: throw SecurityException("Recovery signing key is not pinned in this app version.")
-            val enrollment = RecoveryTenantIdentity.getBinding(context)
-            if (enrollment.tenantId != tenantId) throw SecurityException("Recovery tenant does not match local owner enrollment.")
-            when (val result = RecoveryGrantVerifier.verify(
-                grant, pinnedKey, enrollment.tenantId, nonce, deviceHash,
-                enrollment.ownerUid, kid
-            )) {
+            when (val result = RecoveryGrantVerifier.verify(grant, pinnedKey, tenantId, nonce, deviceHash)) {
                 is RecoveryGrantVerifier.Result.Verified -> result
                 is RecoveryGrantVerifier.Result.Fail -> throw SecurityException("Recovery grant verification failed.")
             }

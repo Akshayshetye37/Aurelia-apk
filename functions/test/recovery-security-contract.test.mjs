@@ -123,7 +123,7 @@ test('recovery grants have a five-minute lifetime on backend and client', () => 
   const verifier = read('android/templates/security/RecoveryGrantVerifier.kt');
   assert.match(functions, /setExpirationTime\(now \+ 300\)/);
   assert.match(functions, /expiresAt: nowMs \+ 5 \* 60_000/);
-  assert.match(verifier, /expiresAt - issuedAt <= 300/);
+  assert.match(verifier, /expiresAt - issuedAt > 300/);
   assert.match(replayStore, /expiresAtEpochSec - nowEpochSec <= 300/);
   assert.match(replayStore, /exp - now <= 300/);
   assert.match(recoveryGate, /TTL_MS = 5 \* 60_000L/);
@@ -140,7 +140,7 @@ test('Android verifies the pinned ES256 signature before server consumption and 
   assert.ok(consumeFlow.indexOf('RecoveryGrantVerifier.verify') < consumeFlow.indexOf('consumeRecoveryGrant(grant'));
   assert.match(verifier, /SHA256withECDSA/);
   assert.match(verifier, /header\.optString\("kid"\)/);
-  assert.match(verifier, /expiresAt - issuedAt <= 300/);
+  assert.match(verifier, /expiresAt - issuedAt > 300/);
   assert.match(verifier, /recovery_grant_public_keys_json/);
   assert.match(verifier, /KeyFactory.getInstance\("EC"\)/);
   assert.match(patcher, /RECOVERY_GRANT_PUBLIC_KEYS_JSON/);

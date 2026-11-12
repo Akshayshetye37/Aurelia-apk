@@ -111,7 +111,7 @@ test('legacy LOCAL_ONLY tenant IDs cannot authorize recovery grants', () => {
   const identity = read('android/templates/RecoveryTenantIdentity.kt');
   assert.match(identity, /bound\.startsWith\("local_"\)/);
   assert.match(identity, /Legacy local-only tenant binding must be re-verified/);
-  assert.match(identity, /previousTenant.startsWith\("local_"\)/);
+  assert.match(identity, /previous\.startsWith\("local_"\)/);
   assert.match(identity, /claims\["role"\] != "owner"/);
 });
 

@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import com.google.firebase.auth.FirebaseAuth
+import org.json.JSONObject
 import com.google.android.gms.tasks.Task
 import java.security.KeyStore
 import java.security.SecureRandom
