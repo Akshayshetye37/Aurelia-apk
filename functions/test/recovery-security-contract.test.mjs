@@ -33,7 +33,7 @@ test('backend stores only tenant-scoped phone HMAC and masked phone', () => {
 test('phone proof can issue only one grant and grant jti is consumed atomically', () => {
   assert.match(functions, /usedPhoneProofs/);
   const persistedGrant = functions.slice(functions.indexOf("tx.create(grantRef"), functions.indexOf("});", functions.indexOf("tx.create(grantRef")));
-  assert.ok(persistedGrant.includes("expiresAt: Date.now() + 5 * 60_000"));
+  assert.ok(persistedGrant.includes("expiresAt: nowMs + 5 * 60_000"));
   assert.match(functions, /state: "ISSUED"/);
   assert.match(functions, /data\.state !== "ISSUED"/);
   assert.match(functions, /state: "CONSUMED"/);
@@ -110,7 +110,7 @@ test('Android surfaces cooldown and cannot consume a grant before the cooldown c
 
 test('recovery grants have a five-minute lifetime on backend and client', () => {
   assert.match(functions, /setExpirationTime\(now \+ 300\)/);
-  assert.match(functions, /expiresAt: Date\.now\(\) \+ 5 \* 60_000/);
+  assert.match(functions, /expiresAt: nowMs \+ 5 \* 60_000/);
   assert.match(grantClient, /expiresAt - issuedAt <= 300/);
   assert.match(replayStore, /expiresAtEpochSec - nowEpochSec <= 300/);
   assert.match(replayStore, /exp - now <= 300/);
