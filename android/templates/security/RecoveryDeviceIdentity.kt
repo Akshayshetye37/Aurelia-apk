@@ -61,7 +61,7 @@ object RecoveryDeviceIdentity {
             generator.generateKeyPair()
         }
 
-        try {
+        return try {
             if (Build.VERSION.SDK_INT >= 28) {
                 try {
                     generate(true)
