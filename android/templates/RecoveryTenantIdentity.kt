@@ -5,7 +5,6 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import com.google.firebase.auth.FirebaseAuth
-import org.json.JSONObject
 import com.google.android.gms.tasks.Task
 import java.security.KeyStore
 import java.security.SecureRandom
@@ -19,8 +18,6 @@ import javax.crypto.spec.GCMParameterSpec
  * A random local installation ID is not a cloud authorization identity.
  */
 object RecoveryTenantIdentity {
-    data class Binding(val ownerUid: String, val tenantId: String)
-
     private const val PREFS = "aurelia_recovery_tenant_v1"
     private const val BLOB = "encrypted_record"
     private const val ALIAS = "aurelia.pms.recovery-tenant.v1"
@@ -31,8 +28,7 @@ object RecoveryTenantIdentity {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val blob = prefs.getString(BLOB, null)
         if (blob != null) {
-            val decoded = decrypt(blob, context)
-            val bound = runCatching { JSONObject(decoded).getString("tenantId") }.getOrElse { decoded }
+            val bound = decrypt(blob, context)
             if (bound.startsWith("local_")) {
                 throw SecurityException("Legacy local-only tenant binding must be re-verified by the property owner in Settings.")
             }
@@ -45,8 +41,6 @@ object RecoveryTenantIdentity {
     fun bindAuthorizedOwner(context: Context): Task<String> {
         val user = FirebaseAuth.getInstance().currentUser
             ?: throw SecurityException("Sign in as the property owner before registering a recovery phone.")
-        val ownerUid = user.uid.takeIf { it.isNotBlank() && it.length <= 128 }
-            ?: throw SecurityException("Authenticated owner UID is invalid.")
         return user.getIdToken(true).continueWith { task ->
             if (!task.isSuccessful) throw task.exception ?: SecurityException("Owner identity verification failed.")
             val claims = task.result?.claims ?: throw SecurityException("Owner identity claims are missing.")
@@ -56,44 +50,23 @@ object RecoveryTenantIdentity {
             require(tenant.matches(Regex("^[A-Za-z0-9_-]{8,128}$"))) {
                 "The authenticated tenant claim is invalid."
             }
-            synchronized(this) { persistOrConfirm(context, tenant, ownerUid) }
+            synchronized(this) { persistOrConfirm(context, tenant) }
             tenant
         }
     }
 
-    /** Read the owner identity written during enrollment; never consult recovery Phone Auth here. */
     @Synchronized
-    fun getBinding(context: Context): Binding {
-        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val blob = prefs.getString(BLOB, null)
-            ?: throw SecurityException("Owner recovery enrollment is missing.")
-        val decoded = decrypt(blob, context)
-        val record = runCatching { JSONObject(decoded) }
-            .getOrElse { throw SecurityException("Owner recovery enrollment must be refreshed by the primary owner.") }
-        val uid = record.optString("ownerUid")
-        val tenant = record.optString("tenantId")
-        if (uid.isBlank() || uid.length > 128 || !tenant.matches(Regex("^[A-Za-z0-9_-]{8,128}$"))) {
-            throw SecurityException("Owner recovery enrollment is incomplete.")
-        }
-        return Binding(uid, tenant)
-    }
-
-    @Synchronized
-    private fun persistOrConfirm(context: Context, tenant: String, ownerUid: String) {
+    private fun persistOrConfirm(context: Context, tenant: String) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val existing = prefs.getString(BLOB, null)
         if (existing != null) {
             val previous = decrypt(existing, context)
-            val previousTenant = runCatching { JSONObject(previous).getString("tenantId") }.getOrElse { previous }
-            check(previousTenant == tenant || previousTenant.startsWith("local_")) {
+            if (previous == tenant) return
+            check(previous.startsWith("local_")) {
                 "This device is already bound to a different owner tenant."
             }
-            if (previousTenant == tenant) {
-                val existingRecord = runCatching { JSONObject(previous) }.getOrNull()
-                if (existingRecord?.optString("ownerUid") == ownerUid) return
-            }
-            // Upgrade the prior tenant-only encrypted enrollment only while a
-            // freshly refreshed primary Firebase owner token proves the same tenant.
+            // Upgrade only the known legacy LOCAL_ONLY namespace, and only
+            // after the current Firebase token has asserted role=owner + tenantId.
         }
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         if (existing == null) {
@@ -105,8 +78,7 @@ object RecoveryTenantIdentity {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key(context), GCMParameterSpec(128, nonce))
         cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
-        val plain = JSONObject().put("ownerUid", ownerUid).put("tenantId", tenant)
-            .toString().toByteArray(Charsets.UTF_8)
+        val plain = tenant.toByteArray(Charsets.UTF_8)
         val encrypted = try { cipher.doFinal(plain) } finally { plain.fill(0) }
         val packed = nonce + encrypted
         try {
@@ -129,15 +101,9 @@ object RecoveryTenantIdentity {
             cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
             val plain = cipher.doFinal(encrypted)
             try {
-                val decoded = String(plain, Charsets.UTF_8)
-                val tenant = runCatching { JSONObject(decoded).getString("tenantId") }.getOrElse { decoded }
+                val tenant = String(plain, Charsets.UTF_8)
                 require(tenant.matches(Regex("^[A-Za-z0-9_-]{8,128}$")))
-                val record = runCatching { JSONObject(decoded) }.getOrNull()
-                if (record != null) {
-                    val ownerUid = record.optString("ownerUid")
-                    require(ownerUid.isNotBlank() && ownerUid.length <= 128)
-                }
-                return decoded
+                return tenant
             } finally { plain.fill(0) }
         } finally {
             nonce.fill(0); encrypted.fill(0); packed.fill(0)
