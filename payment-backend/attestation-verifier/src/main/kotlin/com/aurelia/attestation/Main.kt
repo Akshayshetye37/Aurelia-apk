@@ -193,7 +193,7 @@ fun main() {
                 VerificationResult.SoftwareAttestationUnsupported -> respond(exchange, 422, failure("software_attestation_unsupported"))
             }
         } catch (error: Exception) {
-            System.err.println("Attestation verification request rejected: ${error.javaClass.simpleName}: ${error.message}")
+            System.err.println("Attestation verification request rejected: ${error.javaClass.simpleName}")
             respond(exchange, 400, failure("attestation_request_invalid"))
         }
     }
