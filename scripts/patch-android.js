@@ -317,6 +317,38 @@ if (fs.existsSync(iconPng) && !fs.existsSync(iconJpg)) {
 const javaDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms');
 fs.mkdirSync(javaDir, { recursive: true });
 
+
+// APK-embedded ES256 trust pins. This is public material, supplied as a GitHub
+// Actions repository variable. An absent/empty key ring is allowed for compile
+// tests but every recovery grant is rejected at runtime until a pin is present.
+const recoveryPinJson = process.env.RECOVERY_GRANT_PUBLIC_KEYS_JSON || '{}';
+let recoveryPins;
+try {
+  recoveryPins = JSON.parse(recoveryPinJson);
+  if (!recoveryPins || Array.isArray(recoveryPins) || typeof recoveryPins !== 'object') {
+    throw new Error('Expected a JSON object keyed by JWT kid.');
+  }
+  for (const [kid, spki] of Object.entries(recoveryPins)) {
+    if (!/^[A-Za-z0-9._-]{1,64}$/.test(kid) || typeof spki !== 'string' ||
+        !/^[A-Za-z0-9+/]{80,200}={0,2}$/.test(spki)) {
+      throw new Error('Invalid recovery public-key pin entry.');
+    }
+    const der = Buffer.from(spki, 'base64');
+    if (der.length < 80 || der.length > 160 || der.toString('base64') !== spki) {
+      throw new Error('Recovery public-key pin must be canonical base64 DER SPKI.');
+    }
+  }
+} catch (error) {
+  throw new Error('RECOVERY_GRANT_PUBLIC_KEYS_JSON is invalid.', { cause: error });
+}
+const recoveryValuesDir = path.join(appDir, 'res', 'values');
+fs.mkdirSync(recoveryValuesDir, { recursive: true });
+const xmlEscape = value => value.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+fs.writeFileSync(path.join(recoveryValuesDir, 'aurelia_recovery_grant_keys.xml'),
+  '<?xml version="1.0" encoding="utf-8"?>\\n<resources><string name="recovery_grant_public_keys_json" translatable="false">' +
+  xmlEscape(JSON.stringify(recoveryPins)) + '</string></resources>');
+
 const appModuleDir = path.join(androidDir, 'app');
 const appGradleGroovy = path.join(appModuleDir, 'build.gradle');
 const appGradleKts = path.join(appModuleDir, 'build.gradle.kts');
