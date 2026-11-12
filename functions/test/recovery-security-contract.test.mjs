@@ -211,9 +211,11 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(functions, /ownerAuthFactor/);
   assert.match(functions, /ownerAuthFactorAuthTime/);
   assert.match(messageService, /NotificationManagerCompat\.from\(this\)\.areNotificationsEnabled\(\)/);
-  assert.match(messageService, /acknowledgeRecoveryOwnerAlert/);
-  assert.match(messageService, /Tasks\.await/);
-  assert.match(messageService, /10, TimeUnit\.SECONDS/);
+  assert.doesNotMatch(messageService, /acknowledgeRecoveryOwnerAlert/);
+  assert.doesNotMatch(messageService, /Tasks\.await/);
+  assert.doesNotMatch(messageService, /TimeUnit\.SECONDS/);
+  assert.match(ownerAlertActivity, /acknowledgeRecoveryOwnerAlert/);
+  assert.match(ownerAlertActivity, /getIdToken\(true\)/);
   assert.match(messageService, /RecoveryDeviceIdentity\.deviceIdHash\(\)/);
   assert.match(patcher, /android\.permission\.POST_NOTIFICATIONS/);
   assert.match(patcher, /firebase-messaging:24\.1\.1/);
