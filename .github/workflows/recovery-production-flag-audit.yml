@@ -27,14 +27,14 @@ jobs:
           set -euo pipefail
           test -n "$PROJECT_ID" && test -n "$REGION"
           gcloud config set project "$PROJECT_ID"
-          FUNCTIONS="$(gcloud functions list --gen2 --project "$PROJECT_ID" --regions "$REGION" --format=json)"
+          FUNCTIONS="$(gcloud functions list --gen2 --project "$PROJECT_ID" --regions "asia-south1" --format=json)"
           mapfile -t function_names < <(echo "$FUNCTIONS" | jq -r '.[] | select(.name | test("recovery|attestation"; "i")) | .name')
           if [[ "${#function_names[@]}" -eq 0 ]]; then
             echo "::error::No deployed recovery/attestation Functions found; production flag state cannot be evidenced."
             exit 1
           fi
           for name in "${function_names[@]}"; do
-            json="$(gcloud functions describe "$name" --gen2 --project "$PROJECT_ID" --region "$REGION" --format=json)"
+            json="$(gcloud functions describe "$name" --gen2 --project "$PROJECT_ID" --region "asia-south1" --format=json)"
             enabled="$(echo "$json" | jq -r '(.serviceConfig.environmentVariables.RECOVERY_ENABLED // .environmentVariables.RECOVERY_ENABLED // "false")')"
             if [[ "$enabled" != "false" ]]; then
               echo "::error::Production function $name has RECOVERY_ENABLED=$enabled; expected false or unset."

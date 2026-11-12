@@ -66,7 +66,12 @@ jobs:
             version="$(gcloud secrets versions list "$secret" --project "$PROJECT_ID" --filter='state=ENABLED' --format='value(name)' | head -n 1)"
             test -n "$version"
           done
-          echo "Staging project, key ID, public pin, app config, signing keystore and Secret Manager versions are present."
+          gcloud secrets versions access latest --secret RECOVERY_SIGNING_KEY_PKCS8 --project "$PROJECT_ID" > "$RUNNER_TEMP/recovery-signing-key.pem"
+          chmod 600 "$RUNNER_TEMP/recovery-signing-key.pem"
+          export RECOVERY_PRIVATE_KEY_PATH="$RUNNER_TEMP/recovery-signing-key.pem"
+          node -e 'const fs=require("fs"), crypto=require("crypto"); const pins=JSON.parse(process.env.PUBLIC_KEYS); const key=crypto.createPrivateKey(fs.readFileSync(process.env.RECOVERY_PRIVATE_KEY_PATH)); const publicKey=crypto.createPublicKey(key).export({type:"spki",format:"der"}).toString("base64"); if(pins[process.env.ACTIVE_KID]!==publicKey) { console.error("Active APK public pin does not match the Secret Manager signing key."); process.exit(1); }'
+          rm -f "$RUNNER_TEMP/recovery-signing-key.pem"
+          echo "Staging project, matching active public pin/private key, app config, signing keystore and Secret Manager versions are present."
 
       - name: Install Firebase Functions dependencies
         run: npm install --prefix functions --ignore-scripts
@@ -85,7 +90,7 @@ jobs:
             "$ACTIVE_KID" "$VERIFIER_URL" "$FUNCTION_SA" > "functions/.env.$PROJECT_ID"
           firebase deploy --only functions --project "$PROJECT_ID" --non-interactive
           rm -f "functions/.env.$PROJECT_ID"
-          FUNCTION_JSON="$(gcloud functions describe verifyRecoveryDeviceAttestation --gen2 --project "$PROJECT_ID" --region "${{ vars.GCP_REGION }}" --format=json)"
+          FUNCTION_JSON="$(gcloud functions describe verifyRecoveryDeviceAttestation --gen2 --project "$PROJECT_ID" --region "asia-south1" --format=json)"
           echo "$FUNCTION_JSON" | jq -e --arg sa "$FUNCTION_SA" '
             .serviceConfig.serviceAccountEmail == $sa and
             .serviceConfig.environmentVariables.RECOVERY_ENABLED == "true"
