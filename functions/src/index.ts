@@ -458,6 +458,7 @@ export const issueRecoveryGrant = onCall(
       if (pending.deviceIdHash !== deviceIdHash ||
           !equalDigest(pending.phoneHash, actualHash)) throw GENERIC;
       if (pendingState === "ALERT_PENDING") {
+        tx.update(cooldownRef, { alertedDeviceHashes, updatedAt: FieldValue.serverTimestamp() });
         return { status: "COOLDOWN" as const, eligibleAt: 0, notify: true,
           eventId: String(pending.alertEventId ?? "") };
       }
