@@ -86,6 +86,7 @@ test('Android arms recovery only after backend consumption without fabricating a
   assert.doesNotMatch(grantClient, /RecoveryGrantVerifier\.Result\.Ok/);
   assert.match(grantClient, /task\.isSuccessful && task\.result == true/);
   assert.match(grantClient, /replayStore\.markUsed\(claims\.jti, claims\.expiresAt\)/);
+  assert.match(grantClient, /runCatching \{[\\s\\S]*?RecoveryGate\.armAfterServerConsumption/);
 });
 
 test('every recovery callable enforces App Check and phone-change activation rejects future auth_time', () => {
