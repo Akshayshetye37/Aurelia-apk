@@ -69,7 +69,8 @@ class RecoveryOwnerMessagingService : FirebaseMessagingService() {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setAutoCancel(true)
+            // Keep the notification until explicit owner acknowledgement/cancellation.
+            .setAutoCancel(false)
             .setContentIntent(pending)
             .build()
         try {

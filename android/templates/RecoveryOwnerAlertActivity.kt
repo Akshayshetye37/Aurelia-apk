@@ -1,6 +1,7 @@
 package com.aurelia.pms.identity
 
 import android.os.Bundle
+import androidx.core.app.NotificationManagerCompat
 import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
@@ -91,6 +92,7 @@ class RecoveryOwnerAlertActivity : FragmentActivity() {
                 )).addOnCompleteListener { task ->
                     status.text = if (task.isSuccessful &&
                         (task.result?.data as? Map<*, *>)?.get("acknowledged") == true) {
+                        NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
                         "Alert acknowledged. The 24-hour security hold has started."
                     } else {
                         "Acknowledgement rejected. A fresh primary owner sign-in (email link or passkey) is required. The recovery hold remains blocked."
@@ -117,6 +119,7 @@ class RecoveryOwnerAlertActivity : FragmentActivity() {
                 .addOnCompleteListener { task ->
                     status.text = if (task.isSuccessful &&
                         (task.result?.data as? Map<*, *>)?.get("cancelled") == true) {
+                        NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
                         "Recovery request cancelled. The pending hold and any unconsumed grant were revoked."
                     } else {
                         "Cancellation rejected. A fresh primary owner sign-in (email link or passkey) is required."
@@ -130,5 +133,6 @@ class RecoveryOwnerAlertActivity : FragmentActivity() {
         const val EXTRA_DEVICE = "recovery_alert_device"
         const val EXTRA_EVENT = "recovery_alert_event"
         const val EXTRA_ACK_TOKEN = "recovery_alert_ack_token"
+        const val NOTIFICATION_ID = 9402
     }
 }
