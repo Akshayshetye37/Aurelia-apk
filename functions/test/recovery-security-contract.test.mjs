@@ -191,6 +191,8 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
 test('backend grants carry a key ID for documented public-key rotation', () => {
   assert.match(functions, /RECOVERY_SIGNING_KEY_ID = defineString/);
   assert.match(functions, /kid: RECOVERY_SIGNING_KEY_ID\.value\(\)/);
+  assert.match(functions, /maxTokenAge: "5m"/);
+  assert.match(functions, /header\.kid !== RECOVERY_SIGNING_KEY_ID\.value\(\)/);
 });
 
 test('decrypted recovery phone bytes are zeroized after parsing', () => {
