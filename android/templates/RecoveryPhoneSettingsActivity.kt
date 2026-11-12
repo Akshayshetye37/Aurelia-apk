@@ -11,6 +11,7 @@ import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
 import com.aurelia.pms.security.RecoveryDeviceIdentity
 import com.google.android.gms.tasks.Tasks
+import com.google.firebase.messaging.FirebaseMessaging
 
 /** Explicit Settings workflow; Hotel Identity fields never call this activity. */
 class RecoveryPhoneSettingsActivity : FragmentActivity() {
@@ -156,45 +157,67 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                     return@runOnUiThread
                 }
                 val tenant = tenantTask.result
-                val deviceHash = try { RecoveryDeviceIdentity.deviceIdHash() } catch (failure: Exception) {
-                    status.text = "Secure device binding is unavailable: ${failure.message}"
+                val deviceHash = try { RecoveryDeviceIdentity.deviceIdHash() } catch (_: Exception) {
+                    status.text = "Secure device binding is unavailable."
                     return@runOnUiThread
                 }
-                status.text = "Saving verified recovery phone…"
-                try {
-                    if (store.read().currentE164 == null) store.markUnverified(candidate)
-                } catch (failure: Exception) {
-                    status.text = "Could not stage recovery-phone policy safely: ${failure.message}"
-                    return@runOnUiThread
-                }
-                client.registerRecoveryPhone(newPhoneToken, tenant, deviceHash, oldPhoneToken)
-                    .addOnCompleteListener { task ->
-                        runOnUiThread {
-                            if (!task.isSuccessful) {
-                                status.text = "Could not register recovery phone. Verify owner access and phone proof, then try again."
-                                return@runOnUiThread
-                            }
-                            val serverState = (task.result?.get("state") as? String) ?: "UNSET"
-                            try {
-                                val record = store.read()
-                                if (record.currentE164 == null || record.currentE164 == candidate) {
-                                    store.markVerified(candidate)
-                                } else if (serverState == "CHANGE_PENDING") {
-                                    store.requestChange(candidate)
-                                }
-                                status.text = if (serverState == "CHANGE_PENDING") {
-                                    "New number verified. The old number remains active for 48 hours."
-                                } else {
-                                    "Recovery phone verified: ${mask(candidate)}"
-                                }
-                                phone.text.clear()
-                            } catch (failure: Exception) {
-                                status.text = "Server accepted verification, but local state could not be saved: ${failure.message}"
-                            }
+                status.text = "Registering owner security notifications…"
+                FirebaseMessaging.getInstance().token.addOnCompleteListener { tokenTask ->
+                    runOnUiThread {
+                        if (!tokenTask.isSuccessful || tokenTask.result.isNullOrBlank()) {
+                            status.text = "Owner security notifications are unavailable. Recovery phone registration is blocked."
+                            return@runOnUiThread
                         }
+                        client.registerOwnerNotificationDevice(tenant, deviceHash, tokenTask.result)
+                            .addOnCompleteListener { notificationTask ->
+                                runOnUiThread {
+                                    if (!notificationTask.isSuccessful || notificationTask.result != true) {
+                                        status.text = "Could not register owner security notifications. Recovery phone registration is blocked."
+                                        return@runOnUiThread
+                                    }
+                                    persistRecoveryPhone(newPhoneToken, tenant, deviceHash)
+                                }
+                            }
                     }
+                }
             }
         }
+    }
+
+    private fun persistRecoveryPhone(newPhoneToken: String, tenant: String, deviceHash: String) {
+        status.text = "Saving verified recovery phone…"
+        try {
+            if (store.read().currentE164 == null) store.markUnverified(candidate)
+        } catch (_: Exception) {
+            status.text = "Could not stage recovery-phone policy safely."
+            return
+        }
+        client.registerRecoveryPhone(newPhoneToken, tenant, deviceHash, oldPhoneToken)
+            .addOnCompleteListener { task ->
+                runOnUiThread {
+                    if (!task.isSuccessful) {
+                        status.text = "Could not register recovery phone. Verify owner access and phone proof, then try again."
+                        return@runOnUiThread
+                    }
+                    val serverState = (task.result?.get("state") as? String) ?: "UNSET"
+                    try {
+                        val record = store.read()
+                        if (record.currentE164 == null || record.currentE164 == candidate) {
+                            store.markVerified(candidate)
+                        } else if (serverState == "CHANGE_PENDING") {
+                            store.requestChange(candidate)
+                        }
+                        status.text = if (serverState == "CHANGE_PENDING") {
+                            "New number verified. The old number remains active for 48 hours."
+                        } else {
+                            "Recovery phone verified: ${mask(candidate)}"
+                        }
+                        phone.text.clear()
+                    } catch (_: Exception) {
+                        status.text = "Server accepted verification, but local state could not be saved."
+                    }
+                }
+            }
     }
 
     private fun mask(value: String): String {
