@@ -213,12 +213,23 @@ jobs:
           test -f "$avd_config"
           # Explicit guest sizing avoids relying on the AVD's low-memory default.
           sed -i -E 's/^hw\.ramSize=.*/hw.ramSize=4096/; s/^hw\.cpu\.ncore=.*/hw.cpu.ncore=4/; s/^vm\.heapSize=.*/vm.heapSize=512/' "$avd_config"
-          "$ANDROID_HOME/emulator/emulator" -accel-check || true
-          if [[ -r /dev/kvm && -w /dev/kvm ]]; then
-            echo on > "$RUNNER_TEMP/aurelia-emulator/acceleration-mode.txt"
-          else
-            echo off > "$RUNNER_TEMP/aurelia-emulator/acceleration-mode.txt"
+
+
+      - name: Require Linux KVM for Android SQLite instrumentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -c /dev/kvm ]]; then
+            echo "::error::KVM device is unavailable; refusing to run SQLCipher instrumentation under software emulation."
+            exit 1
           fi
+          sudo chmod 666 /dev/kvm
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            echo "::error::KVM device permissions are insufficient after setup."
+            exit 1
+          fi
+          "$ANDROID_HOME/emulator/emulator" -accel-check
+          printf 'on\\n' > "$RUNNER_TEMP/aurelia-emulator/acceleration-mode.txt"
 
       - name: Start emulator and capture console output
         shell: bash
@@ -227,8 +238,12 @@ jobs:
           emulator="$ANDROID_HOME/emulator/emulator"
           log_dir="$RUNNER_TEMP/aurelia-emulator"
           accel="$(cat "$log_dir/acceleration-mode.txt")"
-          echo "Starting emulator with KVM acceleration: $accel"
-          nohup "$emulator" -avd aurelia-ci-api34 -accel "$accel" \
+          if [[ "$accel" != "on" ]]; then
+            echo "::error::Hardware acceleration is mandatory for native SQLite instrumentation."
+            exit 1
+          fi
+          echo "Starting emulator with required KVM acceleration."
+          nohup "$emulator" -avd aurelia-ci-api34 -accel on \
             -memory 4096 -cores 4 \
             -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim \
             -no-snapshot -no-snapshot-save -wipe-data -verbose \
