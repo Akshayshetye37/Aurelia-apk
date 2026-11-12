@@ -112,10 +112,14 @@ function validateNonce(value: unknown): string {
 }
 
 async function signGrant(tenantId: string, deviceIdHash: string, nonce: string, jti: string) {
+  const keyId = RECOVERY_SIGNING_KEY_ID.value();
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(keyId)) {
+    throw new HttpsError("failed-precondition", "Recovery signing key ID is invalid.");
+  }
   const privateKey = await importPKCS8(RECOVERY_SIGNING_KEY_PKCS8.value(), "ES256");
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT({ did: deviceIdHash, nonce, scope: "recovery:continue" })
-    .setProtectedHeader({ alg: "ES256", typ: "JWT", kid: RECOVERY_SIGNING_KEY_ID.value() })
+    .setProtectedHeader({ alg: "ES256", typ: "JWT", kid: keyId })
     .setIssuer(ISSUER).setAudience(AUDIENCE).setSubject(tenantId)
     .setJti(jti).setIssuedAt(now).setExpirationTime(now + 300).sign(privateKey);
 }
