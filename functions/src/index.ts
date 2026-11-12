@@ -635,16 +635,16 @@ export const consumeRecoveryGrant = onCall(
       tx.update(ref, { state: "CONSUMED", consumedAt: FieldValue.serverTimestamp() });
       tx.update(cooldownRef, { state: "CONSUMED", consumedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp() });
-      // This is deliberately the final write: identity, grant and recovery-state
-      // bindings have all been validated before the tenant+UID-scoped JTI is spent.
-      tx.create(consumedJtiRef, { tenantId, ownerUid: uid, grantJtiHash: createHash("sha256").update(jti).digest("hex"),
-        consumedAt: FieldValue.serverTimestamp() });
       const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
       tx.create(eventRef, {
         tenantId, type: "RECOVERY_GRANT_CONSUMED", deviceIdHash,
         grantJtiHash: createHmac("sha256", PHONE_PEPPER.value()).update(jti).digest("hex"),
         createdAt: FieldValue.serverTimestamp()
       });
+      // Final write: all identity, grant and recovery-state bindings are validated
+      // before the tenant+UID-scoped JTI is irreversibly spent.
+      tx.create(consumedJtiRef, { tenantId, ownerUid: uid, grantJtiHash: createHash("sha256").update(jti).digest("hex"),
+        consumedAt: FieldValue.serverTimestamp() });
     });
     return { consumed: true };
   }
@@ -674,7 +674,8 @@ export const cancelRecoveryRequest = onCall(
       tx.update(cooldownRef, {
         state: "CANCELLED", cancelledAt: FieldValue.serverTimestamp(),
         cancelledByUid: owner.uid, cancelledByDeviceHash: deviceIdHash,
-        eligibleAt: null, updatedAt: FieldValue.serverTimestamp()
+        eligibleAt: FieldValue.delete(), alertedDeviceHashes: FieldValue.delete(),
+        grantExpiresAt: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp()
       });
       if (grantRef && grantSnapshot?.exists) {
         tx.update(grantRef, { state: "REVOKED", revokedAt: FieldValue.serverTimestamp() });
