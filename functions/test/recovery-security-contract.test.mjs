@@ -75,6 +75,7 @@ test('recovery grants have a five-minute lifetime on backend and client', () => 
   assert.match(functions, /setExpirationTime\(now \+ 300\)/);
   assert.match(functions, /expiresAt: Date\.now\(\) \+ 5 \* 60_000/);
   assert.match(grantClient, /expiresAt - issuedAt <= 300/);
+  assert.match(functions, /tx\\.create\\(grantRef, \\{ tenantId, deviceIdHash, nonce, state: "ISSUED"[\\s\\S]*?expiresAt: Date\\.now\\(\\) \\+ 5 \\* 60_000/);
   assert.match(replayStore, /expiresAtEpochSec - nowEpochSec <= 300/);
   assert.match(replayStore, /exp - now <= 300/);
   assert.match(recoveryGate, /TTL_MS = 5 \* 60_000L/);
