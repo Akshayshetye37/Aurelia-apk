@@ -42,9 +42,10 @@ test('phone proof can issue only one grant and grant jti is consumed atomically'
 test('rate limit counters commit before rejected requests return', () => {
   const rate = functions.slice(functions.indexOf('async function spendRateLimit'), functions.indexOf('function maskPhone'));
   assert.match(rate, /tx\.set\(ref, \{ count/);
-  assert.match(rate, /return count <= max/);
+  assert.match(rate, /blockedUntil: now \+ backoffMs/);
+  assert.match(rate, /30_000 \* \(2 \*\* Math\.min\(nextStrike - 1, 7\)\)/);
   assert.match(rate, /if \(!allowed\) throw/);
-  assert.ok(rate.indexOf('tx.set(ref, { count') < rate.indexOf('if (!allowed)'));
+  assert.ok(rate.indexOf('tx.set(ref') < rate.indexOf('if (!allowed)'));
   assert.match(rate, /if \(!allowed\) throw new HttpsError/);
 });
 
