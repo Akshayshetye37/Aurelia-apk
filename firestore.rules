@@ -15,5 +15,11 @@ service cloud.firestore {
     match /rateLimits/{limitId} {
       allow read, write: if false;
     }
+    match /recoveryCooldowns/{tenantId} {
+      allow read, write: if false;
+    }
+    match /recoverySecurityEvents/{eventId} {
+      allow read, write: if false;
+    }
   }
 }
