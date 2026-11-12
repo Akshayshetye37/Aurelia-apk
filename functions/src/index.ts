@@ -324,6 +324,7 @@ export const registerRecoveryOwnerDevice = onCall(
     if (auth.token.tenantId !== tenantId) throw GENERIC;
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
     await requireAttestedDevice(tenantId, deviceIdHash, auth.uid);
+    await spendRateLimit(`notify:${tenantId}:${deviceIdHash}`, 10, 60 * 60_000);
     const token = requiredString(request.data?.fcmToken, 4096);
     if (token.length < 100) throw GENERIC;
     const tokenHash = createHmac("sha256", PHONE_PEPPER.value()).update(token).digest("hex");
