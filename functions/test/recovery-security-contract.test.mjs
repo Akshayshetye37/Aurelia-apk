@@ -53,7 +53,7 @@ test('backend never deletes Firebase phone-auth users', () => {
 });
 
 test('Firestore client rules deny direct access to recovery secrets and grants', () => {
-  for (const collection of ['tenants', 'recoveryGrants', 'usedPhoneProofs', 'rateLimits']) {
+  for (const collection of ['tenants', 'recoveryGrants', 'usedPhoneProofs', 'rateLimits', 'recoveryCooldowns', 'recoverySecurityEvents']) {
     assert.ok(rules.includes(collection));
   }
   assert.match(rules, /allow read, write: if false/);
@@ -83,6 +83,29 @@ test('recovery grants are bound to the device key registered by the authenticate
   assert.match(issuance, /phoneRecord\.deviceIdHash !== deviceIdHash/);
   assert.match(issuance, /rec:p:\$\{phoneRateKey\}/);
   assert.match(issuance, /digest\(tenantId, proof\.phone\)\.toString\("hex"\)/);
+});
+
+test('recovery requires a 24-hour cooldown and a fresh phone-auth event before grant issue', () => {
+  const issuance = functions.slice(functions.indexOf('export const issueRecoveryGrant'), functions.indexOf('export const consumeRecoveryGrant'));
+  const consumption = functions.slice(functions.indexOf('export const consumeRecoveryGrant'), functions.indexOf('export const cancelRecoveryPhoneChange'));
+  assert.match(functions, /RECOVERY_COOLDOWN_MS = 24 \* 60 \* 60_000/);
+  assert.match(issuance, /recoveryCooldowns\/\$\{tenantId\}/);
+  assert.match(issuance, /state: "PENDING"/);
+  assert.match(issuance, /nowMs < eligibleAt/);
+  assert.match(issuance, /status: "COOLDOWN"/);
+  assert.match(issuance, /status: "ISSUED"/);
+  assert.match(consumption, /pending\.grantJti !== jti/);
+  assert.match(consumption, /tx\.delete\(cooldownRef\)/);
+  assert.match(consumption, /RECOVERY_GRANT_CONSUMED/);
+});
+
+test('Android surfaces cooldown and cannot consume a grant before the cooldown completes', () => {
+  assert.match(grantClient, /GrantIssueResult\.Cooldown/);
+  assert.match(grantClient, /GrantIssueResult\.Issued/);
+  const lockGate = read('android/templates/security/LockGateActivity.kt');
+  assert.match(lockGate, /RecoveryGrantClient\.GrantIssueResult\.Cooldown/);
+  assert.match(lockGate, /24-hour hold/);
+  assert.match(lockGate, /RecoveryGrantClient\.GrantIssueResult\.Issued/);
 });
 
 test('recovery grants have a five-minute lifetime on backend and client', () => {
