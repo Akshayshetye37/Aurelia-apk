@@ -23,6 +23,7 @@ const RECOVERY_COOLDOWN_MS = 24 * 60 * 60_000;
 
 const RECOVERY_ATTESTATION_VERIFIER_URL = defineString("RECOVERY_ATTESTATION_VERIFIER_URL", { default: "" });
 const RECOVERY_FUNCTIONS_SERVICE_ACCOUNT = defineString("RECOVERY_FUNCTIONS_SERVICE_ACCOUNT", { default: "default" });
+const FIREBASE_WEB_API_KEY = defineString("FIREBASE_WEB_API_KEY", { default: "" });
 
 function requireRecoveryEnabled(): void {
   if (RECOVERY_ENABLED.value() !== "true") {
@@ -342,6 +343,68 @@ export const registerRecoveryPhone = onCall(
       return "CHANGE_PENDING" as const;
     });
     return { state: result, masked: result === "VERIFIED" ? maskPhone(newProof.phone) : undefined };
+  }
+);
+
+/** Verify a one-time Firebase email sign-in link and mint a short-lived primary-owner session. */
+export const exchangeOwnerEmailLink = onCall(
+  { region: REGION, enforceAppCheck: true },
+  async request => {
+    requireRecoveryEnabled();
+    const tenantId = requiredString(request.data?.tenantId, 128);
+    const deviceIdHash = requiredString(request.data?.deviceIdHash, 128);
+    const email = requiredString(request.data?.email, 254).trim().toLowerCase();
+    const emailLink = requiredString(request.data?.emailLink, 4096);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw GENERIC;
+    const apiKey = FIREBASE_WEB_API_KEY.value();
+    if (!apiKey) throw GENERIC;
+    let link: URL;
+    try { link = new URL(emailLink); } catch { throw GENERIC; }
+    const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT ||
+      (() => { try { return JSON.parse(process.env.FIREBASE_CONFIG || "{}").projectId; } catch { return ""; } })();
+    const allowedHosts = new Set([\`${projectId}.firebaseapp.com\`, \`${projectId}.web.app\`]);
+    const oobCode = link.searchParams.get("oobCode");
+    if (link.protocol !== "https:" || link.username || link.password || link.hash ||
+        !allowedHosts.has(link.hostname) || link.searchParams.get("mode") !== "signIn" ||
+        link.searchParams.get("apiKey") !== apiKey || !oobCode || oobCode.length > 2048) throw GENERIC;
+    await requireAttestedDevice(tenantId, deviceIdHash, "");
+    const endpoint = process.env.FIREBASE_AUTH_EMULATOR_HOST
+      ? \`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithEmailLink?key=${encodeURIComponent(apiKey)}\`
+      : \`https://identitytoolkit.googleapis.com/v1/accounts:signInWithEmailLink?key=${encodeURIComponent(apiKey)}\`;
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, oobCode, returnSecureToken: true }),
+        signal: AbortSignal.timeout(8000)
+      });
+    } catch { throw GENERIC; }
+    if (!response.ok) throw GENERIC;
+    const authResult = await response.json() as { idToken?: unknown; localId?: unknown };
+    if (typeof authResult.idToken !== "string" || typeof authResult.localId !== "string") throw GENERIC;
+    let decoded: DecodedIdToken;
+    try { decoded = await getAuth().verifyIdToken(authResult.idToken, true); } catch { throw GENERIC; }
+    const now = Math.floor(Date.now() / 1000);
+    const authTime = Number(decoded.auth_time);
+    const firebase = decoded.firebase as { sign_in_provider?: unknown } | undefined;
+    if (decoded.uid !== authResult.localId || decoded.email !== email ||
+        decoded.email_verified !== true || firebase?.sign_in_provider !== "password" ||
+        !Number.isInteger(authTime) || authTime > now || now - authTime >= 300) throw GENERIC;
+    const phoneRecord = (await db.doc(`tenants/${tenantId}/security/recoveryPhone`).get()).data();
+    if (!phoneRecord || phoneRecord.ownerUid !== decoded.uid) throw GENERIC;
+    const owner = await getAuth().getUser(decoded.uid);
+    if (owner.disabled || owner.customClaims?.role !== "owner" ||
+        owner.customClaims?.tenantId !== tenantId) throw GENERIC;
+    const enrolledDevice = (await db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`).get()).data();
+    if (!enrolledDevice || enrolledDevice.ownerUid !== decoded.uid ||
+        enrolledDevice.deviceIdHash !== deviceIdHash || enrolledDevice.active !== true) throw GENERIC;
+    const factorIssuedAt = Math.floor(Date.now() / 1000);
+    const customToken = await getAuth().createCustomToken(decoded.uid, {
+      ...(owner.customClaims || {}),
+      ownerAuthFactor: "email_link",
+      ownerAuthFactorAuthTime: factorIssuedAt
+    });
+    return { customToken };
   }
 );
 
