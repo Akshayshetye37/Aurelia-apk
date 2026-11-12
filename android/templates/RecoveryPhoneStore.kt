@@ -53,7 +53,8 @@ class RecoveryPhoneStore(context: Context) {
                 val cipher = Cipher.getInstance("AES/GCM/NoPadding")
                 cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(TAG_BITS, nonce))
                 cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
-                val json = JSONObject(String(cipher.doFinal(ciphertext), Charsets.UTF_8))
+                val plaintext = cipher.doFinal(ciphertext)
+                val json = try { JSONObject(String(plaintext, Charsets.UTF_8)) } finally { plaintext.fill(0) }
                 val state = State.valueOf(json.getString("state"))
                 val current = json.optString("currentE164").takeIf { it.isNotEmpty() }
                 val pending = json.optString("pendingE164").takeIf { it.isNotEmpty() }
