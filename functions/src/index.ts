@@ -443,7 +443,8 @@ export const issueRecoveryGrant = onCall(
         tx.set(cooldownRef, {
           tenantId, deviceIdHash, phoneHash: actualHash.toString("base64"),
           state: "ALERT_PENDING", requestedAt: FieldValue.serverTimestamp(),
-          eligibleAt: null, alertEventId: eventRef.id, updatedAt: FieldValue.serverTimestamp()
+          eligibleAt: null, alertEventId: eventRef.id, alertedDeviceHashes,
+          updatedAt: FieldValue.serverTimestamp()
         });
         tx.create(eventRef, {
           tenantId, type: "RECOVERY_COOLDOWN_STARTED", deviceIdHash,
