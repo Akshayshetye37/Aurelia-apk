@@ -39,9 +39,8 @@ function requireFreshPrimaryOwner(request: CallableRequest<unknown>): { uid: str
   const authTime = Number(auth?.token.auth_time);
   const factor = auth?.token.ownerAuthFactor;
   const factorAuthTime = Number(auth?.token.ownerAuthFactorAuthTime);
-  const firebase = auth?.token.firebase as { sign_in_provider?: unknown; identities?: Record<string, unknown> } | undefined;
+  const firebase = auth?.token.firebase as { sign_in_provider?: unknown } | undefined;
   const provider = firebase?.sign_in_provider;
-  const identities = firebase?.identities;
   const emailLink = factor === "email_link" && provider === "custom" &&
     auth.token.email_verified === true && typeof auth.token.email === "string";
   const passkey = factor === "passkey" && provider === "custom";
