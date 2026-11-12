@@ -1,0 +1,61 @@
+name: Recovery hardware-attestation verifier CI
+
+on:
+  push:
+    branches:
+      - work/p0-storage-hardening
+    paths:
+      - "payment-backend/attestation-verifier/**"
+      - "payment-backend/Dockerfile.attestation"
+      - "cloudbuild-recovery-attestation.yaml"
+      - ".github/workflows/recovery-attestation-ci.yml"
+  pull_request:
+    branches:
+      - work/p0-storage-hardening
+    paths:
+      - "payment-backend/attestation-verifier/**"
+      - "payment-backend/Dockerfile.attestation"
+      - "cloudbuild-recovery-attestation.yaml"
+      - ".github/workflows/recovery-attestation-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recovery-attestation-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Java 21
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10"
+
+      - name: Fetch pinned Android Key Attestation verifier dependency
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v0.4 https://github.com/android/keyattestation.git /opt/keyattestation
+          test "$(git -C /opt/keyattestation rev-parse HEAD)" = "621149c4ebaeeea844d6f43098687c73c4d370a3"
+
+      - name: Build and test hardware-attestation verifier
+        working-directory: payment-backend/attestation-verifier
+        run: gradle --no-daemon clean test shadowJar
+
+      - name: Build isolated Cloud Run container
+        run: docker build --pull --file payment-backend/Dockerfile.attestation --tag aurelia-recovery-attestation:ci .
+
+      - name: Verify container runs as non-root
+        run: test "$(docker image inspect aurelia-recovery-attestation:ci --format '{{.Config.User}}')" = "10001"
