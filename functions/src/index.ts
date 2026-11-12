@@ -339,6 +339,46 @@ export const registerRecoveryOwnerDevice = onCall(
   }
 );
 
+/** The owner app acknowledges that the recovery alert was posted on the attested device. */
+export const acknowledgeRecoveryOwnerAlert = onCall(
+  { region: REGION, enforceAppCheck: true },
+  async request => {
+    requireRecoveryEnabled();
+    const auth = request.auth;
+    if (!auth || auth.token.role !== "owner") throw GENERIC;
+    const tenantId = validateTenantId(request.data?.tenantId);
+    if (auth.token.tenantId !== tenantId) throw GENERIC;
+    const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
+    const eventId = requiredString(request.data?.eventId, 64);
+    if (!/^[0-9a-f-]{36}$/i.test(eventId)) throw GENERIC;
+    await requireAttestedDevice(tenantId, deviceIdHash, auth.uid);
+    const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
+    const eventRef = db.doc(`recoverySecurityEvents/${eventId}`);
+    const eligibleAt = Date.now() + RECOVERY_COOLDOWN_MS;
+    await db.runTransaction(async tx => {
+      const [cooldownSnapshot, eventSnapshot] = await Promise.all([
+        tx.get(cooldownRef), tx.get(eventRef)
+      ]);
+      const cooldown = cooldownSnapshot.data();
+      const event = eventSnapshot.data();
+      if (!cooldown || cooldown.state !== "ALERT_PENDING" ||
+          cooldown.alertEventId !== eventId || cooldown.deviceIdHash !== deviceIdHash ||
+          !event || event.tenantId !== tenantId ||
+          event.type !== "RECOVERY_COOLDOWN_STARTED") throw GENERIC;
+      tx.update(cooldownRef, {
+        state: "PENDING", eligibleAt,
+        notificationDeliveredAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      });
+      tx.update(eventRef, {
+        notificationAcknowledgedAt: FieldValue.serverTimestamp(),
+        notificationDelivery: "APP_ACKNOWLEDGED"
+      });
+    });
+    return { acknowledged: true, eligibleAt };
+  }
+);
+
 /** OTP proof may issue one grant per Firebase phone-auth event (uid + auth_time). */
 export const issueRecoveryGrant = onCall(
   { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER, RECOVERY_SIGNING_KEY_PKCS8] },
@@ -394,28 +434,29 @@ export const issueRecoveryGrant = onCall(
         const eligibleAt = nowMs + RECOVERY_COOLDOWN_MS;
         tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
           expiresAt: nowMs + 5 * 60_000 });
+        const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
         tx.set(cooldownRef, {
           tenantId, deviceIdHash, phoneHash: actualHash.toString("base64"),
-          state: "PENDING", requestedAt: FieldValue.serverTimestamp(),
-          eligibleAt, updatedAt: FieldValue.serverTimestamp()
+          state: "ALERT_PENDING", requestedAt: FieldValue.serverTimestamp(),
+          eligibleAt: null, alertEventId: eventRef.id, updatedAt: FieldValue.serverTimestamp()
         });
-        const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
         tx.create(eventRef, {
           tenantId, type: "RECOVERY_COOLDOWN_STARTED", deviceIdHash,
-          phoneHash: actualHash.toString("base64"), eligibleAt,
+          phoneHash: actualHash.toString("base64"), notificationDelivery: "PENDING",
           createdAt: FieldValue.serverTimestamp()
         });
-        return { status: "COOLDOWN" as const, eligibleAt };
+        return { status: "COOLDOWN" as const, eligibleAt: 0, notify: true, eventId: eventRef.id };
       }
-      if ((pendingState !== "PENDING" && !expiredIssuedGrant) ||
-          pending.deviceIdHash !== deviceIdHash ||
+      if (pending.deviceIdHash !== deviceIdHash ||
           !equalDigest(pending.phoneHash, actualHash)) throw GENERIC;
+      if (pendingState === "ALERT_PENDING") {
+        return { status: "COOLDOWN" as const, eligibleAt: 0, notify: true,
+          eventId: String(pending.alertEventId ?? "") };
+      }
+      if (pendingState !== "PENDING" && !expiredIssuedGrant) throw GENERIC;
       const eligibleAt = Number(pending.eligibleAt);
       if (!Number.isFinite(eligibleAt)) throw GENERIC;
-      if (nowMs < eligibleAt) {
-        return { status: "COOLDOWN" as const, eligibleAt,
-          notify: !pending.notificationDeliveredAt };
-      }
+      if (nowMs < eligibleAt) return { status: "COOLDOWN" as const, eligibleAt, notify: false };
       tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
         expiresAt: nowMs + 5 * 60_000 });
       tx.create(grantRef, {
@@ -432,41 +473,25 @@ export const issueRecoveryGrant = onCall(
     if (outcome.status === "COOLDOWN") {
       if (outcome.notify) {
         try {
+          if (!outcome.eventId) throw new Error("missing_alert_event");
           await getMessaging().send({
             token: ownerDevice.fcmToken,
-            notification: {
-              title: "Aurelia recovery request",
-              body: "A recovery request was started for your property account. If this was not you, open Aurelia and cancel it immediately."
+            data: {
+              type: "RECOVERY_COOLDOWN_STARTED", tenantId, deviceIdHash,
+              eventId: outcome.eventId
             },
-            data: { type: "RECOVERY_COOLDOWN_STARTED", tenantId, eligibleAt: String(outcome.eligibleAt) },
             android: { priority: "high", ttl: 60 * 60 * 1000 }
           });
-          const deliveredAt = Date.now();
-          await db.runTransaction(async tx => {
-            const snapshot = await tx.get(cooldownRef);
-            const pending = snapshot.data();
-            if (!pending || pending.state !== "PENDING" ||
-                pending.deviceIdHash !== deviceIdHash ||
-                !equalDigest(pending.phoneHash, actualHash)) throw GENERIC;
-            tx.update(cooldownRef, {
-              notificationDeliveredAt: FieldValue.serverTimestamp(),
-              eligibleAt: deliveredAt + RECOVERY_COOLDOWN_MS,
-              updatedAt: FieldValue.serverTimestamp()
-            });
-            const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
-            tx.create(eventRef, {
-              tenantId, type: "RECOVERY_OWNER_NOTIFICATION_DELIVERED",
-              deviceIdHash, createdAt: FieldValue.serverTimestamp()
-            });
+          await db.doc(`recoverySecurityEvents/${outcome.eventId}`).update({
+            fcmAcceptedAt: FieldValue.serverTimestamp()
           });
-          return { status: "COOLDOWN", eligibleAt: deliveredAt + RECOVERY_COOLDOWN_MS };
         } catch {
           const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
           await eventRef.set({
             tenantId, type: "RECOVERY_OWNER_NOTIFICATION_FAILED",
             deviceIdHash, createdAt: FieldValue.serverTimestamp()
           });
-          throw new HttpsError("unavailable", "Owner security notification could not be delivered; recovery remains blocked.");
+          throw new HttpsError("unavailable", "Owner alert was not acknowledged; recovery remains blocked.");
         }
       }
       return { status: "COOLDOWN", eligibleAt: outcome.eligibleAt };
