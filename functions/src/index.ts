@@ -480,13 +480,20 @@ export const issueRecoveryGrant = onCall(
       if (outcome.notify) {
         try {
           if (!outcome.eventId) throw new Error("missing_alert_event");
-          await getMessaging().send({
-            token: ownerDevice.fcmToken,
+          const sends = await Promise.allSettled(ownerDevices.map(device => getMessaging().send({
+            token: device.fcmToken,
             data: {
-              type: "RECOVERY_COOLDOWN_STARTED", tenantId, deviceIdHash,
-              eventId: outcome.eventId
+              type: "RECOVERY_COOLDOWN_STARTED", tenantId,
+              deviceIdHash: device.deviceIdHash, eventId: outcome.eventId
             },
             android: { priority: "high", ttl: 60 * 60 * 1000 }
+          })));
+          const acceptedHashes = sends.flatMap((result, index) =>
+            result.status === "fulfilled" ? [ownerDevices[index].deviceIdHash] : []);
+          if (acceptedHashes.length === 0) throw new Error("no_owner_alert_endpoint_accepted");
+          await db.doc(`recoverySecurityEvents/${outcome.eventId}`).update({
+            fcmAcceptedAt: FieldValue.serverTimestamp(),
+            fcmAcceptedDeviceHashes: acceptedHashes
           });
           await db.doc(`recoverySecurityEvents/${outcome.eventId}`).update({
             fcmAcceptedAt: FieldValue.serverTimestamp()
