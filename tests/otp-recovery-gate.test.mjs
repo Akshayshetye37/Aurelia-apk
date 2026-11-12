@@ -100,6 +100,8 @@ test('APK verifies the pinned ES256 signature before server grant consumption', 
   assert.match(patcher, /aurelia_recovery_grant_keys\.xml/);
   assert.match(client, /replayStore\.markUsed\(verified\.jti, verified\.expiresAtEpochSec\)/);
   assert.match(client, /RecoveryGate\.armAfterServerConsumption\(remainingGrantMs\)/);
+  assert.match(client, /awaitingOwnerAlert/);
+  assert.match(gate, /24-hour hold has not started yet/);
   assert.doesNotMatch(client, /inspectClaims/);
 });
 
