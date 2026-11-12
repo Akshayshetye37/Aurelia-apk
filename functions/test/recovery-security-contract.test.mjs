@@ -281,3 +281,9 @@ test('legacy local tenant-only recovery binding requires backend owner UID confi
   assert.match(functions, /confirmRecoveryOwnerBinding = onCall/);
   assert.match(functions, /record\.ownerUid !== owner\.uid/);
 });
+
+test('hardware attestation verifier URL must be HTTPS and cannot carry credentials or query secrets', () => {
+  assert.match(functions, /base\.protocol !== "https:"/);
+  assert.match(functions, /base\.username \|\| base\.password/);
+  assert.match(functions, /base\.search \|\| base\.hash/);
+});

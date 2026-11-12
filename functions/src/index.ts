@@ -116,6 +116,8 @@ export const verifyRecoveryDeviceAttestation = onCall(
     };
     try {
       const base = new URL(verifierUrl);
+      if (base.protocol !== "https:" || base.username || base.password ||
+          base.search || base.hash) throw GENERIC;
       const client = await new GoogleAuth().getIdTokenClient(base.origin);
       const response = await client.request({
         url: new URL("/verify", base).toString(), method: "POST",
