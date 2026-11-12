@@ -81,6 +81,8 @@ test('recovery grants are bound to the device key registered by the authenticate
   assert.match(registration, /current\?\.deviceIdHash && current\.deviceIdHash !== deviceIdHash/);
   assert.match(registration, /deviceIdHash,/);
   assert.match(issuance, /phoneRecord\.deviceIdHash !== deviceIdHash/);
+  assert.match(issuance, /rec:p:\$\{phoneRateKey\}/);
+  assert.match(issuance, /digest\(tenantId, proof\.phone\)\.toString\("hex"\)/);
 });
 
 test('recovery grants have a five-minute lifetime on backend and client', () => {
