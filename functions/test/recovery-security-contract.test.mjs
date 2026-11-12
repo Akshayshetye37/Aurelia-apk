@@ -106,6 +106,11 @@ test('Android arms recovery only after backend consumption without fabricating a
   assert.ok(grantClient.includes("runCatching {") && grantClient.includes("RecoveryGate.armAfterServerConsumption(remainingGrantMs)"));
 });
 
+test('decrypted recovery phone bytes are zeroized after parsing', () => {
+  assert.match(phoneStore, /val plaintext = cipher\.doFinal\(ciphertext\)/);
+  assert.match(phoneStore, /finally \{ plaintext\.fill\(0\) \}/);
+});
+
 test('persisted recovery state is never re-encrypted under a silently regenerated Keystore key', () => {
   for (const source of [phoneStore, tenantIdentity, replayStore]) {
     assert.match(source, /prefs\.contains\(BLOB\)/);
