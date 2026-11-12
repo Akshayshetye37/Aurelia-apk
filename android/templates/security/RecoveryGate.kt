@@ -3,11 +3,13 @@ package com.aurelia.pms.security
 import android.os.SystemClock
 
 /**
- * Process-local authorization window. It is armed only after a signed backend
- * recovery grant has been verified. Process death closes the gate automatically.
+ * Process-local authorization window. It is armed only after the backend verifies
+ * and atomically consumes a signed grant and the encrypted local replay marker commits.
+ * Process death closes the gate automatically.
  *
  * One grant authorizes at most three checksum-valid recovery-key unwrap attempts.
- * Checksum/format failures are handled before spendAttempt() and are free.
+ * The remaining duration is measured from a monotonic timestamp captured before
+ * the grant request; wall-clock changes cannot extend the authorization window.
  */
 object RecoveryGate {
     private const val TTL_MS = 5 * 60_000L
