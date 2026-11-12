@@ -33,6 +33,17 @@ test('recovery gate is cleared on background, lock, and durable recovery commit'
   assert.match(manager, /private fun clearSession\(\)[\s\S]*?RecoveryGate\.clear\(\)/);
 });
 
+test('biometric Keystore invalidation fails closed and can only be replaced after PIN authorization', () => {
+  const biometric = read('android/templates/security/BiometricVaultManager.kt');
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.match(biometric, /setUserAuthenticationRequired\(true\)/);
+  assert.match(biometric, /setInvalidatedByBiometricEnrollment\(true\)/);
+  assert.match(biometric, /fun isKeyInvalidated\(nonce: ByteArray\)/);
+  assert.match(biometric, /catch \(_:\s*Exception\)[\s\S]*?true/);
+  assert.match(biometric, /fun replaceInvalidatedKeyAfterPinAuthorization/);
+  assert.match(gate, /private fun continueAfterPinUnlock\(\)[\s\S]*?isKeyInvalidated\(wrapped\.nonce\)[\s\S]*?replaceInvalidatedKeyAfterPinAuthorization\(\)/);
+});
+
 test('recovery phone is encrypted with a non-authentication-bound Android Keystore key', () => {
   const phone = read('android/templates/RecoveryPhoneStore.kt');
   assert.match(phone, /AndroidKeyStore/);
