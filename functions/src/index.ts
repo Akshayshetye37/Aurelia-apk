@@ -264,13 +264,24 @@ export const consumeRecoveryGrant = onCall(
     const clientNonce = validateNonce(request.data?.nonce);
     if (did !== deviceIdHash || nonce !== clientNonce) throw GENERIC;
     const ref = db.doc(`recoveryGrants/${jti}`);
+    const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
     await db.runTransaction(async tx => {
-      const snapshot = await tx.get(ref);
+      const [snapshot, cooldown] = await Promise.all([tx.get(ref), tx.get(cooldownRef)]);
       const data = snapshot.data();
+      const pending = cooldown.data();
       if (!data || data.state !== "ISSUED" || data.tenantId !== tenantId ||
           data.deviceIdHash !== deviceIdHash || data.nonce !== clientNonce ||
-          Number(data.expiresAt) <= Date.now()) throw GENERIC;
+          Number(data.expiresAt) <= Date.now() || !pending ||
+          pending.state !== "ISSUED" || pending.grantJti !== jti ||
+          pending.deviceIdHash !== deviceIdHash) throw GENERIC;
       tx.update(ref, { state: "CONSUMED", consumedAt: FieldValue.serverTimestamp() });
+      tx.delete(cooldownRef);
+      const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
+      tx.create(eventRef, {
+        tenantId, type: "RECOVERY_GRANT_CONSUMED", deviceIdHash,
+        grantJtiHash: createHmac("sha256", PHONE_PEPPER.value()).update(jti).digest("hex"),
+        createdAt: FieldValue.serverTimestamp()
+      });
     });
     return { consumed: true };
   }
