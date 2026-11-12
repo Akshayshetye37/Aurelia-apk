@@ -196,6 +196,10 @@ if (!manifest.includes('com.aurelia.pms.security.LockGateActivity')) {
   const gateActivity = '<activity android:name="com.aurelia.pms.security.LockGateActivity" android:exported="true" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.NoActionBar"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>';
   manifest = manifest.replace(mainMatch[0], internalMain + '\n        ' + gateActivity);
 }
+if (!manifest.includes('com.aurelia.pms.identity.RecoveryOwnerAlertActivity')) {
+  const recoveryAlertActivity = '<activity android:name="com.aurelia.pms.identity.RecoveryOwnerAlertActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.NoActionBar" />';
+  manifest = manifest.replace('</application>', recoveryAlertActivity + '</application>');
+}
 if (!manifest.includes('com.aurelia.pms.identity.RecoveryPhoneSettingsActivity')) {
   const recoverySettingsActivity = '<activity android:name="com.aurelia.pms.identity.RecoveryPhoneSettingsActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.NoActionBar" />';
   manifest = manifest.replace('</application>', recoverySettingsActivity + '</application>');

@@ -13,6 +13,7 @@ import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.aurelia.pms.identity.RecoveryTenantIdentity
+import com.aurelia.pms.identity.RecoveryOwnerAlertActivity
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -51,8 +52,12 @@ class RecoveryOwnerMessagingService : FirebaseMessagingService() {
         }
         if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) return
 
-        val openApp = Intent(this, LockGateActivity::class.java).apply {
+        val openApp = Intent(this, RecoveryOwnerAlertActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(RecoveryOwnerAlertActivity.EXTRA_TENANT, tenantId)
+            putExtra(RecoveryOwnerAlertActivity.EXTRA_DEVICE, deviceIdHash)
+            putExtra(RecoveryOwnerAlertActivity.EXTRA_EVENT, eventId)
+            putExtra(RecoveryOwnerAlertActivity.EXTRA_ACK_TOKEN, ackToken)
         }
         val pending = PendingIntent.getActivity(
             this, NOTIFICATION_ID, openApp,
@@ -75,17 +80,8 @@ class RecoveryOwnerMessagingService : FirebaseMessagingService() {
             return
         }
 
-        // Server-side cooldown starts only after the attested owner app confirms
-        // that Android accepted the notification for display.
-        if (FirebaseAuth.getInstance().currentUser == null) return
-        runCatching {
-            Tasks.await(
-                FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
-                    .getHttpsCallable("acknowledgeRecoveryOwnerAlert")
-                    .call(mapOf("tenantId" to tenantId, "deviceIdHash" to deviceIdHash, "eventId" to eventId, "ackToken" to ackToken)),
-                10, TimeUnit.SECONDS
-            )
-        }
+        // A notification being posted is not owner consent. The owner must open
+        // the alert and explicitly acknowledge or cancel from a fresh primary session.
     }
 
     private companion object {

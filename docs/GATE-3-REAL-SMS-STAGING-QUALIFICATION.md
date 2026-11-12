@@ -21,7 +21,7 @@ Run `Recovery staging deployment and APK` only after the private attestation ver
 | G3-02 | Request OTP and submit an incorrect code. | Rejected; no grant, no local recovery gate, no DEK operation. |
 | G3-03 | Allow an OTP to expire, then submit it. | Rejected; no grant and no gate arm. |
 | G3-04 | Submit the same OTP proof twice. | Second use rejected; no second grant. |
-| G3-05 | Verify the independent owner alert and acknowledgement. | Alert goes only to separately enrolled attested owner devices; no SMS/alert is sent to the recovery number. |
+| G3-05 | Verify the independent owner alert; open it and explicitly acknowledge from a fresh primary-auth owner session. | Merely receiving/displaying FCM never starts the hold; acknowledgement is single-use, expires after 15 minutes and is accepted only from an attested device with a fresh email-link/passkey owner session. No SMS/alert is sent to the recovery number. |
 | G3-06 | Wait the full 24-hour hold; request a fresh OTP and grant. | Old OTP cannot be reused; new grant is UID/tenant/device/nonce-bound and expires within five minutes. |
 | G3-07 | Submit wrong tenant, UID, device, nonce, signature, key ID, expired and replayed grants. | Every invalid grant rejected before the recovery gate arms. |
 | G3-08 | Complete recovery using the offline recovery key. | SMS and grant authorize the workflow only; neither receives or derives the DEK. The offline key unwraps the original DEK and PIN B wraps that same DEK. |

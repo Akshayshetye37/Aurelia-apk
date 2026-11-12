@@ -256,3 +256,14 @@ test('every recovery callable enforces App Check and phone-change activation rej
   assert.match(activation, /tx\.delete\(cooldownRef\)/);
   assert.match(activation, /RECOVERY_PHONE_CHANGE_ACTIVATED/);
 });
+
+
+test('owner alert acknowledgement is explicit and never automatic on FCM delivery', () => {
+  const service = read('android/templates/security/RecoveryOwnerMessagingService.kt');
+  const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
+  assert.doesNotMatch(service, /acknowledgeRecoveryOwnerAlert/);
+  assert.match(service, /RecoveryOwnerAlertActivity\.EXTRA_ACK_TOKEN/);
+  assert.match(activity, /acknowledgeRecoveryOwnerAlert/);
+  assert.match(activity, /cancelRecoveryRequest/);
+  assert.match(activity, /getIdToken\(true\)/);
+});
