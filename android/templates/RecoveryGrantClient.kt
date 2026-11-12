@@ -1,6 +1,7 @@
 package com.aurelia.pms.identity
 
 import android.content.Context
+import android.os.SystemClock
 import com.aurelia.pms.security.RecoveryGate
 import com.aurelia.pms.security.RecoveryGrantReplayStore
 import com.google.firebase.FirebaseApp
@@ -25,6 +26,9 @@ class RecoveryGrantClient(private val context: Context) {
         }
 
     fun issueRecoveryGrant(phoneIdToken: String, tenantId: String): GrantRequest {
+        // Start before the network request so local authorization cannot outlive
+        // the five-minute grant even if the device wall clock is changed.
+        val startedAtElapsedMs = SystemClock.elapsedRealtime()
         val nonceBytes = ByteArray(32).also(SecureRandom()::nextBytes)
         val nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(nonceBytes)
         nonceBytes.fill(0)
@@ -36,7 +40,7 @@ class RecoveryGrantClient(private val context: Context) {
             val data = result.result?.data as? Map<*, *> ?: throw IllegalStateException("Recovery authorization failed.")
             data["grant"] as? String ?: throw IllegalStateException("Recovery authorization failed.")
         }
-        return GrantRequest(task, nonce, deviceHash)
+        return GrantRequest(task, nonce, deviceHash, startedAtElapsedMs)
     }
 
     fun consumeRecoveryGrant(grant: String, nonce: String, deviceHash: String): Task<Boolean> =
@@ -52,7 +56,7 @@ class RecoveryGrantClient(private val context: Context) {
      * It is NOT cryptographic signature verification: server validates ES256 and
      * atomically consumes jti. A durable local replay marker is required before arming.
      */
-    fun consumeAndArm(grant: String, nonce: String, deviceHash: String, tenantId: String, onResult: (Boolean) -> Unit) {
+    fun consumeAndArm(grant: String, nonce: String, deviceHash: String, tenantId: String, startedAtElapsedMs: Long, onResult: (Boolean) -> Unit) {
         val claims = try { inspectClaims(grant, nonce, deviceHash, tenantId) }
         catch (_: Exception) { onResult(false); return }
 
@@ -65,8 +69,9 @@ class RecoveryGrantClient(private val context: Context) {
             val recorded = if (consumed) runCatching {
                 replayStore.markUsed(claims.jti, claims.expiresAt)
             }.getOrDefault(false) else false
+            val remainingGrantMs = 5 * 60_000L - (SystemClock.elapsedRealtime() - startedAtElapsedMs)
             val armed = consumed && recorded && runCatching {
-                RecoveryGate.armAfterServerConsumption(claims.expiresAt)
+                RecoveryGate.armAfterServerConsumption(remainingGrantMs)
             }.isSuccess
             if (armed) {
                 onResult(true)
@@ -102,5 +107,5 @@ class RecoveryGrantClient(private val context: Context) {
     }
 
     private data class GrantClaims(val jti: String, val expiresAt: Long)
-    data class GrantRequest(val task: Task<String>, val nonce: String, val deviceIdHash: String)
+    data class GrantRequest(val task: Task<String>, val nonce: String, val deviceIdHash: String, val startedAtElapsedMs: Long)
 }
