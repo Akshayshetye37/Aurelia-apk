@@ -104,12 +104,12 @@ Until these gates pass, this is an implementation foundation, not a production s
 
 | Control | Current state | Production gate |
 |---|---|---|
-| OTP authorization | Firebase Phone Auth helper only; not connected to recovery | Trusted backend, App Check + Play Integrity, verified tenant phone binding, fresh auth_time, signed single-use jti token and replay tests |
-| Phone registration/change | Not implemented | PIN/biometric step-up, E.164 verification, cooling period, old-contact alerts and cancellation |
+| OTP authorization | Source flow connected; local APK-pinned ES256 verification, App Check callables, one-time JTI and cooldown implemented | Staging key provisioning, Firebase Emulator runtime tests, real SMS and physical-device qualification |
+| Phone registration/change | Owner/tenant-bound registration, E.164 proof, 48-hour number-change hold and owner cancellation implemented in source | Staging verification and physical-device tests; old-number delivery evidence |
 | Auto-lock choices | Fixed Activity pause/resume timeout foundation; `FLAG_SECURE` is applied to both `LockGateActivity` and generated `MainActivity` | Immediately / 5-minute / Never settings via `ProcessLifecycleOwner`, transient picker/prompt suppression, Keystore-authenticated setting storage, and full SQLCipher/WebView/decrypted-cache teardown; secure recents snapshots still need physical-device qualification |
 | Session invalidation | Current process manager can clear its DEK | Revoke every app session after recovery and prove no restored WebView/session survives |
-| Security event log/alerts | Not implemented | Append-only hash chain, secret-free records, owner alerts and tamper tests |
-| Step-up / integrity | Not implemented end-to-end | Fresh auth for sensitive actions and Play Integrity policy for recovery/payment |
+| Security event log/alerts | Secret-free Firestore security events and multi-device FCM alert acknowledgement implemented in source | Verify FCM delivery/display/ack on physical devices; tamper/retention review |
+| Step-up / integrity | Fresh owner auth and Android Key Attestation verifier wired in source; App Check enforced | Configure Play Integrity App Check, deploy private verifier and verify physical TEE/StrongBox devices |
 | Assisted recovery / staff roles | Not implemented; assisted recovery must remain off | Separate opt-in design review and constrained credential model |
 
 OTP must never substitute for the offline recovery key and must never create, unwrap or replace the DEK. No automatic wipe is permitted after failed attempts.
