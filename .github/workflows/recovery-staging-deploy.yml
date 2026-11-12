@@ -118,12 +118,16 @@ jobs:
           AURELIA_RELEASE_KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          cp "$RUNNER_TEMP/aurelia-release.jks" "$AURELIA_RELEASE_KEYSTORE_PATH"
           node scripts/patch-android.js
           npx cap sync android
 
       - name: Build staging APK
         working-directory: android
+        env:
+          AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-release.jks
+          AURELIA_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
+          AURELIA_RELEASE_KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
+          AURELIA_RELEASE_KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace assembleRelease
