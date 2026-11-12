@@ -118,13 +118,14 @@ test('legacy LOCAL_ONLY tenant IDs cannot authorize recovery grants', () => {
 
 test('blocked Android notification channels cannot acknowledge owner alerts or start cooldown', () => {
   const service = read('android/templates/security/RecoveryOwnerMessagingService.kt');
+  const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
   const blockedCheck = service.indexOf('getNotificationChannel(CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE');
   const notify = service.indexOf('manager.notify(NOTIFICATION_ID, notification)');
-  const acknowledge = service.indexOf('getHttpsCallable("acknowledgeRecoveryOwnerAlert")');
   assert.ok(blockedCheck >= 0, 'blocked notification channels must be detected');
   assert.ok(blockedCheck < notify, 'channel suppression must be checked before notify');
-  assert.ok(notify < acknowledge, 'owner acknowledgement must follow notification posting');
-  assert.match(service, /"ackToken" to ackToken/);
-  assert.match(service, /data\["ackToken"\]/);
+  assert.doesNotMatch(service, /acknowledgeRecoveryOwnerAlert/, 'FCM delivery must never auto-acknowledge');
+  assert.match(service, /RecoveryOwnerAlertActivity\.EXTRA_ACK_TOKEN/);
+  assert.match(activity, /getHttpsCallable\("acknowledgeRecoveryOwnerAlert"\)/);
+  assert.match(activity, /getIdToken\(true\)/);
   assert.match(service, /if \(manager\.getNotificationChannel\(CHANNEL_ID\)\?\.importance == NotificationManager\.IMPORTANCE_NONE\) return/);
 });

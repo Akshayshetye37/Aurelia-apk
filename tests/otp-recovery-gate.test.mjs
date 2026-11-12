@@ -124,13 +124,17 @@ test('attested Android key generation is challenge-bound and software-only keys 
 test('owner alert must be posted and acknowledged before the recovery cooldown starts', () => {
   const backend = read('functions/src/index.ts');
   const service = read('android/templates/security/RecoveryOwnerMessagingService.kt');
+  const ownerAlert = read('android/templates/RecoveryOwnerAlertActivity.kt');
   assert.match(backend, /state: "ALERT_PENDING"/);
   assert.match(backend, /getMessaging\(\)\.send/);
   assert.match(backend, /acknowledgeRecoveryOwnerAlert = onCall/);
   assert.match(backend, /notificationAcknowledgedAt/);
   assert.match(backend, /eligibleAt = Date\.now\(\) \+ RECOVERY_COOLDOWN_MS/);
   assert.match(service, /NotificationManagerCompat\.from\(this\)\.areNotificationsEnabled\(\)/);
-  assert.match(service, /acknowledgeRecoveryOwnerAlert/);
+  assert.doesNotMatch(service, /acknowledgeRecoveryOwnerAlert/);
+  assert.match(ownerAlert, /acknowledgeRecoveryOwnerAlert/);
+  assert.match(ownerAlert, /cancelRecoveryRequest/);
+  assert.match(ownerAlert, /getIdToken\(true\)/);
   assert.match(service, /RecoveryDeviceIdentity\.deviceIdHash\(\)/);
   assert.match(backend, /cancelRecoveryRequest = onCall/);
 });
