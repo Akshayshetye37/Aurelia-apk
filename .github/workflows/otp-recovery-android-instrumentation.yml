@@ -121,8 +121,8 @@ jobs:
             -no-boot-anim -no-snapshot -no-snapshot-save -wipe-data -verbose \
             >"$log_dir/emulator.stdout-stderr.log" 2>&1 &
           echo "$!" > "$log_dir/emulator.pid"
-          timeout -k 2s 10s adb start-server
-          timeout -k 2s 10s adb devices -l || true
+          timeout -k 2s 10s "$ANDROID_HOME/platform-tools/adb" start-server
+          timeout -k 2s 10s $ANDROID_HOME/platform-tools/adb devices -l || true
 
       - name: Wait for API 34 emulator boot completion
         timeout-minutes: 22
@@ -130,15 +130,15 @@ jobs:
         run: |
           set -euo pipefail
           log_dir="$RUNNER_TEMP/aurelia-recovery-emulator"
-          if ! timeout -k 2s 60s adb wait-for-device; then
+          if ! timeout -k 2s 60s $ANDROID_HOME/platform-tools/adb wait-for-device; then
             echo "ADB enumeration was delayed; continuing bounded boot diagnostics."
           fi
           deadline=$((SECONDS + 900))
           booted=false
           while (( SECONDS < deadline )); do
-            state="$(timeout -k 2s 5s adb get-state 2>&1 || true)"
+            state="$(timeout -k 2s 5s $ANDROID_HOME/platform-tools/adb get-state 2>&1 || true)"
             if [[ "$state" == "device" ]]; then
-              boot="$(timeout -k 2s 5s adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+              boot="$(timeout -k 2s 5s $ANDROID_HOME/platform-tools/adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             else
               boot="unavailable"
             fi
@@ -146,16 +146,16 @@ jobs:
             if [[ "$state" == "device" && "$boot" == "1" ]]; then booted=true; break; fi
             sleep 10
           done
-          timeout -k 2s 5s adb devices -l > "$log_dir/adb-devices-after-boot.txt" 2>&1 || true
+          timeout -k 2s 5s $ANDROID_HOME/platform-tools/adb devices -l > "$log_dir/adb-devices-after-boot.txt" 2>&1 || true
           if [[ "$booted" != true ]]; then
             echo "::error::Android emulator did not reach sys.boot_completed=1 within 900 seconds."
             exit 1
           fi
-          adb shell getprop ro.build.fingerprint
-          test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "34"
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
+          $ANDROID_HOME/platform-tools/adb shell getprop ro.build.fingerprint
+          test "$($ANDROID_HOME/platform-tools/adb shell getprop ro.build.version.sdk | tr -d '\r')" = "34"
+          $ANDROID_HOME/platform-tools/adb shell settings put global window_animation_scale 0
+          $ANDROID_HOME/platform-tools/adb shell settings put global transition_animation_scale 0
+          $ANDROID_HOME/platform-tools/adb shell settings put global animator_duration_scale 0
 
       - name: Run offline SQLCipher recovery instrumentation
         timeout-minutes: 30
@@ -172,8 +172,8 @@ jobs:
         run: |
           log_dir="$RUNNER_TEMP/aurelia-recovery-emulator"
           mkdir -p "$log_dir"
-          adb devices -l > "$log_dir/adb-devices-final.txt" 2>&1 || true
-          adb logcat -d > "$log_dir/logcat.txt" 2>&1 || true
+          $ANDROID_HOME/platform-tools/adb devices -l > "$log_dir/adb-devices-final.txt" 2>&1 || true
+          $ANDROID_HOME/platform-tools/adb logcat -d > "$log_dir/logcat.txt" 2>&1 || true
 
       - name: Verify instrumentation results contain no failures or ignored tests
         if: always()
