@@ -81,6 +81,7 @@ test('recovery grants are bound to the device key registered by the authenticate
   assert.match(registration, /const deviceIdHash = validateDeviceHash/);
   assert.match(registration, /current\?\.deviceIdHash && current\.deviceIdHash !== deviceIdHash/);
   assert.match(registration, /deviceIdHash,/);
+  assert.match(registration, /deviceIdHash,\s*state: "CHANGE_PENDING"/);
   assert.match(issuance, /phoneRecord\.deviceIdHash !== deviceIdHash/);
   assert.match(issuance, /rec:p:\$\{phoneRateKey\}/);
   assert.match(issuance, /digest\(tenantId, proof\.phone\)\.toString\("hex"\)/);
