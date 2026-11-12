@@ -7,6 +7,10 @@ on:
       - 'android/templates/**'
       - 'scripts/patch-android.js'
       - 'scripts/verify-android-instrumentation-results.mjs'
+      - 'functions/test/**'
+      - 'tests/otp-recovery-*.test.mjs'
+      - '.github/workflows/recovery-functions.yml'
+      - '.github/workflows/recovery-attestation-ci.yml'
       - '.github/workflows/otp-recovery-android-instrumentation.yml'
   pull_request:
     paths:
