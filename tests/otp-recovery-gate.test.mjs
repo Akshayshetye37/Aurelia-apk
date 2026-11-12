@@ -83,6 +83,7 @@ test('grant claim preflight binds expiry, tenant, device and nonce before server
   assert.match(client, /replayStore\.markUsed\(claims\.jti, claims\.expiresAt\)/);
   assert.match(client, /if \(consumed && recorded\) \{[\s\S]*?RecoveryGate\.armAfterServerConsumption\(\)/);
   assert.doesNotMatch(client, /RecoveryGate\.arm\(RecoveryGrantVerifier\.Result\.Ok\)/);
+  assert.doesNotMatch(client, /import com\.aurelia\.pms\.security\.RecoveryGrantVerifier/);
   assert.match(client, /NOT cryptographic signature verification/);
 });
 
