@@ -709,7 +709,8 @@ export const cancelRecoveryRequest = onCall(
           attestation.verifiedBootState !== "VERIFIED" || attestation.deviceLocked !== true) throw GENERIC;
       const pending = cooldownSnapshot.data();
       if (!pending || pending.state === "CANCELLED" || pending.state === "CONSUMED") return false;
-      if (!["ALERT_PENDING", "APPROVED", "PENDING", "ISSUED"].includes(pending.state)) throw GENERIC;
+      if (pending.ownerUid !== owner.uid ||
+          !["ALERT_PENDING", "APPROVED", "PENDING", "ISSUED"].includes(pending.state)) throw GENERIC;
       const grantJti = typeof pending.grantJti === "string" ? pending.grantJti : null;
       const grantRef = grantJti ? db.doc(`recoveryGrants/${grantJti}`) : null;
       const eventId = typeof pending.alertEventId === "string" ? pending.alertEventId : null;

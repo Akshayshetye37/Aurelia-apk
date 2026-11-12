@@ -905,3 +905,33 @@ test('owner cancellation before consume revokes the issued grant permanently', a
   }, ownerAuth(ownerUid, tenantId)), 'grant cannot be consumed after cancellation');
   assert.equal((await db.doc(`recoveryGrants/${payload.jti}`).get()).data().state, 'REVOKED');
 });
+
+test('different tenant owner UID cannot cancel another owner UID recovery request', async () => {
+  const tenantId = 'tenant-emulator-secondary-owner-cancel';
+  const ownerUid = 'owner-emulator-primary';
+  const secondaryUid = 'owner-emulator-secondary';
+  const phone = '+15555550119';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
+  const secondaryDeviceHash = deviceHashFor(tenantId + ':secondary');
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
+  await db.doc(`recoveryDeviceAttestations/${tenantId}_${secondaryDeviceHash}`).set({
+    tenantId, ownerUid: secondaryUid, deviceIdHash: secondaryDeviceHash, status: 'VERIFIED',
+    securityLevel: 'TRUSTED_ENVIRONMENT', verifiedBootState: 'VERIFIED',
+    deviceLocked: true, publicKeyHash: secondaryDeviceHash
+  });
+  await db.doc(`recoveryOwnerDevices/${tenantId}_${secondaryDeviceHash}`).set({
+    tenantId, ownerUid: secondaryUid, deviceIdHash: secondaryDeviceHash,
+    fcmToken: ('secondary-fcm-token-' + secondaryDeviceHash).padEnd(220, 'x'),
+    tokenHash: 'secondary-token-hash', active: true
+  });
+  await assert.rejects(callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'j'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phone)
+  }), error => error.code === 'unavailable');
+  await assert.rejects(callable(functions.cancelRecoveryRequest, {
+    tenantId, deviceIdHash: secondaryDeviceHash
+  }, ownerAuth(secondaryUid, tenantId)), 'different owner UID cannot cancel primary recovery request');
+  assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'ALERT_PENDING');
+});
