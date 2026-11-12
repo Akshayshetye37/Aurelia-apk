@@ -292,6 +292,8 @@ export const registerRecoveryPhone = onCall(
     const newHash = digest(tenantId, newProof.phone);
     const ref = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
     const existing = (await ref.get()).data();
+    if (existing?.ownerUid !== undefined && existing.ownerUid !== auth.uid) throw GENERIC;
+    if (existing?.hash && existing.ownerUid !== auth.uid) throw GENERIC;
     if (existing?.deviceIdHash && existing.deviceIdHash !== deviceIdHash) throw GENERIC;
     let oldHash: Buffer | null = null;
     if (existing?.hash && !equalDigest(existing.hash, newHash)) {
@@ -302,6 +304,8 @@ export const registerRecoveryPhone = onCall(
     const result = await db.runTransaction(async tx => {
       const snapshot = await tx.get(ref);
       const current = snapshot.data();
+      if (current?.hash && current.ownerUid !== auth.uid) throw GENERIC;
+      if (current?.ownerUid !== undefined && current.ownerUid !== auth.uid) throw GENERIC;
       if (current?.deviceIdHash && current.deviceIdHash !== deviceIdHash) throw GENERIC;
       if (!current?.hash) {
         tx.create(ref, {

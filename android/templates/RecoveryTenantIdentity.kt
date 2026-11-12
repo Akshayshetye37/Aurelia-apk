@@ -90,7 +90,13 @@ object RecoveryTenantIdentity {
             }
             if (previousTenant == tenant) {
                 val existingRecord = runCatching { JSONObject(previous) }.getOrNull()
-                if (existingRecord?.optString("ownerUid") == ownerUid) return
+                val previousUid = existingRecord?.optString("ownerUid")?.takeIf { !it.isNullOrBlank() }
+                if (previousUid != null) {
+                    check(previousUid == ownerUid) {
+                        "This device is bound to a different authenticated owner identity."
+                    }
+                    return
+                }
             }
             // Upgrade the prior tenant-only encrypted enrollment only while a
             // freshly refreshed primary Firebase owner token proves the same tenant.

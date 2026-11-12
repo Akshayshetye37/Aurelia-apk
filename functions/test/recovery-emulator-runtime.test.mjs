@@ -742,3 +742,26 @@ test('owner acknowledgement token expires after fifteen minutes', async () => {
   assert.equal(unchanged.state, 'ALERT_PENDING');
   assert.equal(unchanged.eligibleAt, null);
 });
+
+test('recovery phone ownership cannot be rebound by a different owner UID in the same tenant', async () => {
+  const tenantId = 'tenant-emulator-owner-binding';
+  const ownerUid = 'owner-emulator-owner-binding';
+  const otherOwnerUid = 'other-owner-emulator-owner-binding';
+  const phone = '+15555550113';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, deviceHashFor(tenantId + ':owner')] });
+  // Model a separately attested device identity for the second owner. The tenant
+  // and device claims are valid; only the immutable recovery-record owner UID differs.
+  await db.doc(`recoveryDeviceAttestations/${tenantId}_${recoveryDeviceHash}`).set({
+    tenantId, ownerUid: otherOwnerUid, deviceIdHash: recoveryDeviceHash,
+    status: 'VERIFIED', securityLevel: 'TRUSTED_ENVIRONMENT',
+    verifiedBootState: 'VERIFIED', deviceLocked: true, publicKeyHash: recoveryDeviceHash
+  });
+  await assert.rejects(callable(functions.registerRecoveryPhone, {
+    tenantId, deviceIdHash: recoveryDeviceHash,
+    phoneIdToken: await phoneAuthToken(phone)
+  }, ownerAuth(otherOwnerUid, tenantId)), 'same-tenant secondary owner cannot rebind recovery phone UID');
+  const record = (await db.doc(`tenants/${tenantId}/security/recoveryPhone`).get()).data();
+  assert.equal(record.ownerUid, ownerUid);
+});
