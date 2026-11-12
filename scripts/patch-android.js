@@ -345,6 +345,11 @@ try {
     if (der.length < 80 || der.length > 160 || der.toString('base64') !== spki) {
       throw new Error('Recovery public-key pin must be canonical base64 DER SPKI.');
     }
+    const publicKey = require('crypto').createPublicKey({ key: der, format: 'der', type: 'spki' });
+    if (publicKey.asymmetricKeyType !== 'ec' ||
+        publicKey.asymmetricKeyDetails?.namedCurve !== 'prime256v1') {
+      throw new Error('Recovery public-key pins must be P-256 EC SPKI keys.');
+    }
   }
 } catch (error) {
   throw new Error('RECOVERY_GRANT_PUBLIC_KEYS_JSON is invalid.', { cause: error });
