@@ -416,6 +416,8 @@ export const issueRecoveryGrant = onCall(
       const candidate = document.data();
       if (candidate.ownerUid !== phoneRecord?.ownerUid || candidate.active !== true ||
           typeof candidate.deviceIdHash !== "string" ||
+          // The device requesting recovery must never be allowed to acknowledge its own alert.
+          candidate.deviceIdHash === deviceIdHash ||
           typeof candidate.fcmToken !== "string" || candidate.fcmToken.length < 100) continue;
       try {
         await requireAttestedDevice(tenantId, candidate.deviceIdHash, phoneRecord?.ownerUid);
