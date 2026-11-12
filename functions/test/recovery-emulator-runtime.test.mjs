@@ -101,6 +101,9 @@ function ownerAuth(uid, tenantId, options = {}) {
 }
 
 async function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, ownerDeviceHashes }) {
+  await db.doc(`tenants/${tenantId}/security/recoveryOwner`).set({
+    tenantId, ownerUid, createdAt: new Date(), provisionedBy: 'emulator-fixture'
+  });
   await db.doc(`tenants/${tenantId}/security/recoveryPhone`).set({
     tenantId, ownerUid, hash: phoneDigest(tenantId, phone),
     deviceIdHash: recoveryDeviceHash, state: 'VERIFIED', masked: '+1******0100'
@@ -988,7 +991,7 @@ test('one-time Firebase email link mints a fresh owner session only for the enro
   const emailLink = `https://${PROJECT_ID}.firebaseapp.com/__/auth/action?apiKey=fake-api-key&mode=signIn&oobCode=single-use-code`;
   try {
     const result = await callable(functions.exchangeOwnerEmailLink, {
-      tenantId, deviceIdHash: ownerDeviceHash, email, emailLink
+      tenantId, deviceIdHash: ownerDeviceHash, email, emailLink, purpose: 'alert'
     });
     assert.equal(result.customToken, 'emulator-owner-custom-token');
     assert.equal(exchangedBody.email, email);
@@ -1010,7 +1013,7 @@ test('one-time Firebase email link mints a fresh owner session only for the enro
     }), 'email link identity must match the immutable recovery owner UID');
 
     await assert.rejects(callable(functions.exchangeOwnerEmailLink, {
-      tenantId, deviceIdHash: ownerDeviceHash, email,
+      tenantId, deviceIdHash: ownerDeviceHash, email, purpose: 'alert',
       emailLink: 'https://attacker.example/__/auth/action?apiKey=fake-api-key&mode=signIn&oobCode=bad'
     }), 'untrusted email-link host must be rejected');
   } finally {
