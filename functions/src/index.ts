@@ -495,9 +495,6 @@ export const issueRecoveryGrant = onCall(
             fcmAcceptedAt: FieldValue.serverTimestamp(),
             fcmAcceptedDeviceHashes: acceptedHashes
           });
-          await db.doc(`recoverySecurityEvents/${outcome.eventId}`).update({
-            fcmAcceptedAt: FieldValue.serverTimestamp()
-          });
         } catch {
           const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
           await eventRef.set({
