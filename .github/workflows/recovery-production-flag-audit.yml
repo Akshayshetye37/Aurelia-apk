@@ -28,7 +28,7 @@ jobs:
           test -n "$PROJECT_ID" && test -n "$REGION"
           gcloud config set project "$PROJECT_ID"
           FUNCTIONS="$(gcloud functions list --gen2 --project "$PROJECT_ID" --regions "asia-south1" --format=json)"
-          mapfile -t function_names < <(echo "$FUNCTIONS" | jq -r '.[] | select(.name | test("recovery|attestation"; "i")) | .name')
+          mapfile -t function_names < <(echo "$FUNCTIONS" | jq -r '.[] | select(.name | test("recovery|attestation"; "i")) | .name | split("/")[-1]')
           if [[ "${#function_names[@]}" -eq 0 ]]; then
             echo "::error::No deployed recovery/attestation Functions found; production flag state cannot be evidenced."
             exit 1
