@@ -1,6 +1,7 @@
 name: OTP Recovery Android Instrumentation
 
 on:
+  workflow_dispatch:
   push:
     branches: [work/p0-storage-hardening]
     paths:
@@ -24,7 +25,7 @@ permissions:
 
 concurrency:
   group: otp-recovery-android-instrumentation-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   sqlcipher-recovery-instrumentation:
