@@ -58,7 +58,7 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
         val record = store.read()
         status = TextView(this).apply {
             text = when (record.state) {
-                RecoveryPhoneStore.State.UNSET -> "SMS recovery only authorizes the workflow; your offline recovery key is still required to unlock the existing database. Keep it safe."
+                RecoveryPhoneStore.State.UNSET -> "Important: SMS OTP only authorizes recovery; it does not unlock the database or replace your offline recovery key. You must enter that key to restore access. If you lose both this device and the offline recovery key, your encrypted data cannot be recovered."
                 RecoveryPhoneStore.State.UNVERIFIED -> "Phone verification was not completed."
                 RecoveryPhoneStore.State.VERIFIED -> "Verified recovery phone: ${record.maskedCurrent()}"
                 RecoveryPhoneStore.State.CHANGE_PENDING -> "Current: ${record.maskedCurrent()}\nPending: ${record.pendingE164?.let { mask(it) }}\nChange activates after the 48-hour security delay."
