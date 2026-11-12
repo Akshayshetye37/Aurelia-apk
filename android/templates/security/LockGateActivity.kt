@@ -573,7 +573,7 @@ class LockGateActivity : FragmentActivity() {
                                         return@addOnCompleteListener
                                     }
                                     val grant = task.result
-                                    client.consumeAndArm(grant, grantRequest.nonce, grantRequest.deviceIdHash, tenant) { armed ->
+                                    client.consumeAndArm(grant, grantRequest.nonce, grantRequest.deviceIdHash, tenant, grantRequest.startedAtElapsedMs) { armed ->
                                         runOnUiThread {
                                             if (!recoveryFlowActive || isFinishing) {
                                                 RecoveryGate.clear()
