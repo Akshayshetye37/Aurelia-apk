@@ -546,12 +546,17 @@ function addFirebaseDependencies(contents, kotlinDsl) {
       : '\n' + missing.map(dependency => '    implementation "' + dependency + '"').join('\n');
     updated = updated.replace(/dependencies\s*\{/, match => match + lines);
   }
-  if (!updated.includes(bom)) {
+  if (/com\.google\.firebase:firebase-bom:[0-9.]+/.test(updated)) {
+    updated = updated.replace(/com\.google\.firebase:firebase-bom:[0-9.]+/g, bom);
+  } else {
     updated = updated.replace(/dependencies\s*\{/, match =>
       match + (kotlinDsl
         ? '\n    implementation(platform("' + bom + '"))'
         : '\n    implementation platform("' + bom + '")'));
   }
+  // Let the BoM choose the compatible Messaging SDK version instead of retaining
+  // a stale explicit pin from a previously generated Android project.
+  updated = updated.replace(/com\.google\.firebase:firebase-messaging:[0-9.]+/g, messaging);
   return updated;
 }
 
