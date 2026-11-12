@@ -298,3 +298,20 @@ test('Android Play Integrity App Check bootstrap is installed before cloud recov
   assert.match(patcher, /firebase-appcheck-playintegrity/);
   assert.match(patcher, /com\.aurelia\.pms\.AureliaApplication/);
 });
+
+test('owner email-link exchange verifies the one-time link before minting primary factor claims', () => {
+  const exchange = functions.slice(functions.indexOf('export const exchangeOwnerEmailLink'), functions.indexOf('export const confirmRecoveryOwnerBinding'));
+  assert.match(exchange, /enforceAppCheck: true/);
+  assert.match(exchange, /requireRecoveryEnabled\(\)/);
+  assert.match(exchange, /accounts:signInWithEmailLink/);
+  assert.match(exchange, /link\.protocol !== "https:"/);
+  assert.match(exchange, /link\.searchParams\.get\("apiKey"\) !== apiKey/);
+  assert.match(exchange, /decoded\.uid !== authResult\.localId/);
+  assert.match(exchange, /phoneRecord\.ownerUid !== decoded\.uid/);
+  assert.match(exchange, /requireAttestedDevice\(tenantId, deviceIdHash, decoded\.uid\)/);
+  assert.match(exchange, /ownerAuthFactor: "email_link"/);
+  assert.match(exchange, /createCustomToken/);
+  assert.match(functions, /provider === "custom"/);
+  assert.match(functions, /auth\.token\.email_verified === true/);
+  assert.match(functions, /factorAuthTime > authTime/);
+});
