@@ -176,3 +176,16 @@ test('Android installs Play Integrity App Check before Firebase services without
   assert.match(patcher, /firebase-bom:35\.1\.0/);
   assert.match(patcher, /android:name="com\.aurelia\.pms\.AureliaApplication"/);
 });
+
+test('owner alert UI completes server-verified email-link primary authentication', () => {
+  const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
+  const patcher = read('scripts/patch-android.js');
+  assert.match(activity, /sendSignInLinkToEmail/);
+  assert.match(activity, /exchangeOwnerEmailLink/);
+  assert.match(activity, /signInWithCustomToken/);
+  assert.match(activity, /RecoveryTenantIdentity\.getBinding/);
+  assert.match(activity, /RecoveryDeviceIdentity\.deviceIdHash/);
+  assert.match(patcher, /firebaseapp\.com/);
+  assert.match(patcher, /android:pathPrefix="\/__\/auth"/);
+  assert.match(patcher, /android:launchMode="singleTask"/);
+});
