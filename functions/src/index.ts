@@ -2,7 +2,7 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { defineSecret } from "firebase-functions/params";
+import { defineSecret, defineString } from "firebase-functions/params";
 import { createHmac, createPrivateKey, createPublicKey, randomUUID, timingSafeEqual } from "node:crypto";
 import { importPKCS8, importSPKI, jwtVerify, SignJWT } from "jose";
 
@@ -10,11 +10,18 @@ if (!getApps().length) initializeApp();
 const db = getFirestore();
 const PHONE_PEPPER = defineSecret("PHONE_PEPPER");
 const RECOVERY_SIGNING_KEY_PKCS8 = defineSecret("RECOVERY_SIGNING_KEY_PKCS8");
+const RECOVERY_ENABLED = defineString("RECOVERY_ENABLED", { default: "false" });
 const GENERIC = new HttpsError("permission-denied", "Verification failed.");
 const ISSUER = "aurelia-recovery";
 const AUDIENCE = "aurelia-recovery-client";
 const REGION = "asia-south1";
 const RECOVERY_COOLDOWN_MS = 24 * 60 * 60_000;
+
+function requireRecoveryEnabled(): void {
+  if (RECOVERY_ENABLED.value() !== "true") {
+    throw new HttpsError("failed-precondition", "Account recovery is disabled.");
+  }
+}
 
 type PhoneProof = { uid: string; phone: string; authTime: number };
 
@@ -119,6 +126,7 @@ async function signGrant(tenantId: string, deviceIdHash: string, nonce: string, 
 export const registerRecoveryPhone = onCall(
   { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER] },
   async request => {
+    requireRecoveryEnabled();
     // Phone possession is not owner authorization. Bind registration to a
     // recently authenticated primary owner session and its server-issued tenant claim.
     const auth = request.auth;
@@ -183,6 +191,7 @@ export const registerRecoveryPhone = onCall(
 export const issueRecoveryGrant = onCall(
   { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER, RECOVERY_SIGNING_KEY_PKCS8] },
   async request => {
+    requireRecoveryEnabled();
     const tenantId = validateTenantId(request.data?.tenantId);
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
     const nonce = validateNonce(request.data?.nonce);
@@ -267,6 +276,7 @@ export const issueRecoveryGrant = onCall(
 export const consumeRecoveryGrant = onCall(
   { region: REGION, enforceAppCheck: true, secrets: [RECOVERY_SIGNING_KEY_PKCS8, PHONE_PEPPER] },
   async request => {
+    requireRecoveryEnabled();
     const grant = requiredString(request.data?.grant, 4096);
     const privateKeyPem = RECOVERY_SIGNING_KEY_PKCS8.value();
     const privateKeyObject = createPrivateKey(privateKeyPem);
@@ -308,6 +318,7 @@ export const consumeRecoveryGrant = onCall(
 export const cancelRecoveryPhoneChange = onCall(
   { region: REGION, enforceAppCheck: true },
   async request => {
+    requireRecoveryEnabled();
     const tenantId = validateTenantId(request.auth?.token.tenantId);
     const ownerAge = Date.now() / 1000 - Number(request.auth?.token.auth_time ?? 0);
     if (request.auth?.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
@@ -327,6 +338,7 @@ export const cancelRecoveryPhoneChange = onCall(
 export const activateRecoveryPhoneChange = onCall(
   { region: REGION, enforceAppCheck: true },
   async request => {
+    requireRecoveryEnabled();
     const tenantId = validateTenantId(request.auth?.token.tenantId);
     const ownerAge = Date.now() / 1000 - Number(request.auth?.token.auth_time ?? 0);
     if (request.auth?.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
