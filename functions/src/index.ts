@@ -22,6 +22,7 @@ const REGION = "asia-south1";
 const RECOVERY_COOLDOWN_MS = 24 * 60 * 60_000;
 
 const RECOVERY_ATTESTATION_VERIFIER_URL = defineString("RECOVERY_ATTESTATION_VERIFIER_URL", { default: "" });
+const RECOVERY_FUNCTIONS_SERVICE_ACCOUNT = defineString("RECOVERY_FUNCTIONS_SERVICE_ACCOUNT", { default: "default" });
 
 function requireRecoveryEnabled(): void {
   if (RECOVERY_ENABLED.value() !== "true") {
@@ -90,7 +91,7 @@ export const createRecoveryAttestationChallenge = onCall(
 
 /** Verify the full Android certificate chain against Google roots in the isolated Cloud Run verifier. */
 export const verifyRecoveryDeviceAttestation = onCall(
-  { region: REGION, enforceAppCheck: true },
+  { region: REGION, enforceAppCheck: true, serviceAccount: RECOVERY_FUNCTIONS_SERVICE_ACCOUNT },
   async request => {
     requireRecoveryEnabled();
     const owner = requireFreshOwner(request);

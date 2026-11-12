@@ -1,0 +1,156 @@
+name: Recovery staging deployment and APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: recovery-staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-build:
+    runs-on: ubuntu-latest
+    environment: recovery-staging
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+
+      - name: Authenticate to staging Google Cloud with Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Validate staging configuration without printing secrets
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
+          VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
+          ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
+          PUBLIC_KEYS: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          KEYSTORE_B64: ${{ secrets.AURELIA_RELEASE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in PROJECT_ID REGION FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then echo "::error::Missing recovery-staging environment setting: $name"; exit 1; fi
+          done
+          node -e 'const o=JSON.parse(process.env.PUBLIC_KEYS); if(!o[process.env.ACTIVE_KID]) process.exit(1);'
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/aurelia-release.jks"
+          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "$RUNNER_TEMP/google-services.json"
+          export GOOGLE_SERVICES_PATH="$RUNNER_TEMP/google-services.json"
+          node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); if(!p || c.project_info?.project_id!==process.env.PROJECT_ID) process.exit(1);'
+          gcloud config set project "$PROJECT_ID"
+          for secret in PHONE_PEPPER RECOVERY_SIGNING_KEY_PKCS8; do
+            gcloud secrets describe "$secret" --project "$PROJECT_ID" >/dev/null
+            version="$(gcloud secrets versions list "$secret" --project "$PROJECT_ID" --filter='state=ENABLED' --format='value(name)' | head -n 1)"
+            test -n "$version"
+          done
+          echo "Staging project, key ID, public pin, app config, signing keystore and Secret Manager versions are present."
+
+      - name: Deploy Firebase Functions with staging-only recovery enabled
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
+          VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
+          FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          npm install --global firebase-tools@13.31.2
+          printf 'RECOVERY_ENABLED=true\nRECOVERY_SIGNING_KEY_ID=%s\nRECOVERY_ATTESTATION_VERIFIER_URL=%s\nRECOVERY_FUNCTIONS_SERVICE_ACCOUNT=%s\n'             "$ACTIVE_KID" "$VERIFIER_URL" "$FUNCTION_SA" > "functions/.env.$PROJECT_ID"
+          firebase deploy --only functions --project "$PROJECT_ID" --non-interactive
+          rm -f "functions/.env.$PROJECT_ID"
+          SERVICE_JSON="$(gcloud run services describe verifyRecoveryDeviceAttestation --project "$PROJECT_ID" --region "${{ vars.GCP_REGION }}" --format=json)"
+          echo "$SERVICE_JSON" | jq -e --arg sa "$FUNCTION_SA" '
+            .spec.template.spec.serviceAccountName == $sa and
+            ([.spec.template.spec.containers[].env[]? | select(.name=="RECOVERY_ENABLED" and .value=="true")] | length == 1)
+          ' >/dev/null
+          echo "Staging recovery functions deployed with the configured service account and RECOVERY_ENABLED=true."
+
+      - name: Generate Android project and inject staging Firebase config
+        shell: bash
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npm run build
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          mv android/templates "$template_dir"
+          rmdir android
+          npx cap add android
+          mkdir -p android/templates android/app
+          cp -a "$template_dir/." android/templates/
+          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
+          test -s android/app/google-services.json
+
+      - name: Apply pinned recovery key ring and release signing
+        env:
+          RECOVERY_GRANT_PUBLIC_KEYS_JSON: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
+          AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-release.jks
+          AURELIA_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
+          AURELIA_RELEASE_KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
+          AURELIA_RELEASE_KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/aurelia-release.jks" "$AURELIA_RELEASE_KEYSTORE_PATH"
+          node scripts/patch-android.js
+          npx cap sync android
+
+      - name: Build staging APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace assembleRelease
+
+      - name: Verify APK signature and staging Firebase project
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          EXPECTED_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-certificate.txt"
+          ACTUAL_SHA256="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/apk-certificate.txt" | tr -d ':')"
+          EXPECTED="$(echo "$EXPECTED_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          test -n "$ACTUAL_SHA256" && test "$ACTUAL_SHA256" = "$EXPECTED"
+          sha256sum "$APK" | tee "$RUNNER_TEMP/apk-sha256.txt"
+          node -e 'const c=require("./android/app/google-services.json"); if(c.project_info.project_id!==process.env.PROJECT_ID) process.exit(1);'
+          cat "$RUNNER_TEMP/apk-sha256.txt"
+          grep -E 'SHA-1|SHA-256' "$RUNNER_TEMP/apk-certificate.txt"
+
+      - name: Upload staging APK and non-secret fingerprints
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aurelia-recovery-staging-apk-${{ github.sha }}
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            ${{ runner.temp }}/apk-sha256.txt
+            ${{ runner.temp }}/apk-certificate.txt
+          if-no-files-found: error
+          retention-days: 30

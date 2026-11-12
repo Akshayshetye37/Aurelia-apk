@@ -83,3 +83,41 @@ jobs:
             --project "$PROJECT_ID" --region "$REGION" \
             --member "serviceAccount:$FUNCTIONS_SERVICE_ACCOUNT" --role "roles/run.invoker"
           gcloud run services describe aurelia-recovery-attestation --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)'
+
+      
+      - name: Verify verifier IAM policy and fail-closed HTTP probes
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          FUNCTIONS_SERVICE_ACCOUNT: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          URL="$(gcloud run services describe aurelia-recovery-attestation --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+          test -n "$URL"
+          POLICY="$(gcloud run services get-iam-policy aurelia-recovery-attestation --project "$PROJECT_ID" --region "$REGION" --format=json)"
+          if echo "$POLICY" | jq -e '[.bindings[]? | select(.role == "roles/run.invoker") | .members[]? | select(. == "allUsers" or . == "allAuthenticatedUsers")] | length > 0' >/dev/null; then
+            echo "::error::Attestation verifier has a public invoker binding."
+            exit 1
+          fi
+          if ! echo "$POLICY" | jq -e --arg member "serviceAccount:$FUNCTIONS_SERVICE_ACCOUNT" '[.bindings[]? | select(.role == "roles/run.invoker") | .members[]? | select(. == $member)] | length == 1' >/dev/null; then
+            echo "::error::Functions runtime service account is missing roles/run.invoker."
+            exit 1
+          fi
+          unauth="$(curl -sS -o "$RUNNER_TEMP/attestation-unauth.json" -w '%{http_code}' "$URL/healthz")"
+          if [[ "$unauth" != "401" && "$unauth" != "403" ]]; then
+            echo "::error::Unauthenticated verifier probe expected 401/403, received $unauth."
+            exit 1
+          fi
+          TOKEN="$(gcloud auth print-identity-token --audiences="$URL")"
+          health="$(curl -sS -o "$RUNNER_TEMP/attestation-health.json" -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$URL/healthz")"
+          if [[ "$health" != "200" ]]; then
+            echo "::error::Authenticated verifier health probe failed with HTTP $health."
+            exit 1
+          fi
+          malformed="$(curl -sS -o "$RUNNER_TEMP/attestation-invalid.json" -w '%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data '{"certificateChainBase64":[],"challengeBase64":"AAAAAAAAAAAAAAAAAAAAAA"}' "$URL/verify")"
+          if [[ "$malformed" != "400" ]]; then
+            echo "::error::Authenticated malformed attestation must fail closed with HTTP 400; received $malformed."
+            exit 1
+          fi
+          echo "Verifier IAM is private; authenticated health succeeds; malformed attestation is rejected."
