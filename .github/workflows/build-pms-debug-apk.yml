@@ -61,6 +61,8 @@ jobs:
           test -f android/app/build.gradle
 
       - name: Apply PMS Android configuration
+        env:
+          RECOVERY_GRANT_PUBLIC_KEYS_JSON: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
         run: node scripts/patch-android.js
 
       - name: Sync Capacitor Android project
