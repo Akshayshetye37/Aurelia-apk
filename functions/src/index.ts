@@ -485,6 +485,9 @@ export const issueRecoveryGrant = onCall(
         const alertEvent = alertEventSnapshot.data();
         if (!alertEvent || alertEvent.tenantId !== tenantId ||
             alertEvent.type !== "RECOVERY_COOLDOWN_STARTED") throw GENERIC;
+        // Consume this fresh phone-auth event so the same proof cannot spam alert retries.
+        tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
+          expiresAt: nowMs + 5 * 60_000 });
         // Rotate per-device proofs before retrying FCM. Tokens from an earlier,
         // possibly delayed delivery can no longer acknowledge the new alert.
         tx.update(cooldownRef, { alertedDeviceHashes, updatedAt: FieldValue.serverTimestamp() });
