@@ -1,17 +1,46 @@
 package com.aurelia.pms.security
 
+import android.content.Context
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
+import java.security.KeyFactory
 import java.security.MessageDigest
 import java.security.PublicKey
 import java.security.Signature
+import java.security.interfaces.ECPublicKey
+import java.security.spec.X509EncodedKeySpec
 import java.util.Base64
 
-/** Strict ES256 verifier for backend-issued, short-lived recovery grants. */
+/** Strict ES256 verifier. Trust anchors are packaged in the APK, never fetched dynamically. */
 object RecoveryGrantVerifier {
     sealed interface Result {
-        data object Ok : Result
+        data class Verified(val jti: String, val expiresAtEpochSec: Long) : Result
         data class Fail(val reason: String) : Result
+    }
+
+    fun keyId(jwt: String): String {
+        val parts = jwt.split('.')
+        require(parts.size == 3 && parts.all { it.isNotEmpty() })
+        val header = JSONObject(String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8))
+        require(header.optString("alg") == "ES256" && header.optString("typ") == "JWT")
+        val kid = header.optString("kid")
+        require(kid.matches(Regex("^[A-Za-z0-9._-]{1,64}$")))
+        return kid
+    }
+
+    fun pinnedPublicKey(context: Context, kid: String): PublicKey? {
+        if (!kid.matches(Regex("^[A-Za-z0-9._-]{1,64}$"))) return null
+        return runCatching {
+            val pins = JSONObject(context.applicationContext.getString(
+                com.aurelia.pms.R.string.recovery_grant_public_keys_json
+            ))
+            val encoded = pins.optString(kid).takeIf { it.isNotEmpty() } ?: return null
+            val der = Base64.getDecoder().decode(encoded)
+            val key = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(der))
+            val ec = key as? ECPublicKey ?: return null
+            if (ec.params.order.bitLength() != 256) return null
+            key
+        }.getOrNull()
     }
 
     fun verify(
@@ -20,7 +49,6 @@ object RecoveryGrantVerifier {
         tenantId: String,
         nonce: String,
         deviceIdHash: String,
-        markJtiUsed: (String) -> Boolean,
         nowEpochSec: Long = System.currentTimeMillis() / 1000
     ): Result {
         return try {
@@ -35,7 +63,9 @@ object RecoveryGrantVerifier {
 
             val header = JSONObject(String(headerBytes, StandardCharsets.UTF_8))
             if (header.optString("alg") != "ES256" || header.optString("typ") != "JWT" ||
-                header.length() != 2) return Result.Fail("header")
+                header.length() != 3 || !header.optString("kid").matches(Regex("^[A-Za-z0-9._-]{1,64}$"))) {
+                return Result.Fail("header")
+            }
 
             val signature = Signature.getInstance("SHA256withECDSA")
             signature.initVerify(pinnedPublicKey)
@@ -59,8 +89,7 @@ object RecoveryGrantVerifier {
                 expiresAt > nowEpochSec && expiresAt > issuedAt &&
                 expiresAt - issuedAt <= 300 && jti.matches(Regex("^[0-9a-fA-F-]{36}$"))
             if (!valid) return Result.Fail("claims")
-            if (!markJtiUsed(jti)) return Result.Fail("replay")
-            Result.Ok
+            Result.Verified(jti, expiresAt)
         } catch (_: Exception) {
             Result.Fail("malformed")
         }
