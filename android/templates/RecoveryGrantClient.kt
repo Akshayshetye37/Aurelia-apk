@@ -75,10 +75,10 @@ class RecoveryGrantClient(private val context: Context) {
             @Suppress("UNCHECKED_CAST")
             val data = result.result?.data as? Map<*, *> ?: throw IllegalStateException("Recovery authorization failed.")
             when (data["status"] as? String) {
-                "COOLDOWN" -> GrantIssueResult.Cooldown(
-                    (data["eligibleAt"] as? Number)?.toLong()
-                        ?: throw IllegalStateException("Recovery cooldown response is invalid.")
-                )
+                "COOLDOWN" -> {
+                    val eligibleAt = (data["eligibleAt"] as? Number)?.toLong() ?: 0L
+                    GrantIssueResult.Cooldown(eligibleAt.takeIf { it > 0L }, eligibleAt <= 0L)
+                }
                 "ISSUED" -> GrantIssueResult.Issued(
                     data["grant"] as? String ?: throw IllegalStateException("Recovery grant is missing.")
                 )
@@ -137,7 +137,7 @@ class RecoveryGrantClient(private val context: Context) {
 
     sealed class GrantIssueResult {
         data class Issued(val grant: String) : GrantIssueResult()
-        data class Cooldown(val eligibleAtEpochMs: Long) : GrantIssueResult()
+        data class Cooldown(val eligibleAtEpochMs: Long?, val awaitingOwnerAlert: Boolean) : GrantIssueResult()
     }
 
     data class GrantRequest(val task: Task<GrantIssueResult>, val nonce: String, val deviceIdHash: String, val startedAtElapsedMs: Long)
