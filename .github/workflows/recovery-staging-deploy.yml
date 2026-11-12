@@ -45,6 +45,9 @@ jobs:
           VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
           ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
           PUBLIC_KEYS: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
+          APP_CHECK_REGISTERED: ${{ vars.APP_CHECK_PLAY_INTEGRITY_REGISTERED }}
+          APP_CHECK_SIGNER_SHA256: ${{ vars.APP_CHECK_SIGNER_SHA256 }}
+          ATTESTATION_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
           KEYSTORE_B64: ${{ secrets.AURELIA_RELEASE_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
@@ -52,9 +55,19 @@ jobs:
           KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          for name in PROJECT_ID REGION FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+          for name in PROJECT_ID REGION FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS APP_CHECK_REGISTERED APP_CHECK_SIGNER_SHA256 ATTESTATION_SIGNER_SHA256 GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [[ -z "${!name}" ]]; then echo "::error::Missing recovery-staging environment setting: $name"; exit 1; fi
           done
+          if [[ "$APP_CHECK_REGISTERED" != "true" ]]; then
+            echo "::error::Register com.aurelia.pms with Play Integrity in Firebase App Check before staging deployment."
+            exit 1
+          fi
+          APP_CHECK_CERT="$(echo "$APP_CHECK_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          ATTESTATION_CERT="$(echo "$ATTESTATION_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          if [[ "$APP_CHECK_CERT" != "$ATTESTATION_CERT" ]]; then
+            echo "::error::Firebase App Check and hardware-attestation signer fingerprints must match the release APK signer."
+            exit 1
+          fi
           node -e 'const o=JSON.parse(process.env.PUBLIC_KEYS); if(!o[process.env.ACTIVE_KID]) process.exit(1);'
           echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/aurelia-release.jks"
           echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "$RUNNER_TEMP/google-services.json"

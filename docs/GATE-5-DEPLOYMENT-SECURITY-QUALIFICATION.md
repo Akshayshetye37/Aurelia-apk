@@ -16,7 +16,9 @@
 
 The generated Android application installs Firebase App Check with the Play Integrity provider in its custom `Application.onCreate`, before Firebase Auth, Functions or Messaging use the default app. Missing Firebase configuration does not block local PIN/biometric use; recovery calls remain fail-closed because the callable endpoints enforce App Check.
 
-Before staging, register package `com.aurelia.pms` in Firebase App Check with the Play Integrity provider, link the Play Integrity API to the same Google Cloud project, and register the release signing certificate SHA-256 used by the staging APK. Do not enable a debug provider in release builds. Emulator callable-runtime tests invoke the Firebase Functions handlers directly and do not constitute App Check verification.
+Before staging, register package `com.aurelia.pms` in Firebase App Check with the Play Integrity provider, link the Play Integrity API to the same Google Cloud project, and register the release signing certificate SHA-256 used by the staging APK. The staging environment must set `APP_CHECK_PLAY_INTEGRITY_REGISTERED=true` and `APP_CHECK_SIGNER_SHA256`; the workflow compares this fingerprint with `ATTESTATION_APP_SIGNER_SHA256` before building.
+
+If the APK is distributed outside Google Play, configure the App Check Play Integrity app registration so it does not require the `PLAY_RECOGNIZED` or `LICENSED` verdicts that sideloaded builds cannot satisfy; apply the intended device-integrity threshold explicitly. Do not enable a debug provider in release builds. Register any debug token only in the staging Firebase project and verify that the same token is rejected by production. Emulator callable-runtime tests invoke Firebase Functions handlers directly and do not constitute App Check verification.
 
 ## Remaining staging security probes
 
