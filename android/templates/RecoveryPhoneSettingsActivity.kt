@@ -12,6 +12,11 @@ import androidx.fragment.app.FragmentActivity
 import com.aurelia.pms.security.RecoveryDeviceIdentity
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.messaging.FirebaseMessaging
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.pm.PackageManager
+import android.os.Build
+import java.util.Base64
 
 /** Explicit Settings workflow; Hotel Identity fields never call this activity. */
 class RecoveryPhoneSettingsActivity : FragmentActivity() {
@@ -23,6 +28,7 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
     private var candidate = ""
     private var stage = Stage.NEW
     private var oldPhoneToken: String? = null
+    private var pendingNotificationPermissionAction: (() -> Unit)? = null
     private enum class Stage { OLD, NEW }
 
     override fun onCreate(savedInstanceState: Bundle?) {
