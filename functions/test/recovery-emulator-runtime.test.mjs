@@ -20,6 +20,7 @@ process.env.RECOVERY_ENABLED = 'true';
 process.env.RECOVERY_SIGNING_KEY_ID = SIGNING_KEY_ID;
 process.env.PHONE_PEPPER = PHONE_PEPPER;
 process.env.RECOVERY_SIGNING_KEY_PKCS8 = privateKeyPem;
+process.env.FIREBASE_WEB_API_KEY = 'fake-api-key';
 
 const [{ getAuth }, { getFirestore }, { getMessaging }, functions] = await Promise.all([
   import('firebase-admin/auth'),
@@ -85,15 +86,16 @@ function phoneDigest(tenantId, phone) {
 }
 
 function ownerAuth(uid, tenantId, options = {}) {
-  const provider = options.provider ?? 'password';
+  const provider = options.provider ?? 'custom';
   const factor = options.factor ?? 'email_link';
   const authTime = options.authTime ?? Math.floor(Date.now() / 1000);
   return {
     uid,
     token: {
-      role: 'owner', tenantId, auth_time: authTime, ownerAuthFactor: factor,
-      ownerAuthFactorAuthTime: authTime,
-      firebase: { sign_in_provider: provider, identities: provider === 'password' ? { email: ['owner@example.invalid'] } : {} }
+      role: 'owner', tenantId, auth_time: authTime,
+      email: 'owner@example.invalid', email_verified: options.emailVerified ?? factor === 'email_link',
+      ownerAuthFactor: factor, ownerAuthFactorAuthTime: options.factorAuthTime ?? authTime,
+      firebase: { sign_in_provider: provider }
     }
   };
 }
@@ -944,4 +946,72 @@ test('different tenant owner UID cannot cancel another owner UID recovery reques
     tenantId, deviceIdHash: secondaryDeviceHash
   }, ownerAuth(secondaryUid, tenantId)), 'different owner UID cannot cancel primary recovery request');
   assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'ALERT_PENDING');
+});
+
+
+test('one-time Firebase email link mints a fresh owner session only for the enrolled recovery owner', async () => {
+  const tenantId = 'tenant-emulator-email-link-owner';
+  const ownerUid = 'owner-emulator-email-link-owner';
+  const otherUid = 'other-emulator-email-link-owner';
+  const email = 'primary-owner@example.invalid';
+  const phone = '+15555550120';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
+  await auth.createUser({ uid: ownerUid, email, emailVerified: true });
+  await auth.setCustomUserClaims(ownerUid, { role: 'owner', tenantId });
+  const now = Math.floor(Date.now() / 1000);
+  const originalFetch = globalThis.fetch;
+  const originalVerify = auth.verifyIdToken;
+  const originalCreateCustomToken = auth.createCustomToken;
+  let exchangedBody;
+  let mintedClaims;
+  globalThis.fetch = async (url, init) => {
+    assert.match(String(url), /accounts:signInWithEmailLink/);
+    exchangedBody = JSON.parse(init.body);
+    return { ok: true, json: async () => ({ idToken: 'emulator-email-link-id-token', localId: ownerUid }) };
+  };
+  auth.verifyIdToken = async () => ({
+    uid: ownerUid, email, email_verified: true, auth_time: now,
+    firebase: { sign_in_provider: 'password' }
+  });
+  auth.createCustomToken = async (uid, claims) => {
+    assert.equal(uid, ownerUid);
+    mintedClaims = claims;
+    return 'emulator-owner-custom-token';
+  };
+  const emailLink = `https://${PROJECT_ID}.firebaseapp.com/__/auth/action?apiKey=fake-api-key&mode=signIn&oobCode=single-use-code`;
+  try {
+    const result = await callable(functions.exchangeOwnerEmailLink, {
+      tenantId, deviceIdHash: ownerDeviceHash, email, emailLink
+    });
+    assert.equal(result.customToken, 'emulator-owner-custom-token');
+    assert.equal(exchangedBody.email, email);
+    assert.equal(exchangedBody.oobCode, 'single-use-code');
+    assert.equal(exchangedBody.returnSecureToken, true);
+    assert.equal(mintedClaims.ownerAuthFactor, 'email_link');
+    assert.ok(mintedClaims.ownerAuthFactorAuthTime >= now);
+    assert.equal(mintedClaims.tenantId, tenantId);
+
+    auth.verifyIdToken = async () => ({
+      uid: otherUid, email, email_verified: true, auth_time: now,
+      firebase: { sign_in_provider: 'password' }
+    });
+    auth.createCustomToken = async () => {
+      throw new Error('custom token must not be minted for another UID');
+    };
+    await assert.rejects(callable(functions.exchangeOwnerEmailLink, {
+      tenantId, deviceIdHash: ownerDeviceHash, email, emailLink
+    }), 'email link identity must match the immutable recovery owner UID');
+
+    await assert.rejects(callable(functions.exchangeOwnerEmailLink, {
+      tenantId, deviceIdHash: ownerDeviceHash, email,
+      emailLink: 'https://attacker.example/__/auth/action?apiKey=fake-api-key&mode=signIn&oobCode=bad'
+    }), 'untrusted email-link host must be rejected');
+  } finally {
+    globalThis.fetch = originalFetch;
+    auth.verifyIdToken = originalVerify;
+    auth.createCustomToken = originalCreateCustomToken;
+  }
 });
