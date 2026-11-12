@@ -143,3 +143,18 @@ test('local grant replay cache is Keystore encrypted, bounded to grant expiry an
   assert.match(store, /entries\.any \{ it\.first == jti \}/);
   assert.match(store, /MAX_ENTRIES = 20/);
 });
+
+test('normal PIN and biometric unlock remain local when the backend is unavailable', () => {
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  const pinStart = gate.indexOf('private fun submit()');
+  const pinEnd = gate.indexOf('private fun ', pinStart + 1);
+  const pinFlow = gate.slice(pinStart, pinEnd);
+  assert.match(pinFlow, /manager\.unlock\(first, envelope\)/);
+  assert.doesNotMatch(pinFlow, /FirebaseFunctions|RecoveryGrantClient|getHttpsCallable|httpsCallable/);
+
+  const biometricStart = gate.indexOf('private fun unlockWithBiometrics()');
+  const biometricEnd = gate.indexOf('private fun showUnrecoverableState', biometricStart);
+  const biometricFlow = gate.slice(biometricStart, biometricEnd);
+  assert.match(biometricFlow, /manager\.unlockWithDataKey\(unwrapped\)/);
+  assert.doesNotMatch(biometricFlow, /FirebaseFunctions|RecoveryGrantClient|getHttpsCallable|httpsCallable/);
+});

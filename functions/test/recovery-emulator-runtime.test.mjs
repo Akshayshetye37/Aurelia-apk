@@ -168,6 +168,9 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) + 60 })), 'future auth_time is rejected');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
+  }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) - 301 })), 'stale primary authentication is rejected');
+  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, ownerAuth('different-owner-uid', tenantId)), 'wrong owner UID cannot acknowledge');
   const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
@@ -446,6 +449,10 @@ test('independent primary owner can cancel during alert hold and cancellation re
     tenantId, deviceIdHash: independentDeviceHash
   }, ownerAuth(ownerUid, tenantId, { provider: 'phone', factor: undefined })),
   'phone-only owner cannot cancel');
+  await assert.rejects(callable(functions.cancelRecoveryRequest, {
+    tenantId, deviceIdHash: independentDeviceHash
+  }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) - 301 })),
+  'stale owner authentication cannot cancel');
   const cancelled = await callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: independentDeviceHash
   }, ownerAuth(ownerUid, tenantId));
@@ -453,6 +460,11 @@ test('independent primary owner can cancel during alert hold and cancellation re
   const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(state.state, 'CANCELLED');
   assert.equal(state.cancelledByDeviceHash, independentDeviceHash);
+  const events = await db.collection('recoverySecurityEvents').where('tenantId', '==', tenantId).get();
+  const audit = events.docs.map(doc => doc.data()).find(event => event.type === 'RECOVERY_REQUEST_CANCELLED');
+  assert.ok(audit);
+  assert.deepEqual(Object.keys(audit).sort(), ['createdAt', 'deviceIdHash', 'tenantId', 'type'].sort(),
+    'cancellation audit is limited to tenant, hashed device identity, event type and timestamp');
   const nextToken = await phoneAuthToken(phone);
   await assert.rejects(callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 's'.repeat(43), phoneIdToken: nextToken

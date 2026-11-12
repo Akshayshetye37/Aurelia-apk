@@ -204,6 +204,7 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.doesNotMatch(cancel, /pending\.deviceIdHash !== deviceIdHash/);
   assert.match(cancel, /state: "CANCELLED"/);
   assert.match(functions, /ownerAuthFactor/);
+  assert.match(functions, /ownerAuthFactorAuthTime/);
   assert.match(messageService, /NotificationManagerCompat\.from\(this\)\.areNotificationsEnabled\(\)/);
   assert.match(messageService, /acknowledgeRecoveryOwnerAlert/);
   assert.match(messageService, /Tasks\.await/);

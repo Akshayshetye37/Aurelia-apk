@@ -44,6 +44,12 @@ public final class RecoveryGrantVerifierInstrumentedTest {
     assertRejected(pair, legacy, UID, TENANT, KID);
 
     String valid = sign(pair, claims(), KID);
+    RecoveryGate.clear();
+    RecoveryGrantVerifier.Result accepted = RecoveryGrantVerifier.INSTANCE.verify(
+        valid, pair.getPublic(), TENANT, NONCE, DID, UID, KID, NOW);
+    assertTrue("correct pinned grant must verify locally",
+        accepted instanceof RecoveryGrantVerifier.Result.Verified);
+    assertFalse("local verification alone must not arm the recovery gate", RecoveryGate.isOpen());
     String[] parts = valid.split("\\.");
     byte[] signature = Base64.decode(parts[2], Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
     signature[signature.length - 1] ^= 1;
