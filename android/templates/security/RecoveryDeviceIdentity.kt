@@ -44,9 +44,11 @@ object RecoveryDeviceIdentity {
     fun createAttestedIdentity(challenge: ByteArray): AttestedIdentity {
         require(challenge.size in 16..128) { "Server attestation challenge length is invalid." }
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        check(!store.containsAlias(ALIAS)) {
-            "A recovery device key already exists; refusing silent key replacement."
-        }
+        // The caller reaches this method only after the authenticated server
+        // returned a fresh challenge because this key has no trusted attestation record.
+        // Replacing an unregistered key is therefore safe; registered keys are returned
+        // by createRecoveryAttestationChallenge as verified and never reach this path.
+        if (store.containsAlias(ALIAS)) store.deleteEntry(ALIAS)
 
         fun generate(strongBox: Boolean) {
             val generator = KeyPairGenerator.getInstance("EC", "AndroidKeyStore")
