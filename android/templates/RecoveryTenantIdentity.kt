@@ -28,7 +28,7 @@ object RecoveryTenantIdentity {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val blob = prefs.getString(BLOB, null)
         if (blob != null) {
-            val bound = decrypt(blob)
+            val bound = decrypt(blob, context)
             if (bound.startsWith("local_")) {
                 throw SecurityException("Legacy local-only tenant binding must be re-verified by the property owner in Settings.")
             }
@@ -60,7 +60,7 @@ object RecoveryTenantIdentity {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val existing = prefs.getString(BLOB, null)
         if (existing != null) {
-            val previous = decrypt(existing)
+            val previous = decrypt(existing, context)
             if (previous == tenant) return
             check(previous.startsWith("local_")) {
                 "This device is already bound to a different owner tenant."
@@ -76,7 +76,7 @@ object RecoveryTenantIdentity {
         }
         val nonce = ByteArray(12).also(SecureRandom()::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key(), GCMParameterSpec(128, nonce))
+        cipher.init(Cipher.ENCRYPT_MODE, key(context), GCMParameterSpec(128, nonce))
         cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
         val plain = tenant.toByteArray(Charsets.UTF_8)
         val encrypted = try { cipher.doFinal(plain) } finally { plain.fill(0) }
@@ -90,14 +90,14 @@ object RecoveryTenantIdentity {
         }
     }
 
-    private fun decrypt(blob: String): String {
+    private fun decrypt(blob: String, context: Context): String {
         val packed = Base64.decode(blob, Base64.NO_WRAP)
         require(packed.size > 28)
         val nonce = packed.copyOfRange(0, 12)
         val encrypted = packed.copyOfRange(12, packed.size)
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, nonce))
+            cipher.init(Cipher.DECRYPT_MODE, key(context), GCMParameterSpec(128, nonce))
             cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
             val plain = cipher.doFinal(encrypted)
             try {
@@ -110,7 +110,8 @@ object RecoveryTenantIdentity {
         }
     }
 
-    private fun key(): SecretKey {
+    private fun key(context: Context): SecretKey {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(ALIAS, null) as? SecretKey)?.let { return it }
         if (prefs.contains(BLOB)) {
