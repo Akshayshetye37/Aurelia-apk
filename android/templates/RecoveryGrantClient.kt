@@ -65,8 +65,10 @@ class RecoveryGrantClient(private val context: Context) {
             val recorded = if (consumed) runCatching {
                 replayStore.markUsed(claims.jti, claims.expiresAt)
             }.getOrDefault(false) else false
-            if (consumed && recorded) {
+            val armed = consumed && recorded && runCatching {
                 RecoveryGate.armAfterServerConsumption(claims.expiresAt)
+            }.isSuccess
+            if (armed) {
                 onResult(true)
             } else {
                 RecoveryGate.clear()
