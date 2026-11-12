@@ -44,6 +44,12 @@ jobs:
         run: npm test
         working-directory: functions
 
+      - name: Install Firebase Emulator CLI
+        run: npm install --global firebase-tools@13.31.2
+
+      - name: Run Auth and Firestore emulator recovery state-machine tests
+        run: firebase emulators:exec --only auth,firestore --project demo-aurelia-recovery "cd functions && npm run test:emulator"
+
   otp-contract-tests:
     runs-on: ubuntu-latest
     steps:
