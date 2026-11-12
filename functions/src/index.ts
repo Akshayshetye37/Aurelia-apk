@@ -524,7 +524,16 @@ export const consumeRecoveryGrant = onCall(
     const privateKeyObject = createPrivateKey(privateKeyPem);
     const publicKeyPem = createPublicKey(privateKeyObject).export({ type: "spki", format: "pem" }).toString();
     const publicKeyObject = await importSPKI(publicKeyPem, "ES256");
-    const verified = await jwtVerify(grant, publicKeyObject, { issuer: ISSUER, audience: AUDIENCE });
+    const verified = await jwtVerify(grant, publicKeyObject, {
+      issuer: ISSUER, audience: AUDIENCE, maxTokenAge: "5m"
+    });
+    const header = verified.protectedHeader;
+    const issuedAt = Number(verified.payload.iat);
+    const expiresAt = Number(verified.payload.exp);
+    if (header.alg !== "ES256" || header.typ !== "JWT" ||
+        header.kid !== RECOVERY_SIGNING_KEY_ID.value() || Object.keys(header).length !== 3 ||
+        !Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) ||
+        expiresAt <= issuedAt || expiresAt - issuedAt > 300) throw GENERIC;
     const { sub, jti, did, nonce, scope } = verified.payload;
     if (typeof sub !== "string" || typeof jti !== "string" || typeof did !== "string" ||
         typeof nonce !== "string" || scope !== "recovery:continue") throw GENERIC;
