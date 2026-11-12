@@ -67,8 +67,15 @@ test('native recovery settings uses the encrypted phone record and secondary pho
   assert.match(activity, /FirebasePhoneIdentity/);
   assert.match(activity, /registerRecoveryPhone/);
   assert.match(activity, /oldPhoneToken/);
+  assert.match(activity, /createRecoveryAttestationChallenge/);
+  assert.match(activity, /verifyRecoveryDeviceAttestation/);
+  assert.match(activity, /registerOwnerNotificationDevice/);
+  assert.match(activity, /POST_NOTIFICATIONS/);
+  assert.match(activity, /offline recovery key is still required/);
   const client = read('android/templates/RecoveryGrantClient.kt');
   assert.match(client, /currentPhoneIdToken/);
+  assert.match(client, /RecoveryGrantVerifier\.verify/);
+  assert.match(client, /cancelRecoveryRequest/);
 });
 
 
