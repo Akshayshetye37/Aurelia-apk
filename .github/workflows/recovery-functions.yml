@@ -23,12 +23,17 @@ on:
       - 'tests/otp-recovery-*.test.mjs'
       - 'scripts/patch-android.js'
 
+concurrency:
+  group: recovery-functions-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
 jobs:
   recovery-functions:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -67,11 +72,12 @@ jobs:
         with:
           name: recovery-emulator-runtime-logs
           path: recovery-emulator-runtime.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
   otp-contract-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
