@@ -62,9 +62,8 @@ object RecoveryTenantIdentity {
             val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val existingBlob = prefs.getString(BLOB, null)
             val previous = existingBlob?.let { decrypt(it, context) }
-            val previousTenant = previous?.let {
-                runCatching { JSONObject(it).getString("tenantId") }.getOrElse { it }
-            }
+            val previousTenant = if (previous == null) null else
+                runCatching { JSONObject(previous).getString("tenantId") }.getOrDefault(previous)
             val previousRecord = previous?.let { runCatching { JSONObject(it) }.getOrNull() }
             val previousUid = previousRecord?.optString("ownerUid")?.takeIf { !it.isNullOrBlank() }
             if (existingBlob != null && previousTenant == tenant && previousUid == null) {
