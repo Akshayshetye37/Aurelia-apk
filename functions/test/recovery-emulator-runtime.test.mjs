@@ -247,8 +247,8 @@ test('only an owner device whose FCM endpoint accepted the alert may start the c
   const tenantId = 'tenant-emulator-partial-fcm';
   const ownerUid = 'owner-emulator-partial-fcm';
   const phone = '+15555550102';
-  const recoveryDeviceHash = 'g'.repeat(64);
-  const secondOwnerDeviceHash = 'h'.repeat(64);
+  const recoveryDeviceHash = 'c'.repeat(64);
+  const secondOwnerDeviceHash = 'd'.repeat(64);
   await seedTenant({
     tenantId, phone, ownerUid, recoveryDeviceHash,
     ownerDeviceHashes: [recoveryDeviceHash, secondOwnerDeviceHash]
