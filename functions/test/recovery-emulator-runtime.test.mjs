@@ -142,8 +142,14 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   assert.equal(cooldown.eligibleAt, null, 'FCM acceptance alone must not start the cooldown');
 
   const eventId = cooldown.alertEventId;
-  const secondOwnerAlert = sentMessages.find(message => message.data.deviceIdHash === secondOwnerDeviceHash);
+  const ownerAlerts = sentMessages.filter(message => message.data.deviceIdHash === secondOwnerDeviceHash);
+  assert.equal(ownerAlerts.length, 2, 'a retry sends a fresh owner alert with a rotated token');
+  const oldAckToken = ownerAlerts[0].data.ackToken;
+  const secondOwnerAlert = ownerAlerts.at(-1);
   assert.ok(secondOwnerAlert?.data.ackToken, 'independent owner device receives its one-time acknowledgement token');
+  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: oldAckToken
+  }, ownerAuth(ownerUid, tenantId)), 'an older notification token is invalidated when a retry rotates the proof');
   const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, ownerAuth(ownerUid, tenantId));
