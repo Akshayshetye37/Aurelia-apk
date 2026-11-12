@@ -121,7 +121,6 @@ test('recovery grants have a five-minute lifetime on backend and client', () => 
 
 test('Android verifies the pinned ES256 signature before server consumption and gate arming', () => {
   const verifier = read('android/templates/security/RecoveryGrantVerifier.kt');
-  const pins = read('android/templates/security/RecoveryGrantKeySet.kt');
   const patcher = read('scripts/patch-android.js');
   assert.match(grantClient, /RecoveryGrantVerifier\.verify\(grant, pinnedKey, tenantId, nonce, deviceHash\)/);
   assert.match(grantClient, /RecoveryGrantVerifier\.pinnedPublicKey\(context, kid\)/);
@@ -129,7 +128,8 @@ test('Android verifies the pinned ES256 signature before server consumption and 
   assert.match(verifier, /SHA256withECDSA/);
   assert.match(verifier, /header\.optString\("kid"\)/);
   assert.match(verifier, /expiresAt - issuedAt <= 300/);
-  assert.match(pins, /recovery_grant_public_keys_json/);
+  assert.match(verifier, /recovery_grant_public_keys_json/);
+  assert.match(verifier, /KeyFactory.getInstance\("EC"\)/);
   assert.match(patcher, /RECOVERY_GRANT_PUBLIC_KEYS_JSON/);
   assert.match(patcher, /aurelia_recovery_grant_keys.xml/);
   assert.match(grantClient, /RecoveryGate\.armAfterServerConsumption\(/);
