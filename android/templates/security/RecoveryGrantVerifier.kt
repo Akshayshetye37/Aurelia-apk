@@ -1,6 +1,7 @@
 package com.aurelia.pms.security
 
 import android.content.Context
+import android.util.Base64
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import java.security.KeyFactory
@@ -9,7 +10,6 @@ import java.security.PublicKey
 import java.security.Signature
 import java.security.interfaces.ECPublicKey
 import java.security.spec.X509EncodedKeySpec
-import java.util.Base64
 
 /** Strict ES256 verifier. Trust anchors are packaged in the APK, never fetched dynamically. */
 object RecoveryGrantVerifier {
@@ -22,7 +22,7 @@ object RecoveryGrantVerifier {
         require(jwt.length in 100..4096)
         val parts = jwt.split('.')
         require(parts.size == 3 && parts.all { it.isNotEmpty() })
-        val header = JSONObject(String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8))
+        val header = JSONObject(String(Base64.decode(parts[0], Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING), StandardCharsets.UTF_8))
         require(header.optString("alg") == "ES256" && header.optString("typ") == "JWT")
         val kid = header.optString("kid")
         require(kid.matches(Regex("^[A-Za-z0-9._-]{1,64}$")))
@@ -44,6 +44,8 @@ object RecoveryGrantVerifier {
         }.getOrNull()
     }
 
+    private val UrlBase64 = object { fun decode(value: String) = Base64.decode(value, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING) }
+
     fun verify(
         jwt: String,
         pinnedPublicKey: PublicKey,
@@ -56,7 +58,7 @@ object RecoveryGrantVerifier {
             if (jwt.length !in 100..4096) return Result.Fail("size")
             val parts = jwt.split('.')
             if (parts.size != 3 || parts.any { it.isEmpty() }) return Result.Fail("format")
-            val decoder = Base64.getUrlDecoder()
+            val decoder = UrlBase64
             val headerBytes = decoder.decode(parts[0])
             val payloadBytes = decoder.decode(parts[1])
             val rawSignature = decoder.decode(parts[2])
