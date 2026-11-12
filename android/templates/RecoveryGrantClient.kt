@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import com.aurelia.pms.security.RecoveryGate
 import com.aurelia.pms.security.RecoveryGrantReplayStore
+import com.aurelia.pms.security.RecoveryGrantVerifier
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.android.gms.tasks.Task
@@ -67,17 +68,25 @@ class RecoveryGrantClient(private val context: Context) {
      * atomically consumes jti. A durable local replay marker is required before arming.
      */
     fun consumeAndArm(grant: String, nonce: String, deviceHash: String, tenantId: String, startedAtElapsedMs: Long, onResult: (Boolean) -> Unit) {
-        val claims = try { inspectClaims(grant, nonce, deviceHash, tenantId) }
-        catch (_: Exception) { onResult(false); return }
+        val verified = try {
+            val kid = RecoveryGrantVerifier.keyId(grant)
+            val pinnedKey = RecoveryGrantVerifier.pinnedPublicKey(context, kid)
+                ?: throw SecurityException("Recovery signing key is not pinned in this app version.")
+            when (val result = RecoveryGrantVerifier.verify(grant, pinnedKey, tenantId, nonce, deviceHash)) {
+                is RecoveryGrantVerifier.Result.Verified -> result
+                is RecoveryGrantVerifier.Result.Fail -> throw SecurityException("Recovery grant verification failed.")
+            }
+        } catch (_: Exception) { onResult(false); return }
 
-        if (replayStore.isUsed(claims.jti)) {
+        if (replayStore.isUsed(verified.jti)) {
             onResult(false)
             return
         }
+
         consumeRecoveryGrant(grant, nonce, deviceHash).addOnCompleteListener { task ->
             val consumed = task.isSuccessful && task.result == true
             val recorded = if (consumed) runCatching {
-                replayStore.markUsed(claims.jti, claims.expiresAt)
+                replayStore.markUsed(verified.jti, verified.expiresAtEpochSec)
             }.getOrDefault(false) else false
             val remainingGrantMs = 5 * 60_000L - (SystemClock.elapsedRealtime() - startedAtElapsedMs)
             val armed = consumed && recorded && runCatching {
@@ -92,31 +101,6 @@ class RecoveryGrantClient(private val context: Context) {
         }
     }
 
-    private fun inspectClaims(jwt: String, nonce: String, deviceHash: String, tenantId: String): GrantClaims {
-        require(jwt.length in 100..4096)
-        val parts = jwt.split('.')
-        require(parts.size == 3 && parts.all { it.isNotEmpty() })
-        val decoder = Base64.getUrlDecoder()
-        val header = JSONObject(String(decoder.decode(parts[0]), Charsets.UTF_8))
-        require(header.optString("alg") == "ES256" && header.optString("typ") == "JWT" && header.length() == 2)
-        val payload = JSONObject(String(decoder.decode(parts[1]), Charsets.UTF_8))
-        val now = System.currentTimeMillis() / 1000
-        val issuedAt = payload.optLong("iat", -1)
-        val expiresAt = payload.optLong("exp", -1)
-        val jti = payload.optString("jti")
-        require(payload.optString("iss") == "aurelia-recovery")
-        require(payload.optString("aud") == "aurelia-recovery-client")
-        require(payload.optString("scope") == "recovery:continue")
-        require(payload.optString("sub") == tenantId)
-        require(payload.optString("did") == deviceHash)
-        require(payload.optString("nonce") == nonce)
-        require(issuedAt in 1..(now + 30))
-        require(expiresAt > now && expiresAt > issuedAt && expiresAt - issuedAt <= 300)
-        require(jti.matches(Regex("^[0-9a-fA-F-]{36}$")))
-        return GrantClaims(jti, expiresAt)
-    }
-
-    private data class GrantClaims(val jti: String, val expiresAt: Long)
     sealed class GrantIssueResult {
         data class Issued(val grant: String) : GrantIssueResult()
         data class Cooldown(val eligibleAtEpochMs: Long) : GrantIssueResult()
