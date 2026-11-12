@@ -72,6 +72,15 @@ test('recovery phone registration is owner-authenticated and tenant-bound', () =
   assert.match(registration, /auth\.token\.tenantId !== tenantId/);
 });
 
+test('recovery grants are bound to the device key registered by the authenticated owner', () => {
+  const registration = functions.slice(functions.indexOf('export const registerRecoveryPhone'), functions.indexOf('export const issueRecoveryGrant'));
+  const issuance = functions.slice(functions.indexOf('export const issueRecoveryGrant'), functions.indexOf('export const consumeRecoveryGrant'));
+  assert.match(registration, /const deviceIdHash = validateDeviceHash/);
+  assert.match(registration, /current\?\.deviceIdHash && current\.deviceIdHash !== deviceIdHash/);
+  assert.match(registration, /deviceIdHash,/);
+  assert.match(issuance, /phoneRecord\.deviceIdHash !== deviceIdHash/);
+});
+
 test('recovery grants have a five-minute lifetime on backend and client', () => {
   assert.match(functions, /setExpirationTime\(now \+ 300\)/);
   assert.match(functions, /expiresAt: Date\.now\(\) \+ 5 \* 60_000/);
