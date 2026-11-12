@@ -220,7 +220,7 @@ function validateNonce(value: unknown): string {
   return nonce;
 }
 
-async async function requireAttestedDevice(tenantId: string, deviceIdHash: string, ownerUid?: string): Promise<void> {
+async function requireAttestedDevice(tenantId: string, deviceIdHash: string, ownerUid?: string): Promise<void> {
   const snapshot = await db.doc(`recoveryDeviceAttestations/${tenantId}_${deviceIdHash}`).get();
   const attestation = snapshot.data();
   if (!attestation || attestation.status !== "VERIFIED" ||
