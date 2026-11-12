@@ -88,6 +88,12 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                 setTextColor(android.graphics.Color.WHITE)
             })
             addView(status)
+            addView(TextView(this@RecoveryPhoneSettingsActivity).apply {
+                text = "SMS OTP never unlocks the database. Your offline recovery key is still required. If both this device and that key are lost, the encrypted data is permanently unrecoverable."
+                textSize = 13f
+                setTextColor(android.graphics.Color.LTGRAY)
+                setPadding(0, 0, 0, 20)
+            })
             addView(phone, LinearLayout.LayoutParams(-1, -2))
             addView(button, LinearLayout.LayoutParams(-1, -2))
             addView(Button(this@RecoveryPhoneSettingsActivity).apply {
