@@ -192,7 +192,7 @@ export const issueRecoveryGrant = onCall(
       tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
         expiresAt: Date.now() + 5 * 60_000 });
       tx.create(grantRef, { tenantId, deviceIdHash, nonce, state: "ISSUED",
-        createdAt: FieldValue.serverTimestamp(), expiresAt: Date.now() + 10 * 60_000 });
+        createdAt: FieldValue.serverTimestamp(), expiresAt: Date.now() + 5 * 60_000 });
     });
     return { grant: await signGrant(tenantId, deviceIdHash, nonce, jti) };
   }
