@@ -569,7 +569,6 @@ export const consumeRecoveryGrant = onCall(
 export const cancelRecoveryRequest = onCall(
   { region: REGION, enforceAppCheck: true },
   async request => {
-    requireRecoveryEnabled();
     const owner = requireFreshOwner(request);
     if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
@@ -609,7 +608,6 @@ export const cancelRecoveryRequest = onCall(
 export const cancelRecoveryPhoneChange = onCall(
   { region: REGION, enforceAppCheck: true },
   async request => {
-    requireRecoveryEnabled();
     const tenantId = validateTenantId(request.auth?.token.tenantId);
     const ownerAge = Date.now() / 1000 - Number(request.auth?.token.auth_time ?? 0);
     if (request.auth?.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
