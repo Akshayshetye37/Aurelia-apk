@@ -162,3 +162,17 @@ test('normal PIN and biometric unlock remain local when the backend is unavailab
   assert.match(biometricFlow, /manager\.unlockWithDataKey\(unwrapped\)/);
   assert.doesNotMatch(biometricFlow, /FirebaseFunctions|RecoveryGrantClient|getHttpsCallable|httpsCallable/);
 });
+
+
+test('Android installs Play Integrity App Check before Firebase services without blocking local-only startup', () => {
+  const bootstrap = read('android/templates/AureliaApplication.java');
+  const patcher = read('scripts/patch-android.js');
+  assert.match(bootstrap, /installAppCheckProviderFactory/);
+  assert.match(bootstrap, /PlayIntegrityAppCheckProviderFactory/);
+  assert.match(bootstrap, /FirebaseApp\.initializeApp\(this\)/);
+  assert.match(bootstrap, /if \(firebaseApp == null\) return/);
+  assert.match(bootstrap, /cloud recovery remains unavailable/);
+  assert.match(patcher, /firebase-appcheck-playintegrity/);
+  assert.match(patcher, /firebase-bom:35\.1\.0/);
+  assert.match(patcher, /android:name="com\.aurelia\.pms\.AureliaApplication"/);
+});

@@ -15,6 +15,11 @@ manifest = manifest.replace(/<application\b([^>]*)>/, (match, attributes) => {
     .replace(/\s+android:allowBackup="[^"]*"/g, '')
     .replace(/\s+android:fullBackupContent="[^"]*"/g, '')
     .replace(/\s+android:dataExtractionRules="[^"]*"/g, '');
+  const appClass = next.match(/android:name="([^"]+)"/);
+  if (appClass && appClass[1] !== 'com.aurelia.pms.AureliaApplication') {
+    throw new Error('An unexpected Application class is configured; App Check bootstrap cannot be safely injected.');
+  }
+  if (!appClass) next += ' android:name="com.aurelia.pms.AureliaApplication"';
   return '<application' + next +
     ' android:allowBackup="false"' +
     ' android:fullBackupContent="@xml/aurelia_backup_rules"' +
@@ -328,6 +333,10 @@ if (fs.existsSync(iconPng) && !fs.existsSync(iconJpg)) {
 
 const javaDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms');
 fs.mkdirSync(javaDir, { recursive: true });
+const appBootstrapTemplate = path.join(androidDir, 'templates', 'AureliaApplication.java');
+if (!fs.existsSync(appBootstrapTemplate)) throw new Error('AureliaApplication.java App Check bootstrap template is missing.');
+fs.copyFileSync(appBootstrapTemplate, path.join(javaDir, 'AureliaApplication.java'));
+fs.mkdirSync(javaDir, { recursive: true });
 
 
 // APK-embedded ES256 trust pins. This is public material, supplied as a GitHub
@@ -517,9 +526,11 @@ if (fs.existsSync(appGradleGroovy)) {
 const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
 
 function addFirebaseDependencies(contents, kotlinDsl) {
-  const bom = 'com.google.firebase:firebase-bom:33.5.0';
+  const bom = 'com.google.firebase:firebase-bom:35.1.0';
   const auth = 'com.google.firebase:firebase-auth';
   const functions = 'com.google.firebase:firebase-functions';
+  const appCheck = 'com.google.firebase:firebase-appcheck-playintegrity';
+  const messaging = 'com.google.firebase:firebase-messaging';
   const paymentDependencies = [
     'com.razorpay:checkout:1.6.41',
     'com.cashfree.pg:api:2.6.1'
@@ -528,7 +539,7 @@ function addFirebaseDependencies(contents, kotlinDsl) {
     throw new Error('App Gradle file has no dependencies block; refusing an incomplete native payment integration.');
   }
   let updated = contents;
-  const missing = [auth, functions, ...paymentDependencies].filter(dependency => !updated.includes(dependency));
+  const missing = [auth, functions, appCheck, messaging, ...paymentDependencies].filter(dependency => !updated.includes(dependency));
   if (missing.length) {
     const lines = kotlinDsl
       ? '\n' + missing.map(dependency => '    implementation("' + dependency + '")').join('\n')
@@ -1881,8 +1892,8 @@ function ensurePmsInstrumentation(contents, kotlinDsl) {
   }
   if (!contents.includes('firebase-messaging')) {
     const messaging = kotlinDsl
-      ? '\n    implementation("com.google.firebase:firebase-messaging:24.1.1")'
-      : '\n    implementation "com.google.firebase:firebase-messaging:24.1.1"';
+      ? '\n    implementation("com.google.firebase:firebase-messaging")'
+      : '\n    implementation "com.google.firebase:firebase-messaging"';
     contents = contents.replace(/dependencies\s*\{/, match => match + messaging);
   }
   return contents;

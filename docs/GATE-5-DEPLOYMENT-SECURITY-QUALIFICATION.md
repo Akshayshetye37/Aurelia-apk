@@ -12,6 +12,12 @@
 - `Recovery staging deployment and APK` verifies staging Secret Manager secret versions, sets `RECOVERY_ENABLED=true` only in the staging project, binds the verifier service account and builds the staging APK.
 - `Verify production recovery remains disabled` is a read-only workflow. It must pass against the production project and confirm every deployed recovery/attestation service has `RECOVERY_ENABLED=false` or the parameter is unset (default false).
 
+## Android App Check bootstrap
+
+The generated Android application installs Firebase App Check with the Play Integrity provider in its custom `Application.onCreate`, before Firebase Auth, Functions or Messaging use the default app. Missing Firebase configuration does not block local PIN/biometric use; recovery calls remain fail-closed because the callable endpoints enforce App Check.
+
+Before staging, register package `com.aurelia.pms` in Firebase App Check with the Play Integrity provider, link the Play Integrity API to the same Google Cloud project, and register the release signing certificate SHA-256 used by the staging APK. Do not enable a debug provider in release builds. Emulator callable-runtime tests invoke the Firebase Functions handlers directly and do not constitute App Check verification.
+
 ## Remaining staging security probes
 
 1. Missing and invalid App Check tokens must be rejected by every recovery callable.

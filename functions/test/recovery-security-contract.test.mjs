@@ -287,3 +287,12 @@ test('hardware attestation verifier URL must be HTTPS and cannot carry credentia
   assert.match(functions, /base\.username \|\| base\.password/);
   assert.match(functions, /base\.search \|\| base\.hash/);
 });
+
+test('Android Play Integrity App Check bootstrap is installed before cloud recovery SDK use', () => {
+  const bootstrap = read('android/templates/AureliaApplication.java');
+  const patcher = read('scripts/patch-android.js');
+  assert.match(bootstrap, /PlayIntegrityAppCheckProviderFactory\.getInstance\(\)/);
+  assert.match(bootstrap, /installAppCheckProviderFactory/);
+  assert.match(patcher, /firebase-appcheck-playintegrity/);
+  assert.match(patcher, /com\.aurelia\.pms\.AureliaApplication/);
+});
