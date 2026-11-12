@@ -137,6 +137,9 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   });
   assert.equal(stillPending.status, 'COOLDOWN');
   assert.equal(stillPending.eligibleAt, 0);
+  await assert.rejects(callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce, phoneIdToken: retryPhoneToken
+  }), 'a phone-auth proof may trigger at most one alert attempt');
   cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(cooldown.state, 'ALERT_PENDING');
   assert.equal(cooldown.eligibleAt, null, 'FCM acceptance alone must not start the cooldown');
