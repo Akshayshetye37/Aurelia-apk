@@ -123,12 +123,12 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   });
   assert.equal(first.status, 'COOLDOWN');
   assert.equal(first.eligibleAt, 0);
-  assert.equal(sentMessages.length, 2, 'alert is sent to every enrolled owner device');
+  assert.equal(sentMessages.length, 1, 'the recovery-requesting device is excluded from owner alerts');
 
   let cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(cooldown.state, 'ALERT_PENDING');
   assert.equal(cooldown.eligibleAt, null);
-  assert.deepEqual(new Set(cooldown.alertedDeviceHashes), new Set([recoveryDeviceHash, secondOwnerDeviceHash]));
+  assert.deepEqual(cooldown.alertedDeviceHashes, [secondOwnerDeviceHash]);
 
   await sleep(1100);
   const retryPhoneToken = await phoneAuthToken(phone);
@@ -225,7 +225,7 @@ test('owner alert delivery failure leaves the recovery request blocked', async (
   const recoveryDeviceHash = 'f'.repeat(64);
   await seedTenant({
     tenantId, phone, ownerUid, recoveryDeviceHash,
-    ownerDeviceHashes: [recoveryDeviceHash]
+    ownerDeviceHashes: [recoveryDeviceHash, 'e'.repeat(64)]
   });
   const original = messaging.send;
   messaging.send = async () => { throw new Error('simulated FCM unavailable'); };
@@ -249,9 +249,10 @@ test('only an owner device whose FCM endpoint accepted the alert may start the c
   const phone = '+15555550102';
   const recoveryDeviceHash = 'c'.repeat(64);
   const secondOwnerDeviceHash = 'd'.repeat(64);
+  const thirdOwnerDeviceHash = 'e'.repeat(64);
   await seedTenant({
     tenantId, phone, ownerUid, recoveryDeviceHash,
-    ownerDeviceHashes: [recoveryDeviceHash, secondOwnerDeviceHash]
+    ownerDeviceHashes: [recoveryDeviceHash, secondOwnerDeviceHash, thirdOwnerDeviceHash]
   });
   const original = messaging.send;
   messaging.send = async message => {
@@ -267,15 +268,37 @@ test('only an owner device whose FCM endpoint accepted the alert may start the c
     assert.equal(result.status, 'COOLDOWN');
     const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
     const event = (await db.doc(`recoverySecurityEvents/${cooldown.alertEventId}`).get()).data();
-    assert.deepEqual(event.fcmAcceptedDeviceHashes, [recoveryDeviceHash]);
+    assert.deepEqual(event.fcmAcceptedDeviceHashes, [thirdOwnerDeviceHash]);
     await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
       tenantId, deviceIdHash: secondOwnerDeviceHash, eventId: cooldown.alertEventId
     }, ownerAuth(ownerUid, tenantId)), 'an endpoint that rejected FCM cannot acknowledge delivery');
-    const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
+    await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
       tenantId, deviceIdHash: recoveryDeviceHash, eventId: cooldown.alertEventId
+    }, ownerAuth(ownerUid, tenantId)), 'the recovery-requesting device cannot acknowledge its own alert');
+    const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
+      tenantId, deviceIdHash: thirdOwnerDeviceHash, eventId: cooldown.alertEventId
     }, ownerAuth(ownerUid, tenantId));
     assert.equal(acknowledged.acknowledged, true);
   } finally {
     messaging.send = original;
   }
+});
+
+test('recovery is blocked when no independent attested owner notification device exists', async () => {
+  const tenantId = 'tenant-emulator-no-independent-owner-device';
+  const ownerUid = 'owner-emulator-no-independent-owner-device';
+  const phone = '+15555550103';
+  const recoveryDeviceHash = '9'.repeat(64);
+  await seedTenant({
+    tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash]
+  });
+  const phoneToken = await phoneAuthToken(phone);
+  await assert.rejects(
+    callable(functions.issueRecoveryGrant, {
+      tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'q'.repeat(43), phoneIdToken: phoneToken
+    }),
+    error => error.code === 'failed-precondition'
+  );
+  assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).exists, false);
 });
