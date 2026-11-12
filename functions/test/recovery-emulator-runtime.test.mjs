@@ -812,3 +812,27 @@ test('attested but unenrolled owner device cannot cancel a recovery request', as
   }, ownerAuth(ownerUid, tenantId)), 'attested but unenrolled device cannot cancel');
   assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'ALERT_PENDING');
 });
+
+test('revoked owner notification device cannot acknowledge a pending alert', async () => {
+  const tenantId = 'tenant-emulator-revoked-ack-device';
+  const ownerUid = 'owner-emulator-revoked-ack-device';
+  const phone = '+15555550116';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
+  await assert.rejects(callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'd'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phone)
+  }), error => error.code === 'unavailable');
+  const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  const alert = sentMessages.find(message => message.data.tenantId === tenantId &&
+    message.data.deviceIdHash === ownerDeviceHash);
+  assert.ok(alert?.data.ackToken);
+  await db.doc(`recoveryOwnerDevices/${tenantId}_${ownerDeviceHash}`).update({ active: false });
+  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
+    ackToken: alert.data.ackToken
+  }, ownerAuth(ownerUid, tenantId)), 'revoked owner device cannot acknowledge');
+  assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'ALERT_PENDING');
+});

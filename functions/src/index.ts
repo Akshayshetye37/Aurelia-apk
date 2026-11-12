@@ -404,13 +404,22 @@ export const acknowledgeRecoveryOwnerAlert = onCall(
     await requireAttestedDevice(tenantId, deviceIdHash, owner.uid);
     const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
     const eventRef = db.doc(`recoverySecurityEvents/${eventId}`);
+    const ownerDeviceRef = db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`);
+    const attestationRef = db.doc(`recoveryDeviceAttestations/${tenantId}_${deviceIdHash}`);
     const eligibleAt = Date.now() + RECOVERY_COOLDOWN_MS;
     await db.runTransaction(async tx => {
-      const [cooldownSnapshot, eventSnapshot] = await Promise.all([
-        tx.get(cooldownRef), tx.get(eventRef)
+      const [cooldownSnapshot, eventSnapshot, ownerDeviceSnapshot, attestationSnapshot] = await Promise.all([
+        tx.get(cooldownRef), tx.get(eventRef), tx.get(ownerDeviceRef), tx.get(attestationRef)
       ]);
       const cooldown = cooldownSnapshot.data();
       const event = eventSnapshot.data();
+      const ownerDevice = ownerDeviceSnapshot.data();
+      const attestation = attestationSnapshot.data();
+      if (!ownerDevice || ownerDevice.ownerUid !== owner.uid ||
+          ownerDevice.deviceIdHash !== deviceIdHash || ownerDevice.active !== true ||
+          !attestation || attestation.ownerUid !== owner.uid || attestation.status !== "VERIFIED" ||
+          !["TRUSTED_ENVIRONMENT", "STRONG_BOX"].includes(attestation.securityLevel) ||
+          attestation.verifiedBootState !== "VERIFIED" || attestation.deviceLocked !== true) throw GENERIC;
       if (!cooldown || cooldown.state !== "ALERT_PENDING" ||
           cooldown.alertEventId !== eventId ||
           !Array.isArray(cooldown.alertedDeviceHashes) ||
