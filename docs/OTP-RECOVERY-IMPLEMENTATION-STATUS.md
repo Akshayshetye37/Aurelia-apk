@@ -7,11 +7,11 @@
 - Recovery phone E.164 and state are AES-256-GCM encrypted with an Android Keystore key.
 - Phone registration is owner/tenant-bound; local random tenant IDs cannot authorize cloud recovery.
 - Firebase Phone Auth uses a secondary Auth session and returns the short-lived ID token in memory; the secondary session is signed out after token retrieval.
-- The backend verifies phone identity, applies tenant-scoped HMAC matching and rate limits, issues one grant per phone-auth event, and atomically consumes grant jti.
+- The backend verifies phone identity, applies tenant-scoped HMAC matching, binds the registered recovery phone to the owner-approved device key hash, applies per-phone/tenant/device/IP rate limits, issues one grant per phone-auth event, and atomically consumes grant jti.
 - Android performs strict JWT header/claim preflight (issuer, audience, scope, tenant, device, nonce, issue time, expiry and jti) before server consumption. This is NOT local cryptographic signature verification. The server is authoritative for ES256 signature validation and atomic one-time consumption.
-- After successful server consumption, Android persists a Keystore-encrypted local jti replay marker, bounded to the grant expiry (maximum ten minutes), before arming the process-local three-attempt gate.
+- After successful server consumption, Android persists a Keystore-encrypted local jti replay marker, bounded to the signed grant expiry (maximum five minutes), before arming the process-local three-attempt gate.
 - A duplicate local jti is rejected before another server request. The server remains authoritative against replay across devices/processes.
-- The offline recovery key remains mandatory and unwraps the existing DEK. OTP never decrypts or regenerates the DEK.
+- The offline recovery key remains mandatory and unwraps the existing DEK. OTP never decrypts or regenerates the DEK. Android's client-side grant handling performs strict claim preflight only; the backend verifies the ES256 signature and atomically consumes the jti. The local ES256 verifier helper is not wired because a pinned public key has not been provisioned.
 
 ## Security invariants
 
