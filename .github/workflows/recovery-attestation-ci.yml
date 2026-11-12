@@ -10,9 +10,13 @@ on:
       - "payment-backend/Dockerfile.attestation"
       - "cloudbuild-recovery-attestation.yaml"
       - ".github/workflows/recovery-attestation-ci.yml"
+      - "android/templates/**"
+      - "tests/otp-recovery-*.test.mjs"
       - ".github/workflows/otp-recovery-android-instrumentation.yml"
       - ".github/workflows/recovery-functions.yml"
       - "functions/test/**"
+      - "android/templates/**"
+      - "tests/otp-recovery-*.test.mjs"
   pull_request:
     branches:
       - work/p0-storage-hardening
