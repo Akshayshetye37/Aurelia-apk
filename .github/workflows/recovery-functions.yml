@@ -9,6 +9,7 @@ on:
       - 'firestore.rules'
       - 'firebase.json'
       - '.github/workflows/recovery-functions.yml'
+      - '.github/workflows/otp-recovery-android-instrumentation.yml'
       - 'android/templates/**'
       - 'tests/otp-recovery-*.test.mjs'
       - 'scripts/patch-android.js'
