@@ -17,6 +17,14 @@ class RecoveryGrantClient(private val context: Context) {
     private val functions = FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
     private val replayStore = RecoveryGrantReplayStore(context)
 
+    fun cancelRecoveryRequest(tenantId: String, deviceHash: String): Task<Boolean> =
+        functions.getHttpsCallable("cancelRecoveryRequest").call(mapOf(
+            "tenantId" to tenantId, "deviceIdHash" to deviceHash
+        )).continueWith { task ->
+            if (!task.isSuccessful) throw task.exception ?: IllegalStateException("Recovery cancellation failed.")
+            (task.result?.data as? Map<*, *>)?.get("cancelled") == true
+        }
+
     fun registerRecoveryPhone(phoneIdToken: String, tenantId: String, deviceIdHash: String, currentPhoneIdToken: String? = null): Task<Map<*, *>> =
         functions.getHttpsCallable("registerRecoveryPhone").call(mapOf(
             "phoneIdToken" to phoneIdToken, "tenantId" to tenantId,
