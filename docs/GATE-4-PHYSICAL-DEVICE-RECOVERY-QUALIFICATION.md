@@ -83,3 +83,7 @@ All cases below must be run on the physical handset. Capture timestamped, redact
 Gate 4 is PASS only when all required cases pass on every approved device/API combination, evidence is attached to the access-controlled evidence store, exact source/APK/Firebase staging identities are recorded, and an independent reviewer signs the results.
 
 **Current state:** Gate 4 execution has not started. Gate 3 staging APK and signing evidence are prerequisites. Production account recovery remains DISABLED until all release gates and owner sign-off pass.
+
+## Independent owner-alert requirement
+
+The device requesting recovery must never count as its own owner-notification destination and must never acknowledge its own recovery event. At least one separately enrolled, hardware-attested owner device must accept the FCM event and acknowledge the posted notification. If no independent device exists, or all independent endpoints reject delivery, recovery remains in `ALERT_PENDING` with no cooldown start and no grant. Physical qualification must verify successful acknowledgement from the independent device, rejection of self-acknowledgement, partial FCM failure, and the no-independent-device fail-closed case.
