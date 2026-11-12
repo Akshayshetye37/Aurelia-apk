@@ -478,9 +478,23 @@ export const issueRecoveryGrant = onCall(
       if (pending.deviceIdHash !== deviceIdHash ||
           !equalDigest(pending.phoneHash, actualHash)) throw GENERIC;
       if (pendingState === "ALERT_PENDING") {
+        const eventId = String(pending.alertEventId ?? "");
+        if (!/^[0-9a-f-]{36}$/i.test(eventId)) throw GENERIC;
+        const alertEventRef = db.doc(`recoverySecurityEvents/${eventId}`);
+        const alertEventSnapshot = await tx.get(alertEventRef);
+        const alertEvent = alertEventSnapshot.data();
+        if (!alertEvent || alertEvent.tenantId !== tenantId ||
+            alertEvent.type !== "RECOVERY_COOLDOWN_STARTED") throw GENERIC;
+        // Rotate per-device proofs before retrying FCM. Tokens from an earlier,
+        // possibly delayed delivery can no longer acknowledge the new alert.
         tx.update(cooldownRef, { alertedDeviceHashes, updatedAt: FieldValue.serverTimestamp() });
-        return { status: "COOLDOWN" as const, eligibleAt: 0, notify: true,
-          eventId: String(pending.alertEventId ?? "") };
+        tx.update(alertEventRef, {
+          ackTokenHashes: alertAckTokenHashes,
+          fcmAcceptedDeviceHashes: FieldValue.delete(),
+          notificationDelivery: "PENDING",
+          updatedAt: FieldValue.serverTimestamp()
+        });
+        return { status: "COOLDOWN" as const, eligibleAt: 0, notify: true, eventId };
       }
       if (pendingState !== "PENDING" && !expiredIssuedGrant) throw GENERIC;
       const eligibleAt = Number(pending.eligibleAt);
