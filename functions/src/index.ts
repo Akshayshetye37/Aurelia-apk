@@ -12,6 +12,7 @@ const PHONE_PEPPER = defineSecret("PHONE_PEPPER");
 const RECOVERY_SIGNING_KEY_PKCS8 = defineSecret("RECOVERY_SIGNING_KEY_PKCS8");
 // Fail closed by default; only qualified staging may opt in after gate evidence.
 const RECOVERY_ENABLED = defineString("RECOVERY_ENABLED", { default: "false" });
+const RECOVERY_SIGNING_KEY_ID = defineString("RECOVERY_SIGNING_KEY_ID", { default: "active-1" });
 const GENERIC = new HttpsError("permission-denied", "Verification failed.");
 const ISSUER = "aurelia-recovery";
 const AUDIENCE = "aurelia-recovery-client";
@@ -114,7 +115,7 @@ async function signGrant(tenantId: string, deviceIdHash: string, nonce: string, 
   const privateKey = await importPKCS8(RECOVERY_SIGNING_KEY_PKCS8.value(), "ES256");
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT({ did: deviceIdHash, nonce, scope: "recovery:continue" })
-    .setProtectedHeader({ alg: "ES256", typ: "JWT" })
+    .setProtectedHeader({ alg: "ES256", typ: "JWT", kid: RECOVERY_SIGNING_KEY_ID.value() })
     .setIssuer(ISSUER).setAudience(AUDIENCE).setSubject(tenantId)
     .setJti(jti).setIssuedAt(now).setExpirationTime(now + 300).sign(privateKey);
 }
