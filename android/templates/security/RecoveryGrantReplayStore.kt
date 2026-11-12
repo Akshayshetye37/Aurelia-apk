@@ -26,7 +26,7 @@ class RecoveryGrantReplayStore(context: Context) {
     @Synchronized
     fun markUsed(jti: String, expiresAtEpochSec: Long, nowEpochSec: Long = System.currentTimeMillis() / 1000): Boolean {
         require(validJti(jti))
-        require(expiresAtEpochSec > nowEpochSec && expiresAtEpochSec - nowEpochSec <= 600)
+        require(expiresAtEpochSec > nowEpochSec && expiresAtEpochSec - nowEpochSec <= 300)
         val entries = readEntries(nowEpochSec)
         if (entries.any { it.first == jti }) return false
         val array = JSONArray()
@@ -47,7 +47,7 @@ class RecoveryGrantReplayStore(context: Context) {
                 val item = array.optJSONObject(i) ?: continue
                 val id = item.optString("jti")
                 val exp = item.optLong("exp", 0)
-                if (validJti(id) && exp > now && exp - now <= 600) entries += id to exp
+                if (validJti(id) && exp > now && exp - now <= 300) entries += id to exp
             }
         } finally { /* decrypted JSON contains only random grant identifiers and expiries */ }
         return entries
