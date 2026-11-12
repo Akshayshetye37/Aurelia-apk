@@ -355,7 +355,8 @@ export const acknowledgeRecoveryOwnerAlert = onCall(
     if (auth.token.tenantId !== tenantId) throw GENERIC;
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
     const eventId = requiredString(request.data?.eventId, 64);
-    if (!/^[0-9a-f-]{36}$/i.test(eventId)) throw GENERIC;
+    const ackToken = requiredString(request.data?.ackToken, 64);
+    if (!/^[0-9a-f-]{36}$/i.test(eventId) || !/^[A-Za-z0-9_-]{43}$/.test(ackToken)) throw GENERIC;
     await requireAttestedDevice(tenantId, deviceIdHash, auth.uid);
     const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
     const eventRef = db.doc(`recoverySecurityEvents/${eventId}`);
@@ -372,8 +373,8 @@ export const acknowledgeRecoveryOwnerAlert = onCall(
           !cooldown.alertedDeviceHashes.includes(deviceIdHash) ||
           !event || event.tenantId !== tenantId ||
           event.type !== "RECOVERY_COOLDOWN_STARTED" ||
-          !Array.isArray(event.fcmAcceptedDeviceHashes) ||
-          !event.fcmAcceptedDeviceHashes.includes(deviceIdHash)) throw GENERIC;
+          !equalDigest(event.ackTokenHashes?.[deviceIdHash],
+            createHash("sha256").update(ackToken).digest())) throw GENERIC;
       tx.update(cooldownRef, {
         state: "PENDING", eligibleAt,
         notificationDeliveredAt: FieldValue.serverTimestamp(),
@@ -428,6 +429,11 @@ export const issueRecoveryGrant = onCall(
       throw new HttpsError("failed-precondition", "No attested owner notification device is registered.");
     }
     const alertedDeviceHashes = ownerDevices.map(device => device.deviceIdHash);
+    // Persist only hashes. The raw per-device token is sent exclusively in that device's FCM payload.
+    const alertAckTokens = new Map(ownerDevices.map(device =>
+      [device.deviceIdHash, randomBytes(32).toString("base64url")] as const));
+    const alertAckTokenHashes = Object.fromEntries([...alertAckTokens].map(([hash, token]) =>
+      [hash, createHash("sha256").update(token).digest("base64")]));
     const actualHash = digest(tenantId, proof.phone);
     if (!phoneRecord || !["VERIFIED", "CHANGE_PENDING"].includes(phoneRecord.state) ||
         phoneRecord.otpRequired === false || phoneRecord.deviceIdHash !== deviceIdHash ||
@@ -464,6 +470,7 @@ export const issueRecoveryGrant = onCall(
         tx.create(eventRef, {
           tenantId, type: "RECOVERY_COOLDOWN_STARTED", deviceIdHash,
           phoneHash: actualHash.toString("base64"), notificationDelivery: "PENDING",
+          ackTokenHashes: alertAckTokenHashes,
           createdAt: FieldValue.serverTimestamp()
         });
         return { status: "COOLDOWN" as const, eligibleAt: 0, notify: true, eventId: eventRef.id };
@@ -500,7 +507,8 @@ export const issueRecoveryGrant = onCall(
             token: device.fcmToken,
             data: {
               type: "RECOVERY_COOLDOWN_STARTED", tenantId,
-              deviceIdHash: device.deviceIdHash, eventId: outcome.eventId
+              deviceIdHash: device.deviceIdHash, eventId: outcome.eventId,
+              ackToken: alertAckTokens.get(device.deviceIdHash)!
             },
             android: { priority: "high", ttl: 60 * 60 * 1000 }
           })));
