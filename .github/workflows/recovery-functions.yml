@@ -54,7 +54,19 @@ jobs:
         run: npm install --global firebase-tools@13.31.2
 
       - name: Run Auth and Firestore emulator recovery state-machine tests
-        run: firebase emulators:exec --only auth,firestore --project demo-aurelia-recovery "cd functions && npm run test:emulator"
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase emulators:exec --only auth,firestore --project demo-aurelia-recovery "cd functions && npm run test:emulator" 2>&1 | tee recovery-emulator-runtime.log
+
+      - name: Upload raw Firebase Emulator runtime logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovery-emulator-runtime-logs
+          path: recovery-emulator-runtime.log
+          if-no-files-found: error
+          retention-days: 14
 
   otp-contract-tests:
     runs-on: ubuntu-latest
