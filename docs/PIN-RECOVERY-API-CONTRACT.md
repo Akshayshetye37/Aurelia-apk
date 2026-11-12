@@ -10,7 +10,7 @@ Changing a number requires PIN, OTP to the new number, a 24–72 hour cooling pe
 
 ## Recovery authorization
 
-The backend checks that the token phone number equals the trusted phone stored for the tenant and that auth_time is less than five minutes old. It issues a signed token with a ten-minute expiry, one-time jti, audience recovery, tenant binding, device ID and client nonce. Consume jti atomically and reject replay, expiry, wrong audience, device, nonce, tenant or phone.
+The backend checks that the token phone number equals the trusted phone stored for the tenant and that auth_time is less than five minutes old. It issues a signed token with a five-minute expiry, one-time jti, audience recovery, tenant binding, owner-registered device-key hash and client nonce. Consume jti atomically and reject replay, expiry, wrong audience, device, nonce, tenant or phone.
 
 This token authorizes workflow continuation only. The offline recovery key is still required locally to unwrap the same DEK. Never accept a client-supplied number, PIN, DEK or envelope as proof of recovery. Never send SMS or call external KMS inside a Firestore transaction.
 
