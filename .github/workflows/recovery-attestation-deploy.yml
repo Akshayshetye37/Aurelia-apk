@@ -1,0 +1,80 @@
+name: Recovery hardware-attestation verifier deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: recovery-attestation-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: recovery-staging
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate to Google Cloud with Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Validate staging deployment configuration
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          RUNTIME_SERVICE_ACCOUNT: ${{ vars.RECOVERY_ATTESTATION_SERVICE_ACCOUNT }}
+          APP_PACKAGE: ${{ vars.ATTESTATION_APP_PACKAGE }}
+          APP_MIN_VERSION: ${{ vars.ATTESTATION_APP_MIN_VERSION }}
+          APP_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
+        run: |
+          set -euo pipefail
+          for name in PROJECT_ID REGION RUNTIME_SERVICE_ACCOUNT APP_PACKAGE APP_MIN_VERSION APP_SIGNER_SHA256; do
+            if [ -z "${!name}" ]; then echo "::error::Missing required GitHub environment variable: $name"; exit 1; fi
+          done
+          [[ "$APP_SIGNER_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]]
+          [[ "$APP_MIN_VERSION" =~ ^[1-9][0-9]*$ ]]
+
+      - name: Build isolated verifier image
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+        run: |
+          set -euo pipefail
+          gcloud config set project "$PROJECT_ID"
+          gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
+          gcloud artifacts repositories describe aurelia-recovery --location "$REGION" >/dev/null 2>&1 ||
+            gcloud artifacts repositories create aurelia-recovery --repository-format=docker --location "$REGION" --description="Aurelia recovery security services"
+          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/aurelia-recovery/device-attestation:$GITHUB_SHA"
+          gcloud builds submit --tag "$IMAGE" --file payment-backend/Dockerfile.attestation .
+
+      - name: Deploy verifier with IAM authentication only
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          RUNTIME_SERVICE_ACCOUNT: ${{ vars.RECOVERY_ATTESTATION_SERVICE_ACCOUNT }}
+          APP_PACKAGE: ${{ vars.ATTESTATION_APP_PACKAGE }}
+          APP_MIN_VERSION: ${{ vars.ATTESTATION_APP_MIN_VERSION }}
+          APP_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
+        run: |
+          set -euo pipefail
+          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/aurelia-recovery/device-attestation:$GITHUB_SHA"
+          gcloud run deploy aurelia-recovery-attestation \
+            --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE" \
+            --service-account "$RUNTIME_SERVICE_ACCOUNT" \
+            --no-allow-unauthenticated --ingress all \
+            --set-env-vars "ATTESTATION_BIND_HOST=0.0.0.0,PORT=8080,ATTESTATION_APP_PACKAGE=$APP_PACKAGE,ATTESTATION_APP_MIN_VERSION=$APP_MIN_VERSION,ATTESTATION_APP_SIGNER_SHA256=$APP_SIGNER_SHA256" \
+            --cpu 1 --memory 512Mi --min 0 --max 3 --concurrency 4 --timeout 15s
+          gcloud run services describe aurelia-recovery-attestation --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)'
