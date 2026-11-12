@@ -148,7 +148,6 @@ const permissionsToRemove = [
   'android.permission.BODY_SENSORS',
   'android.permission.BODY_SENSORS_BACKGROUND',
   'android.permission.ACTIVITY_RECOGNITION',
-  'android.permission.POST_NOTIFICATIONS',
   'android.permission.BLUETOOTH',
   'android.permission.BLUETOOTH_ADMIN',
   'android.permission.BLUETOOTH_SCAN',
@@ -222,6 +221,15 @@ fs.writeFileSync(path.join(networkXmlDir, 'aurelia_network_security_config.xml')
       '</trust-anchors>' +
     '</base-config>' +
   '</network-security-config>');
+
+// Recovery owner-alert delivery requires the Android 13+ runtime notification permission.
+if (!manifest.includes('android.permission.POST_NOTIFICATIONS')) {
+  manifest = manifest.replace('</manifest>', '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\\n</manifest>');
+}
+if (!manifest.includes('com.aurelia.pms.security.RecoveryOwnerMessagingService')) {
+  const messagingService = '<service android:name="com.aurelia.pms.security.RecoveryOwnerMessagingService" android:exported="false"><intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter></service>';
+  manifest = manifest.replace('</application>', '    <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="aurelia_recovery_security" />\\n    ' + messagingService + '</application>');
+}
 
 // Keep the future Pay Bridge discovery narrowly scoped; never request QUERY_ALL_PACKAGES.
 fs.writeFileSync(manifestPath, manifest);
@@ -446,6 +454,7 @@ for (const file of [
   'RecoveryGrantVerifier.kt',
   'RecoveryGrantReplayStore.kt',
   'RecoveryDeviceIdentity.kt',
+  'RecoveryOwnerMessagingService.kt',
   'PaymentDeviceKeyStore.kt',
   'PaymentDeviceClient.kt',
   'SettlementEnvelopeVerifier.kt',
