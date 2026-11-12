@@ -11,6 +11,8 @@ on:
       - "cloudbuild-recovery-attestation.yaml"
       - ".github/workflows/recovery-attestation-ci.yml"
       - ".github/workflows/otp-recovery-android-instrumentation.yml"
+      - ".github/workflows/recovery-functions.yml"
+      - "functions/test/**"
   pull_request:
     branches:
       - work/p0-storage-hardening
