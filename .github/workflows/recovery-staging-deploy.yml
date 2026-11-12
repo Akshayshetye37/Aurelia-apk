@@ -45,6 +45,7 @@ jobs:
           VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
           ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
           PUBLIC_KEYS: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
+          FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
           APP_CHECK_REGISTERED: ${{ vars.APP_CHECK_PLAY_INTEGRITY_REGISTERED }}
           APP_CHECK_SIGNER_SHA256: ${{ vars.APP_CHECK_SIGNER_SHA256 }}
           ATTESTATION_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
@@ -55,7 +56,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          for name in PROJECT_ID REGION FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS APP_CHECK_REGISTERED APP_CHECK_SIGNER_SHA256 ATTESTATION_SIGNER_SHA256 GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+          for name in PROJECT_ID REGION FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS FIREBASE_WEB_API_KEY APP_CHECK_REGISTERED APP_CHECK_SIGNER_SHA256 ATTESTATION_SIGNER_SHA256 GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [[ -z "${!name}" ]]; then echo "::error::Missing recovery-staging environment setting: $name"; exit 1; fi
           done
           if [[ "$APP_CHECK_REGISTERED" != "true" ]]; then
@@ -72,7 +73,7 @@ jobs:
           echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/aurelia-release.jks"
           echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "$RUNNER_TEMP/google-services.json"
           export GOOGLE_SERVICES_PATH="$RUNNER_TEMP/google-services.json"
-          node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); if(!p || c.project_info?.project_id!==process.env.PROJECT_ID) process.exit(1);'
+          node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); const key=p?.api_key?.[0]?.current_key; if(!p || c.project_info?.project_id!==process.env.PROJECT_ID || key!==process.env.FIREBASE_WEB_API_KEY) process.exit(1);'
           gcloud config set project "$PROJECT_ID"
           for secret in PHONE_PEPPER RECOVERY_SIGNING_KEY_PKCS8; do
             gcloud secrets describe "$secret" --project "$PROJECT_ID" >/dev/null
@@ -96,11 +97,12 @@ jobs:
           ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
           VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
           FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
+          FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
         run: |
           set -euo pipefail
           npm install --global firebase-tools@13.31.2
-          printf 'RECOVERY_ENABLED=true\nRECOVERY_SIGNING_KEY_ID=%s\nRECOVERY_ATTESTATION_VERIFIER_URL=%s\nRECOVERY_FUNCTIONS_SERVICE_ACCOUNT=%s\n' \
-            "$ACTIVE_KID" "$VERIFIER_URL" "$FUNCTION_SA" > "functions/.env.$PROJECT_ID"
+          printf 'RECOVERY_ENABLED=true\nRECOVERY_SIGNING_KEY_ID=%s\nRECOVERY_ATTESTATION_VERIFIER_URL=%s\nRECOVERY_FUNCTIONS_SERVICE_ACCOUNT=%s\nFIREBASE_WEB_API_KEY=%s\n' \
+            "$ACTIVE_KID" "$VERIFIER_URL" "$FUNCTION_SA" "$FIREBASE_WEB_API_KEY" > "functions/.env.$PROJECT_ID"
           firebase deploy --only functions --project "$PROJECT_ID" --non-interactive
           rm -f "functions/.env.$PROJECT_ID"
           FUNCTION_JSON="$(gcloud functions describe verifyRecoveryDeviceAttestation --gen2 --project "$PROJECT_ID" --region "asia-south1" --format=json)"
