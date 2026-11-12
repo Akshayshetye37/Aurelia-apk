@@ -20,7 +20,7 @@ import com.google.firebase.messaging.RemoteMessage
 /** Posts the owner alert, then acknowledges it; the server starts the 24h hold only after this ack. */
 class RecoveryOwnerMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
-        val user = FirebaseAuth.getInstance().currentUser ?: return
+        if (FirebaseAuth.getInstance().currentUser == null) return
         val tenant = runCatching { RecoveryTenantIdentity.getOrCreate(this) }.getOrNull() ?: return
         val deviceHash = runCatching { RecoveryDeviceIdentity.deviceIdHash() }.getOrNull() ?: return
         FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
