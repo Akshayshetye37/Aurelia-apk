@@ -49,3 +49,15 @@
 - Save and review raw workflow job logs, instrumentation XML, artifacts, Firebase Emulator logs, Cloud Run verifier logs and physical-device test records. A summary table alone is insufficient.
 - Record exact SHA, workflow run URL/ID, test project ID, device model, Android version, APK hash and signer fingerprint.
 - Production RECOVERY_ENABLED stays false until all gates pass on one SHA and owner sign-off is recorded.
+
+
+## Current qualification control (2026-11-13)
+
+- Working branch: `work/p0-storage-hardening`.
+- Production recovery flag: `RECOVERY_ENABLED=false` by default; no production enablement has been authorized.
+- Android verifier enforces the locally enrolled owner UID, tenant, pinned key ID, signed claims and five-minute grant lifetime before calling server consumption.
+- Owner cancellation and acknowledgement require a fresh primary-auth session carrying server-issued `ownerAuthFactor` and matching `ownerAuthFactorAuthTime` claims; phone-OTP-only sessions are rejected. The repository documents that the trusted primary-auth claim issuer is not yet integrated, so those actions fail closed until that dependency exists.
+- Owner acknowledgement tokens expire after 15 minutes and are single-use. Cancellation preserves terminal `CANCELLED` state for transaction race arbitration while deleting pending hold, alert and grant linkage fields.
+- Android instrumentation CI has a two-phase process-death test separated by verified `adb shell am force-stop`; this is emulator evidence, not physical-device Gate 4.
+- Staging deployment, real SMS, physical-device tests, production IAM/App Check probes and owner sign-off require configured external environments and remain unqualified until actual run evidence is recorded.
+- See `docs/GATE-3-REAL-SMS-STAGING-QUALIFICATION.md`, `docs/GATE-4-PHYSICAL-DEVICE-RECOVERY-QUALIFICATION.md`, `docs/GATE-5-DEPLOYMENT-SECURITY-QUALIFICATION.md` and `docs/GATE-6-RELEASE-SIGNOFF.md`.

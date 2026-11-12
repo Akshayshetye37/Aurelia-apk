@@ -27,16 +27,27 @@ jobs:
           set -euo pipefail
           test -n "$PROJECT_ID" && test -n "$REGION"
           gcloud config set project "$PROJECT_ID"
-          mapfile -t services < <(gcloud run services list --project "$PROJECT_ID" --region "$REGION" --format='value(metadata.name)' | grep -Ei 'recovery|attestation' || true)
-          if [[ "${#services[@]}" -eq 0 ]]; then
-            echo "::error::No deployed recovery/attestation services found; production flag state cannot be evidenced."
+          FUNCTIONS="$(gcloud functions list --gen2 --project "$PROJECT_ID" --regions "$REGION" --format=json)"
+          mapfile -t function_names < <(echo "$FUNCTIONS" | jq -r '.[] | select(.name | test("recovery|attestation"; "i")) | .name')
+          if [[ "${#function_names[@]}" -eq 0 ]]; then
+            echo "::error::No deployed recovery/attestation Functions found; production flag state cannot be evidenced."
             exit 1
           fi
+          for name in "${function_names[@]}"; do
+            json="$(gcloud functions describe "$name" --gen2 --project "$PROJECT_ID" --region "$REGION" --format=json)"
+            enabled="$(echo "$json" | jq -r '(.serviceConfig.environmentVariables.RECOVERY_ENABLED // .environmentVariables.RECOVERY_ENABLED // "false")')"
+            if [[ "$enabled" != "false" ]]; then
+              echo "::error::Production function $name has RECOVERY_ENABLED=$enabled; expected false or unset."
+              exit 1
+            fi
+            echo "PASS: $name has recovery disabled."
+          done
+          mapfile -t services < <(gcloud run services list --project "$PROJECT_ID" --region "$REGION" --format='value(metadata.name)' | grep -Ei 'recovery|attestation' || true)
           for service in "${services[@]}"; do
             json="$(gcloud run services describe "$service" --project "$PROJECT_ID" --region "$REGION" --format=json)"
             enabled="$(echo "$json" | jq -r '[.spec.template.spec.containers[].env[]? | select(.name=="RECOVERY_ENABLED") | .value] | first // "false"')"
             if [[ "$enabled" != "false" ]]; then
-              echo "::error::Production service $service has RECOVERY_ENABLED=$enabled; expected false or unset."
+              echo "::error::Production Cloud Run service $service has RECOVERY_ENABLED=$enabled; expected false or unset."
               exit 1
             fi
             echo "PASS: $service has recovery disabled."
