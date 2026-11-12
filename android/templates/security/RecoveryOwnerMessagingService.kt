@@ -9,12 +9,14 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.aurelia.pms.identity.RecoveryTenantIdentity
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import java.util.concurrent.TimeUnit
 
 /** Posts the owner alert, then acknowledges it; the server starts the 24h hold only after this ack. */
 class RecoveryOwnerMessagingService : FirebaseMessagingService() {
@@ -72,9 +74,14 @@ class RecoveryOwnerMessagingService : FirebaseMessagingService() {
         // Server-side cooldown starts only after the attested owner app confirms
         // that Android accepted the notification for display.
         if (FirebaseAuth.getInstance().currentUser == null) return
-        FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
-            .getHttpsCallable("acknowledgeRecoveryOwnerAlert")
-            .call(mapOf("tenantId" to tenantId, "deviceIdHash" to deviceIdHash, "eventId" to eventId))
+        runCatching {
+            Tasks.await(
+                FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
+                    .getHttpsCallable("acknowledgeRecoveryOwnerAlert")
+                    .call(mapOf("tenantId" to tenantId, "deviceIdHash" to deviceIdHash, "eventId" to eventId)),
+                10, TimeUnit.SECONDS
+            )
+        }
     }
 
     private companion object {
