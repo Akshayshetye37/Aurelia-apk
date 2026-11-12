@@ -934,10 +934,12 @@ test('different tenant owner UID cannot cancel another owner UID recovery reques
     fcmToken: ('secondary-fcm-token-' + secondaryDeviceHash).padEnd(220, 'x'),
     tokenHash: 'secondary-token-hash', active: true
   });
-  await assert.rejects(callable(functions.issueRecoveryGrant, {
+  const started = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'j'.repeat(43),
     phoneIdToken: await phoneAuthToken(phone)
-  }), error => error.code === 'unavailable');
+  });
+  assert.equal(started.status, 'COOLDOWN');
+  assert.equal(started.eligibleAt, 0);
   await assert.rejects(callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: secondaryDeviceHash
   }, ownerAuth(secondaryUid, tenantId)), 'different owner UID cannot cancel primary recovery request');
