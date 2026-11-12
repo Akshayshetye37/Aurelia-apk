@@ -569,18 +569,30 @@ class LockGateActivity : FragmentActivity() {
                                 val grantRequest = client.issueRecoveryGrant(state.firebaseIdToken, tenant)
                                 grantRequest.task.addOnCompleteListener { task ->
                                     if (!task.isSuccessful) {
+                                        recoveryFlowActive = false
+                                        identity.reset()
+                                        RecoveryGate.clear()
                                         showError("OTP was verified, but recovery authorization failed. Request a fresh OTP.")
                                         return@addOnCompleteListener
                                     }
-                                    val grant = task.result
-                                    client.consumeAndArm(grant, grantRequest.nonce, grantRequest.deviceIdHash, tenant, grantRequest.startedAtElapsedMs) { armed ->
-                                        runOnUiThread {
-                                            if (!recoveryFlowActive || isFinishing) {
-                                                RecoveryGate.clear()
-                                                return@runOnUiThread
+                                    when (val outcome = task.result) {
+                                        is RecoveryGrantClient.GrantIssueResult.Cooldown -> {
+                                            recoveryFlowActive = false
+                                            identity.reset()
+                                            RecoveryGate.clear()
+                                            showError("For account safety, recovery is on a 24-hour hold after phone verification. After the hold, tap Forgot PIN and verify a fresh SMS code.")
+                                        }
+                                        is RecoveryGrantClient.GrantIssueResult.Issued -> {
+                                            client.consumeAndArm(outcome.grant, grantRequest.nonce, grantRequest.deviceIdHash, tenant, grantRequest.startedAtElapsedMs) { armed ->
+                                                runOnUiThread {
+                                                    if (!recoveryFlowActive || isFinishing) {
+                                                        RecoveryGate.clear()
+                                                        return@runOnUiThread
+                                                    }
+                                                    if (armed && RecoveryGate.isOpen()) showRecoveryKeyPrompt()
+                                                    else showError("Recovery authorization expired or was already used. Request a fresh OTP.")
+                                                }
                                             }
-                                            if (armed && RecoveryGate.isOpen()) showRecoveryKeyPrompt()
-                                            else showError("Recovery authorization expired or was already used. Request a fresh OTP.")
                                         }
                                     }
                                 }
