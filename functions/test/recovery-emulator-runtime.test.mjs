@@ -84,6 +84,7 @@ function ownerAuth(uid, tenantId, options = {}) {
     uid,
     token: {
       role: 'owner', tenantId, auth_time: authTime, ownerAuthFactor: factor,
+      ownerAuthFactorAuthTime: authTime,
       firebase: { sign_in_provider: provider, identities: provider === 'password' ? { email: ['owner@example.invalid'] } : {} }
     }
   };

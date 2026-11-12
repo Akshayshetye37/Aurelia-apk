@@ -36,6 +36,7 @@ function requireFreshPrimaryOwner(request: CallableRequest<unknown>): { uid: str
   const now = Math.floor(Date.now() / 1000);
   const authTime = Number(auth?.token.auth_time);
   const factor = auth?.token.ownerAuthFactor;
+  const factorAuthTime = Number(auth?.token.ownerAuthFactorAuthTime);
   const firebase = auth?.token.firebase as { sign_in_provider?: unknown; identities?: Record<string, unknown> } | undefined;
   const provider = firebase?.sign_in_provider;
   const identities = firebase?.identities;
@@ -43,7 +44,9 @@ function requireFreshPrimaryOwner(request: CallableRequest<unknown>): { uid: str
   const emailLink = factor === "email_link" && provider === "password" && emailIdentity;
   const passkey = factor === "passkey" && provider === "custom";
   if (!auth || auth.token.role !== "owner" || !Number.isInteger(authTime) ||
-      authTime > now || now - authTime >= 300 || (!emailLink && !passkey)) throw GENERIC;
+      authTime > now || now - authTime >= 300 ||
+      !Number.isInteger(factorAuthTime) || factorAuthTime !== authTime ||
+      (!emailLink && !passkey)) throw GENERIC;
   return { uid: auth.uid, tenantId: validateTenantId(auth.token.tenantId) };
 }
 
