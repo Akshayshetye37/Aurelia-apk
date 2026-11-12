@@ -12,6 +12,8 @@ const rules = read('firestore.rules');
 const identity = read('android/templates/FirebasePhoneIdentity.kt');
 const grantClient = read('android/templates/RecoveryGrantClient.kt');
 const recoveryGate = read('android/templates/security/RecoveryGate.kt');
+const phoneStore = read('android/templates/RecoveryPhoneStore.kt');
+const tenantIdentity = read('android/templates/RecoveryTenantIdentity.kt');
 const replayStore = read('android/templates/security/RecoveryGrantReplayStore.kt');
 
 test('backend matches only verified Firebase phone identity and enforces fresh auth_time', () => {
@@ -96,6 +98,13 @@ test('Android arms recovery only after backend consumption without fabricating a
   assert.match(grantClient, /task\.isSuccessful && task\.result == true/);
   assert.match(grantClient, /replayStore\.markUsed\(claims\.jti, claims\.expiresAt\)/);
   assert.ok(grantClient.includes("runCatching {") && grantClient.includes("RecoveryGate.armAfterServerConsumption(claims.expiresAt)"));
+});
+
+test('persisted recovery state is never re-encrypted under a silently regenerated Keystore key', () => {
+  for (const source of [phoneStore, tenantIdentity, replayStore]) {
+    assert.match(source, /prefs\.contains\(BLOB\)/);
+    assert.match(source, /Persisted recovery state exists but its Keystore key is missing/);
+  }
 });
 
 test('every recovery callable enforces App Check and phone-change activation rejects future auth_time', () => {
