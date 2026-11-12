@@ -22,13 +22,11 @@ object RecoveryGate {
      * The local window can never outlive the signed grant expiry.
      */
     @Synchronized
-    fun armAfterServerConsumption(expiresAtEpochSec: Long) {
-        val nowEpochSec = System.currentTimeMillis() / 1000
-        val remainingMs = (expiresAtEpochSec - nowEpochSec) * 1000L
-        check(remainingMs in 1..TTL_MS) {
+    fun armAfterServerConsumption(remainingGrantMs: Long) {
+        check(remainingGrantMs in 1..TTL_MS) {
             "A live, five-minute recovery grant consumed by the backend is required."
         }
-        deadlineElapsed = SystemClock.elapsedRealtime() + remainingMs
+        deadlineElapsed = SystemClock.elapsedRealtime() + remainingGrantMs
         attemptsRemaining = MAX_ATTEMPTS
     }
 
