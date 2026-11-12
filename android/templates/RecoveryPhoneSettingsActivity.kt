@@ -94,6 +94,17 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                 text = "Close"
                 setOnClickListener { finish() }
             })
+            addView(Button(this@RecoveryPhoneSettingsActivity).apply {
+                text = "Cancel suspicious recovery request"
+                setOnClickListener {
+                    AlertDialog.Builder(this@RecoveryPhoneSettingsActivity)
+                        .setTitle("Cancel account recovery?")
+                        .setMessage("This will revoke any unconsumed recovery grant and stop the pending recovery hold.")
+                        .setNegativeButton("Keep request", null)
+                        .setPositiveButton("Cancel recovery") { _, _ -> cancelPendingRecovery() }
+                        .show()
+                }
+            })
         }
         setContentView(root)
     }
@@ -304,6 +315,32 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                     }
                 }
             }
+    }
+
+    private fun cancelPendingRecovery() {
+        status.text = "Checking owner authorization…"
+        RecoveryTenantIdentity.bindAuthorizedOwner(this).addOnCompleteListener { ownerTask ->
+            runOnUiThread {
+                if (!ownerTask.isSuccessful) {
+                    status.text = "Sign in again as the property owner to cancel recovery."
+                    return@runOnUiThread
+                }
+                val deviceHash = runCatching { RecoveryDeviceIdentity.deviceIdHash() }.getOrNull()
+                if (deviceHash == null) {
+                    status.text = "This device has no verified recovery identity."
+                    return@runOnUiThread
+                }
+                client.cancelRecoveryRequest(ownerTask.result, deviceHash).addOnCompleteListener { cancelTask ->
+                    runOnUiThread {
+                        status.text = if (cancelTask.isSuccessful && cancelTask.result == true) {
+                            "Pending account recovery was cancelled."
+                        } else {
+                            "No cancellable recovery request was found, or owner verification failed."
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun mask(value: String): String {
