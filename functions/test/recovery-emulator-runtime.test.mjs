@@ -8,7 +8,7 @@ const PROJECT_ID = 'demo-aurelia-recovery';
 const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
 const PHONE_PEPPER = 'emulator-only-phone-pepper-not-for-production';
 const SIGNING_KEY_ID = 'emulator-key-1';
-const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 
 process.env.GCLOUD_PROJECT = PROJECT_ID;
@@ -31,7 +31,6 @@ const auth = getAuth();
 const db = getFirestore();
 const sentMessages = [];
 const messaging = getMessaging();
-const originalSend = messaging.send.bind(messaging);
 messaging.send = async message => {
   sentMessages.push(message);
   return 'emulator-fcm-message-' + sentMessages.length;
@@ -53,10 +52,10 @@ async function phoneAuthToken(phoneNumber) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ phoneNumber, recaptchaToken: 'emulator-recaptcha-token' })
   });
-  assert.equal(sent.ok, true, await sent.text());
+  if (!sent.ok) throw new Error(await sent.text());
   const session = await sent.json();
   const codesResponse = await fetch(`http://${AUTH_HOST}/emulator/v1/projects/${PROJECT_ID}/verificationCodes`);
-  assert.equal(codesResponse.ok, true, await codesResponse.text());
+  if (!codesResponse.ok) throw new Error(await codesResponse.text());
   const codes = await codesResponse.json();
   const entry = (codes.verificationCodes || []).find(item =>
     item.phoneNumber === phoneNumber && item.sessionInfo === session.sessionInfo
@@ -67,7 +66,7 @@ async function phoneAuthToken(phoneNumber) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ sessionInfo: session.sessionInfo, code: entry.code })
   });
-  assert.equal(signedIn.ok, true, await signedIn.text());
+  if (!signedIn.ok) throw new Error(await signedIn.text());
   const body = await signedIn.json();
   assert.ok(body.idToken);
   return body.idToken;
@@ -186,7 +185,7 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   assert.equal(consumed.consumed, true);
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
-  }), 'replayed JTI must be rejected');
+  }));
 
   const grantRecord = (await db.doc(`recoveryGrants/${payload.jti}`).get()).data();
   assert.equal(grantRecord.state, 'CONSUMED');
@@ -198,7 +197,7 @@ test('expired or over-five-minute signed grants are rejected by backend verifica
   const deviceHash = 'd'.repeat(64);
   const nonce = 'e'.repeat(43);
   const now = Math.floor(Date.now() / 1000);
-  const signingKey = await import('node:crypto').then(({ createPrivateKey }) => createPrivateKey(privateKeyPem));
+  const signingKey = privateKey;
   const overlong = await new SignJWT({
     did: deviceHash, nonce, scope: 'recovery:continue'
   }).setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid: SIGNING_KEY_ID })
@@ -207,7 +206,7 @@ test('expired or over-five-minute signed grants are rejected by backend verifica
     .setIssuedAt(now).setExpirationTime(now + 301).sign(signingKey);
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: overlong, nonce, deviceIdHash: deviceHash
-  }), 'grant lifetime above 300 seconds must fail');
+  }));
   const expired = await new SignJWT({
     did: deviceHash, nonce, scope: 'recovery:continue'
   }).setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid: SIGNING_KEY_ID })
@@ -216,7 +215,7 @@ test('expired or over-five-minute signed grants are rejected by backend verifica
     .setIssuedAt(now - 301).setExpirationTime(now - 1).sign(signingKey);
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: expired, nonce, deviceIdHash: deviceHash
-  }), 'expired grant must fail');
+  }));
 });
 
 test('owner alert delivery failure leaves the recovery request blocked', async () => {
