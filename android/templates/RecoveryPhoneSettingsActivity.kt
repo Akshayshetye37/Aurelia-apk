@@ -203,10 +203,6 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                             registerOwnerAlertEndpoint(tenant, existingHash) { persistRecoveryPhone(newPhoneToken, tenant, existingHash) }
                             return@runOnUiThread
                         }
-                        if (existingHash != null) {
-                            status.text = "This device key predates hardware attestation. Supervised key re-enrollment is required."
-                            return@runOnUiThread
-                        }
                         val challengeId = response["challengeId"] as? String
                         val challengeEncoded = response["challengeBase64"] as? String
                         if (challengeId.isNullOrBlank() || challengeEncoded.isNullOrBlank()) {
