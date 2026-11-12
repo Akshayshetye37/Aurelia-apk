@@ -79,9 +79,15 @@ jobs:
             --no-allow-unauthenticated --ingress all \
             --set-env-vars "ATTESTATION_BIND_HOST=0.0.0.0,PORT=8080,ATTESTATION_APP_PACKAGE=$APP_PACKAGE,ATTESTATION_APP_MIN_VERSION=$APP_MIN_VERSION,ATTESTATION_APP_SIGNER_SHA256=$APP_SIGNER_SHA256" \
             --cpu 1 --memory 512Mi --min 0 --max 3 --concurrency 4 --timeout 15s
-          gcloud run services add-iam-policy-binding aurelia-recovery-attestation \
-            --project "$PROJECT_ID" --region "$REGION" \
-            --member "serviceAccount:$FUNCTIONS_SERVICE_ACCOUNT" --role "roles/run.invoker"
+          POLICY_FILE="$RUNNER_TEMP/aurelia-attestation-iam.json"
+          gcloud run services get-iam-policy aurelia-recovery-attestation \
+            --project "$PROJECT_ID" --region "$REGION" --format=json > "$POLICY_FILE"
+          jq --arg member "serviceAccount:$FUNCTIONS_SERVICE_ACCOUNT" '
+            .bindings = ([.bindings[]? | select(.role != "roles/run.invoker")] +
+              [{"role":"roles/run.invoker","members":[$member]}])
+          ' "$POLICY_FILE" > "$POLICY_FILE.next"
+          gcloud run services set-iam-policy aurelia-recovery-attestation "$POLICY_FILE.next" \
+            --project "$PROJECT_ID" --region "$REGION"
           gcloud run services describe aurelia-recovery-attestation --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)'
 
       

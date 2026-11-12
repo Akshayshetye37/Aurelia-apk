@@ -441,6 +441,9 @@ fs.copyFileSync(recoveryGrantClientTemplate, path.join(identityDir, 'RecoveryGra
 const recoveryPhoneSettingsTemplate = path.join(androidDir, 'templates', 'RecoveryPhoneSettingsActivity.kt');
 if (!fs.existsSync(recoveryPhoneSettingsTemplate)) throw new Error('RecoveryPhoneSettingsActivity.kt template is missing.');
 fs.copyFileSync(recoveryPhoneSettingsTemplate, path.join(identityDir, 'RecoveryPhoneSettingsActivity.kt'));
+const recoveryOwnerAlertTemplate = path.join(androidDir, 'templates', 'RecoveryOwnerAlertActivity.kt');
+if (!fs.existsSync(recoveryOwnerAlertTemplate)) throw new Error('RecoveryOwnerAlertActivity.kt template is missing.');
+fs.copyFileSync(recoveryOwnerAlertTemplate, path.join(identityDir, 'RecoveryOwnerAlertActivity.kt'));
 
 
 
