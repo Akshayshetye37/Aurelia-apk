@@ -3,7 +3,6 @@ package com.aurelia.pms.identity
 import android.content.Context
 import com.aurelia.pms.security.RecoveryGate
 import com.aurelia.pms.security.RecoveryGrantReplayStore
-import com.aurelia.pms.security.RecoveryGrantVerifier
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.android.gms.tasks.Task
@@ -67,7 +66,7 @@ class RecoveryGrantClient(private val context: Context) {
                 replayStore.markUsed(claims.jti, claims.expiresAt)
             }.getOrDefault(false) else false
             if (consumed && recorded) {
-                RecoveryGate.arm(RecoveryGrantVerifier.Result.Ok)
+                RecoveryGate.armAfterServerConsumption(claims.expiresAt)
                 onResult(true)
             } else {
                 RecoveryGate.clear()
@@ -95,7 +94,7 @@ class RecoveryGrantClient(private val context: Context) {
         require(payload.optString("did") == deviceHash)
         require(payload.optString("nonce") == nonce)
         require(issuedAt in 1..(now + 30))
-        require(expiresAt > now && expiresAt > issuedAt && expiresAt - issuedAt <= 600)
+        require(expiresAt > now && expiresAt > issuedAt && expiresAt - issuedAt <= 300)
         require(jti.matches(Regex("^[0-9a-fA-F-]{36}$")))
         return GrantClaims(jti, expiresAt)
     }
