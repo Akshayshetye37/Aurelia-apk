@@ -172,6 +172,9 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, ownerAuth(ownerUid, tenantId));
   assert.equal(acknowledged.acknowledged, true);
+  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
+  }, ownerAuth(ownerUid, tenantId)), 'owner acknowledgement token is single-use');
   assert.ok(acknowledged.eligibleAt >= Date.now() + 23 * 60 * 60_000);
   cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(cooldown.state, 'APPROVED');
@@ -261,6 +264,10 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
 
   const grantRecord = (await db.doc(`recoveryGrants/${payload.jti}`).get()).data();
   assert.equal(grantRecord.state, 'CONSUMED');
+  const consumedCancellation = await callable(functions.cancelRecoveryRequest, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(consumedCancellation.cancelled, false, 'consume wins before later cancellation');
   const finalState = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(finalState.state, 'CONSUMED');
   const consumedKey = createHash('sha256').update(`${tenantId}|${ownerUid}|${payload.jti}`).digest('hex');
@@ -485,4 +492,125 @@ test('independent primary owner cancels an issued grant; consume is rejected aft
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: issued.grant, nonce: 'u'.repeat(43), deviceIdHash: recoveryDeviceHash
   }, ownerAuth(ownerUid, tenantId)), 'cancelled grant cannot be consumed');
+});
+
+
+test('independent owner can cancel during the approved 24-hour hold', async () => {
+  const tenantId = 'tenant-emulator-cancel-hold';
+  const ownerUid = 'owner-emulator-cancel-hold';
+  const phone = '+15555550107';
+  const recoveryDeviceHash = '8'.repeat(64);
+  const ownerDeviceHash = '9'.repeat(64);
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
+  const started = await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'v'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phone)
+  });
+  assert.equal(started.status, 'COOLDOWN');
+  const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  const alert = sentMessages.find(message => message.data.tenantId === tenantId &&
+    message.data.deviceIdHash === ownerDeviceHash);
+  assert.ok(alert?.data.ackToken);
+  await callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
+    ackToken: alert.data.ackToken
+  }, ownerAuth(ownerUid, tenantId));
+  const approved = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  assert.equal(approved.state, 'APPROVED');
+  assert.ok(approved.eligibleAt > Date.now());
+  const cancelled = await callable(functions.cancelRecoveryRequest, {
+    tenantId, deviceIdHash: ownerDeviceHash
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(cancelled.cancelled, true);
+  assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'CANCELLED');
+});
+
+test('cancellation racing with grant issue wins the recovery-state transaction', async () => {
+  const tenantId = 'tenant-emulator-cancel-issue-race';
+  const ownerUid = 'owner-emulator-cancel-issue-race';
+  const phone = '+15555550108';
+  const recoveryDeviceHash = 'a'.repeat(64);
+  const ownerDeviceHash = 'b'.repeat(64);
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
+  await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'w'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phone)
+  });
+  const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  const alert = sentMessages.find(message => message.data.tenantId === tenantId &&
+    message.data.deviceIdHash === ownerDeviceHash);
+  await callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
+    ackToken: alert.data.ackToken
+  }, ownerAuth(ownerUid, tenantId));
+  await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
+  const [issueResult, cancelResult] = await Promise.allSettled([
+    callable(functions.issueRecoveryGrant, {
+      tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'x'.repeat(43),
+      phoneIdToken: await phoneAuthToken(phone)
+    }),
+    callable(functions.cancelRecoveryRequest, {
+      tenantId, deviceIdHash: ownerDeviceHash
+    }, ownerAuth(ownerUid, tenantId))
+  ]);
+  assert.equal(cancelResult.status, 'fulfilled');
+  assert.equal(cancelResult.value.cancelled, true);
+  const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  assert.equal(state.state, 'CANCELLED');
+  if (issueResult.status === 'fulfilled' && issueResult.value.status === 'ISSUED') {
+    const issuedPayload = JSON.parse(Buffer.from(issueResult.value.grant.split('.')[1], 'base64url').toString('utf8'));
+    assert.equal((await db.doc(`recoveryGrants/${issuedPayload.jti}`).get()).data().state, 'REVOKED');
+  } else {
+    assert.equal(issueResult.status, 'rejected', 'cancelled approval cannot issue a grant');
+  }
+});
+
+test('grant consumption racing with cancellation has exactly one winner', async () => {
+  const tenantId = 'tenant-emulator-consume-cancel-race';
+  const ownerUid = 'owner-emulator-consume-cancel-race';
+  const phone = '+15555550109';
+  const recoveryDeviceHash = 'c'.repeat(64);
+  const ownerDeviceHash = 'd'.repeat(64);
+  const nonce = 'y'.repeat(43);
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
+  await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce, phoneIdToken: await phoneAuthToken(phone)
+  });
+  const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  const alert = sentMessages.find(message => message.data.tenantId === tenantId &&
+    message.data.deviceIdHash === ownerDeviceHash);
+  await callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
+    ackToken: alert.data.ackToken
+  }, ownerAuth(ownerUid, tenantId));
+  await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
+  const issued = await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce, phoneIdToken: await phoneAuthToken(phone)
+  });
+  assert.equal(issued.status, 'ISSUED');
+  const payload = JSON.parse(Buffer.from(issued.grant.split('.')[1], 'base64url').toString('utf8'));
+  const [consumeResult, cancelResult] = await Promise.allSettled([
+    callable(functions.consumeRecoveryGrant, {
+      grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
+    }, ownerAuth(ownerUid, tenantId)),
+    callable(functions.cancelRecoveryRequest, {
+      tenantId, deviceIdHash: ownerDeviceHash
+    }, ownerAuth(ownerUid, tenantId))
+  ]);
+  assert.equal(cancelResult.status, 'fulfilled');
+  const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  const grant = (await db.doc(`recoveryGrants/${payload.jti}`).get()).data();
+  if (consumeResult.status === 'fulfilled') {
+    assert.equal(consumeResult.value.consumed, true);
+    assert.equal(cancelResult.value.cancelled, false, 'a consumed grant cannot be cancelled retroactively');
+    assert.equal(state.state, 'CONSUMED');
+    assert.equal(grant.state, 'CONSUMED');
+  } else {
+    assert.equal(cancelResult.value.cancelled, true);
+    assert.equal(state.state, 'CANCELLED');
+    assert.equal(grant.state, 'REVOKED');
+  }
 });
