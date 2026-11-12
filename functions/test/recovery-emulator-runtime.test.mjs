@@ -57,9 +57,9 @@ async function phoneAuthToken(phoneNumber) {
   const codesResponse = await fetch(`http://${AUTH_HOST}/emulator/v1/projects/${PROJECT_ID}/verificationCodes`);
   if (!codesResponse.ok) throw new Error(await codesResponse.text());
   const codes = await codesResponse.json();
-  const entry = (codes.verificationCodes || []).find(item =>
-    item.phoneNumber === phoneNumber && item.sessionInfo === session.sessionInfo
-  );
+  const entry = (codes.verificationCodes || []).filter(item =>
+    item.phoneNumber === phoneNumber
+  ).at(-1);
   assert.ok(entry?.code, 'Auth Emulator must expose the per-request verification code');
   const signedIn = await fetch(`http://${AUTH_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPhoneNumber?key=fake-api-key`, {
     method: 'POST',
