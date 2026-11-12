@@ -173,9 +173,9 @@ test('hardware attestation is challenge-bound, server-verified and rejects softw
 test('recovery cannot proceed until owner alert is posted and acknowledged by the attested device', () => {
   assert.match(functions, /registerRecoveryOwnerDevice = onCall/);
   assert.match(functions, /recoveryOwnerDevices/);
-  assert.match(functions, /alertedDeviceHashes/);
-  assert.match(functions, /Promise\\.allSettled\\(ownerDevices\\.map/);
-  assert.match(functions, /cooldown\\.alertedDeviceHashes\\.includes\\(deviceIdHash\\)/);
+  assert.ok(functions.includes('cooldown.alertedDeviceHashes.includes(deviceIdHash)'));
+  assert.ok(functions.includes('Promise.allSettled(ownerDevices.map'));
+  assert.ok(functions.includes('cooldown.alertedDeviceHashes.includes(deviceIdHash)'));
   assert.match(functions, /getMessaging\(\)\.send/);
   assert.match(functions, /state: "ALERT_PENDING"/);
   assert.match(functions, /acknowledgeRecoveryOwnerAlert = onCall/);
