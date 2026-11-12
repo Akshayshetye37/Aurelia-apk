@@ -1,6 +1,7 @@
 name: Recovery hardware-attestation verifier CI
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - work/p0-storage-hardening
