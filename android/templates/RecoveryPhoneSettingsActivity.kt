@@ -282,10 +282,6 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                             }
                             return@runOnUiThread
                         }
-                        if (existingHash != null) {
-                            status.text = "Existing device key is not attested; supervised re-enrollment is required."
-                            return@runOnUiThread
-                        }
                         val challengeId = response["challengeId"] as? String
                         val challengeEncoded = response["challengeBase64"] as? String
                         if (challengeId.isNullOrBlank() || challengeEncoded.isNullOrBlank()) {
