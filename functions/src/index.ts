@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
 import { getMessaging } from "firebase-admin/messaging";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError, type CallableRequest } from "firebase-functions/v2/https";
@@ -42,12 +42,13 @@ function requireFreshPrimaryOwner(request: CallableRequest<unknown>): { uid: str
   const firebase = auth?.token.firebase as { sign_in_provider?: unknown; identities?: Record<string, unknown> } | undefined;
   const provider = firebase?.sign_in_provider;
   const identities = firebase?.identities;
-  const emailIdentity = Array.isArray(identities?.email) && identities!.email!.length > 0;
-  const emailLink = factor === "email_link" && provider === "password" && emailIdentity;
+  const emailLink = factor === "email_link" && provider === "custom" &&
+    auth.token.email_verified === true && typeof auth.token.email === "string";
   const passkey = factor === "passkey" && provider === "custom";
   if (!auth || auth.token.role !== "owner" || !Number.isInteger(authTime) ||
       authTime > now || now - authTime >= 300 ||
-      !Number.isInteger(factorAuthTime) || factorAuthTime !== authTime ||
+      !Number.isInteger(factorAuthTime) || factorAuthTime > authTime ||
+      authTime - factorAuthTime >= 300 ||
       (!emailLink && !passkey)) throw GENERIC;
   return { uid: auth.uid, tenantId: validateTenantId(auth.token.tenantId) };
 }
@@ -362,12 +363,13 @@ export const exchangeOwnerEmailLink = onCall(
     try { link = new URL(emailLink); } catch { throw GENERIC; }
     const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT ||
       (() => { try { return JSON.parse(process.env.FIREBASE_CONFIG || "{}").projectId; } catch { return ""; } })();
-    const allowedHosts = new Set([\`${projectId}.firebaseapp.com\`, \`${projectId}.web.app\`]);
+    if (!projectId) throw GENERIC;
+    const allowedHosts = new Set([projectId + ".firebaseapp.com", projectId + ".web.app"]);
     const oobCode = link.searchParams.get("oobCode");
     if (link.protocol !== "https:" || link.username || link.password || link.hash ||
-        !allowedHosts.has(link.hostname) || link.searchParams.get("mode") !== "signIn" ||
+        !allowedHosts.has(link.hostname) || !link.pathname.startsWith("/__/auth/") ||
+        link.searchParams.get("mode") !== "signIn" ||
         link.searchParams.get("apiKey") !== apiKey || !oobCode || oobCode.length > 2048) throw GENERIC;
-    await requireAttestedDevice(tenantId, deviceIdHash, "");
     const endpoint = process.env.FIREBASE_AUTH_EMULATOR_HOST
       ? \`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithEmailLink?key=${encodeURIComponent(apiKey)}\`
       : \`https://identitytoolkit.googleapis.com/v1/accounts:signInWithEmailLink?key=${encodeURIComponent(apiKey)}\`;
@@ -392,6 +394,7 @@ export const exchangeOwnerEmailLink = onCall(
         !Number.isInteger(authTime) || authTime > now || now - authTime >= 300) throw GENERIC;
     const phoneRecord = (await db.doc(`tenants/${tenantId}/security/recoveryPhone`).get()).data();
     if (!phoneRecord || phoneRecord.ownerUid !== decoded.uid) throw GENERIC;
+    await requireAttestedDevice(tenantId, deviceIdHash, decoded.uid);
     const owner = await getAuth().getUser(decoded.uid);
     if (owner.disabled || owner.customClaims?.role !== "owner" ||
         owner.customClaims?.tenantId !== tenantId) throw GENERIC;
