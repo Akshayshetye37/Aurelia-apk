@@ -326,9 +326,6 @@ export const registerRecoveryOwnerDevice = onCall(
     await requireAttestedDevice(tenantId, deviceIdHash, auth.uid);
     const token = requiredString(request.data?.fcmToken, 4096);
     if (token.length < 100) throw GENERIC;
-    const phoneRef = db.doc(`tenants/${tenantId}/security/recoveryPhone`);
-    const phone = (await phoneRef.get()).data();
-    if (phone?.deviceIdHash && phone.deviceIdHash !== deviceIdHash) throw GENERIC;
     const tokenHash = createHmac("sha256", PHONE_PEPPER.value()).update(token).digest("hex");
     await db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`).set({
       tenantId, deviceIdHash, ownerUid: auth.uid, fcmToken: token,
