@@ -10,6 +10,7 @@ on:
       - "payment-backend/Dockerfile.attestation"
       - "cloudbuild-recovery-attestation.yaml"
       - ".github/workflows/recovery-attestation-ci.yml"
+      - ".github/workflows/otp-recovery-android-instrumentation.yml"
   pull_request:
     branches:
       - work/p0-storage-hardening
