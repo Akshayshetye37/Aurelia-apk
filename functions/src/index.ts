@@ -4,8 +4,9 @@ import { getMessaging } from "firebase-admin/messaging";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
-import { createHmac, createPrivateKey, createPublicKey, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, createPrivateKey, createPublicKey, randomUUID, randomBytes, timingSafeEqual } from "node:crypto";
 import { importPKCS8, importSPKI, jwtVerify, SignJWT } from "jose";
+import { GoogleAuth } from "google-auth-library";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -20,6 +21,8 @@ const AUDIENCE = "aurelia-recovery-client";
 const REGION = "asia-south1";
 const RECOVERY_COOLDOWN_MS = 24 * 60 * 60_000;
 
+const RECOVERY_ATTESTATION_VERIFIER_URL = defineString("RECOVERY_ATTESTATION_VERIFIER_URL", { default: "" });
+
 function requireRecoveryEnabled(): void {
   if (RECOVERY_ENABLED.value() !== "true") {
     throw new HttpsError("failed-precondition", "Account recovery is disabled.");
@@ -27,6 +30,111 @@ function requireRecoveryEnabled(): void {
 }
 
 type PhoneProof = { uid: string; phone: string; authTime: number };
+
+function requireFreshOwner(request: Parameters<Parameters<typeof onCall>[1]>[0]): { uid: string; tenantId: string } {
+  const auth = request.auth;
+  const ownerAge = Date.now() / 1000 - Number(auth?.token.auth_time ?? 0);
+  if (!auth || auth.token.role !== "owner" || ownerAge < 0 || ownerAge >= 300) throw GENERIC;
+  return { uid: auth.uid, tenantId: validateTenantId(auth.token.tenantId) };
+}
+
+/** Issue a one-use Android Key Attestation challenge, bound to the signed-in owner. */
+export const createRecoveryAttestationChallenge = onCall(
+  { region: REGION, enforceAppCheck: true },
+  async request => {
+    requireRecoveryEnabled();
+    const owner = requireFreshOwner(request);
+    if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
+    const requestedHash = request.data?.deviceIdHash;
+    if (requestedHash !== undefined && requestedHash !== null) {
+      const deviceIdHash = validateDeviceHash(requestedHash);
+      const existing = (await db.doc(`recoveryDeviceAttestations/${owner.tenantId}_${deviceIdHash}`).get()).data();
+      if (existing?.status === "VERIFIED" && existing.ownerUid === owner.uid) {
+        return { verified: true, deviceIdHash };
+      }
+    }
+    const challengeId = randomUUID();
+    const challenge = randomBytes(32).toString("base64url");
+    await db.doc(`recoveryAttestationChallenges/${challengeId}`).create({
+      challengeId, tenantId: owner.tenantId, ownerUid: owner.uid,
+      challengeBase64: challenge, createdAt: FieldValue.serverTimestamp(),
+      expiresAt: Date.now() + 5 * 60_000
+    });
+    return { verified: false, challengeId, challengeBase64: challenge };
+  }
+);
+
+/** Verify the full Android certificate chain against Google roots in the isolated Cloud Run verifier. */
+export const verifyRecoveryDeviceAttestation = onCall(
+  { region: REGION, enforceAppCheck: true },
+  async request => {
+    requireRecoveryEnabled();
+    const owner = requireFreshOwner(request);
+    if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
+    const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
+    const challengeId = requiredString(request.data?.challengeId, 64);
+    if (!/^[0-9a-f-]{36}$/i.test(challengeId)) throw GENERIC;
+    const chain = request.data?.certificateChainBase64;
+    if (!Array.isArray(chain) || chain.length < 2 || chain.length > 8 ||
+        chain.some(value => typeof value !== "string" || value.length < 128 || value.length > 90_000)) throw GENERIC;
+    const challengeRef = db.doc(`recoveryAttestationChallenges/${challengeId}`);
+    const challengeSnapshot = await challengeRef.get();
+    const challenge = challengeSnapshot.data();
+    if (!challenge || challenge.ownerUid !== owner.uid || challenge.tenantId !== owner.tenantId ||
+        Number(challenge.expiresAt) <= Date.now() || challenge.consumedAt) throw GENERIC;
+
+    const verifierUrl = RECOVERY_ATTESTATION_VERIFIER_URL.value().trim();
+    if (!verifierUrl) throw new HttpsError("failed-precondition", "Hardware attestation verifier is not configured.");
+    let verification: {
+      status?: string; publicKeySpkiBase64?: string; securityLevel?: string;
+      verifiedBootState?: string; deviceLocked?: boolean
+    };
+    try {
+      const base = new URL(verifierUrl);
+      const client = await new GoogleAuth().getIdTokenClient(base.origin);
+      const response = await client.request({
+        url: new URL("/verify", base).toString(), method: "POST",
+        data: { certificateChainBase64: chain, challengeBase64: challenge.challengeBase64 }
+      });
+      verification = response.data as typeof verification;
+    } catch {
+      throw new HttpsError("unavailable", "Hardware attestation verification is unavailable; recovery is blocked.");
+    }
+    if (verification.status !== "VERIFIED" ||
+        !["TRUSTED_ENVIRONMENT", "STRONG_BOX"].includes(verification.securityLevel ?? "") ||
+        verification.verifiedBootState !== "VERIFIED" || verification.deviceLocked !== true ||
+        typeof verification.publicKeySpkiBase64 !== "string") throw GENERIC;
+    const spki = Buffer.from(verification.publicKeySpkiBase64, "base64");
+    if (!spki.length || spki.toString("base64") !== verification.publicKeySpkiBase64 ||
+        spki.length < 80 || spki.length > 160) throw GENERIC;
+    const publicKeyHash = createHash("sha256").update(spki).digest("hex");
+    if (publicKeyHash !== deviceIdHash) throw GENERIC;
+
+    const attestationRef = db.doc(`recoveryDeviceAttestations/${owner.tenantId}_${deviceIdHash}`);
+    await db.runTransaction(async tx => {
+      const currentChallenge = await tx.get(challengeRef);
+      const current = currentChallenge.data();
+      if (!current || current.ownerUid !== owner.uid || current.tenantId !== owner.tenantId ||
+          Number(current.expiresAt) <= Date.now() || current.consumedAt) throw GENERIC;
+      tx.update(challengeRef, { consumedAt: FieldValue.serverTimestamp() });
+      tx.create(attestationRef, {
+        tenantId: owner.tenantId, ownerUid: owner.uid, deviceIdHash,
+        status: "VERIFIED", securityLevel: verification.securityLevel,
+        verifiedBootState: verification.verifiedBootState, deviceLocked: true,
+        publicKeySpkiSha256: publicKeyHash,
+        certificateChainSha256: createHash("sha256").update(chain.join(".")).digest("hex"),
+        verifiedAt: FieldValue.serverTimestamp()
+      });
+      const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());
+      tx.create(eventRef, {
+        tenantId: owner.tenantId, type: "RECOVERY_DEVICE_ATTESTATION_VERIFIED",
+        deviceIdHash, securityLevel: verification.securityLevel,
+        createdAt: FieldValue.serverTimestamp()
+      });
+    });
+    return { verified: true, deviceIdHash, securityLevel: verification.securityLevel };
+  }
+);
 
 function requiredString(value: unknown, max = 512): string {
   if (typeof value !== "string" || value.length === 0 || value.length > max) throw GENERIC;
