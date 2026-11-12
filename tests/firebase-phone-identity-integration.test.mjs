@@ -16,7 +16,7 @@ test('Android generation copies both Firebase recovery Kotlin sources', () => {
 });
 
 test('Firebase Auth dependency is added without obsolete KTX artifact', () => {
-  assert.match(patchScript, /firebase-bom:33\.5\.0/);
+  assert.match(patchScript, /firebase-bom:35\.1\.0/);
   assert.match(patchScript, /com\.google\.firebase:firebase-auth/);
   assert.doesNotMatch(patchScript, /firebase-auth-ktx/);
 });
@@ -31,7 +31,7 @@ test('Groovy and Kotlin DSL app dependencies are supported', () => {
   assert.ok(patchScript.includes('implementation platform'));
   assert.ok(patchScript.includes('implementation(platform'));
   assert.ok(patchScript.includes("const auth = 'com.google.firebase:firebase-auth'"));
-  assert.ok(patchScript.includes("const missing = [auth, functions, ...paymentDependencies]"));
+  assert.ok(patchScript.includes("const missing = [auth, functions, appCheck, messaging, ...paymentDependencies]"));
   assert.match(patchScript, /implementation.*dependency/);
   assert.match(patchScript, /implementation.*dependency/);
 });
