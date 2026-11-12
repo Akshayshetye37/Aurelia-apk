@@ -41,6 +41,11 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
             identity = FirebasePhoneIdentity(RecoveryFirebaseAuthFactory.create(this)) { state ->
                 runOnUiThread { onPhoneState(state) }
             }
+            if (Build.VERSION.SDK_INT >= 26) {
+                getSystemService(NotificationManager::class.java).createNotificationChannel(
+                    NotificationChannel("aurelia_recovery_security", "Account security", NotificationManager.IMPORTANCE_HIGH)
+                )
+            }
             render()
         } catch (failure: Exception) {
             status = TextView(this)
@@ -159,34 +164,109 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
         RecoveryTenantIdentity.bindAuthorizedOwner(this).addOnCompleteListener { tenantTask ->
             runOnUiThread {
                 if (!tenantTask.isSuccessful) {
-                    status.text = "Recovery phone setup requires a recently authenticated property-owner account with a tenant binding."
+                    status.text = "Recovery phone setup requires a recently authenticated property-owner account."
                     return@runOnUiThread
                 }
                 val tenant = tenantTask.result
-                val deviceHash = try { RecoveryDeviceIdentity.deviceIdHash() } catch (_: Exception) {
+                val existingHash = try { RecoveryDeviceIdentity.deviceIdHashOrNull() } catch (_: Exception) {
                     status.text = "Secure device binding is unavailable."
                     return@runOnUiThread
                 }
-                status.text = "Registering owner security notifications…"
-                FirebaseMessaging.getInstance().token.addOnCompleteListener { tokenTask ->
+                status.text = "Checking hardware-backed device attestation…"
+                client.createRecoveryAttestationChallenge(tenant, existingHash).addOnCompleteListener { challengeTask ->
                     runOnUiThread {
-                        if (!tokenTask.isSuccessful || tokenTask.result.isNullOrBlank()) {
-                            status.text = "Owner security notifications are unavailable. Recovery phone registration is blocked."
+                        if (!challengeTask.isSuccessful) {
+                            status.text = "Hardware attestation challenge is unavailable. Recovery registration is blocked."
                             return@runOnUiThread
                         }
-                        client.registerOwnerNotificationDevice(tenant, deviceHash, tokenTask.result)
-                            .addOnCompleteListener { notificationTask ->
-                                runOnUiThread {
-                                    if (!notificationTask.isSuccessful || notificationTask.result != true) {
-                                        status.text = "Could not register owner security notifications. Recovery phone registration is blocked."
-                                        return@runOnUiThread
-                                    }
-                                    persistRecoveryPhone(newPhoneToken, tenant, deviceHash)
-                                }
+                        val response = challengeTask.result
+                        if (response["verified"] == true) {
+                            if (existingHash == null || response["deviceIdHash"] != existingHash) {
+                                status.text = "Device attestation binding is inconsistent."
+                                return@runOnUiThread
                             }
+                            registerOwnerAlertEndpoint(newPhoneToken, tenant, existingHash)
+                            return@runOnUiThread
+                        }
+                        if (existingHash != null) {
+                            status.text = "This device key predates hardware attestation. Supervised key re-enrollment is required."
+                            return@runOnUiThread
+                        }
+                        val challengeId = response["challengeId"] as? String
+                        val challengeEncoded = response["challengeBase64"] as? String
+                        if (challengeId.isNullOrBlank() || challengeEncoded.isNullOrBlank()) {
+                            status.text = "Server attestation challenge is malformed."
+                            return@runOnUiThread
+                        }
+                        val identity = try {
+                            val challenge = Base64.getUrlDecoder().decode(challengeEncoded)
+                            try { RecoveryDeviceIdentity.createAttestedIdentity(challenge) }
+                            finally { challenge.fill(0) }
+                        } catch (_: Exception) {
+                            status.text = "Android hardware attestation is unavailable. Software-only keys are rejected."
+                            return@runOnUiThread
+                        }
+                        client.verifyRecoveryDeviceAttestation(
+                            tenant, challengeId, identity.deviceIdHash, identity.certificateChainBase64
+                        ).addOnCompleteListener { verifyTask ->
+                            runOnUiThread {
+                                if (!verifyTask.isSuccessful || verifyTask.result != true) {
+                                    status.text = "Hardware key attestation failed. This device cannot be enrolled."
+                                    return@runOnUiThread
+                                }
+                                registerOwnerAlertEndpoint(newPhoneToken, tenant, identity.deviceIdHash)
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+
+    private fun registerOwnerAlertEndpoint(newPhoneToken: String, tenant: String, deviceHash: String) {
+        withNotificationPermission {
+            status.text = "Registering owner security notifications…"
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { tokenTask ->
+                runOnUiThread {
+                    if (!tokenTask.isSuccessful || tokenTask.result.isNullOrBlank()) {
+                        status.text = "Owner security notifications are unavailable. Recovery registration is blocked."
+                        return@runOnUiThread
+                    }
+                    client.registerOwnerNotificationDevice(tenant, deviceHash, tokenTask.result)
+                        .addOnCompleteListener { notificationTask ->
+                            runOnUiThread {
+                                if (!notificationTask.isSuccessful || notificationTask.result != true) {
+                                    status.text = "Could not register owner security notifications. Recovery registration is blocked."
+                                    return@runOnUiThread
+                                }
+                                persistRecoveryPhone(newPhoneToken, tenant, deviceHash)
+                            }
+                        }
+                }
+            }
+        }
+    }
+
+    private fun withNotificationPermission(action: () -> Unit) {
+        if (Build.VERSION.SDK_INT < 33 ||
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            action()
+            return
+        }
+        pendingNotificationPermissionAction = action
+        status.text = "Allow security notifications to protect this recovery destination."
+        requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 9401)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != 9401) return
+        val action = pendingNotificationPermissionAction
+        pendingNotificationPermissionAction = null
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            action?.invoke()
+        } else {
+            status.text = "Security notifications are required. Recovery phone registration remains blocked."
         }
     }
 
