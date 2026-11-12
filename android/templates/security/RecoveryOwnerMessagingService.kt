@@ -24,6 +24,8 @@ class RecoveryOwnerMessagingService : FirebaseMessagingService() {
         val tenantId = data["tenantId"] ?: return
         val deviceIdHash = data["deviceIdHash"] ?: return
         val eventId = data["eventId"] ?: return
+        val localDeviceHash = runCatching { RecoveryDeviceIdentity.deviceIdHash() }.getOrNull() ?: return
+        if (localDeviceHash != deviceIdHash) return
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val manager = getSystemService(NotificationManager::class.java)
