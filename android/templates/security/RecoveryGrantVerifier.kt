@@ -19,6 +19,7 @@ object RecoveryGrantVerifier {
     }
 
     fun keyId(jwt: String): String {
+        require(jwt.length in 100..4096)
         val parts = jwt.split('.')
         require(parts.size == 3 && parts.all { it.isNotEmpty() })
         val header = JSONObject(String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8))
