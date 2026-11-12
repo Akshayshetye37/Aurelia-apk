@@ -4,7 +4,6 @@ import android.os.Build
 import android.util.Base64
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.security.keystore.StrongBoxUnavailableException
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.MessageDigest
@@ -66,7 +65,8 @@ object RecoveryDeviceIdentity {
             if (Build.VERSION.SDK_INT >= 28) {
                 try {
                     generate(true)
-                } catch (_: StrongBoxUnavailableException) {
+                } catch (failure: Exception) {
+                    if (failure.javaClass.name != "android.security.keystore.StrongBoxUnavailableException") throw failure
                     runCatching { store.deleteEntry(ALIAS) }
                     generate(false) // TEE is accepted; software-backed keys are rejected server-side.
                 }
