@@ -34,12 +34,13 @@ jobs:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           REGION: ${{ vars.GCP_REGION }}
           RUNTIME_SERVICE_ACCOUNT: ${{ vars.RECOVERY_ATTESTATION_SERVICE_ACCOUNT }}
+          FUNCTIONS_SERVICE_ACCOUNT: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
           APP_PACKAGE: ${{ vars.ATTESTATION_APP_PACKAGE }}
           APP_MIN_VERSION: ${{ vars.ATTESTATION_APP_MIN_VERSION }}
           APP_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
         run: |
           set -euo pipefail
-          for name in PROJECT_ID REGION RUNTIME_SERVICE_ACCOUNT APP_PACKAGE APP_MIN_VERSION APP_SIGNER_SHA256; do
+          for name in PROJECT_ID REGION RUNTIME_SERVICE_ACCOUNT FUNCTIONS_SERVICE_ACCOUNT APP_PACKAGE APP_MIN_VERSION APP_SIGNER_SHA256; do
             if [ -z "${!name}" ]; then echo "::error::Missing required GitHub environment variable: $name"; exit 1; fi
           done
           [[ "$APP_SIGNER_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]]
@@ -77,4 +78,7 @@ jobs:
             --no-allow-unauthenticated --ingress all \
             --set-env-vars "ATTESTATION_BIND_HOST=0.0.0.0,PORT=8080,ATTESTATION_APP_PACKAGE=$APP_PACKAGE,ATTESTATION_APP_MIN_VERSION=$APP_MIN_VERSION,ATTESTATION_APP_SIGNER_SHA256=$APP_SIGNER_SHA256" \
             --cpu 1 --memory 512Mi --min 0 --max 3 --concurrency 4 --timeout 15s
+          gcloud run services add-iam-policy-binding aurelia-recovery-attestation \
+            --project "$PROJECT_ID" --region "$REGION" \
+            --member "serviceAccount:$FUNCTIONS_SERVICE_ACCOUNT" --role "roles/run.invoker"
           gcloud run services describe aurelia-recovery-attestation --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)'
