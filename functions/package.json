@@ -10,7 +10,8 @@
     "build": "tsc",
     "test": "node --test test/recovery-security-contract.test.mjs",
     "emulate": "npm run build && firebase emulators:start --only functions,firestore",
-    "test:emulator": "node --test test/recovery-emulator-runtime.test.mjs"
+    "test:emulator": "node --test test/recovery-emulator-runtime.test.mjs",
+    "test:disabled": "node --test test/recovery-disabled-runtime.test.mjs"
   },
   "dependencies": {
     "firebase-admin": "^13.4.0",
