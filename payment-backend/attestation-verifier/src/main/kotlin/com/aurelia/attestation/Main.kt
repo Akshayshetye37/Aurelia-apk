@@ -199,5 +199,5 @@ fun main() {
     }
 
     server.start()
-    System.err.println("Aurelia Android Key Attestation verifier listening on 127.0.0.1:8091")
+    System.err.println("Aurelia Android Key Attestation verifier listening on ${System.getenv("ATTESTATION_BIND_HOST") ?: "127.0.0.1"}:${System.getenv("PORT")?.toIntOrNull() ?: 8091}")
 }
