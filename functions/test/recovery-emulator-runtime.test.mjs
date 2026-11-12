@@ -802,10 +802,12 @@ test('attested but unenrolled owner device cannot cancel a recovery request', as
     securityLevel: 'TRUSTED_ENVIRONMENT', verifiedBootState: 'VERIFIED',
     deviceLocked: true, publicKeyHash: unregisteredOwnerHash
   });
-  await assert.rejects(callable(functions.issueRecoveryGrant, {
+  const started = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'c'.repeat(43),
     phoneIdToken: await phoneAuthToken(phone)
-  }), error => error.code === 'unavailable', 'no acknowledgement keeps the request pending');
+  });
+  assert.equal(started.status, 'COOLDOWN');
+  assert.equal(started.eligibleAt, 0, 'no acknowledgement keeps the request pending');
   await assert.rejects(callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: unregisteredOwnerHash
   }, ownerAuth(ownerUid, tenantId)), 'attested but unenrolled device cannot cancel');
@@ -820,10 +822,12 @@ test('revoked owner notification device cannot acknowledge a pending alert', asy
   const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
   await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
     ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
-  await assert.rejects(callable(functions.issueRecoveryGrant, {
+  const started = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'd'.repeat(43),
     phoneIdToken: await phoneAuthToken(phone)
-  }), error => error.code === 'unavailable');
+  });
+  assert.equal(started.status, 'COOLDOWN');
+  assert.equal(started.eligibleAt, 0);
   const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   const alert = sentMessages.find(message => message.data.tenantId === tenantId &&
     message.data.deviceIdHash === ownerDeviceHash);
@@ -845,10 +849,12 @@ test('owner cancellation before grant issue permanently prevents grant creation'
   const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
   await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
     ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
-  await assert.rejects(callable(functions.issueRecoveryGrant, {
+  const started = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'f'.repeat(43),
     phoneIdToken: await phoneAuthToken(phone)
-  }), error => error.code === 'unavailable');
+  });
+  assert.equal(started.status, 'COOLDOWN');
+  assert.equal(started.eligibleAt, 0);
   const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   const alert = sentMessages.find(message => message.data.tenantId === tenantId &&
     message.data.deviceIdHash === ownerDeviceHash);
@@ -878,10 +884,12 @@ test('owner cancellation before consume revokes the issued grant permanently', a
   const nonce = 'h'.repeat(43);
   await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
     ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
-  await assert.rejects(callable(functions.issueRecoveryGrant, {
+  const started = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'i'.repeat(43),
     phoneIdToken: await phoneAuthToken(phone)
-  }), error => error.code === 'unavailable');
+  });
+  assert.equal(started.status, 'COOLDOWN');
+  assert.equal(started.eligibleAt, 0);
   const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   const alert = sentMessages.find(message => message.data.tenantId === tenantId &&
     message.data.deviceIdHash === ownerDeviceHash);
