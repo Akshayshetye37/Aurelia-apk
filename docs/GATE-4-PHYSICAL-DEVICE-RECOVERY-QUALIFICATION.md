@@ -61,6 +61,7 @@ All cases below must be run on the physical handset. Capture timestamped, redact
 | G4-10 | Inspect app-private files, preferences, crash/logcat output and approved diagnostic artifacts. | No plaintext PIN, OTP, phone number, ID token, grant, recovery key or DEK; no secret in CI artifacts or uploaded logs. |
 | G4-11 | Enroll the PIN/biometric Keystore wrappers, then change/remove the secure lock-screen credential through Android Settings and attempt unlock/recovery. | Invalidated Keystore wrappers are detected; app fails closed, never silently regenerates the DEK or wrapper; the separately provisioned offline recovery key can still unwrap the same DEK where its own wrapper remains valid. |
 | G4-12 | Register two independently attested owner devices, then simulate a recovery attempt from the registered recovery handset while the second owner device is online; repeat with the second device offline and with notification permission disabled. | Every enrolled owner device receives the alert; at least one device must post and acknowledge it before the 24-hour hold starts. No acknowledgement means no cooldown eligibility and no grant. Owner cancellation revokes an unconsumed grant. |
+| G4-13 | Simulate SIM swap/port-out by moving the staging test number to a second SIM/handset while retaining the original attested owner devices. Attempt recovery from the unregistered handset and from the registered recovery device. | Phone possession alone on the unregistered handset cannot satisfy device binding. Owner devices receive and acknowledge the alert; the 24-hour hold begins only after acknowledgement; a fresh SMS after the hold is still bound to the enrolled device and grant. Any missing owner alert/ack blocks grant issue. |
 
 ## Execution notes
 
@@ -75,7 +76,7 @@ All cases below must be run on the physical handset. Capture timestamped, redact
 
 | Case | Device label | Run ID | Result | Evidence reference | Tester/date | Reviewer/date |
 |---|---|---|---|---|---|---|
-| G4-01 to G4-12 | — | NOT RUN | NOT QUALIFIED | — | — | — |
+| G4-01 to G4-13 | — | NOT RUN | NOT QUALIFIED | — | — | — |
 
 ## Exit criteria
 
