@@ -36,9 +36,19 @@ class RecoveryGrantClient(private val context: Context) {
         val task = functions.getHttpsCallable("issueRecoveryGrant").call(
             mapOf("phoneIdToken" to phoneIdToken, "tenantId" to tenantId, "deviceIdHash" to deviceHash, "nonce" to nonce)
         ).continueWith { result ->
+            if (!result.isSuccessful) throw result.exception ?: IllegalStateException("Recovery authorization failed.")
             @Suppress("UNCHECKED_CAST")
             val data = result.result?.data as? Map<*, *> ?: throw IllegalStateException("Recovery authorization failed.")
-            data["grant"] as? String ?: throw IllegalStateException("Recovery authorization failed.")
+            when (data["status"] as? String) {
+                "COOLDOWN" -> GrantIssueResult.Cooldown(
+                    (data["eligibleAt"] as? Number)?.toLong()
+                        ?: throw IllegalStateException("Recovery cooldown response is invalid.")
+                )
+                "ISSUED" -> GrantIssueResult.Issued(
+                    data["grant"] as? String ?: throw IllegalStateException("Recovery grant is missing.")
+                )
+                else -> throw IllegalStateException("Recovery authorization response is invalid.")
+            }
         }
         return GrantRequest(task, nonce, deviceHash, startedAtElapsedMs)
     }
@@ -107,5 +117,10 @@ class RecoveryGrantClient(private val context: Context) {
     }
 
     private data class GrantClaims(val jti: String, val expiresAt: Long)
-    data class GrantRequest(val task: Task<String>, val nonce: String, val deviceIdHash: String, val startedAtElapsedMs: Long)
+    sealed class GrantIssueResult {
+        data class Issued(val grant: String) : GrantIssueResult()
+        data class Cooldown(val eligibleAtEpochMs: Long) : GrantIssueResult()
+    }
+
+    data class GrantRequest(val task: Task<GrantIssueResult>, val nonce: String, val deviceIdHash: String, val startedAtElapsedMs: Long)
 }
