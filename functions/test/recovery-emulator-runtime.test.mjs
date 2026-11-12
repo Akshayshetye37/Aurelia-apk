@@ -474,6 +474,10 @@ test('independent primary owner can cancel during alert hold and cancellation re
   const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(state.state, 'CANCELLED');
   assert.equal(state.cancelledByDeviceHash, independentDeviceHash);
+  for (const field of ['ownerUid', 'deviceIdHash', 'phoneHash', 'requestedAt',
+    'alertEventId', 'grantJti', 'eligibleAt', 'alertedDeviceHashes', 'grantExpiresAt']) {
+    assert.equal(Object.hasOwn(state, field), false, `cancelled hold clears ${field}`);
+  }
   const events = await db.collection('recoverySecurityEvents').where('tenantId', '==', tenantId).get();
   const audit = events.docs.map(doc => doc.data()).find(event => event.type === 'RECOVERY_REQUEST_CANCELLED');
   assert.ok(audit);

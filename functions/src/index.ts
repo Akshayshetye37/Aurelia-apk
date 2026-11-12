@@ -681,6 +681,11 @@ export const cancelRecoveryRequest = onCall(
       tx.update(cooldownRef, {
         state: "CANCELLED", cancelledAt: FieldValue.serverTimestamp(),
         cancelledByUid: owner.uid, cancelledByDeviceHash: deviceIdHash,
+        // Keep the terminal state for race arbitration, but erase the pending hold,
+        // alert routing and grant linkage so cancellation cannot be resumed.
+        ownerUid: FieldValue.delete(), deviceIdHash: FieldValue.delete(),
+        phoneHash: FieldValue.delete(), requestedAt: FieldValue.delete(),
+        alertEventId: FieldValue.delete(), grantJti: FieldValue.delete(),
         eligibleAt: FieldValue.delete(), alertedDeviceHashes: FieldValue.delete(),
         grantExpiresAt: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp()
       });
