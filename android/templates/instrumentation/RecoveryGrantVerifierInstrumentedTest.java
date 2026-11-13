@@ -1,5 +1,6 @@
 package com.aurelia.pms.security;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -8,6 +9,8 @@ import android.os.SystemClock;
 import androidx.test.core.app.ApplicationProvider;
 import com.aurelia.pms.identity.RecoveryGrantClient;
 import com.google.android.gms.tasks.Tasks;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import java.nio.charset.StandardCharsets;
@@ -112,6 +115,41 @@ public final class RecoveryGrantVerifierInstrumentedTest {
       assertEquals("invalid grant must never reach server consume", 0, networkCalls.get());
       assertFalse("invalid grant must leave recovery gate closed", RecoveryGate.isOpen());
     }
+  }
+
+  @Test public void grantUidMustMatchEncryptedOwnerBindingNotPhoneAuthUid() throws Exception {
+    KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
+    generator.initialize(new ECGenParameterSpec("secp256r1"));
+    KeyPair pair = generator.generateKeyPair();
+    final String phoneAuthUid = "phone-auth-session-uid-not-owner";
+    assertFalse("recovery phone identity must be distinct from the owner identity",
+        UID.equals(phoneAuthUid));
+
+    AtomicInteger networkCalls = new AtomicInteger();
+    CountDownLatch completed = new CountDownLatch(1);
+    final boolean[] accepted = new boolean[] { false };
+    RecoveryGrantClient client = new RecoveryGrantClient(
+        ApplicationProvider.getApplicationContext(),
+        (grant, nonce, deviceHash) -> {
+          networkCalls.incrementAndGet();
+          return Tasks.forResult(true);
+        },
+        // This binding is loaded from the encrypted owner-enrollment record.
+        // No phone-auth UID is supplied to consumeAndArm or used as its authority.
+        () -> new com.aurelia.pms.identity.RecoveryTenantIdentity.Binding(UID, TENANT),
+        kid -> KID.equals(kid) ? pair.getPublic() : null
+    );
+    long now = System.currentTimeMillis() / 1000;
+    String grant = sign(pair, claims().put("iat", now - 1).put("exp", now + 299), KID);
+    RecoveryGate.clear();
+    client.consumeAndArm(grant, NONCE, DID, TENANT, SystemClock.elapsedRealtime(), result -> {
+      accepted[0] = result;
+      completed.countDown();
+    });
+    assertTrue("grant processing must complete", completed.await(5, TimeUnit.SECONDS));
+    assertEquals("owner UID from encrypted enrollment authorizes local preflight", 1, networkCalls.get());
+    assertTrue("valid owner-bound grant arms only after server consumption", accepted[0]);
+    RecoveryGate.clear();
   }
 
   @Test public void rejectsInvalidGrantsBeforeAnyRecoveryGateCanArm() throws Exception {
