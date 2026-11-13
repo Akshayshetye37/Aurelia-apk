@@ -33,6 +33,7 @@ jobs:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       STAGING_RUN_ID: ${{ inputs.staging_run_id }}
       DEVICE_LABEL: ${{ inputs.device_label }}
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -117,7 +118,8 @@ jobs:
           jq -n --arg label "$DEVICE_LABEL" --arg manufacturer "$manufacturer" --arg model "$model" \
             --arg api "$api" --arg fingerprint "$fingerprint" --arg verified "$verified" \
             --arg flashLocked "$flash_locked" --arg vbmetaState "$vbmeta_state" \
-            --arg sha "$CANDIDATE_SHA" '{deviceLabel:$label,manufacturer:$manufacturer,model:$model,apiLevel:$api,buildFingerprint:$fingerprint,verifiedBootState:$verified,flashLocked:$flashLocked,vbmetaDeviceState:$vbmetaState,candidateSha:$sha}' > evidence/device.json
+            --arg sha "$CANDIDATE_SHA" --arg stagingRun "$STAGING_RUN_ID" --arg project "$PROJECT_ID" \
+            '{deviceLabel:$label,manufacturer:$manufacturer,model:$model,apiLevel:$api,buildFingerprint:$fingerprint,verifiedBootState:$verified,flashLocked:$flashLocked,vbmetaDeviceState:$vbmetaState,candidateSha:$sha,stagingRunId:$stagingRun,stagingProjectId:$project}' > evidence/device.json
           # Device serial is intentionally never written to logs or evidence.
 
       - name: Install exact release APK and matching instrumentation APK
