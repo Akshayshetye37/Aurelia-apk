@@ -891,7 +891,7 @@ test('revoked owner notification device cannot acknowledge a pending alert', asy
 });
 
 
-test('owner cancellation before grant issue permanently prevents grant creation', async () => {
+test('owner cancellation before grant issue closes the old hold and requires a fresh owner alert', async () => {
   const tenantId = 'tenant-emulator-cancel-before-issue';
   const ownerUid = 'owner-emulator-cancel-before-issue';
   const phone = '+15555550117';
@@ -899,9 +899,10 @@ test('owner cancellation before grant issue permanently prevents grant creation'
   const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
   await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
     ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
+  const firstPhoneToken = await phoneAuthToken(phone);
   const started = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'f'.repeat(43),
-    phoneIdToken: await phoneAuthToken(phone)
+    phoneIdToken: firstPhoneToken
   });
   assert.equal(started.status, 'COOLDOWN');
   assert.equal(started.eligibleAt, 0);
@@ -915,14 +916,24 @@ test('owner cancellation before grant issue permanently prevents grant creation'
   await callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: ownerDeviceHash
   }, ownerAuth(ownerUid, tenantId));
-  await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
   await assert.rejects(callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'g'.repeat(43),
-    phoneIdToken: await phoneAuthToken(phone)
-  }), 'cancelled state prevents subsequent grant issue');
+    phoneIdToken: firstPhoneToken
+  }), 'the consumed phone-auth proof cannot restart the cancelled hold');
+  await sleep(1100);
+  const freshPhoneToken = await phoneAuthToken(phone);
+  const freshRequest = await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'g'.repeat(43),
+    phoneIdToken: freshPhoneToken
+  });
+  assert.equal(freshRequest.status, 'COOLDOWN',
+    'a fresh OTP starts a new owner-alert hold but cannot issue a grant immediately');
+  assert.equal(freshRequest.eligibleAt, 0);
   const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
-  assert.equal(state.state, 'CANCELLED');
+  assert.equal(state.state, 'ALERT_PENDING');
+  assert.equal(state.eligibleAt, null);
   assert.equal(state.grantJti, undefined);
+  assert.equal(state.grantExpiresAt, undefined);
 });
 
 test('owner cancellation before consume revokes the issued grant permanently', async () => {
