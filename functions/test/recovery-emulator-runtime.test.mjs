@@ -196,7 +196,7 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' }));
-  assert.equal(acknowledged.acknowledged, true);
+  assert.equal(acknowledged.acknowledged, true, 'an independently enrolled, attested passkey owner device may acknowledge');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' })), 'owner acknowledgement token is single-use');
