@@ -164,16 +164,11 @@ jobs:
           run_test force-stop-phase-two 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop'
           run_test reboot-phase-one 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOneCommitsPinBForDeviceReboot'
           # The device is physically rebooted between recovery commit and PIN-B verification.
-                - name: Reboot handset and wait for user unlock
-        shell: bash
-        timeout-minutes: 20
-        run: |
-          set -euo pipefail
-          adb reboot
-          adb wait-for-device
+          adb -s "$DEVICE_SERIAL" reboot
+          adb -s "$DEVICE_SERIAL" wait-for-device
           ready=false
           for _ in $(seq 1 180); do
-            booted="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            booted="$(adb -s "$DEVICE_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             if [[ "$booted" == "1" ]]; then ready=true; break; fi
             sleep 5
           done
@@ -183,7 +178,7 @@ jobs:
           fi
           unlocked=false
           for _ in $(seq 1 180); do
-            if adb shell dumpsys user 2>/dev/null | grep -q 'RUNNING_UNLOCKED'; then
+            if adb -s "$DEVICE_SERIAL" shell dumpsys user 2>/dev/null | grep -q 'RUNNING_UNLOCKED'; then
               unlocked=true
               break
             fi
@@ -193,11 +188,10 @@ jobs:
             echo "::error::Unlock the physical test handset after reboot, then rerun Gate 4."
             exit 1
           fi
-          verified="$(adb shell getprop ro.boot.verifiedbootstate | tr -d '\r')"
-          flash_locked="$(adb shell getprop ro.boot.flash.locked | tr -d '\r')"
-          vbmeta_state="$(adb shell getprop ro.boot.vbmeta.device_state | tr -d '\r')"
-          [[ "$verified" == "green" && "$flash_locked" == "1" && "$vbmeta_state" == "locked" ]
-
+          verified="$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.verifiedbootstate | tr -d '\r')"
+          flash_locked="$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.flash.locked | tr -d '\r')"
+          vbmeta_state="$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.vbmeta.device_state | tr -d '\r')"
+          [[ "$verified" == "green" && "$flash_locked" == "1" && "$vbmeta_state" == "locked" ]]
           run_test reboot-phase-two 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoAfterDeviceRebootUnlocksPinBAndReadsDatabase'
 
       - name: Upload redacted physical-device evidence
