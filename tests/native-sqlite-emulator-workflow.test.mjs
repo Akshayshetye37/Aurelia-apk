@@ -6,7 +6,11 @@ const workflow = fs.readFileSync('.github/workflows/native-sqlite-contract.yml',
 const repositoryInstrumentation = fs.readFileSync(
   'android/templates/instrumentation/LocalPmsRepositoryInstrumentedTest.java', 'utf8'
 );
+const securityInstrumentation = fs.readFileSync(
+  'android/templates/instrumentation/AureliaSecurityInstrumentedTest.java', 'utf8'
+);
 const repositoryTestCount = [...repositoryInstrumentation.matchAll(/@Test\b/g)].length;
+const securityTestCount = [...securityInstrumentation.matchAll(/@Test\b/g)].length;
 
 test('native SQLite instrumentation enables KVM before starting the emulator', () => {
   const kvm = workflow.indexOf('- name: Enable and require hardware KVM before any Android work');
@@ -27,15 +31,17 @@ test('native SQLite instrumentation fails closed instead of using software emula
 
 
 
-test('native SQLite gate requires non-zero execution and zero failures, errors and skips', () => {
-  // The workflow selects only LocalPmsRepositoryInstrumentedTest. The exact
-  // count is pinned to the 29 @Test methods present on the historical baseline.
+test('native SQLite gate executes both selected suites with exactly 35 tests and no skips', () => {
   assert.equal(repositoryTestCount, 29);
-  assert.ok(workflow.includes('totals.tests !== 29'));
+  assert.equal(securityTestCount, 6);
+  assert.equal(repositoryTestCount + securityTestCount, 35);
+  assert.ok(workflow.includes('totals.tests !== 35'));
   assert.ok(workflow.includes('totals.failures !== 0'));
   assert.ok(workflow.includes('totals.errors !== 0'));
   assert.ok(workflow.includes('totals.skipped !== 0'));
-  assert.ok(workflow.includes('Expected exactly 29 executed repository tests, zero failures, zero errors and zero skipped tests.'));
+  assert.ok(workflow.includes('Expected exactly 35 executed repository and recovery-security tests, zero failures, zero errors and zero skipped tests.'));
+  assert.ok(workflow.includes('AureliaSecurityInstrumentedTest'));
+  assert.ok(emulatorScript.includes('locksettings set-pin 246810'));
 });
 
 
@@ -47,7 +53,10 @@ test('emulator runner invokes one checked-in shell script per attempt', () => {
   assert.ok(emulatorScript.includes('log_dir="$repo_root/.aurelia-emulator"'));
   assert.ok(emulatorScript.includes('echo "booted=true" >> "$GITHUB_OUTPUT"'));
   assert.ok(emulatorScript.includes('connectedDebugAndroidTest'));
-  assert.ok(emulatorScript.includes('-Pandroid.testInstrumentationRunnerArguments.class=com.aurelia.pms.LocalPmsRepositoryInstrumentedTest'));
+  assert.ok(emulatorScript.includes('com.aurelia.pms.LocalPmsRepositoryInstrumentedTest'));
+  assert.ok(emulatorScript.includes('com.aurelia.pms.security.AureliaSecurityInstrumentedTest'));
+  assert.ok(emulatorScript.includes('run_suite repository'));
+  assert.ok(emulatorScript.includes('run_suite security'));
   assert.ok(emulatorScript.includes('gradle_status=${PIPESTATUS[0]}'));
 });
 

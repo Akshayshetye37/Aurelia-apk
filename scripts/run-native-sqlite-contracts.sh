@@ -45,10 +45,45 @@ adb shell getprop ro.build.fingerprint | tee "$log_dir/emulator-build-fingerprin
 test "$(adb shell getprop ro.build.version.sdk | tr -d "\r")" = "30"
 
 cd "$repo_root/android"
-set +e
-./gradlew --no-daemon --stacktrace --info connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.class=com.aurelia.pms.LocalPmsRepositoryInstrumentedTest \
-  2>&1 | tee "$log_dir/connectedDebugAndroidTest.log"
-gradle_status=${PIPESTATUS[0]}
-echo "$gradle_status" > "$log_dir/gradle-exit-code.txt"
-exit "$gradle_status"
+
+# The biometric recovery test requires a secure device lock screen. Configure
+# the disposable API 30 emulator; the test itself verifies KeyguardManager.
+adb shell locksettings set-pin 246810 | tee "$log_dir/secure-lockscreen-setup.log"
+
+results_dir="$log_dir/junit-results"
+rm -rf "$results_dir"
+mkdir -p "$results_dir"
+
+run_suite() {
+  local suite="$1"
+  local selector="$2"
+  local output="$results_dir/$suite"
+  rm -rf app/build/outputs/androidTest-results/connected app/build/reports/androidTests/connected
+  set +e
+  ./gradlew --no-daemon --stacktrace --info connectedDebugAndroidTest \
+    "-Pandroid.testInstrumentationRunnerArguments.class=$selector" \
+    2>&1 | tee "$log_dir/$suite.log"
+  local gradle_status=${PIPESTATUS[0]}
+  set -e
+  echo "$gradle_status" > "$log_dir/$suite-gradle-exit-code.txt"
+  if [[ "$gradle_status" -ne 0 ]]; then
+    return "$gradle_status"
+  fi
+  local junit_root="app/build/outputs/androidTest-results/connected"
+  if [[ ! -d "$junit_root" ]]; then
+    echo "::error::The $suite instrumentation suite produced no JUnit result directory."
+    return 1
+  fi
+  mkdir -p "$output"
+  cp -a "$junit_root/." "$output/"
+}
+
+run_suite repository com.aurelia.pms.LocalPmsRepositoryInstrumentedTest
+run_suite security com.aurelia.pms.security.AureliaSecurityInstrumentedTest
+
+# Merge both independently executed suites for the strict 35-test result gate.
+rm -rf app/build/outputs/androidTest-results/connected
+mkdir -p app/build/outputs/androidTest-results/connected
+cp -a "$results_dir/." app/build/outputs/androidTest-results/connected/
+cat "$log_dir/repository.log" "$log_dir/security.log" > "$log_dir/connectedDebugAndroidTest.log"
+echo "0" > "$log_dir/gradle-exit-code.txt"

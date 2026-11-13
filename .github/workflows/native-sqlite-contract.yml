@@ -189,10 +189,12 @@ jobs:
           while IFS= read -r dex; do
             unzip -p "$test_apk" "$dex" | strings >> "$dex_symbols"
           done < <(unzip -Z1 "$test_apk" | grep 'classes.*dex' || true)
-          if ! grep -q 'LocalPmsRepositoryInstrumentedTest' "$dex_symbols"; then
-            echo "::error::The androidTest APK does not contain LocalPmsRepositoryInstrumentedTest."
-            exit 1
-          fi
+          for test_class in LocalPmsRepositoryInstrumentedTest AureliaSecurityInstrumentedTest; do
+            if ! grep -q "$test_class" "$dex_symbols"; then
+              echo "::error::The androidTest APK does not contain $test_class."
+              exit 1
+            fi
+          done
           if ! grep -q 'AndroidJUnitRunner' "$dex_symbols"; then
             echo "::error::The androidTest APK does not contain AndroidJUnitRunner symbols."
             exit 1
@@ -291,11 +293,10 @@ jobs:
             }
           }
           console.log("Exact SQLCipher instrumentation acceptance:", JSON.stringify(totals));
-          // LocalPmsRepositoryInstrumentedTest has exactly 29 @Test methods
-          // on the historical baseline and current candidate. Keep the count exact;
-          // do not inflate it with suites this workflow does not execute.
-          if (totals.files === 0 || totals.tests !== 29 || totals.failures !== 0 || totals.errors !== 0 || totals.skipped !== 0) {
-            console.error("::error::Expected exactly 29 executed repository tests, zero failures, zero errors and zero skipped tests.");
+          // The two selected emulator suites contain 29 repository tests and
+          // 6 authenticated recovery/Keystore tests. Require all 35 to execute.
+          if (totals.files === 0 || totals.tests !== 35 || totals.failures !== 0 || totals.errors !== 0 || totals.skipped !== 0) {
+            console.error("::error::Expected exactly 35 executed repository and recovery-security tests, zero failures, zero errors and zero skipped tests.");
             process.exit(1);
           }
           NODE
