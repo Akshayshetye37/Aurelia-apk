@@ -27,20 +27,23 @@
 - Firebase Functions secrets: PHONE_PEPPER, RECOVERY_SIGNING_KEY_PKCS8.
 - Firebase Functions parameter: RECOVERY_SIGNING_KEY_ID matching the APK's public-key ring.
 - GitHub Actions repository variable: RECOVERY_GRANT_PUBLIC_KEYS_JSON, a JSON object mapping kid to canonical base64 DER SPKI public key. This is public key material, not a private secret.
-- Cloud Run deployment workflow environment variables: GCP_PROJECT_ID, GCP_REGION, RECOVERY_ATTESTATION_SERVICE_ACCOUNT, RECOVERY_FUNCTIONS_SERVICE_ACCOUNT, ATTESTATION_APP_PACKAGE, ATTESTATION_APP_MIN_VERSION, ATTESTATION_APP_SIGNER_SHA256; GitHub secrets: GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_DEPLOY_SERVICE_ACCOUNT.
-- After Cloud Run deploy, set Firebase Functions parameter RECOVERY_ATTESTATION_VERIFIER_URL to the deployed private service URL. Grant the Functions runtime service account roles/run.invoker (the deployment workflow binds the configured account).
+- GitHub Environment `recovery-staging` variables: GCP_PROJECT_ID, PRODUCTION_GCP_PROJECT_ID, GCP_REGION, RECOVERY_ATTESTATION_SERVICE_ACCOUNT (Cloud Run runtime identity), RECOVERY_FUNCTIONS_SERVICE_ACCOUNT (Firebase Functions caller identity), RECOVERY_ATTESTATION_VERIFIER_URL (private Cloud Run URL), RECOVERY_SIGNING_KEY_ID, RECOVERY_GRANT_PUBLIC_KEYS_JSON, FIREBASE_WEB_API_KEY, ATTESTATION_APP_PACKAGE, ATTESTATION_APP_MIN_VERSION, ATTESTATION_APP_SIGNER_SHA256, APP_CHECK_PLAY_INTEGRITY_REGISTERED=true and APP_CHECK_SIGNER_SHA256.
+- GitHub Environment secrets: GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_DEPLOY_SERVICE_ACCOUNT, GOOGLE_SERVICES_JSON_BASE64, AURELIA_RELEASE_KEYSTORE_BASE64, AURELIA_RELEASE_KEYSTORE_PASSWORD, AURELIA_RELEASE_KEY_ALIAS, AURELIA_RELEASE_KEY_PASSWORD.
+- Staging Secret Manager secrets: PHONE_PEPPER and RECOVERY_SIGNING_KEY_PKCS8. The staging deploy verifies that each deployed function runtime identity has secret-level `roles/secretmanager.secretAccessor` for its declared secrets.
+- The attestation deployment workflow binds only the Functions caller identity to Cloud Run `roles/run.invoker`; the Cloud Run runtime, Functions caller and WIF deploy identities must be distinct. The private verifier URL is supplied through the GitHub Environment variable and written to the staging Functions environment during deploy.
+- The `recovery-production-audit` GitHub Environment must set GCP_PROJECT_ID equal to PRODUCTION_GCP_PROJECT_ID. The read-only production audit verifies recovery remains disabled and checks deployed runtime secret access.
 - The app package, minimum version and signing-certificate SHA-256 must match the staging APK's actual package and signer.
 
 ## Outstanding release blockers
 
-1. Finish source changes and freeze one final candidate SHA. No gate evidence from earlier commits carries forward.
+1. Complete final candidate CI, review the full diff, and freeze one exact 40-character SHA. No gate evidence from earlier commits carries forward.
 2. Configure the matching ES256 private key and APK-embedded public-key ring; verify valid, tampered, expired, wrong-kid and rotated-key grants locally and server-side.
 3. Deploy the private Cloud Run attestation verifier and Firebase Functions to the dedicated staging project; verify missing URL, invalid IAM, stale revocation data and software-only key all fail closed.
 4. Confirm FCM notification is actually posted and acknowledged on the enrolled physical owner device; confirm disabled notifications, offline device and missing auth leave the hold blocked; verify owner cancellation.
-5. Run Gate 1 SQLCipher same-DEK instrumentation on the final SHA with full test-result XML/artifact logs.
+5. Run Gate 1 SQLCipher same-DEK instrumentation on the final SHA with full test-result XML/artifact logs. The two-phase host force-stop test is implemented; its latest successful run on the frozen SHA is still required.
 6. Run Gate 2 Firebase Emulator runtime tests on the final SHA: cooldown start only after alert acknowledgement, 24-hour timer, fresh SMS after expiry, grant issue/consume once, replay rejection, five-minute expiry, cancellation and rate limits.
 7. Run Gate 3 real SMS in a dedicated staging Firebase project and test number: invalid/expired OTP, wrong UID, wrong tenant/device/nonce, tampered signature, wrong kid, replay and cross-device reuse.
-8. Run Gate 4 on a physical Android device: PIN A to PIN B, process death, reboot, SQLCipher data integrity, lock-screen change/Keystore invalidation, StrongBox/TEE evidence, notification receipt/acknowledgement, SIM-swap simulation and owner cancellation.
+8. Run Gate 4 on a physical Android device: use `.github/workflows/recovery-physical-device-qualification.yml` for exact-SHA artifact verification, locked-boot checks, SQLCipher, invalid-grant preflight, host force-stop and full reboot/PIN-B persistence. Separately perform lock-screen change/Keystore invalidation, StrongBox/TEE evidence, notification receipt/acknowledgement, SIM-swap simulation and owner cancellation. The physical workflow requires a dedicated self-hosted runner and has not been executed.
 9. Gate 5 deployment/security review: App Check/Play Integrity enforcement, hardware attestation service, secret access, signing-key rotation, log redaction, rate limits and production flag default OFF.
 10. Gate 6: signed release APK, APK SHA-256, signing-certificate fingerprint and explicit owner sign-off tied to the same frozen SHA.
 
@@ -67,3 +70,8 @@
 
 
 - Android API compatibility: API 23 remains local-PIN-only. Biometric-vault enrollment and hardware-attested recovery enrollment require API 24+; API 23 recovery fails closed before altering existing Keystore aliases.
+
+
+- Staging deployment guardrails: the deploy workflows are branch-restricted to `work/p0-storage-hardening`, compare the staging project ID against `PRODUCTION_GCP_PROJECT_ID`, probe missing/invalid App Check, verify per-function Secret Manager access, and build a release-signed APK plus matching release-signed instrumentation APK.
+- Production guardrails: the read-only audit requires `GCP_PROJECT_ID == PRODUCTION_GCP_PROJECT_ID`, verifies every deployed recovery/attestation function and service has recovery disabled or unset, and checks runtime secret access. It has not yet been run against production.
+- Physical-device workflow: exact staging run/SHA, signer and artifact hashes, physical device, locked bootloader, verified boot, SQLCipher, grant preflight, force-stop and post-reboot PIN-B/database integrity are automated. Real SMS, owner actions, lock-screen changes and SIM-swap tests remain physical/manual.
