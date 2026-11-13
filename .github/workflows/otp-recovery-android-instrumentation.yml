@@ -188,19 +188,20 @@ jobs:
           run_suite sqlcipher com.aurelia.pms.OtpRecoverySqlCipherInstrumentedTest
           run_suite grant-verifier com.aurelia.pms.security.RecoveryGrantVerifierInstrumentedTest
           run_suite process-death-phase-one com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop
-          before_pid="$(adb shell pidof com.aurelia.pms | tr -d '\r' || true)"
+          adb_bin="$ANDROID_HOME/platform-tools/adb"
+          before_pid="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
           if [[ -z "$before_pid" ]]; then
             echo "::error::The target app process was not alive after process-death phase one."
             exit 1
           fi
-          adb shell am force-stop com.aurelia.pms
-          after_stop="$(adb shell pidof com.aurelia.pms | tr -d '\r' || true)"
+          "$adb_bin" shell am force-stop com.aurelia.pms
+          after_stop="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
           if [[ -n "$after_stop" ]]; then
             echo "::error::adb force-stop did not terminate the target app process."
             exit 1
           fi
           run_suite process-death-phase-two com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop
-          after_pid="$(adb shell pidof com.aurelia.pms | tr -d '\r' || true)"
+          after_pid="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
           if [[ -z "$after_pid" || "$after_pid" == "$before_pid" ]]; then
             echo "::error::Phase two did not run in a newly started target app process."
             exit 1

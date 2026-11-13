@@ -302,6 +302,8 @@ test('recovery Android diagnostic collection is bounded and stale SHA runs canno
   const workflow = read('.github/workflows/otp-recovery-android-instrumentation.yml');
   assert.ok(workflow.includes('timeout -k 2s 8s "$ANDROID_HOME/platform-tools/adb" devices -l'));
   assert.ok(workflow.includes('timeout -k 2s 8s "$ANDROID_HOME/platform-tools/adb" logcat -d'));
+  assert.ok(workflow.includes('adb_bin="$ANDROID_HOME/platform-tools/adb"'));
+  assert.ok(workflow.includes('"$adb_bin" shell am force-stop com.aurelia.pms'));
   assert.ok(workflow.includes('timeout-minutes: 2'));
   assert.ok(workflow.includes('otp-recovery-android-instrumentation-${{ github.ref }}-${{ github.sha }}'));
 });
