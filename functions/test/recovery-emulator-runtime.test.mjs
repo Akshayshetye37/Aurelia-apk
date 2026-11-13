@@ -87,7 +87,7 @@ function phoneDigest(tenantId, phone) {
 
 function ownerAuth(uid, tenantId, options = {}) {
   const provider = options.provider ?? 'custom';
-  const factor = options.factor ?? 'email_link';
+  const factor = Object.prototype.hasOwnProperty.call(options, 'factor') ? options.factor : 'email_link';
   const authTime = options.authTime ?? Math.floor(Date.now() / 1000);
   return {
     uid,
