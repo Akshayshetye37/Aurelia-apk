@@ -199,7 +199,7 @@ jobs:
           test -f "$app_apk"
           test -f "$test_apk"
           "$adb_bin" install -r "$app_apk"
-          "$adb_bin" install -r "$test_apk"
+          "$adb_bin" install -r -t "$test_apk"
 
           run_instrumentation_test() {
             local suite="$1"
