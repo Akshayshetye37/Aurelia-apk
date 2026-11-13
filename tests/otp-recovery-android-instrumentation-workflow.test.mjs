@@ -32,13 +32,13 @@ test("host force-stops the exact phase-one process without manufacturing a repla
   assert.ok(!workflow.includes('monkey -p com.aurelia.pms'));
 });
 
-test("phase two is followed by a fresh app launch and distinct process identity", () => {
+test("phase two itself must leave a new target process without a synthetic app launch", () => {
   const phaseTwo = workflow.indexOf('run_instrumentation_test process-death-phase-two "$phase_two"');
-  const relaunch = workflow.indexOf("launch_target_app", phaseTwo);
   const pidCheck = workflow.indexOf('if [[ "$after_pid" == "$before_pid" ]]', phaseTwo);
-  assert.ok(phaseTwo >= 0 && relaunch > phaseTwo && pidCheck > relaunch);
+  assert.ok(phaseTwo >= 0 && pidCheck > phaseTwo);
   assert.ok(workflow.includes("Phase-two instrumentation did not leave a newly started target process."));
   assert.ok(!workflow.includes("launch_target_app"));
+  assert.ok(!workflow.includes("monkey -p com.aurelia.pms"));
 });
 
 test("recovery emulator still requires KVM and refuses software emulation", () => {
