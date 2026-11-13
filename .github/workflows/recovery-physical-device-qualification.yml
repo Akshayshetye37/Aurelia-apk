@@ -1,0 +1,173 @@
+name: Recovery physical-device qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact source SHA that produced the staging APK artifact
+        required: true
+        type: string
+      staging_run_id:
+        description: Successful Recovery staging deployment and APK workflow run ID
+        required: true
+        type: string
+      device_label:
+        description: Redacted device label (for example DEVICE-01)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: recovery-physical-device-${{ inputs.device_label }}
+  cancel-in-progress: false
+
+jobs:
+  physical-device:
+    runs-on: [self-hosted, linux, x64, aurelia-android-device]
+    timeout-minutes: 90
+    environment: recovery-staging
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+      DEVICE_LABEL: ${{ inputs.device_label }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          persist-credentials: false
+
+      - name: Verify immutable candidate and staging workflow run
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$STAGING_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$DEVICE_LABEL" =~ ^[A-Z0-9-]{3,32}$ ]]
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          run_json="$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID")"
+          echo "$run_json" | jq -e --arg sha "$CANDIDATE_SHA" '
+            .head_sha == $sha and .status == "completed" and .conclusion == "success" and
+            (.path | endswith("recovery-staging-deploy.yml"))
+          ' >/dev/null
+
+      - name: Download exact staging APK and instrumentation artifact
+        uses: actions/download-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aurelia-recovery-staging-apk-${{ inputs.candidate_sha }}
+          run-id: ${{ inputs.staging_run_id }}
+          github-token: ${{ github.token }}
+          path: artifacts
+
+      - name: Verify artifact hashes and matching release signer
+        shell: bash
+        env:
+          EXPECTED_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
+        run: |
+          set -euo pipefail
+          APP_APK="artifacts/app-release.apk"
+          TEST_APK="artifacts/app-release-androidTest.apk"
+          test -s "$APP_APK" && test -s "$TEST_APK"
+          expected_app="$(awk '$2=="app-release.apk" {print $1}' artifacts/apk-sha256.txt)"
+          expected_test="$(awk '$2=="app-release-androidTest.apk" {print $1}' artifacts/apk-sha256.txt)"
+          actual_app="$(sha256sum "$APP_APK" | awk '{print $1}')"
+          actual_test="$(sha256sum "$TEST_APK" | awk '{print $1}')"
+          test -n "$expected_app" && test "$actual_app" = "$expected_app"
+          test -n "$expected_test" && test "$actual_test" = "$expected_test"
+          APKSIGNER="$(find "${ANDROID_HOME:?}/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs "$APP_APK" > "$RUNNER_TEMP/physical-app-cert.txt"
+          "$APKSIGNER" verify --print-certs "$TEST_APK" > "$RUNNER_TEMP/physical-test-cert.txt"
+          app_cert="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/physical-app-cert.txt" | tr -d ':')"
+          test_cert="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/physical-test-cert.txt" | tr -d ':')"
+          expected_cert="$(echo "$EXPECTED_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          test -n "$app_cert" && test "$app_cert" = "$expected_cert"
+          test "$test_cert" = "$app_cert"
+          mkdir -p evidence
+          cp "$RUNNER_TEMP/physical-app-cert.txt" evidence/app-certificate.txt
+          cp "$RUNNER_TEMP/physical-test-cert.txt" evidence/instrumentation-certificate.txt
+          printf '%s\n' "$actual_app" > evidence/app-sha256.txt
+          printf '%s\n' "$actual_test" > evidence/instrumentation-sha256.txt
+
+      - name: Verify attached handset is physical, booted and locked
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t connected < <(adb devices | awk 'NR>1 && $2=="device" {print $1}')
+          if [[ "${#connected[@]}" -ne 1 ]]; then
+            echo "::error::Exactly one authorized Android handset must be connected to this runner."
+            exit 1
+          fi
+          DEVICE_SERIAL="${connected[0]}"
+          qemu="$(adb -s "$DEVICE_SERIAL" shell getprop ro.kernel.qemu | tr -d '\r')"
+          if [[ "$qemu" == "1" ]]; then echo "::error::Emulator detected; Gate 4 requires a physical handset."; exit 1; fi
+          api="$(adb -s "$DEVICE_SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')"
+          manufacturer="$(adb -s "$DEVICE_SERIAL" shell getprop ro.product.manufacturer | tr -d '\r')"
+          model="$(adb -s "$DEVICE_SERIAL" shell getprop ro.product.model | tr -d '\r')"
+          fingerprint="$(adb -s "$DEVICE_SERIAL" shell getprop ro.build.fingerprint | tr -d '\r')"
+          verified="$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.verifiedbootstate | tr -d '\r')"
+          flash_locked="$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.flash.locked | tr -d '\r')"
+          vbmeta_state="$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.vbmeta.device_state | tr -d '\r')"
+          booted="$(adb -s "$DEVICE_SERIAL" shell getprop sys.boot_completed | tr -d '\r')"
+          [[ "$api" =~ ^[0-9]+$ ]] && (( api >= 24 ))
+          [[ "$verified" == "green" && "$flash_locked" == "1" && "$vbmeta_state" == "locked" && "$booted" == "1" ]]
+          jq -n --arg label "$DEVICE_LABEL" --arg manufacturer "$manufacturer" --arg model "$model" \
+            --arg api "$api" --arg fingerprint "$fingerprint" --arg verified "$verified" \
+            --arg flashLocked "$flash_locked" --arg vbmetaState "$vbmeta_state" \
+            --arg sha "$CANDIDATE_SHA" '{deviceLabel:$label,manufacturer:$manufacturer,model:$model,apiLevel:$api,buildFingerprint:$fingerprint,verifiedBootState:$verified,flashLocked:$flashLocked,vbmetaDeviceState:$vbmetaState,candidateSha:$sha}' > evidence/device.json
+          # Device serial is intentionally never written to logs or evidence.
+
+      - name: Install exact release APK and matching instrumentation APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t connected < <(adb devices | awk 'NR>1 && $2=="device" {print $1}')
+          DEVICE_SERIAL="${connected[0]}"
+          adb -s "$DEVICE_SERIAL" install -r artifacts/app-release.apk
+          adb -s "$DEVICE_SERIAL" install -r artifacts/app-release-androidTest.apk
+
+      - name: Run physical SQLCipher, grant preflight and force-stop suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t connected < <(adb devices | awk 'NR>1 && $2=="device" {print $1}')
+          DEVICE_SERIAL="${connected[0]}"
+          runner="com.aurelia.pms.test/androidx.test.runner.AndroidJUnitRunner"
+          run_test() {
+            name="$1"
+            selector="$2"
+            output="evidence/$name.txt"
+            set +e
+            adb -s "$DEVICE_SERIAL" shell am instrument -w -r -e class "$selector" "$runner" > "$output" 2>&1
+            code=$?
+            set -e
+            if [[ "$code" -ne 0 ]] || grep -q "FAILURES!!!" "$output" || ! grep -Eq 'OK \([0-9]+ tests?\)' "$output"; then
+              echo "::error::Physical instrumentation suite failed: $name"
+              cat "$output"
+              exit 1
+            fi
+          }
+          run_test sqlcipher com.aurelia.pms.OtpRecoverySqlCipherInstrumentedTest
+          run_test grant-preflight com.aurelia.pms.security.RecoveryGrantVerifierInstrumentedTest
+          run_test force-stop-phase-one 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop'
+          before_pid="$(adb -s "$DEVICE_SERIAL" shell pidof -s com.aurelia.pms | tr -d '\r')"
+          if [[ -z "$before_pid" ]]; then
+            echo "::error::Target process was not alive after phase one; force-stop boundary cannot be evidenced."
+            exit 1
+          fi
+          adb -s "$DEVICE_SERIAL" shell am force-stop com.aurelia.pms
+          after_pid="$(adb -s "$DEVICE_SERIAL" shell pidof -s com.aurelia.pms | tr -d '\r')"
+          if [[ -n "$after_pid" ]]; then echo "::error::Target process survived force-stop."; exit 1; fi
+          run_test force-stop-phase-two 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop'
+
+      - name: Upload redacted physical-device evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aurelia-recovery-physical-device-${{ inputs.candidate_sha }}-${{ inputs.device_label }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7

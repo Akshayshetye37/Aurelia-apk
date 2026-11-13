@@ -202,7 +202,7 @@ jobs:
           test -n "$TEST_SHA256" && test "$TEST_SHA256" = "$ACTUAL_SHA256"
           APP_HASH="$(sha256sum "$APK" | awk '{print $1}')"
           TEST_HASH="$(sha256sum "$TEST_APK" | awk '{print $1}')"
-          printf '%s  app-release.apk\\n%s  app-release-androidTest.apk\\n' "$APP_HASH" "$TEST_HASH" > "$RUNNER_TEMP/apk-sha256.txt"
+          printf '%s  app-release.apk\n%s  app-release-androidTest.apk\n' "$APP_HASH" "$TEST_HASH" > "$RUNNER_TEMP/apk-sha256.txt"
           mkdir -p "$RUNNER_TEMP/staging-artifacts"
           cp "$APK" "$RUNNER_TEMP/staging-artifacts/app-release.apk"
           cp "$TEST_APK" "$RUNNER_TEMP/staging-artifacts/app-release-androidTest.apk"

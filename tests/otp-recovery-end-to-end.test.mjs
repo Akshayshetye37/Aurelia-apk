@@ -214,3 +214,16 @@ test('staging APK includes release-signed instrumentation companion for physical
   assert.match(workflow, /app-release-androidTest\.apk/);
   assert.match(workflow, /TEST_SHA256.*ACTUAL_SHA256/);
 });
+
+
+test('physical-device workflow consumes same-SHA release artifact and enforces real locked handset', () => {
+  const workflow = read('.github/workflows/recovery-physical-device-qualification.yml');
+  assert.match(workflow, /runs-on: \[self-hosted, linux, x64, aurelia-android-device\]/);
+  assert.match(workflow, /\.head_sha == \$sha/);
+  assert.match(workflow, /ro\.boot\.verifiedbootstate/);
+  assert.match(workflow, /ro\.boot\.flash\.locked/);
+  assert.match(workflow, /am force-stop com\.aurelia\.pms/);
+  assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseOne/);
+  assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseTwo/);
+  assert.match(workflow, /app-release-androidTest\.apk/);
+});
