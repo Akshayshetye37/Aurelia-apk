@@ -40,6 +40,7 @@ test('emulator runner invokes one checked-in shell script per attempt', () => {
   assert.ok(emulatorScript.includes('log_dir="$repo_root/.aurelia-emulator"'));
   assert.ok(emulatorScript.includes('echo "booted=true" >> "$GITHUB_OUTPUT"'));
   assert.ok(emulatorScript.includes('connectedDebugAndroidTest'));
+  assert.ok(emulatorScript.includes('-Pandroid.testInstrumentationRunnerArguments.class=com.aurelia.pms.LocalPmsRepositoryInstrumentedTest'));
   assert.ok(emulatorScript.includes('gradle_status=${PIPESTATUS[0]}'));
 });
 

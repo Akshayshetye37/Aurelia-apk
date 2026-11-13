@@ -46,7 +46,9 @@ test "$(adb shell getprop ro.build.version.sdk | tr -d "\r")" = "30"
 
 cd "$repo_root/android"
 set +e
-./gradlew --no-daemon --stacktrace --info connectedDebugAndroidTest 2>&1 | tee "$log_dir/connectedDebugAndroidTest.log"
+./gradlew --no-daemon --stacktrace --info connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.aurelia.pms.LocalPmsRepositoryInstrumentedTest \
+  2>&1 | tee "$log_dir/connectedDebugAndroidTest.log"
 gradle_status=${PIPESTATUS[0]}
 echo "$gradle_status" > "$log_dir/gradle-exit-code.txt"
 exit "$gradle_status"

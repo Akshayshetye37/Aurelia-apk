@@ -186,6 +186,7 @@ jobs:
             cp -a app/build/outputs/androidTest-results/connected/. "$results_root/$suite/"
           }
           run_suite sqlcipher com.aurelia.pms.OtpRecoverySqlCipherInstrumentedTest
+          run_suite recovery-phone-store com.aurelia.pms.security.AureliaSecurityInstrumentedTest#recoveryEnvelopeAndPhoneStoresRetainAuthenticatedKeystoreState
           run_suite grant-verifier com.aurelia.pms.security.RecoveryGrantVerifierInstrumentedTest
           run_suite process-death-phase-one com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop
           adb_bin="$ANDROID_HOME/platform-tools/adb"
