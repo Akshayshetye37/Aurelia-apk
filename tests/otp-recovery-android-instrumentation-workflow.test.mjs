@@ -5,6 +5,10 @@ import fs from "node:fs";
 const workflow = fs.readFileSync(
   ".github/workflows/otp-recovery-android-instrumentation.yml", "utf8"
 );
+const nativeWorkflow = fs.readFileSync(
+  ".github/workflows/native-sqlite-contract.yml", "utf8"
+);
+const nativeRunner = fs.readFileSync("scripts/run-native-sqlite-contracts.sh", "utf8");
 
 test("recovery workflow preserves separate phase-one and phase-two process-death invocations", () => {
   assert.ok(workflow.includes(
@@ -38,4 +42,22 @@ test("recovery emulator still requires KVM and refuses software emulation", () =
   assert.ok(workflow.includes("refusing a slow software-emulated x86_64 test"));
   assert.ok(workflow.includes("sudo chmod 666 /dev/kvm"));
   assert.ok(workflow.includes("-accel on"));
+});
+
+test("native SQLCipher candidate executes all 35 repository and recovery-security tests", () => {
+  const repositoryTests = fs.readFileSync(
+    "android/templates/instrumentation/LocalPmsRepositoryInstrumentedTest.java", "utf8"
+  );
+  const securityTests = fs.readFileSync(
+    "android/templates/instrumentation/AureliaSecurityInstrumentedTest.java", "utf8"
+  );
+  assert.equal([...repositoryTests.matchAll(/@Test\\b/g)].length, 29);
+  assert.equal([...securityTests.matchAll(/@Test\\b/g)].length, 6);
+  assert.ok(nativeRunner.includes("locksettings set-pin 246810"));
+  assert.ok(nativeRunner.includes("com.aurelia.pms.LocalPmsRepositoryInstrumentedTest"));
+  assert.ok(nativeRunner.includes("com.aurelia.pms.security.AureliaSecurityInstrumentedTest"));
+  assert.ok(nativeWorkflow.includes("totals.tests !== 35"));
+  assert.ok(nativeWorkflow.includes("totals.failures !== 0"));
+  assert.ok(nativeWorkflow.includes("totals.errors !== 0"));
+  assert.ok(nativeWorkflow.includes("totals.skipped !== 0"));
 });
