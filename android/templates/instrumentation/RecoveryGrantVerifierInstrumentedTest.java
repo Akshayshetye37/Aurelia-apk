@@ -42,13 +42,13 @@ public final class RecoveryGrantVerifierInstrumentedTest {
           networkCalls.incrementAndGet();
           return Tasks.forResult(true);
         });
-    RecoveryGate.clear();
+    RecoveryGate.INSTANCE.clear();
     final boolean[] callback = new boolean[] { true };
     client.consumeAndArm("malformed.grant.value", NONCE, DID, TENANT,
-        SystemClock.elapsedRealtime(), accepted -> callback[0] = accepted);
+        SystemClock.elapsedRealtime(), accepted -> { callback[0] = accepted; return kotlin.Unit.INSTANCE; });
     assertFalse("invalid grant must fail before network consumption", callback[0]);
     assertEquals("invalid grant must not call the server consume endpoint", 0, networkCalls.get());
-    assertFalse("invalid grant must not arm the recovery gate", RecoveryGate.isOpen());
+    assertFalse("invalid grant must not arm the recovery gate", RecoveryGate.INSTANCE.isOpen());
   }
 
 
@@ -107,13 +107,13 @@ public final class RecoveryGrantVerifierInstrumentedTest {
         Base64.encodeToString(signature, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING));
 
     for (String invalidGrant : invalidGrants) {
-      RecoveryGate.clear();
+      RecoveryGate.INSTANCE.clear();
       final boolean[] callback = new boolean[] { true };
       client.consumeAndArm(invalidGrant, NONCE, DID, TENANT,
           SystemClock.elapsedRealtime(), accepted -> callback[0] = accepted);
       assertFalse("invalid signed grant must be rejected", callback[0]);
       assertEquals("invalid grant must never reach server consume", 0, networkCalls.get());
-      assertFalse("invalid grant must leave recovery gate closed", RecoveryGate.isOpen());
+      assertFalse("invalid grant must leave recovery gate closed", RecoveryGate.INSTANCE.isOpen());
     }
 
     // Every rejected token above shares the legitimate JTI. Prove none of them
@@ -124,13 +124,14 @@ public final class RecoveryGrantVerifierInstrumentedTest {
         SystemClock.elapsedRealtime(), accepted -> {
           validAccepted[0] = accepted;
           validCompletion.countDown();
+          return kotlin.Unit.INSTANCE;
         });
     assertTrue("valid grant must complete after rejected attempts",
         validCompletion.await(5, java.util.concurrent.TimeUnit.SECONDS));
     assertTrue("valid grant remains consumable after rejected attempts", validAccepted[0]);
     assertEquals("only the valid grant reaches server consume", 1, networkCalls.get());
-    assertTrue("valid grant arms recovery only after server consumption", RecoveryGate.isOpen());
-    RecoveryGate.clear();
+    assertTrue("valid grant arms recovery only after server consumption", RecoveryGate.INSTANCE.isOpen());
+    RecoveryGate.INSTANCE.clear();
   }
 
   @Test public void grantUidMustMatchEncryptedOwnerBindingNotPhoneAuthUid() throws Exception {
@@ -157,15 +158,16 @@ public final class RecoveryGrantVerifierInstrumentedTest {
     );
     long now = System.currentTimeMillis() / 1000;
     String grant = sign(pair, claims().put("iat", now - 1).put("exp", now + 299), KID);
-    RecoveryGate.clear();
+    RecoveryGate.INSTANCE.clear();
     client.consumeAndArm(grant, NONCE, DID, TENANT, SystemClock.elapsedRealtime(), result -> {
       accepted[0] = result;
       completed.countDown();
+      return kotlin.Unit.INSTANCE;
     });
     assertTrue("grant processing must complete", completed.await(5, TimeUnit.SECONDS));
     assertEquals("owner UID from encrypted enrollment authorizes local preflight", 1, networkCalls.get());
     assertTrue("valid owner-bound grant arms only after server consumption", accepted[0]);
-    RecoveryGate.clear();
+    RecoveryGate.INSTANCE.clear();
   }
 
   @Test public void rejectsInvalidGrantsBeforeAnyRecoveryGateCanArm() throws Exception {
@@ -187,12 +189,12 @@ public final class RecoveryGrantVerifierInstrumentedTest {
     assertRejected(pair, legacy, UID, TENANT, KID);
 
     String valid = sign(pair, claims(), KID);
-    RecoveryGate.clear();
+    RecoveryGate.INSTANCE.clear();
     RecoveryGrantVerifier.Result accepted = RecoveryGrantVerifier.INSTANCE.verify(
         valid, pair.getPublic(), TENANT, NONCE, DID, UID, KID, NOW);
     assertTrue("correct pinned grant must verify locally",
         accepted instanceof RecoveryGrantVerifier.Result.Verified);
-    assertFalse("local verification alone must not arm the recovery gate", RecoveryGate.isOpen());
+    assertFalse("local verification alone must not arm the recovery gate", RecoveryGate.INSTANCE.isOpen());
     String[] parts = valid.split("\\.");
     byte[] signature = Base64.decode(parts[2], Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
     signature[signature.length - 1] ^= 1;
@@ -212,12 +214,12 @@ public final class RecoveryGrantVerifierInstrumentedTest {
 
   private static void assertRejectedToken(KeyPair pair, String jwt, String uid,
       String tenant, String expectedKid) {
-    RecoveryGate.clear();
+    RecoveryGate.INSTANCE.clear();
     RecoveryGrantVerifier.Result result = RecoveryGrantVerifier.INSTANCE.verify(
         jwt, pair.getPublic(), tenant, NONCE, DID, uid, expectedKid, NOW);
     assertFalse("invalid local grant must be rejected",
         result instanceof RecoveryGrantVerifier.Result.Verified);
-    assertFalse("invalid grant must not arm the local recovery gate", RecoveryGate.isOpen());
+    assertFalse("invalid grant must not arm the local recovery gate", RecoveryGate.INSTANCE.isOpen());
   }
 
   private static JSONObject claims() throws Exception {
