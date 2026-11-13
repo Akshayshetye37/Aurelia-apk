@@ -176,8 +176,9 @@ test('Android writes an owner UID binding only after the server confirms the imm
 
 test('attestation deployment requires separate deploy and Functions identities', () => {
   const workflow = read('.github/workflows/recovery-attestation-deploy.yml');
-  assert.match(workflow, /DEPLOY_SERVICE_ACCOUNT DEPLOY_SERVICE_ACCOUNT/); // env validation includes deploy identity
-  assert.match(workflow, /DEPLOY_SERVICE_ACCOUNT.*FUNCTIONS_SERVICE_ACCOUNT/);
+  assert.match(workflow, /DEPLOY_SERVICE_ACCOUNT: \$\{\{ secrets\.GCP_DEPLOY_SERVICE_ACCOUNT \}\}/);
+  assert.match(workflow, /if \[\[ "\$DEPLOY_SERVICE_ACCOUNT" == "\$FUNCTIONS_SERVICE_ACCOUNT" \]\]/);
+  assert.match(workflow, /for name in [^\n]*DEPLOY_SERVICE_ACCOUNT/);
   assert.match(workflow, /self-impersonation is not supported/);
   assert.match(workflow, /roles\/iam\.serviceAccountOpenIdTokenCreator/);
 });
