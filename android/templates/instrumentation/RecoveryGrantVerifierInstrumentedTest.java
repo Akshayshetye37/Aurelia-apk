@@ -5,9 +5,12 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.util.Base64;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.SystemClock;
 import androidx.test.core.app.ApplicationProvider;
 import com.aurelia.pms.identity.RecoveryGrantClient;
+import com.aurelia.pms.identity.RecoveryTenantIdentity;
 import com.google.android.gms.tasks.Tasks;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -16,6 +19,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.KeyStore;
+import java.lang.reflect.Method;
 import java.security.Signature;
 import java.security.spec.ECGenParameterSpec;
 import java.util.UUID;
@@ -142,32 +147,54 @@ public final class RecoveryGrantVerifierInstrumentedTest {
     assertFalse("recovery phone identity must be distinct from the owner identity",
         UID.equals(phoneAuthUid));
 
+    Context appContext = ApplicationProvider.getApplicationContext();
+    SharedPreferences enrollmentPrefs = appContext.getSharedPreferences(
+        "aurelia_recovery_tenant_v1", Context.MODE_PRIVATE);
+    KeyStore enrollmentKeys = KeyStore.getInstance("AndroidKeyStore");
+    enrollmentKeys.load(null);
+    final String enrollmentAlias = "aurelia.pms.recovery-tenant.v1";
+    enrollmentPrefs.edit().clear().commit();
+    if (enrollmentKeys.containsAlias(enrollmentAlias)) enrollmentKeys.deleteEntry(enrollmentAlias);
+    Method persistEnrollment = RecoveryTenantIdentity.class.getDeclaredMethod(
+        "persistOrConfirm", Context.class, String.class, String.class);
+    persistEnrollment.setAccessible(true);
+    persistEnrollment.invoke(RecoveryTenantIdentity.INSTANCE, appContext, TENANT, UID);
+    String encryptedRecord = enrollmentPrefs.getString("encrypted_record", null);
+    assertTrue("owner enrollment must be persisted", encryptedRecord != null);
+    assertFalse("encrypted owner record must not contain the plaintext UID", encryptedRecord.contains(UID));
+    assertFalse("encrypted owner record must not contain the plaintext tenant", encryptedRecord.contains(TENANT));
+
     AtomicInteger networkCalls = new AtomicInteger();
     CountDownLatch completed = new CountDownLatch(1);
     final boolean[] accepted = new boolean[] { false };
     RecoveryGrantClient client = new RecoveryGrantClient(
-        ApplicationProvider.getApplicationContext(),
+        appContext,
         (grant, nonce, deviceHash) -> {
           networkCalls.incrementAndGet();
           return Tasks.forResult(true);
         },
-        // This binding is loaded from the encrypted owner-enrollment record.
-        // No phone-auth UID is supplied to consumeAndArm or used as its authority.
-        () -> new com.aurelia.pms.identity.RecoveryTenantIdentity.Binding(UID, TENANT),
+        // Resolve the actual encrypted owner enrollment; never substitute the phone-auth UID.
+        () -> RecoveryTenantIdentity.INSTANCE.getBinding(appContext),
         kid -> KID.equals(kid) ? pair.getPublic() : null
     );
-    long now = System.currentTimeMillis() / 1000;
-    String grant = sign(pair, claims().put("iat", now - 1).put("exp", now + 299), KID);
-    RecoveryGate.INSTANCE.clear();
-    client.consumeAndArm(grant, NONCE, DID, TENANT, SystemClock.elapsedRealtime(), result -> {
-      accepted[0] = result;
-      completed.countDown();
-      return kotlin.Unit.INSTANCE;
-    });
-    assertTrue("grant processing must complete", completed.await(5, TimeUnit.SECONDS));
-    assertEquals("owner UID from encrypted enrollment authorizes local preflight", 1, networkCalls.get());
-    assertTrue("valid owner-bound grant arms only after server consumption", accepted[0]);
-    RecoveryGate.INSTANCE.clear();
+    try {
+      long now = System.currentTimeMillis() / 1000;
+      String grant = sign(pair, claims().put("iat", now - 1).put("exp", now + 299), KID);
+      RecoveryGate.INSTANCE.clear();
+      client.consumeAndArm(grant, NONCE, DID, TENANT, SystemClock.elapsedRealtime(), result -> {
+        accepted[0] = result;
+        completed.countDown();
+        return kotlin.Unit.INSTANCE;
+      });
+      assertTrue("grant processing must complete", completed.await(5, TimeUnit.SECONDS));
+      assertEquals("owner UID from encrypted enrollment authorizes local preflight", 1, networkCalls.get());
+      assertTrue("valid owner-bound grant arms only after server consumption", accepted[0]);
+    } finally {
+      RecoveryGate.INSTANCE.clear();
+      enrollmentPrefs.edit().clear().commit();
+      enrollmentKeys.load(null);
+      if (enrollmentKeys.containsAlias(enrollmentAlias)) enrollmentKeys.deleteEntry(enrollmentAlias);
+    }
   }
 
   @Test public void rejectsInvalidGrantsBeforeAnyRecoveryGateCanArm() throws Exception {

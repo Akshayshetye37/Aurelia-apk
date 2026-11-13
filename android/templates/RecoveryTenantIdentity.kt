@@ -142,9 +142,12 @@ object RecoveryTenantIdentity {
                 "Recovery tenant record is missing; refusing to create a replacement namespace."
             }
         }
-        val nonce = ByteArray(12).also(SecureRandom()::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key(context), GCMParameterSpec(128, nonce))
+        // Android Keystore requires provider-generated nonces when randomized
+        // encryption is enforced. Persist the returned IV with the ciphertext.
+        cipher.init(Cipher.ENCRYPT_MODE, key(context))
+        val nonce = cipher.iv ?: throw SecurityException("Keystore did not return a GCM nonce.")
+        require(nonce.size == 12) { "Unexpected AES-GCM nonce length." }
         cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
         val plain = JSONObject().put("ownerUid", ownerUid).put("tenantId", tenant)
             .toString().toByteArray(Charsets.UTF_8)
