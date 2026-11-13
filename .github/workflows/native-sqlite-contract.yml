@@ -236,7 +236,7 @@ jobs:
           script: |
             bash -euo pipefail <<'BASH'
             set -euo pipefail
-            log_dir="$RUNNER_TEMP/aurelia-emulator"
+            log_dir="$PWD/../.aurelia-emulator"
             mkdir -p "$log_dir"
             trap 'adb logcat -b all -d -v threadtime > "$log_dir/logcat-full.txt" 2>&1 || true; adb logcat -b crash -d -v threadtime > "$log_dir/logcat-crash.txt" 2>&1 || true' EXIT
             if ! timeout -k 2s 15s adb shell getprop sys.boot_completed | grep -qx '1'; then
@@ -282,7 +282,7 @@ jobs:
           script: |
             bash -euo pipefail <<'BASH'
             set -euo pipefail
-            log_dir="$RUNNER_TEMP/aurelia-emulator"
+            log_dir="$PWD/../.aurelia-emulator"
             mkdir -p "$log_dir"
             trap 'adb logcat -b all -d -v threadtime > "$log_dir/logcat-full.txt" 2>&1 || true; adb logcat -b crash -d -v threadtime > "$log_dir/logcat-crash.txt" 2>&1 || true' EXIT
             if ! timeout -k 2s 15s adb shell getprop sys.boot_completed | grep -qx '1'; then
@@ -359,7 +359,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          log_dir="$RUNNER_TEMP/aurelia-emulator"
+          log_dir=".aurelia-emulator"
           diag_dir="android/app/build/diagnostics"
           mkdir -p "$log_dir" "$diag_dir"
           {
