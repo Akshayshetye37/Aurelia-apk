@@ -1,0 +1,129 @@
+name: Recovery staging preflight (non-qualifying)
+
+on:
+  workflow_dispatch:
+    inputs:
+      physical_device_ready:
+        description: A dedicated physical Android test device and SIM are available
+        required: true
+        type: boolean
+      sms_delivery_confirmed:
+        description: Confirm that a real staging Firebase Phone Auth SMS was received on the test number
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: recovery-staging-preflight
+  cancel-in-progress: false
+
+jobs:
+  staging-preflight:
+    name: Configuration and staging-readiness checks only
+    runs-on: ubuntu-latest
+    environment: recovery-staging
+    timeout-minutes: 15
+    steps:
+      - name: Enforce hardening branch and non-qualifying scope
+        shell: bash
+        env:
+          PHYSICAL_DEVICE_READY: ${{ inputs.physical_device_ready }}
+          SMS_DELIVERY_CONFIRMED: ${{ inputs.sms_delivery_confirmed }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/work/p0-storage-hardening" ]]; then
+            echo "::error::Preflight is restricted to work/p0-storage-hardening."
+            exit 1
+          fi
+          if [[ "$PHYSICAL_DEVICE_READY" != "true" ]]; then
+            echo "::error::Dedicated physical device and SIM readiness was not confirmed."
+            exit 1
+          fi
+          if [[ "$SMS_DELIVERY_CONFIRMED" != "true" ]]; then
+            echo "::error::Real staging SMS receipt was not confirmed. Do not treat configuration presence as SMS-delivery evidence."
+            exit 1
+          fi
+          echo "SCOPE=NON-QUALIFYING, HISTORICAL SHA 6b81708"
+          echo "This workflow validates staging readiness only. It does not qualify a release."
+
+      - name: Authenticate to staging Google Cloud with Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Validate staging configuration and Secret Manager metadata without exposing values
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
+          VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
+          ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
+          PUBLIC_KEYS: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
+          FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
+          TEST_PHONE_NUMBER: ${{ vars.RECOVERY_STAGING_TEST_PHONE_NUMBER }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+          required=(PROJECT_ID PRODUCTION_PROJECT_ID REGION FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS FIREBASE_WEB_API_KEY TEST_PHONE_NUMBER GOOGLE_SERVICES_JSON)
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing recovery-staging setting: $name"
+              exit 1
+            fi
+          done
+          if [[ "$PROJECT_ID" == "$PRODUCTION_PROJECT_ID" ]]; then
+            echo "::error::Staging project matches the configured production project."
+            exit 1
+          fi
+          if [[ ! "$TEST_PHONE_NUMBER" =~ ^\+[1-9][0-9]{7,14}$ ]]; then
+            echo "::error::RECOVERY_STAGING_TEST_PHONE_NUMBER must be an E.164 test number."
+            exit 1
+          fi
+          node -e 'const pins=JSON.parse(process.env.PUBLIC_KEYS); const kid=process.env.ACTIVE_KID; if(!kid || !pins || typeof pins[kid]!=="string" || !pins[kid]) process.exit(1);'
+          printf '%s' "$GOOGLE_SERVICES_JSON" | base64 --decode > "$RUNNER_TEMP/google-services.json"
+          export GOOGLE_SERVICES_PATH="$RUNNER_TEMP/google-services.json"
+          node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); if(!p || c.project_info?.project_id!==process.env.PROJECT_ID || p.api_key?.[0]?.current_key!==process.env.FIREBASE_WEB_API_KEY) process.exit(1);'
+          gcloud config set project "$PROJECT_ID" --quiet
+          for secret in PHONE_PEPPER RECOVERY_SIGNING_KEY_PKCS8; do
+            gcloud secrets describe "$secret" --project "$PROJECT_ID" >/dev/null
+            version="$(gcloud secrets versions list "$secret" --project "$PROJECT_ID" --filter='state=ENABLED' --format='value(name)' | head -n 1)"
+            if [[ -z "$version" ]]; then
+              echo "::error::Secret Manager secret $secret has no enabled version."
+              exit 1
+            fi
+            echo "PASS: Secret Manager entry $secret exists with an enabled version (value not read or printed)."
+          done
+          echo "PASS: staging project identity, Firebase Android config, active public-key ID and required staging secret metadata validated."
+          echo "NON-QUALIFYING, HISTORICAL SHA 6b81708 — no deploy, no build, no release artifact."
+
+      - name: Publish non-secret preflight evidence
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
+        run: |
+          set -euo pipefail
+          {
+            echo "classification=NON-QUALIFYING"
+            echo "historical_sha=6b81708edce73fd2ac9b23e0cfc1cff3e8bfeded"
+            echo "workflow_sha=$GITHUB_SHA"
+            echo "staging_project=$PROJECT_ID"
+            echo "region=$REGION"
+            echo "active_key_id=$ACTIVE_KID"
+            echo "physical_device_ready=${{ inputs.physical_device_ready }}"
+            echo "sms_delivery_confirmed=${{ inputs.sms_delivery_confirmed }}"
+            echo "production_recovery_enabled=false (invariant; not modified by this workflow)"
+            echo "deployment_performed=false"
+            echo "apk_built=false"
+            echo "release_qualification=false"
+          } > "$RUNNER_TEMP/recovery-staging-preflight.txt"
+          cat "$RUNNER_TEMP/recovery-staging-preflight.txt"
