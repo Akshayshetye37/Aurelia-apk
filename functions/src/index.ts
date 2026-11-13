@@ -601,7 +601,7 @@ export const issueRecoveryGrant = onCall(
       // revoked the previous JTI and erased all pending hold linkage.
       if (pendingState === "CANCELLED" &&
           (!Number.isFinite(Number(pending?.cancelledAtMs)) ||
-            proof.authTime <= Number(pending.cancelledAtSec))) throw GENERIC;
+            proof.authTime <= Number(pending?.cancelledAtSec))) throw GENERIC;
       if (!pending || pendingState === "CONSUMED" || pendingState === "CANCELLED") {
         tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
           expiresAt: nowMs + 5 * 60_000 });
