@@ -26,7 +26,7 @@ test("host force-stops the exact phase-one process without manufacturing a repla
   assert.ok(workflow.includes('Phase-one instrumentation process exited before the explicit force-stop boundary.'));
   assert.ok(workflow.includes('install -r "$app_apk"'));
   assert.ok(workflow.includes('install -r -t "$test_apk"'));
-  assert.ok(workflow.includes('shell am instrument -w -e class "$selector"'));
+  assert.ok(workflow.includes('shell am instrument -w -r -e class "$selector"'));
   assert.ok(workflow.includes('"$adb_bin" shell am force-stop com.aurelia.pms'));
   assert.ok(workflow.includes('if [[ -n "$after_stop" ]]'));
   assert.ok(!workflow.includes('monkey -p com.aurelia.pms'));
