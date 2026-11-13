@@ -178,7 +178,7 @@ test('Android installs Play Integrity App Check before Firebase services without
   assert.match(bootstrap, /if \(firebaseApp == null\) return/);
   assert.match(bootstrap, /cloud recovery remains unavailable/);
   assert.match(patcher, /firebase-appcheck-playintegrity/);
-  assert.match(patcher, /firebase-bom:35\.1\.0/);
+  assert.match(patcher, /firebase-bom:34\.12\.0/);
   assert.match(patcher, /android:name="com\.aurelia\.pms\.AureliaApplication"/);
 });
 

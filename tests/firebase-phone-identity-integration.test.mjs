@@ -16,7 +16,7 @@ test('Android generation copies both Firebase recovery Kotlin sources', () => {
 });
 
 test('Firebase Auth dependency is added without obsolete KTX artifact', () => {
-  assert.match(patchScript, /firebase-bom:35\.1\.0/);
+  assert.match(patchScript, /firebase-bom:34\.12\.0/);
   assert.match(patchScript, /com\.google\.firebase:firebase-auth/);
   assert.doesNotMatch(patchScript, /firebase-auth-ktx/);
 });
