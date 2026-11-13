@@ -27,7 +27,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: otp-recovery-android-instrumentation-${{ github.ref }}
+  group: otp-recovery-android-instrumentation-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -208,6 +208,7 @@ jobs:
 
       - name: Capture recovery emulator diagnostics
         if: always()
+        timeout-minutes: 2
         shell: bash
         run: |
           log_dir="$RUNNER_TEMP/aurelia-recovery-emulator"
