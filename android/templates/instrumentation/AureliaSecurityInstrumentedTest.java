@@ -2,7 +2,6 @@ package com.aurelia.pms.security;
 
 import static org.junit.Assert.*;
 
-import android.content.Context;
 import android.app.KeyguardManager;
 import android.content.Context;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -24,16 +23,18 @@ public final class AureliaSecurityInstrumentedTest {
         assertTrue("Physical recovery device must have a secure lock screen", keyguard.isDeviceSecure());
         BiometricVaultManager vault = new BiometricVaultManager();
         KeyStore keys = KeyStore.getInstance("AndroidKeyStore");
-        keys.load(null);
-        vault.invalidateAfterRecovery();
-        keys.load(null);
-        assertFalse("Recovery must remove the old biometric wrapping key",
-            keys.containsAlias("aurelia.pms.biometric.dek.v1"));
-        vault.createOrReplaceKey();
-        keys.load(null);
-        assertTrue("Owner must be able to re-enroll the biometric wrapping key",
-            keys.containsAlias("aurelia.pms.biometric.dek.v1"));
-        vault.invalidateAfterRecovery();
+        try {
+            vault.invalidateAfterRecovery();
+            keys.load(null);
+            assertFalse("Recovery must remove the old biometric wrapping key",
+                keys.containsAlias("aurelia.pms.biometric.dek.v1"));
+            vault.createOrReplaceKey();
+            keys.load(null);
+            assertTrue("Owner must be able to re-enroll the biometric wrapping key",
+                keys.containsAlias("aurelia.pms.biometric.dek.v1"));
+        } finally {
+            vault.invalidateAfterRecovery();
+        }
     }
 
     @Test
