@@ -93,8 +93,10 @@ public final class OtpRecoverySqlCipherInstrumentedTest {
       Arrays.fill(fakeNonce, (byte) 0);
       Arrays.fill(fakeCiphertext, (byte) 0);
 
-      // 2. Simulate process recreation after successful recovery-key unwrap but before envelope
-      // commit. Old PIN and biometric unlock remain intact because no replacement was committed.
+      // 2. Simulate a fresh coordinator after an uncommitted recovery result. This is
+      // deliberately not treated as process-death evidence; the separate
+      // RecoveryProcessDeathInstrumentedTest performs host-side adb force-stop between phases.
+      // Old PIN and biometric unlock remain intact because no replacement was committed.
       String uncommitted = manager.recoverWithRecoveryKey(recoveryCode, newPin, envelopeStore.read());
       JSONObject pending = new JSONObject(uncommitted);
       byte[] pendingDek = crypto.unwrapDataKey(pending.getString("pin"), newPin);
