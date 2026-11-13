@@ -190,21 +190,44 @@ jobs:
           run_suite grant-verifier com.aurelia.pms.security.RecoveryGrantVerifierInstrumentedTest
           run_suite process-death-phase-one com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop
           adb_bin="$ANDROID_HOME/platform-tools/adb"
-          before_pid="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
-          if [[ -z "$before_pid" ]]; then
-            echo "::error::The target app process was not alive after process-death phase one."
+          launch_target_app() {
+            # Instrumentation can shut down the target process when its runner exits.
+            # Explicitly launch the installed app before observing and force-stopping it.
+            "$adb_bin" shell monkey -p com.aurelia.pms 1
+          }
+          wait_for_target_pid() {
+            local pid=""
+            for attempt in {1..15}; do
+              pid="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
+              if [[ -n "$pid" ]]; then printf '%s' "$pid"; return 0; fi
+              sleep 2
+            done
+            return 1
+          }
+          launch_target_app
+          before_pid="$(wait_for_target_pid)" || {
+            echo "::error::Could not launch the target app after process-death phase one."
             exit 1
-          fi
+          }
           "$adb_bin" shell am force-stop com.aurelia.pms
-          after_stop="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
+          after_stop=""
+          for attempt in {1..10}; do
+            after_stop="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
+            [[ -z "$after_stop" ]] && break
+            sleep 1
+          done
           if [[ -n "$after_stop" ]]; then
             echo "::error::adb force-stop did not terminate the target app process."
             exit 1
           fi
           run_suite process-death-phase-two com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop
-          after_pid="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
-          if [[ -z "$after_pid" || "$after_pid" == "$before_pid" ]]; then
-            echo "::error::Phase two did not run in a newly started target app process."
+          launch_target_app
+          after_pid="$(wait_for_target_pid)" || {
+            echo "::error::Could not relaunch the target app after process-death phase two."
+            exit 1
+          }
+          if [[ "$after_pid" == "$before_pid" ]]; then
+            echo "::error::Phase two did not produce a newly started target app process."
             exit 1
           fi
           mkdir -p app/build/outputs/androidTest-results/connected
