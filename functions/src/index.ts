@@ -452,20 +452,18 @@ export const registerRecoveryOwnerDevice = onCall(
     if (owner.tenantId !== tenantId || auth?.uid !== owner.uid) throw GENERIC;
     await requireRecoveryOwnerBinding(tenantId, owner.uid);
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
-    await requireAttestedDevice(tenantId, deviceIdHash, auth.uid);
+    await requireAttestedDevice(tenantId, deviceIdHash, owner.uid);
     await spendRateLimit(`notify:${tenantId}:${deviceIdHash}`, 10, 60 * 60_000);
     const token = requiredString(request.data?.fcmToken, 4096);
     if (token.length < 100) throw GENERIC;
     const deviceRef = db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`);
     const existingDevice = (await deviceRef.get()).data();
-    if (!existingDevice) {
-      requireFreshPrimaryOwner(request);
-    } else if (existingDevice.ownerUid !== owner.uid || existingDevice.deviceIdHash !== deviceIdHash) {
+    if (existingDevice && (existingDevice.ownerUid !== owner.uid || existingDevice.deviceIdHash !== deviceIdHash)) {
       throw GENERIC;
     }
     const tokenHash = createHmac("sha256", PHONE_PEPPER.value()).update(token).digest("hex");
     await deviceRef.set({
-      tenantId, deviceIdHash, ownerUid: auth.uid, fcmToken: token,
+      tenantId, deviceIdHash, ownerUid: owner.uid, fcmToken: token,
       tokenHash, active: true, updatedAt: FieldValue.serverTimestamp()
     });
     return { registered: true };
