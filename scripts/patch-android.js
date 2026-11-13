@@ -660,7 +660,19 @@ if (fs.existsSync(appGradleGroovy)) {
     }
     if (end < 0) throw new Error('Could not locate generated android block boundary.');
     gradle = gradle.slice(0, end) + signingBlock + '\n' + gradle.slice(end);
-    fs.writeFileSync(appGradleGroovy, gradle);
+  }
+  // Gate 4 must instrument the exact release-signed staging APK, not a debug
+  // variant. The default CI instrumentation path remains debug unless this
+  // staging-only environment switch is explicitly set.
+  if (process.env.AURELIA_ANDROID_TEST_BUILD_TYPE === 'release') {
+    const testBuildType = /testBuildType\\s+["'][^"']+["']/;
+    if (testBuildType.test(gradle)) {
+      gradle = gradle.replace(testBuildType, 'testBuildType "release"');
+    } else {
+      gradle = gradle.replace(/android\\s*\\{/, match => match + '\\n    testBuildType "release"');
+    }
+  }
+  fs.writeFileSync(appGradleGroovy, gradle);
   }
 } else {
   throw new Error('Expected generated Groovy app/build.gradle; release signing configuration was not applied.');

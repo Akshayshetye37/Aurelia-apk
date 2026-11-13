@@ -200,3 +200,15 @@ test('recovery hardware attestation fails closed below Android API 24 without de
   assert.ok(guard >= 0 && deleteAlias > guard && attestationCall > guard);
   assert.match(source, /Hardware-attested recovery enrollment requires Android 7\.0 or later/);
 });
+
+
+test('staging APK includes release-signed instrumentation companion for physical qualification', () => {
+  const patcher = read('scripts/patch-android.js');
+  assert.match(patcher, /AURELIA_ANDROID_TEST_BUILD_TYPE/);
+  assert.match(patcher, /testBuildType "release"/);
+  const workflow = read('.github/workflows/recovery-staging-deploy.yml');
+  assert.match(workflow, /AURELIA_ANDROID_TEST_BUILD_TYPE: release/);
+  assert.match(workflow, /assembleRelease assembleReleaseAndroidTest/);
+  assert.match(workflow, /app-release-androidTest\.apk/);
+  assert.match(workflow, /TEST_SHA256.*ACTUAL_SHA256/);
+});

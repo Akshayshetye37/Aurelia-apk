@@ -163,6 +163,7 @@ jobs:
           AURELIA_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
           AURELIA_RELEASE_KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
           AURELIA_RELEASE_KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
+          AURELIA_ANDROID_TEST_BUILD_TYPE: release
         run: |
           set -euo pipefail
           node scripts/patch-android.js
@@ -177,7 +178,7 @@ jobs:
           AURELIA_RELEASE_KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace assembleRelease
+          ./gradlew --no-daemon --stacktrace assembleRelease assembleReleaseAndroidTest
 
       - name: Verify APK signature and staging Firebase project
         shell: bash
@@ -187,25 +188,36 @@ jobs:
         run: |
           set -euo pipefail
           APK="android/app/build/outputs/apk/release/app-release.apk"
+          TEST_APK="android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk"
           test -s "$APK"
+          test -s "$TEST_APK"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort | tail -n 1)"
           test -x "$APKSIGNER"
           "$APKSIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-certificate.txt"
+          "$APKSIGNER" verify --print-certs "$TEST_APK" > "$RUNNER_TEMP/androidTest-certificate.txt"
           ACTUAL_SHA256="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/apk-certificate.txt" | tr -d ':')"
+          TEST_SHA256="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/androidTest-certificate.txt" | tr -d ':')"
           EXPECTED="$(echo "$EXPECTED_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
           test -n "$ACTUAL_SHA256" && test "$ACTUAL_SHA256" = "$EXPECTED"
-          sha256sum "$APK" | tee "$RUNNER_TEMP/apk-sha256.txt"
+          test -n "$TEST_SHA256" && test "$TEST_SHA256" = "$ACTUAL_SHA256"
+          APP_HASH="$(sha256sum "$APK" | awk '{print $1}')"
+          TEST_HASH="$(sha256sum "$TEST_APK" | awk '{print $1}')"
+          printf '%s  app-release.apk\\n%s  app-release-androidTest.apk\\n' "$APP_HASH" "$TEST_HASH" > "$RUNNER_TEMP/apk-sha256.txt"
+          mkdir -p "$RUNNER_TEMP/staging-artifacts"
+          cp "$APK" "$RUNNER_TEMP/staging-artifacts/app-release.apk"
+          cp "$TEST_APK" "$RUNNER_TEMP/staging-artifacts/app-release-androidTest.apk"
+          cp "$RUNNER_TEMP/apk-sha256.txt" "$RUNNER_TEMP/staging-artifacts/"
+          cp "$RUNNER_TEMP/apk-certificate.txt" "$RUNNER_TEMP/staging-artifacts/"
+          cp "$RUNNER_TEMP/androidTest-certificate.txt" "$RUNNER_TEMP/staging-artifacts/"
           node -e 'const c=require("./android/app/google-services.json"); if(c.project_info.project_id!==process.env.PROJECT_ID) process.exit(1);'
           cat "$RUNNER_TEMP/apk-sha256.txt"
           grep -E 'SHA-1|SHA-256' "$RUNNER_TEMP/apk-certificate.txt"
+          grep -E 'SHA-1|SHA-256' "$RUNNER_TEMP/androidTest-certificate.txt"
 
       - name: Upload staging APK and non-secret fingerprints
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: aurelia-recovery-staging-apk-${{ github.sha }}
-          path: |
-            android/app/build/outputs/apk/release/app-release.apk
-            ${{ runner.temp }}/apk-sha256.txt
-            ${{ runner.temp }}/apk-certificate.txt
+          path: ${{ runner.temp }}/staging-artifacts/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7

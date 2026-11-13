@@ -65,7 +65,8 @@ All cases below must be run on the physical handset. Capture timestamped, redact
 
 ## Execution notes
 
-- Use the exact approved instrumentation APK from Gate 3. Do not build or install a different candidate during the run.
+- Use the exact approved release APK and companion release-signed androidTest APK from the same Gate 3 artifact. The artifact must contain `app-release.apk`, `app-release-androidTest.apk`, their SHA-256 values and both certificate reports. The app and instrumentation APK signer SHA-256 values must match. Do not build or install a different candidate during the run.
+- Run the automated physical-device subset using `.github/workflows/recovery-physical-device-qualification.yml` on the dedicated self-hosted Android device runner. The workflow verifies the staging artifact's originating SHA, physical/locked boot state, signer match and runs the local SQLCipher, grant-preflight and force-stop recovery instrumentation suites. Real SMS, independent owner-device alert/cancellation, lock-screen changes and reboot qualification remain separate Gate 4 cases.
 - Capture device build fingerprint, Android API, model and package version before testing. Store serial privately; record only redacted device label here.
 - For force-stop cases, record command and timestamp. Force-stop/relaunch is not a substitute for the separate reboot case.
 - Run database integrity and foreign-key checks using the approved diagnostic build path; do not add a production-accessible debug endpoint.
