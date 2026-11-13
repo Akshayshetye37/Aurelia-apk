@@ -13,7 +13,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.security.PublicKey;
 import java.security.Signature;
 import java.security.spec.ECGenParameterSpec;
 import java.util.UUID;
@@ -69,7 +68,8 @@ public final class RecoveryGrantVerifierInstrumentedTest {
     JSONObject validClaims = claims().put("iat", now - 1).put("exp", now + 299);
     java.util.ArrayList<String> invalidGrants = new java.util.ArrayList<>();
     invalidGrants.add(sign(pair, new JSONObject(validClaims.toString()).put("uid", UID + "-wrong"), KID));
-    invalidGrants.add(sign(pair, new JSONObject(validClaims.toString()).put("tenant", TENANT + "-wrong"), KID));
+    invalidGrants.add(sign(pair, new JSONObject(validClaims.toString())
+        .put("tenant", TENANT + "-wrong").put("sub", TENANT + "-wrong"), KID));
     for (String missing : new String[] {"uid", "tenant", "jti", "nonce", "did"}) {
       JSONObject missingClaim = new JSONObject(validClaims.toString());
       missingClaim.remove(missing);
