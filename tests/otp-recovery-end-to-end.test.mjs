@@ -300,6 +300,6 @@ test('physical-device workflow verifies secure lock screen and biometric vault r
 
 test('recovery Android diagnostic collection is bounded when adb becomes unresponsive', () => {
   const workflow = read('.github/workflows/otp-recovery-android-instrumentation.yml');
-  assert.match(workflow, /timeout -k 2s 8s "\\$ANDROID_HOME\\/platform-tools\\/adb" devices -l/);
-  assert.match(workflow, /timeout -k 2s 8s "\\$ANDROID_HOME\\/platform-tools\\/adb" logcat -d/);
+  assert.ok(workflow.includes('timeout -k 2s 8s "$ANDROID_HOME/platform-tools/adb" devices -l'));
+  assert.ok(workflow.includes('timeout -k 2s 8s "$ANDROID_HOME/platform-tools/adb" logcat -d'));
 });
