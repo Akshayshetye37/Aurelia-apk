@@ -292,7 +292,8 @@ test('Android generator installs native cryptographic and recovery instrumentati
   assert.match(securityTest, /base32RecoveryKeyRoundTripsAndChecksumDetectsMutation/);
   assert.match(securityTest, /pinAndRecoveryWrappersUnwrapTheIdenticalDek/);
   assert.match(securityTest, /replacementPinWrapperPreservesRecoveryEnvelopeAndSameDek/);
-  assert.match(securityTest, /recoveryEnvelopeStoreRetainsPrevious/);
+  assert.match(securityTest, /recoveryEnvelopeAndPhoneStoresRetainAuthenticatedKeystoreState/);
+  assert.match(securityTest, /assertRecoveryPhoneStoreRoundTrip/);
 });
 
 test('missing enrollment envelope never silently creates a new key and offers only typed destructive reset', () => {
