@@ -39,13 +39,15 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
             val binding = runCatching { RecoveryTenantIdentity.getBinding(this) }.getOrNull()
             tenantId = binding?.tenantId
                 ?: intent.getStringExtra(EXTRA_TENANT_ID).orEmpty()
-            deviceHash = runCatching { RecoveryDeviceIdentity.deviceIdHash() }.getOrElse {
+            val enrollmentRequested = intent.getBooleanExtra(EXTRA_ENROLLMENT_MODE, false)
+            deviceHash = runCatching { RecoveryDeviceIdentity.deviceIdHashOrNull() }.getOrNull().orEmpty()
+            val enrollmentFlow = enrollmentRequested || !incomingLink.isNullOrBlank()
+            if (deviceHash.isBlank() && !enrollmentFlow) {
                 finish()
                 return
             }
             if (!incomingLink.isNullOrBlank()) applyEmailLinkContext(incomingLink)
-            val enrollmentRequested = intent.getBooleanExtra(EXTRA_ENROLLMENT_MODE, false)
-            if (tenantId.isBlank() && !enrollmentRequested && incomingLink.isNullOrBlank()) {
+            if (tenantId.isBlank() && !enrollmentFlow) {
                 finish()
                 return
             }

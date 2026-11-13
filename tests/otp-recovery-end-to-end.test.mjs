@@ -182,3 +182,11 @@ test('attestation deployment requires separate deploy and Functions identities',
   assert.match(workflow, /self-impersonation is not supported/);
   assert.match(workflow, /roles\/iam\.serviceAccountOpenIdTokenCreator/);
 });
+
+
+test('new owner device can complete email-link enrollment before hardware key creation', () => {
+  const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
+  assert.match(activity, /deviceIdHashOrNull\(\)/);
+  assert.match(activity, /enrollmentRequested \|\| !incomingLink\.isNullOrBlank\(\)/);
+  assert.match(activity, /if \(deviceHash\.isBlank\(\) && !enrollmentFlow\)/);
+});

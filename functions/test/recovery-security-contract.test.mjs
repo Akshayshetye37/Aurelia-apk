@@ -327,3 +327,11 @@ test('owner email-link exchange verifies the one-time link before minting primar
   assert.match(functions, /proof\.authTime <= Number\(pending\?\.cancelledAtSec\)/);
   assert.match(functions, /cancelledAtSec: Math\.floor\(Date\.now\(\) \/ 1000\)/);
 });
+
+
+test('owner email-link enrollment does not require an attested device key before enrollment', () => {
+  const exchange = functions.slice(functions.indexOf('export const exchangeOwnerEmailLink'), functions.indexOf('export const confirmRecoveryOwnerBinding'));
+  assert.match(exchange, /purpose === "alert" \? validateDeviceHash/);
+  assert.match(exchange, /if \(purpose === "alert"\)/);
+  assert.doesNotMatch(exchange.slice(0, exchange.indexOf('if (purpose === "alert")')), /requiredString\(request\.data\?\.deviceIdHash/);
+});
