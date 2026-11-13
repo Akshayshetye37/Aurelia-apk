@@ -3,6 +3,8 @@ package com.aurelia.pms.security;
 import static org.junit.Assert.*;
 
 import android.content.Context;
+import android.app.KeyguardManager;
+import android.content.Context;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.Test;
@@ -14,6 +16,25 @@ import java.security.SecureRandom;
 public final class AureliaSecurityInstrumentedTest {
     private final AureliaCryptoEngine crypto = new AureliaCryptoEngine();
     private final Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+
+    @Test
+    public void biometricVaultCanBeReenrolledAfterRecoveryInvalidationOnSecureLockScreen() throws Exception {
+        KeyguardManager keyguard = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+        assertNotNull("Keyguard service must be available", keyguard);
+        assertTrue("Physical recovery device must have a secure lock screen", keyguard.isDeviceSecure());
+        BiometricVaultManager vault = new BiometricVaultManager();
+        KeyStore keys = KeyStore.getInstance("AndroidKeyStore");
+        keys.load(null);
+        vault.invalidateAfterRecovery();
+        keys.load(null);
+        assertFalse("Recovery must remove the old biometric wrapping key",
+            keys.containsAlias("aurelia.pms.biometric.dek.v1"));
+        vault.createOrReplaceKey();
+        keys.load(null);
+        assertTrue("Owner must be able to re-enroll the biometric wrapping key",
+            keys.containsAlias("aurelia.pms.biometric.dek.v1"));
+        vault.invalidateAfterRecovery();
+    }
 
     @Test
     public void pinPolicyRejectsShortRepeatedAndSequentialPins() {

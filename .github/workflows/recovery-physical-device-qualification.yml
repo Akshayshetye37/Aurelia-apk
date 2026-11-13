@@ -153,6 +153,7 @@ jobs:
               exit 1
             fi
           }
+          run_test security-primitives com.aurelia.pms.security.AureliaSecurityInstrumentedTest
           run_test sqlcipher com.aurelia.pms.OtpRecoverySqlCipherInstrumentedTest
           run_test grant-preflight com.aurelia.pms.security.RecoveryGrantVerifierInstrumentedTest
           run_test force-stop-phase-one 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop'

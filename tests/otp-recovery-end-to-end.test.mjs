@@ -285,3 +285,12 @@ test('attestation deployment separates Cloud Run runtime, Functions caller and d
   assert.match(workflow, /RUNTIME_SERVICE_ACCOUNT.*DEPLOY_SERVICE_ACCOUNT/);
   assert.match(workflow, /must be three distinct service accounts/);
 });
+
+
+test('physical-device workflow verifies secure lock screen and biometric vault re-enrollment', () => {
+  const source = read('android/templates/instrumentation/AureliaSecurityInstrumentedTest.java');
+  assert.match(source, /keyguard\.isDeviceSecure\(\)/);
+  assert.match(source, /biometricVaultCanBeReenrolledAfterRecoveryInvalidationOnSecureLockScreen/);
+  const workflow = read('.github/workflows/recovery-physical-device-qualification.yml');
+  assert.match(workflow, /run_test security-primitives com\.aurelia\.pms\.security\.AureliaSecurityInstrumentedTest/);
+});
