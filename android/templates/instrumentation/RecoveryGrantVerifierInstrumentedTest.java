@@ -13,6 +13,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.PublicKey;
 import java.security.Signature;
 import java.security.spec.ECGenParameterSpec;
 import java.util.UUID;
@@ -46,6 +47,56 @@ public final class RecoveryGrantVerifierInstrumentedTest {
     assertFalse("invalid grant must fail before network consumption", callback[0]);
     assertEquals("invalid grant must not call the server consume endpoint", 0, networkCalls.get());
     assertFalse("invalid grant must not arm the recovery gate", RecoveryGate.isOpen());
+  }
+
+
+  @Test public void everyInvalidSignedGrantIsRejectedBeforeNetworkOrGateMutation() throws Exception {
+    KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
+    generator.initialize(new ECGenParameterSpec("secp256r1"));
+    KeyPair pair = generator.generateKeyPair();
+    AtomicInteger networkCalls = new AtomicInteger();
+    RecoveryGrantClient client = new RecoveryGrantClient(
+        ApplicationProvider.getApplicationContext(),
+        (grant, nonce, deviceHash) -> {
+          networkCalls.incrementAndGet();
+          return Tasks.forResult(true);
+        },
+        () -> new com.aurelia.pms.identity.RecoveryTenantIdentity.Binding(UID, TENANT),
+        kid -> KID.equals(kid) ? pair.getPublic() : null
+    );
+
+    long now = System.currentTimeMillis() / 1000;
+    JSONObject validClaims = claims().put("iat", now - 1).put("exp", now + 299);
+    java.util.ArrayList<String> invalidGrants = new java.util.ArrayList<>();
+    invalidGrants.add(sign(pair, new JSONObject(validClaims.toString()).put("uid", UID + "-wrong"), KID));
+    invalidGrants.add(sign(pair, new JSONObject(validClaims.toString()).put("tenant", TENANT + "-wrong"), KID));
+    for (String missing : new String[] {"uid", "tenant", "jti", "nonce", "did"}) {
+      JSONObject missingClaim = new JSONObject(validClaims.toString());
+      missingClaim.remove(missing);
+      invalidGrants.add(sign(pair, missingClaim, KID));
+    }
+    JSONObject legacy = new JSONObject(validClaims.toString());
+    legacy.remove("uid");
+    invalidGrants.add(sign(pair, legacy, KID));
+    invalidGrants.add(sign(pair, new JSONObject(validClaims.toString()), "unknown-key"));
+    invalidGrants.add(sign(pair, new JSONObject(validClaims.toString()), null));
+
+    String valid = sign(pair, new JSONObject(validClaims.toString()), KID);
+    String[] parts = valid.split("\\.");
+    byte[] signature = Base64.decode(parts[2], Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+    signature[signature.length - 1] ^= 1;
+    invalidGrants.add(parts[0] + "." + parts[1] + "." +
+        Base64.encodeToString(signature, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING));
+
+    for (String invalidGrant : invalidGrants) {
+      RecoveryGate.clear();
+      final boolean[] callback = new boolean[] { true };
+      client.consumeAndArm(invalidGrant, NONCE, DID, TENANT,
+          SystemClock.elapsedRealtime(), accepted -> callback[0] = accepted);
+      assertFalse("invalid signed grant must be rejected", callback[0]);
+      assertEquals("invalid grant must never reach server consume", 0, networkCalls.get());
+      assertFalse("invalid grant must leave recovery gate closed", RecoveryGate.isOpen());
+    }
   }
 
   @Test public void rejectsInvalidGrantsBeforeAnyRecoveryGateCanArm() throws Exception {

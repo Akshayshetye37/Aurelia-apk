@@ -13,10 +13,38 @@ import java.security.SecureRandom
 import java.util.Base64
 
 /** APK-pinned ES256 verification precedes authoritative server JTI consumption and local replay persistence. */
-class RecoveryGrantClient(
+class RecoveryGrantClient private constructor(
     private val context: Context,
-    private val consumeOverride: ((String, String, String) -> Task<Boolean>)? = null
+    private val dependencies: Dependencies
 ) {
+    private data class Dependencies(
+        val consumeOverride: ((String, String, String) -> Task<Boolean>)?,
+        val bindingProvider: () -> RecoveryTenantIdentity.Binding,
+        val pinnedKeyProvider: (String) -> java.security.PublicKey?
+    )
+
+    constructor(context: Context) : this(context, Dependencies(
+        null,
+        { RecoveryTenantIdentity.getBinding(context) },
+        { kid -> RecoveryGrantVerifier.pinnedPublicKey(context, kid) }
+    ))
+
+    internal constructor(
+        context: Context,
+        consumeOverride: ((String, String, String) -> Task<Boolean>)?
+    ) : this(context, Dependencies(
+        consumeOverride,
+        { RecoveryTenantIdentity.getBinding(context) },
+        { kid -> RecoveryGrantVerifier.pinnedPublicKey(context, kid) }
+    ))
+
+    internal constructor(
+        context: Context,
+        consumeOverride: ((String, String, String) -> Task<Boolean>)?,
+        bindingProvider: () -> RecoveryTenantIdentity.Binding,
+        pinnedKeyProvider: (String) -> java.security.PublicKey?
+    ) : this(context, Dependencies(consumeOverride, bindingProvider, pinnedKeyProvider))
+
     private val functions by lazy { FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1") }
     private val replayStore = RecoveryGrantReplayStore(context)
 
@@ -92,7 +120,7 @@ class RecoveryGrantClient(
     }
 
     fun consumeRecoveryGrant(grant: String, nonce: String, deviceHash: String): Task<Boolean> {
-        consumeOverride?.let { return it(grant, nonce, deviceHash) }
+        dependencies.consumeOverride?.let { return it(grant, nonce, deviceHash) }
         return functions.getHttpsCallable("consumeRecoveryGrant").call(
             mapOf("grant" to grant, "nonce" to nonce, "deviceIdHash" to deviceHash)
         ).continueWith { task ->
@@ -109,9 +137,9 @@ class RecoveryGrantClient(
     fun consumeAndArm(grant: String, nonce: String, deviceHash: String, tenantId: String, startedAtElapsedMs: Long, onResult: (Boolean) -> Unit) {
         val verified = try {
             val kid = RecoveryGrantVerifier.keyId(grant)
-            val pinnedKey = RecoveryGrantVerifier.pinnedPublicKey(context, kid)
+            val pinnedKey = dependencies.pinnedKeyProvider(kid)
                 ?: throw SecurityException("Recovery signing key is not pinned in this app version.")
-            val enrollment = RecoveryTenantIdentity.getBinding(context)
+            val enrollment = dependencies.bindingProvider()
             if (enrollment.tenantId != tenantId) throw SecurityException("Recovery tenant does not match local owner enrollment.")
             when (val result = RecoveryGrantVerifier.verify(
                 grant, pinnedKey, enrollment.tenantId, nonce, deviceHash,
