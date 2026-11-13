@@ -480,6 +480,10 @@ test('independent primary owner can cancel during alert hold and cancellation re
     tenantId, deviceIdHash: independentDeviceHash
   }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) - 301 })),
   'stale owner authentication cannot cancel');
+  await assert.rejects(callable(functions.cancelRecoveryRequest, {
+    tenantId, deviceIdHash: independentDeviceHash
+  }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) + 60 })),
+  'future owner auth_time cannot cancel');
   const cancelled = await callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: independentDeviceHash
   }, ownerAuth(ownerUid, tenantId));
@@ -496,6 +500,15 @@ test('independent primary owner can cancel during alert hold and cancellation re
   assert.ok(audit);
   assert.deepEqual(Object.keys(audit).sort(), ['createdAt', 'deviceIdHash', 'tenantId', 'type'].sort(),
     'cancellation audit is limited to tenant, hashed device identity, event type and timestamp');
+  const replayedCancellation = await callable(functions.cancelRecoveryRequest, {
+    tenantId, deviceIdHash: independentDeviceHash
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(replayedCancellation.cancelled, false, 'replayed cancellation is a terminal no-op');
+  const cancellationEvents = await db.collection('recoverySecurityEvents')
+    .where('tenantId', '==', tenantId).get();
+  assert.equal(cancellationEvents.docs.filter(doc =>
+    doc.data().type === 'RECOVERY_REQUEST_CANCELLED').length, 1,
+  'replayed cancellation does not duplicate the audit event');
   const nextToken = await phoneAuthToken(phone);
   await assert.rejects(callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 's'.repeat(43), phoneIdToken: nextToken
