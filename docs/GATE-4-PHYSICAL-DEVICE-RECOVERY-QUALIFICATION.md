@@ -4,7 +4,7 @@
 
 ## Entry criteria
 
-- A dedicated Linux self-hosted runner labeled `aurelia-android-device` is online with Android platform-tools, build-tools (`apksigner`), `jq`, `curl` and USB access to one authorized physical test handset. The runner must be isolated from production credentials and must not log/store device serials.
+- A dedicated Linux self-hosted runner labeled `aurelia-android-device` is online with Android platform-tools, build-tools (`apksigner`), `jq`, `curl` and USB access to one authorized physical staging handset. The handset must contain no production/user data: the workflow uninstalls `com.aurelia.pms` and its test package before installing the staging APK, which deletes the app sandbox. The runner must be isolated from production credentials and must not log/store device serials.
 - Gate 1 same-DEK SQLCipher instrumentation is PASS for the candidate SHA.
 - Gate 2 Firebase Emulator grant issue/consume/replay and negative-claim tests are PASS.
 - Gate 3 staging APK workflow completed successfully for the same candidate SHA; artifact SHA-256 and APK signing SHA-1/SHA-256 are recorded.

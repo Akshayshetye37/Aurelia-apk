@@ -129,8 +129,12 @@ jobs:
           set -euo pipefail
           mapfile -t connected < <(adb devices | awk 'NR>1 && $2=="device" {print $1}')
           DEVICE_SERIAL="${connected[0]}"
-          adb -s "$DEVICE_SERIAL" install -r artifacts/app-release.apk
-          adb -s "$DEVICE_SERIAL" install -r artifacts/app-release-androidTest.apk
+          # This workflow is destructive to the Aurelia app sandbox. It may run only
+          # against the dedicated staging handset, never a personal/production device.
+          adb -s "$DEVICE_SERIAL" uninstall com.aurelia.pms >/dev/null 2>&1 || true
+          adb -s "$DEVICE_SERIAL" uninstall com.aurelia.pms.test >/dev/null 2>&1 || true
+          adb -s "$DEVICE_SERIAL" install artifacts/app-release.apk
+          adb -s "$DEVICE_SERIAL" install artifacts/app-release-androidTest.apk
 
       - name: Run physical SQLCipher, grant preflight and force-stop suites
         shell: bash
