@@ -42,8 +42,9 @@ test('Recovery phone registration is bound to the existing phone before a number
   assert.match(register, /equalDigest\(current\.hash, oldHash\)/);
   assert.match(register, /state: "CHANGE_PENDING"/);
   assert.match(register, /effectiveAt/);
-  assert.match(register, /auth\.token\.role !== "owner"/);
-  assert.match(register, /auth\.token\.tenantId !== tenantId/);
+  assert.match(register, /requireFreshPrimaryOwner\(request\)/);
+  assert.match(register, /owner\.tenantId !== tenantId/);
+  assert.match(register, /requireRecoveryOwnerBinding\(tenantId, owner\.uid\)/);
 });
 
 test('recovery phone tenant scope is generated and stored encrypted by Android Keystore', () => {

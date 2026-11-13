@@ -77,8 +77,8 @@ test('recovery phone registration requires a fresh owner token bound to the tena
   const backend = read('functions/src/index.ts');
   const registration = backend.slice(backend.indexOf('export const registerRecoveryPhone'), backend.indexOf('export const issueRecoveryGrant'));
   assert.match(registration, /requireFreshPrimaryOwner\(request\)/);
-  assert.match(registration, /auth\.uid/);
-  assert.match(registration, /requireAttestedDevice\(tenantId, deviceIdHash, auth\.uid\)/);
+  assert.match(registration, /owner\.tenantId !== tenantId/);
+  assert.match(registration, /requireAttestedDevice\(tenantId, deviceIdHash, owner\.uid\)/);
   const ownerGuard = backend.slice(backend.indexOf('function requireFreshPrimaryOwner'), backend.indexOf('async function requireRecoveryOwnerBinding'));
   assert.match(ownerGuard, /ownerAuthFactor/);
   assert.match(ownerGuard, /ownerAuthFactorAuthTime/);
