@@ -495,7 +495,7 @@ test('independent primary owner can cancel during alert hold and cancellation re
   const cancelled = await callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: independentDeviceHash
   }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' }));
-  assert.equal(cancelled.cancelled, true, 'an independently enrolled, attested email-link owner device may cancel');
+  assert.equal(cancelled.cancelled, true, 'an independently enrolled, attested passkey owner device may cancel');
   const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(state.state, 'CANCELLED');
   assert.equal(state.cancelledByDeviceHash, independentDeviceHash);
