@@ -40,3 +40,6 @@ The attestation deployment workflow probes the private Cloud Run service as the 
 ## Staging App Check probes
 
 The staging deploy workflow sends missing-token and malformed-token callable requests to each recovery endpoint and requires HTTP 401/403 before it builds the APK. A valid Play Integrity token must be exercised from a real staging handset; emulator/source tests are not a substitute. Never register a debug App Check token in production. If a debug provider is needed for isolated staging diagnostics, its token must be registered only in the staging Firebase project and removed after testing.
+
+
+The staging deploy service account and Functions runtime service account must be distinct identities. The deploy account needs only the OIDC-token-creator role on the runtime account for the authenticated verifier probe; it must not be added as a Cloud Run invoker.

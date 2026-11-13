@@ -41,9 +41,13 @@ jobs:
           APP_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
         run: |
           set -euo pipefail
-          for name in PROJECT_ID REGION RUNTIME_SERVICE_ACCOUNT FUNCTIONS_SERVICE_ACCOUNT APP_PACKAGE APP_MIN_VERSION APP_SIGNER_SHA256; do
+          for name in PROJECT_ID REGION RUNTIME_SERVICE_ACCOUNT FUNCTIONS_SERVICE_ACCOUNT DEPLOY_SERVICE_ACCOUNT APP_PACKAGE APP_MIN_VERSION APP_SIGNER_SHA256; do
             if [ -z "${!name}" ]; then echo "::error::Missing required GitHub environment variable: $name"; exit 1; fi
           done
+          if [[ "$DEPLOY_SERVICE_ACCOUNT" == "$FUNCTIONS_SERVICE_ACCOUNT" ]]; then
+            echo "::error::Use separate deploy and Functions runtime service accounts; self-impersonation is not supported."
+            exit 1
+          fi
           [[ "$APP_SIGNER_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]]
           [[ "$APP_MIN_VERSION" =~ ^[1-9][0-9]*$ ]]
           SA_POLICY="$(gcloud iam service-accounts get-iam-policy "$FUNCTIONS_SERVICE_ACCOUNT" --project "$PROJECT_ID" --format=json)"
