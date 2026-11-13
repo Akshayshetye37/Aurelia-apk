@@ -12,25 +12,28 @@ const nativeRunner = fs.readFileSync("scripts/run-native-sqlite-contracts.sh", "
 
 test("recovery workflow preserves separate phase-one and phase-two process-death invocations", () => {
   assert.ok(workflow.includes(
-    "run_suite process-death-phase-one com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop"
+    'phase_one="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop"'
   ));
   assert.ok(workflow.includes(
-    "run_suite process-death-phase-two com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop"
+    'phase_two="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop"'
   ));
+  assert.ok(workflow.includes('run_instrumentation_test process-death-phase-one "$phase_one"'));
+  assert.ok(workflow.includes('run_instrumentation_test process-death-phase-two "$phase_two"'));
 });
 
 test("host explicitly launches and observes the target process before force-stop", () => {
   assert.ok(workflow.includes('launch_target_app()'));
   assert.ok(workflow.includes('"$adb_bin" shell monkey -p com.aurelia.pms 1'));
   assert.ok(workflow.includes('before_pid="$(wait_for_target_pid)"'));
+  assert.ok(workflow.includes('install -r "$app_apk"'));
+  assert.ok(workflow.includes('install -r "$test_apk"'));
+  assert.ok(workflow.includes('shell am instrument -w -e class "$selector"'));
   assert.ok(workflow.includes('"$adb_bin" shell am force-stop com.aurelia.pms'));
   assert.ok(workflow.includes('if [[ -n "$after_stop" ]]'));
 });
 
 test("phase two is followed by a fresh app launch and distinct process identity", () => {
-  const phaseTwo = workflow.indexOf(
-    "run_suite process-death-phase-two com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop"
-  );
+  const phaseTwo = workflow.indexOf('run_instrumentation_test process-death-phase-two "$phase_two"');
   const relaunch = workflow.indexOf("launch_target_app", phaseTwo);
   const pidCheck = workflow.indexOf('if [[ "$after_pid" == "$before_pid" ]]', phaseTwo);
   assert.ok(phaseTwo >= 0 && relaunch > phaseTwo && pidCheck > relaunch);
