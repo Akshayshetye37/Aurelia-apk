@@ -135,7 +135,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
         emailInput = EditText(this).apply {
             hint = "Primary owner's registered email address"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-            singleLine = true
+            setSingleLine(true)
         }
         emailLinkInput = EditText(this).apply {
             hint = "Paste the email sign-in link here if the app did not open it automatically"
