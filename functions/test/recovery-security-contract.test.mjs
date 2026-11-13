@@ -323,4 +323,6 @@ test('owner email-link exchange verifies the one-time link before minting primar
   assert.match(functions, /ackTokenExpiresAt/);
   assert.match(functions, /Number\(event\.ackTokenExpiresAt\) <= Date\.now\(\)/);
   assert.match(functions, /pendingState === "CANCELLED"/);
+  assert.match(functions, /proof\.authTime \* 1000 <= Number\(pending\.cancelledAtMs\)/);
+  assert.match(functions, /cancelledAtMs: Date\.now\(\)/);
 });
