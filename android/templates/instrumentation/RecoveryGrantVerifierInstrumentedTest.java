@@ -181,8 +181,23 @@ public final class RecoveryGrantVerifierInstrumentedTest {
     );
     try {
       long now = System.currentTimeMillis() / 1000;
-      String grant = sign(pair, claims().put("iat", now - 1).put("exp", now + 299), KID);
+      String phoneUidGrant = sign(pair,
+          claims().put("uid", phoneAuthUid).put("iat", now - 1).put("exp", now + 299), KID);
+      CountDownLatch phoneUidCompleted = new CountDownLatch(1);
+      final boolean[] phoneUidAccepted = new boolean[] { true };
       RecoveryGate.INSTANCE.clear();
+      client.consumeAndArm(phoneUidGrant, NONCE, DID, TENANT, SystemClock.elapsedRealtime(), result -> {
+        phoneUidAccepted[0] = result;
+        phoneUidCompleted.countDown();
+        return kotlin.Unit.INSTANCE;
+      });
+      assertTrue("phone-UID grant preflight must complete",
+          phoneUidCompleted.await(5, TimeUnit.SECONDS));
+      assertFalse("phone-auth UID must never substitute for encrypted owner UID", phoneUidAccepted[0]);
+      assertEquals("phone-UID substitution must not call server consume", 0, networkCalls.get());
+      assertFalse("phone-UID substitution must not arm recovery", RecoveryGate.INSTANCE.isOpen());
+
+      String grant = sign(pair, claims().put("iat", now - 1).put("exp", now + 299), KID);
       client.consumeAndArm(grant, NONCE, DID, TENANT, SystemClock.elapsedRealtime(), result -> {
         accepted[0] = result;
         completed.countDown();
