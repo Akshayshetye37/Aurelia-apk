@@ -40,6 +40,7 @@ jobs:
         shell: bash
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
           REGION: ${{ vars.GCP_REGION }}
           FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
           VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
@@ -56,9 +57,13 @@ jobs:
           KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          for name in PROJECT_ID REGION FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS FIREBASE_WEB_API_KEY APP_CHECK_REGISTERED APP_CHECK_SIGNER_SHA256 ATTESTATION_SIGNER_SHA256 GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+          for name in PROJECT_ID PRODUCTION_PROJECT_ID REGION FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS FIREBASE_WEB_API_KEY APP_CHECK_REGISTERED APP_CHECK_SIGNER_SHA256 ATTESTATION_SIGNER_SHA256 GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [[ -z "${!name}" ]]; then echo "::error::Missing recovery-staging environment setting: $name"; exit 1; fi
           done
+          if [[ "$PROJECT_ID" == "$PRODUCTION_PROJECT_ID" ]]; then
+            echo "::error::Staging deployment is blocked because GCP_PROJECT_ID equals the configured production project."
+            exit 1
+          fi
           if [[ "$APP_CHECK_REGISTERED" != "true" ]]; then
             echo "::error::Register com.aurelia.pms with Play Integrity in Firebase App Check before staging deployment."
             exit 1

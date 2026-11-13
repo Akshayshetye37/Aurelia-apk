@@ -228,3 +228,13 @@ test('physical-device workflow consumes same-SHA release artifact and enforces r
   assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseTwo/);
   assert.match(workflow, /app-release-androidTest\.apk/);
 });
+
+
+test('staging deployment workflows refuse to target the production Firebase project', () => {
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  const verifier = read('.github/workflows/recovery-attestation-deploy.yml');
+  for (const workflow of [staging, verifier]) {
+    assert.match(workflow, /PRODUCTION_PROJECT_ID: \$\{\{ vars\.PRODUCTION_GCP_PROJECT_ID \}\}/);
+    assert.match(workflow, /PROJECT_ID" == "\$PRODUCTION_PROJECT_ID/);
+  }
+});

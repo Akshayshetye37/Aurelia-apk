@@ -43,3 +43,6 @@ The staging deploy workflow sends missing-token and malformed-token callable req
 
 
 The staging deploy service account and Functions runtime service account must be distinct identities. The deploy account needs only the OIDC-token-creator role on the runtime account for the authenticated verifier probe; it must not be added as a Cloud Run invoker.
+
+
+**Staging/production separation:** Configure `PRODUCTION_GCP_PROJECT_ID` in the `recovery-staging` GitHub Environment. Both staging deployment workflows fail if `GCP_PROJECT_ID` equals that production project ID. Do not reuse the production Firebase project, signing private key or test phone numbers in staging.

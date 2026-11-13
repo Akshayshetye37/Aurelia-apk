@@ -32,6 +32,7 @@ jobs:
         shell: bash
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
           REGION: ${{ vars.GCP_REGION }}
           RUNTIME_SERVICE_ACCOUNT: ${{ vars.RECOVERY_ATTESTATION_SERVICE_ACCOUNT }}
           FUNCTIONS_SERVICE_ACCOUNT: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
@@ -41,9 +42,13 @@ jobs:
           APP_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
         run: |
           set -euo pipefail
-          for name in PROJECT_ID REGION RUNTIME_SERVICE_ACCOUNT FUNCTIONS_SERVICE_ACCOUNT DEPLOY_SERVICE_ACCOUNT APP_PACKAGE APP_MIN_VERSION APP_SIGNER_SHA256; do
+          for name in PROJECT_ID PRODUCTION_PROJECT_ID REGION RUNTIME_SERVICE_ACCOUNT FUNCTIONS_SERVICE_ACCOUNT DEPLOY_SERVICE_ACCOUNT APP_PACKAGE APP_MIN_VERSION APP_SIGNER_SHA256; do
             if [ -z "${!name}" ]; then echo "::error::Missing required GitHub environment variable: $name"; exit 1; fi
           done
+          if [[ "$PROJECT_ID" == "$PRODUCTION_PROJECT_ID" ]]; then
+            echo "::error::Staging verifier deployment is blocked because GCP_PROJECT_ID equals the configured production project."
+            exit 1
+          fi
           if [[ "$DEPLOY_SERVICE_ACCOUNT" == "$FUNCTIONS_SERVICE_ACCOUNT" ]]; then
             echo "::error::Use separate deploy and Functions runtime service accounts; self-impersonation is not supported."
             exit 1
