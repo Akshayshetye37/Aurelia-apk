@@ -418,6 +418,212 @@ function ensureJavaResourcePackaging(contents, kotlinDsl) {
 }
 
 if (fs.existsSync(appGradleGroovy)) {
+  let gradle = ensureKotlinAndroidPlugin(fs.readFileSync(appGradleGroovy, 'utf8'), false);
+  if (!gradle.includes('com.google.mlkit:text-recognition:')) {
+    gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
+  }
+  gradle = ensureJavaResourcePackaging(gradle, false);
+  fs.writeFileSync(appGradleGroovy, gradle);
+} else if (fs.existsSync(appGradleKts)) {
+  let gradle = ensureKotlinAndroidPlugin(fs.readFileSync(appGradleKts, 'utf8'), true);
+  if (!gradle.includes('com.google.mlkit:text-recognition:')) {
+    gradle = gradle.replace(/dependencies\s*\{/, match => match + '\n    implementation("com.google.mlkit:text-recognition:16.0.1")');
+  }
+  gradle = ensureJavaResourcePackaging(gradle, true);
+  fs.writeFileSync(appGradleKts, gradle);
+}
+
+
+// Firebase Phone Auth native integration. Firebase's native BoM and plugin
+// versions are owned by the generated Capacitor project's plugin DSL/catalog.
+// Inject Firebase Auth into the app module without rewriting root Gradle plugin
+// management. The Google Services plugin is applied only for a supplied config.
+const firebaseTemplate = path.join(androidDir, 'templates', 'FirebasePhoneIdentity.kt');
+if (!fs.existsSync(firebaseTemplate)) throw new Error('FirebasePhoneIdentity.kt template is missing.');
+const identityDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms', 'identity');
+fs.mkdirSync(identityDir, { recursive: true });
+fs.copyFileSync(firebaseTemplate, path.join(identityDir, 'FirebasePhoneIdentity.kt'));
+
+const firebaseBootstrapTemplate = path.join(androidDir, 'templates', 'RecoveryFirebaseAuthFactory.kt');
+if (!fs.existsSync(firebaseBootstrapTemplate)) throw new Error('RecoveryFirebaseAuthFactory.kt template is missing.');
+fs.copyFileSync(firebaseBootstrapTemplate, path.join(identityDir, 'RecoveryFirebaseAuthFactory.kt'));
+const recoveryPhoneTemplate = path.join(androidDir, 'templates', 'RecoveryPhoneStore.kt');
+if (!fs.existsSync(recoveryPhoneTemplate)) throw new Error('RecoveryPhoneStore.kt template is missing.');
+fs.copyFileSync(recoveryPhoneTemplate, path.join(identityDir, 'RecoveryPhoneStore.kt'));
+const recoveryTenantTemplate = path.join(androidDir, 'templates', 'RecoveryTenantIdentity.kt');
+if (!fs.existsSync(recoveryTenantTemplate)) throw new Error('RecoveryTenantIdentity.kt template is missing.');
+fs.copyFileSync(recoveryTenantTemplate, path.join(identityDir, 'RecoveryTenantIdentity.kt'));
+const recoveryGrantClientTemplate = path.join(androidDir, 'templates', 'RecoveryGrantClient.kt');
+if (!fs.existsSync(recoveryGrantClientTemplate)) throw new Error('RecoveryGrantClient.kt template is missing.');
+fs.copyFileSync(recoveryGrantClientTemplate, path.join(identityDir, 'RecoveryGrantClient.kt'));
+const recoveryPhoneSettingsTemplate = path.join(androidDir, 'templates', 'RecoveryPhoneSettingsActivity.kt');
+if (!fs.existsSync(recoveryPhoneSettingsTemplate)) throw new Error('RecoveryPhoneSettingsActivity.kt template is missing.');
+fs.copyFileSync(recoveryPhoneSettingsTemplate, path.join(identityDir, 'RecoveryPhoneSettingsActivity.kt'));
+const recoveryOwnerAlertTemplate = path.join(androidDir, 'templates', 'RecoveryOwnerAlertActivity.kt');
+if (!fs.existsSync(recoveryOwnerAlertTemplate)) throw new Error('RecoveryOwnerAlertActivity.kt template is missing.');
+fs.copyFileSync(recoveryOwnerAlertTemplate, path.join(identityDir, 'RecoveryOwnerAlertActivity.kt'));
+
+
+
+/**
+ * Native App Manager security sources are maintained as templates and copied
+ * into the generated Capacitor project on every rebuild.
+ */
+const securityTemplateDir = path.join(androidDir, 'templates', 'security');
+const securitySourceDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms', 'security');
+fs.mkdirSync(securitySourceDir, { recursive: true });
+for (const file of [
+  'AureliaCryptoEngine.kt',
+  'AppLockManager.kt',
+  'BiometricVaultManager.kt',
+  'BiometricEnvelopeStore.kt',
+  'AureliaAppManager.kt',
+  'AureliaSecurityRuntime.kt',
+  'AureliaEnvelopeStore.kt',
+  'RecoveryGate.kt',
+  'RecoveryGrantVerifier.kt',
+  'RecoveryGrantReplayStore.kt',
+  'RecoveryDeviceIdentity.kt',
+  'RecoveryOwnerMessagingService.kt',
+  'PaymentDeviceKeyStore.kt',
+  'PaymentDeviceClient.kt',
+  'SettlementEnvelopeVerifier.kt',
+  'LockGateActivity.kt'
+]) {
+  const source = path.join(securityTemplateDir, file);
+  if (!fs.existsSync(source)) throw new Error('Native security template is missing: ' + file);
+  fs.copyFileSync(source, path.join(securitySourceDir, file));
+}
+
+// Fault injection is compiled into debug variants only. No hook source is
+// copied into src/main or src/release.
+const debugFaultTemplate = path.join(androidDir, 'templates', 'debug', 'LocalPmsFaultInjection.java');
+if (!fs.existsSync(debugFaultTemplate)) throw new Error('Debug fault-injection template is missing.');
+const debugFaultSourceDir = path.join(androidDir, 'app', 'src', 'debug', 'java', 'com', 'aurelia', 'pms', 'debug');
+fs.mkdirSync(debugFaultSourceDir, { recursive: true });
+fs.copyFileSync(debugFaultTemplate, path.join(debugFaultSourceDir, 'LocalPmsFaultInjection.java'));
+
+function addNativeSecurityDependencies(contents, kotlinDsl) {
+  if (!/dependencies\s*\{/.test(contents)) {
+    throw new Error('App Gradle file has no dependencies block; native security dependencies were not added.');
+  }
+  const dependencies = [
+    ['org.bouncycastle:bcprov-jdk18on:1.80', 'org.bouncycastle:bcprov-jdk18on'],
+    ['androidx.biometric:biometric:1.2.0-alpha05', 'androidx.biometric:biometric'],
+    ['net.zetetic:sqlcipher-android:4.17.0@aar', 'net.zetetic:sqlcipher-android'],
+    ['androidx.sqlite:sqlite:2.6.2', 'androidx.sqlite:sqlite']
+  ];
+  for (const [coordinate, marker] of dependencies) {
+    if (contents.includes(marker)) continue;
+    const line = kotlinDsl
+      ? `\n    implementation("${coordinate}")`
+      : `\n    implementation "${coordinate}"`;
+    contents = contents.replace(/dependencies\s*\{/, match => match + line);
+  }
+  return contents;
+}
+if (fs.existsSync(appGradleGroovy)) {
+  const gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleGroovy, 'utf8'), false);
+  fs.writeFileSync(appGradleGroovy, gradle);
+} else if (fs.existsSync(appGradleKts)) {
+  const gradle = addNativeSecurityDependencies(fs.readFileSync(appGradleKts, 'utf8'), true);
+  fs.writeFileSync(appGradleKts, gradle);
+} else {
+  throw new Error('Generated Android app Gradle file was not found; native security dependencies cannot be wired.');
+}
+
+const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
+
+function addFirebaseDependencies(contents, kotlinDsl) {
+  // Preserve the app's API 23 floor. Firebase BoM 35.1.0 moved Auth 25.0.0
+  // to API 24; BoM 34.12.0 pins Auth 24.0.1 and the API-23-compatible
+  // Functions, App Check and Messaging SDK lines.
+  const bom = 'com.google.firebase:firebase-bom:34.12.0';
+  const auth = 'com.google.firebase:firebase-auth';
+  const functions = 'com.google.firebase:firebase-functions';
+  const appCheck = 'com.google.firebase:firebase-appcheck-playintegrity';
+  const messaging = 'com.google.firebase:firebase-messaging';
+  const paymentDependencies = [
+    'com.razorpay:checkout:1.6.41',
+    'com.cashfree.pg:api:2.6.1'
+  ];
+  if (!/dependencies\s*\{/.test(contents)) {
+    throw new Error('App Gradle file has no dependencies block; refusing an incomplete native payment integration.');
+  }
+  let updated = contents;
+  const missing = [auth, functions, appCheck, messaging, ...paymentDependencies].filter(dependency => !updated.includes(dependency));
+  if (missing.length) {
+    const lines = kotlinDsl
+      ? '\n' + missing.map(dependency => '    implementation("' + dependency + '")').join('\n')
+      : '\n' + missing.map(dependency => '    implementation "' + dependency + '"').join('\n');
+    updated = updated.replace(/dependencies\s*\{/, match => match + lines);
+  }
+  if (/com\.google\.firebase:firebase-bom:[0-9.]+/.test(updated)) {
+    updated = updated.replace(/com\.google\.firebase:firebase-bom:[0-9.]+/g, bom);
+  } else {
+    updated = updated.replace(/dependencies\s*\{/, match =>
+      match + (kotlinDsl
+        ? '\n    implementation(platform("' + bom + '"))'
+        : '\n    implementation platform("' + bom + '")'));
+  }
+  // Let the BoM choose the compatible Messaging SDK version instead of retaining
+  // a stale explicit pin from a previously generated Android project.
+  updated = updated.replace(/com\.google\.firebase:firebase-messaging:[0-9.]+/g, messaging);
+  return updated;
+}
+
+function applyGoogleServices(contents, kotlinDsl) {
+  if (!hasGoogleServicesConfig || contents.includes('com.google.gms.google-services')) return contents;
+  if (!/plugins\s*\{/.test(contents)) {
+    throw new Error('App Gradle file has no plugins block for Google Services; refusing to append an unmanaged plugin.');
+  }
+  const statement = kotlinDsl
+    ? '\n    id("com.google.gms.google-services")'
+    : "\n    id 'com.google.gms.google-services'";
+  return contents.replace(/plugins\s*\{/, match => match + statement);
+}
+
+if (fs.existsSync(appGradleGroovy)) {
+  let appGradle = fs.readFileSync(appGradleGroovy, 'utf8');
+  appGradle = addFirebaseDependencies(appGradle, false);
+  appGradle = applyGoogleServices(appGradle, false);
+  fs.writeFileSync(appGradleGroovy, appGradle);
+} else if (fs.existsSync(appGradleKts)) {
+  let appGradle = fs.readFileSync(appGradleKts, 'utf8');
+  appGradle = addFirebaseDependencies(appGradle, true);
+  appGradle = applyGoogleServices(appGradle, true);
+  fs.writeFileSync(appGradleKts, appGradle);
+} else {
+  throw new Error('Generated Android app Gradle file was not found; Firebase integration cannot be wired.');
+}
+
+if (hasGoogleServicesConfig) {
+  let config;
+  try {
+    config = JSON.parse(fs.readFileSync(path.join(appModuleDir, 'google-services.json'), 'utf8'));
+  } catch (error) {
+    throw new Error('google-services.json is invalid JSON; refusing Firebase build.', { cause: error });
+  }
+  const clients = Array.isArray(config.client) ? config.client : [];
+  const matchingClient = clients.some(client =>
+    client.client_info &&
+    client.client_info.android_client_info &&
+    client.client_info.android_client_info.package_name === 'com.aurelia.pms' &&
+    typeof client.client_info.mobilesdk_app_id === 'string' &&
+    /^1:[0-9]+:android:[0-9a-f]+$/i.test(client.client_info.mobilesdk_app_id) &&
+    Array.isArray(client.api_key) &&
+    client.api_key.some(key => typeof key.current_key === 'string' && /^AIza[0-9A-Za-z_-]{30,}$/.test(key.current_key))
+  );
+  if (!matchingClient || !config.project_info || typeof config.project_info.project_id !== 'string' || !config.project_info.project_id) {
+    throw new Error('google-services.json failed structural validation for package com.aurelia.pms; refusing Firebase build.');
+  }
+} else {
+  console.log('Firebase config not supplied: Firebase SDK is compile-integrated, but Phone Auth is not configured and must remain unavailable at runtime.');
+}
+
+// Release signing must use the same controlled keystore as Aurelia Pay Bridge.
+// Debug builds remain development-only and cannot authenticate to a release-signed bridge.
+if (fs.existsSync(appGradleGroovy)) {
   let gradle = fs.readFileSync(appGradleGroovy, 'utf8');
   if (!gradle.includes('AURELIA_RELEASE_KEYSTORE_PATH')) {
     const envBlock = [
@@ -454,21 +660,21 @@ if (fs.existsSync(appGradleGroovy)) {
     }
     if (end < 0) throw new Error('Could not locate generated android block boundary.');
     gradle = gradle.slice(0, end) + signingBlock + '\n' + gradle.slice(end);
+    fs.writeFileSync(appGradleGroovy, gradle);
   }
-  // Gate 4 instruments the exact release-signed staging APK, not a debug variant.
-  // The default CI instrumentation path remains debug unless this staging-only
-  // environment switch is explicitly set.
-  if (process.env.AURELIA_ANDROID_TEST_BUILD_TYPE === 'release') {
-    const testBuildType = /testBuildType\s+["'][^"']+["']/;
-    if (testBuildType.test(gradle)) {
-      gradle = gradle.replace(testBuildType, 'testBuildType "release"');
-    } else {
-      gradle = gradle.replace(/android\s*\{/, match => match + '\n    testBuildType "release"');
-    }
-  }
-  fs.writeFileSync(appGradleGroovy, gradle);
 } else {
   throw new Error('Expected generated Groovy app/build.gradle; release signing configuration was not applied.');
+}
+
+if (process.env.AURELIA_ANDROID_TEST_BUILD_TYPE === 'release') {
+  let gradle = fs.readFileSync(appGradleGroovy, 'utf8');
+  const testBuildType = /testBuildType\s+["'][^"']+["']/;
+  if (testBuildType.test(gradle)) {
+    gradle = gradle.replace(testBuildType, 'testBuildType "release"');
+  } else {
+    gradle = gradle.replace(/android\s*\{/, match => match + '\n    testBuildType "release"');
+  }
+  fs.writeFileSync(appGradleGroovy, gradle);
 }
 
 const payBridgeTemplate = path.join(androidDir, 'templates', 'PayBridgeClient.java');
