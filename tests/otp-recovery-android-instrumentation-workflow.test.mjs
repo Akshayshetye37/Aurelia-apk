@@ -51,8 +51,8 @@ test("native SQLCipher candidate executes all 35 repository and recovery-securit
   const securityTests = fs.readFileSync(
     "android/templates/instrumentation/AureliaSecurityInstrumentedTest.java", "utf8"
   );
-  assert.equal([...repositoryTests.matchAll(/@Test\\b/g)].length, 29);
-  assert.equal([...securityTests.matchAll(/@Test\\b/g)].length, 6);
+  assert.equal([...repositoryTests.matchAll(/@Test/g)].length, 29);
+  assert.equal([...securityTests.matchAll(/@Test/g)].length, 6);
   assert.ok(nativeRunner.includes("locksettings set-pin 246810"));
   assert.ok(nativeRunner.includes("com.aurelia.pms.LocalPmsRepositoryInstrumentedTest"));
   assert.ok(nativeRunner.includes("com.aurelia.pms.security.AureliaSecurityInstrumentedTest"));
