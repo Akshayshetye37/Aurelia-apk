@@ -1062,3 +1062,28 @@ test('owner cancellation permits a fresh OTP to start a new alert cycle', async 
   assert.equal(cancelledEvent.ackTokenHashes, undefined);
   assert.equal(cancelledEvent.ackTokenExpiresAt, undefined);
 });
+
+test('owner notification endpoint token rotation requires fresh primary authentication', async () => {
+  const tenantId = 'tenant-emulator-owner-token-rotation';
+  const ownerUid = 'owner-emulator-owner-token-rotation';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
+  await seedTenant({ tenantId, phone: '+15555550113', ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
+  const ref = db.doc(`recoveryOwnerDevices/${tenantId}_${ownerDeviceHash}`);
+  const original = (await ref.get()).data().fcmToken;
+  const replacement = ('replacement-fcm-token-' + ownerDeviceHash).padEnd(240, 'y');
+  const data = { tenantId, deviceIdHash: ownerDeviceHash, fcmToken: replacement };
+  await assert.rejects(callable(functions.registerRecoveryOwnerDevice, data,
+    ownerAuth(ownerUid, tenantId, { provider: 'phone', factor: undefined })),
+    'phone-only session cannot replace a trusted owner alert endpoint');
+  await assert.rejects(callable(functions.registerRecoveryOwnerDevice, data,
+    ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) - 301 })),
+    'stale primary session cannot replace a trusted owner alert endpoint');
+  assert.equal((await ref.get()).data().fcmToken, original, 'rejected token rotations leave the trusted endpoint unchanged');
+  const result = await callable(functions.registerRecoveryOwnerDevice, data, ownerAuth(ownerUid, tenantId));
+  assert.equal(result.registered, true);
+  const updated = (await ref.get()).data();
+  assert.equal(updated.fcmToken, replacement);
+  assert.equal(updated.ownerUid, ownerUid);
+});

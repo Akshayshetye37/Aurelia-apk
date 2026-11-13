@@ -45,7 +45,7 @@ object RecoveryTenantIdentity {
     }
 
     /** Bind setup to the existing primary Firebase owner session; never trust a typed tenant ID. */
-    fun bindAuthorizedOwner(context: Context): Task<String> {
+    fun bindAuthorizedOwner(context: Context, expectedTenantId: String? = null): Task<String> {
         val user = FirebaseAuth.getInstance().currentUser
             ?: throw SecurityException("Sign in as the property owner before registering a recovery phone.")
         val ownerUid = user.uid.takeIf { it.isNotBlank() && it.length <= 128 }
@@ -56,6 +56,9 @@ object RecoveryTenantIdentity {
             if (claims["role"] != "owner") throw SecurityException("Only the property owner can register recovery security.")
             val tenant = claims["tenantId"] as? String
                 ?: throw SecurityException("The owner account has no tenant binding.")
+            if (expectedTenantId != null && expectedTenantId != tenant) {
+                throw SecurityException("The authenticated owner tenant does not match the requested tenant.")
+            }
             require(tenant.matches(Regex("^[A-Za-z0-9_-]{8,128}$"))) {
                 "The authenticated tenant claim is invalid."
             }

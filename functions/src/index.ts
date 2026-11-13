@@ -296,7 +296,7 @@ export const registerRecoveryPhone = onCall(
     if (owner.tenantId !== tenantId) throw GENERIC;
     await requireRecoveryOwnerBinding(tenantId, owner.uid);
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
-    await requireAttestedDevice(tenantId, deviceIdHash, auth.uid);
+    await requireAttestedDevice(tenantId, deviceIdHash, owner.uid);
     await spendRateLimit(`reg:${tenantId}`, 5, 60 * 60_000);
 
     const newProof = await verifyPhoneToken(request.data?.phoneIdToken);
@@ -447,10 +447,10 @@ export const registerRecoveryOwnerDevice = onCall(
   async request => {
     requireRecoveryEnabled();
     const auth = request.auth;
-    if (!auth || auth.token.role !== "owner") throw GENERIC;
+    const owner = requireFreshPrimaryOwner(request);
     const tenantId = validateTenantId(request.data?.tenantId);
-    if (auth.token.tenantId !== tenantId) throw GENERIC;
-    await requireRecoveryOwnerBinding(tenantId, auth.uid);
+    if (owner.tenantId !== tenantId || auth?.uid !== owner.uid) throw GENERIC;
+    await requireRecoveryOwnerBinding(tenantId, owner.uid);
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
     await requireAttestedDevice(tenantId, deviceIdHash, auth.uid);
     await spendRateLimit(`notify:${tenantId}:${deviceIdHash}`, 10, 60 * 60_000);
@@ -460,7 +460,7 @@ export const registerRecoveryOwnerDevice = onCall(
     const existingDevice = (await deviceRef.get()).data();
     if (!existingDevice) {
       requireFreshPrimaryOwner(request);
-    } else if (existingDevice.ownerUid !== auth.uid || existingDevice.deviceIdHash !== deviceIdHash) {
+    } else if (existingDevice.ownerUid !== owner.uid || existingDevice.deviceIdHash !== deviceIdHash) {
       throw GENERIC;
     }
     const tokenHash = createHmac("sha256", PHONE_PEPPER.value()).update(token).digest("hex");
