@@ -42,3 +42,8 @@ test('emulator runner invokes one checked-in shell script per attempt', () => {
   assert.ok(emulatorScript.includes('connectedDebugAndroidTest'));
   assert.ok(emulatorScript.includes('gradle_status=${PIPESTATUS[0]}'));
 });
+
+
+test('native SQLite workflow isolates stale SHA runs from the current candidate', () => {
+  assert.ok(workflow.includes('aurelia-native-sqlite-${{ github.ref }}-${{ github.sha }}'));
+});
