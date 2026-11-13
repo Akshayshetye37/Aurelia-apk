@@ -65,7 +65,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          firebase emulators:exec --only auth,firestore --project demo-aurelia-recovery "cd functions && npm run test:emulator" 2>&1 | tee recovery-emulator-runtime.log
+          firebase emulators:exec --only auth,firestore --project demo-aurelia-recovery "cd functions && npm run test:emulator" 2>&1 | sed -E 's/To verify the phone number .* use the code .*/[REDACTED Firebase Auth Emulator verification code]/' | tee recovery-emulator-runtime.log
 
       - name: Upload raw Firebase Emulator runtime logs
         if: always()
