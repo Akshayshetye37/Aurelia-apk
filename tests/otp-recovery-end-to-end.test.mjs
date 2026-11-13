@@ -259,3 +259,12 @@ test('staging and production audits verify per-function Secret Manager runtime a
     assert.match(workflow, /acknowledgeRecoveryOwnerAlert:PHONE_PEPPER/);
   }
 });
+
+
+test('physical-device Gate 4 workflow reboots between committed PIN B and post-reboot unlock', () => {
+  const workflow = read('.github/workflows/recovery-physical-device-qualification.yml');
+  assert.match(workflow, /adb reboot/);
+  assert.match(workflow, /phaseOneCommitsPinBForDeviceReboot/);
+  assert.match(workflow, /phaseTwoAfterDeviceRebootUnlocksPinBAndReadsDatabase/);
+  assert.match(workflow, /RUNNING_UNLOCKED/);
+});
