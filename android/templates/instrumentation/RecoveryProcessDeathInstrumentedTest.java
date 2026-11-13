@@ -1,7 +1,18 @@
 package com.aurelia.pms;
 
 import android.content.Context;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
+import android.util.Base64;
 import androidx.test.core.app.ApplicationProvider;
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -17,6 +28,11 @@ import static org.junit.Assert.*;
 public final class RecoveryProcessDeathInstrumentedTest {
   private static final String DB = "aurelia-process-death-recovery.db";
   private static final String PIN_A = "684219";
+  private static final String PIN_B = "792516";
+  private static final String FIXTURE_PREFS = "recovery_process_death_fixture";
+  private static final String FIXTURE_BLOB = "encrypted_recovery_key";
+  private static final String FIXTURE_ALIAS = "aurelia.test.recovery-process-death.v1";
+  private static final String FIXTURE_AAD = "AURELIA-TEST-RECOVERY-PHASE-V1";
   private static final String ENTITY_TYPE = "process_death_recovery";
   private static final String ENTITY_ID = "persisted_before_force_stop";
 
@@ -29,12 +45,21 @@ public final class RecoveryProcessDeathInstrumentedTest {
 
     com.aurelia.pms.security.AureliaAppManager manager = newManager(context);
     char[] pin = PIN_A.toCharArray();
+    char[] newPin = PIN_B.toCharArray();
+    char[] recoveryCode = null;
     byte[] key = null;
     LocalPmsRepository repository = null;
     com.aurelia.pms.security.AureliaAppManager.Enrollment enrollment = null;
     try {
       enrollment = manager.enroll(pin);
+      recoveryCode = enrollment.getRecoveryKey();
       store.write(enrollment.getEnvelopeJson());
+      // Persist only an AES-GCM-encrypted test fixture so phase two can prove
+      // that the offline recovery key survives a genuine host force-stop.
+      persistRecoveryFixture(context, recoveryCode);
+      // Prepare PIN B's replacement envelope but deliberately do not commit it.
+      // The host workflow kills the app process immediately after this phase.
+      assertNotNull(manager.recoverWithRecoveryKey(recoveryCode, newPin, store.read()));
       key = manager.currentDataKeyCopy();
       repository = new LocalPmsRepository(context, key);
       repository.initialize();
@@ -57,6 +82,8 @@ public final class RecoveryProcessDeathInstrumentedTest {
       if (key != null) Arrays.fill(key, (byte) 0);
       manager.lock();
       Arrays.fill(pin, '\0');
+      Arrays.fill(newPin, '\0');
+      if (recoveryCode != null) Arrays.fill(recoveryCode, '\0');
       if (enrollment != null) {
         char[] recovery = enrollment.getRecoveryKey();
         Arrays.fill(recovery, '\0');
@@ -72,27 +99,140 @@ public final class RecoveryProcessDeathInstrumentedTest {
     assertNotNull("phase one envelope must survive force-stop", envelope);
 
     com.aurelia.pms.security.AureliaAppManager manager = newManager(context);
-    char[] pin = PIN_A.toCharArray();
-    byte[] key = null;
+    com.aurelia.pms.security.AureliaCryptoEngine crypto =
+      new com.aurelia.pms.security.AureliaCryptoEngine();
+    char[] oldPin = PIN_A.toCharArray();
+    char[] newPin = PIN_B.toCharArray();
+    char[] recoveryCode = loadRecoveryFixture(context);
+    byte[] recoveryKey = null;
+    byte[] recoveryDek = null;
+    byte[] pinBDek = null;
+    byte[] dbKey = null;
     LocalPmsRepository repository = null;
     try {
       assertTrue("PIN A must still unlock after a real app process termination",
-        manager.unlock(pin, envelope));
-      key = manager.currentDataKeyCopy();
-      repository = new LocalPmsRepository(context, key);
+        manager.unlock(oldPin, envelope));
+      manager.lock();
+      assertFalse("PIN B must not be committed by the interrupted pre-force-stop attempt",
+        manager.unlock(newPin, envelope));
+
+      // The offline recovery key must still unwrap the original DEK after the
+      // real process boundary; only then may PIN B's replacement be committed.
+      JSONObject original = new JSONObject(envelope);
+      recoveryKey = crypto.decodeRecoveryKey(recoveryCode);
+      recoveryDek = crypto.unwrapDataKeyWithRecovery(original.getString("recovery"), recoveryKey);
+      String replacement = manager.recoverWithRecoveryKey(recoveryCode, newPin, envelope);
+      JSONObject rotated = new JSONObject(replacement);
+      assertEquals("recovery wrapper remains attached to the same DEK",
+        original.getString("recovery"), rotated.getString("recovery"));
+      pinBDek = crypto.unwrapDataKey(rotated.getString("pin"), newPin);
+      assertArrayEquals("PIN B must wrap the original recovery-key DEK", recoveryDek, pinBDek);
+
+      store.writeRecoveryReplacement(replacement);
+      manager.confirmRecoverySwapCommitted();
+      manager.lock();
+      assertFalse("PIN A must be rejected after the post-force-stop commit",
+        manager.unlock(oldPin, store.read()));
+      assertTrue("PIN B must open the committed envelope", manager.unlock(newPin, store.read()));
+
+      dbKey = manager.currentDataKeyCopy();
+      repository = new LocalPmsRepository(context, dbKey);
       repository.initialize();
       JSONObject entity = repository.getEntity(ENTITY_TYPE, ENTITY_ID);
-      assertNotNull("SQLCipher data must survive force-stop", entity);
+      assertNotNull("SQLCipher data must survive force-stop and PIN rotation", entity);
       assertEquals("survives-real-process-death", entity.getJSONObject("data").getString("value"));
       assertEquals(1L, entity.getLong("version"));
     } finally {
       if (repository != null) repository.close();
-      if (key != null) Arrays.fill(key, (byte) 0);
+      if (dbKey != null) Arrays.fill(dbKey, (byte) 0);
+      if (recoveryKey != null) Arrays.fill(recoveryKey, (byte) 0);
+      if (recoveryDek != null) Arrays.fill(recoveryDek, (byte) 0);
+      if (pinBDek != null) Arrays.fill(pinBDek, (byte) 0);
       manager.lock();
-      Arrays.fill(pin, '\0');
+      Arrays.fill(oldPin, '\0');
+      Arrays.fill(newPin, '\0');
+      Arrays.fill(recoveryCode, '\0');
+      clearRecoveryFixture(context);
       store.delete();
       context.deleteDatabase(DB);
     }
+  }
+
+  private static SecretKey fixtureKey() throws Exception {
+    KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+    keyStore.load(null);
+    SecretKey existing = (SecretKey) keyStore.getKey(FIXTURE_ALIAS, null);
+    if (existing != null) return existing;
+    KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
+    generator.init(new KeyGenParameterSpec.Builder(FIXTURE_ALIAS,
+        KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+        .setKeySize(256).setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+        .setRandomizedEncryptionRequired(true).build());
+    return generator.generateKey();
+  }
+
+  private static void persistRecoveryFixture(Context context, char[] recoveryCode) throws Exception {
+    ByteBuffer encoded = StandardCharsets.UTF_8.encode(CharBuffer.wrap(recoveryCode));
+    byte[] plaintext = new byte[encoded.remaining()];
+    encoded.get(plaintext);
+    if (encoded.hasArray()) Arrays.fill(encoded.array(), (byte) 0);
+    byte[] packed = null;
+    byte[] ciphertext = null;
+    byte[] iv = null;
+    try {
+      Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+      cipher.init(Cipher.ENCRYPT_MODE, fixtureKey());
+      cipher.updateAAD(FIXTURE_AAD.getBytes(StandardCharsets.UTF_8));
+      ciphertext = cipher.doFinal(plaintext);
+      iv = cipher.getIV();
+      packed = new byte[iv.length + ciphertext.length];
+      System.arraycopy(iv, 0, packed, 0, iv.length);
+      System.arraycopy(ciphertext, 0, packed, iv.length, ciphertext.length);
+      String value = Base64.encodeToString(packed, Base64.NO_WRAP);
+      if (!context.getSharedPreferences(FIXTURE_PREFS, Context.MODE_PRIVATE)
+          .edit().putString(FIXTURE_BLOB, value).commit()) {
+        throw new IllegalStateException("Could not persist encrypted test recovery fixture.");
+      }
+    } finally {
+      Arrays.fill(plaintext, (byte) 0);
+      if (packed != null) Arrays.fill(packed, (byte) 0);
+      if (ciphertext != null) Arrays.fill(ciphertext, (byte) 0);
+      if (iv != null) Arrays.fill(iv, (byte) 0);
+    }
+  }
+
+  private static char[] loadRecoveryFixture(Context context) throws Exception {
+    String value = context.getSharedPreferences(FIXTURE_PREFS, Context.MODE_PRIVATE)
+      .getString(FIXTURE_BLOB, null);
+    if (value == null) throw new AssertionError("Encrypted recovery fixture did not survive force-stop.");
+    byte[] packed = Base64.decode(value, Base64.NO_WRAP);
+    byte[] iv = Arrays.copyOfRange(packed, 0, 12);
+    byte[] ciphertext = Arrays.copyOfRange(packed, 12, packed.length);
+    byte[] plaintext = null;
+    try {
+      Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+      cipher.init(Cipher.DECRYPT_MODE, fixtureKey(), new GCMParameterSpec(128, iv));
+      cipher.updateAAD(FIXTURE_AAD.getBytes(StandardCharsets.UTF_8));
+      plaintext = cipher.doFinal(ciphertext);
+      CharBuffer decoded = StandardCharsets.UTF_8.decode(ByteBuffer.wrap(plaintext));
+      char[] result = new char[decoded.remaining()];
+      decoded.get(result);
+      if (decoded.hasArray()) Arrays.fill(decoded.array(), '\0');
+      return result;
+    } finally {
+      Arrays.fill(packed, (byte) 0);
+      Arrays.fill(iv, (byte) 0);
+      Arrays.fill(ciphertext, (byte) 0);
+      if (plaintext != null) Arrays.fill(plaintext, (byte) 0);
+    }
+  }
+
+  private static void clearRecoveryFixture(Context context) throws Exception {
+    context.getSharedPreferences(FIXTURE_PREFS, Context.MODE_PRIVATE).edit().clear().commit();
+    KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+    keyStore.load(null);
+    if (keyStore.containsAlias(FIXTURE_ALIAS)) keyStore.deleteEntry(FIXTURE_ALIAS);
   }
 
   private static com.aurelia.pms.security.AureliaAppManager newManager(Context context) {
