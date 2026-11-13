@@ -41,7 +41,11 @@ test('native SQLite gate executes both selected suites with exactly 35 tests and
   assert.ok(workflow.includes('totals.skipped !== 0'));
   assert.ok(workflow.includes('Expected exactly 35 executed repository and recovery-security tests, zero failures, zero errors and zero skipped tests.'));
   assert.ok(workflow.includes('AureliaSecurityInstrumentedTest'));
-  assert.ok(emulatorScript.includes('locksettings set-pin 246810'));
+  assert.ok(emulatorScript.includes('locksettings set-pin'));
+  assert.ok(emulatorScript.includes('android.settings.FINGERPRINT_ENROLL'));
+  assert.ok(emulatorScript.includes('uiautomator dump'));
+  assert.ok(emulatorScript.includes('adb emu finger touch 1'));
+  assert.ok(emulatorScript.includes('Fingerprint enrollment did not complete.'));
 });
 
 

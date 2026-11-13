@@ -53,7 +53,10 @@ test("native SQLCipher candidate executes all 35 repository and recovery-securit
   );
   assert.equal([...repositoryTests.matchAll(/@Test/g)].length, 29);
   assert.equal([...securityTests.matchAll(/@Test/g)].length, 6);
-  assert.ok(nativeRunner.includes("locksettings set-pin 246810"));
+  assert.ok(nativeRunner.includes("locksettings set-pin"));
+  assert.ok(nativeRunner.includes("android.settings.FINGERPRINT_ENROLL"));
+  assert.ok(nativeRunner.includes("uiautomator dump"));
+  assert.ok(nativeRunner.includes("adb emu finger touch 1"));
   assert.ok(nativeRunner.includes("com.aurelia.pms.LocalPmsRepositoryInstrumentedTest"));
   assert.ok(nativeRunner.includes("com.aurelia.pms.security.AureliaSecurityInstrumentedTest"));
   assert.ok(nativeWorkflow.includes("totals.tests !== 35"));

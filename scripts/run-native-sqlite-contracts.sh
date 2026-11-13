@@ -46,9 +46,116 @@ test "$(adb shell getprop ro.build.version.sdk | tr -d "\r")" = "30"
 
 cd "$repo_root/android"
 
-# The biometric recovery test requires a secure device lock screen. Configure
-# the disposable API 30 emulator; the test itself verifies KeyguardManager.
-adb shell locksettings set-pin 246810 | tee "$log_dir/secure-lockscreen-setup.log"
+# The biometric recovery test requires both a secure lock screen and an
+# enrolled strong biometric. Configure these only on this disposable emulator.
+emulator_pin="246810"
+adb shell locksettings set-pin "$emulator_pin" | tee "$log_dir/secure-lockscreen-setup.log"
+adb shell am start -a android.settings.FINGERPRINT_ENROLL
+sleep 2
+
+ui_xml="$log_dir/fingerprint-enrollment-window.xml"
+dump_enrollment_ui() {
+  timeout -k 2s 10s adb shell uiautomator dump /sdcard/aurelia-fingerprint-enrollment.xml >/dev/null 2>&1
+  adb pull /sdcard/aurelia-fingerprint-enrollment.xml "$ui_xml" >/dev/null 2>&1
+}
+ui_has_text() {
+  dump_enrollment_ui
+  python3 - "$ui_xml" "$1" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+needle = sys.argv[2].casefold()
+raise SystemExit(0 if any(needle in (node.attrib.get("text", "") + " " +
+    node.attrib.get("content-desc", "")).casefold() for node in root.iter()) else 1)
+PY
+}
+ui_has_edit_text() {
+  dump_enrollment_ui
+  python3 - "$ui_xml" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+raise SystemExit(0 if any("EditText" in node.attrib.get("class", "") for node in root.iter()) else 1)
+PY
+}
+tap_enrollment_label() {
+  dump_enrollment_ui
+  local point
+  point="$(python3 - "$ui_xml" "$1" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+parents = {child: parent for parent in root.iter() for child in parent}
+needle = sys.argv[2].casefold()
+for node in root.iter():
+    value = (node.attrib.get("text", "") + " " +
+             node.attrib.get("content-desc", "")).strip().casefold()
+    if value != needle:
+        continue
+    target = node
+    while target in parents and target.attrib.get("clickable") != "true":
+        target = parents[target]
+    bounds = target.attrib.get("bounds", "")
+    if not bounds:
+        continue
+    import re
+    match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+    if match:
+        x1, y1, x2, y2 = map(int, match.groups())
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+)" || return 1
+  read -r x y <<< "$point"
+  adb shell input tap "$x" "$y"
+  sleep 1
+}
+
+# Re-enter the emulator PIN if the enrollment activity requests it.
+if ui_has_edit_text; then
+  adb shell input text "$emulator_pin"
+  adb shell input keyevent KEYCODE_ENTER
+  sleep 2
+fi
+for attempt in {1..12}; do
+  if tap_enrollment_label "More"; then continue; fi
+  if tap_enrollment_label "I agree"; then break; fi
+  if tap_enrollment_label "Next"; then continue; fi
+  if ui_has_text "Touch the sensor"; then break; fi
+  sleep 1
+done
+if ui_has_text "I agree"; then tap_enrollment_label "I agree"; fi
+sensor_ready=false
+for attempt in {1..20}; do
+  if ui_has_text "Touch the sensor"; then sensor_ready=true; break; fi
+  sleep 1
+done
+if [[ "$sensor_ready" != true ]]; then
+  dump_enrollment_ui
+  cp "$ui_xml" "$log_dir/fingerprint-enrollment-failed-window.xml"
+  echo "::error::Fingerprint enrollment did not reach the sensor prompt."
+  exit 1
+fi
+for touch in {1..4}; do
+  adb emu finger touch 1
+  sleep 1
+  adb emu finger remove
+  sleep 1
+done
+enrollment_done=false
+for attempt in {1..20}; do
+  if tap_enrollment_label "Done"; then enrollment_done=true; break; fi
+  sleep 1
+done
+if [[ "$enrollment_done" != true ]]; then
+  dump_enrollment_ui
+  cp "$ui_xml" "$log_dir/fingerprint-enrollment-failed-window.xml"
+  echo "::error::Fingerprint enrollment did not complete."
+  exit 1
+fi
+adb shell input keyevent KEYCODE_HOME
+adb shell dumpsys fingerprint > "$log_dir/fingerprint-enrollment-dump.txt" 2>&1
 
 results_dir="$log_dir/junit-results"
 rm -rf "$results_dir"
