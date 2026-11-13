@@ -380,8 +380,8 @@ export const exchangeOwnerEmailLink = onCall(
         link.searchParams.get("mode") !== "signIn" ||
         link.searchParams.get("apiKey") !== apiKey || !oobCode || oobCode.length > 2048) throw GENERIC;
     const endpoint = process.env.FIREBASE_AUTH_EMULATOR_HOST
-      ? \`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithEmailLink?key=${encodeURIComponent(apiKey)}\`
-      : \`https://identitytoolkit.googleapis.com/v1/accounts:signInWithEmailLink?key=${encodeURIComponent(apiKey)}\`;
+      ? `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithEmailLink?key=${encodeURIComponent(apiKey)}`
+      : `https://identitytoolkit.googleapis.com/v1/accounts:signInWithEmailLink?key=${encodeURIComponent(apiKey)}`;
     let response: Response;
     try {
       response = await fetch(endpoint, {

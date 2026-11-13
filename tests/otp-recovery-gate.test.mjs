@@ -76,11 +76,16 @@ test('recovery grant client binds consume request to the issued nonce', () => {
 test('recovery phone registration requires a fresh owner token bound to the tenant claim', () => {
   const backend = read('functions/src/index.ts');
   const registration = backend.slice(backend.indexOf('export const registerRecoveryPhone'), backend.indexOf('export const issueRecoveryGrant'));
-  assert.match(registration, /request\.auth/);
-  assert.match(registration, /auth\.token\.role !== "owner"/);
-  assert.match(registration, /ownerAge >= 300/);
-  assert.match(registration, /auth\.token\.tenantId !== tenantId/);
+  assert.match(registration, /requireFreshPrimaryOwner\(request\)/);
+  assert.match(registration, /auth\.uid/);
   assert.match(registration, /requireAttestedDevice\(tenantId, deviceIdHash, auth\.uid\)/);
+  const ownerGuard = backend.slice(backend.indexOf('function requireFreshPrimaryOwner'), backend.indexOf('async function requireRecoveryOwnerBinding'));
+  assert.match(ownerGuard, /ownerAuthFactor/);
+  assert.match(ownerGuard, /ownerAuthFactorAuthTime/);
+  assert.match(ownerGuard, /authTime > now/);
+  assert.match(ownerGuard, /now - authTime >= 300/);
+  assert.match(ownerGuard, /email_link/);
+  assert.match(ownerGuard, /passkey/);
 });
 
 test('APK verifies the pinned ES256 signature before server grant consumption', () => {
