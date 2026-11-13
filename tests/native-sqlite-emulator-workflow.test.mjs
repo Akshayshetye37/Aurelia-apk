@@ -18,6 +18,15 @@ test('native SQLite instrumentation enables KVM before starting the emulator', (
 test('native SQLite instrumentation fails closed instead of using software emulation', () => {
   assert.ok(workflow.includes('refusing software emulation'));
   assert.ok(workflow.includes('disable-linux-hw-accel: false'));
-  assert.doesNotMatch(workflow, /disable-linux-hw-accel:\\s*true|-accel off|echo off > .*acceleration-mode/);
+  assert.doesNotMatch(workflow, /disable-linux-hw-accel:\s*true|-accel off|echo off > .*acceleration-mode/);
 });
 
+
+
+test('native SQLite gate requires non-zero execution and zero failures, errors and skips', () => {
+  assert.ok(workflow.includes('totals.tests !== 35'));
+  assert.ok(workflow.includes('totals.failures !== 0'));
+  assert.ok(workflow.includes('totals.errors !== 0'));
+  assert.ok(workflow.includes('totals.skipped !== 0'));
+  assert.ok(workflow.includes('Expected exactly 35 executed tests, zero failures, zero errors and zero skipped tests.'));
+});
