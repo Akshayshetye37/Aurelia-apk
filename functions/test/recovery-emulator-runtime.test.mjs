@@ -100,7 +100,7 @@ function ownerAuth(uid, tenantId, options = {}) {
   };
 }
 
-async function phoneOnlyOwnerAuth(uid, tenantId) {
+function phoneOnlyOwnerAuth(uid, tenantId) {
   const session = ownerAuth(uid, tenantId, { provider: 'phone', factor: undefined });
   assert.equal(session.token.ownerAuthFactor, undefined,
     'SIM/phone possession alone must not mint a primary-owner factor claim');
