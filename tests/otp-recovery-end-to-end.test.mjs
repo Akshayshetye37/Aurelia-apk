@@ -190,3 +190,13 @@ test('new owner device can complete email-link enrollment before hardware key cr
   assert.match(activity, /enrollmentRequested \|\| !incomingLink\.isNullOrBlank\(\)/);
   assert.match(activity, /if \(deviceHash\.isBlank\(\) && !enrollmentFlow\)/);
 });
+
+
+test('recovery hardware attestation fails closed below Android API 24 without deleting keys', () => {
+  const source = read('android/templates/security/RecoveryDeviceIdentity.kt');
+  const guard = source.indexOf('if (Build.VERSION.SDK_INT < 24)');
+  const deleteAlias = source.indexOf('if (store.containsAlias(ALIAS)) store.deleteEntry(ALIAS)');
+  const attestationCall = source.indexOf('.setAttestationChallenge(challenge)');
+  assert.ok(guard >= 0 && deleteAlias > guard && attestationCall > guard);
+  assert.match(source, /Hardware-attested recovery enrollment requires Android 7\.0 or later/);
+});
