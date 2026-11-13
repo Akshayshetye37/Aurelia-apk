@@ -527,6 +527,8 @@ test('independent primary owner cancels the old hold and fresh OTP starts a new 
   await assert.rejects(callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 's'.repeat(43), phoneIdToken: phoneToken
   }), 'the already-consumed phone-auth proof cannot restart a cancelled hold');
+  // Auth Emulator auth_time has one-second granularity; force a distinct proof ID.
+  await sleep(1100);
   const nextToken = await phoneAuthToken(phone);
   const restarted = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 's'.repeat(43), phoneIdToken: nextToken
