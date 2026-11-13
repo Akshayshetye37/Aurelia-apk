@@ -392,7 +392,7 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
 
     private fun cancelPendingRecovery() {
         status.text = "Checking owner authorization…"
-        RecoveryTenantIdentity.bindAuthorizedOwner(this).addOnCompleteListener { ownerTask ->
+        RecoveryTenantIdentity.getPrimaryOwnerTenant().addOnCompleteListener { ownerTask ->
             runOnUiThread {
                 if (!ownerTask.isSuccessful) {
                     status.text = "Sign in again as the property owner to cancel recovery."
@@ -403,6 +403,8 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                     status.text = "This device has no verified recovery identity."
                     return@runOnUiThread
                 }
+                // The callable independently verifies the canonical owner UID,
+                // fresh primary factor and enrolled hardware-attested device.
                 client.cancelRecoveryRequest(ownerTask.result, deviceHash).addOnCompleteListener { cancelTask ->
                     runOnUiThread {
                         status.text = if (cancelTask.isSuccessful && cancelTask.result == true) {

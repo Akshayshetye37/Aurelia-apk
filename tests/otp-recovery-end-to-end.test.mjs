@@ -159,3 +159,16 @@ test('staging deployment probes missing and invalid App Check on all recovery ca
     'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant', 'consumeRecoveryGrant',
     'cancelRecoveryRequest', 'cancelRecoveryPhoneChange', 'activateRecoveryPhoneChange']) assert.ok(workflow.includes(callable));
 });
+
+
+test('Android writes an owner UID binding only after the server confirms the immutable recovery owner', () => {
+  const identity = read('android/templates/RecoveryTenantIdentity.kt');
+  const bind = identity.slice(identity.indexOf('fun bindAuthorizedOwner'), identity.indexOf('fun getPrimaryOwnerTenant'));
+  assert.match(bind, /getHttpsCallable\("confirmRecoveryOwnerBinding"\)/);
+  assert.match(bind, /persistOrConfirm\(context, tenant, ownerUid\)/);
+  assert.ok(bind.indexOf('confirmRecoveryOwnerBinding') < bind.indexOf('persistOrConfirm'));
+  const settings = read('android/templates/RecoveryPhoneSettingsActivity.kt');
+  const cancel = settings.slice(settings.indexOf('private fun cancelPendingRecovery'), settings.indexOf('private fun mask'));
+  assert.match(cancel, /getPrimaryOwnerTenant/);
+  assert.doesNotMatch(cancel, /bindAuthorizedOwner/);
+});

@@ -56,7 +56,7 @@
 - Working branch: `work/p0-storage-hardening`.
 - Production recovery flag: `RECOVERY_ENABLED=false` by default; no production enablement has been authorized.
 - Android verifier enforces the locally enrolled owner UID, tenant, pinned key ID, signed claims and five-minute grant lifetime before calling server consumption.
-- Owner cancellation and acknowledgement require a fresh primary-auth session carrying server-issued `ownerAuthFactor` and matching `ownerAuthFactorAuthTime` claims; phone-OTP-only sessions are rejected. The repository documents that the trusted primary-auth claim issuer is not yet integrated, so those actions fail closed until that dependency exists.
+- Owner cancellation and acknowledgement require a fresh primary-auth session carrying server-issued `ownerAuthFactor` and matching `ownerAuthFactorAuthTime` claims; phone-OTP-only sessions are rejected. The email-link exchange callable validates the one-time Firebase email link, immutable owner UID, tenant, verified email and fresh auth time before minting the short-lived custom owner session. A passkey factor is accepted only when minted by a trusted server-side primary-auth integration.
 - Owner acknowledgement tokens expire after 15 minutes and are single-use. Cancellation preserves terminal `CANCELLED` state for transaction race arbitration while deleting pending hold, alert and grant linkage fields.
 - Android instrumentation CI has a two-phase process-death test separated by verified `adb shell am force-stop`; this is emulator evidence, not physical-device Gate 4.
 - Staging deployment, real SMS, physical-device tests, production IAM/App Check probes and owner sign-off require configured external environments and remain unqualified until actual run evidence is recorded.

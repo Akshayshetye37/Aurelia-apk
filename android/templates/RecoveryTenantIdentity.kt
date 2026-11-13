@@ -7,7 +7,6 @@ import android.util.Base64
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
-import com.google.android.gms.tasks.Tasks
 import org.json.JSONObject
 import com.google.android.gms.tasks.Task
 import java.security.KeyStore
@@ -62,30 +61,38 @@ object RecoveryTenantIdentity {
             require(tenant.matches(Regex("^[A-Za-z0-9_-]{8,128}$"))) {
                 "The authenticated tenant claim is invalid."
             }
-            val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            val existingBlob = prefs.getString(BLOB, null)
-            val previous = existingBlob?.let { decrypt(it, context) }
-            val previousTenant = if (previous == null) null else
-                runCatching { JSONObject(previous).getString("tenantId") }.getOrDefault(previous)
-            val previousRecord = previous?.let { runCatching { JSONObject(it) }.getOrNull() }
-            val previousUid = previousRecord?.optString("ownerUid")?.takeIf { !it.isNullOrBlank() }
-            if (existingBlob != null && previousTenant == tenant && previousUid == null) {
-                FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
-                    .getHttpsCallable("confirmRecoveryOwnerBinding")
-                    .call(mapOf("tenantId" to tenant))
-                    .continueWith { confirmTask ->
-                        if (!confirmTask.isSuccessful ||
-                            (confirmTask.result?.data as? Map<*, *>)?.get("confirmed") != true) {
-                            throw confirmTask.exception
-                                ?: SecurityException("Legacy recovery owner binding could not be confirmed.")
-                        }
-                        synchronized(this) { persistOrConfirm(context, tenant, ownerUid) }
-                        tenant
+            // The server's immutable recovery-owner UID is authoritative. Confirm
+            // it before writing any local UID so a same-tenant secondary owner
+            // cannot poison this installation's encrypted owner binding.
+            FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
+                .getHttpsCallable("confirmRecoveryOwnerBinding")
+                .call(mapOf("tenantId" to tenant))
+                .continueWith { confirmTask ->
+                    if (!confirmTask.isSuccessful ||
+                        (confirmTask.result?.data as? Map<*, *>)?.get("confirmed") != true) {
+                        throw confirmTask.exception
+                            ?: SecurityException("Recovery owner identity could not be confirmed by the server.")
                     }
-            } else {
-                synchronized(this) { persistOrConfirm(context, tenant, ownerUid) }
-                Tasks.forResult(tenant)
+                    synchronized(this) { persistOrConfirm(context, tenant, ownerUid) }
+                    tenant
+                }
+        }
+    }
+
+    /** Read the signed owner tenant claim without mutating local enrollment state. */
+    fun getPrimaryOwnerTenant(): Task<String> {
+        val user = FirebaseAuth.getInstance().currentUser
+            ?: throw SecurityException("Sign in as the property owner before cancelling recovery.")
+        return user.getIdToken(true).continueWith { task ->
+            if (!task.isSuccessful) throw task.exception ?: SecurityException("Owner identity verification failed.")
+            val claims = task.result?.claims ?: throw SecurityException("Owner identity claims are missing.")
+            if (claims["role"] != "owner") throw SecurityException("Only the property owner can cancel recovery.")
+            val tenant = claims["tenantId"] as? String
+                ?: throw SecurityException("The owner account has no tenant binding.")
+            require(tenant.matches(Regex("^[A-Za-z0-9_-]{8,128}$"))) {
+                "The authenticated tenant claim is invalid."
             }
+            tenant
         }
     }
 
