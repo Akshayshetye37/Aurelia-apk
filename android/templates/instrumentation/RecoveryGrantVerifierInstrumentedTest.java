@@ -78,6 +78,21 @@ public final class RecoveryGrantVerifierInstrumentedTest {
     JSONObject legacy = new JSONObject(validClaims.toString());
     legacy.remove("uid");
     invalidGrants.add(sign(pair, legacy, KID));
+    JSONObject expired = new JSONObject(validClaims.toString()).put("exp", now - 1);
+    invalidGrants.add(sign(pair, expired, KID));
+    JSONObject overLifetime = new JSONObject(validClaims.toString()).put("exp", now + 300);
+    invalidGrants.add(sign(pair, overLifetime, KID)); // exp - iat = 301 seconds
+    JSONObject futureIssued = new JSONObject(validClaims.toString())
+        .put("iat", now + 31).put("exp", now + 200);
+    invalidGrants.add(sign(pair, futureIssued, KID));
+    invalidGrants.add(sign(pair, new JSONObject(validClaims.toString()).put("iss", "wrong-issuer"), KID));
+    invalidGrants.add(sign(pair, new JSONObject(validClaims.toString()).put("aud", "wrong-audience"), KID));
+    invalidGrants.add(sign(pair, new JSONObject(validClaims.toString()).put("scope", "wrong-scope"), KID));
+    for (String missing : new String[] {"iss", "aud", "sub", "scope", "iat", "exp"}) {
+      JSONObject missingClaim = new JSONObject(validClaims.toString());
+      missingClaim.remove(missing);
+      invalidGrants.add(sign(pair, missingClaim, KID));
+    }
     invalidGrants.add(sign(pair, new JSONObject(validClaims.toString()), "unknown-key"));
     invalidGrants.add(sign(pair, new JSONObject(validClaims.toString()), null));
 
