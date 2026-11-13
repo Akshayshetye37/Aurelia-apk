@@ -233,35 +233,7 @@ jobs:
           disable-linux-hw-accel: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-snapshot-save -noaudio -no-boot-anim
           working-directory: android
-          script: |
-            bash -euo pipefail <<'BASH'
-            set -euo pipefail
-            log_dir="$PWD/../.aurelia-emulator"
-            mkdir -p "$log_dir"
-            trap 'adb logcat -b all -d -v threadtime > "$log_dir/logcat-full.txt" 2>&1 || true; adb logcat -b crash -d -v threadtime > "$log_dir/logcat-crash.txt" 2>&1 || true' EXIT
-            if ! timeout -k 2s 15s adb shell getprop sys.boot_completed | grep -qx '1'; then
-              echo "::error::Emulator did not report completed boot."
-              exit 1
-            fi
-            package_manager_ready=false
-            for attempt in {1..18}; do
-              if timeout -k 2s 15s adb shell pm list packages >/dev/null 2>&1; then package_manager_ready=true; break; fi
-              echo "Package manager not ready; waiting 10 seconds (attempt $attempt/18)."
-              sleep 10
-            done
-            if [[ "$package_manager_ready" != true ]]; then
-              echo "::error::Package manager did not become responsive after emulator boot."
-              exit 1
-            fi
-            echo "booted=true" >> "$GITHUB_OUTPUT"
-            adb shell getprop ro.build.fingerprint | tee "$log_dir/emulator-build-fingerprint.txt"
-            test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "30"
-            set +e
-            ./gradlew --no-daemon --stacktrace --info connectedDebugAndroidTest 2>&1 | tee "$log_dir/connectedDebugAndroidTest.log"
-            gradle_status=${PIPESTATUS[0]}
-            echo "$gradle_status" > "$log_dir/gradle-exit-code.txt"
-            exit "$gradle_status"
-            BASH
+          script: bash ../scripts/run-native-sqlite-contracts.sh 1
 
       - name: Retry emulator boot once (never retry a test failure)
         id: emulator_attempt_2
@@ -279,35 +251,7 @@ jobs:
           disable-linux-hw-accel: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-snapshot-save -noaudio -no-boot-anim
           working-directory: android
-          script: |
-            bash -euo pipefail <<'BASH'
-            set -euo pipefail
-            log_dir="$PWD/../.aurelia-emulator"
-            mkdir -p "$log_dir"
-            trap 'adb logcat -b all -d -v threadtime > "$log_dir/logcat-full.txt" 2>&1 || true; adb logcat -b crash -d -v threadtime > "$log_dir/logcat-crash.txt" 2>&1 || true' EXIT
-            if ! timeout -k 2s 15s adb shell getprop sys.boot_completed | grep -qx '1'; then
-              echo "::error::Second emulator boot attempt did not complete."
-              exit 1
-            fi
-            package_manager_ready=false
-            for attempt in {1..18}; do
-              if timeout -k 2s 15s adb shell pm list packages >/dev/null 2>&1; then package_manager_ready=true; break; fi
-              echo "Package manager not ready; waiting 10 seconds (attempt $attempt/18)."
-              sleep 10
-            done
-            if [[ "$package_manager_ready" != true ]]; then
-              echo "::error::Package manager did not become responsive on second boot attempt."
-              exit 1
-            fi
-            echo "booted=true" >> "$GITHUB_OUTPUT"
-            adb shell getprop ro.build.fingerprint | tee "$log_dir/emulator-build-fingerprint.txt"
-            test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "30"
-            set +e
-            ./gradlew --no-daemon --stacktrace --info connectedDebugAndroidTest 2>&1 | tee "$log_dir/connectedDebugAndroidTest.log"
-            gradle_status=${PIPESTATUS[0]}
-            echo "$gradle_status" > "$log_dir/gradle-exit-code.txt"
-            exit "$gradle_status"
-            BASH
+          script: bash ../scripts/run-native-sqlite-contracts.sh 2
 
       - name: Fail if first boot succeeded but its test run failed
         if: steps.emulator_attempt_1.outcome == 'failure' && steps.emulator_attempt_1.outputs.booted == 'true'

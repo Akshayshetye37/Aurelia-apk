@@ -100,7 +100,14 @@ function ownerAuth(uid, tenantId, options = {}) {
   };
 }
 
-async function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, ownerDeviceHashes }) {
+async function phoneOnlyOwnerAuth(uid, tenantId) {
+  const session = ownerAuth(uid, tenantId, { provider: 'phone', factor: undefined });
+  assert.equal(session.token.ownerAuthFactor, undefined,
+    'SIM/phone possession alone must not mint a primary-owner factor claim');
+  return session;
+}
+
+function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, ownerDeviceHashes }) {
   await db.doc(`tenants/${tenantId}/security/recoveryOwner`).set({
     tenantId, ownerUid, createdAt: new Date(), provisionedBy: 'emulator-fixture'
   });
@@ -175,7 +182,7 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   }, ownerAuth(ownerUid, tenantId)), 'an older notification token is invalidated when a retry rotates the proof');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId, { factor: undefined, provider: 'phone' })), 'phone-only owner session cannot acknowledge');
+  }, phoneOnlyOwnerAuth(ownerUid, tenantId)), 'phone-only owner session cannot acknowledge');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, ownerAuth(ownerUid, tenantId, { provider: 'password' })),
@@ -225,7 +232,7 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   const payload = JSON.parse(Buffer.from(issued.grant.split('.')[1], 'base64url').toString('utf8'));
   await assert.rejects(callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: secondOwnerDeviceHash
-  }, ownerAuth(ownerUid, tenantId, { provider: 'phone', factor: undefined })),
+  }, phoneOnlyOwnerAuth(ownerUid, tenantId)),
   'phone-OTP-only cancellation cannot revoke an issued grant or burn its JTI');
   assert.ok(payload.exp > payload.iat);
   assert.ok(payload.exp - payload.iat <= 300, 'grant lifetime is at most five minutes');
@@ -482,7 +489,7 @@ test('independent primary owner can cancel during alert hold and cancellation re
   assert.equal(start.status, 'COOLDOWN');
   await assert.rejects(callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: independentDeviceHash
-  }, ownerAuth(ownerUid, tenantId, { provider: 'phone', factor: undefined })),
+  }, phoneOnlyOwnerAuth(ownerUid, tenantId)),
   'phone-only owner cannot cancel');
   await assert.rejects(callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: independentDeviceHash
@@ -1096,7 +1103,7 @@ test('owner notification endpoint token rotation requires fresh primary authenti
   const replacement = ('replacement-fcm-token-' + ownerDeviceHash).padEnd(240, 'y');
   const data = { tenantId, deviceIdHash: ownerDeviceHash, fcmToken: replacement };
   await assert.rejects(callable(functions.registerRecoveryOwnerDevice, data,
-    ownerAuth(ownerUid, tenantId, { provider: 'phone', factor: undefined })),
+    phoneOnlyOwnerAuth(ownerUid, tenantId)),
     'phone-only session cannot replace a trusted owner alert endpoint');
   await assert.rejects(callable(functions.registerRecoveryOwnerDevice, data,
     ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) - 301 })),

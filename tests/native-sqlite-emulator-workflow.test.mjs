@@ -36,3 +36,15 @@ test('nested emulator action scripts use a workspace log path instead of missing
   assert.equal((workflow.match(/log_dir="\$PWD\/\.\.\/\.aurelia-emulator"/g) || []).length, 2);
   assert.ok(workflow.includes('log_dir=".aurelia-emulator"'));
 });
+
+
+const emulatorScript = fs.readFileSync('scripts/run-native-sqlite-contracts.sh', 'utf8');
+
+test('emulator runner invokes one checked-in shell script per attempt', () => {
+  assert.ok(workflow.includes('script: bash ../scripts/run-native-sqlite-contracts.sh 1'));
+  assert.ok(workflow.includes('script: bash ../scripts/run-native-sqlite-contracts.sh 2'));
+  assert.ok(emulatorScript.includes('log_dir="$repo_root/.aurelia-emulator"'));
+  assert.ok(emulatorScript.includes('echo "booted=true" >> "$GITHUB_OUTPUT"'));
+  assert.ok(emulatorScript.includes('connectedDebugAndroidTest'));
+  assert.ok(emulatorScript.includes('gradle_status=${PIPESTATUS[0]}'));
+});
