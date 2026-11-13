@@ -363,7 +363,7 @@ export const exchangeOwnerEmailLink = onCall(
     if (purpose !== "alert" && purpose !== "enrollment") throw GENERIC;
     // Enrollment happens before this device has an attested key. Only an alert
     // acknowledgement/cancellation context is allowed to supply a device binding.
-    const deviceIdHash = purpose === "alert" ? validateDeviceHash(request.data?.deviceIdHash) : null;
+    const deviceIdHash = purpose === "alert" ? validateDeviceHash(request.data?.deviceIdHash) : "";
     // Owner alert authentication must remain available so a primary owner can
     // cancel a pending request even while recovery issuance is disabled.
     if (purpose === "enrollment") requireRecoveryEnabled();
