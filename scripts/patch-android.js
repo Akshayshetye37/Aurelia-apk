@@ -2,7 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 const androidDir = path.join(__dirname, '..', 'android');
-const appDir = path.join(androidDir, 'app', 'src', 'main');
+const appModuleDir = path.join(androidDir, 'app');
+const appDir = path.join(appModuleDir, 'src', 'main');
 const manifestPath = path.join(appDir, 'AndroidManifest.xml');
 if (!fs.existsSync(manifestPath)) throw new Error('AndroidManifest.xml not found; run npx cap add android first.');
 
@@ -384,7 +385,6 @@ fs.writeFileSync(path.join(recoveryValuesDir, 'aurelia_recovery_grant_keys.xml')
   '<?xml version="1.0" encoding="utf-8"?>\n<resources><string name="recovery_grant_public_keys_json" translatable="false">' +
   xmlEscape(JSON.stringify(recoveryPins)) + '</string></resources>');
 
-const appModuleDir = path.join(androidDir, 'app');
 const appGradleGroovy = path.join(appModuleDir, 'build.gradle');
 const appGradleKts = path.join(appModuleDir, 'build.gradle.kts');
 
