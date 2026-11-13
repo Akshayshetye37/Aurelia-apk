@@ -4,7 +4,9 @@ import static org.junit.Assert.*;
 
 import android.app.KeyguardManager;
 import android.content.Context;
+import android.content.SharedPreferences;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import com.aurelia.pms.identity.RecoveryPhoneStore;
 import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -128,7 +130,7 @@ public final class AureliaSecurityInstrumentedTest {
     }
 
     @Test
-    public void recoveryEnvelopeStoreRetainsPreviousUntilSuccessfulUnlockAcknowledgement() {
+    public void recoveryEnvelopeAndPhoneStoresRetainAuthenticatedKeystoreState() throws Exception {
         AureliaEnvelopeStore store = new AureliaEnvelopeStore(context);
         String first = "before";
         String second = "after";
@@ -142,6 +144,35 @@ public final class AureliaSecurityInstrumentedTest {
             assertFalse(store.hasPreviousEnvelope());
         } finally {
             store.delete();
+        }
+        assertRecoveryPhoneStoreRoundTrip();
+    }
+
+    private void assertRecoveryPhoneStoreRoundTrip() throws Exception {
+        final String prefsName = "aurelia_recovery_phone_v1";
+        final String blobName = "encrypted_record";
+        final String keyAlias = "aurelia.pms.recovery-phone.v1";
+        final String phoneNumber = "+15555550123";
+        SharedPreferences phonePrefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE);
+        KeyStore phoneKeys = KeyStore.getInstance("AndroidKeyStore");
+        phoneKeys.load(null);
+        phonePrefs.edit().clear().commit();
+        if (phoneKeys.containsAlias(keyAlias)) phoneKeys.deleteEntry(keyAlias);
+        try {
+            RecoveryPhoneStore phoneStore = new RecoveryPhoneStore(context);
+            phoneStore.markUnverified(phoneNumber);
+            assertEquals(RecoveryPhoneStore.State.UNVERIFIED, phoneStore.read().state);
+            phoneStore.markVerified(phoneNumber);
+            RecoveryPhoneStore.Record verified = phoneStore.read();
+            assertEquals(RecoveryPhoneStore.State.VERIFIED, verified.state);
+            assertEquals(phoneNumber, verified.currentE164);
+            String encrypted = phonePrefs.getString(blobName, null);
+            assertNotNull("Recovery phone must be stored as an encrypted record", encrypted);
+            assertFalse("Encrypted preferences must not contain the E.164 number", encrypted.contains(phoneNumber));
+        } finally {
+            phonePrefs.edit().clear().commit();
+            phoneKeys.load(null);
+            if (phoneKeys.containsAlias(keyAlias)) phoneKeys.deleteEntry(keyAlias);
         }
     }
 

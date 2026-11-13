@@ -33,7 +33,6 @@ class RecoveryPhoneStore(context: Context) {
     }
 
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private val random = SecureRandom()
 
     @Synchronized
     fun read(): Record {
@@ -140,9 +139,12 @@ class RecoveryPhoneStore(context: Context) {
             .put("effectiveAtEpochMs", record.effectiveAtEpochMs)
             .put("otpRequired", record.otpRequired)
             .toString()
-        val nonce = ByteArray(NONCE_BYTES).also(random::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key(), GCMParameterSpec(TAG_BITS, nonce))
+        // Keystore keys enforce randomized encryption; let the provider generate
+        // the GCM IV and persist it beside the ciphertext for later decryption.
+        cipher.init(Cipher.ENCRYPT_MODE, key())
+        val nonce = cipher.iv ?: throw SecurityException("Keystore did not return a GCM nonce.")
+        require(nonce.size == NONCE_BYTES) { "Unexpected AES-GCM nonce length." }
         cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
         val plaintext = json.toByteArray(Charsets.UTF_8)
         val encrypted = try {
