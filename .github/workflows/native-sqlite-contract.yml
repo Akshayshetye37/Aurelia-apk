@@ -19,12 +19,34 @@ concurrency:
 jobs:
   android-sqlite-instrumentation:
     needs: [indexeddb-contract]
-    runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
+      - name: Enable and require hardware KVM before any Android work
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          for attempt in {1..15}; do
+            [[ -c /dev/kvm ]] && break
+            sleep 1
+          done
+          if [[ ! -c /dev/kvm ]]; then
+            echo "::error::/dev/kvm is absent; refusing software emulation."
+            exit 1
+          fi
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then sudo chmod 0666 /dev/kvm; fi
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            echo "::error::/dev/kvm must be readable and writable by the runner."
+            exit 1
+          fi
+          ls -l /dev/kvm
+          echo "KVM device exists and is writable."
       - name: Checkout exact candidate
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Download deterministic repository property vectors
@@ -95,8 +117,7 @@ jobs:
             "platforms;android-35" \
             "build-tools;34.0.0" \
             "build-tools;35.0.0" \
-            "emulator" \
-            "system-images;android-34;google_apis;x86_64"
+            "emulator"
           mkdir -p "$RUNNER_TEMP/aurelia-emulator"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
@@ -136,7 +157,7 @@ jobs:
         working-directory: android
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           chmod +x gradlew
           log_dir="$RUNNER_TEMP/aurelia-emulator"
           mkdir -p "$log_dir"
@@ -196,138 +217,141 @@ jobs:
           unzip -Z1 "$app_apk" | grep -q 'res/xml/aurelia_data_extraction_rules.xml'
           echo "Packaged APK manifest disables backup and contains both exclusion rule resources."
 
-      - name: Create Android 34 AVD
-        shell: bash
-        run: |
-          set -euo pipefail
-          AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
-          if [[ ! -x "$AVDMANAGER" ]]; then
-            AVDMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -type f -name avdmanager -perm -u+x | sort | tail -n 1)"
-          fi
-          test -x "$AVDMANAGER"
-          echo no | "$AVDMANAGER" create avd \
-            --force --name aurelia-ci-api34 \
-            --package "system-images;android-34;google_apis;x86_64" \
-            --device pixel_2
-          avd_config="$HOME/.android/avd/aurelia-ci-api34.avd/config.ini"
-          test -f "$avd_config"
-          # Explicit guest sizing avoids relying on the AVD's low-memory default.
-          sed -i -E 's/^hw\.ramSize=.*/hw.ramSize=4096/; s/^hw\.cpu\.ncore=.*/hw.cpu.ncore=4/; s/^vm\.heapSize=.*/vm.heapSize=512/' "$avd_config"
-
-
-      - name: Require Linux KVM for Android SQLite instrumentation
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! -c /dev/kvm ]]; then
-            echo "::error::KVM device is unavailable; refusing to run SQLCipher instrumentation under software emulation."
-            exit 1
-          fi
-          sudo chmod 666 /dev/kvm
-          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
-            echo "::error::KVM device permissions are insufficient after setup."
-            exit 1
-          fi
-          "$ANDROID_HOME/emulator/emulator" -accel-check
-          printf 'on\n' > "$RUNNER_TEMP/aurelia-emulator/acceleration-mode.txt"
-
-      - name: Start emulator and capture console output
-        shell: bash
-        run: |
-          set -euo pipefail
-          emulator="$ANDROID_HOME/emulator/emulator"
-          log_dir="$RUNNER_TEMP/aurelia-emulator"
-          accel="$(cat "$log_dir/acceleration-mode.txt")"
-          if [[ "$accel" != "on" ]]; then
-            echo "::error::Hardware acceleration is mandatory for native SQLite instrumentation."
-            exit 1
-          fi
-          echo "Starting emulator with required KVM acceleration."
-          nohup "$emulator" -avd aurelia-ci-api34 -accel on \
-            -memory 4096 -cores 4 \
-            -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim \
-            -no-snapshot -no-snapshot-save -wipe-data -verbose \
-            >"$log_dir/emulator.stdout-stderr.log" 2>&1 &
-          echo "$!" > "$log_dir/emulator.pid"
-          echo "Emulator process started: PID $(cat "$log_dir/emulator.pid")"
-          timeout -k 2s 10s adb start-server || {
-            echo "::error::ADB server failed to start within 10 seconds."
-            exit 1
-          }
-          timeout -k 2s 10s adb devices -l || true
-
-      - name: Wait for Android emulator boot completion
-        timeout-minutes: 22
-        shell: bash
-        run: |
-          set -euo pipefail
-          log_dir="$RUNNER_TEMP/aurelia-emulator"
-          echo "Waiting up to 60 seconds for ADB device enumeration."
-          if ! timeout -k 2s 60s adb wait-for-device; then
-            echo "ADB did not enumerate the emulator within 60 seconds; continuing bounded boot diagnostics."
-          fi
-          deadline=$((SECONDS + 900))
-          booted=false
-          while (( SECONDS < deadline )); do
-            state="$(timeout -k 2s 5s adb get-state 2>&1 || true)"
-            if [[ "$state" == "device" ]]; then
-              boot="$(timeout -k 2s 5s adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
-            else
-              boot="unavailable"
+      - name: Boot accelerated API 30 emulator and run SQLite contracts (attempt 1)
+        id: emulator_attempt_1
+        continue-on-error: true
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          cores: 4
+          ram-size: 4096M
+          heap-size: 512M
+          emulator-boot-timeout: 900
+          disable-linux-hw-accel: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-snapshot-save -noaudio -no-boot-anim
+          working-directory: android
+          script: |
+            bash -euo pipefail <<'BASH'
+            set -euo pipefail
+            log_dir="$RUNNER_TEMP/aurelia-emulator"
+            mkdir -p "$log_dir"
+            trap 'adb logcat -b all -d -v threadtime > "$log_dir/logcat-full.txt" 2>&1 || true; adb logcat -b crash -d -v threadtime > "$log_dir/logcat-crash.txt" 2>&1 || true' EXIT
+            if ! timeout -k 2s 15s adb shell getprop sys.boot_completed | grep -qx '1'; then
+              echo "::error::Emulator did not report completed boot."
+              exit 1
             fi
-            echo "Emulator health: adb_state=$state sys.boot_completed=$boot elapsed=$((900 - (deadline - SECONDS)))s"
-            if [[ "$state" == "device" && "$boot" == "1" ]]; then
-              booted=true
-              break
+            package_manager_ready=false
+            for attempt in {1..18}; do
+              if timeout -k 2s 15s adb shell pm list packages >/dev/null 2>&1; then package_manager_ready=true; break; fi
+              echo "Package manager not ready; waiting 10 seconds (attempt $attempt/18)."
+              sleep 10
+            done
+            if [[ "$package_manager_ready" != true ]]; then
+              echo "::error::Package manager did not become responsive after emulator boot."
+              exit 1
             fi
-            sleep 10
-          done
-          timeout -k 2s 5s adb devices -l > "$log_dir/adb-devices-after-boot.txt" 2>&1 || true
-          if [[ "$booted" != true ]]; then
-            echo "::error::Android emulator did not reach sys.boot_completed=1 within 900 seconds."
-            exit 1
-          fi
-          adb shell getprop ro.build.fingerprint
-          test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "34"
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
-          echo "Checking system_server package-manager readiness before APK installation."
-          package_manager_ready=false
-          package_deadline=$((SECONDS + 180))
-          while (( SECONDS < package_deadline )); do
-            if timeout -k 2s 15s adb shell pm list packages >/dev/null 2>&1; then
-              package_manager_ready=true
-              break
-            fi
-            echo "Package manager is not responsive yet; retrying after 10 seconds."
-            sleep 10
-          done
-          if [[ "$package_manager_ready" != true ]]; then
-            echo "::error::Android boot completed but package manager did not become responsive within 180 seconds."
-            timeout -k 2s 10s adb logcat -b crash -d -v threadtime | tail -n 200 || true
-            exit 1
-          fi
+            echo "booted=true" >> "$GITHUB_OUTPUT"
+            adb shell getprop ro.build.fingerprint | tee "$log_dir/emulator-build-fingerprint.txt"
+            test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "30"
+            set +e
+            ./gradlew --no-daemon --stacktrace --info connectedDebugAndroidTest 2>&1 | tee "$log_dir/connectedDebugAndroidTest.log"
+            gradle_status=${PIPESTATUS[0]}
+            echo "$gradle_status" > "$log_dir/gradle-exit-code.txt"
+            exit "$gradle_status"
+            BASH
 
-      - name: Execute real SQLite contract tests
-        if: success()
-        timeout-minutes: 20
-        working-directory: android
-        shell: bash
+      - name: Retry emulator boot once (never retry a test failure)
+        id: emulator_attempt_2
+        if: steps.emulator_attempt_1.outcome == 'failure' && steps.emulator_attempt_1.outputs.booted != 'true'
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          cores: 4
+          ram-size: 4096M
+          heap-size: 512M
+          emulator-boot-timeout: 900
+          disable-linux-hw-accel: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-snapshot-save -noaudio -no-boot-anim
+          working-directory: android
+          script: |
+            bash -euo pipefail <<'BASH'
+            set -euo pipefail
+            log_dir="$RUNNER_TEMP/aurelia-emulator"
+            mkdir -p "$log_dir"
+            trap 'adb logcat -b all -d -v threadtime > "$log_dir/logcat-full.txt" 2>&1 || true; adb logcat -b crash -d -v threadtime > "$log_dir/logcat-crash.txt" 2>&1 || true' EXIT
+            if ! timeout -k 2s 15s adb shell getprop sys.boot_completed | grep -qx '1'; then
+              echo "::error::Second emulator boot attempt did not complete."
+              exit 1
+            fi
+            package_manager_ready=false
+            for attempt in {1..18}; do
+              if timeout -k 2s 15s adb shell pm list packages >/dev/null 2>&1; then package_manager_ready=true; break; fi
+              echo "Package manager not ready; waiting 10 seconds (attempt $attempt/18)."
+              sleep 10
+            done
+            if [[ "$package_manager_ready" != true ]]; then
+              echo "::error::Package manager did not become responsive on second boot attempt."
+              exit 1
+            fi
+            echo "booted=true" >> "$GITHUB_OUTPUT"
+            adb shell getprop ro.build.fingerprint | tee "$log_dir/emulator-build-fingerprint.txt"
+            test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "30"
+            set +e
+            ./gradlew --no-daemon --stacktrace --info connectedDebugAndroidTest 2>&1 | tee "$log_dir/connectedDebugAndroidTest.log"
+            gradle_status=${PIPESTATUS[0]}
+            echo "$gradle_status" > "$log_dir/gradle-exit-code.txt"
+            exit "$gradle_status"
+            BASH
+
+      - name: Fail if first boot succeeded but its test run failed
+        if: steps.emulator_attempt_1.outcome == 'failure' && steps.emulator_attempt_1.outputs.booted == 'true'
         run: |
-          set -uo pipefail
-          log_dir="$RUNNER_TEMP/aurelia-emulator"
-          set +e
-          ./gradlew --no-daemon --stacktrace --info connectedDebugAndroidTest 2>&1 | tee "$log_dir/connectedDebugAndroidTest.log"
-          gradle_status=${PIPESTATUS[0]}
-          echo "$gradle_status" > "$log_dir/gradle-exit-code.txt"
-          exit "$gradle_status"
+          echo "::error::The emulator booted successfully; the instrumentation test failed. Test retries are prohibited."
+          exit 1
 
       - name: Enforce instrumentation test results and ban ignored tests
         if: always()
         timeout-minutes: 2
         shell: bash
-        run: node scripts/verify-android-instrumentation-results.mjs android/app/build/outputs/androidTest-results/connected android/templates
+        run: |
+          set -euo pipefail
+          node scripts/verify-android-instrumentation-results.mjs android/app/build/outputs/androidTest-results/connected android/templates
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import path from "node:path";
+          const root = "android/app/build/outputs/androidTest-results/connected";
+          const walk = dir => fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+            const full = path.join(dir, entry.name);
+            return entry.isDirectory() ? walk(full) : [full];
+          }) : [];
+          const files = walk(root).filter(file => file.endsWith(".xml"));
+          const totals = { files: files.length, tests: 0, failures: 0, errors: 0, skipped: 0 };
+          const attrs = tag => Object.fromEntries([...tag.matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)[ ]*=[ ]*["']([^"']*)["']/g)]
+            .map(match => [match[1], Number(match[2])]));
+          for (const file of files) {
+            const xml = fs.readFileSync(file, "utf8");
+            const tags = [...xml.matchAll(/<(testsuites|testsuite)[^>]*>/g)]
+              .map(match => ({ name: match[1], values: attrs(match[0]) }));
+            if (!tags.length) throw new Error(`JUnit XML has no testsuite element: ${file}`);
+            const aggregate = tags.find(tag => tag.name === "testsuites");
+            const selected = aggregate && ["tests", "failures", "errors", "skipped"].every(key => key in aggregate.values)
+              ? [aggregate] : tags.filter(tag => tag.name === "testsuite");
+            for (const suite of selected) for (const key of ["tests", "failures", "errors", "skipped"]) {
+              totals[key] += suite.values[key] ?? 0;
+            }
+          }
+          console.log("Exact SQLCipher instrumentation acceptance:", JSON.stringify(totals));
+          if (totals.files === 0 || totals.tests !== 35 || totals.failures !== 0 || totals.errors !== 0 || totals.skipped !== 0) {
+            console.error("::error::Expected exactly 35 executed tests, zero failures, zero errors and zero skipped tests.");
+            process.exit(1);
+          }
+          NODE
 
       - name: Capture emulator, instrumentation and APK diagnostics
         if: always()
@@ -376,6 +400,9 @@ jobs:
           timeout -k 2s 8s adb logcat -b all -d -v threadtime '*:S' AndroidRuntime:E DEBUG:E libc:F linker:E ActivityManager:E ActivityTaskManager:E Instrumentation:E TestRunner:V SQLiteLog:E > "$diag_dir/logcat-startup-filtered.txt" 2>&1 || true
           if [[ -f "$log_dir/emulator.stdout-stderr.log" ]]; then cp "$log_dir/emulator.stdout-stderr.log" "$diag_dir/emulator.stdout-stderr.log"; fi
           if [[ -f "$log_dir/connectedDebugAndroidTest.log" ]]; then cp "$log_dir/connectedDebugAndroidTest.log" "$diag_dir/connectedDebugAndroidTest.log"; fi
+          if [[ -f "$log_dir/logcat-full.txt" ]]; then cp "$log_dir/logcat-full.txt" "$diag_dir/logcat-full.txt"; fi
+          if [[ -f "$log_dir/logcat-crash.txt" ]]; then cp "$log_dir/logcat-crash.txt" "$diag_dir/logcat-crash.txt"; fi
+          if [[ -f "$log_dir/emulator-build-fingerprint.txt" ]]; then cp "$log_dir/emulator-build-fingerprint.txt" "$diag_dir/emulator-build-fingerprint.txt"; fi
           if [[ -f "$log_dir/compile-native-gradle.log" ]]; then cp "$log_dir/compile-native-gradle.log" "$diag_dir/compile-native-gradle.log"; fi
           if [[ -f "$log_dir/compile-gradle-exit-code.txt" ]]; then cp "$log_dir/compile-gradle-exit-code.txt" "$diag_dir/compile-gradle-exit-code.txt"; fi
           for report in "$log_dir"/kotlin-*-dependency-insight.log; do
