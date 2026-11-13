@@ -137,3 +137,13 @@ test('Firebase native SDK baseline preserves Android API 23 compatibility', () =
   assert.doesNotMatch(patcher, /firebase-bom:35\.1\.0/);
   assert.match(patcher, /Preserve the app's API 23 floor/);
 });
+
+
+test('staging deployment keeps API-compatible npm install and probes verifier as Functions identity', () => {
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  assert.match(staging, /if \[ -f package-lock\.json \]/);
+  const deploy = read('.github/workflows/recovery-attestation-deploy.yml');
+  assert.match(deploy, /roles\/iam\.serviceAccountOpenIdTokenCreator/);
+  assert.match(deploy, /--impersonate-service-account="\$FUNCTIONS_SERVICE_ACCOUNT"/);
+  assert.doesNotMatch(deploy, /gcloud auth print-identity-token --audiences=/);
+});

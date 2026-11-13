@@ -30,3 +30,8 @@ If the APK is distributed outside Google Play, configure the App Check Play Inte
 6. Inspect Cloud Run, Functions and Android logs for OTP, raw phone, ID token, grant, PIN, recovery key or DEK leakage.
 
 Record immutable run URLs, exact SHA, project, service account identities, APK fingerprints and redacted probe outcomes. Do not copy secrets or token values into evidence. Production recovery stays disabled.
+
+
+## Deployment probe identity prerequisite
+
+The attestation deployment workflow probes the private Cloud Run service as the **Functions runtime service account**, not as the GitHub deploy identity. Grant the GitHub staging deploy service account only `roles/iam.serviceAccountOpenIdTokenCreator` on the Functions runtime service account. The workflow verifies this narrow binding and obtains a short-lived audience-bound OIDC token by impersonating the runtime identity. It does not grant the deploy identity Cloud Run invoker access.

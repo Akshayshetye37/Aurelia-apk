@@ -35,6 +35,7 @@ jobs:
           REGION: ${{ vars.GCP_REGION }}
           RUNTIME_SERVICE_ACCOUNT: ${{ vars.RECOVERY_ATTESTATION_SERVICE_ACCOUNT }}
           FUNCTIONS_SERVICE_ACCOUNT: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
           APP_PACKAGE: ${{ vars.ATTESTATION_APP_PACKAGE }}
           APP_MIN_VERSION: ${{ vars.ATTESTATION_APP_MIN_VERSION }}
           APP_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
@@ -45,6 +46,14 @@ jobs:
           done
           [[ "$APP_SIGNER_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]]
           [[ "$APP_MIN_VERSION" =~ ^[1-9][0-9]*$ ]]
+          SA_POLICY="$(gcloud iam service-accounts get-iam-policy "$FUNCTIONS_SERVICE_ACCOUNT" --project "$PROJECT_ID" --format=json)"
+          if ! echo "$SA_POLICY" | jq -e --arg member "serviceAccount:$DEPLOY_SERVICE_ACCOUNT" '
+            [.bindings[]? | select(.role=="roles/iam.serviceAccountOpenIdTokenCreator") |
+              .members[]? | select(. == $member)] | length == 1
+          ' >/dev/null; then
+            echo "::error::Grant roles/iam.serviceAccountOpenIdTokenCreator on the Functions runtime service account to the staging deploy service account."
+            exit 1
+          fi
 
       - name: Build isolated verifier image
         shell: bash
@@ -115,7 +124,7 @@ jobs:
             echo "::error::Unauthenticated verifier probe expected 401/403, received $unauth."
             exit 1
           fi
-          TOKEN="$(gcloud auth print-identity-token --audiences="$URL")"
+          TOKEN="$(gcloud auth print-identity-token --impersonate-service-account="$FUNCTIONS_SERVICE_ACCOUNT" --audiences="$URL" --include-email)"
           health="$(curl -sS -o "$RUNNER_TEMP/attestation-health.json" -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$URL/healthz")"
           if [[ "$health" != "200" ]]; then
             echo "::error::Authenticated verifier health probe failed with HTTP $health."
