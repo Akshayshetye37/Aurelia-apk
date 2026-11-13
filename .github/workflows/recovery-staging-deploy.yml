@@ -119,7 +119,7 @@ jobs:
           REGION: asia-south1
         run: |
           set -euo pipefail
-          functions=(registerRecoveryPhone createRecoveryAttestationChallenge verifyRecoveryDeviceAttestation registerRecoveryOwnerDevice acknowledgeRecoveryOwnerAlert issueRecoveryGrant consumeRecoveryGrant cancelRecoveryRequest)
+          functions=(createRecoveryAttestationChallenge verifyRecoveryDeviceAttestation registerRecoveryPhone exchangeOwnerEmailLink confirmRecoveryOwnerBinding registerRecoveryOwnerDevice acknowledgeRecoveryOwnerAlert issueRecoveryGrant consumeRecoveryGrant cancelRecoveryRequest cancelRecoveryPhoneChange activateRecoveryPhoneChange)
           for function_name in "${functions[@]}"; do
             url="https://${REGION}-${PROJECT_ID}.cloudfunctions.net/${function_name}"
             missing_code="$(curl -sS -o "$RUNNER_TEMP/appcheck-missing.json" -w '%{http_code}' -X POST "$url" -H 'Content-Type: application/json' --data '{"data":{}}')"

@@ -155,6 +155,7 @@ test('staging deployment probes missing and invalid App Check on all recovery ca
   assert.match(workflow, /X-Firebase-AppCheck: invalid-staging-probe-token/);
   for (const callable of ['registerRecoveryPhone', 'createRecoveryAttestationChallenge',
     'verifyRecoveryDeviceAttestation', 'registerRecoveryOwnerDevice',
+    'exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
     'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant', 'consumeRecoveryGrant',
-    'cancelRecoveryRequest']) assert.ok(workflow.includes(callable));
+    'cancelRecoveryRequest', 'cancelRecoveryPhoneChange', 'activateRecoveryPhoneChange']) assert.ok(workflow.includes(callable));
 });
