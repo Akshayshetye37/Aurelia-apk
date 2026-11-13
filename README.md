@@ -1,6 +1,14 @@
 # Aurelia PMS
 
-**MANDATORY PRODUCT PRINCIPLE — Our app works primarily on the primary device's local storage.**
+> **LOCAL-FIRST BY DEFAULT — YOUR PROPERTY DATA STAYS ON YOUR DEVICE.**
+>
+> Aurelia is designed to run primarily on the device where it is installed. Core property-management workflows use local device storage and do **not** require an internet connection, backend, remote server or cloud account to operate.
+>
+> **Cloud and backend services are optional.** If you choose to use a supported online service, you can connect your own backend, server or cloud environment and provide its required connection details through the app's supported configuration flow. You remain in control of whether those services are connected. If you do not configure them, Aurelia remains a local-first application.
+>
+> **Your data, your choice:** ordinary local workflows should remain available offline. Optional online features must not make local PMS operation dependent on a remote service. Cloud sync is separate and OFF by default.
+>
+> **Security:** never put production secrets, provider API keys, webhook secrets or private signing keys into the app, README, source code or chat. Sensitive provider credentials belong in the trusted backend's secret manager. Only enter connection credentials through a supported secure configuration flow.
 
 **Current remaining work:** [2026-11-09 end-to-end audit and implementation acceptance plan](./docs/REMAINING_WORK_AUDIT_2026-11-09.md). This is the current task list; it preserves local PMS operation as primary and treats internet/cloud as optional.
 
