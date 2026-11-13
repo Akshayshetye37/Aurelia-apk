@@ -189,6 +189,10 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, ownerAuth('different-owner-uid', tenantId)), 'wrong owner UID cannot acknowledge');
+  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: recoveryDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
+  }, ownerAuth(ownerUid, tenantId)),
+  'the recovery-requesting device cannot acknowledge its own owner alert');
   const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, ownerAuth(ownerUid, tenantId));
