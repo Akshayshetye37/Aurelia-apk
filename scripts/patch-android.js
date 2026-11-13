@@ -535,7 +535,10 @@ if (fs.existsSync(appGradleGroovy)) {
 const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
 
 function addFirebaseDependencies(contents, kotlinDsl) {
-  const bom = 'com.google.firebase:firebase-bom:35.1.0';
+  // Preserve the app's API 23 floor. Firebase BoM 35.1.0 moved Auth 25.0.0
+  // to API 24; BoM 34.12.0 pins Auth 24.0.1 and the API-23-compatible
+  // Functions, App Check and Messaging SDK lines.
+  const bom = 'com.google.firebase:firebase-bom:34.12.0';
   const auth = 'com.google.firebase:firebase-auth';
   const functions = 'com.google.firebase:firebase-functions';
   const appCheck = 'com.google.firebase:firebase-appcheck-playintegrity';

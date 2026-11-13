@@ -129,3 +129,10 @@ test('blocked Android notification channels cannot acknowledge owner alerts or s
   assert.match(activity, /getIdToken\(true\)/);
   assert.match(service, /if \(manager\.getNotificationChannel\(CHANNEL_ID\)\?\.importance == NotificationManager\.IMPORTANCE_NONE\) return/);
 });
+
+test('Firebase native SDK baseline preserves Android API 23 compatibility', () => {
+  const patcher = read('scripts/patch-android.js');
+  assert.match(patcher, /firebase-bom:34\.12\.0/);
+  assert.doesNotMatch(patcher, /firebase-bom:35\.1\.0/);
+  assert.match(patcher, /Preserve the app's API 23 floor/);
+});
