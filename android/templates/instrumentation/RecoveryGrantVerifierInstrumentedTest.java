@@ -115,6 +115,22 @@ public final class RecoveryGrantVerifierInstrumentedTest {
       assertEquals("invalid grant must never reach server consume", 0, networkCalls.get());
       assertFalse("invalid grant must leave recovery gate closed", RecoveryGate.isOpen());
     }
+
+    // Every rejected token above shares the legitimate JTI. Prove none of them
+    // burns it locally: the original, valid grant must still reach consume once.
+    java.util.concurrent.CountDownLatch validCompletion = new java.util.concurrent.CountDownLatch(1);
+    final boolean[] validAccepted = new boolean[] { false };
+    client.consumeAndArm(valid, NONCE, DID, TENANT,
+        SystemClock.elapsedRealtime(), accepted -> {
+          validAccepted[0] = accepted;
+          validCompletion.countDown();
+        });
+    assertTrue("valid grant must complete after rejected attempts",
+        validCompletion.await(5, java.util.concurrent.TimeUnit.SECONDS));
+    assertTrue("valid grant remains consumable after rejected attempts", validAccepted[0]);
+    assertEquals("only the valid grant reaches server consume", 1, networkCalls.get());
+    assertTrue("valid grant arms recovery only after server consumption", RecoveryGate.isOpen());
+    RecoveryGate.clear();
   }
 
   @Test public void grantUidMustMatchEncryptedOwnerBindingNotPhoneAuthUid() throws Exception {
