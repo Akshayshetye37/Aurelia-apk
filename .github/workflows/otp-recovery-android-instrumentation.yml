@@ -188,11 +188,73 @@ jobs:
           run_suite sqlcipher com.aurelia.pms.OtpRecoverySqlCipherInstrumentedTest
           run_suite recovery-phone-store com.aurelia.pms.security.AureliaSecurityInstrumentedTest#recoveryEnvelopeAndPhoneStoresRetainAuthenticatedKeystoreState
           run_suite grant-verifier com.aurelia.pms.security.RecoveryGrantVerifierInstrumentedTest
-          run_suite process-death-phase-one com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop
           adb_bin="$ANDROID_HOME/platform-tools/adb"
+          app_apk="app/build/outputs/apk/debug/app-debug.apk"
+          test_apk="app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
+          test_runner="com.aurelia.pms.test/androidx.test.runner.AndroidJUnitRunner"
+
+          # Gradle uninstalls the target app after connectedDebugAndroidTest. Install
+          # both APKs once, then use am instrument for both phases so Keystore and app
+          # data survive the host-issued force-stop between them.
+          test -f "$app_apk"
+          test -f "$test_apk"
+          "$adb_bin" install -r "$app_apk"
+          "$adb_bin" install -r "$test_apk"
+
+          run_instrumentation_test() {
+            local suite="$1"
+            local selector="$2"
+            local raw_log="$log_dir/$suite.log"
+            local suite_dir="$results_root/$suite"
+            local class_name="${selector%%#*}"
+            local method_name="${selector##*#}"
+            mkdir -p "$suite_dir"
+            set +e
+            "$adb_bin" shell am instrument -w -e class "$selector" "$test_runner" 2>&1 | tee "$raw_log"
+            local adb_status=${PIPESTATUS[0]}
+            set -e
+            echo "$adb_status" > "$log_dir/$suite-adb-exit-code.txt"
+            node --input-type=module - "$raw_log" "$suite_dir/TEST-$suite.xml" "$class_name" "$method_name" "$adb_status" <<'NODE'
+          import fs from "node:fs";
+          const [logPath, xmlPath, className, methodName, adbStatusText] = process.argv.slice(2);
+          const raw = fs.readFileSync(logPath, "utf8");
+          const adbStatus = Number(adbStatusText);
+          const declaredTests = [...raw.matchAll(/INSTRUMENTATION_STATUS: numtests=(\d+)/g)]
+            .map(match => Number(match[1]));
+          const completed = [...raw.matchAll(/INSTRUMENTATION_STATUS_CODE: 0\b/g)].length;
+          const negativeCodes = [...raw.matchAll(/INSTRUMENTATION_STATUS_CODE: (-\d+)/g)]
+            .map(match => Number(match[1]));
+          const observedMethods = [...raw.matchAll(/INSTRUMENTATION_STATUS: test=([^\r\n]+)/g)]
+            .map(match => match[1].trim());
+          const instrumentationCode = raw.match(/INSTRUMENTATION_CODE: (-?\d+)/)?.[1];
+          const testCount = declaredTests.length ? Math.max(...declaredTests) : 0;
+          const skipped = negativeCodes.some(code => code === -3 || code === -4) ? 1 : 0;
+          const failures = negativeCodes.some(code => code === -2) ? 1 : 0;
+          const passed = adbStatus === 0 && testCount === 1 && completed === 1 &&
+            negativeCodes.length === 0 && instrumentationCode === "-1" &&
+            observedMethods.includes(methodName) && /OK \(1 test\)/.test(raw);
+          const errors = passed || failures || skipped ? 0 : 1;
+          const escape = value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+          const failureXml = passed ? "" :
+            `<failure message="AndroidJUnitRunner did not report one successful, non-skipped test">${escape(raw.slice(-12000))}</failure>`;
+          const xml = `<?xml version="1.0" encoding="UTF-8"?>
+          <testsuite name="${escape(methodName)}" tests="${testCount}" failures="${failures}" errors="${errors}" skipped="${skipped}">
+            <testcase classname="${escape(className)}" name="${escape(methodName)}">${failureXml}</testcase>
+          </testsuite>`;
+          fs.writeFileSync(xmlPath, xml);
+          if (!passed) {
+            console.error(`::error::${methodName}: AndroidJUnitRunner did not prove exactly one successful test.`);
+            process.exit(1);
+          }
+          NODE
+          }
+
+          phase_one="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop"
+          phase_two="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop"
+          run_instrumentation_test process-death-phase-one "$phase_one"
+
           launch_target_app() {
-            # Instrumentation can shut down the target process when its runner exits.
-            # Explicitly launch the installed app before observing and force-stopping it.
             "$adb_bin" shell monkey -p com.aurelia.pms 1
           }
           wait_for_target_pid() {
@@ -206,7 +268,7 @@ jobs:
           }
           launch_target_app
           before_pid="$(wait_for_target_pid)" || {
-            echo "::error::Could not launch the target app after process-death phase one."
+            echo "::error::Could not launch the installed target app after process-death phase one."
             exit 1
           }
           "$adb_bin" shell am force-stop com.aurelia.pms
@@ -220,10 +282,11 @@ jobs:
             echo "::error::adb force-stop did not terminate the target app process."
             exit 1
           fi
-          run_suite process-death-phase-two com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop
+
+          run_instrumentation_test process-death-phase-two "$phase_two"
           launch_target_app
           after_pid="$(wait_for_target_pid)" || {
-            echo "::error::Could not relaunch the target app after process-death phase two."
+            echo "::error::Could not relaunch the installed target app after process-death phase two."
             exit 1
           }
           if [[ "$after_pid" == "$before_pid" ]]; then
