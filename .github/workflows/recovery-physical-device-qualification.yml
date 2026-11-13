@@ -51,7 +51,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           run_json="$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID")"
           echo "$run_json" | jq -e --arg sha "$CANDIDATE_SHA" '
-            .head_sha == $sha and .status == "completed" and .conclusion == "success" and
+            .head_sha == $sha and .head_branch == "work/p0-storage-hardening" and
+            .status == "completed" and .conclusion == "success" and
             (.path | endswith("recovery-staging-deploy.yml"))
           ' >/dev/null
 

@@ -57,6 +57,10 @@ jobs:
           KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/work/p0-storage-hardening" ]]; then
+            echo "::error::Recovery staging deployment is allowed only from work/p0-storage-hardening."
+            exit 1
+          fi
           for name in PROJECT_ID PRODUCTION_PROJECT_ID REGION FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS FIREBASE_WEB_API_KEY APP_CHECK_REGISTERED APP_CHECK_SIGNER_SHA256 ATTESTATION_SIGNER_SHA256 GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [[ -z "${!name}" ]]; then echo "::error::Missing recovery-staging environment setting: $name"; exit 1; fi
           done

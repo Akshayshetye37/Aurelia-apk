@@ -36,3 +36,6 @@ For each case record the candidate SHA, staging project ID, APK SHA-256, signing
 
 
 **Android API floor:** The app retains its API 23 local-first support. Hardware-attested recovery enrollment requires API 24 or later because Android added `KeyGenParameterSpec.Builder.setAttestationChallenge` in API 24. On API 23, the app fails recovery enrollment closed before modifying any existing Keystore alias; local PIN/biometric use remains available.
+
+
+All recovery staging and verifier deployment workflows are restricted to `work/p0-storage-hardening`. The physical-device workflow also verifies that the successful staging artifact originated from that branch and the exact candidate SHA.

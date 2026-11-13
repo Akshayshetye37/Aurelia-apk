@@ -268,3 +268,12 @@ test('physical-device Gate 4 workflow reboots between committed PIN B and post-r
   assert.match(workflow, /phaseTwoAfterDeviceRebootUnlocksPinBAndReadsDatabase/);
   assert.match(workflow, /RUNNING_UNLOCKED/);
 });
+
+
+test('recovery deployment and physical qualification are pinned to the working branch', () => {
+  for (const path of [
+    '.github/workflows/recovery-staging-deploy.yml',
+    '.github/workflows/recovery-attestation-deploy.yml'
+  ]) assert.match(read(path), /refs\/heads\/work\/p0-storage-hardening/);
+  assert.match(read('.github/workflows/recovery-physical-device-qualification.yml'), /\.head_branch == "work\/p0-storage-hardening"/);
+});
