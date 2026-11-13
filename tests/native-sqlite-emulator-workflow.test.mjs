@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const workflow = fs.readFileSync('.github/workflows/native-sqlite-contract.yml', 'utf8');
+const repositoryInstrumentation = fs.readFileSync(
+  'android/templates/instrumentation/LocalPmsRepositoryInstrumentedTest.java', 'utf8'
+);
+const repositoryTestCount = [...repositoryInstrumentation.matchAll(/@Test\b/g)].length;
 
 test('native SQLite instrumentation enables KVM before starting the emulator', () => {
   const kvm = workflow.indexOf('- name: Enable and require hardware KVM before any Android work');
@@ -24,11 +28,14 @@ test('native SQLite instrumentation fails closed instead of using software emula
 
 
 test('native SQLite gate requires non-zero execution and zero failures, errors and skips', () => {
-  assert.ok(workflow.includes('totals.tests !== 35'));
+  // The workflow selects only LocalPmsRepositoryInstrumentedTest. The exact
+  // count is pinned to the 29 @Test methods present on the historical baseline.
+  assert.equal(repositoryTestCount, 29);
+  assert.ok(workflow.includes('totals.tests !== 29'));
   assert.ok(workflow.includes('totals.failures !== 0'));
   assert.ok(workflow.includes('totals.errors !== 0'));
   assert.ok(workflow.includes('totals.skipped !== 0'));
-  assert.ok(workflow.includes('Expected exactly 35 executed tests, zero failures, zero errors and zero skipped tests.'));
+  assert.ok(workflow.includes('Expected exactly 29 executed repository tests, zero failures, zero errors and zero skipped tests.'));
 });
 
 
