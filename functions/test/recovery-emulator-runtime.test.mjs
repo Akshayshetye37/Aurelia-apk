@@ -195,11 +195,11 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   'the recovery-requesting device cannot acknowledge its own owner alert');
   const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' }));
   assert.equal(acknowledged.acknowledged, true);
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId)), 'owner acknowledgement token is single-use');
+  }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' })), 'owner acknowledgement token is single-use');
   assert.ok(acknowledged.eligibleAt >= Date.now() + 23 * 60 * 60_000);
   cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(cooldown.state, 'APPROVED');
@@ -494,7 +494,7 @@ test('independent primary owner can cancel during alert hold and cancellation re
   'future owner auth_time cannot cancel');
   const cancelled = await callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: independentDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
+  }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' }));
   assert.equal(cancelled.cancelled, true, 'an independently enrolled, attested email-link owner device may cancel');
   const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(state.state, 'CANCELLED');
@@ -510,7 +510,7 @@ test('independent primary owner can cancel during alert hold and cancellation re
     'cancellation audit is limited to tenant, hashed device identity, event type and timestamp');
   const replayedCancellation = await callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: independentDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
+  }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' }));
   assert.equal(replayedCancellation.cancelled, false, 'replayed cancellation is a terminal no-op');
   const cancellationEvents = await db.collection('recoverySecurityEvents')
     .where('tenantId', '==', tenantId).get();
