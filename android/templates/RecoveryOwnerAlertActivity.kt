@@ -128,7 +128,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
         tenantInput = EditText(this).apply {
             hint = "Tenant ID supplied by your administrator"
             inputType = InputType.TYPE_CLASS_TEXT
-            singleLine = true
+            setSingleLine(true)
             setText(tenantId)
             visibility = if (hasAlertContext) View.GONE else View.VISIBLE
         }
