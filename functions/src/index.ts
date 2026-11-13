@@ -358,11 +358,13 @@ export const registerRecoveryPhone = onCall(
 export const exchangeOwnerEmailLink = onCall(
   { region: REGION, enforceAppCheck: true },
   async request => {
-    requireRecoveryEnabled();
     const tenantId = requiredString(request.data?.tenantId, 128);
     const deviceIdHash = requiredString(request.data?.deviceIdHash, 128);
     const purpose = requiredString(request.data?.purpose, 16);
     if (purpose !== "alert" && purpose !== "enrollment") throw GENERIC;
+    // Owner alert authentication must remain available so a primary owner can
+    // cancel a pending request even while recovery issuance is disabled.
+    if (purpose === "enrollment") requireRecoveryEnabled();
     const email = requiredString(request.data?.email, 254).trim().toLowerCase();
     const emailLink = requiredString(request.data?.emailLink, 4096);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw GENERIC;

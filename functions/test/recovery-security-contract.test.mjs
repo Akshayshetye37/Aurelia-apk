@@ -308,7 +308,8 @@ test('Android Play Integrity App Check bootstrap is installed before cloud recov
 test('owner email-link exchange verifies the one-time link before minting primary factor claims', () => {
   const exchange = functions.slice(functions.indexOf('export const exchangeOwnerEmailLink'), functions.indexOf('export const confirmRecoveryOwnerBinding'));
   assert.match(exchange, /enforceAppCheck: true/);
-  assert.match(exchange, /requireRecoveryEnabled\(\)/);
+  assert.match(exchange, /purpose === "enrollment"\) requireRecoveryEnabled\(\)/);
+  assert.doesNotMatch(exchange, /async request => \{\s*requireRecoveryEnabled\(\)/);
   assert.match(exchange, /accounts:signInWithEmailLink/);
   assert.match(exchange, /link\.protocol !== "https:"/);
   assert.match(exchange, /link\.searchParams\.get\("apiKey"\) !== apiKey/);
