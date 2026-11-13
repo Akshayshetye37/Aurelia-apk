@@ -21,15 +21,15 @@ test("recovery workflow preserves separate phase-one and phase-two process-death
   assert.ok(workflow.includes('run_instrumentation_test process-death-phase-two "$phase_two"'));
 });
 
-test("host explicitly launches and observes the target process before force-stop", () => {
-  assert.ok(workflow.includes('launch_target_app()'));
-  assert.ok(workflow.includes('"$adb_bin" shell monkey -p com.aurelia.pms 1'));
+test("host force-stops the exact phase-one process without manufacturing a replacement", () => {
   assert.ok(workflow.includes('before_pid="$(wait_for_target_pid)"'));
+  assert.ok(workflow.includes('Phase-one instrumentation process exited before the explicit force-stop boundary.'));
   assert.ok(workflow.includes('install -r "$app_apk"'));
   assert.ok(workflow.includes('install -r "$test_apk"'));
   assert.ok(workflow.includes('shell am instrument -w -e class "$selector"'));
   assert.ok(workflow.includes('"$adb_bin" shell am force-stop com.aurelia.pms'));
   assert.ok(workflow.includes('if [[ -n "$after_stop" ]]'));
+  assert.ok(!workflow.includes('monkey -p com.aurelia.pms'));
 });
 
 test("phase two is followed by a fresh app launch and distinct process identity", () => {
@@ -37,7 +37,8 @@ test("phase two is followed by a fresh app launch and distinct process identity"
   const relaunch = workflow.indexOf("launch_target_app", phaseTwo);
   const pidCheck = workflow.indexOf('if [[ "$after_pid" == "$before_pid" ]]', phaseTwo);
   assert.ok(phaseTwo >= 0 && relaunch > phaseTwo && pidCheck > relaunch);
-  assert.ok(workflow.includes("Phase two did not produce a newly started target app process."));
+  assert.ok(workflow.includes("Phase-two instrumentation did not leave a newly started target process."));
+  assert.ok(!workflow.includes("launch_target_app"));
 });
 
 test("recovery emulator still requires KVM and refuses software emulation", () => {
