@@ -73,10 +73,13 @@ test('Firebase ID token is returned only in memory after the isolated Auth sessi
 
 test('recovery phone registration is owner-authenticated and tenant-bound', () => {
   const registration = functions.slice(functions.indexOf('export const registerRecoveryPhone'), functions.indexOf('export const issueRecoveryGrant'));
-  assert.match(registration, /request\.auth/);
-  assert.match(registration, /auth\.token\.role !== "owner"/);
-  assert.match(registration, /ownerAge >= 300/);
-  assert.match(registration, /auth\.token\.tenantId !== tenantId/);
+  assert.match(registration, /requireFreshPrimaryOwner\(request\)/);
+  assert.match(registration, /owner\.tenantId !== tenantId/);
+  const primaryOwnerGuard = functions.slice(functions.indexOf('function requireFreshPrimaryOwner'), functions.indexOf('async function requireRecoveryOwnerBinding'));
+  assert.match(primaryOwnerGuard, /authTime > now/);
+  assert.match(primaryOwnerGuard, /now - authTime >= 300/);
+  assert.match(primaryOwnerGuard, /ownerAuthFactor/);
+  assert.match(primaryOwnerGuard, /ownerAuthFactorAuthTime/);
 });
 
 test('recovery grants are bound to the device key registered by the authenticated owner', () => {
@@ -179,7 +182,7 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(functions, /registerRecoveryOwnerDevice = onCall/);
   const registerAlertDevice = functions.slice(functions.indexOf('export const registerRecoveryOwnerDevice'), functions.indexOf('export const acknowledgeRecoveryOwnerAlert'));
   assert.match(registerAlertDevice, /if \(!existingDevice\)/);
-  assert.match(registerAlertDevice, /ownerAge >= 300/);
+  assert.match(registerAlertDevice, /requireFreshPrimaryOwner\(request\)/);
   assert.match(registerAlertDevice, /existingDevice\.ownerUid !== auth\.uid/);
   assert.match(functions, /recoveryOwnerDevices/);
   assert.ok(functions.includes('cooldown.alertedDeviceHashes.includes(deviceIdHash)'));
@@ -312,6 +315,9 @@ test('owner email-link exchange verifies the one-time link before minting primar
   assert.match(exchange, /ownerAuthFactor: "email_link"/);
   assert.match(exchange, /createCustomToken/);
   assert.match(functions, /provider === "custom"/);
-  assert.match(functions, /auth\.token\.email_verified === true/);
+  assert.match(functions, /auth\?\.token\.email_verified === true/);
   assert.match(functions, /factorAuthTime > authTime/);
+  assert.match(functions, /ackTokenExpiresAt/);
+  assert.match(functions, /Number\(event\.ackTokenExpiresAt\) <= Date\.now\(\)/);
+  assert.match(functions, /pendingState === "CANCELLED"/);
 });
