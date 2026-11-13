@@ -107,7 +107,7 @@ function phoneOnlyOwnerAuth(uid, tenantId) {
   return session;
 }
 
-function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, ownerDeviceHashes }) {
+async function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, ownerDeviceHashes }) {
   await db.doc(`tenants/${tenantId}/security/recoveryOwner`).set({
     tenantId, ownerUid, createdAt: new Date(), provisionedBy: 'emulator-fixture'
   });
