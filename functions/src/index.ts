@@ -594,7 +594,10 @@ export const issueRecoveryGrant = onCall(
       const pendingState = pending?.state;
       const expiredIssuedGrant = pendingState === "ISSUED" &&
         Number(pending?.grantExpiresAt) <= nowMs;
-      if (!pending || pendingState === "CONSUMED") {
+      // Cancellation is terminal for the old hold, but a later fresh OTP may
+      // start a new alert cycle. The cancellation transaction has already
+      // revoked the previous JTI and erased all pending hold linkage.
+      if (!pending || pendingState === "CONSUMED" || pendingState === "CANCELLED") {
         tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
           expiresAt: nowMs + 5 * 60_000 });
         const eventRef = db.collection("recoverySecurityEvents").doc(randomUUID());

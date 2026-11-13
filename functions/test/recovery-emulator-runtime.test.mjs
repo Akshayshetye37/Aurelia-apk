@@ -1028,3 +1028,33 @@ test('one-time Firebase email link mints a fresh owner session only for the enro
     auth.createCustomToken = originalCreateCustomToken;
   }
 });
+
+test('owner cancellation permits a fresh OTP to start a new alert cycle', async () => {
+  const tenantId = 'tenant-emulator-cancel-restart';
+  const ownerUid = 'owner-emulator-cancel-restart';
+  const phone = '+15555550113';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  const ownerDeviceHash = deviceHashFor(tenantId + ':owner');
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, ownerDeviceHash] });
+  const first = await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'f'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phone)
+  });
+  assert.equal(first.status, 'COOLDOWN');
+  const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
+  const firstCooldown = (await cooldownRef.get()).data();
+  assert.equal(firstCooldown.state, 'ALERT_PENDING');
+  const cancelled = await callable(functions.cancelRecoveryRequest, {
+    tenantId, deviceIdHash: ownerDeviceHash
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(cancelled.cancelled, true);
+  const second = await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'g'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phone)
+  });
+  assert.equal(second.status, 'COOLDOWN');
+  const restarted = (await cooldownRef.get()).data();
+  assert.equal(restarted.state, 'ALERT_PENDING');
+  assert.notEqual(restarted.alertEventId, firstCooldown.alertEventId);
+});
