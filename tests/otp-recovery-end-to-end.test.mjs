@@ -277,3 +277,11 @@ test('recovery deployment and physical qualification are pinned to the working b
   ]) assert.match(read(path), /refs\/heads\/work\/p0-storage-hardening/);
   assert.match(read('.github/workflows/recovery-physical-device-qualification.yml'), /\.head_branch == "work\/p0-storage-hardening"/);
 });
+
+
+test('attestation deployment separates Cloud Run runtime, Functions caller and deploy identities', () => {
+  const workflow = read('.github/workflows/recovery-attestation-deploy.yml');
+  assert.match(workflow, /RUNTIME_SERVICE_ACCOUNT.*FUNCTIONS_SERVICE_ACCOUNT/);
+  assert.match(workflow, /RUNTIME_SERVICE_ACCOUNT.*DEPLOY_SERVICE_ACCOUNT/);
+  assert.match(workflow, /must be three distinct service accounts/);
+});

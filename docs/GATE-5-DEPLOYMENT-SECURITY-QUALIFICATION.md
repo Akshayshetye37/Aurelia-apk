@@ -52,3 +52,6 @@ The read-only production flag audit also requires `GCP_PROJECT_ID` to equal `PRO
 
 
 The staging deploy and read-only production audit workflows resolve the deployed service account for each recovery callable that uses Secret Manager, then verify secret-level `roles/secretmanager.secretAccessor` for exactly the declared secrets. The owner-alert acknowledgement callable explicitly binds `PHONE_PEPPER`; missing runtime secret bindings or IAM grants fail deployment qualification.
+
+
+The Cloud Run verifier runtime service account (`RECOVERY_ATTESTATION_SERVICE_ACCOUNT`), the Firebase Functions caller service account (`RECOVERY_FUNCTIONS_SERVICE_ACCOUNT`) and the WIF deployment service account (`GCP_DEPLOY_SERVICE_ACCOUNT`) must be three distinct identities. Only the Functions caller receives `roles/run.invoker`; the deploy identity receives `roles/iam.serviceAccountOpenIdTokenCreator` on the caller identity for the authenticated deployment probe.

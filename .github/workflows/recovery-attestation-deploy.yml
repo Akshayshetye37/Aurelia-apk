@@ -53,8 +53,10 @@ jobs:
             echo "::error::Staging verifier deployment is blocked because GCP_PROJECT_ID equals the configured production project."
             exit 1
           fi
-          if [[ "$DEPLOY_SERVICE_ACCOUNT" == "$FUNCTIONS_SERVICE_ACCOUNT" ]]; then
-            echo "::error::Use separate deploy and Functions runtime service accounts; self-impersonation is not supported."
+          if [[ "$DEPLOY_SERVICE_ACCOUNT" == "$FUNCTIONS_SERVICE_ACCOUNT" ||
+                "$RUNTIME_SERVICE_ACCOUNT" == "$FUNCTIONS_SERVICE_ACCOUNT" ||
+                "$RUNTIME_SERVICE_ACCOUNT" == "$DEPLOY_SERVICE_ACCOUNT" ]]; then
+            echo "::error::Cloud Run runtime, Functions caller and deploy identities must be three distinct service accounts."
             exit 1
           fi
           [[ "$APP_SIGNER_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]]
