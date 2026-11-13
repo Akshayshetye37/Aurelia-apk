@@ -13,6 +13,7 @@ on:
       - 'functions/test/**'
       - 'functions/src/**'
       - 'tests/otp-recovery-*.test.mjs'
+      - 'tests/native-security-template.test.mjs'
       - '.github/workflows/recovery-functions.yml'
       - '.github/workflows/recovery-attestation-ci.yml'
       - '.github/workflows/otp-recovery-android-instrumentation.yml'
@@ -21,6 +22,7 @@ on:
       - 'android/templates/**'
       - 'scripts/patch-android.js'
       - 'scripts/verify-android-instrumentation-results.mjs'
+      - 'tests/native-security-template.test.mjs'
       - '.github/workflows/otp-recovery-android-instrumentation.yml'
 
 permissions:
