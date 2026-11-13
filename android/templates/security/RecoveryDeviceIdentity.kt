@@ -43,7 +43,8 @@ object RecoveryDeviceIdentity {
     fun createAttestedIdentity(challenge: ByteArray): AttestedIdentity {
         require(challenge.size in 16..128) { "Server attestation challenge length is invalid." }
         // setAttestationChallenge was added in API 24. Keep API 23 available for
-        // local PIN/biometric use, but fail recovery enrollment closed before
+        // local PIN unlock; biometric-vault enrollment and hardware-attested
+        // recovery both require API 24. Fail recovery enrollment closed before
         // touching any existing Keystore alias on unsupported Android versions.
         if (Build.VERSION.SDK_INT < 24) {
             throw SecurityException("Hardware-attested recovery enrollment requires Android 7.0 or later.")

@@ -61,3 +61,6 @@
 - Android instrumentation CI now prepares a PIN-B recovery envelope without committing it, persists the recovery-key fixture only under a test-only Android Keystore AES-GCM key, executes host-side `adb shell am force-stop`, then proves PIN A and the recovery key still work, PIN B was not committed, and PIN B can subsequently open the original SQLCipher data. This is emulator evidence, not physical-device Gate 4.
 - Staging deployment, real SMS, physical-device tests, production IAM/App Check probes and owner sign-off require configured external environments and remain unqualified until actual run evidence is recorded.
 - See `docs/GATE-3-REAL-SMS-STAGING-QUALIFICATION.md`, `docs/GATE-4-PHYSICAL-DEVICE-RECOVERY-QUALIFICATION.md`, `docs/GATE-5-DEPLOYMENT-SECURITY-QUALIFICATION.md` and `docs/GATE-6-RELEASE-SIGNOFF.md`.
+
+
+- Android API compatibility: API 23 remains local-PIN-only. Biometric-vault enrollment and hardware-attested recovery enrollment require API 24+; API 23 recovery fails closed before altering existing Keystore aliases.
