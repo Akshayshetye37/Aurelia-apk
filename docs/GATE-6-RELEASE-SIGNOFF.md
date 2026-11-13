@@ -25,6 +25,7 @@ The release candidate must be one immutable 40-character Git commit SHA on `work
 |---|---|
 | Candidate SHA | NOT FROZEN |
 | Android APK SHA-256 | NOT BUILT |
+| Android instrumentation APK SHA-256 | NOT BUILT |
 | APK signer SHA-1 | NOT BUILT |
 | APK signer SHA-256 | NOT BUILT |
 | Staging Firebase project ID | NOT CONFIGURED |

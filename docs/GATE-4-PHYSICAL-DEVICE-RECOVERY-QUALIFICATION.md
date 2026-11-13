@@ -4,6 +4,7 @@
 
 ## Entry criteria
 
+- A dedicated Linux self-hosted runner labeled `aurelia-android-device` is online with Android platform-tools, build-tools (`apksigner`), `jq`, `curl` and USB access to one authorized physical test handset. The runner must be isolated from production credentials and must not log/store device serials.
 - Gate 1 same-DEK SQLCipher instrumentation is PASS for the candidate SHA.
 - Gate 2 Firebase Emulator grant issue/consume/replay and negative-claim tests are PASS.
 - Gate 3 staging APK workflow completed successfully for the same candidate SHA; artifact SHA-256 and APK signing SHA-1/SHA-256 are recorded.
@@ -66,6 +67,7 @@ All cases below must be run on the physical handset. Capture timestamped, redact
 ## Execution notes
 
 - Use the exact approved release APK and companion release-signed androidTest APK from the same Gate 3 artifact. The artifact must contain `app-release.apk`, `app-release-androidTest.apk`, their SHA-256 values and both certificate reports. The app and instrumentation APK signer SHA-256 values must match. Do not build or install a different candidate during the run.
+- Dispatch the physical workflow with the candidate SHA, successful staging run ID and a redacted device label. It rejects emulators, API levels below 24, unlocked bootloaders and non-green verified boot.
 - Run the automated physical-device subset using `.github/workflows/recovery-physical-device-qualification.yml` on the dedicated self-hosted Android device runner. The workflow verifies the staging artifact's originating SHA, physical/locked boot state, signer match and runs the local SQLCipher, grant-preflight and force-stop recovery instrumentation suites. Real SMS, independent owner-device alert/cancellation, lock-screen changes and reboot qualification remain separate Gate 4 cases.
 - Capture device build fingerprint, Android API, model and package version before testing. Store serial privately; record only redacted device label here.
 - For force-stop cases, record command and timestamp. Force-stop/relaunch is not a substitute for the separate reboot case.

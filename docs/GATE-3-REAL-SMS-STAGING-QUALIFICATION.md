@@ -11,7 +11,7 @@ Create the GitHub Environment `recovery-staging` and configure:
 - Secret Manager versions in the staging project: `PHONE_PEPPER`, `RECOVERY_SIGNING_KEY_PKCS8`.
 - The signing public key ring must contain the active `RECOVERY_SIGNING_KEY_ID`. The private key is never stored in GitHub variables or this repository.
 
-Run `Recovery staging deployment and APK` only after the private attestation verifier is deployed. The workflow sets `RECOVERY_ENABLED=true` only in this staging project, deploys Functions, builds a release-signed APK with the staging Firebase configuration and uploads the APK plus SHA-256/certificate fingerprints. Production remains disabled.
+Run `Recovery staging deployment and APK` only after the private attestation verifier is deployed. The workflow sets `RECOVERY_ENABLED=true` only in this staging project, deploys Functions, probes missing/invalid App Check tokens on every recovery callable, then builds a release-signed app APK and matching release-signed androidTest APK with the staging Firebase configuration. It verifies that both APKs use the configured app signer and uploads both artifacts plus their SHA-256/certificate fingerprints (7-day retention). Production remains disabled.
 
 ## Real-device test matrix
 
@@ -26,6 +26,7 @@ Run `Recovery staging deployment and APK` only after the private attestation ver
 | G3-07 | Submit wrong tenant, UID, device, nonce, signature, key ID, expired and replayed grants. | Every invalid grant rejected before the recovery gate arms. |
 | G3-08 | Complete recovery using the offline recovery key. | SMS and grant authorize the workflow only; neither receives or derives the DEK. The offline key unwraps the original DEK and PIN B wraps that same DEK. |
 | G3-09 | Inspect app files, shared preferences and logcat. | No plaintext PIN, OTP, recovery key, DEK, JWT or raw phone number. |
+| G3-10 | Verify staging release APK and companion instrumentation APK. | Both artifacts originate from the same SHA, have matching approved signer SHA-256, and their separate APK SHA-256 values are recorded. |
 
 ## Evidence record
 
