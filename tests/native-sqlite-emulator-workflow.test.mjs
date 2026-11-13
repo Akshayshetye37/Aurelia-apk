@@ -33,6 +33,6 @@ test('native SQLite gate requires non-zero execution and zero failures, errors a
 
 
 test('nested emulator action scripts use a workspace log path instead of missing RUNNER_TEMP', () => {
-  assert.equal((workflow.match(/log_dir="\\$PWD\/\.\.\/\.aurelia-emulator"/g) || []).length, 2);
+  assert.equal((workflow.match(/log_dir="\$PWD\/\.\.\/\.aurelia-emulator"/g) || []).length, 2);
   assert.ok(workflow.includes('log_dir=".aurelia-emulator"'));
 });
