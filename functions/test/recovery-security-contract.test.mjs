@@ -335,3 +335,13 @@ test('owner email-link enrollment does not require an attested device key before
   assert.match(exchange, /if \(purpose === "alert"\)/);
   assert.doesNotMatch(exchange.slice(0, exchange.indexOf('if (purpose === "alert")')), /requiredString\(request\.data\?\.deviceIdHash/);
 });
+
+
+test('owner alert acknowledgement binds PHONE_PEPPER as a deployed callable secret', () => {
+  const acknowledgement = functions.slice(
+    functions.indexOf('export const acknowledgeRecoveryOwnerAlert'),
+    functions.indexOf('export const issueRecoveryGrant')
+  );
+  assert.match(acknowledgement, /secrets: \[PHONE_PEPPER\]/);
+  assert.match(acknowledgement, /ownerAckTokenDigest/);
+});

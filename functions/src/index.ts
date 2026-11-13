@@ -474,7 +474,7 @@ export const registerRecoveryOwnerDevice = onCall(
 
 /** The owner app acknowledges that the recovery alert was posted on the attested device. */
 export const acknowledgeRecoveryOwnerAlert = onCall(
-  { region: REGION, enforceAppCheck: true },
+  { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER] },
   async request => {
     requireRecoveryEnabled();
     const owner = requireFreshPrimaryOwner(request);
