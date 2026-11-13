@@ -35,3 +35,8 @@ Record immutable run URLs, exact SHA, project, service account identities, APK f
 ## Deployment probe identity prerequisite
 
 The attestation deployment workflow probes the private Cloud Run service as the **Functions runtime service account**, not as the GitHub deploy identity. Grant the GitHub staging deploy service account only `roles/iam.serviceAccountOpenIdTokenCreator` on the Functions runtime service account. The workflow verifies this narrow binding and obtains a short-lived audience-bound OIDC token by impersonating the runtime identity. It does not grant the deploy identity Cloud Run invoker access.
+
+
+## Staging App Check probes
+
+The staging deploy workflow sends missing-token and malformed-token callable requests to each recovery endpoint and requires HTTP 401/403 before it builds the APK. A valid Play Integrity token must be exercised from a real staging handset; emulator/source tests are not a substitute. Never register a debug App Check token in production. If a debug provider is needed for isolated staging diagnostics, its token must be registered only in the staging Firebase project and removed after testing.

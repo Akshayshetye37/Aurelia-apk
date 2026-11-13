@@ -147,3 +147,14 @@ test('staging deployment keeps API-compatible npm install and probes verifier as
   assert.match(deploy, /--impersonate-service-account="\$FUNCTIONS_SERVICE_ACCOUNT"/);
   assert.doesNotMatch(deploy, /gcloud auth print-identity-token --audiences=/);
 });
+
+
+test('staging deployment probes missing and invalid App Check on all recovery callables', () => {
+  const workflow = read('.github/workflows/recovery-staging-deploy.yml');
+  assert.match(workflow, /Probe missing and invalid App Check tokens/);
+  assert.match(workflow, /X-Firebase-AppCheck: invalid-staging-probe-token/);
+  for (const callable of ['registerRecoveryPhone', 'createRecoveryAttestationChallenge',
+    'verifyRecoveryDeviceAttestation', 'registerRecoveryOwnerDevice',
+    'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant', 'consumeRecoveryGrant',
+    'cancelRecoveryRequest']) assert.ok(workflow.includes(callable));
+});

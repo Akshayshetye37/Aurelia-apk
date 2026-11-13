@@ -112,6 +112,29 @@ jobs:
           ' >/dev/null
           echo "Staging recovery functions deployed with the configured service account and RECOVERY_ENABLED=true."
 
+      - name: Probe missing and invalid App Check tokens on every recovery callable
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: asia-south1
+        run: |
+          set -euo pipefail
+          functions=(registerRecoveryPhone createRecoveryAttestationChallenge verifyRecoveryDeviceAttestation registerRecoveryOwnerDevice acknowledgeRecoveryOwnerAlert issueRecoveryGrant consumeRecoveryGrant cancelRecoveryRequest)
+          for function_name in "${functions[@]}"; do
+            url="https://${REGION}-${PROJECT_ID}.cloudfunctions.net/${function_name}"
+            missing_code="$(curl -sS -o "$RUNNER_TEMP/appcheck-missing.json" -w '%{http_code}' -X POST "$url" -H 'Content-Type: application/json' --data '{"data":{}}')"
+            if [[ "$missing_code" != "401" && "$missing_code" != "403" ]]; then
+              echo "::error::${function_name} accepted a request without an App Check token (HTTP $missing_code)."
+              exit 1
+            fi
+            invalid_code="$(curl -sS -o "$RUNNER_TEMP/appcheck-invalid.json" -w '%{http_code}' -X POST "$url" -H 'Content-Type: application/json' -H 'X-Firebase-AppCheck: invalid-staging-probe-token' --data '{"data":{}}')"
+            if [[ "$invalid_code" != "401" && "$invalid_code" != "403" ]]; then
+              echo "::error::${function_name} did not reject an invalid App Check token (HTTP $invalid_code)."
+              exit 1
+            fi
+            echo "PASS: ${function_name} rejects missing and invalid App Check tokens."
+          done
+
       - name: Generate Android project and inject staging Firebase config
         shell: bash
         env:
