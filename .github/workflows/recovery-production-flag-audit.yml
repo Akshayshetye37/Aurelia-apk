@@ -22,10 +22,15 @@ jobs:
         shell: bash
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
           REGION: ${{ vars.GCP_REGION }}
         run: |
           set -euo pipefail
-          test -n "$PROJECT_ID" && test -n "$REGION"
+          test -n "$PROJECT_ID" && test -n "$PRODUCTION_PROJECT_ID" && test -n "$REGION"
+          if [[ "$PROJECT_ID" != "$PRODUCTION_PROJECT_ID" ]]; then
+            echo "::error::Production audit GCP_PROJECT_ID does not match PRODUCTION_GCP_PROJECT_ID."
+            exit 1
+          fi
           gcloud config set project "$PROJECT_ID"
           FUNCTIONS="$(gcloud functions list --gen2 --project "$PROJECT_ID" --regions "asia-south1" --format=json)"
           mapfile -t function_names < <(echo "$FUNCTIONS" | jq -r '.[] | select(.name | test("recovery|attestation"; "i")) | .name | split("/")[-1]')

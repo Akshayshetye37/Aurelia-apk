@@ -238,3 +238,10 @@ test('staging deployment workflows refuse to target the production Firebase proj
     assert.match(workflow, /PROJECT_ID" == "\$PRODUCTION_PROJECT_ID/);
   }
 });
+
+
+test('production flag audit proves it targets the configured production project', () => {
+  const workflow = read('.github/workflows/recovery-production-flag-audit.yml');
+  assert.match(workflow, /PRODUCTION_PROJECT_ID: \$\{\{ vars\.PRODUCTION_GCP_PROJECT_ID \}\}/);
+  assert.match(workflow, /PROJECT_ID" != "\$PRODUCTION_PROJECT_ID/);
+});

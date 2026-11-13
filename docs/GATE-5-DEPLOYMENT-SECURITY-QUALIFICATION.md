@@ -46,3 +46,6 @@ The staging deploy service account and Functions runtime service account must be
 
 
 **Staging/production separation:** Configure `PRODUCTION_GCP_PROJECT_ID` in the `recovery-staging` GitHub Environment. Both staging deployment workflows fail if `GCP_PROJECT_ID` equals that production project ID. Do not reuse the production Firebase project, signing private key or test phone numbers in staging.
+
+
+The read-only production flag audit also requires `GCP_PROJECT_ID` to equal `PRODUCTION_GCP_PROJECT_ID` in the `recovery-production-audit` GitHub Environment. This prevents a successful audit against the staging project from being mistaken for production evidence.
