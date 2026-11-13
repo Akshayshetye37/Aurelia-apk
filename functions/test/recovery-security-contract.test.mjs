@@ -226,7 +226,7 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(patcher, /android\.permission\.POST_NOTIFICATIONS/);
   assert.match(patcher, /firebase-messaging/);
   assert.match(patcher, /firebase-appcheck-playintegrity/);
-  assert.match(patcher, /firebase-bom:35\.1\.0/);
+  assert.match(patcher, /firebase-bom:34\\.12\\.0/);
   const settings = read('android/templates/RecoveryPhoneSettingsActivity.kt');
   assert.match(settings, /Register this device for owner security alerts/);
   assert.match(settings, /registerThisDeviceForAlerts/);
