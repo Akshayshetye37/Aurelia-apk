@@ -54,10 +54,14 @@ class RecoveryGrantReplayStore(context: Context) {
     }
 
     private fun write(value: String) {
-        val nonce = ByteArray(12).also(SecureRandom()::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key(), GCMParameterSpec(128, nonce))
+        // Android Keystore enforces randomized encryption and rejects caller-supplied
+        // GCM nonces. Let the Keystore-backed provider generate the nonce, then persist
+        // that IV alongside the ciphertext for authenticated decryption.
+        cipher.init(Cipher.ENCRYPT_MODE, key())
         cipher.updateAAD(AAD.toByteArray(Charsets.UTF_8))
+        val nonce = cipher.iv ?: throw SecurityException("Keystore did not return a GCM nonce.")
+        require(nonce.size == 12) { "Unexpected AES-GCM nonce length." }
         val plain = value.toByteArray(Charsets.UTF_8)
         val encrypted = try { cipher.doFinal(plain) } finally { plain.fill(0) }
         val packed = nonce + encrypted
