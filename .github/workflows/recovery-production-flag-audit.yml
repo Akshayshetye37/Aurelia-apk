@@ -47,6 +47,37 @@ jobs:
             fi
             echo "PASS: $name has recovery disabled."
           done
+          # Read-only verification of the actual deployed runtime identities and least-privilege secret access.
+          bindings=(
+            "registerRecoveryPhone:PHONE_PEPPER"
+            "registerRecoveryOwnerDevice:PHONE_PEPPER"
+            "acknowledgeRecoveryOwnerAlert:PHONE_PEPPER"
+            "issueRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"
+            "consumeRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"
+          )
+          for binding in "${bindings[@]}"; do
+            function_name="${binding%%:*}"
+            secret_list="${binding#*:}"
+            function_json="$(gcloud functions describe "$function_name" --gen2 --project "$PROJECT_ID" --region "$REGION" --format=json)"
+            runtime_sa="$(echo "$function_json" | jq -r '.serviceConfig.serviceAccountEmail // empty')"
+            if [[ -z "$runtime_sa" ]]; then
+              echo "::error::Could not determine production runtime service account for $function_name."
+              exit 1
+            fi
+            IFS=',' read -r -a secrets <<< "$secret_list"
+            for secret in "${secrets[@]}"; do
+              policy="$(gcloud secrets get-iam-policy "$secret" --project "$PROJECT_ID" --format=json)"
+              if ! echo "$policy" | jq -e --arg member "serviceAccount:$runtime_sa" '
+                [.bindings[]? | select(.role=="roles/secretmanager.secretAccessor") |
+                  .members[]? | select(. == $member)] | length > 0
+              ' >/dev/null; then
+                echo "::error::Production runtime service account for $function_name lacks secretAccessor on $secret."
+                exit 1
+              fi
+            done
+            echo "PASS: production $function_name runtime identity has required secret access."
+          done
+
           mapfile -t services < <(gcloud run services list --project "$PROJECT_ID" --region "$REGION" --format='value(metadata.name)' | grep -Ei 'recovery|attestation' || true)
           for service in "${services[@]}"; do
             json="$(gcloud run services describe "$service" --project "$PROJECT_ID" --region "$REGION" --format=json)"

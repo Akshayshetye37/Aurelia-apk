@@ -49,3 +49,6 @@ The staging deploy service account and Functions runtime service account must be
 
 
 The read-only production flag audit also requires `GCP_PROJECT_ID` to equal `PRODUCTION_GCP_PROJECT_ID` in the `recovery-production-audit` GitHub Environment. This prevents a successful audit against the staging project from being mistaken for production evidence.
+
+
+The staging deploy and read-only production audit workflows resolve the deployed service account for each recovery callable that uses Secret Manager, then verify secret-level `roles/secretmanager.secretAccessor` for exactly the declared secrets. The owner-alert acknowledgement callable explicitly binds `PHONE_PEPPER`; missing runtime secret bindings or IAM grants fail deployment qualification.

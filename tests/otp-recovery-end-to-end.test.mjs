@@ -245,3 +245,17 @@ test('production flag audit proves it targets the configured production project'
   assert.match(workflow, /PRODUCTION_PROJECT_ID: \$\{\{ vars\.PRODUCTION_GCP_PROJECT_ID \}\}/);
   assert.match(workflow, /PROJECT_ID" != "\$PRODUCTION_PROJECT_ID/);
 });
+
+
+test('staging and production audits verify per-function Secret Manager runtime access', () => {
+  for (const path of [
+    '.github/workflows/recovery-staging-deploy.yml',
+    '.github/workflows/recovery-production-flag-audit.yml'
+  ]) {
+    const workflow = read(path);
+    assert.match(workflow, /Verify deployed recovery runtime service accounts can access their secrets|Read-only verification of the actual deployed runtime identities/);
+    assert.match(workflow, /gcloud functions describe "\$function_name"/);
+    assert.match(workflow, /roles\/secretmanager\.secretAccessor/);
+    assert.match(workflow, /acknowledgeRecoveryOwnerAlert:PHONE_PEPPER/);
+  }
+});

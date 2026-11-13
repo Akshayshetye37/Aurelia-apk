@@ -117,6 +117,43 @@ jobs:
           ' >/dev/null
           echo "Staging recovery functions deployed with the configured service account and RECOVERY_ENABLED=true."
 
+      - name: Verify deployed recovery runtime service accounts can access their secrets
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: asia-south1
+        run: |
+          set -euo pipefail
+          bindings=(
+            "registerRecoveryPhone:PHONE_PEPPER"
+            "registerRecoveryOwnerDevice:PHONE_PEPPER"
+            "acknowledgeRecoveryOwnerAlert:PHONE_PEPPER"
+            "issueRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"
+            "consumeRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"
+          )
+          for binding in "${bindings[@]}"; do
+            function_name="${binding%%:*}"
+            secret_list="${binding#*:}"
+            function_json="$(gcloud functions describe "$function_name" --gen2 --project "$PROJECT_ID" --region "$REGION" --format=json)"
+            runtime_sa="$(echo "$function_json" | jq -r '.serviceConfig.serviceAccountEmail // empty')"
+            if [[ -z "$runtime_sa" ]]; then
+              echo "::error::Could not determine runtime service account for $function_name."
+              exit 1
+            fi
+            IFS=',' read -r -a secrets <<< "$secret_list"
+            for secret in "${secrets[@]}"; do
+              policy="$(gcloud secrets get-iam-policy "$secret" --project "$PROJECT_ID" --format=json)"
+              if ! echo "$policy" | jq -e --arg member "serviceAccount:$runtime_sa" '
+                [.bindings[]? | select(.role=="roles/secretmanager.secretAccessor") |
+                  .members[]? | select(. == $member)] | length > 0
+              ' >/dev/null; then
+                echo "::error::Runtime service account for $function_name lacks secretAccessor on $secret."
+                exit 1
+              fi
+            done
+            echo "PASS: $function_name runtime identity has access to its declared secrets."
+          done
+
       - name: Probe missing and invalid App Check tokens on every recovery callable
         shell: bash
         env:
