@@ -474,7 +474,7 @@ test('an independent owner can acknowledge before the FCM send response returns'
 });
 
 
-test('independent primary owner can cancel during alert hold and cancellation revokes future grant issue', async () => {
+test('independent primary owner cancels the old hold and fresh OTP starts a new owner-alert cycle', async () => {
   const tenantId = 'tenant-emulator-cancel-alert';
   const ownerUid = 'owner-emulator-cancel-alert';
   const phone = '+15555550105';
@@ -524,10 +524,21 @@ test('independent primary owner can cancel during alert hold and cancellation re
   assert.equal(cancellationEvents.docs.filter(doc =>
     doc.data().type === 'RECOVERY_REQUEST_CANCELLED').length, 1,
   'replayed cancellation does not duplicate the audit event');
-  const nextToken = await phoneAuthToken(phone);
   await assert.rejects(callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 's'.repeat(43), phoneIdToken: phoneToken
+  }), 'the already-consumed phone-auth proof cannot restart a cancelled hold');
+  const nextToken = await phoneAuthToken(phone);
+  const restarted = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 's'.repeat(43), phoneIdToken: nextToken
-  }), 'cancelled state blocks issue');
+  });
+  assert.equal(restarted.status, 'COOLDOWN',
+    'a fresh OTP may only start a new owner-alert hold, never issue a grant directly');
+  assert.equal(restarted.eligibleAt, 0);
+  const restartedState = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  assert.equal(restartedState.state, 'ALERT_PENDING');
+  assert.equal(restartedState.eligibleAt, null);
+  assert.equal(restartedState.grantJti, undefined);
+  assert.equal(restartedState.grantExpiresAt, undefined);
 });
 
 test('independent primary owner cancels an issued grant; consume is rejected after cancellation', async () => {
