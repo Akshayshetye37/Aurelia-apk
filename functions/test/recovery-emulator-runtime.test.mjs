@@ -1049,6 +1049,7 @@ test('owner cancellation permits a fresh OTP to start a new alert cycle', async 
     tenantId, deviceIdHash: ownerDeviceHash
   }, ownerAuth(ownerUid, tenantId));
   assert.equal(cancelled.cancelled, true);
+  await sleep(1100); // Firebase phone auth_time has one-second granularity.
   const second = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'g'.repeat(43),
     phoneIdToken: await phoneAuthToken(phone)

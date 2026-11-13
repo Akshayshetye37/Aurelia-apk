@@ -601,7 +601,7 @@ export const issueRecoveryGrant = onCall(
       // revoked the previous JTI and erased all pending hold linkage.
       if (pendingState === "CANCELLED" &&
           (!Number.isFinite(Number(pending?.cancelledAtMs)) ||
-            proof.authTime * 1000 <= Number(pending.cancelledAtMs))) throw GENERIC;
+            proof.authTime <= Number(pending.cancelledAtSec))) throw GENERIC;
       if (!pending || pendingState === "CONSUMED" || pendingState === "CANCELLED") {
         tx.create(proofRef, { tenantId, createdAt: FieldValue.serverTimestamp(),
           expiresAt: nowMs + 5 * 60_000 });
@@ -812,7 +812,7 @@ export const cancelRecoveryRequest = onCall(
       const eventSnapshot = eventRef ? await tx.get(eventRef) : null;
       if (grantSnapshot?.exists && grantSnapshot.data()?.state === "CONSUMED") return false;
       tx.update(cooldownRef, {
-        state: "CANCELLED", cancelledAt: FieldValue.serverTimestamp(), cancelledAtMs: Date.now(),
+        state: "CANCELLED", cancelledAt: FieldValue.serverTimestamp(), cancelledAtSec: Math.floor(Date.now() / 1000),
         cancelledByUid: owner.uid, cancelledByDeviceHash: deviceIdHash,
         // Keep the terminal state for race arbitration, but erase the pending hold,
         // alert routing and grant linkage so cancellation cannot be resumed.
