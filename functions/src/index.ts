@@ -519,7 +519,9 @@ export const acknowledgeRecoveryOwnerAlert = onCall(
       tx.update(eventRef, {
         acknowledgedAt: FieldValue.serverTimestamp(),
         notificationAcknowledgedAt: FieldValue.serverTimestamp(),
-        notificationDelivery: "APP_ACKNOWLEDGED"
+        notificationDelivery: "APP_ACKNOWLEDGED",
+        ackTokenHashes: FieldValue.delete(),
+        ackTokenExpiresAt: FieldValue.delete()
       });
     });
     return { acknowledged: true, eligibleAt };
@@ -821,7 +823,11 @@ export const cancelRecoveryRequest = onCall(
         tx.update(grantRef, { state: "REVOKED", revokedAt: FieldValue.serverTimestamp() });
       }
       if (eventRef && eventSnapshot?.exists) {
-        tx.update(eventRef, { notificationDelivery: "OWNER_CANCELLED", cancelledAt: FieldValue.serverTimestamp() });
+        tx.update(eventRef, {
+          notificationDelivery: "OWNER_CANCELLED", cancelledAt: FieldValue.serverTimestamp(),
+          ackTokenHashes: FieldValue.delete(), ackTokenExpiresAt: FieldValue.delete(),
+          fcmAcceptedDeviceHashes: FieldValue.delete(), phoneHash: FieldValue.delete()
+        });
       }
       const auditRef = db.collection("recoverySecurityEvents").doc(randomUUID());
       tx.create(auditRef, {

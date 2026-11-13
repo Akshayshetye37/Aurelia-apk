@@ -1057,4 +1057,7 @@ test('owner cancellation permits a fresh OTP to start a new alert cycle', async 
   const restarted = (await cooldownRef.get()).data();
   assert.equal(restarted.state, 'ALERT_PENDING');
   assert.notEqual(restarted.alertEventId, firstCooldown.alertEventId);
+  const cancelledEvent = (await db.doc(`recoverySecurityEvents/${firstCooldown.alertEventId}`).get()).data();
+  assert.equal(cancelledEvent.ackTokenHashes, undefined);
+  assert.equal(cancelledEvent.ackTokenExpiresAt, undefined);
 });

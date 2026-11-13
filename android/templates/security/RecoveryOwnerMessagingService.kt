@@ -52,9 +52,9 @@ class RecoveryOwnerMessagingService : FirebaseMessagingService() {
 
         val openApp = Intent(this, RecoveryOwnerAlertActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(RecoveryOwnerAlertActivity.EXTRA_TENANT, tenantId)
-            putExtra(RecoveryOwnerAlertActivity.EXTRA_DEVICE, deviceIdHash)
-            putExtra(RecoveryOwnerAlertActivity.EXTRA_EVENT, eventId)
+            putExtra(RecoveryOwnerAlertActivity.EXTRA_TENANT_ID, tenantId)
+            putExtra(RecoveryOwnerAlertActivity.EXTRA_DEVICE_HASH, deviceIdHash)
+            putExtra(RecoveryOwnerAlertActivity.EXTRA_EVENT_ID, eventId)
             putExtra(RecoveryOwnerAlertActivity.EXTRA_ACK_TOKEN, ackToken)
         }
         val pending = PendingIntent.getActivity(

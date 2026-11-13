@@ -200,6 +200,9 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(functions, /fcmAcceptedDeviceHashes: FieldValue\.delete\(\)/);
   assert.ok(messageService.includes('getNotificationChannel(CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE'));
   assert.doesNotMatch(messageService, /acknowledgeRecoveryOwnerAlert/);
+  assert.match(messageService, /RecoveryOwnerAlertActivity\.EXTRA_TENANT_ID/);
+  assert.match(messageService, /RecoveryOwnerAlertActivity\.EXTRA_DEVICE_HASH/);
+  assert.match(messageService, /RecoveryOwnerAlertActivity\.EXTRA_EVENT_ID/);
   const ownerAlertActivity = read('android/templates/RecoveryOwnerAlertActivity.kt');
   assert.match(ownerAlertActivity, /acknowledgeRecoveryOwnerAlert/);
   assert.match(ownerAlertActivity, /cancelRecoveryRequest/);
