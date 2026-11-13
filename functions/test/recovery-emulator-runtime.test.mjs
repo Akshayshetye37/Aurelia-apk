@@ -223,6 +223,10 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   assert.equal(issued.status, 'ISSUED');
   assert.ok(issued.grant);
   const payload = JSON.parse(Buffer.from(issued.grant.split('.')[1], 'base64url').toString('utf8'));
+  await assert.rejects(callable(functions.cancelRecoveryRequest, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash
+  }, ownerAuth(ownerUid, tenantId, { provider: 'phone', factor: undefined })),
+  'phone-OTP-only cancellation cannot revoke an issued grant or burn its JTI');
   assert.ok(payload.exp > payload.iat);
   assert.ok(payload.exp - payload.iat <= 300, 'grant lifetime is at most five minutes');
   assert.equal(payload.uid, ownerUid, 'grant is bound to the recovery phone owner');
