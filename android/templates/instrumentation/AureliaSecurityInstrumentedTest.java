@@ -161,11 +161,11 @@ public final class AureliaSecurityInstrumentedTest {
         try {
             RecoveryPhoneStore phoneStore = new RecoveryPhoneStore(context);
             phoneStore.markUnverified(phoneNumber);
-            assertEquals(RecoveryPhoneStore.State.UNVERIFIED, phoneStore.read().state);
+            assertEquals(RecoveryPhoneStore.State.UNVERIFIED, phoneStore.read().getState());
             phoneStore.markVerified(phoneNumber);
             RecoveryPhoneStore.Record verified = phoneStore.read();
-            assertEquals(RecoveryPhoneStore.State.VERIFIED, verified.state);
-            assertEquals(phoneNumber, verified.currentE164);
+            assertEquals(RecoveryPhoneStore.State.VERIFIED, verified.getState());
+            assertEquals(phoneNumber, verified.getCurrentE164());
             String encrypted = phonePrefs.getString(blobName, null);
             assertNotNull("Recovery phone must be stored as an encrypted record", encrypted);
             assertFalse("Encrypted preferences must not contain the E.164 number", encrypted.contains(phoneNumber));
