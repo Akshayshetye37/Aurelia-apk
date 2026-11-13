@@ -296,3 +296,10 @@ test('physical-device workflow verifies secure lock screen and biometric vault r
   const workflow = read('.github/workflows/recovery-physical-device-qualification.yml');
   assert.match(workflow, /run_test security-primitives com\.aurelia\.pms\.security\.AureliaSecurityInstrumentedTest/);
 });
+
+
+test('recovery Android diagnostic collection is bounded when adb becomes unresponsive', () => {
+  const workflow = read('.github/workflows/otp-recovery-android-instrumentation.yml');
+  assert.match(workflow, /timeout -k 2s 8s "\\$ANDROID_HOME\\/platform-tools\\/adb" devices -l/);
+  assert.match(workflow, /timeout -k 2s 8s "\\$ANDROID_HOME\\/platform-tools\\/adb" logcat -d/);
+});

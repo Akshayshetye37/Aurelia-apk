@@ -212,8 +212,8 @@ jobs:
         run: |
           log_dir="$RUNNER_TEMP/aurelia-recovery-emulator"
           mkdir -p "$log_dir"
-          $ANDROID_HOME/platform-tools/adb devices -l > "$log_dir/adb-devices-final.txt" 2>&1 || true
-          $ANDROID_HOME/platform-tools/adb logcat -d > "$log_dir/logcat.txt" 2>&1 || true
+          timeout -k 2s 8s "$ANDROID_HOME/platform-tools/adb" devices -l > "$log_dir/adb-devices-final.txt" 2>&1 || true
+          timeout -k 2s 8s "$ANDROID_HOME/platform-tools/adb" logcat -d > "$log_dir/logcat.txt" 2>&1 || true
 
       - name: Verify instrumentation results contain no failures or ignored tests
         if: always()
