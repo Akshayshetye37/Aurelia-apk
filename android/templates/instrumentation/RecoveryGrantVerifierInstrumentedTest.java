@@ -110,7 +110,7 @@ public final class RecoveryGrantVerifierInstrumentedTest {
       RecoveryGate.INSTANCE.clear();
       final boolean[] callback = new boolean[] { true };
       client.consumeAndArm(invalidGrant, NONCE, DID, TENANT,
-          SystemClock.elapsedRealtime(), accepted -> callback[0] = accepted);
+          SystemClock.elapsedRealtime(), accepted -> { callback[0] = accepted; return kotlin.Unit.INSTANCE; });
       assertFalse("invalid signed grant must be rejected", callback[0]);
       assertEquals("invalid grant must never reach server consume", 0, networkCalls.get());
       assertFalse("invalid grant must leave recovery gate closed", RecoveryGate.INSTANCE.isOpen());
