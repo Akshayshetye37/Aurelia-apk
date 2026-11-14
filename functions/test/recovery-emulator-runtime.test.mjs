@@ -1410,6 +1410,14 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
   const cancelBegin = await callable(functions.createRecoveryOwnerActionOptions, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId
   }, ownerAuth(ownerUid, tenantId));
+
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
+    challengeId: cancelBegin.challengeId, credentialResponse: assertion, ackToken
+  }, ownerAuth(ownerUid, tenantId)),
+  'a cancel challenge cannot be submitted as an ack action');
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${cancelBegin.challengeId}`).get()).get('state'), 'PENDING',
+    'cross-action rejection leaves the cancellation challenge pending');
   const unchangedCounter = authenticator.assert({
     rpId: RP_ID, origin: RP_ORIGIN, challenge: cancelBegin.options.challenge, counter: 10
   });
@@ -1417,6 +1425,8 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId,
     challengeId: cancelBegin.challengeId, credentialResponse: unchangedCounter
   }, ownerAuth(ownerUid, tenantId)), 'a non-increasing signature counter is rejected');
+  assert.equal((await credentialRef.get()).get('counter'), 10,
+    'equal-counter rejection must leave the stored authenticator counter unchanged');
   assert.equal((await db.doc(`recoveryPasskeyChallenges/${cancelBegin.challengeId}`).get()).get('state'), 'PENDING',
     'non-increasing counter rejection leaves the challenge usable');
   const regressed = authenticator.assert({
@@ -1426,6 +1436,8 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId,
     challengeId: cancelBegin.challengeId, credentialResponse: regressed
   }, ownerAuth(ownerUid, tenantId)), 'signature counter regression is rejected');
+  assert.equal((await credentialRef.get()).get('counter'), 10,
+    'regressed-counter rejection must leave the stored authenticator counter unchanged');
   assert.equal((await db.doc(`recoveryPasskeyChallenges/${cancelBegin.challengeId}`).get()).get('state'), 'PENDING',
     'counter regression must not consume the legitimate cancellation challenge');
   const validCancel = authenticator.assert({
