@@ -22,6 +22,7 @@ import com.aurelia.pms.identity.RecoveryFirebaseAuthFactory
 import com.aurelia.pms.identity.RecoveryGrantClient
 import com.aurelia.pms.identity.RecoveryPhoneStore
 import com.aurelia.pms.identity.RecoveryTenantIdentity
+import com.google.firebase.auth.FirebaseAuth
 
 /**
  * Exported launcher boundary. This Activity contains no WebView and starts the
@@ -485,38 +486,78 @@ class LockGateActivity : FragmentActivity() {
         }
         AlertDialog.Builder(this)
             .setTitle("Permanently erase local Aurelia data?")
-            .setMessage("This permanently deletes the encrypted PMS database, its local photo archive, PIN/recovery envelopes and biometric wrapper on this device. It cannot recover data and does not delete owner-held external backups. Type the exact phrase to continue.")
+            .setMessage("This permanently deletes the encrypted PMS database, its local photo archive, PIN/recovery envelopes and biometric wrapper on this device. It cannot recover data and does not delete owner-held external backups. A fresh, verified owner session (under five minutes old) is required in addition to the confirmation phrase.")
             .setView(confirmation)
             .setPositiveButton("Erase local data") { _, _ ->
                 if (confirmation.text.toString() != "RESET AURELIA DATA") {
+                    confirmation.text.clear()
                     showError("Confirmation phrase did not match. No data was deleted.")
                     return@setPositiveButton
                 }
-                try {
-                    manager.lock()
-                    val database = getDatabasePath("aurelia-pms-encrypted.db")
-                    val files = listOf(
-                        database,
-                        java.io.File(database.path + "-wal"),
-                        java.io.File(database.path + "-shm"),
-                        java.io.File(database.path + "-journal")
-                    )
-                    files.forEach { if (it.exists() && !it.delete()) throw SecurityException("Could not delete encrypted database files.") }
-                    val photos = java.io.File(filesDir, "aurelia_photo_archive")
-                    if (photos.exists() && !photos.deleteRecursively()) throw SecurityException("Could not delete local photo archive.")
-                    envelopeStore.delete()
-                    biometricStore.delete()
-                    AureliaSecurityRuntime.clearEnrollmentMarkerForConfirmedDestructiveReset()
-                    enrollmentMode = true
-                    render()
-                } catch (failure: Exception) {
-                    showError(failure.message ?: "Destructive reset failed. Data remains unavailable.")
-                } finally {
-                    confirmation.text.clear()
+                confirmation.text.clear()
+                authorizeDestructiveReset {
+                    try {
+                        manager.lock()
+                        val database = getDatabasePath("aurelia-pms-encrypted.db")
+                        val files = listOf(
+                            database,
+                            java.io.File(database.path + "-wal"),
+                            java.io.File(database.path + "-shm"),
+                            java.io.File(database.path + "-journal")
+                        )
+                        files.forEach { if (it.exists() && !it.delete()) throw SecurityException("Could not delete encrypted database files.") }
+                        val photos = java.io.File(filesDir, "aurelia_photo_archive")
+                        if (photos.exists() && !photos.deleteRecursively()) throw SecurityException("Could not delete local photo archive.")
+                        envelopeStore.delete()
+                        biometricStore.delete()
+                        AureliaSecurityRuntime.clearEnrollmentMarkerForConfirmedDestructiveReset()
+                        enrollmentMode = true
+                        render()
+                    } catch (failure: Exception) {
+                        showError(failure.message ?: "Destructive reset failed. Data remains unavailable.")
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    /** Destructive reset requires a server-minted, freshly authenticated owner session. */
+    private fun authorizeDestructiveReset(onAuthorized: () -> Unit) {
+        val user = FirebaseAuth.getInstance().currentUser
+        if (user == null) {
+            showError("Destructive reset is blocked. Sign in again as the verified property owner.")
+            return
+        }
+        user.getIdToken(true).addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                showError("Owner authentication could not be refreshed. No data was deleted.")
+                return@addOnCompleteListener
+            }
+            try {
+                val claims = task.result?.claims ?: throw SecurityException("Owner claims are missing.")
+                val now = System.currentTimeMillis() / 1000
+                val authTime = (claims["auth_time"] as? Number)?.toLong()
+                    ?: throw SecurityException("Owner authentication time is missing.")
+                val factorTime = (claims["ownerAuthFactorAuthTime"] as? Number)?.toLong()
+                    ?: throw SecurityException("Owner factor time is missing.")
+                val factor = claims["ownerAuthFactor"] as? String
+                val firebase = claims["firebase"] as? Map<*, *>
+                val binding = RecoveryTenantIdentity.getBinding(this)
+                val tenant = claims["tenantId"] as? String
+                if (claims["role"] != "owner" || claims["email_verified"] != true ||
+                    firebase?.get("sign_in_provider") != "custom" ||
+                    factor !in setOf("email_link", "passkey") ||
+                    authTime > now || now - authTime >= 300 ||
+                    factorTime > authTime || now - factorTime >= 300 ||
+                    tenant != binding.tenantId) {
+                    throw SecurityException("A fresh, verified owner session for this tenant is required.")
+                }
+                onAuthorized()
+            } catch (failure: Exception) {
+                showError(failure.message ?: "Owner authorization failed. No data was deleted.")
+            }
+        }
     }
 
     private fun showRecoveryPrompt() {
