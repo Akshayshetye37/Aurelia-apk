@@ -1,0 +1,55 @@
+name: Aurelia settlement foundation CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/multi-provider-payment-backend
+      - 'work/**'
+    paths:
+      - "src/payments/**"
+      - "tests/**"
+      - "package.json"
+      - ".github/workflows/settlement-foundation-ci.yml"
+  pull_request:
+    branches:
+      - feature/multi-provider-payment-backend
+    paths:
+      - "src/payments/**"
+      - "tests/**"
+      - "package.json"
+      - ".github/workflows/settlement-foundation-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurelia-settlement-foundation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  settlement-foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install application dependencies
+        run: npm install --no-audit --no-fund
+      - name: Syntax-check settlement modules
+        run: |
+          node --check src/payments/canonical.mjs
+          node --check src/payments/settlement-authorization.mjs
+          node --check src/payments/settlement-journal.mjs
+          node --check src/payments/settlement-service.mjs
+          node --check src/payments/settlement-projector.mjs
+          node --check src/payments/payment-device-bridge.mjs
+          node --check tests/settlement-projector.test.mjs
+      - name: Run full application test suite
+        run: npm test
+      - name: Build production web assets
+        run: npm run build

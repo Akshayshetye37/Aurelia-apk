@@ -1,0 +1,79 @@
+name: PMS source tests and production web packaging
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pms-source-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-tests-web:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout PMS
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Assert exact candidate SHA
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Assert R1 release defaults remain OFF
+        run: node --test tests/release-defaults.test.mjs
+
+      - name: Run complete PMS test suite
+        run: npm test
+
+      - name: Enforce storage module boundary
+        run: npm run check:storage-boundaries
+
+      - name: Build production web bundle
+        run: npm run build
+
+      - name: Enforce production asset privacy boundaries
+        run: node scripts/check-release-boundaries.mjs
+
+      - name: Upload complete production web bundle (not an Android APK)
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurelia-pms-web-${{ github.sha }}
+          path: www/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Generate evidence-based STATUS.md
+        run: node scripts/generate-status.mjs
+
+      - name: Upload generated R1 status
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurelia-r1-status-${{ github.sha }}
+          path: STATUS.md
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record Android release gate
+        run: |
+          {
+            echo "## Android release status"
+            echo "Android/APK builds, signing and publishing are intentionally not part of this source-quality workflow."
+            echo "The repository release plan prohibits Android builds until all ten acceptance workstreams pass and owner approval is recorded."
+            echo "This run validates source tests, web packaging and client asset privacy only."
+          } >> "$GITHUB_STEP_SUMMARY"

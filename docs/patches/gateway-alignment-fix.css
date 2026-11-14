@@ -1,0 +1,32 @@
+/* Aurelia PMS — Gateway settings alignment fix (2026-11-07)
+ * Insert this block into index.html after the existing provider-config CSS,
+ * or keep as reference for the WebView-stable layout rules.
+ * Does not enable live collection or change payment logic.
+ */
+.provider-config-panel{max-width:100%;overflow-x:hidden}
+.provider-config-layout{align-items:start}
+.provider-config-layout>.tag,.provider-env-tag{
+  justify-self:stretch;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  line-height:1.45
+}
+.provider-select-field>span{margin-bottom:6px}
+.provider-select-field select{
+  appearance:none;
+  -webkit-appearance:none;
+  padding:11px 40px 11px 14px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23e2c783' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 14px center;
+  background-size:12px 8px
+}
+.provider-config-layout form{gap:10px}
+.provider-config-layout form .fld input{margin-top:6px;padding:10px 14px}
+.provider-config-layout form .provider-save-button{min-height:46px;margin-top:4px}
+.provider-config-status{
+  padding:12px 0;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  line-height:1.45
+}
