@@ -165,7 +165,7 @@ const androidRepositorySource = readFileSync(
 
 test("Android SQLite rejects ledger rewrites in both single and batch transactions", () => {
   const guards = androidRepositorySource.match(
-    /"ledger"\\.equals\\(type\\)&&actual>0\\)throw new IllegalStateException\\("LEDGER_APPEND_ONLY"\\)/g
+    /"ledger"\.equals\(type\)&&actual>0\)throw new IllegalStateException\("LEDGER_APPEND_ONLY"\)/g
   ) || [];
   assert.equal(guards.length, 2);
 });
