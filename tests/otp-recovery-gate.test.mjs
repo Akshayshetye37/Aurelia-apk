@@ -6,13 +6,18 @@ const read = path => fs.readFileSync(path, 'utf8');
 
 test('OTP recovery gate persists grant-bound attempts in Keystore-encrypted AtomicFile state and expires monotonically across reboot', () => {
   const gate = read('android/templates/security/RecoveryGate.kt');
-  assert.match(gate, /SystemClock\.elapsedRealtime\(\)/);
+  assert.match(gate, /SystemClock\\.elapsedRealtime\\(\\)/);
   assert.match(gate, /MAX_ATTEMPTS = 3/);
-  assert.match(gate, /TTL_MS = 5 \* 60_000L/);
-  assert.match(gate, /fun armAfterServerConsumption\(remainingGrantMs: Long\)/);
-  assert.match(gate, /fun spendAttempt\(\): Boolean/);
-  assert.match(gate, /fun clear\(\)/);
-  assert.doesNotMatch(gate, /SharedPreferences|AtomicFile|File\(/);
+  assert.match(gate, /TTL_MS = 5 \\* 60_000L/);
+  assert.match(gate, /fun initialize\\(context: Context\\)/);
+  assert.match(gate, /fun armAfterServerConsumption\\(jti: String, remainingGrantMs: Long\\)/);
+  assert.match(gate, /fun spendAttempt\\(expectedJti: String\\? = null\\): Boolean/);
+  assert.match(gate, /fun clear\\(\\)/);
+  assert.match(gate, /AtomicFile/);
+  assert.match(gate, /AndroidKeyStore/);
+  assert.match(gate, /bootCount/);
+  assert.match(gate, /missing; refusing to reset attempts/);
+  assert.doesNotMatch(gate, /SharedPreferences/);
 });
 
 test('recovery checksum is validated before an OTP attempt is spent', () => {
@@ -107,7 +112,7 @@ test('APK verifies the pinned ES256 signature before server grant consumption', 
   assert.match(patcher, /RECOVERY_GRANT_PUBLIC_KEYS_JSON/);
   assert.match(patcher, /aurelia_recovery_grant_keys\.xml/);
   assert.match(client, /replayStore\.markUsed\(verified\.jti, verified\.expiresAtEpochSec\)/);
-  assert.match(client, /RecoveryGate\.armAfterServerConsumption\(remainingGrantMs\)/);
+  assert.match(client, /RecoveryGate\\.armAfterServerConsumption\\(verified\\.jti, remainingGrantMs\\)/);
   assert.match(client, /awaitingOwnerAlert/);
   assert.match(lockGate, /24-hour hold has not started yet/);
   assert.doesNotMatch(client, /inspectClaims/);
