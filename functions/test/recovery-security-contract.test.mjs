@@ -114,6 +114,9 @@ test('recovery requires a 24-hour cooldown and a fresh phone-auth event before g
   assert.match(issuance, /pendingState === "ALERT_PENDING"/);
   const acknowledgement = passkeys.slice(passkeys.indexOf("async function completeOwnerAction"));
   assert.match(acknowledgement, /verifyAuthenticationResponse/);
+  assert.match(acknowledgement, /expectedOrigin: config\.origins/);
+  assert.match(acknowledgement, /expectedRPID: config\.rpID/);
+  assert.match(passkeys, /SimpleWebAuthn validates expectedOrigin/);
   assert.match(acknowledgement, /requireUserVerification: true/);
   assert.match(acknowledgement, /authenticationInfo\.userVerified/);
   assert.match(acknowledgement, /state: "APPROVED"/);

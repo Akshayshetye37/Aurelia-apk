@@ -214,8 +214,10 @@ export const completeRecoveryPasskeyEnrollment = onCall(
       requireUserVerification: true
     });
     const info = verification.registrationInfo;
-    if (!verification.verified || !info || info.fmt !== "none" || !info.userVerified ||
-        info.origin === undefined || info.rpID !== config.rpID) throw GENERIC;
+    // SimpleWebAuthn validates expectedOrigin, expectedRPID, challenge, RP ID
+    // hash and user-presence/user-verification flags. Do not re-check optional
+    // response metadata fields that are not part of every authenticator result.
+    if (!verification.verified || !info || info.fmt !== "none" || !info.userVerified) throw GENERIC;
     const credential = info.credential;
     const hash = credentialHash(credential.id);
     const passkeyRef = db.doc("tenants/" + owner.tenantId + "/recoveryPasskeys/" + hash);

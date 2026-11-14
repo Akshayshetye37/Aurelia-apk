@@ -142,7 +142,7 @@ function phoneOnlyOwnerAuth(uid, tenantId) {
   return session;
 }
 
-async function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, ownerDeviceHashes }) {
+async function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, ownerDeviceHashes, enrollPasskey = true }) {
   await db.doc(`tenants/${tenantId}/security/recoveryOwner`).set({
     tenantId, ownerUid, createdAt: new Date(), provisionedBy: 'emulator-fixture'
   });
@@ -163,6 +163,7 @@ async function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, owner
     });
   }
 
+  if (!enrollPasskey) return;
   const enrollment = await callable(functions.createRecoveryPasskeyEnrollmentOptions, {
     tenantId, deviceIdHash: recoveryDeviceHash
   }, ownerAuth(ownerUid, tenantId));
@@ -486,7 +487,7 @@ test('recovery is blocked when no independent attested owner notification device
   const recoveryDeviceHash = '9'.repeat(64);
   await seedTenant({
     tenantId, phone, ownerUid, recoveryDeviceHash,
-    ownerDeviceHashes: [recoveryDeviceHash]
+    ownerDeviceHashes: [recoveryDeviceHash], enrollPasskey: false
   });
   const phoneToken = await phoneAuthToken(phone);
   await assert.rejects(
