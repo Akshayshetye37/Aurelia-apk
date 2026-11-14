@@ -22,6 +22,8 @@ import {
   revokePaymentDevice, authenticatePaymentDeviceRequest, leaseNextSettlementCommand,
   acknowledgeSettlementCommand, paymentDeviceRef
 } from './devices/firestore-device-service.mjs';
+import { verifyAndAcceptAccountingReceipt } from './devices/accounting-receipt-service.mjs';
+import { mapVerifiedProviderStatus } from './intents/intent-state-machine.mjs';
 import { verifiedWebhookProviderPatch } from './webhooks/provider-webhook-state.mjs';
 import {
   PAYMENT_CONTROL_DEFAULTS, PAYMENT_CONTROL_IDS, readPaymentControls,
@@ -324,6 +326,41 @@ app.post('/v1/devices/:deviceId/commands/:commandId/ack', requireTenantPaymentAc
       return res.json(result);
     } catch (error) {
       return fail(res, 409, String(error?.message || 'payment_device_acknowledgement_failed').slice(0, 96));
+    }
+  });
+
+app.post('/v1/devices/:deviceId/commands/:commandId/accounting-receipt',
+  requireTenantPaymentActor, express.json({ limit: '8kb', strict: true }),
+  requireRegisteredPaymentDevice, async (req, res) => {
+    const body = req.body || {};
+    if (Object.keys(body).length !== 1 || !body.receipt ||
+        typeof body.receipt !== 'object' || Array.isArray(body.receipt)) {
+      return fail(res, 400, 'invalid_accounting_receipt_request');
+    }
+    try {
+      const result = await verifyAndAcceptAccountingReceipt({
+        db, tenantId: req.tenant.id, deviceId: req.device.deviceId,
+        commandId: req.params.commandId, receipt: body.receipt,
+        verifyProviderStatus: async intent => {
+          if (intent.deviceId !== req.device.deviceId) throw new Error('payment_device_intent_binding_mismatch');
+          const checked = await paymentRepository.reconcilePaymentIntent(
+            req.actor.uid, intent.intentId, { forceProviderLookup: true }
+          );
+          return {
+            provider: intent.provider, environment: intent.environment,
+            providerAccountId: intent.providerAccountId,
+            orderId: checked.providerOrderId, paymentId: checked.providerPaymentId,
+            amountMinor: checked.amountMinor, currency: checked.currency,
+            captured: mapVerifiedProviderStatus(intent.provider, checked.providerStatus) === 'CAPTURED',
+            observedAt: checked.reconciledAt || new Date().toISOString()
+          };
+        }
+      });
+      return res.json(result);
+    } catch (error) {
+      const code = String(error?.message || 'accounting_receipt_rejected').slice(0, 96);
+      const status = code.includes('signature') ? 403 : code.includes('invalid') ? 400 : 409;
+      return fail(res, status, code);
     }
   });
 

@@ -178,6 +178,14 @@ class PaymentDeviceKeyStore {
         return sign(transcript.toByteArray(Charsets.UTF_8))
     }
 
+    /** Signs a canonical accounting receipt with the enrolled attested device key. */
+    @Synchronized
+    fun signAccountingReceipt(transcript: ByteArray): String {
+        require(transcript.size in 1..4096) { "Accounting receipt transcript size is invalid." }
+        if (!hasAttestedIdentity()) throw SecurityException("An enrolled attested device key is required.")
+        return sign(transcript)
+    }
+
     @Synchronized
     fun deleteIdentity() {
         val store = keyStore()

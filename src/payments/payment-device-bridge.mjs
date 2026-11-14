@@ -118,12 +118,17 @@ export async function leaseNextSettlementCommand({ tokenProvider = getPaymentDev
   return nativeRequest("paymentDeviceLeaseNext", { idToken });
 }
 
-export async function acknowledgeSettlementCommand({ commandId, ledgerAckId, tokenProvider = getPaymentDeviceIdToken } = {}) {
+export async function acknowledgeSettlementCommand({ commandId, ledgerEntryHash, tokenProvider = getPaymentDeviceIdToken } = {}) {
   if (!/^[0-9a-f-]{36}$/i.test(String(commandId || ""))) throw new TypeError("Invalid settlement command ID");
-  if (!/^[A-Za-z0-9_-]{8,128}$/.test(String(ledgerAckId || ""))) throw new TypeError("Invalid durable ledger receipt ID");
+  if (!/^[a-f0-9]{64}$/.test(String(ledgerEntryHash || ""))) throw new TypeError("A persisted ledger-entry SHA-256 hash is required");
   if (typeof tokenProvider !== "function") throw new TypeError("A Firebase ID-token provider is required for cloud device acknowledgement");
   const idToken = await tokenProvider();
-  return nativeRequest("paymentDeviceAcknowledge", { commandId, ledgerAckId, idToken });
+  return nativeRequest("paymentDeviceAcknowledge", { commandId, ledgerEntryHash, idToken });
+}
+
+export function createSettlementReceiptAcknowledger({ tokenProvider = getPaymentDeviceIdToken } = {}) {
+  return ({ commandId, ledgerEntryHash }) =>
+    acknowledgeSettlementCommand({ commandId, ledgerEntryHash, tokenProvider });
 }
 
 export function paymentDeviceNativeAvailable() {

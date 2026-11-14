@@ -45,7 +45,10 @@ test("legacy business snapshot key is rejected outside its explicit migration bo
     mkdirSync(path.join(root, "src", "features"), { recursive: true });
     writeFileSync(path.join(root, "src", "features", "bad.mjs"), "const key = '" + LEGACY_KEY_FIXTURE + "';");
     const result = scanStorageBoundaries({ rootDir: root, includeLegacyIndex: false });
-    assert.ok(result.violations.some(message => message.includes(LEGACY_KEY_FIXTURE)));
+    const violation = result.violations.find(message => message.includes("src/features/bad.mjs"));
+    assert.ok(violation, "the prohibited legacy key must be detected");
+    assert.match(violation, /references the legacy business snapshot key outside its migration boundary/);
+    assert.doesNotMatch(violation, new RegExp(LEGACY_KEY_FIXTURE));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

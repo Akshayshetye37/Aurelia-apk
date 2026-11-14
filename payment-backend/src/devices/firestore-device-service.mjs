@@ -195,7 +195,7 @@ export async function leaseNextSettlementCommand({
     const command = commandSnap.data();
     const current = now();
     const leaseExpires = command.leaseExpiresAt?.toDate?.()?.getTime?.() || 0;
-    if (command.status === "PROCESSED" ||
+    if (["PROCESSED", "DEVICE_ACKNOWLEDGED_PENDING_VERIFICATION", "RECEIPT_ACCEPTED"].includes(command.status) ||
         command.status === "LEASED" && leaseExpires > current.getTime()) return null;
     if (!["PENDING", "LEASED"].includes(command.status)) throw new Error("payment_device_command_state_invalid");
     const leaseToken = crypto.randomBytes(32).toString("base64url");
@@ -247,35 +247,57 @@ export async function leaseNextSettlementCommand({
 export async function acknowledgeSettlementCommand({
   db, tenantId, deviceId, commandId, body, now = () => new Date()
 }) {
+  const deviceReceiptId = body?.deviceReceiptId ?? body?.ledgerAckId;
   if (!COMMAND_ID.test(commandId || "") || !body || body.durableApplied !== true ||
       !Number.isSafeInteger(body.sequenceId) || body.sequenceId < 1 ||
       !/^[a-f0-9]{64}$/.test(body.payloadHash || "") ||
       typeof body.leaseToken !== "string" || body.leaseToken.length < 40 ||
-      !/^[A-Za-z0-9._:-]{8,128}$/.test(body.ledgerAckId || "")) {
+      !/^[A-Za-z0-9._:-]{8,128}$/.test(deviceReceiptId || "")) {
     throw new TypeError("invalid_payment_device_acknowledgement");
   }
+
   const ref = paymentDeviceRef(db, tenantId, deviceId);
   return db.runTransaction(async tx => {
     const deviceSnap = await tx.get(ref);
-    if (!deviceSnap.exists || deviceSnap.data().status !== "ACTIVE") throw new Error("payment_device_not_active");
+    if (!deviceSnap.exists || deviceSnap.data().status !== "ACTIVE") {
+      throw new Error("payment_device_not_active");
+    }
+
     const commandRef = ref.collection("commands").doc(String(body.sequenceId));
     const commandSnap = await tx.get(commandRef);
-    if (!commandSnap.exists || commandSnap.data().commandId !== commandId) throw new Error("payment_device_command_not_found");
+    if (!commandSnap.exists || commandSnap.data().commandId !== commandId) {
+      throw new Error("payment_device_command_not_found");
+    }
+
     const command = commandSnap.data();
-    if (command.status === "PROCESSED") {
-      if (command.ledgerAckId !== body.ledgerAckId || command.payloadHash !== body.payloadHash) {
+    if (command.status === "DEVICE_ACKNOWLEDGED_PENDING_VERIFICATION") {
+      if (command.deviceReceiptId !== deviceReceiptId || command.payloadHash !== body.payloadHash) {
         throw new Error("payment_device_acknowledgement_conflict");
       }
-      return { acknowledged: true, duplicate: true, cursor: deviceSnap.data().lastAckedSequence };
+      return {
+        acknowledged: true,
+        duplicate: true,
+        settlementPosted: false,
+        accountingStatus: "PENDING_VERIFICATION",
+        cursor: deviceSnap.data().lastAckedSequence
+      };
     }
-    const intentRef = db.collection("paymentIntents").doc(command.transactionId);
-    const inboxRef = command.webhookInboxId
-      ? db.collection("paymentWebhookInbox").doc(command.webhookInboxId) : null;
-    const folioLockRef = db.collection("paymentFolioLocks")
-      .doc(sha256(tenantId + ":" + command.folioId));
-    const [intentSnap, inboxSnap, folioLockSnap] = await Promise.all([
-      tx.get(intentRef), inboxRef ? tx.get(inboxRef) : Promise.resolve(null), tx.get(folioLockRef)
-    ]);
+
+    if (command.status === "RECEIPT_ACCEPTED") {
+      if (command.deviceReceiptId !== deviceReceiptId || command.payloadHash !== body.payloadHash) {
+        throw new Error("payment_device_acknowledgement_conflict");
+      }
+      return { acknowledged: true, duplicate: true, settlementPosted: false,
+        accountingStatus: "POSTED_TO_LOCAL_FOLIO", cursor: deviceSnap.data().lastAckedSequence };
+    }
+
+    // Historical PROCESSED records were created by an acknowledgement path
+    // that trusted caller-supplied durableApplied/ledgerAckId fields. They are
+    // not upgraded into trusted accounting evidence by this endpoint.
+    if (command.status === "PROCESSED") {
+      throw new Error("legacy_device_acknowledgement_requires_reconciliation");
+    }
+
     const current = now();
     const leaseExpires = command.leaseExpiresAt?.toDate?.()?.getTime?.() || 0;
     if (command.status !== "LEASED" || leaseExpires <= current.getTime() ||
@@ -284,33 +306,31 @@ export async function acknowledgeSettlementCommand({
         body.sequenceId !== (deviceSnap.data().lastAckedSequence || 0) + 1) {
       throw new Error("payment_device_lease_or_sequence_mismatch");
     }
+
+    // This endpoint authenticates a device acknowledgement only. A device
+    // signature and a caller-supplied receipt ID do not prove that the
+    // canonical PMS ledger committed. Keep accounting pending and retain the
+    // folio lock until a separately trusted accounting receipt is verified.
     tx.update(commandRef, {
-      status: "PROCESSED", ledgerAckId: body.ledgerAckId,
-      acknowledgedAt: current, leaseTokenHash: null, leaseExpiresAt: null
+      status: "DEVICE_ACKNOWLEDGED_PENDING_VERIFICATION",
+      deviceReceiptId,
+      deviceReportedApplied: true,
+      deviceAcknowledgedAt: current,
+      accountingVerificationStatus: "PENDING",
+      leaseTokenHash: null,
+      leaseExpiresAt: null
     });
-    tx.update(ref, { lastAckedSequence: body.sequenceId, lastAcknowledgedAt: current });
-    if (intentSnap.exists && intentSnap.data().tenantId === tenantId) {
-      tx.update(intentRef, {
-        accountingStatus: "POSTED_TO_LOCAL_FOLIO",
-        accountingPostedAt: current,
-        localLedgerAckId: body.ledgerAckId,
-        accountingBlockReason: null
-      });
-    }
-    if (inboxRef && inboxSnap?.exists) {
-      tx.set(inboxRef, {
-        accountingStatus: "POSTED_TO_LOCAL_FOLIO",
-        processingStatus: "POSTED_TO_FOLIO",
-        ledgerAckId: body.ledgerAckId,
-        accountingPostedAt: current
-      }, { merge: true });
-    }
-    if (folioLockSnap.exists && folioLockSnap.data().intentId === command.transactionId) {
-      tx.update(folioLockRef, {
-        active: false, state: "POSTED_TO_LOCAL_FOLIO",
-        updatedAt: current, localLedgerAckId: body.ledgerAckId
-      });
-    }
-    return { acknowledged: true, duplicate: false, cursor: body.sequenceId };
+    tx.update(ref, {
+      lastAckedSequence: body.sequenceId,
+      lastAcknowledgedAt: current
+    });
+
+    return {
+      acknowledged: true,
+      duplicate: false,
+      settlementPosted: false,
+      accountingStatus: "PENDING_VERIFICATION",
+      cursor: body.sequenceId
+    };
   });
 }

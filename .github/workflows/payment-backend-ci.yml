@@ -11,7 +11,7 @@ on:
       - ".github/workflows/payment-backend-ci.yml"
   pull_request:
     branches:
-      - feature/multi-provider-payment-backend
+      - '**'
     paths:
       - "payment-backend/**"
       - ".github/workflows/payment-backend-ci.yml"

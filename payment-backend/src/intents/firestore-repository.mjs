@@ -126,7 +126,7 @@ export class FirestorePaymentRepository {
     };
   }
 
-  async reconcilePaymentIntent(authUid, intentId) {
+  async reconcilePaymentIntent(authUid, intentId, { forceProviderLookup = false } = {}) {
     if (typeof authUid !== 'string' || !authUid ||
         typeof intentId !== 'string' || !/^[0-9a-f-]{36}$/i.test(intentId)) {
       throw new TypeError('invalid_payment_intent_reconciliation');
@@ -144,7 +144,7 @@ export class FirestorePaymentRepository {
       const error = new Error('payment_intent_not_found'); error.statusCode = 404; throw error;
     }
     let record = snapshot.data();
-    if (['CAPTURED', 'FAILED_TO_INITIATE'].includes(record.state)) {
+    if (!forceProviderLookup && ['CAPTURED', 'FAILED_TO_INITIATE'].includes(record.state)) {
       return this.getPaymentIntent(authUid, intentId);
     }
     if (!record.providerAccountId ||

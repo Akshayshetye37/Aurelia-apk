@@ -136,3 +136,150 @@ test("projector records verified evidence but automatic gateway settlement remai
   assert.equal(state.b[0].p, 0);
   assert.equal((await j.get(result.key)).status, "PENDING");
 });
+
+test("projector keeps a durable local posting pending until the signed server receipt is accepted", async () => {
+  const { lease, authorization } = await envelopes();
+  const state = { b: [{ id: command.bookingId, st: "in", p: 0, pays: [] }], today: 0, aud: [] };
+  let stored = JSON.stringify(state);
+  function persist() { stored = JSON.stringify(state); }
+  persist.synchronous = true;
+  let allowReceipt = false;
+  let receiptIncluded = false;
+  let acknowledgements = 0;
+  const settle = ({ booking, amount, method, reference, authorization: binding, persist: save, now }) => {
+    const existing = booking.pays.find(row => row.idempotencyKey === binding.idempotencyKey);
+    if (existing) return { ok: true, duplicate: true, payment: existing };
+    const payment = {
+      a: amount, amountPaise: binding.amountPaise, m: method, r: reference, at: now(),
+      auto: true, source: "verified_gateway", bookingId: binding.bookingId,
+      verificationConfirmed: true, idempotencyKey: binding.idempotencyKey,
+      provider: binding.provider, providerTransactionId: binding.providerTransactionId,
+      tenantId: binding.tenantId, deviceId: binding.deviceId,
+      providerAccountId: binding.providerAccountId, environment: binding.environment,
+      authorizationId: binding.authorizationId, leaseId: binding.leaseId
+    };
+    booking.pays.push(payment);
+    booking.p = amount;
+    save();
+    return { ok: true, duplicate: false, payment };
+  };
+  const j = journal("projector-receipt-ack");
+  const projector = new SettlementProjector({
+    journal: j, verifier: verifier(), getLease: async () => lease,
+    getState: () => state, findBooking: (s, id) => s.b.find(b => b.id === id),
+    getBalanceDue: () => 5000, persist, readBack: async () => JSON.parse(stored),
+    isEmergencyStopped: () => false, autoSettlementEnabled: true, settle,
+    acknowledge: async ({ commandId, ledgerEntryHash }) => {
+      acknowledgements += 1;
+      assert.equal(commandId, command.commandId);
+      assert.match(ledgerEntryHash, /^[a-f0-9]{64}$/);
+      if (!allowReceipt) {
+        const error = new Error("Provider status lookup unavailable");
+        error.code = "PROVIDER_STATUS_UNAVAILABLE";
+        throw error;
+      }
+      if (!receiptIncluded) {
+        return { acknowledgement: {
+          acknowledged: true, duplicate: false, settlementPosted: false, accountingStatus: "PENDING_VERIFICATION"
+        } };
+      }
+      return {
+        acknowledgement: {
+          acknowledged: true, duplicate: false, settlementPosted: false, accountingStatus: "PENDING_VERIFICATION"
+        },
+        receipt: { accepted: true, duplicate: false, settlementPosted: true, accountingStatus: "POSTED_TO_LOCAL_FOLIO" }
+      };
+    },
+    now: () => iso(NOW)
+  });
+  const first = await projector.submit({ command, authorization });
+  assert.equal(first.status, "pending");
+  assert.equal(first.code, "PROVIDER_STATUS_UNAVAILABLE");
+  assert.equal((await j.get(first.key)).status, "PENDING");
+  assert.equal(state.b[0].pays.length, 1);
+  allowReceipt = true;
+  const bareAck = await projector.project(first.key);
+  assert.equal(bareAck.status, "pending", "transport acknowledgement without a signed receipt cannot apply settlement");
+  assert.equal(bareAck.code, "ACCOUNTING_RECEIPT_NOT_ACCEPTED");
+  assert.equal((await j.get(first.key)).status, "PENDING");
+  receiptIncluded = true;
+  const recovered = await projector.project(first.key);
+  assert.equal(recovered.status, "applied");
+  assert.equal(acknowledgements, 3);
+  assert.equal((await j.get(first.key)).status, "APPLIED");
+});
+
+test("projector uses the native signed-receipt bridge by default and requires an accepted receipt", async () => {
+  const originalWindow = globalThis.window;
+  const originalCryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+  const fakeWindow = {
+    AureliaPaymentAuth: { getFreshIdToken: async () => "fresh-firebase-id-token-for-payment-device" },
+    AureliaNative: {
+      postMessage(raw) {
+        const request = JSON.parse(raw);
+        nativeCalls.push(request);
+        queueMicrotask(() => fakeWindow.aureliaNativePaymentDeviceResult(request.requestId, true, JSON.stringify({
+          acknowledgement: {
+            acknowledged: true, duplicate: false, settlementPosted: false, accountingStatus: "PENDING_VERIFICATION"
+          },
+          receipt: {
+            accepted: true, duplicate: false, settlementPosted: true, accountingStatus: "POSTED_TO_LOCAL_FOLIO"
+          }
+        })));
+      }
+    }
+  };
+  const nativeCalls = [];
+  globalThis.window = fakeWindow;
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    enumerable: originalCryptoDescriptor?.enumerable ?? true,
+    writable: true,
+    value: {
+      subtle: webcrypto.subtle,
+      randomUUID: () => "123e4567-e89b-12d3-a456-426614174001"
+    }
+  });
+  try {
+    const nativeCommand = { ...command, commandId: "123e4567-e89b-12d3-a456-426614174000" };
+    const { lease, authorization } = await envelopes(nativeCommand);
+    const state = { b: [{ id: nativeCommand.bookingId, st: "in", p: 0, pays: [] }], today: 0, aud: [] };
+    let stored = JSON.stringify(state);
+    function persist() { stored = JSON.stringify(state); }
+    persist.synchronous = true;
+    const settle = ({ booking, amount, method, reference, authorization: binding, persist: save, now }) => {
+      const payment = {
+        a: amount, amountPaise: binding.amountPaise, m: method, r: reference, at: now(),
+        auto: true, source: "verified_gateway", bookingId: binding.bookingId,
+        verificationConfirmed: true, idempotencyKey: binding.idempotencyKey,
+        provider: binding.provider, providerTransactionId: binding.providerTransactionId,
+        tenantId: binding.tenantId, deviceId: binding.deviceId,
+        providerAccountId: binding.providerAccountId, environment: binding.environment,
+        authorizationId: binding.authorizationId, leaseId: binding.leaseId
+      };
+      booking.pays.push(payment);
+      booking.p = amount;
+      save();
+      return { ok: true, duplicate: false, payment };
+    };
+    const j = journal("projector-native-receipt-bridge");
+    const projector = new SettlementProjector({
+      journal: j, verifier: verifier(), getLease: async () => lease,
+      getState: () => state, findBooking: (s, id) => s.b.find(b => b.id === id),
+      getBalanceDue: () => 5000, persist, readBack: async () => JSON.parse(stored),
+      isEmergencyStopped: () => false, autoSettlementEnabled: true, settle, now: () => iso(NOW)
+    });
+    const result = await projector.submit({ command: nativeCommand, authorization });
+    assert.equal(result.status, "applied");
+    assert.equal(nativeCalls.length, 1);
+    assert.equal(nativeCalls[0].type, "paymentDeviceAcknowledge");
+    assert.equal(nativeCalls[0].commandId, nativeCommand.commandId);
+    assert.match(nativeCalls[0].ledgerEntryHash, /^[a-f0-9]{64}$/);
+    assert.equal((await j.get(result.key)).status, "APPLIED");
+  } finally {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+    if (originalCryptoDescriptor) Object.defineProperty(globalThis, "crypto", originalCryptoDescriptor);
+    else delete globalThis.crypto;
+  }
+});
