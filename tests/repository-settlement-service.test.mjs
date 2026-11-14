@@ -56,8 +56,10 @@ test("idempotent retry returns the original canonical payment without a second c
     verificationConfirmed: true
   };
   const first = await settlePaymentToRepository(input);
+  state.led = [];
   const second = await settlePaymentToRepository(input);
   assert.equal(first.duplicate, false);
+  assert.equal(state.led.length, 1);
   assert.equal(second.duplicate, true);
   assert.equal(booking.p, 250);
   assert.equal(booking.pays.length, 1);
