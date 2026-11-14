@@ -27,6 +27,9 @@ service cloud.firestore {
     match /recoveryAttestationChallenges/{challengeId} {
       allow read, write: if false;
     }
+    match /recoveryPasskeyChallenges/{challengeId} {
+      allow read, write: if false;
+    }
     match /recoveryDeviceAttestations/{deviceId} {
       allow read, write: if false;
     }
