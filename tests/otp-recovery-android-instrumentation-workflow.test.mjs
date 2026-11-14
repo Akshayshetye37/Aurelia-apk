@@ -21,29 +21,34 @@ test("recovery workflow preserves separate phase-one and phase-two process-death
   assert.ok(workflow.includes('run_instrumentation_test process-death-phase-two "$phase_two"'));
 });
 
-test("host force-stops the exact target app process after phase one has anchored it", () => {
-  assert.ok(workflow.includes('before_pid="$(wait_for_target_pid)"'));
-  assert.ok(workflow.includes('Phase-one target app process exited before the explicit force-stop boundary.'));
-  assert.ok(workflow.includes('install -r "$app_apk"'));
-  assert.ok(workflow.includes('install -r -t "$test_apk"'));
-  assert.ok(workflow.includes('shell am instrument -w -r -e class "$selector"'));
-  assert.ok(workflow.includes('"$adb_bin" shell am force-stop com.aurelia.pms'));
-  assert.ok(workflow.includes('pidof com.aurelia.pms'));
-  assert.ok(workflow.includes('if [[ -n "$after_stop" ]]'));
-  assert.ok(!workflow.includes('monkey -p com.aurelia.pms'));
-});
-
-test("phase one and phase two keep the actual target package alive from inside the test", () => {
+test("phase one holds the tested target process until the host force-stops it", () => {
   const processDeathTest = fs.readFileSync(
     "android/templates/instrumentation/RecoveryProcessDeathInstrumentedTest.java", "utf8"
   );
-  assert.ok(processDeathTest.includes("getLaunchIntentForPackage(context.getPackageName())"));
-  assert.ok(processDeathTest.includes("keepTargetApplicationProcessAlive(context)"));
-  const phaseTwo = workflow.indexOf('run_instrumentation_test process-death-phase-two "$phase_two"');
+  assert.ok(processDeathTest.includes('Log.i("RecoveryProcessDeath", "PHASE_ONE_READY")'));
+  assert.ok(processDeathTest.includes("Thread.sleep(30 * 60 * 1000L)"));
+  assert.ok(workflow.includes('timeout -k 5s 1800s "$adb_bin" shell am instrument -w -r -e class "$phase_one"'));
+  assert.ok(workflow.includes('wait_for_log_marker "PHASE_ONE_READY"'));
+  assert.ok(workflow.includes('before_pid="$(wait_for_target_pid)"'));
+  assert.ok(workflow.includes('"$adb_bin" shell am force-stop com.aurelia.pms'));
+  assert.ok(workflow.includes('Phase-one target app process was not alive at the durable-state marker.'));
+  assert.ok(workflow.includes('if [[ -n "$after_stop" ]]'));
+  assert.ok(workflow.includes('process-death-phase-one/TEST-process-death-phase-one.xml'));
+  assert.ok(!workflow.includes('monkey -p com.aurelia.pms'));
+});
+
+test("phase two proves a fresh process and persisted recovery state before returning", () => {
+  const processDeathTest = fs.readFileSync(
+    "android/templates/instrumentation/RecoveryProcessDeathInstrumentedTest.java", "utf8"
+  );
+  assert.ok(processDeathTest.includes('Log.i("RecoveryProcessDeath", "PHASE_TWO_VERIFIED")'));
+  assert.ok(processDeathTest.includes("SystemClock.sleep(3000L)"));
+  const phaseTwo = workflow.indexOf('run_instrumentation_test process-death-phase-two "$phase_two" &');
   const pidCheck = workflow.indexOf('if [[ "$after_pid" == "$before_pid" ]]', phaseTwo);
   assert.ok(phaseTwo >= 0 && pidCheck > phaseTwo);
-  assert.ok(workflow.includes("Phase-two test did not leave a newly started target app process."));
+  assert.ok(workflow.includes('wait_for_log_marker "PHASE_TWO_VERIFIED"'));
   assert.ok(workflow.includes('after_pid="$(wait_for_target_pid)"'));
+  assert.ok(workflow.includes("Phase two reused the phase-one target app PID."));
   assert.ok(!workflow.includes("launch_target_app"));
   assert.ok(!workflow.includes("monkey -p com.aurelia.pms"));
 });

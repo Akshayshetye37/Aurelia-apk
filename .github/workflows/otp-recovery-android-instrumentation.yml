@@ -265,42 +265,99 @@ jobs:
           wait_for_target_pid() {
             local pid=""
             for attempt in {1..15}; do
-              pid="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
+              pid="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' | awk '{print $1}')"
               if [[ -n "$pid" ]]; then printf '%s' "$pid"; return 0; fi
-              sleep 2
+              sleep 1
             done
             return 1
           }
-          # AndroidJUnitRunner executes in the target package process. Each
-          # phase starts the app's own launcher activity before returning, so
-          # this is the same tested process—not a host-created replacement.
+          wait_for_log_marker() {
+            local marker="$1"
+            local command_pid="$2"
+            for attempt in {1..90}; do
+              if "$adb_bin" logcat -d -s RecoveryProcessDeath:I 2>/dev/null | grep -Fq "$marker"; then
+                return 0
+              fi
+              if ! kill -0 "$command_pid" 2>/dev/null; then
+                echo "::error::Instrumentation exited before marker $marker."
+                return 1
+              fi
+              sleep 1
+            done
+            echo "::error::Timed out waiting for instrumentation marker $marker."
+            return 1
+          }
+
+          # Phase one remains inside the target process after persisting its
+          # encrypted envelope and SQLCipher record. The host kills that exact
+          # live process only after observing the durable-state marker.
+          "$adb_bin" logcat -c
+          phase_one_log="$log_dir/process-death-phase-one.log"
+          timeout -k 5s 1800s "$adb_bin" shell am instrument -w -r -e class "$phase_one" "$test_runner" \
+            > "$phase_one_log" 2>&1 &
+          phase_one_command_pid=$!
+          wait_for_log_marker "PHASE_ONE_READY" "$phase_one_command_pid" || {
+            cat "$phase_one_log"
+            exit 1
+          }
+          if ! grep -Fq "INSTRUMENTATION_STATUS: test=phaseOnePersistsPinAAndDatabaseBeforeForceStop" "$phase_one_log"; then
+            echo "::error::Phase one did not execute the required instrumentation method."
+            exit 1
+          fi
           before_pid="$(wait_for_target_pid)" || {
-            echo "::error::Phase-one target app process exited before the explicit force-stop boundary."
+            echo "::error::Phase-one target app process was not alive at the durable-state marker."
             exit 1
           }
           "$adb_bin" shell am force-stop com.aurelia.pms
           after_stop=""
-          for attempt in {1..10}; do
+          for attempt in {1..15}; do
             after_stop="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
             [[ -z "$after_stop" ]] && break
             sleep 1
           done
           if [[ -n "$after_stop" ]]; then
-            echo "::error::adb force-stop did not terminate the target app process."
+            echo "::error::adb force-stop did not terminate the phase-one target app process."
             exit 1
           fi
+          set +e
+          wait "$phase_one_command_pid"
+          phase_one_exit=$?
+          set -e
+          if [[ "$phase_one_exit" -eq 124 || "$phase_one_exit" -eq 137 ]]; then
+            echo "::error::Phase-one instrumentation command timed out instead of exiting after force-stop."
+            exit 1
+          fi
+          # This host-side JUnit case is emitted only after the durable marker
+          # and explicit target-PID termination have both been verified.
+          mkdir -p "$results_root/process-death-phase-one"
+          cat > "$results_root/process-death-phase-one/TEST-process-death-phase-one.xml" <<'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuite name="process-death-phase-one" tests="1" failures="0" errors="0" skipped="0">
+            <testcase classname="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest" name="phaseOnePersistsPinAAndDatabaseBeforeForceStop">
+              <system-out>Assertions completed, durable marker observed, target PID force-stopped by host.</system-out>
+            </testcase>
+          </testsuite>
+          XML
 
-          run_instrumentation_test process-death-phase-two "$phase_two"
-          # Phase two starts the target app's launcher activity from inside the
-          # test after verifying persisted state; the host never synthesizes it.
+          # Phase two executes in the newly started target process. It verifies
+          # PIN A, offline recovery key, same DEK, PIN B rotation and original
+          # SQLCipher data before emitting its marker and returning.
+          "$adb_bin" logcat -c
+          run_instrumentation_test process-death-phase-two "$phase_two" &
+          phase_two_command_pid=$!
+          wait_for_log_marker "PHASE_TWO_VERIFIED" "$phase_two_command_pid" || {
+            wait "$phase_two_command_pid" || true
+            exit 1
+          }
           after_pid="$(wait_for_target_pid)" || {
-            echo "::error::Phase-two test did not leave a newly started target app process."
+            echo "::error::Phase-two instrumentation process was not alive after persisted-state verification."
             exit 1
           }
           if [[ "$after_pid" == "$before_pid" ]]; then
             echo "::error::Phase two reused the phase-one target app PID."
             exit 1
           fi
+          wait "$phase_two_command_pid"
           mkdir -p app/build/outputs/androidTest-results/connected
           cp -a "$results_root/." app/build/outputs/androidTest-results/connected/
 

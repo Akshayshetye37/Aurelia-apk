@@ -1,10 +1,11 @@
 package com.aurelia.pms;
 
 import android.content.Context;
-import android.content.Intent;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
+import android.util.Log;
+import android.os.SystemClock;
 import androidx.test.core.app.ApplicationProvider;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
@@ -92,7 +93,12 @@ public final class RecoveryProcessDeathInstrumentedTest {
         Arrays.fill(recovery, '\0');
       }
     }
-    keepTargetApplicationProcessAlive(context);
+    Log.i("RecoveryProcessDeath", "PHASE_ONE_READY");
+    // Hold this exact app process until the host observes the durable marker and
+    // explicitly force-stops it. Returning from AndroidJUnitRunner would itself
+    // stop the target package before the host can kill it.
+    Thread.sleep(30 * 60 * 1000L);
+    fail("Host did not force-stop the phase-one target process.");
   }
 
   @Test public void phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop() throws Exception {
@@ -160,7 +166,9 @@ public final class RecoveryProcessDeathInstrumentedTest {
       store.delete();
       context.deleteDatabase(DB);
     }
-    keepTargetApplicationProcessAlive(context);
+    Log.i("RecoveryProcessDeath", "PHASE_TWO_VERIFIED");
+    // Give the host time to capture this fresh process PID before the runner exits.
+    SystemClock.sleep(3000L);
   }
 
 
@@ -251,17 +259,6 @@ public final class RecoveryProcessDeathInstrumentedTest {
       store.delete();
       context.deleteDatabase(DB);
     }
-  }
-
-  /**
-   * Keep the real target-package process alive after AndroidJUnitRunner returns.
-   * The host then captures and force-stops this exact PID before phase two.
-   */
-  private static void keepTargetApplicationProcessAlive(Context context) {
-    Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
-    assertNotNull("target application must expose its launcher activity", launch);
-    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-    context.startActivity(launch);
   }
 
   private static SecretKey fixtureKey() throws Exception {
