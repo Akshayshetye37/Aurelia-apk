@@ -52,6 +52,14 @@ function requireFreshPrimaryOwner(request: CallableRequest<unknown>): { uid: str
   return { uid: auth.uid, tenantId: validateTenantId(auth.token.tenantId) };
 }
 
+/** Only a server-minted passkey-authenticated owner session may approve a recovery hold. */
+function requireFreshPasskeyOwner(request: CallableRequest<unknown>): { uid: string; tenantId: string } {
+  const owner = requireFreshPrimaryOwner(request);
+  const token = request.auth?.token;
+  if (!token || token.ownerAuthFactor !== "passkey" || token.email_verified !== true) throw GENERIC;
+  return owner;
+}
+
 async function requireRecoveryOwnerBinding(tenantId: string, ownerUid: string): Promise<void> {
   const binding = (await db.doc(`tenants/${tenantId}/security/recoveryOwner`).get()).data();
   if (!binding || binding.ownerUid !== ownerUid) throw GENERIC;
@@ -477,7 +485,7 @@ export const acknowledgeRecoveryOwnerAlert = onCall(
   { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER] },
   async request => {
     requireRecoveryEnabled();
-    const owner = requireFreshPrimaryOwner(request);
+    const owner = requireFreshPasskeyOwner(request);
     const tenantId = owner.tenantId;
     if (request.data?.tenantId !== tenantId) throw GENERIC;
     const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
