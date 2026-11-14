@@ -29,6 +29,7 @@ object RecoveryGate {
     private const val STORE = "AndroidKeyStore"
     private lateinit var appContext: Context
     private var stateFile: AtomicFile? = null
+    @Volatile private var stateUnavailable = false
 
     private data class State(
         val jti: String,
@@ -42,12 +43,13 @@ object RecoveryGate {
     fun initialize(context: Context) {
         appContext = context.applicationContext
         stateFile = AtomicFile(File(appContext.noBackupFilesDir, FILE_NAME))
-        // Validate any existing record immediately; never silently recreate a lost key/state.
-        readState()
+        // Corrupt/missing recovery state disables recovery only; local PIN unlock remains available.
+        stateUnavailable = try { readState(); false } catch (_: Exception) { true }
     }
 
     @Synchronized
     fun armAfterServerConsumption(jti: String, remainingGrantMs: Long) {
+        check(!stateUnavailable) { "Recovery attempt state is unavailable; refusing recovery." }
         require(jti.matches(Regex("^[0-9a-fA-F-]{36}$")))
         check(remainingGrantMs in 1..TTL_MS) {
             "A live, five-minute recovery grant consumed by the backend is required."
@@ -58,6 +60,7 @@ object RecoveryGate {
 
     @Synchronized
     fun isOpen(): Boolean {
+        if (stateUnavailable) return false
         val state = readState() ?: return false
         if (state.attemptsRemaining <= 0 || expired(state)) {
             clear()
@@ -68,6 +71,7 @@ object RecoveryGate {
 
     @Synchronized
     fun spendAttempt(expectedJti: String? = null): Boolean {
+        if (stateUnavailable) return false
         val state = readState() ?: return false
         if (state.attemptsRemaining <= 0 || expired(state) ||
             (expectedJti != null && expectedJti != state.jti)) {
@@ -80,6 +84,7 @@ object RecoveryGate {
 
     @Synchronized
     fun attemptsLeft(): Int {
+        if (stateUnavailable) return 0
         val state = readState() ?: return 0
         if (state.attemptsRemaining <= 0 || expired(state)) {
             clear()
@@ -90,6 +95,7 @@ object RecoveryGate {
 
     @Synchronized
     fun clear() {
+        if (stateUnavailable) return
         writeState(State("", 0, 0L, 0L, bootCount()))
     }
 
