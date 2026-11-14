@@ -88,7 +88,8 @@ export class SettlementProjector {
       const transportAck = acknowledgement?.acknowledgement;
       const receipt = acknowledgement?.receipt;
       if (transportAck?.acknowledged !== true || transportAck?.settlementPosted !== false ||
-          receipt?.accepted !== true || receipt?.settlementPosted !== true ||
+          receipt?.accepted !== true || receipt?.settlementPosted !== false ||
+          receipt?.localLedgerPosted !== true ||
           receipt?.accountingStatus !== "POSTED_TO_LOCAL_FOLIO") {
         throw fail("ACCOUNTING_RECEIPT_NOT_ACCEPTED",
           "A transport acknowledgement is not accounting settlement; a separately accepted signed receipt is required.");

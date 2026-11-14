@@ -59,32 +59,25 @@ export async function verifyAndAcceptAccountingReceipt({db,tenantId,deviceId,com
 
  const receiptDocumentId=sha(tenantId+":"+commandId+":"+receiptId);
  const receiptRef=db.collection("paymentAccountingReceipts").doc(receiptDocumentId);
- const folioHash=sha(tenantId+":"+payload.folioId);
- const folioRef=db.collection("paymentFolios").doc(folioHash);
- const journalRef=folioRef.collection("journalEntries").doc(payload.intentId);
  const lockRef=db.collection("paymentFolioLocks").doc(folioHash);
  const inboxRef=command.webhookInboxId?db.collection("paymentWebhookInbox").doc(command.webhookInboxId):null;
  const acceptedAt=currentTime;
  return db.runTransaction(async tx=>{
   const reads=[tx.get(deviceRef),tx.get(commandRef),tx.get(intentRef),tx.get(receiptRef),
-   tx.get(lockRef),tx.get(folioRef),tx.get(journalRef)];
+   tx.get(lockRef)];
   if(inboxRef)reads.push(tx.get(inboxRef));
-  const [cd,cc,ci,prior,lock,folio,journal,inbox]=await Promise.all(reads);
+  const [cd,cc,ci,prior,lock,inbox]=await Promise.all(reads);
   const currentIntent=ci.exists?ci.data():{};
-  const folioData=folio.exists?folio.data():{};
-  const journalData=journal.exists?journal.data():{};
   const lockData=lock.exists?lock.data():null;
 
   if(prior.exists){
    const priorData=prior.data();
    if(priorData.status==="ACCEPTED"&&priorData.receiptId===receiptId&&priorData.payloadHash===receiptId&&
-    priorData.signature===receipt.signature&&folio.exists&&journal.exists&&
-    journalData.accountingReceiptId===receiptId&&journalData.ledgerEntryHash===payload.ledgerEntryHash&&
-    journalData.deviceReceiptSignature===receipt.signature&&
+    priorData.signature===receipt.signature&&
     currentIntent.accountingStatus==="POSTED_TO_LOCAL_FOLIO"&&
     currentIntent.accountingReceiptDocumentId===receiptDocumentId){
-    return {accepted:true,duplicate:true,settlementPosted:true,accountingStatus:"POSTED_TO_LOCAL_FOLIO",
-     receiptId,folioId:payload.folioId,folioBalanceMinor:folioData.balanceMinor};
+    return {accepted:true,duplicate:true,localLedgerPosted:true,settlementPosted:false,
+     accountingStatus:"POSTED_TO_LOCAL_FOLIO",receiptId,folioId:payload.folioId};
    }
    fail("accounting_receipt_replay_or_conflict");
   }
@@ -101,11 +94,6 @@ export async function verifyAndAcceptAccountingReceipt({db,tenantId,deviceId,com
    lockData.active!==true||lockData.intentId!==payload.intentId||
    (inboxRef&&(!inbox?.exists||inbox.data().tenantId!==tenantId)))
    fail("accounting_receipt_state_changed");
-  if(!folio.exists||folioData.tenantId!==tenantId||folioData.folioId!==payload.folioId||
-   folioData.currency!==payload.currency||folioData.status!=="open"||
-   !Number.isSafeInteger(folioData.balanceMinor)||folioData.balanceMinor<payload.amountMinor)
-   fail("authoritative_payment_folio_invalid");
-  if(journal.exists)fail("accounting_receipt_folio_journal_conflict");
 
   const providerVerification={
    provider:provider.provider,environment:provider.environment,providerAccountId:provider.providerAccountId,
@@ -113,32 +101,21 @@ export async function verifyAndAcceptAccountingReceipt({db,tenantId,deviceId,com
    currency:provider.currency,observedAt:provider.observedAt||acceptedAt.toISOString()
   };
   const eventId=command.webhookInboxId||receiptId;
-  const nextBalance=folioData.balanceMinor-payload.amountMinor;
   tx.create(receiptRef,{...payload,signature:receipt.signature,receiptId,payloadHash:receiptId,
    status:"ACCEPTED",providerVerification,acceptedAt,commandId,deviceId,eventId});
-  tx.create(journalRef,{
-   type:"PAYMENT_CREDIT",tenantId,folioId:payload.folioId,intentId:payload.intentId,eventId,
-   commandId,deviceId,provider:intent.provider,providerPaymentId:payload.paymentId,
-   amountMinor:payload.amountMinor,currency:payload.currency,ledgerEntryHash:payload.ledgerEntryHash,
-   accountingReceiptId:receiptId,receiptDocumentId:receiptDocumentId,
-   deviceReceiptSignature:receipt.signature,providerVerifiedStatus:"CAPTURED",
-   providerVerification,createdAt:acceptedAt
-  });
-  tx.update(folioRef,{balanceMinor:nextBalance,
-   revision:(Number.isSafeInteger(folioData.revision)?folioData.revision:0)+1,
-   updatedAt:acceptedAt,lastPaymentIntentId:payload.intentId,lastAccountingReceiptId:receiptId});
   tx.update(commandRef,{status:"RECEIPT_ACCEPTED",accountingVerificationStatus:"VERIFIED",
    accountingReceiptId:receiptId,accountingReceiptHash:payload.ledgerEntryHash,accountingReceiptAcceptedAt:acceptedAt});
   tx.update(intentRef,{accountingStatus:"POSTED_TO_LOCAL_FOLIO",accountingPostedAt:acceptedAt,
+   localLedgerPostedAt:acceptedAt,
    accountingReceiptId:receiptId,accountingReceiptCommandId:commandId,
    accountingReceiptDocumentId:receiptDocumentId,accountingReceiptHash:payload.ledgerEntryHash,
    accountingReceiptAcceptedAt:acceptedAt,localLedgerReceiptId:receiptId,
    localLedgerEntryHash:payload.ledgerEntryHash,accountingBlockReason:null});
   tx.update(lockRef,{active:false,state:"POSTED_TO_LOCAL_FOLIO",postedAt:acceptedAt,receiptId});
-  if(inboxRef&&inbox?.exists)tx.update(inboxRef,{accountingStatus:"POSTED",
-   processingStatus:"POSTED_TO_FOLIO",accountingReceiptId:receiptId,
+  if(inboxRef&&inbox?.exists)tx.update(inboxRef,{accountingStatus:"POSTED_TO_LOCAL_FOLIO",
+   processingStatus:"LOCAL_LEDGER_RECEIPT_ACCEPTED",accountingReceiptId:receiptId,
    accountingReceiptHash:payload.ledgerEntryHash,accountingReceiptAcceptedAt:acceptedAt});
-  return {accepted:true,duplicate:false,settlementPosted:true,accountingStatus:"POSTED_TO_LOCAL_FOLIO",
-   receiptId,folioId:payload.folioId,folioBalanceMinor:nextBalance};
+  return {accepted:true,duplicate:false,localLedgerPosted:true,settlementPosted:false,
+   accountingStatus:"POSTED_TO_LOCAL_FOLIO",receiptId,folioId:payload.folioId};
  });
 }

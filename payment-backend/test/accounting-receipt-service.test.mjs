@@ -33,11 +33,23 @@ const check=(o={})=>async()=>({captured:true,provider:"razorpay",environment:"te
  orderId:"order_001",paymentId:"pay_001",amountMinor:150000,currency:"INR",observedAt:now.toISOString(),...o});
 const accept=(r,db,verifyProviderStatus=check())=>verifyAndAcceptAccountingReceipt({db,tenantId,deviceId,commandId,receipt:r,verifyProviderStatus,now:()=>now});
 test("signed receipt plus exact provider capture posts once",async()=>{const r=receipt(),{db,cmd,lock,folio,inbox}=fixture(r);
- const x=await accept(r,db);assert.equal(x.accepted,true);assert.equal(x.duplicate,false);assert.equal(x.settlementPosted,true);
+ const x=await accept(r,db);assert.equal(x.accepted,true);assert.equal(x.duplicate,false);assert.equal(x.localLedgerPosted,true);assert.equal(x.settlementPosted,false);
  assert.equal(db.docs.get(cmd).status,"RECEIPT_ACCEPTED");assert.equal(db.docs.get(`paymentIntents/${intentId}`).accountingStatus,"POSTED_TO_LOCAL_FOLIO");
- assert.equal(db.docs.get(lock).active,false);assert.equal(db.docs.get(folio).balanceMinor,50000);
+ assert.equal(db.docs.get(lock).active,false);assert.equal(db.docs.get(folio).balanceMinor,200000);
+ assert.equal(db.docs.has(folio+`/journalEntries/${intentId}`),false);
  assert.equal(db.docs.get(inbox).accountingStatus,"POSTED");});
-test("identical receipt replay is idempotent",async()=>{const r=receipt(),{db}=fixture(r);assert.equal((await accept(r,db)).duplicate,false);assert.equal((await accept(r,db)).duplicate,true);});
+test("identical receipt replay is idempotent without creating a backend ledger",async()=>{const r=receipt(),{db,folio}=fixture(r);
+ const first=await accept(r,db),second=await accept(r,db);
+ assert.equal(first.localLedgerPosted,true);assert.equal(first.settlementPosted,false);
+ assert.equal(second.duplicate,true);assert.equal(second.localLedgerPosted,true);assert.equal(second.settlementPosted,false);
+ assert.equal(db.docs.get(folio).balanceMinor,200000);assert.equal(db.docs.has(folio+`/journalEntries/${intentId}`),false);
+});
+test("receipt acceptance does not require a paymentFolios ledger or cached balance",async()=>{
+ const r=receipt(),{db,folio}=fixture(r);db.docs.delete(folio);
+ const result=await accept(r,db);
+ assert.equal(result.accepted,true);assert.equal(result.localLedgerPosted,true);assert.equal(result.settlementPosted,false);
+ assert.equal(db.docs.has(folio),false);assert.equal(db.docs.has(folio+`/journalEntries/${intentId}`),false);
+});
 test("forged signature is rejected",async()=>{const r=receipt(),{db}=fixture(r);await assert.rejects(accept({...r,signature:crypto.randomBytes(72).toString("base64url")},db),/accounting_receipt_signature_invalid/);});
 test("receipt replayed against another command is rejected",async()=>{const r=receipt(),{db}=fixture(r);await assert.rejects(verifyAndAcceptAccountingReceipt({db,tenantId,deviceId,
  commandId:"123e4567-e89b-42d3-a456-426614174099",receipt:r,verifyProviderStatus:check(),now:()=>now}),/invalid_accounting_receipt/);});

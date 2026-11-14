@@ -431,16 +431,19 @@ export class FirestorePaymentRepository {
         return { kind: 'DUPLICATE', intentId: idem.intentId, state: priorIntent.state, checkoutData: priorIntent.checkoutData || null, providerOrderId: priorIntent.providerOrderId || null, providerReference: priorIntent.providerReference || null };
       }
       if (!folioSnap.exists) return { kind: 'FOLIO_NOT_PROVISIONED' };
-      const authoritativeFolio = folioSnap.data();
-      if (authoritativeFolio.tenantId !== tenantId || authoritativeFolio.folioId !== payload.folioId || authoritativeFolio.status !== 'open' || authoritativeFolio.currency !== 'INR' || !Number.isSafeInteger(authoritativeFolio.balanceMinor) || authoritativeFolio.balanceMinor < 0) return { kind: 'FOLIO_NOT_PAYABLE' };
-      if (payload.amountMinor > authoritativeFolio.balanceMinor) return { kind: 'AMOUNT_EXCEEDS_FOLIO_BALANCE' };
+      // paymentFolios is a cache of the latest local PMS folio snapshot, never a ledger.
+      // This is only a conservative checkout preflight; the trusted device rechecks the
+      // current local PMS journal before posting, and receipt acceptance never mutates this cache.
+      const folioCache = folioSnap.data();
+      if (folioCache.tenantId !== tenantId || folioCache.folioId !== payload.folioId || folioCache.status !== 'open' || folioCache.currency !== 'INR' || !Number.isSafeInteger(folioCache.balanceMinor) || folioCache.balanceMinor < 0) return { kind: 'FOLIO_NOT_PAYABLE' };
+      if (payload.amountMinor > folioCache.balanceMinor) return { kind: 'AMOUNT_EXCEEDS_FOLIO_BALANCE' };
       if (lockSnap.exists && lockSnap.data().active === true) {
         return { kind: 'FOLIO_LOCKED', intentId: lockSnap.data().intentId || null };
       }
 
       const record = {
         intentId, tenantId, folioId: payload.folioId,
-        bookingId: authoritativeFolio.bookingId || null, folioRevision: authoritativeFolio.revision ?? null,
+        bookingId: folioCache.bookingId || null, folioRevision: folioCache.revision ?? null,
         provider: payload.provider, environment: payload.environment,
         providerAccountId, deviceId: payload.deviceId || null,
         amountMinor: payload.amountMinor, currency: payload.currency,

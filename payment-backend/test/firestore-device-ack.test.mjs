@@ -114,6 +114,7 @@ test("duplicate acknowledgement after receipt acceptance remains transport-only"
     db, tenantId, deviceId, commandId, body: body({}), now: () => now
   });
   assert.equal(result.duplicate, true);
+  assert.equal(result.localLedgerPosted, true);
   assert.equal(result.settlementPosted, false);
   assert.equal(result.accountingStatus, "POSTED_TO_LOCAL_FOLIO");
 });

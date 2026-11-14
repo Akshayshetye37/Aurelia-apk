@@ -187,7 +187,7 @@ test("projector keeps a durable local posting pending until the signed server re
         acknowledgement: {
           acknowledged: true, duplicate: false, settlementPosted: false, accountingStatus: "PENDING_VERIFICATION"
         },
-        receipt: { accepted: true, duplicate: false, settlementPosted: true, accountingStatus: "POSTED_TO_LOCAL_FOLIO" }
+        receipt: { accepted: true, duplicate: false, localLedgerPosted: true, settlementPosted: false, accountingStatus: "POSTED_TO_LOCAL_FOLIO" }
       };
     },
     now: () => iso(NOW)
@@ -223,7 +223,7 @@ test("projector uses the native signed-receipt bridge by default and requires an
             acknowledged: true, duplicate: false, settlementPosted: false, accountingStatus: "PENDING_VERIFICATION"
           },
           receipt: {
-            accepted: true, duplicate: false, settlementPosted: true, accountingStatus: "POSTED_TO_LOCAL_FOLIO"
+            accepted: true, duplicate: false, localLedgerPosted: true, settlementPosted: false, accountingStatus: "POSTED_TO_LOCAL_FOLIO"
           }
         })));
       }
