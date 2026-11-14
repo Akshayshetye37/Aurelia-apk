@@ -495,6 +495,14 @@ async function completeOwnerAction(request: CallableRequest<unknown>, forcedActi
         notificationAcknowledgedAt: FieldValue.serverTimestamp(), notificationDelivery: "APP_ACKNOWLEDGED",
         ackTokenHashes: FieldValue.delete(), ackTokenExpiresAt: FieldValue.delete() });
     } else {
+      if (cooldown.state === "CONSUMED") {
+        // A concurrent grant consumption wins, but a valid cancellation assertion
+        // still consumes its one-time challenge and advances the authenticator counter.
+        tx.update(credentialRef, { counter: verification.authenticationInfo.newCounter,
+          lastUsedAt: FieldValue.serverTimestamp() });
+        tx.update(ref, { state: "CONSUMED", consumedAt: FieldValue.serverTimestamp() });
+        return { cancelled: false };
+      }
       if (!["ALERT_PENDING", "APPROVED", "PENDING", "ISSUED"].includes(cooldown.state)) throw GENERIC;
       const grantJti = typeof cooldown.grantJti === "string" ? cooldown.grantJti : null;
       const grantRef = grantJti ? db.doc("recoveryGrants/" + grantJti) : null;
