@@ -429,6 +429,8 @@ async function completeOwnerAction(request: CallableRequest<unknown>, forcedActi
     }
   });
   if (!verification.verified || !verification.authenticationInfo.userVerified) throw GENERIC;
+  // Require a strictly increasing authenticator counter; zero-counter or stale authenticators fail closed.
+  if (verification.authenticationInfo.newCounter <= Number(stored.counter)) throw GENERIC;
   const cooldownRef = db.doc("recoveryCooldowns/" + owner.tenantId);
   const eventRef = db.doc("recoverySecurityEvents/" + requestId);
   const ownerDeviceRef = db.doc("recoveryOwnerDevices/" + owner.tenantId + "_" + deviceHash);
@@ -475,7 +477,14 @@ async function completeOwnerAction(request: CallableRequest<unknown>, forcedActi
       const grantJti = typeof cooldown.grantJti === "string" ? cooldown.grantJti : null;
       const grantRef = grantJti ? db.doc("recoveryGrants/" + grantJti) : null;
       const grantNow = grantRef ? await tx.get(grantRef) : null;
-      if (grantNow?.exists && grantNow.data()?.state === "CONSUMED") return { cancelled: false };
+      if (grantNow?.exists && grantNow.data()?.state === "CONSUMED") {
+        // The grant already won the race, but this valid assertion still spends its challenge
+        // and advances the authenticator counter atomically to prevent assertion replay.
+        tx.update(credentialRef, { counter: verification.authenticationInfo.newCounter,
+          lastUsedAt: FieldValue.serverTimestamp() });
+        tx.update(ref, { state: "CONSUMED", consumedAt: FieldValue.serverTimestamp() });
+        return { cancelled: false };
+      }
       tx.update(cooldownRef, {
         state: "CANCELLED", cancelledAt: FieldValue.serverTimestamp(),
         cancelledAtSec: Math.floor(now / 1000), cancelledByUid: owner.uid, cancelledByDeviceHash: deviceHash,
