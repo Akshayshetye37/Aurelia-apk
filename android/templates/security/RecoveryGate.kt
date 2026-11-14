@@ -85,7 +85,7 @@ object RecoveryGate {
     @Synchronized
     fun attemptsLeft(): Int {
         if (stateUnavailable) return 0
-        val state = readState() ?: return 0
+        val state = safeReadState() ?: return 0
         if (state.attemptsRemaining <= 0 || expired(state)) {
             clear()
             return 0
