@@ -229,15 +229,18 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(messageService, /RecoveryOwnerAlertActivity\.EXTRA_EVENT_ID/);
   const ownerAlertActivity = read('android/templates/RecoveryOwnerAlertActivity.kt');
   assert.match(ownerAlertActivity, /acknowledgeRecoveryOwnerAlert/);
-  assert.match(ownerAlertActivity, /cancelRecoveryRequest/);
+  assert.match(ownerAlertActivity, /completeRecoveryOwnerPasskeyAction/);
+  assert.doesNotMatch(ownerAlertActivity, /cancelRecoveryRequest/);
   assert.match(ownerAlertActivity, /getIdToken\(true\)/);
   assert.match(passkeys, /eligibleAt = now \+ 24 \* 60 \* 60_000/);
   assert.match(functions, /Owner alert was not acknowledged; recovery remains blocked/);
   assert.match(functions, /cancelRecoveryRequest = onCall/);
   const cancel = functions.slice(functions.indexOf("export const cancelRecoveryRequest"), functions.indexOf("export const cancelRecoveryPhoneChange"));
-  assert.match(cancel, /requireFreshPrimaryOwner\(request\)/);
-  assert.doesNotMatch(cancel, /pending\.deviceIdHash !== deviceIdHash/);
-  assert.match(cancel, /state: "CANCELLED"/);
+  assert.match(cancel, /requireRecoveryEnabled\(\)/);
+  assert.match(cancel, /Owner cancellation requires a verified passkey assertion/);
+  assert.doesNotMatch(cancel, /state: "CANCELLED"/);
+  assert.match(passkeys, /getRecoveryOwnerPendingAction = onCall/);
+  assert.match(passkeys, /cooldown\.deviceIdHash === deviceHash/);
   assert.match(allFunctions, /ownerAuthFactor/);
   assert.match(allFunctions, /ownerAuthFactorAuthTime/);
   assert.match(messageService, /NotificationManagerCompat\.from\(this\)\.areNotificationsEnabled\(\)/);
@@ -254,6 +257,9 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   const settings = read('android/templates/RecoveryPhoneSettingsActivity.kt');
   assert.match(settings, /Register this device for owner security alerts/);
   assert.match(settings, /registerThisDeviceForAlerts/);
+  assert.match(settings, /getRecoveryOwnerPendingAction/);
+  assert.match(settings, /EXTRA_ACTION, "cancel"/);
+  assert.doesNotMatch(settings, /client\.cancelRecoveryRequest/);
 });
 
 test('backend grants carry a key ID for documented public-key rotation', () => {
@@ -284,7 +290,9 @@ test('every recovery callable enforces App Check and phone-change activation rej
   assert.match(passkeyAction, /requireEnabled\(\)/);
   for (const callable of callables) {
     assert.match(callable, /enforceAppCheck: true/);
-    if (/cancelRecoveryRequest|cancelRecoveryPhoneChange/.test(callable)) {
+    if (/cancelRecoveryRequest/.test(callable)) {
+      assert.match(callable, /requireRecoveryEnabled\(\)/);
+    } else if (/cancelRecoveryPhoneChange/.test(callable)) {
       assert.doesNotMatch(callable, /require(?:Recovery)?Enabled\(\)/);
     } else if (/completeRecoveryOwnerPasskeyAction|acknowledgeRecoveryOwnerAlert/.test(callable)) {
       assert.match(callable, /completeOwnerAction/);
@@ -307,7 +315,8 @@ test('owner alert acknowledgement is explicit and never automatic on FCM deliver
   assert.doesNotMatch(service, /acknowledgeRecoveryOwnerAlert/);
   assert.match(service, /RecoveryOwnerAlertActivity\.EXTRA_ACK_TOKEN/);
   assert.match(activity, /acknowledgeRecoveryOwnerAlert/);
-  assert.match(activity, /cancelRecoveryRequest/);
+  assert.match(activity, /completeRecoveryOwnerPasskeyAction/);
+  assert.doesNotMatch(activity, /cancelRecoveryRequest/);
   assert.match(activity, /getIdToken\(true\)/);
 });
 
