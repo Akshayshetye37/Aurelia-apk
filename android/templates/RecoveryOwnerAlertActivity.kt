@@ -41,10 +41,12 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
     private var ackToken = ""
     private var purpose = "enrollment"
     private var hasAlertContext = false
+    private var passkeyOnlyMode = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val incomingLink = intent.dataString
+        passkeyOnlyMode = intent.getBooleanExtra(EXTRA_PASSKEY_ONLY_MODE, false)
         if (!loadAlertContext(intent)) {
             val binding = runCatching { RecoveryTenantIdentity.getBinding(this) }.getOrNull()
             tenantId = binding?.tenantId
@@ -270,12 +272,16 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
                                             if (!binding.isSuccessful) {
                                                 status.text = "Owner session verified, but the encrypted local owner binding could not be saved."
                                             } else {
-                                                status.text = "Owner verified. Register a passkey with the device credential provider before enabling recovery."
-                                                enrollRecoveryPasskey {
-                                                    if (it) {
-                                                        startActivity(Intent(this, RecoveryPhoneSettingsActivity::class.java))
-                                                        finish()
+                                                if (passkeyOnlyMode) {
+                                                    status.text = "Owner verified. Complete passkey registration with the device credential provider."
+                                                    enrollRecoveryPasskey {
+                                                        if (it) finish()
                                                     }
+                                                } else {
+                                                    status.text = "Primary owner verified. Continue to recovery phone setup and hardware device attestation."
+                                                    startActivity(Intent(this, RecoveryPhoneSettingsActivity::class.java)
+                                                        .putExtra(RecoveryPhoneSettingsActivity.EXTRA_ENROLL_PASSKEY_AFTER_SETUP, true))
+                                                    finish()
                                                 }
                                             }
                                         }
@@ -506,6 +512,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
         const val EXTRA_EVENT_ID = "recovery_alert_event_id"
         const val EXTRA_ACK_TOKEN = "recovery_alert_ack_token"
         const val EXTRA_ENROLLMENT_MODE = "recovery_owner_enrollment_mode"
+        const val EXTRA_PASSKEY_ONLY_MODE = "recovery_owner_passkey_only_mode"
         const val NOTIFICATION_ID = 9402
     }
 }

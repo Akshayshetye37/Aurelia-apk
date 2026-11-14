@@ -206,6 +206,20 @@ test('owner alert UI completes server-verified email-link primary authentication
 });
 
 
+test('passkey enrollment starts only after Android device attestation and owner-alert device registration', () => {
+  const owner = read('android/templates/RecoveryOwnerAlertActivity.kt');
+  const phone = read('android/templates/RecoveryPhoneSettingsActivity.kt');
+  const ownerEmail = owner.slice(owner.indexOf('private fun completeOwnerEmailLink'), owner.indexOf('private fun acknowledge'));
+  const phoneRegistration = phone.slice(phone.indexOf('private fun registerNewPhone'), phone.indexOf('private fun registerOwnerAlertEndpoint'));
+  const persist = phone.slice(phone.indexOf('private fun persistRecoveryPhone'), phone.indexOf('private fun cancelPendingRecovery'));
+  assert.ok(ownerEmail.indexOf('RecoveryPhoneSettingsActivity::class.java') < ownerEmail.indexOf('EXTRA_ENROLL_PASSKEY_AFTER_SETUP'));
+  assert.ok(phoneRegistration.indexOf('createRecoveryAttestationChallenge') < phoneRegistration.indexOf('registerOwnerAlertEndpoint'));
+  assert.ok(phoneRegistration.indexOf('registerOwnerAlertEndpoint') < phoneRegistration.indexOf('persistRecoveryPhone'));
+  assert.ok(persist.indexOf('client.registerRecoveryPhone') < persist.indexOf('EXTRA_PASSKEY_ONLY_MODE'));
+  assert.match(phone, /Enroll or add owner passkey/);
+  assert.match(owner, /passkeyOnlyMode/);
+});
+
 test('Android owner alert uses Credential Manager for registration and server-verified acknowledgement', () => {
   const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
   const patcher = read('scripts/patch-android.js');

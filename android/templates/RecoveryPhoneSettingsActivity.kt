@@ -21,6 +21,9 @@ import android.util.Base64
 
 /** Explicit Settings workflow; Hotel Identity fields never call this activity. */
 class RecoveryPhoneSettingsActivity : FragmentActivity() {
+    companion object {
+        const val EXTRA_ENROLL_PASSKEY_AFTER_SETUP = "recovery_enroll_passkey_after_setup"
+    }
     private lateinit var store: RecoveryPhoneStore
     private lateinit var identity: FirebasePhoneIdentity
     private lateinit var client: RecoveryGrantClient
@@ -113,6 +116,16 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
             addView(Button(this@RecoveryPhoneSettingsActivity).apply {
                 text = "Register this device for owner security alerts"
                 setOnClickListener { registerThisDeviceForAlerts() }
+            })
+            addView(Button(this@RecoveryPhoneSettingsActivity).apply {
+                text = "Enroll or add owner passkey"
+                setOnClickListener {
+                    val tenant = runCatching { RecoveryTenantIdentity.getBinding(this@RecoveryPhoneSettingsActivity).tenantId }.getOrNull().orEmpty()
+                    startActivity(Intent(this@RecoveryPhoneSettingsActivity, RecoveryOwnerAlertActivity::class.java)
+                        .putExtra(RecoveryOwnerAlertActivity.EXTRA_ENROLLMENT_MODE, true)
+                        .putExtra(RecoveryOwnerAlertActivity.EXTRA_PASSKEY_ONLY_MODE, true)
+                        .putExtra(RecoveryOwnerAlertActivity.EXTRA_TENANT_ID, tenant))
+                }
             })
             addView(Button(this@RecoveryPhoneSettingsActivity).apply {
                 text = "Cancel suspicious recovery request"
@@ -383,6 +396,15 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                             "Recovery phone verified: ${mask(candidate)}"
                         }
                         phone.text.clear()
+                        if (intent.getBooleanExtra(EXTRA_ENROLL_PASSKEY_AFTER_SETUP, false) &&
+                            serverState != "CHANGE_PENDING") {
+                            intent.removeExtra(EXTRA_ENROLL_PASSKEY_AFTER_SETUP)
+                            startActivity(Intent(this, RecoveryOwnerAlertActivity::class.java)
+                                .putExtra(RecoveryOwnerAlertActivity.EXTRA_ENROLLMENT_MODE, true)
+                                .putExtra(RecoveryOwnerAlertActivity.EXTRA_PASSKEY_ONLY_MODE, true)
+                                .putExtra(RecoveryOwnerAlertActivity.EXTRA_TENANT_ID, tenant))
+                            finish()
+                        }
                     } catch (_: Exception) {
                         status.text = "Server accepted verification, but local state could not be saved."
                     }
