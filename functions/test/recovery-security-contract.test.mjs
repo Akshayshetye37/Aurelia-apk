@@ -275,10 +275,14 @@ test('every recovery callable enforces App Check and phone-change activation rej
   const callables = allFunctions.match(/export const \w+ = onCall\([\s\S]*?\n\);/g) ?? [];
   assert.ok(callables.length >= 5);
   assert.match(allFunctions, /defineString\("RECOVERY_ENABLED", \{ default: "false" \}\)/);
+  const passkeyAction = passkeys.slice(passkeys.indexOf('async function completeOwnerAction'), passkeys.indexOf('export const completeRecoveryOwnerPasskeyAction'));
+  assert.match(passkeyAction, /requireEnabled\(\)/);
   for (const callable of callables) {
     assert.match(callable, /enforceAppCheck: true/);
     if (/cancelRecoveryRequest|cancelRecoveryPhoneChange/.test(callable)) {
       assert.doesNotMatch(callable, /require(?:Recovery)?Enabled\(\)/);
+    } else if (/completeRecoveryOwnerPasskeyAction|acknowledgeRecoveryOwnerAlert/.test(callable)) {
+      assert.match(callable, /completeOwnerAction/);
     } else {
       assert.match(callable, /require(?:Recovery)?Enabled\(\)/);
     }
