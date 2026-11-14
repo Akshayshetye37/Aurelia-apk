@@ -128,8 +128,19 @@ function records(snapshot, migrationId) {
     add("expense", id, { ...clone(row), id }, "exp");
   });
   snapshot.led.forEach((row, index) => {
-    if (!row || typeof row !== "object") throw new Error("Malformed legacy ledger row at index " + index);
-    add("ledger", "legacy-ledger-" + index, { sourceCollection: "led", sourceIndex: index, value: clone(row) }, "led");
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      throw new Error("Malformed legacy ledger row at index " + index);
+    }
+    if (row.recordType === "AURELIA_FINANCIAL_LEDGER_ENTRY_V1") {
+      const id = safeId(row.id, "canonical ledger identity");
+      add("ledger", id, clone(row), "led");
+    } else {
+      // Preserve the original projection key and envelope for legacy rows so
+      // existing migration manifests remain replay-compatible.
+      add("ledger", "legacy-ledger-" + index, {
+        sourceCollection: "led", sourceIndex: index, value: clone(row)
+      }, "led");
+    }
   });
   snapshot.aud.forEach((row, index) => {
     if (!row || typeof row !== "object") throw new Error("Malformed legacy audit row at index " + index);
