@@ -133,7 +133,7 @@ final class LocalPaymentLedger extends SQLiteOpenHelper {
     ContentValues v = new ContentValues(); v.put("local_status", "ORDER_CREATED");
     v.put("provider_order_id", orderId); v.put("updated_at", System.currentTimeMillis());
     int changed = getWritableDatabase().update("payment_ledger", v,
-        "transaction_id=? AND (provider_order_id IS NULL OR provider_order_id=?) AND local_status IN ('READY_FOR_ONLINE','ORDER_CREATED','RECONCILIATION_REQUIRED')", new String[]{tx, orderId});
+        "transaction_id=? AND ((local_status='READY_FOR_ONLINE' AND provider_order_id IS NULL) OR (local_status IN ('ORDER_CREATED','RECONCILIATION_REQUIRED') AND provider_order_id=?))", new String[]{tx, orderId});
     if (changed != 1) throw new IllegalStateException("payment_order_transition_rejected_or_reference_conflict");
     return get(tx);
   }
@@ -154,7 +154,7 @@ final class LocalPaymentLedger extends SQLiteOpenHelper {
     ContentValues v = new ContentValues(); v.put("local_status", "CAPTURED_UNPOSTED");
     v.put("provider_payment_id", paymentId); v.put("updated_at", System.currentTimeMillis());
     int changed = getWritableDatabase().update("payment_ledger", v,
-        "transaction_id=? AND (provider_payment_id IS NULL OR provider_payment_id=?) AND local_status IN ('ORDER_CREATED','AWAITING_PROVIDER','CAPTURED_UNPOSTED','RECONCILIATION_REQUIRED')", new String[]{tx, paymentId});
+        "transaction_id=? AND provider_order_id IS NOT NULL AND (provider_payment_id IS NULL OR provider_payment_id=?) AND local_status IN ('ORDER_CREATED','AWAITING_PROVIDER','CAPTURED_UNPOSTED','RECONCILIATION_REQUIRED')", new String[]{tx, paymentId});
     if (changed != 1) throw new IllegalStateException("payment_capture_transition_rejected");
     return get(tx);
   }

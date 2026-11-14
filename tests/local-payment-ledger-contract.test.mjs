@@ -76,5 +76,16 @@ test('verified capture replay is idempotent only for the same provider payment r
   const capture = ledger.slice(start, end);
   assert.match(capture, /provider_payment_id IS NULL OR provider_payment_id=\?/);
   assert.match(capture, /local_status IN \('ORDER_CREATED','AWAITING_PROVIDER','CAPTURED_UNPOSTED','RECONCILIATION_REQUIRED'\)/);
+  assert.match(capture, /provider_order_id IS NOT NULL/);
   assert.match(capture, /payment_capture_transition_rejected/);
+});
+
+
+test('reconciliation never creates a replacement provider order when the original outcome is unknown', () => {
+  const start = ledger.indexOf('synchronized JSONObject recordProviderOrder');
+  const end = ledger.indexOf('synchronized JSONObject recordAwaitingProvider', start);
+  const order = ledger.slice(start, end);
+  assert.match(order, /local_status='READY_FOR_ONLINE' AND provider_order_id IS NULL/);
+  assert.match(order, /local_status IN \('ORDER_CREATED','RECONCILIATION_REQUIRED'\) AND provider_order_id=\?/);
+  assert.doesNotMatch(order, /provider_order_id IS NULL OR provider_order_id=\?/);
 });
