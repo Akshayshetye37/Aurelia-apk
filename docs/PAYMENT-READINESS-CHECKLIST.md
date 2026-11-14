@@ -1,5 +1,7 @@
 # Aurelia PMS payment readiness checklist
 
+> **SUPERSEDED for execution order and status (2026-11-14).** Use [REMAINING_WORK_AUDIT_2026-11-09.md](./REMAINING_WORK_AUDIT_2026-11-09.md) as the sole canonical plan. This document is retained only as historical/technical reference; do not use its phase ordering or status snapshot to authorize work or release.
+
 Release-gate ledger for `feature/multi-provider-payment-backend`. Source implementation, unit tests and APK builds do not establish deployment or physical-device acceptance.
 
 ## P0 — Required before payment execution

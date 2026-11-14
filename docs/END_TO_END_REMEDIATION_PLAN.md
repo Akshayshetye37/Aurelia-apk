@@ -1,5 +1,7 @@
 # Aurelia PMS — 10-workstream end-to-end remediation and release plan
 
+> **SUPERSEDED for execution order and status (2026-11-14).** Use [REMAINING_WORK_AUDIT_2026-11-09.md](./REMAINING_WORK_AUDIT_2026-11-09.md) as the sole canonical plan. This document is retained only as historical/technical reference; do not use its phase ordering or status snapshot to authorize work or release.
+
 **Status:** Engineering execution specification; implementation and acceptance are not complete.  
 **Branch:** `feature/multi-provider-payment-backend`  
 **Release policy:** Do not run debug APK, release APK, signing, publishing or production deployment workflows until all ten workstreams have passed their acceptance criteria. CI source tests may be run only when they do not invoke an Android/APK build; no build workflow is an acceptable substitute for end-to-end acceptance.  

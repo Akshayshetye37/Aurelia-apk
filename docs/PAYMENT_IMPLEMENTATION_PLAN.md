@@ -1,5 +1,7 @@
 # Aurelia PMS — Payment implementation execution plan
 
+> **SUPERSEDED for execution order and status (2026-11-14).** Use [REMAINING_WORK_AUDIT_2026-11-09.md](./REMAINING_WORK_AUDIT_2026-11-09.md) as the sole canonical plan. This document is retained only as historical/technical reference; do not use its phase ordering or status snapshot to authorize work or release.
+
 **Branch:** `feature/multi-provider-payment-backend`  
 **Architecture:** Hybrid — Android is an offline-first client; the cloud backend is the payment authority.  
 **Release posture:** Live collection stays disabled. No provider is production-ready until its complete acceptance evidence exists.  
