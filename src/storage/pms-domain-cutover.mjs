@@ -93,7 +93,7 @@ function records(snapshot, migrationId) {
   });
   const tableIds = new Set();
   snapshot.t.forEach((row, index) => {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
+    if (!row || typeof row !== "object") {
       throw new Error("Malformed legacy restaurant table at index " + index);
     }
     const tableNumber = Number(row.n);
@@ -131,7 +131,7 @@ function records(snapshot, migrationId) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       throw new Error("Malformed legacy ledger row at index " + index);
     }
-    if (row.recordType === "AURELIA_FINANCIAL_LEDGER_ENTRY_V1") {
+    if (!Array.isArray(row) && row.recordType === "AURELIA_FINANCIAL_LEDGER_ENTRY_V1") {
       const id = safeId(row.id, "canonical ledger identity");
       add("ledger", id, clone(row), "led");
     } else {
