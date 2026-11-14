@@ -326,10 +326,10 @@ test('Android process-death runner uses one host-managed phase-one invocation', 
   const workflow = read('.github/workflows/otp-recovery-android-instrumentation.yml');
   const instrumentation = read('android/templates/instrumentation/RecoveryProcessDeathInstrumentedTest.java');
   assert.doesNotMatch(workflow, /run_instrumentation_test process-death-phase-one/);
-  assert.match(workflow, /am force-stop com\\.aurelia\\.pms/);
-  assert.match(instrumentation, /newRecoveryLockout\\(context\\)\\.beginAttempt\\(\\)/);
-  assert.match(instrumentation, /lockoutFailureCount\\(\\)/);
-  assert.match(instrumentation, /recoveryThrottle\\.completeAttempt\\(\\)/);
+  assert.ok(workflow.includes('shell am force-stop com.aurelia.pms'));
+  assert.ok(instrumentation.includes('newRecoveryLockout(context).beginAttempt()'));
+  assert.ok(instrumentation.includes('lockoutFailureCount()'));
+  assert.ok(instrumentation.includes('recoveryThrottle.completeAttempt()'));
   assert.match(instrumentation, /global recovery-key failures reset only after durable PIN-envelope commit/);
 });
 
