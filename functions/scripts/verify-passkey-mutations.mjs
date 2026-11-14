@@ -40,7 +40,7 @@ function applyMutation(label, replacements, expectedFailure) {
   const output = (result.stdout ?? "") + (result.stderr ?? "");
   if (result.error) throw result.error;
   if (result.status === 0) throw new Error(label + ": security mutation survived; the test unexpectedly passed");
-  if (!output.includes("not ok 1 - WebAuthn owner action challenge") ||
+  if (!/not ok \\d+ - WebAuthn owner action challenge/.test(output) ||
       !output.includes(expectedFailure)) {
     throw new Error(label + ": command failed for an unrelated reason; expected test failure marker " +
       JSON.stringify(expectedFailure) + ":\n" + output.slice(-12000));
