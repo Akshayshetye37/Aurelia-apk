@@ -86,14 +86,6 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace processReleaseResources processDebugResources
 
-      - name: Print generated Android merged resource tree
-        if: always()
-        run: |
-          echo 'Merged resource directories:'
-          find android/app/build/intermediates/merged_res -maxdepth 5 -type d -print 2>/dev/null | sort || true
-          echo 'Generated Aurelia network security XML files:'
-          find android/app/build/intermediates -type f -name 'aurelia_network_security_config.xml' -print 2>/dev/null | sort || true
-
       - name: Assert generated release and debug CA trust resources
         run: node scripts/assert-android-network-security-build.mjs
 
