@@ -59,7 +59,8 @@ export async function verifyAndAcceptAccountingReceipt({db,tenantId,deviceId,com
 
  const receiptDocumentId=sha(tenantId+":"+commandId+":"+receiptId);
  const receiptRef=db.collection("paymentAccountingReceipts").doc(receiptDocumentId);
- const lockRef=db.collection("paymentFolioLocks").doc(folioHash);
+ const folioLockId=sha(tenantId+":"+payload.folioId);
+ const lockRef=db.collection("paymentFolioLocks").doc(folioLockId);
  const inboxRef=command.webhookInboxId?db.collection("paymentWebhookInbox").doc(command.webhookInboxId):null;
  const acceptedAt=currentTime;
  return db.runTransaction(async tx=>{
