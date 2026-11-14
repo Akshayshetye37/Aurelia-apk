@@ -1,6 +1,7 @@
 name: Aurelia R1 local-first required checks
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - '**'
