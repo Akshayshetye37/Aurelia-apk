@@ -274,3 +274,14 @@ test('global recovery-key failure throttle is durably incremented before every c
   assert.ok(flow.includes('Recovery attempt could not be durably recorded.'));
   assert.ok(flow.includes('Recovery key attempt could not be durably throttled.'));
 });
+
+
+test('passkey owner acknowledgement enforces the passkey factor timestamp itself under five minutes old', () => {
+  const backend = read('functions/src/index.ts');
+  const start = backend.indexOf('function requireFreshPasskeyOwner');
+  const end = backend.indexOf('async function requireRecoveryOwnerBinding', start);
+  const guard = backend.slice(start, end);
+  assert.ok(guard.includes('ownerAuthFactorAuthTime'));
+  assert.ok(guard.includes('now - factorAuthTime >= 300'));
+  assert.ok(guard.includes('factorAuthTime > now'));
+});
