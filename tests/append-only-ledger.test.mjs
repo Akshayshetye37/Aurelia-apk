@@ -142,6 +142,7 @@ test("canonical manual payment appends one integer-paise ledger row in the same 
     id: rows[0].id,
     tenantId: "tenant-local",
     propertyId: "property-local",
+    deviceId: "device-local",
     bookingId: "41",
     folioId: "folio-41",
     amountPaise: 12500,
