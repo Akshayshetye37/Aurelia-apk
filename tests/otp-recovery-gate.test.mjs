@@ -204,6 +204,27 @@ test('owner alert UI completes server-verified email-link primary authentication
 });
 
 
+test('Android owner alert uses Credential Manager for registration and server-verified acknowledgement', () => {
+  const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
+  const patcher = read('scripts/patch-android.js');
+  assert.match(activity, /CreatePublicKeyCredentialRequest/);
+  assert.match(activity, /GetPublicKeyCredentialOption/);
+  assert.match(activity, /CredentialManager\\.create/);
+  assert.match(activity, /registrationResponseJson/);
+  assert.match(activity, /authenticationResponseJson/);
+  assert.match(activity, /createRecoveryPasskeyEnrollmentOptions/);
+  assert.match(activity, /completeRecoveryPasskeyEnrollment/);
+  assert.match(activity, /createRecoveryOwnerActionOptions/);
+  assert.match(activity, /acknowledgeRecoveryOwnerAlert/);
+  assert.match(activity, /challengeId/);
+  assert.match(activity, /ackToken/);
+  assert.match(patcher, /androidx\\.credentials:credentials:1\\.5\\.0/);
+  assert.match(patcher, /credentials-play-services-auth:1\\.5\\.0/);
+  assert.match(patcher, /lifecycle-runtime-ktx:2\\.9\\.4/);
+  assert.match(activity, /isEnabled = false/);
+  assert.match(activity, /acknowledgeButton\\.isEnabled = hasAlertContext/);
+});
+
 test('owner recovery acknowledgement verifies the actual WebAuthn assertion and never trusts a custom passkey claim', () => {
   const backend = read('functions/src/index.ts');
   const passkeys = read('functions/src/passkeys.ts');

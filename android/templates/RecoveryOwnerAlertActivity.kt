@@ -12,6 +12,16 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationManagerCompat
+import androidx.credentials.CreatePublicKeyCredentialRequest
+import androidx.credentials.CreatePublicKeyCredentialResponse
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetPublicKeyCredentialOption
+import androidx.credentials.PublicKeyCredential
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 import com.aurelia.pms.security.RecoveryDeviceIdentity
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.ActionCodeSettings
@@ -159,7 +169,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
             text = "Passkey approval not configured"
             visibility = if (hasAlertContext) View.VISIBLE else View.GONE
             isEnabled = false
-            contentDescription = "Owner acknowledgement is disabled until passkey authentication is configured."
+            contentDescription = "Owner acknowledgement requires a server-verified passkey assertion."
             setOnClickListener { acknowledge() }
         }
         cancelButton = Button(this).apply {
@@ -260,13 +270,19 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
                                             if (!binding.isSuccessful) {
                                                 status.text = "Owner session verified, but the encrypted local owner binding could not be saved."
                                             } else {
-                                                status.text = "Primary owner verified and device bound. Continue recovery phone enrollment."
-                                                startActivity(Intent(this, RecoveryPhoneSettingsActivity::class.java))
-                                                finish()
+                                                status.text = "Owner verified. Register a passkey with the device credential provider before enabling recovery."
+                                                enrollRecoveryPasskey {
+                                                    if (it) {
+                                                        startActivity(Intent(this, RecoveryPhoneSettingsActivity::class.java))
+                                                        finish()
+                                                    }
+                                                }
                                             }
                                         }
                                 } else {
-                                    status.text = "Primary owner email verified. A passkey is required to acknowledge the alert; that integration is not configured yet. You may cancel the request, but the 24-hour hold cannot start until passkey approval is available."
+                                    acknowledgeButton.isEnabled = hasAlertContext
+                                    acknowledgeButton.text = "Acknowledge with passkey"
+                                    status.text = "Primary owner email session verified. Use the passkey on this device to acknowledge; the server verifies the assertion and applies the hold atomically."
                                 }
                             }
                         }
@@ -277,15 +293,145 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
     }
 
     private fun acknowledge() {
-        withFreshOwnerSession("acknowledgeRecoveryOwnerAlert") { result ->
-            val acknowledged = (result as? Map<*, *>)?.get("acknowledged") == true
-            if (acknowledged) NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
-            status.text = if (acknowledged) {
-                "Alert acknowledged. The 24-hour security hold has started."
-            } else {
-                "The owner alert could not be acknowledged. The hold has not started."
+        val user = FirebaseAuth.getInstance().currentUser
+        if (!hasAlertContext || user == null || tenantId.isBlank() || deviceHash.isBlank() ||
+            eventId.isBlank() || ackToken.isBlank()) {
+            status.text = "Open the original alert and complete primary-owner email-link sign-in first."
+            return
+        }
+        acknowledgeButton.isEnabled = false
+        status.text = "Requesting a one-time owner-action challenge..."
+        user.getIdToken(true).addOnCompleteListener { tokenTask ->
+            if (!tokenTask.isSuccessful) {
+                acknowledgeButton.isEnabled = true
+                status.text = "The fresh owner session could not be verified. The hold has not started."
+                return@addOnCompleteListener
+            }
+            val functions = FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
+            functions.getHttpsCallable("createRecoveryOwnerActionOptions").call(mapOf(
+                "tenantId" to tenantId, "deviceIdHash" to deviceHash, "action" to "ack", "requestId" to eventId
+            )).addOnCompleteListener { challengeTask ->
+                if (!challengeTask.isSuccessful) {
+                    acknowledgeButton.isEnabled = true
+                    status.text = "The server rejected the passkey challenge request. The hold has not started."
+                    return@addOnCompleteListener
+                }
+                val payload = challengeTask.result?.data as? Map<*, *>
+                val challengeId = payload?.get("challengeId") as? String
+                val options = payload?.get("options") as? Map<*, *>
+                if (challengeId.isNullOrBlank() || options == null) {
+                    acknowledgeButton.isEnabled = true
+                    status.text = "The server returned an invalid passkey challenge."
+                    return@addOnCompleteListener
+                }
+                lifecycleScope.launch {
+                    try {
+                        val requestJson = JSONObject(options).toString()
+                        val response = CredentialManager.create(this@RecoveryOwnerAlertActivity).getCredential(
+                            this@RecoveryOwnerAlertActivity,
+                            GetCredentialRequest(listOf(GetPublicKeyCredentialOption(requestJson)))
+                        )
+                        val passkey = response.credential as? PublicKeyCredential
+                            ?: throw IllegalStateException("Credential provider did not return a public-key credential.")
+                        val credentialResponse = jsonObjectToMap(JSONObject(passkey.authenticationResponseJson))
+                        functions.getHttpsCallable("acknowledgeRecoveryOwnerAlert").call(mapOf(
+                            "tenantId" to tenantId, "deviceIdHash" to deviceHash, "requestId" to eventId,
+                            "challengeId" to challengeId, "credentialResponse" to credentialResponse, "ackToken" to ackToken
+                        )).addOnCompleteListener { assertionTask ->
+                            val acknowledged = assertionTask.isSuccessful &&
+                                (assertionTask.result?.data as? Map<*, *>)?.get("acknowledged") == true
+                            if (acknowledged) {
+                                NotificationManagerCompat.from(this@RecoveryOwnerAlertActivity).cancel(NOTIFICATION_ID)
+                                status.text = "Passkey verified. The 24-hour security hold has started."
+                            } else {
+                                status.text = "The server rejected the passkey assertion. The hold has not started."
+                                acknowledgeButton.isEnabled = true
+                            }
+                        }
+                    } catch (_: Exception) {
+                        acknowledgeButton.isEnabled = true
+                        status.text = "Passkey authentication was cancelled or unavailable. No acknowledgement was recorded."
+                    }
+                }
             }
         }
+    }
+
+    private fun enrollRecoveryPasskey(onComplete: (Boolean) -> Unit) {
+        val user = FirebaseAuth.getInstance().currentUser
+        if (user == null || tenantId.isBlank() || deviceHash.isBlank()) {
+            status.text = "A fresh owner session and attested device are required to enroll a passkey."
+            onComplete(false)
+            return
+        }
+        user.getIdToken(true).addOnCompleteListener { tokenTask ->
+            if (!tokenTask.isSuccessful) {
+                status.text = "The fresh owner session could not be verified. Passkey enrollment was not started."
+                onComplete(false)
+                return@addOnCompleteListener
+            }
+            val functions = FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
+            functions.getHttpsCallable("createRecoveryPasskeyEnrollmentOptions").call(mapOf(
+                "tenantId" to tenantId, "deviceIdHash" to deviceHash
+            )).addOnCompleteListener { optionsTask ->
+                if (!optionsTask.isSuccessful) {
+                    status.text = "The server rejected passkey enrollment. Recovery phone registration remains locked."
+                    onComplete(false)
+                    return@addOnCompleteListener
+                }
+                val payload = optionsTask.result?.data as? Map<*, *>
+                val challengeId = payload?.get("challengeId") as? String
+                val options = payload?.get("options") as? Map<*, *>
+                if (challengeId.isNullOrBlank() || options == null) {
+                    status.text = "The passkey enrollment challenge was invalid."
+                    onComplete(false)
+                    return@addOnCompleteListener
+                }
+                lifecycleScope.launch {
+                    try {
+                        val requestJson = JSONObject(options).toString()
+                        val created = CredentialManager.create(this@RecoveryOwnerAlertActivity).createCredential(
+                            this@RecoveryOwnerAlertActivity, CreatePublicKeyCredentialRequest(requestJson)
+                        ) as? CreatePublicKeyCredentialResponse
+                            ?: throw IllegalStateException("Credential provider did not create a public-key credential.")
+                        val credentialResponse = jsonObjectToMap(JSONObject(created.registrationResponseJson))
+                        functions.getHttpsCallable("completeRecoveryPasskeyEnrollment").call(mapOf(
+                            "tenantId" to tenantId, "deviceIdHash" to deviceHash,
+                            "challengeId" to challengeId, "credentialResponse" to credentialResponse
+                        )).addOnCompleteListener { completion ->
+                            val enrolled = completion.isSuccessful &&
+                                (completion.result?.data as? Map<*, *>)?.get("registered") == true
+                            status.text = if (enrolled) {
+                                "Passkey enrolled. The independent owner alert was accepted; recovery phone setup can continue."
+                            } else {
+                                "The server rejected passkey enrollment. Recovery phone registration remains locked."
+                            }
+                            onComplete(enrolled)
+                        }
+                    } catch (_: Exception) {
+                        status.text = "Passkey creation was cancelled or unavailable. Recovery phone registration remains locked."
+                        onComplete(false)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun jsonObjectToMap(value: JSONObject): Map<String, Any?> {
+        val result = linkedMapOf<String, Any?>()
+        val keys = value.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            result[key] = jsonValue(value.get(key))
+        }
+        return result
+    }
+
+    private fun jsonValue(value: Any?): Any? = when (value) {
+        JSONObject.NULL -> null
+        is JSONObject -> jsonObjectToMap(value)
+        is JSONArray -> (0 until value.length()).map { jsonValue(value.get(it)) }
+        else -> value
     }
 
     private fun cancelRequest() {
