@@ -100,6 +100,17 @@ function ownerAuth(uid, tenantId, options = {}) {
   };
 }
 
+function passkeyOwnerAuth(uid, tenantId, options = {}) {
+  const authTime = options.authTime ?? Math.floor(Date.now() / 1000);
+  return ownerAuth(uid, tenantId, {
+    ...options,
+    provider: 'custom',
+    factor: 'passkey',
+    emailVerified: true,
+    factorAuthTime: options.factorAuthTime ?? authTime
+  });
+}
+
 function phoneOnlyOwnerAuth(uid, tenantId) {
   const session = ownerAuth(uid, tenantId, { provider: 'phone', factor: undefined });
   assert.equal(session.token.ownerAuthFactor, undefined,
@@ -179,34 +190,41 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   assert.ok(secondOwnerAlert?.data.ackToken, 'independent owner device receives its one-time acknowledgement token');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: oldAckToken
-  }, ownerAuth(ownerUid, tenantId)), 'an older notification token is invalidated when a retry rotates the proof');
+  }, passkeyOwnerAuth(ownerUid, tenantId)), 'an older notification token is invalidated when a retry rotates the proof');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, phoneOnlyOwnerAuth(ownerUid, tenantId)), 'phone-only owner session cannot acknowledge');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId, { provider: 'password' })),
+  }, passkeyOwnerAuth(ownerUid, tenantId, { provider: 'password' })),
   'password-only session cannot masquerade as server-verified email-link authentication');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) + 60 })), 'future auth_time is rejected');
+  }, passkeyOwnerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) + 60 })), 'future auth_time is rejected');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) - 301 })), 'stale primary authentication is rejected');
+  }, passkeyOwnerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) - 301 })), 'stale primary authentication is rejected');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth('different-owner-uid', tenantId)), 'wrong owner UID cannot acknowledge');
+  }, passkeyOwnerAuth('different-owner-uid', tenantId)), 'wrong owner UID cannot acknowledge');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: recoveryDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId)),
+  }, passkeyOwnerAuth(ownerUid, tenantId)),
   'the recovery-requesting device cannot acknowledge its own owner alert');
+  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
+  }, ownerAuth(ownerUid, tenantId)), 'email-link-only session cannot acknowledge the hold');
+  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
+  }, passkeyOwnerAuth(ownerUid, tenantId, { factorAuthTime: Math.floor(Date.now() / 1000) - 300 })),
+  'passkey factor older than five minutes cannot acknowledge the hold');
   const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' }));
+  }, passkeyOwnerAuth(ownerUid, tenantId, { factor: 'passkey' }));
   assert.equal(acknowledged.acknowledged, true, 'an independently enrolled, attested passkey owner device may acknowledge');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' })), 'owner acknowledgement token is single-use');
+  }, passkeyOwnerAuth(ownerUid, tenantId, { factor: 'passkey' })), 'owner acknowledgement token is single-use');
   assert.ok(acknowledged.eligibleAt >= Date.now() + 23 * 60 * 60_000);
   cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(cooldown.state, 'APPROVED');
@@ -404,13 +422,13 @@ test('only an owner device whose FCM endpoint accepted the alert may start the c
     const invalidToken = 'x'.repeat(43);
     await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
       tenantId, deviceIdHash: secondOwnerDeviceHash, eventId: cooldown.alertEventId, ackToken: invalidToken
-    }, ownerAuth(ownerUid, tenantId)), 'an endpoint that rejected FCM cannot acknowledge delivery');
+    }, passkeyOwnerAuth(ownerUid, tenantId)), 'an endpoint that rejected FCM cannot acknowledge delivery');
     await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
       tenantId, deviceIdHash: recoveryDeviceHash, eventId: cooldown.alertEventId, ackToken: invalidToken
-    }, ownerAuth(ownerUid, tenantId)), 'the recovery-requesting device cannot acknowledge its own alert');
+    }, passkeyOwnerAuth(ownerUid, tenantId)), 'the recovery-requesting device cannot acknowledge its own alert');
     const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
       tenantId, deviceIdHash: thirdOwnerDeviceHash, eventId: cooldown.alertEventId, ackToken: thirdOwnerAlert.data.ackToken
-    }, ownerAuth(ownerUid, tenantId));
+    }, passkeyOwnerAuth(ownerUid, tenantId));
     assert.equal(acknowledged.acknowledged, true);
   } finally {
     messaging.send = original;
@@ -455,7 +473,7 @@ test('an independent owner can acknowledge before the FCM send response returns'
       deviceIdHash: message.data.deviceIdHash,
       eventId: message.data.eventId,
       ackToken: message.data.ackToken
-    }, ownerAuth(ownerUid, tenantId));
+    }, passkeyOwnerAuth(ownerUid, tenantId));
     return 'emulator-fcm-accepted-after-owner-ack';
   };
   try {
@@ -561,7 +579,7 @@ test('independent primary owner cancels an issued grant; consume is rejected aft
   await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: independentDeviceHash, eventId: cooldown.alertEventId,
     ackToken: ownerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, passkeyOwnerAuth(ownerUid, tenantId));
   await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
   await sleep(1100);
   const issued = await callable(functions.issueRecoveryGrant, {
@@ -601,7 +619,7 @@ test('independent owner can cancel during the approved 24-hour hold', async () =
   await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, passkeyOwnerAuth(ownerUid, tenantId));
   const approved = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(approved.state, 'APPROVED');
   assert.ok(approved.eligibleAt > Date.now());
@@ -630,7 +648,7 @@ test('cancellation racing with grant issue wins the recovery-state transaction',
   await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, passkeyOwnerAuth(ownerUid, tenantId));
   await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
   await sleep(1100);
   const [issueResult, cancelResult] = await Promise.allSettled([
@@ -672,7 +690,7 @@ test('grant consumption racing with cancellation has exactly one winner', async 
   await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, passkeyOwnerAuth(ownerUid, tenantId));
   await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
   await sleep(1100);
   const issued = await callable(functions.issueRecoveryGrant, {
@@ -791,7 +809,7 @@ test('owner acknowledgement token expires after fifteen minutes', async () => {
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId)), 'expired owner acknowledgement is rejected');
+  }, passkeyOwnerAuth(ownerUid, tenantId)), 'expired owner acknowledgement is rejected');
   const unchanged = (await cooldownRef.get()).data();
   assert.equal(unchanged.state, 'ALERT_PENDING');
   assert.equal(unchanged.eligibleAt, null);
@@ -886,7 +904,7 @@ test('revoked owner notification device cannot acknowledge a pending alert', asy
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId)), 'revoked owner device cannot acknowledge');
+  }, passkeyOwnerAuth(ownerUid, tenantId)), 'revoked owner device cannot acknowledge');
   assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'ALERT_PENDING');
 });
 
@@ -912,7 +930,7 @@ test('owner cancellation before grant issue closes the old hold and requires a f
   await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, passkeyOwnerAuth(ownerUid, tenantId));
   await callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: ownerDeviceHash
   }, ownerAuth(ownerUid, tenantId));
@@ -957,7 +975,7 @@ test('owner cancellation before consume revokes the issued grant permanently', a
   await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, passkeyOwnerAuth(ownerUid, tenantId));
   await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
   await sleep(1100);
   const issued = await callable(functions.issueRecoveryGrant, {
