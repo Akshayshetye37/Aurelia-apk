@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 jobs:
-  android-https-resources:
+  build-resources:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -59,12 +59,44 @@ jobs:
           ./gradlew --no-daemon processReleaseResources processDebugResources
       - name: Verify clean release and debug policy
         run: node scripts/assert-android-network-security-build.mjs
-      - name: Mutation proof - release user CA must be rejected
+      - name: Stage exact generated resources for independent mutation job
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/https-policy-artifact"
+          mkdir -p "$stage/android/app/build/intermediates/packaged_res/release/packageReleaseResources/xml"
+          mkdir -p "$stage/android/app/build/intermediates/packaged_res/debug/packageDebugResources/xml"
+          mkdir -p "$stage/android/app/src/main"
+          cp android/app/build/intermediates/packaged_res/release/packageReleaseResources/xml/aurelia_network_security_config.xml "$stage/android/app/build/intermediates/packaged_res/release/packageReleaseResources/xml/"
+          cp android/app/build/intermediates/packaged_res/debug/packageDebugResources/xml/aurelia_network_security_config.xml "$stage/android/app/build/intermediates/packaged_res/debug/packageDebugResources/xml/"
+          cp android/app/src/main/AndroidManifest.xml "$stage/android/app/src/main/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-https-policy-inputs
+          path: ${{ runner.temp }}/https-policy-artifact
+          if-no-files-found: error
+          retention-days: 1
+
+  mutation-proof:
+    needs: build-resources
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-https-policy-inputs
+          path: .
+      - name: Prove release rejects user CA and restored policy passes
         shell: bash
         run: |
           set -euo pipefail
           release_xml="android/app/build/intermediates/packaged_res/release/packageReleaseResources/xml/aurelia_network_security_config.xml"
           backup="$RUNNER_TEMP/release-network-security.xml"
+          test -f "$release_xml"
           cp "$release_xml" "$backup"
           restore() { cp "$backup" "$release_xml"; }
           trap restore EXIT
