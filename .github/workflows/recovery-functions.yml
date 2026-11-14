@@ -5,6 +5,7 @@ on:
   push:
     branches: [work/p0-storage-hardening, work/otp-recovery-hardening]
     paths:
+      - 'payment-backend/test/**'
       - 'functions/**'
       - 'firestore.rules'
       - 'firebase.json'
@@ -16,6 +17,7 @@ on:
       - 'scripts/patch-android.js'
   pull_request:
     paths:
+      - 'payment-backend/test/**'
       - 'functions/**'
       - 'firestore.rules'
       - 'firebase.json'
