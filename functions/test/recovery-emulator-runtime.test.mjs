@@ -631,6 +631,7 @@ test('independent primary owner cancels the old hold and fresh OTP starts a new 
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 's'.repeat(43), phoneIdToken: phoneToken
   });
   assert.equal(start.status, 'COOLDOWN');
+  const originalCooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   await assert.rejects(callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: independentDeviceHash
   }, phoneOnlyOwnerAuth(ownerUid, tenantId)),
@@ -660,7 +661,7 @@ test('independent primary owner cancels the old hold and fresh OTP starts a new 
   assert.deepEqual(Object.keys(audit).sort(), ['createdAt', 'deviceIdHash', 'tenantId', 'type'].sort(),
     'cancellation audit is limited to tenant, hashed device identity, event type and timestamp');
   await assert.rejects(callable(functions.createRecoveryOwnerActionOptions, {
-    tenantId, deviceIdHash: independentDeviceHash, action: 'cancel', requestId: cooldown.alertEventId
+    tenantId, deviceIdHash: independentDeviceHash, action: 'cancel', requestId: originalCooldown.alertEventId
   }, ownerAuth(ownerUid, tenantId)), 'terminal cancellation cannot create a replay challenge');
   const cancellationEvents = await db.collection('recoverySecurityEvents')
     .where('tenantId', '==', tenantId).get();
@@ -1318,9 +1319,11 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
     tenantId, deviceIdHash: secondOwnerDeviceHash
   }, ownerAuth(ownerUid, tenantId));
   assert.deepEqual(pendingAction, { available: true, requestId: eventId });
-  await assert.rejects(callable(functions.getRecoveryOwnerPendingAction, {
+  const requesterContext = await callable(functions.getRecoveryOwnerPendingAction, {
     tenantId, deviceIdHash: recoveryDeviceHash
-  }, ownerAuth(ownerUid, tenantId)), 'the recovery-requesting device cannot retrieve an owner cancellation context');
+  }, ownerAuth(ownerUid, tenantId));
+  assert.deepEqual(requesterContext, { available: false },
+    'the recovery-requesting device cannot retrieve an owner cancellation context');
   await assert.rejects(callable(functions.createRecoveryOwnerActionOptions, {
     tenantId, deviceIdHash: recoveryDeviceHash, action: 'cancel', requestId: eventId
   }, ownerAuth(ownerUid, tenantId)), 'the recovery-requesting device cannot perform owner cancellation');
