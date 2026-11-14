@@ -103,7 +103,9 @@ test('recovery requires a 24-hour cooldown and a fresh phone-auth event before g
   assert.match(issuance, /pendingState === "ALERT_PENDING"/);
   const acknowledgement = functions.slice(functions.indexOf("export const acknowledgeRecoveryOwnerAlert"), functions.indexOf("export const issueRecoveryGrant"));
   assert.match(acknowledgement, /state: "APPROVED"/);
-  assert.match(acknowledgement, /requireFreshPrimaryOwner\(request\)/);
+  assert.match(acknowledgement, /requireFreshPasskeyOwner\(request\)/);
+  assert.match(functions, /function requireFreshPasskeyOwner/);
+  assert.match(functions, /ownerAuthFactor !== "passkey"/);
   assert.match(acknowledgement, /notificationDeliveredAt/);
   assert.match(acknowledgement, /alertedDeviceHashes\.includes\(deviceIdHash\)/);
   assert.match(issuance, /nowMs < eligibleAt/);
@@ -154,7 +156,7 @@ test('Android verifies the pinned ES256 signature before server consumption and 
   assert.match(grantClient, /task\.isSuccessful && task\.result == true/);
   assert.match(grantClient, /startedAtElapsedMs = SystemClock\.elapsedRealtime\(\)/);
   assert.match(grantClient, /SystemClock\.elapsedRealtime\(\) - startedAtElapsedMs/);
-  assert.match(recoveryGate, /fun armAfterServerConsumption\(remainingGrantMs: Long\)/);
+  assert.match(recoveryGate, /fun armAfterServerConsumption\(jti: String, remainingGrantMs: Long\)/);
   assert.doesNotMatch(recoveryGate, /System\.currentTimeMillis\(\)/);
 });
 
