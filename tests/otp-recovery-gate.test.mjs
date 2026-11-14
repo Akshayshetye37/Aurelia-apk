@@ -386,3 +386,15 @@ test('passkey owner acknowledgement enforces the passkey factor timestamp itself
   assert.ok(guard.includes('authTime - factorAuthTime >= 300'));
   assert.ok(guard.includes('factorAuthTime > authTime'));
 });
+
+
+test('Android recovery cancellation requires a Credential Manager passkey assertion', () => {
+  const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
+  const cancel = activity.slice(activity.indexOf('private fun cancelRequest'), activity.indexOf('companion object'));
+  assert.match(cancel, /createRecoveryOwnerActionOptions/);
+  assert.match(cancel, /GetPublicKeyCredentialOption/);
+  assert.match(cancel, /completeRecoveryOwnerPasskeyAction/);
+  assert.match(cancel, /authenticationResponseJson/);
+  assert.doesNotMatch(cancel, /cancelRecoveryRequest/);
+  assert.doesNotMatch(cancel, /withFreshOwnerSession/);
+});
