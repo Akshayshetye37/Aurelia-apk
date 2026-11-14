@@ -73,6 +73,8 @@ test('native recovery settings uses the encrypted phone record and secondary pho
   assert.match(activity, /registerOwnerNotificationDevice/);
   assert.match(activity, /POST_NOTIFICATIONS/);
   assert.match(activity, /You must enter that key to restore access/);
+  assert.match(activity, /SMS OTP resets account access only/);
+  assert.match(activity, /does not recover, regenerate, or replace a lost offline recovery key/);
   assert.match(activity, /encrypted data cannot be recovered/);
   const client = read('android/templates/RecoveryGrantClient.kt');
   assert.match(client, /currentPhoneIdToken/);
