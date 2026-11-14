@@ -187,6 +187,31 @@ async function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, owner
   sentMessages.length = 0;
 }
 
+async function preparePasskeyOwnerAction({ tenantId, ownerUid, deviceHash, action = 'cancel' }) {
+  const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  assert.ok(cooldown?.alertEventId, 'recovery request has an owner action event');
+  const requestId = cooldown.alertEventId;
+  const challenge = await callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: deviceHash, action, requestId
+  }, ownerAuth(ownerUid, tenantId));
+  const authenticator = authenticators.get(tenantId);
+  assert.ok(authenticator, 'tenant fixture has a WebAuthn authenticator');
+  const credentialResponse = authenticator.assert({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: challenge.options.challenge
+  });
+  return {
+    requestId,
+    complete: () => callable(functions.completeRecoveryOwnerPasskeyAction, {
+      tenantId, deviceIdHash: deviceHash, action, requestId,
+      challengeId: challenge.challengeId, credentialResponse
+    }, ownerAuth(ownerUid, tenantId))
+  };
+}
+
+async function cancelRecoveryWithPasskey(options) {
+  return (await preparePasskeyOwnerAction({ ...options, action: 'cancel' })).complete();
+}
+
 test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold, fresh OTP, five-minute grant and one-time JTI', async () => {
   assert.ok(functions.issueRecoveryGrant);
   assert.ok(functions.acknowledgeRecoveryOwnerAlert);
@@ -375,10 +400,9 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
 
   const grantRecord = (await db.doc(`recoveryGrants/${payload.jti}`).get()).data();
   assert.equal(grantRecord.state, 'CONSUMED');
-  const consumedCancellation = await callable(functions.cancelRecoveryRequest, {
+  await assert.rejects(callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: secondOwnerDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
-  assert.equal(consumedCancellation.cancelled, false, 'consume wins before later cancellation');
+  }, ownerAuth(ownerUid, tenantId)), 'legacy cancellation cannot alter an already-consumed grant');
   const finalState = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(finalState.state, 'CONSUMED');
   const consumedKey = createHash('sha256').update(`${tenantId}|${ownerUid}|${payload.jti}`).digest('hex');
@@ -564,10 +588,10 @@ test('independent primary owner cancels the old hold and fresh OTP starts a new 
     tenantId, deviceIdHash: independentDeviceHash
   }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) + 60 })),
   'future owner auth_time cannot cancel');
-  const cancelled = await callable(functions.cancelRecoveryRequest, {
-    tenantId, deviceIdHash: independentDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
-  assert.equal(cancelled.cancelled, true, 'a fresh verified owner email-link session may cancel');
+  const cancelled = await cancelRecoveryWithPasskey({
+    tenantId, ownerUid, deviceHash: independentDeviceHash
+  });
+  assert.equal(cancelled.cancelled, true, 'an independent attested owner device with a valid passkey may cancel');
   const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(state.state, 'CANCELLED');
   assert.equal(state.cancelledByDeviceHash, independentDeviceHash);
@@ -580,10 +604,9 @@ test('independent primary owner cancels the old hold and fresh OTP starts a new 
   assert.ok(audit);
   assert.deepEqual(Object.keys(audit).sort(), ['createdAt', 'deviceIdHash', 'tenantId', 'type'].sort(),
     'cancellation audit is limited to tenant, hashed device identity, event type and timestamp');
-  const replayedCancellation = await callable(functions.cancelRecoveryRequest, {
-    tenantId, deviceIdHash: independentDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
-  assert.equal(replayedCancellation.cancelled, false, 'replayed cancellation is a terminal no-op');
+  await assert.rejects(callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: independentDeviceHash, action: 'cancel', requestId: cooldown.alertEventId
+  }, ownerAuth(ownerUid, tenantId)), 'terminal cancellation cannot create a replay challenge');
   const cancellationEvents = await db.collection('recoverySecurityEvents')
     .where('tenantId', '==', tenantId).get();
   assert.equal(cancellationEvents.docs.filter(doc =>
@@ -634,9 +657,9 @@ test('independent primary owner cancels an issued grant; consume is rejected aft
   });
   assert.equal(issued.status, 'ISSUED');
   const payload = JSON.parse(Buffer.from(issued.grant.split('.')[1], 'base64url').toString('utf8'));
-  const cancelled = await callable(functions.cancelRecoveryRequest, {
-    tenantId, deviceIdHash: independentDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
+  const cancelled = await cancelRecoveryWithPasskey({
+    tenantId, ownerUid, deviceHash: independentDeviceHash
+  });
   assert.equal(cancelled.cancelled, true);
   const grantRecord = (await db.doc(`recoveryGrants/${payload.jti}`).get()).data();
   assert.equal(grantRecord.state, 'REVOKED');
@@ -670,9 +693,9 @@ test('independent owner can cancel during the approved 24-hour hold', async () =
   const approved = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(approved.state, 'APPROVED');
   assert.ok(approved.eligibleAt > Date.now());
-  const cancelled = await callable(functions.cancelRecoveryRequest, {
-    tenantId, deviceIdHash: ownerDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
+  const cancelled = await cancelRecoveryWithPasskey({
+    tenantId, ownerUid, deviceHash: ownerDeviceHash
+  });
   assert.equal(cancelled.cancelled, true);
   assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'CANCELLED');
 });
@@ -698,14 +721,13 @@ test('cancellation racing with grant issue wins the recovery-state transaction',
   }, passkeyOwnerAuth(ownerUid, tenantId));
   await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
   await sleep(1100);
+  const cancellation = await preparePasskeyOwnerAction({ tenantId, ownerUid, deviceHash: ownerDeviceHash });
   const [issueResult, cancelResult] = await Promise.allSettled([
     callable(functions.issueRecoveryGrant, {
       tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'x'.repeat(43),
       phoneIdToken: await phoneAuthToken(phone)
     }),
-    callable(functions.cancelRecoveryRequest, {
-      tenantId, deviceIdHash: ownerDeviceHash
-    }, ownerAuth(ownerUid, tenantId))
+    cancellation.complete()
   ]);
   assert.equal(cancelResult.status, 'fulfilled');
   assert.equal(cancelResult.value.cancelled, true);
@@ -745,13 +767,12 @@ test('grant consumption racing with cancellation has exactly one winner', async 
   });
   assert.equal(issued.status, 'ISSUED');
   const payload = JSON.parse(Buffer.from(issued.grant.split('.')[1], 'base64url').toString('utf8'));
+  const cancellation = await preparePasskeyOwnerAction({ tenantId, ownerUid, deviceHash: ownerDeviceHash });
   const [consumeResult, cancelResult] = await Promise.allSettled([
     callable(functions.consumeRecoveryGrant, {
       grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
     }, ownerAuth(ownerUid, tenantId)),
-    callable(functions.cancelRecoveryRequest, {
-      tenantId, deviceIdHash: ownerDeviceHash
-    }, ownerAuth(ownerUid, tenantId))
+    cancellation.complete()
   ]);
   assert.equal(cancelResult.status, 'fulfilled');
   const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
