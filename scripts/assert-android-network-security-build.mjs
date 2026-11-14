@@ -24,28 +24,28 @@ function readVariantConfig(variant) {
   assert.equal(
     candidates.length,
     1,
-    \`Expected exactly one generated \${variant} network security XML below \${intermediatesRoot}; found \${candidates.length}\`
+    `Expected exactly one generated \${variant} network security XML below \${intermediatesRoot}; found \${candidates.length}`
   );
   return { file: candidates[0], xml: fs.readFileSync(candidates[0], 'utf8') };
 }
 
 function assertPolicy({ variant, xml, expectedAnchors }) {
   assert.match(xml, /<base-config\b[^>]*cleartextTrafficPermitted="false"/,
-    \`\${variant}: cleartext traffic must be disabled\`);
+    `\${variant}: cleartext traffic must be disabled`);
   assert.doesNotMatch(xml, /cleartextTrafficPermitted="true"/,
-    \`\${variant}: no configuration may enable cleartext traffic\`);
+    `\${variant}: no configuration may enable cleartext traffic`);
 
   const trustAnchors = xml.match(/<trust-anchors>([\s\S]*?)<\/trust-anchors>/);
-  assert.ok(trustAnchors, \`\${variant}: trust-anchors block must exist\`);
+  assert.ok(trustAnchors, `\${variant}: trust-anchors block must exist`);
   const actualAnchors = [...trustAnchors[1].matchAll(/<certificates\s+src="([^"]+)"\s*\/>/g)]
     .map(match => match[1])
     .sort();
   assert.deepEqual(actualAnchors, [...expectedAnchors].sort(),
-    \`\${variant}: trust anchors must exactly match the allowed CA set\`);
+    `\${variant}: trust anchors must exactly match the allowed CA set`);
 }
 
 const manifestPath = path.join(root, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
-assert.ok(fs.existsSync(manifestPath), \`Generated Android manifest missing: \${manifestPath}\`);
+assert.ok(fs.existsSync(manifestPath), `Generated Android manifest missing: \${manifestPath}`);
 const manifest = fs.readFileSync(manifestPath, 'utf8');
 const applicationTag = manifest.match(/<application\b[^>]*>/);
 assert.ok(applicationTag, 'Generated Android manifest must contain an application element');
@@ -61,5 +61,5 @@ const debug = readVariantConfig('debug');
 assertPolicy({ variant: 'debug', xml: debug.xml, expectedAnchors: ['system', 'user'] });
 
 console.log('Generated Android manifest and packaged resources verified: release trusts system CAs only; debug trusts system and user CAs; cleartext is disabled in both.');
-console.log(\`Release resource: \${path.relative(root, release.file)}\`);
-console.log(\`Debug resource: \${path.relative(root, debug.file)}\`);
+console.log(`Release resource: \${path.relative(root, release.file)}`);
+console.log(`Debug resource: \${path.relative(root, debug.file)}`);
