@@ -97,10 +97,9 @@ export async function settlePaymentToRepository({
   const bookingId = bookingKey(booking);
   const folioId = String(booking.folioId || "booking-" + bookingId);
   const amountPaise = moneyToPaise(amount, "Payment amount");
-  const ledgerKey = String(idempotencyKey || "").trim() ||
-    (String(reference || "").trim() ? "ref:" + String(reference).trim() : "");
-  if (!ledgerKey || ledgerKey.length > 256 || /[\u0000-\u001f\u007f]/.test(ledgerKey)) {
-    throw fail("PAYMENT_IDEMPOTENCY_KEY_REQUIRED", "A stable payment idempotency key is required before posting.");
+  const suppliedLedgerKey = String(idempotencyKey || "").trim();
+  if (suppliedLedgerKey.length > 256 || /[\u0000-\u001f\u007f]/.test(suppliedLedgerKey)) {
+    throw fail("PAYMENT_IDEMPOTENCY_KEY_INVALID", "The payment idempotency key is invalid.");
   }
   // Flush snapshots queued by the compatibility UI before taking entity
   // versions; otherwise an older queued snapshot could race this transaction.
@@ -164,7 +163,7 @@ export async function settlePaymentToRepository({
     method,
     reference,
     source,
-    idempotencyKey: ledgerKey,
+    idempotencyKey: suppliedLedgerKey || undefined,
     balanceDue: balanceDueFor(workingBooking),
     verificationConfirmed,
     persist: () => {},
@@ -179,6 +178,14 @@ export async function settlePaymentToRepository({
   if (reviewEvidence?.st === "matched" && !result.duplicate) {
     throw fail("PAYMENT_EVIDENCE_STATE_DIVERGENCE",
       "Evidence is marked approved but no matching canonical payment exists; reconcile before posting.");
+  }
+  const normalizedReference = /upi|bank|neft|rtgs|imps|card|wallet/i.test(String(method || ""))
+    ? String(reference || "").trim().replace(/\\s+/g, "").toUpperCase()
+    : String(reference || "").trim();
+  const ledgerKey = String(result.payment?.idempotencyKey || suppliedLedgerKey ||
+    (normalizedReference ? "ref:" + normalizedReference : "")).trim();
+  if (!ledgerKey) {
+    throw fail("PAYMENT_IDEMPOTENCY_KEY_REQUIRED", "A stable payment idempotency key is required before posting.");
   }
   const ledgerId = await ledgerEntityId(bridge.context.tenantId, ledgerKey);
   const committedAt = now();
