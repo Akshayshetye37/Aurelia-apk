@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
@@ -155,4 +156,38 @@ test("canonical manual payment appends one integer-paise ledger row in the same 
     reversalOf: null,
     createdAt: "2026-11-15T12:00:00.000Z"
   });
+});
+
+const androidRepositorySource = readFileSync(
+  new URL("../android/templates/LocalPmsRepository.java", import.meta.url),
+  "utf8"
+);
+
+test("Android SQLite rejects ledger rewrites in both single and batch transactions", () => {
+  const guards = androidRepositorySource.match(
+    /"ledger"\\.equals\\(type\\)&&actual>0\\)throw new IllegalStateException\\("LEDGER_APPEND_ONLY"\\)/g
+  ) || [];
+  assert.equal(guards.length, 2);
+});
+
+test("canonical payment posting refuses to proceed without a stable idempotency key", async () => {
+  const { bridge } = fixture();
+  const booking = {
+    id: 42, folioId: "folio-42", g: "Guest Two", room: "102", st: "in",
+    p: 0, pays: [], payments: [], ch: [], rate: 1000
+  };
+  const state = { tab: "stays", bk: {}, b: [booking], g: [], rooms: [], today: 0, aud: [] };
+  await assert.rejects(settlePaymentToRepository({
+    bridge,
+    state,
+    booking,
+    balanceDueFor: row => Math.max(0, 1000 - Number(row.p || 0)),
+    amount: 100,
+    method: "Cash",
+    source: "manual",
+    verificationConfirmed: true,
+    now: () => "2026-11-15T12:00:00.000Z"
+  }), error => error.code === "PAYMENT_IDEMPOTENCY_KEY_REQUIRED");
+  assert.equal((await bridge.listEntities("ledger")).length, 0);
+  assert.equal(await bridge.fetchEntity("folio", "folio-42"), null);
 });
