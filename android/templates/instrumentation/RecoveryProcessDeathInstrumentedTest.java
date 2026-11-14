@@ -15,7 +15,9 @@ import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
+import java.security.MessageDigest;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
 import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -41,6 +43,7 @@ public final class RecoveryProcessDeathInstrumentedTest {
   private static final String REBOOT_ENTITY_ID = "persisted_before_device_reboot";
 
   @Test public void phaseOnePersistsPinAAndDatabaseBeforeForceStop() throws Exception {
+    requirePhase("1");
     Context context = ApplicationProvider.getApplicationContext().createDeviceProtectedStorageContext();
     context.deleteDatabase(DB);
     com.aurelia.pms.security.AureliaEnvelopeStore store =
@@ -67,8 +70,9 @@ public final class RecoveryProcessDeathInstrumentedTest {
       key = manager.currentDataKeyCopy();
       repository = new LocalPmsRepository(context, key);
       repository.initialize();
+      String persistedValue = "survives-real-process-death";
       repository.transactBusinessChange(ENTITY_TYPE, ENTITY_ID, 0,
-        new JSONObject().put("value", "survives-real-process-death"),
+        new JSONObject().put("value", persistedValue).put("checksum", sha256Hex(persistedValue)),
         new JSONObject().put("eventId", "phase-one-event").put("tenantId", "tenant-test")
           .put("propertyId", "property-test").put("deviceId", "device-test")
           .put("entityType", ENTITY_TYPE).put("entityId", ENTITY_ID).put("sequence", 1)
@@ -94,14 +98,10 @@ public final class RecoveryProcessDeathInstrumentedTest {
       }
     }
     Log.i("RecoveryProcessDeath", "PHASE_ONE_READY");
-    // Hold this exact app process until the host observes the durable marker and
-    // explicitly force-stops it. Returning from AndroidJUnitRunner would itself
-    // stop the target package before the host can kill it.
-    Thread.sleep(30 * 60 * 1000L);
-    fail("Host did not force-stop the phase-one target process.");
   }
 
   @Test public void phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop() throws Exception {
+    requirePhase("2");
     Context context = ApplicationProvider.getApplicationContext().createDeviceProtectedStorageContext();
     com.aurelia.pms.security.AureliaEnvelopeStore store =
       new com.aurelia.pms.security.AureliaEnvelopeStore(context);
@@ -150,7 +150,10 @@ public final class RecoveryProcessDeathInstrumentedTest {
       repository.initialize();
       JSONObject entity = repository.getEntity(ENTITY_TYPE, ENTITY_ID);
       assertNotNull("SQLCipher data must survive force-stop and PIN rotation", entity);
-      assertEquals("survives-real-process-death", entity.getJSONObject("data").getString("value"));
+      JSONObject persistedData = entity.getJSONObject("data");
+      assertEquals("survives-real-process-death", persistedData.getString("value"));
+      assertEquals("phase-one payload checksum must survive process death and database reopen",
+        sha256Hex(persistedData.getString("value")), persistedData.getString("checksum"));
       assertEquals(1L, entity.getLong("version"));
     } finally {
       if (repository != null) repository.close();
@@ -336,6 +339,23 @@ public final class RecoveryProcessDeathInstrumentedTest {
     KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
     keyStore.load(null);
     if (keyStore.containsAlias(FIXTURE_ALIAS)) keyStore.deleteEntry(FIXTURE_ALIAS);
+  }
+
+  private static void requirePhase(String expected) {
+    assertEquals("host must launch each process-death phase in a separate instrumentation invocation",
+      expected, InstrumentationRegistry.getArguments().getString("phase"));
+  }
+
+  private static String sha256Hex(String value) throws Exception {
+    byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+    char[] alphabet = "0123456789abcdef".toCharArray();
+    char[] encoded = new char[digest.length * 2];
+    for (int i = 0; i < digest.length; i++) {
+      int item = digest[i] & 0xff;
+      encoded[i * 2] = alphabet[item >>> 4];
+      encoded[i * 2 + 1] = alphabet[item & 0x0f];
+    }
+    return new String(encoded);
   }
 
   private static com.aurelia.pms.security.AureliaAppManager newManager(Context context) {
