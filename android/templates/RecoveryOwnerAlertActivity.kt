@@ -39,6 +39,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
     private var deviceHash = ""
     private var eventId = ""
     private var ackToken = ""
+    private var requestedAction = "ack"
     private var purpose = "enrollment"
     private var hasAlertContext = false
     private var passkeyOnlyMode = false
@@ -89,21 +90,24 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
         val incomingTenant = source.getStringExtra(EXTRA_TENANT_ID)
         val incomingDevice = source.getStringExtra(EXTRA_DEVICE_HASH)
         val incomingEvent = source.getStringExtra(EXTRA_EVENT_ID)
-        val incomingToken = source.getStringExtra(EXTRA_ACK_TOKEN)
+        val incomingToken = source.getStringExtra(EXTRA_ACK_TOKEN).orEmpty()
+        val incomingAction = source.getStringExtra(EXTRA_ACTION) ?: "ack"
         if (incomingTenant.isNullOrBlank() && incomingDevice.isNullOrBlank() &&
-            incomingEvent.isNullOrBlank() && incomingToken.isNullOrBlank()) return false
+            incomingEvent.isNullOrBlank() && incomingToken.isBlank()) return false
         if (incomingTenant.isNullOrBlank() || incomingDevice.isNullOrBlank() ||
-            incomingEvent.isNullOrBlank() || incomingToken.isNullOrBlank()) return false
+            incomingEvent.isNullOrBlank() || incomingAction !in setOf("ack", "cancel") ||
+            (incomingAction == "ack" && incomingToken.isBlank())) return false
         val localDevice = runCatching { RecoveryDeviceIdentity.deviceIdHash() }.getOrNull()
         if (localDevice != incomingDevice) return false
         tenantId = incomingTenant
         deviceHash = incomingDevice
         eventId = incomingEvent
         ackToken = incomingToken
+        requestedAction = incomingAction
         hasAlertContext = true
         purpose = "alert"
         if (::acknowledgeButton.isInitialized) {
-            acknowledgeButton.visibility = View.VISIBLE
+            acknowledgeButton.visibility = if (requestedAction == "cancel") View.GONE else View.VISIBLE
             acknowledgeButton.isEnabled = false
             cancelButton.visibility = View.VISIBLE
         }
@@ -170,7 +174,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
         })
         acknowledgeButton = Button(this).apply {
             text = "Passkey approval not configured"
-            visibility = if (hasAlertContext) View.VISIBLE else View.GONE
+            visibility = if (hasAlertContext && requestedAction != "cancel") View.VISIBLE else View.GONE
             isEnabled = false
             contentDescription = "Owner acknowledgement requires a server-verified passkey assertion."
             setOnClickListener { acknowledge() }
@@ -300,6 +304,10 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
 
     private fun refreshPasskeyActionReadiness() {
         acknowledgeButton.isEnabled = false
+        if (requestedAction == "cancel") {
+            status.text = "Primary owner verified. Use the passkey to cancel the pending recovery request."
+            return
+        }
         if (!hasAlertContext || tenantId.isBlank() || deviceHash.isBlank() || eventId.isBlank() || ackToken.isBlank()) {
             status.text = "Open the original owner alert and complete email-link sign-in first."
             return
@@ -336,7 +344,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
 
     private fun acknowledge() {
         val user = FirebaseAuth.getInstance().currentUser
-        if (!hasAlertContext || user == null || tenantId.isBlank() || deviceHash.isBlank() ||
+        if (!hasAlertContext || requestedAction != "ack" || user == null || tenantId.isBlank() || deviceHash.isBlank() ||
             eventId.isBlank() || ackToken.isBlank()) {
             status.text = "Open the original alert and complete primary-owner email-link sign-in first."
             return
@@ -563,6 +571,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
         const val EXTRA_DEVICE_HASH = "recovery_alert_device_hash"
         const val EXTRA_EVENT_ID = "recovery_alert_event_id"
         const val EXTRA_ACK_TOKEN = "recovery_alert_ack_token"
+        const val EXTRA_ACTION = "recovery_alert_action"
         const val EXTRA_ENROLLMENT_MODE = "recovery_owner_enrollment_mode"
         const val EXTRA_PASSKEY_ONLY_MODE = "recovery_owner_passkey_only_mode"
         const val NOTIFICATION_ID = 9402
