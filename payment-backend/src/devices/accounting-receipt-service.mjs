@@ -73,6 +73,7 @@ export async function verifyAndAcceptAccountingReceipt({db,tenantId,deviceId,com
   const currentIntent=ci.exists?ci.data():{};
   const folioData=folio.exists?folio.data():{};
   const journalData=journal.exists?journal.data():{};
+  const lockData=lock.exists?lock.data():null;
 
   if(prior.exists){
    const priorData=prior.data();
@@ -87,11 +88,17 @@ export async function verifyAndAcceptAccountingReceipt({db,tenantId,deviceId,com
    }
    fail("accounting_receipt_replay_or_conflict");
   }
+  if(provider.provider!==currentIntent.provider||provider.environment!==currentIntent.environment||
+   provider.providerAccountId!==currentIntent.providerAccountId||provider.orderId!==currentIntent.providerOrderId||
+   provider.paymentId!==currentIntent.providerPaymentId||provider.amountMinor!==currentIntent.amountMinor||
+   provider.currency!==currentIntent.currency)
+   fail("payment_provider_status_intent_mismatch");
   if(!cd.exists||cd.data().status!=="ACTIVE"||cd.data().publicKeySpkiBase64!==device.publicKeySpkiBase64||
    !cc.exists||!ci.exists||!matches(payload,cc.data(),currentIntent,tenantId,deviceId,commandId)||
    cc.data().status!=="DEVICE_ACKNOWLEDGED_PENDING_VERIFICATION"||cc.data().deviceReceiptId!==receiptId||
    currentIntent.accountingStatus==="POSTED_TO_LOCAL_FOLIO"||
-   !lock.exists||lock.data().active!==true||lock.data().intentId!==payload.intentId||
+   !lock.exists||lockData.tenantId!==tenantId||lockData.folioId!==payload.folioId||
+   lockData.active!==true||lockData.intentId!==payload.intentId||
    (inboxRef&&(!inbox?.exists||inbox.data().tenantId!==tenantId)))
    fail("accounting_receipt_state_changed");
   if(!folio.exists||folioData.tenantId!==tenantId||folioData.folioId!==payload.folioId||
