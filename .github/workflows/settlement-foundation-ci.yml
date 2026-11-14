@@ -1,9 +1,12 @@
 name: Aurelia settlement foundation CI
+# Exact-SHA gate fan-out: candidate commits run this workstream's full acceptance suite.
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - feature/multi-provider-payment-backend
+      - 'work/**'
     paths:
       - "src/payments/**"
       - "tests/**"
@@ -11,7 +14,7 @@ on:
       - ".github/workflows/settlement-foundation-ci.yml"
   pull_request:
     branches:
-      - feature/multi-provider-payment-backend
+      - '**'
     paths:
       - "src/payments/**"
       - "tests/**"

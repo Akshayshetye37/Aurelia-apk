@@ -1,4 +1,5 @@
 name: PMS source tests and production web packaging
+# Exact-SHA gate fan-out: candidate commits run this workstream's full acceptance suite.
 
 on:
   workflow_dispatch:

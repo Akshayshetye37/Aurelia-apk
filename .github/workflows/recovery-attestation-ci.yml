@@ -1,4 +1,5 @@
 name: Recovery hardware-attestation verifier CI
+# Exact-SHA gate fan-out: candidate commits run this workstream's full acceptance suite.
 
 on:
   workflow_dispatch:
