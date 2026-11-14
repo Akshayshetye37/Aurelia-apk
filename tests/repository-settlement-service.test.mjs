@@ -56,12 +56,15 @@ test("idempotent retry returns the original canonical payment without a second c
     verificationConfirmed: true
   };
   const first = await settlePaymentToRepository(input);
+  state.led = [];
   const second = await settlePaymentToRepository(input);
   assert.equal(first.duplicate, false);
+  assert.equal(state.led.length, 1);
   assert.equal(second.duplicate, true);
   assert.equal(booking.p, 250);
   assert.equal(booking.pays.length, 1);
   assert.equal((await bridge.fetchEntity("folio", "folio-41")).data.paidPaise, 25000);
+  assert.equal((await bridge.listEntities("ledger")).length, 1);
 });
 
 test("canonical booking divergence fails closed instead of overwriting either copy", async () => {
@@ -73,7 +76,7 @@ test("canonical booking divergence fails closed instead of overwriting either co
   });
   await assert.rejects(settlePaymentToRepository({
     bridge, state, booking, balanceDueFor, amount: 100, method: "Cash",
-    source: "manual", verificationConfirmed: true
+    source: "manual", idempotencyKey: "divergent-booking-payment-41", verificationConfirmed: true
   }), error => error.code === "CANONICAL_BOOKING_DIVERGENCE");
   assert.equal(booking.p, 0);
   assert.equal(await bridge.fetchEntity("folio", "folio-41"), null);
@@ -97,7 +100,7 @@ test("failed canonical transaction leaves the live folio untouched", async () =>
   bridge.mutateEntities = async () => { throw new Error("simulated storage failure"); };
   await assert.rejects(settlePaymentToRepository({
     bridge, state, booking, balanceDueFor, amount: 100, method: "Cash",
-    source: "manual", verificationConfirmed: true
+    source: "manual", idempotencyKey: "failed-storage-payment-41", verificationConfirmed: true
   }), /simulated storage failure/);
   bridge.mutateEntities = original;
   assert.equal(booking.p, 0);
@@ -105,6 +108,7 @@ test("failed canonical transaction leaves the live folio untouched", async () =>
   assert.equal(state.today, 0);
   assert.equal(await bridge.fetchEntity("booking", "41"), null);
   assert.equal(await bridge.fetchEntity("folio", "folio-41"), null);
+  assert.equal((await bridge.listEntities("ledger")).length, 0);
 });
 
 test("legacy UI cache is refreshed only after the canonical payment snapshot is committed", async () => {
@@ -117,7 +121,7 @@ test("legacy UI cache is refreshed only after the canonical payment snapshot is 
   };
   const result = await settlePaymentToRepository({
     bridge, state, booking, balanceDueFor, amount: 125, method: "Cash",
-    source: "manual", verificationConfirmed: true, legacyStorage
+    source: "manual", idempotencyKey: "cache-refresh-payment-41", verificationConfirmed: true, legacyStorage
   });
   assert.equal(result.cacheRefreshed, true);
   const cached = JSON.parse(values.get("aurelia_lodge_v2"));

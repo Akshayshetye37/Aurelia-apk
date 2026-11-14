@@ -1,0 +1,186 @@
+name: Build approved signed Aurelia PMS release APK
+
+# Release builds are deliberately gated; do not build until all ten acceptance gates are signed off.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'aurelia-approved-*'
+
+# Serialize builds on this branch so concurrent runs do not compete for runners
+# or publish ambiguous release artifacts.
+concurrency:
+  group: aurelia-pms-android-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release-apk:
+    if: github.repository == 'Akshayshetye37/Aurelia-apk' && ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/aurelia-approved-')))
+    name: Verify and build signed Aurelia PMS release
+    environment:
+      name: aurelia-release-approval
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4.4.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node v4.4.0
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # actions/setup-java v4.9.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Node dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install payment backend dependencies
+        run: npm --prefix payment-backend ci --no-audit --no-fund
+
+      - name: Run PMS regression tests
+        run: npm test
+
+      - name: Check payment backend syntax and security contracts
+        run: |
+          node --check payment-backend/src/server.mjs
+          npm --prefix payment-backend test
+
+      - name: Validate LAN payment backend source
+        run: |
+          node --check payment-backend/src/local-server.mjs
+          node --check payment-backend/src/providers/razorpay.mjs
+          node --check payment-backend/src/providers/cashfree.mjs
+
+      - name: Test LAN payment backend contracts
+        run: npm --prefix payment-backend test
+
+      - name: Prepare web app
+        run: npm run build
+
+      - name: Enforce production payment privacy boundaries
+        run: node scripts/check-release-boundaries.mjs
+
+      - name: Generate Android project from Capacitor and native templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          if [[ -d android/templates ]]; then
+            mv android/templates "$template_dir"
+          fi
+          if [[ -d android ]]; then
+            rmdir android
+          fi
+          npx cap add android
+          if [[ -d "$template_dir" ]]; then
+            mkdir -p android/templates
+            cp -a "$template_dir/." android/templates/
+          fi
+          test -f android/gradlew
+          test -f android/app/build.gradle
+
+      - name: Apply Aurelia native Android configuration
+        run: node scripts/patch-android.js
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Verify merged Android manifest permissions
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="$(find app/build/intermediates/merged_manifest -type f -name AndroidManifest.xml -print -quit)"
+          if [[ -z "$manifest" ]]; then
+            echo "::error::Merged Android manifest was not found."
+            exit 1
+          fi
+          blocked_permissions='PACKAGE_USAGE_STATS|WRITE_SECURE_SETTINGS|READ_BASIC_PHONE_STATE|READ_CELL_BROADCASTS|BIND_VPN_SERVICE|BIND_NOTIFICATION_LISTENER_SERVICE|BIND_ACCESSIBILITY_SERVICE|ACCESS_MEDIA_LOCATION|READ_CALENDAR|WRITE_CALENDAR|READ_VOICEMAIL|WRITE_VOICEMAIL|ACCEPT_HANDOVER|UWB_RANGING|READ_HEALTH_DATA_IN_BACKGROUND|READ_HEALTH_DATA|WRITE_HEALTH_DATA|FOREGROUND_SERVICE|FOREGROUND_SERVICE_DATA_SYNC|FOREGROUND_SERVICE_CONNECTED_DEVICE|FOREGROUND_SERVICE_HEALTH|FOREGROUND_SERVICE_REMOTE_MESSAGING|FOREGROUND_SERVICE_SYSTEM_EXEMPTED|FOREGROUND_SERVICE_PHONE_CALL|USE_FULL_SCREEN_INTENT|REQUEST_COMPANION_RUN_IN_BACKGROUND|REQUEST_COMPANION_USE_DATA_IN_BACKGROUND|REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND|READ_SMS|RECEIVE_SMS|SEND_SMS|RECEIVE_MMS|RECEIVE_WAP_PUSH|CAMERA|RECORD_AUDIO|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|READ_MEDIA_IMAGES|READ_MEDIA_VIDEO|READ_MEDIA_AUDIO|READ_MEDIA_VISUAL_USER_SELECTED|MANAGE_EXTERNAL_STORAGE|READ_CALL_LOG|WRITE_CALL_LOG|READ_PHONE_STATE|READ_PHONE_NUMBERS|CALL_PHONE|ANSWER_PHONE_CALLS|PROCESS_OUTGOING_CALLS|ADD_VOICEMAIL|USE_SIP|READ_CONTACTS|WRITE_CONTACTS|GET_ACCOUNTS|ACCESS_FINE_LOCATION|ACCESS_COARSE_LOCATION|ACCESS_BACKGROUND_LOCATION|RECORD_AUDIO|BODY_SENSORS|ACTIVITY_RECOGNITION|POST_NOTIFICATIONS|BLUETOOTH|BLUETOOTH_ADMIN|BLUETOOTH_SCAN|BLUETOOTH_CONNECT|BLUETOOTH_ADVERTISE|NEARBY_WIFI_DEVICES|NFC|ACCESS_NETWORK_STATE|QUERY_ALL_PACKAGES|SYSTEM_ALERT_WINDOW|WRITE_SETTINGS|ACCESS_NOTIFICATION_POLICY|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|REQUEST_IGNORE_BATTERY_OPTIMIZATIONS|USE_BIOMETRIC|USE_FINGERPRINT|FOREGROUND_SERVICE_CAMERA|FOREGROUND_SERVICE_MICROPHONE|FOREGROUND_SERVICE_LOCATION|FOREGROUND_SERVICE_MEDIA_PROJECTION|FOREGROUND_SERVICE_SPECIAL_USE|REQUEST_INSTALL_PACKAGES'
+          if grep -E "android.permission.($blocked_permissions)|com.google.android.gms.permission.AD_ID|BIND_NOTIFICATION_LISTENER_SERVICE|BIND_ACCESSIBILITY_SERVICE" "$manifest"; then
+            echo "::error::A blocked sensitive permission/service declaration remains."
+            exit 1
+          fi
+          echo "Merged manifest passed the sensitive-permission check."
+
+      - name: Validate release signing configuration
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_B64: ${{ secrets.AURELIA_RELEASE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$KEYSTORE_B64" ]] || { echo "::error::Missing AURELIA_RELEASE_KEYSTORE_BASE64"; exit 1; }
+          [[ -n "$KEYSTORE_PASSWORD" ]] || { echo "::error::Missing AURELIA_RELEASE_KEYSTORE_PASSWORD"; exit 1; }
+          [[ -n "$KEY_ALIAS" ]] || { echo "::error::Missing AURELIA_RELEASE_KEY_ALIAS"; exit 1; }
+          [[ -n "$KEY_PASSWORD" ]] || { echo "::error::Missing AURELIA_RELEASE_KEY_PASSWORD"; exit 1; }
+          signing_dir="$RUNNER_TEMP/aurelia-signing"
+          mkdir -p "$signing_dir"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$signing_dir/release.jks"
+          test -s "$signing_dir/release.jks"
+          keytool -list -keystore "$signing_dir/release.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          echo "Release keystore and alias validated."
+
+      - name: Build signed PMS release APK
+        if: github.event_name != 'pull_request'
+        working-directory: android
+        env:
+          AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-signing/release.jks
+          AURELIA_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
+          AURELIA_RELEASE_KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
+          AURELIA_RELEASE_KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon --stacktrace assembleRelease
+
+      - name: Prepare release verification metadata
+        if: github.event_name != 'pull_request'
+        working-directory: android
+        shell: bash
+        env:
+          EXPECTED_CERT_SHA256: 562c833fcb8808b226d6b0c33633c9771a47ec63cca5c42d8ef16c4c7b92bf86
+        run: |
+          set -euo pipefail
+          apk="app/build/outputs/apk/release/app-release.apk"
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/aurelia-pms-certificate.txt"
+          expected="${EXPECTED_CERT_SHA256//:/}"
+          expected="${expected,,}"
+          actual="$(awk -F': ' '/Signer #1 certificate SHA-256 digest:/ {print tolower($2); exit}' "$RUNNER_TEMP/aurelia-pms-certificate.txt")"
+          if [[ -z "$expected" ]]; then
+            echo "::error::Missing AURELIA_SHARED_CERT_SHA256. The expected public certificate fingerprint is pinned in CI for both applications."
+            exit 1
+          fi
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::PMS signing certificate does not match AURELIA_SHARED_CERT_SHA256."
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | sed -n '1p'
+          sha256sum "$apk" > "$apk.sha256"
+
+      - name: Upload signed PMS APK and verification metadata
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact v4.6.2
+        with:
+          name: aurelia-pms-release-${{ github.sha }}
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/app-release.apk.sha256
+            ${{ runner.temp }}/aurelia-pms-certificate.txt
+          if-no-files-found: error
+          retention-days: 14

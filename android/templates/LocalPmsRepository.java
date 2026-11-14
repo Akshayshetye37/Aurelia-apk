@@ -60,6 +60,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     try {
       long actual=entityVersion(db,type,id);
       if(actual!=expectedVersion)throw conflict("ENTITY_VERSION_CONFLICT");
+      if("ledger".equals(type)&&actual>0)throw new IllegalStateException("LEDGER_APPEND_ONLY");
       long now=System.currentTimeMillis(); ContentValues entity=new ContentValues();
       entity.put("entity_type",type);entity.put("entity_id",id);entity.put("version",actual+1);entity.put("data_json",nextData.toString());entity.put("updated_at",now);
       db.insertWithOnConflict("pms_entities",null,entity,SQLiteDatabase.CONFLICT_REPLACE);
@@ -80,7 +81,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
     try {
       JSONArray results=new JSONArray();long now=System.currentTimeMillis();
-      for(int i=0;i<changes.length();i++){JSONObject c=changes.getJSONObject(i),event=c.getJSONObject("event");String type=c.getString("entityType"),id=c.getString("entityId");long expected=c.getLong("expectedVersion"),actual=entityVersion(db,type,id);if(actual!=expected)throw conflict("ENTITY_VERSION_CONFLICT");}
+      for(int i=0;i<changes.length();i++){JSONObject c=changes.getJSONObject(i),event=c.getJSONObject("event");String type=c.getString("entityType"),id=c.getString("entityId");long expected=c.getLong("expectedVersion"),actual=entityVersion(db,type,id);if(actual!=expected)throw conflict("ENTITY_VERSION_CONFLICT");if("ledger".equals(type)&&actual>0)throw new IllegalStateException("LEDGER_APPEND_ONLY");}
       for(int i=0;i<changes.length();i++){JSONObject c=changes.getJSONObject(i),event=c.getJSONObject("event");String type=c.getString("entityType"),id=c.getString("entityId");long version=c.getLong("expectedVersion")+1;JSONObject data=c.getJSONObject("data");ContentValues entity=new ContentValues();entity.put("entity_type",type);entity.put("entity_id",id);entity.put("version",version);entity.put("data_json",data.toString());entity.put("updated_at",now);db.insertWithOnConflict("pms_entities",null,entity,SQLiteDatabase.CONFLICT_REPLACE);
         ContentValues out=new ContentValues();out.put("event_id",event.getString("eventId"));out.put("tenant_id",event.getString("tenantId"));out.put("property_id",event.getString("propertyId"));out.put("device_id",event.getString("deviceId"));out.put("entity_type",type);out.put("entity_id",id);out.put("sequence",version);out.put("event_type",event.getString("eventType"));out.put("schema_version",event.getInt("schemaVersion"));out.put("occurred_at",event.getString("occurredAt"));out.put("payload_json",event.opt("payload")==null?"null":serializeJsonValue(event.opt("payload")));out.put("status","PENDING");out.put("attempts",0);out.put("created_at",now);db.insertOrThrow("pms_outbox",null,out);
         JSONObject row=new JSONObject();row.put("key",type+":"+id);row.put("type",type);row.put("id",id);row.put("version",version);row.put("data",data);row.put("updatedAt",isoTimestamp(now));results.put(row);}
