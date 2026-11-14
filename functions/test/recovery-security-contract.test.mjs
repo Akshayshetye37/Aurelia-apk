@@ -60,6 +60,8 @@ test('rate limit counters commit before rejected requests return', () => {
   assert.match(passkeyRate, /60 \* 60_000/);
   assert.match(passkeyRate, /24 \* 60 \* 60_000/);
   assert.ok(rules.includes('recoveryPasskeyRateLimits'));
+  assert.match(rules, /match \/tenants\/\{tenantId\}\/recoveryPasskeys\/\{passkeyId\}/);
+  assert.match(passkeys, /\/recoveryPasskeys/);
 });
 
 test('backend never deletes Firebase phone-auth users', () => {

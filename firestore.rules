@@ -6,6 +6,9 @@ service cloud.firestore {
     match /tenants/{tenantId}/security/{document=**} {
       allow read, write: if false;
     }
+    match /tenants/{tenantId}/recoveryPasskeys/{passkeyId} {
+      allow read, write: if false;
+    }
     match /recoveryGrants/{grantId} {
       allow read, write: if false;
     }

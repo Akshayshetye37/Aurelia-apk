@@ -159,7 +159,7 @@ export const createRecoveryPasskeyEnrollmentOptions = onCall(
     await requireOwnerBinding(owner);
     await requireAttestedOwnerDevice(owner, deviceHash, false);
     const config = rpConfig();
-    const collection = db.collection("tenants/" + owner.tenantId + "/security/recoveryPasskeys");
+    const collection = db.collection("tenants/" + owner.tenantId + "/recoveryPasskeys");
     const existing = await collection.get();
     const userID = createHash("sha256").update(owner.tenantId + "|" + owner.uid).digest().subarray(0, 16);
     const options = await generateRegistrationOptions({
@@ -218,7 +218,7 @@ export const completeRecoveryPasskeyEnrollment = onCall(
         info.origin === undefined || info.rpID !== config.rpID) throw GENERIC;
     const credential = info.credential;
     const hash = credentialHash(credential.id);
-    const passkeyRef = db.doc("tenants/" + owner.tenantId + "/security/recoveryPasskeys/" + hash);
+    const passkeyRef = db.doc("tenants/" + owner.tenantId + "/recoveryPasskeys/" + hash);
     const eventId = randomUUID();
     const eventRef = db.doc("recoverySecurityEvents/" + eventId);
     const devices = await db.collection("recoveryOwnerDevices").where("tenantId", "==", owner.tenantId).get();
@@ -281,7 +281,7 @@ export const retryRecoveryPasskeyEnrollmentAlert = onCall(
     const hash = requiredString(request.data?.credentialHash, 64);
     if (!/^[a-f0-9]{64}$/.test(hash)) throw GENERIC;
     await requireOwnerBinding(owner);
-    const passkeyRef = db.doc("tenants/" + owner.tenantId + "/security/recoveryPasskeys/" + hash);
+    const passkeyRef = db.doc("tenants/" + owner.tenantId + "/recoveryPasskeys/" + hash);
     const passkey = (await passkeyRef.get()).data();
     if (!passkey || passkey.ownerUid !== owner.uid || passkey.state !== "PENDING_ALERT") throw GENERIC;
     const devices = await db.collection("recoveryOwnerDevices").where("tenantId", "==", owner.tenantId).get();
@@ -322,7 +322,7 @@ export const createRecoveryOwnerActionOptions = onCall(
     const cooldown = (await db.doc("recoveryCooldowns/" + owner.tenantId).get()).data();
     if (!cooldown || cooldown.alertEventId !== requestId || cooldown.ownerUid !== owner.uid ||
         !["ALERT_PENDING", "APPROVED", "PENDING", "ISSUED"].includes(cooldown.state)) throw GENERIC;
-    const passkeys = await db.collection("tenants/" + owner.tenantId + "/security/recoveryPasskeys").get();
+    const passkeys = await db.collection("tenants/" + owner.tenantId + "/recoveryPasskeys").get();
     const eligible = passkeys.docs.filter(doc => doc.get("ownerUid") === owner.uid &&
       doc.get("state") === "COOLDOWN" && doc.get("alertAccepted") === true &&
       Number(doc.get("activeAfterMs")) <= Date.now());
@@ -370,7 +370,7 @@ async function completeOwnerAction(request: CallableRequest<unknown>, forcedActi
   if (!/^[A-Za-z0-9_-]+$/.test(credentialId)) throw GENERIC;
   const hash = credentialHash(credentialId);
   if (!Array.isArray(challenge.credentialHashes) || !challenge.credentialHashes.includes(hash)) throw GENERIC;
-  const credentialRef = db.doc("tenants/" + owner.tenantId + "/security/recoveryPasskeys/" + hash);
+  const credentialRef = db.doc("tenants/" + owner.tenantId + "/recoveryPasskeys/" + hash);
   const credentialSnapshot = await credentialRef.get();
   const stored = credentialSnapshot.data();
   if (!stored || stored.ownerUid !== owner.uid || stored.state !== "COOLDOWN" ||

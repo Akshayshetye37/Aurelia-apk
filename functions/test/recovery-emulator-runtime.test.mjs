@@ -177,7 +177,7 @@ async function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, owner
   assert.equal(enrolled.registered, true);
   assert.equal(enrolled.alertAccepted, true, 'independent owner device receives passkey enrollment alert');
   const credentialHash = createHash('sha256').update(registration.id).digest('hex');
-  await db.doc(`tenants/${tenantId}/security/recoveryPasskeys/${credentialHash}`).update({
+  await db.doc(`tenants/${tenantId}/recoveryPasskeys/${credentialHash}`).update({
     state: 'COOLDOWN', alertAccepted: true, activeAfterMs: 0
   });
   authenticators.set(tenantId, authenticator);
@@ -1271,7 +1271,7 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
   assert.equal((await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).get('state'), 'CONSUMED');
 
   const credentialHash = createHash('sha256').update(authenticator.credentialId).digest('hex');
-  const credentialRef = db.doc(`tenants/${tenantId}/security/recoveryPasskeys/${credentialHash}`);
+  const credentialRef = db.doc(`tenants/${tenantId}/recoveryPasskeys/${credentialHash}`);
   await credentialRef.update({ counter: 10 });
   const cancelBegin = await callable(functions.createRecoveryOwnerActionOptions, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId
