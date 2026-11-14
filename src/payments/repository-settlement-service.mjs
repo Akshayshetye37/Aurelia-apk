@@ -35,6 +35,16 @@ function bookingKey(booking) {
 function sameJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
+
+async function ledgerEntityId(tenantId, idempotencyKey) {
+  if (!globalThis.crypto?.subtle || !globalThis.TextEncoder) {
+    throw fail("LEDGER_IDENTITY_CRYPTO_UNAVAILABLE", "Secure payment ledger identity generation is unavailable.");
+  }
+  const bytes = new TextEncoder().encode(String(tenantId) + "\\u0000" + idempotencyKey);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  const hex = Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, "0")).join("");
+  return "payment:" + hex;
+}
 function comparableBooking(value) {
   const copy = clone(value);
   if (copy && typeof copy === "object") {
@@ -87,6 +97,11 @@ export async function settlePaymentToRepository({
   const bookingId = bookingKey(booking);
   const folioId = String(booking.folioId || "booking-" + bookingId);
   const amountPaise = moneyToPaise(amount, "Payment amount");
+  const ledgerKey = String(idempotencyKey || "").trim() ||
+    (String(reference || "").trim() ? "ref:" + String(reference).trim() : "");
+  if (!ledgerKey || ledgerKey.length > 256 || /[\\u0000-\\u001f\\u007f]/.test(ledgerKey)) {
+    throw fail("PAYMENT_IDEMPOTENCY_KEY_REQUIRED", "A stable payment idempotency key is required before posting.");
+  }
   // Flush snapshots queued by the compatibility UI before taking entity
   // versions; otherwise an older queued snapshot could race this transaction.
   if (bridge.compatibilityWrite && typeof bridge.compatibilityWrite.then === "function") {
@@ -149,7 +164,7 @@ export async function settlePaymentToRepository({
     method,
     reference,
     source,
-    idempotencyKey,
+    idempotencyKey: ledgerKey,
     balanceDue: balanceDueFor(workingBooking),
     verificationConfirmed,
     persist: () => {},
@@ -165,7 +180,31 @@ export async function settlePaymentToRepository({
     throw fail("PAYMENT_EVIDENCE_STATE_DIVERGENCE",
       "Evidence is marked approved but no matching canonical payment exists; reconcile before posting.");
   }
+  const ledgerId = await ledgerEntityId(bridge.context.tenantId, ledgerKey);
+  const committedAt = now();
+  const ledgerEntry = {
+    id: ledgerId,
+    tenantId: bridge.context.tenantId,
+    propertyId: bridge.context.propertyId,
+    deviceId: bridge.context.deviceId,
+    bookingId,
+    folioId,
+    amountPaise,
+    currency: "INR",
+    direction: "CREDIT",
+    method: String(result.payment?.m || method || ""),
+    reference: String(result.payment?.r || reference || ""),
+    source: String(result.payment?.source || source),
+    idempotencyKey: ledgerKey,
+    reversalOf: null,
+    createdAt: result.payment?.at || committedAt
+  };
+  const ledgerRow = await bridge.fetchEntity("ledger", ledgerId);
   if (result.duplicate) {
+    if (!ledgerRow || !sameJson(ledgerRow.data, ledgerEntry)) {
+      throw fail("PAYMENT_LEDGER_DIVERGENCE",
+        "The existing payment has no matching immutable ledger entry; reconcile before retrying.");
+    }
     // A duplicate is safe only if the canonical record already contains it.
     if (reviewEvidence && reviewEvidence.st !== "matched") {
       throw fail("PAYMENT_EVIDENCE_STATE_DIVERGENCE",
@@ -173,13 +212,16 @@ export async function settlePaymentToRepository({
     }
     Object.assign(booking, clone(workingBooking));
     const cacheRefreshed = refreshLegacyCompatibilityCache(legacyStorage, canonicalState);
-    return Object.freeze({ ...result, duplicate: true, canonical: true, cacheRefreshed,
-      bookingVersion: bookingRow?.version ?? 0, folioVersion: folioRow?.version ?? 0 });
+    return Object.freeze({ ...result, duplicate: true, canonical: true, ledger: ledgerRow,
+      cacheRefreshed, bookingVersion: bookingRow?.version ?? 0, folioVersion: folioRow?.version ?? 0 });
   }
 
+  if (ledgerRow) {
+    throw fail("PAYMENT_LEDGER_IDEMPOTENCY_CONFLICT",
+      "The payment idempotency key already has a ledger entry but no matching folio payment; reconcile before posting.");
+  }
   const paidPaise = moneyToPaise(workingBooking.p || 0, "Updated folio paid total", { allowZero: true });
   const balanceDuePaise = moneyToPaise(balanceDueFor(workingBooking), "Updated folio balance", { allowZero: true });
-  const committedAt = now();
   if (reviewEvidence) {
     reviewEvidence.st = "matched";
     reviewEvidence.b = workingBooking.id;
@@ -227,6 +269,14 @@ export async function settlePaymentToRepository({
       })
     },
     {
+      entityType: "ledger",
+      entityId: ledgerId,
+      expectedVersion: 0,
+      eventType: "ledger.payment_posted",
+      eventPayload: snapshotPayload,
+      mutate: entity => Object.assign(entity, clone(ledgerEntry))
+    },
+    {
       entityType: SNAPSHOT_TYPE,
       entityId: SNAPSHOT_ID,
       expectedVersion: snapshotRow?.version ?? 0,
@@ -241,16 +291,18 @@ export async function settlePaymentToRepository({
   ]);
 
   // Exact read-back is mandatory before the UI is told the payment succeeded.
-  const [storedBooking, storedFolio, storedSnapshot] = await Promise.all([
+  const [storedBooking, storedFolio, storedLedger, storedSnapshot] = await Promise.all([
     bridge.fetchEntity("booking", bookingId),
     bridge.fetchEntity("folio", folioId),
+    bridge.fetchEntity("ledger", ledgerId),
     bridge.fetchEntity(SNAPSHOT_TYPE, SNAPSHOT_ID)
   ]);
-  if (!storedBooking || !storedFolio || !storedSnapshot ||
+  if (!storedBooking || !storedFolio || !storedLedger || !storedSnapshot ||
       !sameJson(storedBooking.data, workingBooking) ||
       !sameJson(storedFolio.data.paymentRows, workingBooking.pays || []) ||
       storedFolio.data.paidPaise !== paidPaise ||
       storedFolio.data.balanceDuePaise !== balanceDuePaise ||
+      !sameJson(storedLedger.data, ledgerEntry) ||
       !sameJson(storedSnapshot.data.snapshot, canonicalState)) {
     throw fail("PAYMENT_CANONICAL_READBACK_MISMATCH",
       "Payment transaction committed but exact canonical read-back failed. Stop payment entry and reconcile before retrying.");
@@ -285,6 +337,7 @@ export async function settlePaymentToRepository({
     canonical: true,
     entity: storedBooking,
     folio: storedFolio,
+    ledger: storedLedger,
     snapshotVersion: storedSnapshot.version,
     cacheRefreshed,
     bookingVersion: committed.entities[0].version,
