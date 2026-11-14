@@ -212,6 +212,61 @@ async function cancelRecoveryWithPasskey(options) {
   return (await preparePasskeyOwnerAction({ ...options, action: 'cancel' })).complete();
 }
 
+test('WebAuthn enrollment uses a 32-byte uid/tenant-bound two-minute single-use challenge and alerts another owner device', async () => {
+  const tenantId = 'tenant-webauthn-enroll-contract';
+  const ownerUid = 'owner-webauthn-enroll-contract';
+  const recoveryDeviceHash = '1'.repeat(64);
+  const independentDeviceHash = '2'.repeat(64);
+  await seedTenant({
+    tenantId, phone: '+15555550201', ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, independentDeviceHash], enrollPasskey: false
+  });
+  const started = await callable(functions.createRecoveryPasskeyEnrollmentOptions, {
+    tenantId, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth(ownerUid, tenantId));
+  const storedChallenge = await db.doc(`recoveryPasskeyChallenges/${started.challengeId}`).get();
+  const challenge = storedChallenge.data();
+  assert.equal(challenge.ownerUid, ownerUid);
+  assert.equal(challenge.tenantId, tenantId);
+  assert.equal(challenge.purpose, 'ENROLL');
+  assert.equal(challenge.state, 'PENDING');
+  assert.equal(Buffer.from(challenge.challenge, 'base64url').length, 32);
+  assert.ok(challenge.expiresAtMs > Date.now());
+  assert.ok(challenge.expiresAtMs <= Date.now() + 2 * 60_000 + 1000);
+
+  const authenticator = new TestWebAuthnAuthenticator(tenantId);
+  const wrongChallenge = authenticator.register({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: 'wrong-enrollment-challenge'
+  });
+  await assert.rejects(callable(functions.completeRecoveryPasskeyEnrollment, {
+    tenantId, deviceIdHash: recoveryDeviceHash, challengeId: started.challengeId,
+    credentialResponse: wrongChallenge
+  }, ownerAuth(ownerUid, tenantId)), 'registration with a different challenge is rejected');
+  assert.equal((await storedChallenge.ref?.get?.())?.get?.('state') ?? (await db.doc(`recoveryPasskeyChallenges/${started.challengeId}`).get()).get('state'),
+    'PENDING', 'a rejected registration does not consume the legitimate challenge');
+
+  const registration = authenticator.register({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: started.options.challenge
+  });
+  const enrolled = await callable(functions.completeRecoveryPasskeyEnrollment, {
+    tenantId, deviceIdHash: recoveryDeviceHash, challengeId: started.challengeId,
+    credentialResponse: registration
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(enrolled.registered, true);
+  assert.equal(enrolled.alertAccepted, true);
+  assert.ok(enrolled.usableAfterMs >= Date.now() + 23 * 60 * 60_000);
+  const credentialHash = createHash('sha256').update(registration.id).digest('hex');
+  const saved = (await db.doc(`tenants/${tenantId}/recoveryPasskeys/${credentialHash}`).get()).data();
+  assert.equal(saved.ownerUid, ownerUid);
+  assert.equal(saved.state, 'COOLDOWN');
+  assert.equal(saved.alertAccepted, true);
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${started.challengeId}`).get()).get('state'), 'CONSUMED');
+  await assert.rejects(callable(functions.completeRecoveryPasskeyEnrollment, {
+    tenantId, deviceIdHash: recoveryDeviceHash, challengeId: started.challengeId,
+    credentialResponse: registration
+  }, ownerAuth(ownerUid, tenantId)), 'registration challenge replay is rejected');
+});
+
 test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold, fresh OTP, five-minute grant and one-time JTI', async () => {
   assert.ok(functions.issueRecoveryGrant);
   assert.ok(functions.acknowledgeRecoveryOwnerAlert);
