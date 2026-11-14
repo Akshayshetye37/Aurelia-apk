@@ -252,3 +252,11 @@ test('recovery key lockout persists independently across grants and escalates af
   assert.ok(crypto.includes('ByteArray(KEY_BYTES)'));
   assert.ok(crypto.includes('random::nextBytes'));
 });
+
+
+test('email-link owner session cannot present an acknowledgement action without passkey support', () => {
+  const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
+  assert.ok(activity.includes('text = "Passkey approval not configured"'));
+  assert.ok(activity.includes('isEnabled = false'));
+  assert.ok(activity.includes('A passkey is required to acknowledge the alert'));
+});
