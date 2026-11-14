@@ -766,13 +766,10 @@ class LockGateActivity : FragmentActivity() {
     }
 
     override fun onStop() {
-        // Firebase Phone Auth may temporarily launch its own verification activity.
-        // Clear any armed grant, but let that SDK round-trip finish unless the user
-        // explicitly left this app (handled by onUserLeaveHint).
-        RecoveryGate.clear()
+        // Keep the encrypted attempt counter intact across process death. The
+        // explicit user-leave path still revokes the active grant.
         super.onStop()
     }
-
     override fun onBackPressed() {
         // Launcher is the only entry path; back exits instead of bypassing the gate.
         super.onBackPressed()
