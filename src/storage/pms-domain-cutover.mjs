@@ -93,7 +93,7 @@ function records(snapshot, migrationId) {
   });
   const tableIds = new Set();
   snapshot.t.forEach((row, index) => {
-    if (!row || typeof row !== "object") {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
       throw new Error("Malformed legacy restaurant table at index " + index);
     }
     const tableNumber = Number(row.n);
