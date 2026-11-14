@@ -19,7 +19,7 @@ function readVariantConfig(variant) {
     const normalized = file.split(path.sep).join('/').toLowerCase();
     return path.basename(file).toLowerCase() === 'aurelia_network_security_config.xml'
       && normalized.includes(variant)
-      && normalized.includes('/res/');
+      && normalized.split('/').some(segment => segment.includes('res'));
   });
   assert.equal(
     candidates.length,
