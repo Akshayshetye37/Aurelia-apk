@@ -950,6 +950,10 @@ test('attested but unenrolled owner device cannot cancel a recovery request', as
   await assert.rejects(callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: unregisteredOwnerHash
   }, ownerAuth(ownerUid, tenantId)), 'attested but unenrolled device cannot cancel');
+  const pending = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  await assert.rejects(callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: unregisteredOwnerHash, action: 'cancel', requestId: pending.alertEventId
+  }, ownerAuth(ownerUid, tenantId)), 'attested but unenrolled device cannot create a passkey cancellation challenge');
   assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'ALERT_PENDING');
 });
 
@@ -1089,6 +1093,10 @@ test('different tenant owner UID cannot cancel another owner UID recovery reques
   await assert.rejects(callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: secondaryDeviceHash
   }, ownerAuth(secondaryUid, tenantId)), 'different owner UID cannot cancel primary recovery request');
+  const pending = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  await assert.rejects(callable(functions.getRecoveryOwnerPendingAction, {
+    tenantId, deviceIdHash: secondaryDeviceHash
+  }, ownerAuth(secondaryUid, tenantId)), 'different owner UID cannot retrieve primary recovery action context');
   assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'ALERT_PENDING');
 });
 
@@ -1243,6 +1251,14 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
   await assert.rejects(callable(functions.createRecoveryOwnerActionOptions, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId
   }, phoneOnlyOwnerAuth(ownerUid, tenantId)), 'phone OTP alone cannot start an owner passkey ceremony');
+  await assert.rejects(callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId
+  }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) - 301 })),
+  'stale primary-owner session cannot start a passkey ceremony');
+  await assert.rejects(callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId
+  }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) + 60 })),
+  'future primary-owner auth_time cannot start a passkey ceremony');
   const pendingAction = await callable(functions.getRecoveryOwnerPendingAction, {
     tenantId, deviceIdHash: secondOwnerDeviceHash
   }, ownerAuth(ownerUid, tenantId));
