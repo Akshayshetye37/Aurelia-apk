@@ -141,8 +141,8 @@ test('owner alert must be posted and acknowledged before the recovery cooldown s
   assert.match(passkeys, /acknowledgeRecoveryOwnerAlert = onCall/);
   assert.match(passkeys, /verifyAuthenticationResponse/);
   assert.match(passkeys, /requireUserVerification: true/);
-  assert.match(backend, /notificationAcknowledgedAt/);
-  assert.match(backend, /eligibleAt = Date\.now\(\) \+ RECOVERY_COOLDOWN_MS/);
+  assert.match(passkeys, /notificationAcknowledgedAt/);
+  assert.match(passkeys, /eligibleAt = now \+ 24 \* 60 \* 60_000/);
   assert.match(service, /NotificationManagerCompat\.from\(this\)\.areNotificationsEnabled\(\)/);
   assert.doesNotMatch(service, /acknowledgeRecoveryOwnerAlert/);
   assert.match(ownerAlert, /acknowledgeRecoveryOwnerAlert/);
@@ -283,10 +283,11 @@ test('global recovery-key failure throttle is durably incremented before every c
 
 test('passkey owner acknowledgement enforces the passkey factor timestamp itself under five minutes old', () => {
   const backend = read('functions/src/index.ts');
-  const start = backend.indexOf('function requireFreshPasskeyOwner');
-  const end = backend.indexOf('async function requireRecoveryOwnerBinding', start);
-  const guard = backend.slice(start, end);
+  const passkeys = read('functions/src/passkeys.ts');
+  const start = passkeys.indexOf('function ownerFromFreshEmailLink');
+  const end = passkeys.indexOf('function rpConfig', start);
+  const guard = passkeys.slice(start, end);
   assert.ok(guard.includes('ownerAuthFactorAuthTime'));
-  assert.ok(guard.includes('now - factorAuthTime >= 300'));
-  assert.ok(guard.includes('factorAuthTime > now'));
+  assert.ok(guard.includes('authTime - factorAuthTime >= 300'));
+  assert.ok(guard.includes('factorAuthTime > authTime'));
 });

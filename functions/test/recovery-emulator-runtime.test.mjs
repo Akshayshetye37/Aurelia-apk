@@ -1214,33 +1214,44 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
   const issued = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce, phoneIdToken: phoneToken
   });
-  const event = (await db.doc(`recoverySecurityEvents/${issued.eventId}`).get()).data();
+  const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  const eventId = cooldown.alertEventId;
+  const event = (await db.doc(`recoverySecurityEvents/${eventId}`).get()).data();
   assert.ok(event);
 
+  await assert.rejects(callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId
+  }, phoneOnlyOwnerAuth(ownerUid, tenantId)), 'phone OTP alone cannot start an owner passkey ceremony');
+
   const begin = await callable(functions.createRecoveryOwnerActionOptions, {
-    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: issued.eventId
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId
   }, ownerAuth(ownerUid, tenantId));
   const authenticator = authenticators.get(tenantId);
   const assertion = authenticator.assert({ rpId: RP_ID, origin: RP_ORIGIN, challenge: begin.options.challenge });
-  const invalidUid = await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
-    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: issued.eventId,
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
     challengeId: begin.challengeId, credentialResponse: assertion, ackToken: 'x'.repeat(43)
   }, ownerAuth('different-owner', tenantId)));
-  assert.ok(invalidUid);
-
   const wrongAction = await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
-    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: issued.eventId,
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId,
     challengeId: begin.challengeId, credentialResponse: assertion
   }, ownerAuth(ownerUid, tenantId)));
-  assert.ok(wrongAction);
   const challengeAfterRejected = (await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).data();
   assert.equal(challengeAfterRejected.state, 'PENDING', 'rejected cross-uid and wrong-action attempts do not consume the challenge');
 
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
+    challengeId: '00000000-0000-4000-8000-000000000000', credentialResponse: assertion, ackToken: 'x'.repeat(43)
+  }, ownerAuth(ownerUid, tenantId)), 'unknown challenge is rejected without touching the legitimate challenge');
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: '00000000-0000-4000-8000-000000000001',
+    challengeId: begin.challengeId, credentialResponse: assertion, ackToken: 'x'.repeat(43)
+  }, ownerAuth(ownerUid, tenantId)), 'cross-request challenge use is rejected');
   const noUvAssertion = authenticator.assert({
     rpId: RP_ID, origin: RP_ORIGIN, challenge: begin.options.challenge, userVerified: false
   });
   await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
-    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: issued.eventId,
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
     challengeId: begin.challengeId, credentialResponse: noUvAssertion, ackToken: 'x'.repeat(43)
   }, ownerAuth(ownerUid, tenantId)), 'assertions without UV are rejected');
 
@@ -1249,13 +1260,37 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
   assert.ok(ackToken);
   const validAssertion = authenticator.assert({ rpId: RP_ID, origin: RP_ORIGIN, challenge: begin.options.challenge });
   const acknowledged = await callable(functions.completeRecoveryOwnerPasskeyAction, {
-    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: issued.eventId,
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
     challengeId: begin.challengeId, credentialResponse: validAssertion, ackToken
   }, ownerAuth(ownerUid, tenantId));
   assert.equal(acknowledged.acknowledged, true);
   await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
-    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: issued.eventId,
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
     challengeId: begin.challengeId, credentialResponse: validAssertion, ackToken
   }, ownerAuth(ownerUid, tenantId)), 'replayed challenge is rejected');
   assert.equal((await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).get('state'), 'CONSUMED');
+
+  const credentialHash = createHash('sha256').update(authenticator.credentialId).digest('hex');
+  const credentialRef = db.doc(`tenants/${tenantId}/security/recoveryPasskeys/${credentialHash}`);
+  await credentialRef.update({ counter: 10 });
+  const cancelBegin = await callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId
+  }, ownerAuth(ownerUid, tenantId));
+  const regressed = authenticator.assert({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: cancelBegin.options.challenge, counter: 3
+  });
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId,
+    challengeId: cancelBegin.challengeId, credentialResponse: regressed
+  }, ownerAuth(ownerUid, tenantId)), 'signature counter regression is rejected');
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${cancelBegin.challengeId}`).get()).get('state'), 'PENDING',
+    'counter regression must not consume the legitimate cancellation challenge');
+  const validCancel = authenticator.assert({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: cancelBegin.options.challenge, counter: 11
+  });
+  const cancelled = await callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId,
+    challengeId: cancelBegin.challengeId, credentialResponse: validCancel
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(cancelled.cancelled, true, 'owner may cancel with a valid passkey assertion');
 });
