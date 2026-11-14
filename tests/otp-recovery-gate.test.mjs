@@ -208,6 +208,7 @@ test('owner alert UI completes server-verified email-link primary authentication
 test('Android owner alert uses Credential Manager for registration and server-verified acknowledgement', () => {
   const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
   const patcher = read('scripts/patch-android.js');
+  const passkeys = read('functions/src/passkeys.ts');
   assert.match(activity, /CreatePublicKeyCredentialRequest/);
   assert.match(activity, /GetPublicKeyCredentialOption/);
   assert.match(activity, /CredentialManager\.create/);
