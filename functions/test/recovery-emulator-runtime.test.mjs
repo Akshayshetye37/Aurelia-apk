@@ -242,7 +242,7 @@ test('WebAuthn enrollment uses a 32-byte uid/tenant-bound two-minute single-use 
     tenantId, deviceIdHash: recoveryDeviceHash, challengeId: started.challengeId,
     credentialResponse: wrongChallenge
   }, ownerAuth(ownerUid, tenantId)), 'registration with a different challenge is rejected');
-  assert.equal((await storedChallenge.ref?.get?.())?.get?.('state') ?? (await db.doc(`recoveryPasskeyChallenges/${started.challengeId}`).get()).get('state'),
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${started.challengeId}`).get()).get('state'),
     'PENDING', 'a rejected registration does not consume the legitimate challenge');
 
   const registration = authenticator.register({
