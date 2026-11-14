@@ -40,6 +40,8 @@ jobs:
           node-version: "22"
       - name: Install application dependencies
         run: npm ci --no-audit --no-fund
+      - name: Install payment backend dependencies for unified suite
+        run: npm --prefix payment-backend ci --no-audit --no-fund
       - name: Syntax-check settlement modules
         run: |
           node --check src/payments/canonical.mjs
