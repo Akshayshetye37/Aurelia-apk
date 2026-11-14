@@ -1,0 +1,25 @@
+name: Feature lock integrity
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  feature-lock-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify immutable feature file hashes
+        run: node scripts/check-feature-locks.mjs
+      - name: Test lock checker
+        run: node --test tests/feature-lock-check.test.mjs
