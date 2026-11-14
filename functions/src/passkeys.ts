@@ -180,7 +180,7 @@ export const createRecoveryPasskeyEnrollmentOptions = onCall(
     });
     const id = randomUUID();
     await challengeRef(id).create({
-      state: "PENDING", purpose: "ENROLL", ownerUid: owner.uid, tenantId: owner.tenantId,
+      state: "PENDING", purpose: "enroll", ownerUid: owner.uid, tenantId: owner.tenantId,
       deviceIdHash: deviceHash, challenge: options.challenge, rpID: config.rpID,
       createdAt: FieldValue.serverTimestamp(), expiresAtMs: Date.now() + CHALLENGE_TTL_MS
     });
@@ -202,7 +202,7 @@ export const completeRecoveryPasskeyEnrollment = onCall(
     const ref = challengeRef(id);
     const snapshot = await ref.get();
     const challenge = snapshot.data();
-    checkChallenge(challenge, owner, "ENROLL", deviceHash);
+    checkChallenge(challenge, owner, "enroll", deviceHash);
     const response = request.data?.credentialResponse;
     if (!response || typeof response !== "object" || JSON.stringify(response).length > 100_000) throw GENERIC;
     const config = rpConfig();
@@ -236,7 +236,7 @@ export const completeRecoveryPasskeyEnrollment = onCall(
     await db.runTransaction(async tx => {
       const currentChallenge = await tx.get(ref);
       const currentPasskey = await tx.get(passkeyRef);
-      checkChallenge(currentChallenge.data(), owner, "ENROLL", deviceHash);
+      checkChallenge(currentChallenge.data(), owner, "enroll", deviceHash);
       if (currentPasskey.exists) throw GENERIC;
       tx.update(ref, { state: "CONSUMED", consumedAt: FieldValue.serverTimestamp() });
       tx.create(passkeyRef, {
