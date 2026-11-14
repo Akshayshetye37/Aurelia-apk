@@ -10,14 +10,15 @@ const nativeWorkflow = fs.readFileSync(
 );
 const nativeRunner = fs.readFileSync("scripts/run-native-sqlite-contracts.sh", "utf8");
 
-test("recovery workflow preserves separate phase-one and phase-two process-death invocations", () => {
+test("recovery workflow runs phase one only through the host-managed force-stop boundary", () => {
   assert.ok(workflow.includes(
     'phase_one="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop"'
   ));
   assert.ok(workflow.includes(
     'phase_two="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop"'
   ));
-  assert.ok(workflow.includes('run_instrumentation_test process-death-phase-one "$phase_one"'));
+  assert.ok(!workflow.includes('run_instrumentation_test process-death-phase-one "$phase_one"'));
+  assert.ok(workflow.includes('timeout -k 5s 1800s "$adb_bin" shell am instrument -w -r -e class "$phase_one"'));
   assert.ok(workflow.includes('run_instrumentation_test process-death-phase-two "$phase_two"'));
 });
 
@@ -27,6 +28,10 @@ test("phase one holds the tested target process until the host force-stops it", 
   );
   assert.ok(processDeathTest.includes('Log.i("RecoveryProcessDeath", "PHASE_ONE_READY")'));
   assert.ok(processDeathTest.includes("Thread.sleep(30 * 60 * 1000L)"));
+  assert.ok(processDeathTest.includes("newRecoveryLockout(context).beginAttempt()"));
+  assert.ok(processDeathTest.includes("recoveryThrottle.lockoutFailureCount()"));
+  assert.ok(processDeathTest.includes("recoveryThrottle.completeAttempt()"));
+  assert.ok(processDeathTest.includes("global recovery-key failures reset only after durable PIN-envelope commit"));
   assert.ok(workflow.includes('timeout -k 5s 1800s "$adb_bin" shell am instrument -w -r -e class "$phase_one"'));
   assert.ok(workflow.includes('wait_for_log_marker "PHASE_ONE_READY"'));
   assert.ok(workflow.includes('before_pid="$(wait_for_target_pid)"'));
