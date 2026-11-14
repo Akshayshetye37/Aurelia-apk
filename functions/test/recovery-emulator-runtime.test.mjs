@@ -1411,9 +1411,12 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId
   }, ownerAuth(ownerUid, tenantId));
 
+  const cancelChallengeAsAck = authenticator.assert({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: cancelBegin.options.challenge, counter: 11
+  });
   await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
-    challengeId: cancelBegin.challengeId, credentialResponse: assertion, ackToken
+    challengeId: cancelBegin.challengeId, credentialResponse: cancelChallengeAsAck, ackToken
   }, ownerAuth(ownerUid, tenantId)),
   'a cancel challenge cannot be submitted as an ack action');
   assert.equal((await db.doc(`recoveryPasskeyChallenges/${cancelBegin.challengeId}`).get()).get('state'), 'PENDING',
