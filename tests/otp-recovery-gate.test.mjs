@@ -12,7 +12,9 @@ test('OTP recovery gate persists grant-bound attempts in Keystore-encrypted Atom
   assert.ok(gate.includes('fun spendAttempt(expectedJti: String? = null): Boolean'));
   assert.ok(gate.includes('AtomicFile'));
   assert.ok(gate.includes('AndroidKeyStore'));
-  assert.ok(gate.includes('bootCount'));\n  assert.ok(gate.includes('currentBoot >= 0'));\n  assert.ok(gate.includes('state.bootCount < 0 || state.bootCount != bootCount()'));
+  assert.ok(gate.includes('bootCount'));
+  assert.ok(gate.includes('currentBoot >= 0'));
+  assert.ok(gate.includes('state.bootCount < 0 || state.bootCount != bootCount()'));
   assert.ok(gate.includes('missing; refusing to reset attempts'));
   assert.ok(gate.includes('stateUnavailable'));
   assert.ok(!gate.includes('SharedPreferences'));
