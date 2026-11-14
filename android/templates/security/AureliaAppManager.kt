@@ -179,7 +179,12 @@ class AureliaAppManager(
         }
         // Persist the cross-grant crypto throttle BEFORE attempting the unwrap.
         // A process kill after a wrong key cannot erase the failure increment.
-        recoveryLockout.registerFailure()
+        try {
+            recoveryLockout.registerFailure()
+        } catch (failure: Exception) {
+            recoveryKey.fill(0)
+            throw SecurityException("Recovery key attempt could not be durably throttled.", failure)
+        }
         val recovered = try {
             crypto.unwrapDataKeyWithRecovery(bundle.getString("recovery"), recoveryKey)
         } catch (failure: Exception) {
