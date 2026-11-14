@@ -191,6 +191,7 @@ export async function settlePaymentToRepository({
   const committedAt = now();
   const ledgerEntry = {
     id: ledgerId,
+    recordType: "AURELIA_FINANCIAL_LEDGER_ENTRY_V1",
     tenantId: bridge.context.tenantId,
     propertyId: bridge.context.propertyId,
     deviceId: bridge.context.deviceId,
@@ -208,9 +209,13 @@ export async function settlePaymentToRepository({
   };
   const ledgerRow = await bridge.fetchEntity("ledger", ledgerId);
   if (result.duplicate) {
-    if (!ledgerRow || !sameJson(ledgerRow.data, ledgerEntry)) {
+    const snapshotLedgerEntry = Array.isArray(canonicalState.led)
+      ? canonicalState.led.find(row => row?.id === ledgerId)
+      : null;
+    if (!ledgerRow || !sameJson(ledgerRow.data, ledgerEntry) ||
+        !sameJson(snapshotLedgerEntry, ledgerEntry)) {
       throw fail("PAYMENT_LEDGER_DIVERGENCE",
-        "The existing payment has no matching immutable ledger entry; reconcile before retrying.");
+        "The existing payment has no matching immutable ledger entry and recovery projection; reconcile before retrying.");
     }
     // A duplicate is safe only if the canonical record already contains it.
     if (reviewEvidence && reviewEvidence.st !== "matched") {
@@ -227,6 +232,11 @@ export async function settlePaymentToRepository({
     throw fail("PAYMENT_LEDGER_IDEMPOTENCY_CONFLICT",
       "The payment idempotency key already has a ledger entry but no matching folio payment; reconcile before posting.");
   }
+  if (!Array.isArray(canonicalState.led)) canonicalState.led = [];
+  if (canonicalState.led.some(row => row?.id === ledgerId)) {
+    throw fail("PAYMENT_LEDGER_SNAPSHOT_CONFLICT", "The recovery snapshot already contains this ledger identity without a matching repository row.");
+  }
+  canonicalState.led.push(clone(ledgerEntry));
   const paidPaise = moneyToPaise(workingBooking.p || 0, "Updated folio paid total", { allowZero: true });
   const balanceDuePaise = moneyToPaise(balanceDueFor(workingBooking), "Updated folio balance", { allowZero: true });
   if (reviewEvidence) {
@@ -336,6 +346,8 @@ export async function settlePaymentToRepository({
   if (Array.isArray(state.sig) && Array.isArray(canonicalState.sig)) {
     state.sig.splice(0, state.sig.length, ...clone(canonicalState.sig));
   }
+  if (Array.isArray(state.led)) state.led.splice(0, state.led.length, ...clone(canonicalState.led));
+  else state.led = clone(canonicalState.led);
   Object.assign(booking, clone(workingBooking));
 
   return Object.freeze({
