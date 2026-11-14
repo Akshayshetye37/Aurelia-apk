@@ -6,6 +6,7 @@ import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
 import { buildPmsOutboxEvent } from "../src/storage/pms-repository-contract.mjs";
 import { settlePaymentToRepository } from "../src/payments/repository-settlement-service.mjs";
+import { projectLegacyPmsDomains } from "../src/storage/pms-domain-cutover.mjs";
 
 let sequence = 0;
 function fixture() {
@@ -121,7 +122,7 @@ test("canonical manual payment appends one integer-paise ledger row in the same 
     id: 41, folioId: "folio-41", g: "Guest One", room: "101", st: "in",
     p: 0, pays: [], payments: [], ch: [], rate: 1000
   };
-  const state = { tab: "stays", bk: {}, b: [booking], g: [], rooms: [], today: 0, aud: [] };
+  const state = { tab: "stays", bk: {}, b: [booking], g: [], rooms: [], today: 0, aud: [], led: [] };
 
   const result = await settlePaymentToRepository({
     bridge,
@@ -139,6 +140,9 @@ test("canonical manual payment appends one integer-paise ledger row in the same 
   assert.equal(result.canonical, true);
   const rows = await bridge.listEntities("ledger");
   assert.equal(rows.length, 1);
+  const committedSnapshot = await bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  assert.deepEqual(committedSnapshot.data.snapshot.led, [rows[0].data]);
+  assert.deepEqual(state.led, [rows[0].data]);
   assert.deepEqual(rows[0].data, {
     id: rows[0].id,
     tenantId: "tenant-local",
@@ -190,4 +194,37 @@ test("canonical payment posting refuses to proceed without a stable idempotency 
   }), error => error.code === "PAYMENT_IDEMPOTENCY_KEY_REQUIRED");
   assert.equal((await bridge.listEntities("ledger")).length, 0);
   assert.equal(await bridge.fetchEntity("folio", "folio-42"), null);
+});
+
+test("domain projection preserves stable IDs for canonical ledger entries", async () => {
+  const { bridge } = fixture();
+  const entry = {
+    id: "payment:0123456789abcdef",
+    tenantId: "tenant-local",
+    propertyId: "property-local",
+    deviceId: "device-local",
+    bookingId: "41",
+    folioId: "folio-41",
+    amountPaise: 1000,
+    currency: "INR",
+    direction: "CREDIT",
+    method: "Cash",
+    reference: "",
+    source: "manual",
+    idempotencyKey: "projection-test-command",
+    reversalOf: null,
+    createdAt: "2026-11-15T12:00:00.000Z"
+  };
+  await projectLegacyPmsDomains({
+    bridge,
+    migrationId: "migration-ledger-projection",
+    snapshot: {
+      rooms: [], b: [], g: [], t: [], exp: [], inv: [], led: [entry], aud: [],
+      set: {}, menu: {}
+    }
+  });
+  const rows = await bridge.listEntities("ledger");
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, entry.id);
+  assert.deepEqual(rows[0].data, entry);
 });
