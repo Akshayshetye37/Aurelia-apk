@@ -110,7 +110,7 @@ test('APK verifies the pinned ES256 signature before server grant consumption', 
   assert.match(patcher, /RECOVERY_GRANT_PUBLIC_KEYS_JSON/);
   assert.match(patcher, /aurelia_recovery_grant_keys\.xml/);
   assert.match(client, /replayStore\.markUsed\(verified\.jti, verified\.expiresAtEpochSec\)/);
-  assert.match(client, /RecoveryGate\\.armAfterServerConsumption\\(verified\\.jti, remainingGrantMs\\)/);
+  assert.ok(client.includes('RecoveryGate.armAfterServerConsumption(verified.jti, remainingGrantMs)'));
   assert.match(client, /awaitingOwnerAlert/);
   assert.match(lockGate, /24-hour hold has not started yet/);
   assert.doesNotMatch(client, /inspectClaims/);
@@ -204,23 +204,23 @@ test('owner recovery acknowledgement requires a fresh verified passkey factor, n
   const guardStart = backend.indexOf('function requireFreshPasskeyOwner');
   const guardEnd = backend.indexOf('async function requireRecoveryOwnerBinding', guardStart);
   const guard = backend.slice(guardStart, guardEnd);
-  assert.match(guard, /requireFreshPrimaryOwner\\(request\\)/);
-  assert.match(guard, /ownerAuthFactor !== "passkey"/);
-  assert.match(guard, /email_verified !== true/);
+  assert.ok(guard.includes('requireFreshPrimaryOwner(request)'));
+  assert.ok(guard.includes('ownerAuthFactor !== "passkey"'));
+  assert.ok(guard.includes('email_verified !== true'));
   const ackStart = backend.indexOf('export const acknowledgeRecoveryOwnerAlert = onCall');
   const ackEnd = backend.indexOf('/** OTP proof may issue', ackStart);
-  assert.match(backend.slice(ackStart, ackEnd), /requireFreshPasskeyOwner\\(request\\)/);
+  assert.ok(backend.slice(ackStart, ackEnd).includes('requireFreshPasskeyOwner(request)'));
 });
 
 test('destructive reset requires a fresh verified owner session bound to the enrolled tenant', () => {
   const gate = read('android/templates/security/LockGateActivity.kt');
-  assert.match(gate, /private fun authorizeDestructiveReset/);
-  assert.match(gate, /getIdToken\\(true\\)/);
-  assert.match(gate, /email_verified/);
-  assert.match(gate, /now - authTime >= 300/);
-  assert.match(gate, /now - factorTime >= 300/);
-  assert.match(gate, /tenant != binding.tenantId/);
+  assert.ok(gate.includes('private fun authorizeDestructiveReset'));
+  assert.ok(gate.includes('getIdToken(true)'));
+  assert.ok(gate.includes('email_verified'));
+  assert.ok(gate.includes('now - authTime >= 300'));
+  assert.ok(gate.includes('now - factorTime >= 300'));
+  assert.ok(gate.includes('tenant != binding.tenantId'));
   const resetStart = gate.indexOf('private fun showDestructiveResetPrompt');
   const resetEnd = gate.indexOf('private fun authorizeDestructiveReset', resetStart);
-  assert.match(gate.slice(resetStart, resetEnd), /authorizeDestructiveReset/);
+  assert.ok(gate.slice(resetStart, resetEnd).includes('authorizeDestructiveReset'));
 });
