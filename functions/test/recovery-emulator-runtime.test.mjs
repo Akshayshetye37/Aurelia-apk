@@ -1240,6 +1240,16 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
   await assert.rejects(callable(functions.createRecoveryOwnerActionOptions, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId
   }, phoneOnlyOwnerAuth(ownerUid, tenantId)), 'phone OTP alone cannot start an owner passkey ceremony');
+  const pendingAction = await callable(functions.getRecoveryOwnerPendingAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash
+  }, ownerAuth(ownerUid, tenantId));
+  assert.deepEqual(pendingAction, { available: true, requestId: eventId });
+  await assert.rejects(callable(functions.getRecoveryOwnerPendingAction, {
+    tenantId, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth(ownerUid, tenantId)), 'the recovery-requesting device cannot retrieve an owner cancellation context');
+  await assert.rejects(callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: recoveryDeviceHash, action: 'cancel', requestId: eventId
+  }, ownerAuth(ownerUid, tenantId)), 'the recovery-requesting device cannot perform owner cancellation');
 
   const begin = await callable(functions.createRecoveryOwnerActionOptions, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId
