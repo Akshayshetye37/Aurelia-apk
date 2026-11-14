@@ -75,10 +75,10 @@ jobs:
           test -f android/gradlew
           test -f android/app/build.gradle
 
-      - name: Apply Android HTTPS policy and sync native project
+      - name: Sync native project and apply Android HTTPS policy
         run: |
-          node scripts/patch-android.js
           npx cap sync android
+          node scripts/patch-android.js
 
       - name: Merge generated Android release and debug resources
         working-directory: android
