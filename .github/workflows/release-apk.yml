@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   release-apk:
-    if: github.repository == 'Akshayshetye37/Aurelia-apk' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/aurelia-approved-')))
+    if: github.repository == 'Akshayshetye37/Aurelia-apk' && ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/aurelia-approved-')))
     name: Verify and build signed Aurelia PMS release
     environment:
       name: aurelia-release-approval
