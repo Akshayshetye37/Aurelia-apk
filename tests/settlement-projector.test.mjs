@@ -211,7 +211,7 @@ test("projector keeps a durable local posting pending until the signed server re
 
 test("projector uses the native signed-receipt bridge by default and requires an accepted receipt", async () => {
   const originalWindow = globalThis.window;
-  const originalCrypto = globalThis.crypto;
+  const originalCryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto");
   const fakeWindow = {
     AureliaPaymentAuth: { getFreshIdToken: async () => "fresh-firebase-id-token-for-payment-device" },
     AureliaNative: {
@@ -231,10 +231,15 @@ test("projector uses the native signed-receipt bridge by default and requires an
   };
   const nativeCalls = [];
   globalThis.window = fakeWindow;
-  globalThis.crypto = {
-    subtle: webcrypto.subtle,
-    randomUUID: () => "123e4567-e89b-12d3-a456-426614174001"
-  };
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    enumerable: originalCryptoDescriptor?.enumerable ?? true,
+    writable: true,
+    value: {
+      subtle: webcrypto.subtle,
+      randomUUID: () => "123e4567-e89b-12d3-a456-426614174001"
+    }
+  });
   try {
     const nativeCommand = { ...command, commandId: "123e4567-e89b-12d3-a456-426614174000" };
     const { lease, authorization } = await envelopes(nativeCommand);
@@ -274,7 +279,7 @@ test("projector uses the native signed-receipt bridge by default and requires an
   } finally {
     if (originalWindow === undefined) delete globalThis.window;
     else globalThis.window = originalWindow;
-    if (originalCrypto === undefined) delete globalThis.crypto;
-    else globalThis.crypto = originalCrypto;
+    if (originalCryptoDescriptor) Object.defineProperty(globalThis, "crypto", originalCryptoDescriptor);
+    else delete globalThis.crypto;
   }
 });
