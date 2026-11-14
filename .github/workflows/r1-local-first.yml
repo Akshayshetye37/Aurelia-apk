@@ -23,18 +23,18 @@ jobs:
     timeout-minutes: 35
     steps:
       - name: Checkout exact candidate commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4.4.0
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
       - name: Assert checkout is the event SHA
         run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
       - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node v4.4.0
         with:
           node-version: "22"
       - name: Install application dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Assert R1 release flags default OFF
         run: node --test tests/release-defaults.test.mjs
       - name: Run complete PMS test suite
