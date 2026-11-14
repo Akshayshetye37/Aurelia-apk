@@ -328,11 +328,19 @@ test('email-link owner session can only proceed to acknowledgement through Crede
 });
 
 
-test('Android process-death runner uses one host-managed phase-one invocation', () => {
+test('Android process-death runner uses two separate phase invocations and a host force-stop', () => {
   const workflow = read('.github/workflows/otp-recovery-android-instrumentation.yml');
   const instrumentation = read('android/templates/instrumentation/RecoveryProcessDeathInstrumentedTest.java');
-  assert.doesNotMatch(workflow, /run_instrumentation_test process-death-phase-one/);
+  assert.match(workflow, /run_instrumentation_test process-death-phase-one "\$phase_one" 1/);
+  assert.match(workflow, /run_instrumentation_test process-death-phase-two "\$phase_two" 2/);
+  assert.match(workflow, /-e phase "\$phase"/);
   assert.ok(workflow.includes('shell am force-stop com.aurelia.pms'));
+  assert.match(workflow, /for attempt in \{1\.\.30\}/);
+  assert.match(workflow, /pidof com\.aurelia\.pms/);
+  assert.ok(instrumentation.includes('getArguments().getString("phase")'));
+  assert.ok(instrumentation.includes('sha256Hex(persistedValue)'));
+  assert.ok(instrumentation.includes('sha256Hex(persistedData.getString("value"))'));
+  assert.doesNotMatch(instrumentation, /Thread\.sleep\(30 \* 60 \* 1000L\)/);
   assert.ok(instrumentation.includes('newRecoveryLockout(context).beginAttempt()'));
   assert.ok(instrumentation.includes('lockoutFailureCount()'));
   assert.ok(instrumentation.includes('recoveryThrottle.completeAttempt()'));
