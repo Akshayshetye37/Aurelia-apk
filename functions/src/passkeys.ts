@@ -58,8 +58,7 @@ function rpConfig(): { rpID: string; rpName: string; origins: string[] } {
   const rpID = RP_ID.value().trim().toLowerCase();
   const rpName = RP_NAME.value().trim();
   const origins = ANDROID_ORIGINS.value().split(",").map(value => value.trim()).filter(Boolean);
-  const emulator = process.env.FUNCTIONS_EMULATOR === "true";
-  if ((!emulator && ASSETLINKS_VERIFIED.value().trim().toLowerCase() !== "true") || !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))+$/.test(rpID) ||
+  if (ASSETLINKS_VERIFIED.value().trim().toLowerCase() !== "true" || !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))+$/.test(rpID) ||
       !rpName || rpName.length > 64 || origins.length === 0 ||
       origins.some(origin => !/^android:apk-key-hash:[A-Za-z0-9_-]{43}$/.test(origin))) {
     throw new HttpsError("failed-precondition", "Passkey relying-party configuration is incomplete.");
