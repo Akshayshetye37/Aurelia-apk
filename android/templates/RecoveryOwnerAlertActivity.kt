@@ -156,8 +156,10 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
             setOnClickListener { completeOwnerEmailLink() }
         })
         acknowledgeButton = Button(this).apply {
-            text = "Acknowledge alert and start 24-hour hold"
+            text = "Passkey approval not configured"
             visibility = if (hasAlertContext) View.VISIBLE else View.GONE
+            isEnabled = false
+            contentDescription = "Owner acknowledgement is disabled until passkey authentication is configured."
             setOnClickListener { acknowledge() }
         }
         cancelButton = Button(this).apply {
@@ -264,7 +266,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
                                             }
                                         }
                                 } else {
-                                    status.text = "Primary owner verified on this enrolled device. Acknowledge or cancel the recovery request."
+                                    status.text = "Primary owner email verified. A passkey is required to acknowledge the alert; that integration is not configured yet. You may cancel the request, but the 24-hour hold cannot start until passkey approval is available."
                                 }
                             }
                         }
