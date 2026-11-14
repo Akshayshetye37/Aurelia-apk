@@ -3,7 +3,9 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 
 const root = process.cwd();
-const mergedRoot = path.join(root, 'android', 'app', 'build', 'intermediates', 'merged_res');
+// AGP in the verified CI build places merged variant resources under
+// intermediates/packaged_res/<variant>/package<Variant>Resources.
+const packagedRoot = path.join(root, 'android', 'app', 'build', 'intermediates', 'packaged_res');
 
 function walk(directory) {
   if (!fs.existsSync(directory)) return [];
@@ -14,31 +16,40 @@ function walk(directory) {
   });
 }
 
-function readMergedConfig(variant) {
-  const variantRoot = path.join(mergedRoot, variant);
+function readPackagedConfig(variant) {
+  const variantRoot = path.join(packagedRoot, variant);
   const candidates = walk(variantRoot).filter(file =>
-    /(?:^|[/_])aurelia_network_security_config\.xml$/i.test(file)
+    path.basename(file).toLowerCase() === 'aurelia_network_security_config.xml'
   );
   assert.equal(
     candidates.length,
     1,
-    `Expected exactly one generated ${variant} network security XML in ${variantRoot}; found ${candidates.length}`
+    `Expected exactly one generated ${variant} network security XML below ${variantRoot}; found ${candidates.length}`
   );
   return { file: candidates[0], xml: fs.readFileSync(candidates[0], 'utf8') };
 }
 
-const release = readMergedConfig('release');
-assert.match(release.xml, /<base-config\b[^>]*cleartextTrafficPermitted="false"/);
-assert.match(release.xml, /<certificates\s+src="system"\s*\/>/);
-assert.doesNotMatch(release.xml, /<certificates\s+src="user"\s*\/>/);
-assert.doesNotMatch(release.xml, /cleartextTrafficPermitted="true"/);
+function assertPolicy({ variant, xml, expectedAnchors }) {
+  assert.match(xml, /<base-config\\b[^>]*cleartextTrafficPermitted="false"/,
+    `${variant}: cleartext traffic must be disabled`);
+  assert.doesNotMatch(xml, /cleartextTrafficPermitted="true"/,
+    `${variant}: no configuration may enable cleartext traffic`);
 
-const debug = readMergedConfig('debug');
-assert.match(debug.xml, /<base-config\b[^>]*cleartextTrafficPermitted="false"/);
-assert.match(debug.xml, /<certificates\s+src="system"\s*\/>/);
-assert.match(debug.xml, /<certificates\s+src="user"\s*\/>/);
-assert.doesNotMatch(debug.xml, /cleartextTrafficPermitted="true"/);
+  const trustAnchors = xml.match(/<trust-anchors>([\\s\\S]*?)<\\/trust-anchors>/);
+  assert.ok(trustAnchors, `${variant}: trust-anchors block must exist`);
+  const actualAnchors = [...trustAnchors[1].matchAll(/<certificates\\s+src="([^"]+)"\\s*\\/>/g)]
+    .map(match => match[1])
+    .sort();
+  assert.deepEqual(actualAnchors, [...expectedAnchors].sort(),
+    `${variant}: trust anchors must exactly match the allowed CA set`);
+}
 
-console.log('Generated Android resource variants verified: release trusts system CAs only; debug additionally trusts user CAs.');
+const release = readPackagedConfig('release');
+assertPolicy({ variant: 'release', xml: release.xml, expectedAnchors: ['system'] });
+
+const debug = readPackagedConfig('debug');
+assertPolicy({ variant: 'debug', xml: debug.xml, expectedAnchors: ['system', 'user'] });
+
+console.log('Generated Android packaged resources verified: release trusts system CAs only; debug trusts system and user CAs; cleartext is disabled in both.');
 console.log(`Release resource: ${path.relative(root, release.file)}`);
 console.log(`Debug resource: ${path.relative(root, debug.file)}`);
