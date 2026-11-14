@@ -167,14 +167,22 @@ class AureliaAppManager(
             recoveryKey.fill(0)
             throw SecurityException("Recovery phone policy could not be authenticated.", failure)
         }
-        if (otpRequired && !RecoveryGate.spendAttempt()) {
+        val otpAttemptAllowed = try {
+            !otpRequired || RecoveryGate.spendAttempt()
+        } catch (failure: Exception) {
+            recoveryKey.fill(0)
+            throw SecurityException("Recovery attempt could not be durably recorded.", failure)
+        }
+        if (!otpAttemptAllowed) {
             recoveryKey.fill(0)
             throw SecurityException("A fresh OTP verification is required to continue recovery.")
         }
+        // Persist the cross-grant crypto throttle BEFORE attempting the unwrap.
+        // A process kill after a wrong key cannot erase the failure increment.
+        recoveryLockout.registerFailure()
         val recovered = try {
             crypto.unwrapDataKeyWithRecovery(bundle.getString("recovery"), recoveryKey)
         } catch (failure: Exception) {
-            recoveryLockout.registerFailure()
             throw SecurityException("Recovery key verification failed.", failure)
         } finally {
             recoveryKey.fill(0)
