@@ -38,6 +38,9 @@ jobs:
       - name: Assert R1 release defaults remain OFF
         run: node --test tests/release-defaults.test.mjs
 
+      - name: Enforce Android HTTPS and CA trust policy
+        run: node --test tests/https-policy.test.mjs
+
       - name: Run complete PMS test suite
         run: npm test
 
