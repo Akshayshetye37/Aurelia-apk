@@ -183,7 +183,7 @@ test('provider factory exposes only adapters with the complete checkout contract
 
 test('provider-neutral checkout contract rejects amount or provider response binding drift', async () => {
   const { assertCheckoutRequest, normalizeCheckoutSession } = await import('../src/providers/checkout-contract.mjs');
-  const request = { provider: 'razorpay', environment: 'test', amountMinor: 1200, currency: 'INR', idempotencyKey: 'idem-test' };
+  const request = { provider: 'razorpay', environment: 'test', amountMinor: 1200, currency: 'INR', idempotencyKey: 'idem-test-key-123' };
   assert.equal(assertCheckoutRequest(request), request);
   assert.throws(() => assertCheckoutRequest({ ...request, amountMinor: 12.5 }), /invalid_checkout_request/);
   assert.throws(() => normalizeCheckoutSession('razorpay', {
