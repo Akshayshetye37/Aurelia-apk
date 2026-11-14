@@ -61,7 +61,7 @@ object RecoveryGate {
     @Synchronized
     fun isOpen(): Boolean {
         if (stateUnavailable) return false
-        val state = readState() ?: return false
+        val state = safeReadState() ?: return false
         if (state.attemptsRemaining <= 0 || expired(state)) {
             clear()
             return false
@@ -72,7 +72,7 @@ object RecoveryGate {
     @Synchronized
     fun spendAttempt(expectedJti: String? = null): Boolean {
         if (stateUnavailable) return false
-        val state = readState() ?: return false
+        val state = safeReadState() ?: return false
         if (state.attemptsRemaining <= 0 || expired(state) ||
             (expectedJti != null && expectedJti != state.jti)) {
             clear()
@@ -96,7 +96,16 @@ object RecoveryGate {
     @Synchronized
     fun clear() {
         if (stateUnavailable) return
-        writeState(State("", 0, 0L, 0L, bootCount()))
+        try { writeState(State("", 0, 0L, 0L, bootCount())) }
+        catch (_: Exception) { stateUnavailable = true }
+    }
+
+    private fun safeReadState(): State? {
+        if (stateUnavailable) return null
+        return try { readState() } catch (_: Exception) {
+            stateUnavailable = true
+            null
+        }
     }
 
     private fun expired(state: State): Boolean {
