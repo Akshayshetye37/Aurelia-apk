@@ -228,7 +228,7 @@ test('WebAuthn enrollment uses a 32-byte uid/tenant-bound two-minute single-use 
   const challenge = storedChallenge.data();
   assert.equal(challenge.ownerUid, ownerUid);
   assert.equal(challenge.tenantId, tenantId);
-  assert.equal(challenge.purpose, 'ENROLL');
+  assert.equal(challenge.purpose, 'enroll');
   assert.equal(challenge.state, 'PENDING');
   assert.equal(Buffer.from(challenge.challenge, 'base64url').length, 32);
   assert.ok(challenge.expiresAtMs > Date.now());
