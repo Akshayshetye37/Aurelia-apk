@@ -1336,6 +1336,13 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
   await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
     challengeId: begin.challengeId, credentialResponse: assertion, ackToken: 'x'.repeat(43)
+  }, phoneOnlyOwnerAuth(ownerUid, tenantId)), 'phone-OTP-only owner session cannot complete an otherwise valid passkey assertion');
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).get('state'), 'PENDING',
+    'phone-OTP-only rejection preserves the legitimate assertion challenge');
+
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
+    challengeId: begin.challengeId, credentialResponse: assertion, ackToken: 'x'.repeat(43)
   }, ownerAuth('different-owner', tenantId)));
   const wrongAction = await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId,
