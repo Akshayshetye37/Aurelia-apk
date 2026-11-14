@@ -2915,5 +2915,13 @@
       "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
       "file_blob_sha": "351ca9aa1b17d934489ae3715ac53a8d1da59869"
     }
-  ]
+  ],
+  "test_baseline": {
+    "minimum_tests": 750,
+    "scope": [
+      "tests/**/*.test.{mjs,js,cjs}",
+      "payment-backend/test/**/*.test.{mjs,js,cjs}"
+    ],
+    "policy": "Run all discovered files in one Node test process; fail on non-zero failures, any skipped tests, missing summary, or total below minimum. Raise minimum to the exact verified green count after the first unified run."
+  }
 }
