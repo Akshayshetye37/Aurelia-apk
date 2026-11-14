@@ -199,7 +199,7 @@ export async function settlePaymentToRepository({
     folioId,
     amountPaise,
     currency: "INR",
-    direction: "CREDIT",
+    transactionType: "PAYMENT_RECEIVED",
     method: String(result.payment?.m || method || ""),
     reference: String(result.payment?.r || reference || ""),
     source: String(result.payment?.source || source),
