@@ -224,3 +224,15 @@ test('destructive reset requires a fresh verified owner session bound to the enr
   const resetEnd = gate.indexOf('private fun authorizeDestructiveReset', resetStart);
   assert.ok(gate.slice(resetStart, resetEnd).includes('authorizeDestructiveReset'));
 });
+
+
+test('recovery gate is initialized at application startup and not cleared by onStop', () => {
+  const app = read('android/templates/AureliaApplication.java');
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.ok(app.includes('RecoveryGate.INSTANCE.initialize(this)'));
+  const onStopStart = gate.indexOf('override fun onStop()');
+  const onBackStart = gate.indexOf('override fun onBackPressed()', onStopStart);
+  assert.ok(onStopStart >= 0 && onBackStart > onStopStart);
+  assert.ok(!gate.slice(onStopStart, onBackStart).includes('RecoveryGate.clear()'));
+  assert.ok(gate.slice(onBackStart).includes('RecoveryGate.clear()'));
+});
