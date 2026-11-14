@@ -1,0 +1,118 @@
+name: Android HTTPS resource policy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [work/https-hardening]
+    paths:
+      - 'scripts/assert-android-network-security-build.mjs'
+      - 'scripts/patch-android.js'
+      - '.github/workflows/android-https-resource-policy.yml'
+      - 'android/templates/**'
+  pull_request:
+    paths:
+      - 'scripts/assert-android-network-security-build.mjs'
+      - 'scripts/patch-android.js'
+      - '.github/workflows/android-https-resource-policy.yml'
+      - 'android/templates/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-resources:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check assertion script syntax
+        run: node --check scripts/assert-android-network-security-build.mjs
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build web assets required by Capacitor sync
+        run: npm run build
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Generate and sync Android resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          if [[ -d android/templates ]]; then mv android/templates "$template_dir"; fi
+          if [[ -d android ]]; then rmdir android; fi
+          npx cap add android
+          if [[ -d "$template_dir" ]]; then
+            mkdir -p android/templates
+            cp -a "$template_dir/." android/templates/
+          fi
+          npx cap sync android
+          node scripts/patch-android.js
+      - name: Generate release and debug packaged resources
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon processReleaseResources processDebugResources
+      - name: Verify clean release and debug policy
+        run: node scripts/assert-android-network-security-build.mjs
+      - name: Stage exact generated resources for independent mutation job
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/https-policy-artifact"
+          mkdir -p "$stage/android/app/build/intermediates/packaged_res/release/packageReleaseResources/xml"
+          mkdir -p "$stage/android/app/build/intermediates/packaged_res/debug/packageDebugResources/xml"
+          mkdir -p "$stage/android/app/src/main"
+          cp android/app/build/intermediates/packaged_res/release/packageReleaseResources/xml/aurelia_network_security_config.xml "$stage/android/app/build/intermediates/packaged_res/release/packageReleaseResources/xml/"
+          cp android/app/build/intermediates/packaged_res/debug/packageDebugResources/xml/aurelia_network_security_config.xml "$stage/android/app/build/intermediates/packaged_res/debug/packageDebugResources/xml/"
+          cp android/app/src/main/AndroidManifest.xml "$stage/android/app/src/main/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-https-policy-inputs
+          path: ${{ runner.temp }}/https-policy-artifact
+          if-no-files-found: error
+          retention-days: 1
+
+  mutation-proof:
+    needs: build-resources
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-https-policy-inputs
+          path: .
+      - name: Prove release rejects user CA and restored policy passes
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_xml="android/app/build/intermediates/packaged_res/release/packageReleaseResources/xml/aurelia_network_security_config.xml"
+          backup="$RUNNER_TEMP/release-network-security.xml"
+          test -f "$release_xml"
+          cp "$release_xml" "$backup"
+          restore() { cp "$backup" "$release_xml"; }
+          trap restore EXIT
+          node - "$release_xml" <<'NODE'
+          const fs = require('node:fs');
+          const file = process.argv[2];
+          const xml = fs.readFileSync(file, 'utf8');
+          const anchor = '<certificates src="system" />';
+          if (!xml.includes(anchor)) throw new Error('Expected system CA anchor before mutation');
+          fs.writeFileSync(file, xml.replace(anchor, anchor + '<certificates src="user" />'));
+          NODE
+          if node scripts/assert-android-network-security-build.mjs >"$RUNNER_TEMP/https-mutation.log" 2>&1; then
+            echo "Mutation unexpectedly passed"
+            exit 1
+          fi
+          grep -F "release must not trust user-installed CAs" "$RUNNER_TEMP/https-mutation.log"
+          restore
+          trap - EXIT
+          node scripts/assert-android-network-security-build.mjs
