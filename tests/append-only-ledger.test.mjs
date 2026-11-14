@@ -131,7 +131,8 @@ test("canonical manual payment appends one integer-paise ledger row in the same 
     method: "Cash",
     source: "manual",
     idempotencyKey: "manual-ledger-command-0041",
-    verificationConfirmed: true
+    verificationConfirmed: true,
+    now: () => "2026-11-15T12:00:00.000Z"
   });
 
   assert.equal(result.canonical, true);
