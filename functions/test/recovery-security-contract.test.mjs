@@ -213,7 +213,7 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(functions, /ackTokenHashes,/);
   assert.match(passkeys, /equalAckDigest/);
   assert.match(passkeys, /ackTokenHashes\?\.\[deviceHash\]/);
-  assert.match(functions, /ownerAckTokenDigest\(owner\.uid, eventId, deviceIdHash, ackToken\)/);
+  assert.match(functions, /ownerAckTokenDigest\(phoneRecord\.ownerUid, eventRef\.id, hash, token\)/);
   assert.match(functions, /alertAckTokens\.get\(device\.deviceIdHash\)/);
   assert.match(passkeys, /tx\.update\(eventRef, \{/);
   assert.match(functions, /fcmAcceptedDeviceHashes: FieldValue\.delete\(\)/);
@@ -278,9 +278,9 @@ test('every recovery callable enforces App Check and phone-change activation rej
   for (const callable of callables) {
     assert.match(callable, /enforceAppCheck: true/);
     if (/cancelRecoveryRequest|cancelRecoveryPhoneChange/.test(callable)) {
-      assert.doesNotMatch(callable, /requireRecoveryEnabled\(\)/);
+      assert.doesNotMatch(callable, /require(?:Recovery)?Enabled\(\)/);
     } else {
-      assert.match(callable, /requireRecoveryEnabled\(\)/);
+      assert.match(callable, /require(?:Recovery)?Enabled\(\)/);
     }
   }
   const activation = functions.slice(functions.indexOf('export const activateRecoveryPhoneChange'));
