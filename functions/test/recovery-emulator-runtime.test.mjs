@@ -1275,7 +1275,7 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
 
   await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
-    challengeId: begin.challengeId, credentialResponse: undefined, ackToken
+    challengeId: begin.challengeId, credentialResponse: undefined
   }, ownerAuth(ownerUid, tenantId)), 'email-link-only owner session without a WebAuthn assertion is rejected');
   assert.equal((await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).get('state'), 'PENDING',
     'email-link-only rejection leaves the legitimate challenge usable');
