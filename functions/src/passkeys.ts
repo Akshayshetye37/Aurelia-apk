@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { getApps, initializeApp } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError, type CallableRequest } from "firebase-functions/v2/https";
@@ -13,6 +14,7 @@ import {
   type AuthenticatorTransportFuture
 } from "@simplewebauthn/server";
 
+if (!getApps().length) initializeApp();
 const db = getFirestore();
 const ENABLED = defineString("RECOVERY_ENABLED", { default: "false" });
 const RP_ID = defineString("WEBAUTHN_RP_ID", { default: "" });
@@ -200,7 +202,7 @@ export const completeRecoveryPasskeyEnrollment = onCall(
         publicKey: Buffer.from(credential.publicKey).toString("base64url"),
         counter: credential.counter, transports: credential.transports ?? [],
         deviceType: info.credentialDeviceType, backedUp: info.credentialBackedUp,
-        enrolledDeviceHash: deviceHash, state: "PENDING_ALERT", alertAccepted: false,
+        enrolledDeviceHash: deviceHash, enrollmentEventId: eventId, state: "PENDING_ALERT", alertAccepted: false,
         activeAfterMs, createdAt: FieldValue.serverTimestamp()
       });
       tx.create(eventRef, {
