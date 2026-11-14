@@ -78,9 +78,9 @@ test('native recovery settings uses the encrypted phone record and secondary pho
   assert.match(client, /currentPhoneIdToken/);
   assert.match(client, /RecoveryGrantVerifier\.verify/);
   assert.doesNotMatch(client, /cancelRecoveryRequest/);
+  assert.match(activity, /getRecoveryOwnerPendingAction/);
+  assert.match(activity, /RecoveryOwnerAlertActivity\.EXTRA_ACTION, "cancel"/);
   const ownerAlert = read('android/templates/RecoveryOwnerAlertActivity.kt');
-  assert.match(ownerAlert, /getRecoveryOwnerPendingAction/);
-  assert.match(ownerAlert, /EXTRA_ACTION/);
   assert.match(ownerAlert, /completeRecoveryOwnerPasskeyAction/);
 });
 
