@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 
 const root = process.cwd();
 const registryPath = path.join(root, "feature-registry.json");
@@ -33,17 +33,32 @@ if (files.length === 0) throw new Error("No test files discovered");
 console.log(`Discovered ${files.length} test files:`);
 for (const file of files) console.log(`  ${file}`);
 
-const result = spawnSync(process.execPath, ["--test", ...files], {
+const child = spawn(process.execPath, ["--test", ...files], {
   cwd: root,
-  encoding: "utf8",
-  maxBuffer: 64 * 1024 * 1024
+  stdio: ["ignore", "pipe", "pipe"]
 });
 
-const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-process.stdout.write(output);
+let tail = "";
+const remember = (chunk) => {
+  tail += chunk.toString();
+  if (tail.length > 1024 * 1024) tail = tail.slice(-1024 * 1024);
+};
+child.stdout.on("data", (chunk) => {
+  process.stdout.write(chunk);
+  remember(chunk);
+});
+child.stderr.on("data", (chunk) => {
+  process.stderr.write(chunk);
+  remember(chunk);
+});
+
+const exitCode = await new Promise((resolve, reject) => {
+  child.once("error", reject);
+  child.once("close", resolve);
+});
 
 const readCount = (label) => {
-  const match = output.match(new RegExp(`^# ${label} (\\d+)$`, "m"));
+  const match = tail.match(new RegExp(`^# ${label} (\\\\d+)$`, "m"));
   return match ? Number(match[1]) : null;
 };
 const total = readCount("tests");
@@ -51,8 +66,7 @@ const passed = readCount("pass");
 const failed = readCount("fail");
 const skipped = readCount("skipped");
 
-if (result.error) throw result.error;
-if (result.status !== 0) process.exit(result.status ?? 1);
+if (exitCode !== 0) process.exit(exitCode ?? 1);
 if ([total, passed, failed, skipped].some((value) => value === null)) {
   throw new Error("Node test runner summary is missing; refusing to report a pass");
 }
