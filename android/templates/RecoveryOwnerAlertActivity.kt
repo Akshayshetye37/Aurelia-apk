@@ -494,51 +494,67 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
     }
 
     private fun cancelRequest() {
-        withFreshOwnerSession("cancelRecoveryRequest") { result ->
-            val cancelled = (result as? Map<*, *>)?.get("cancelled") == true
-            if (cancelled) NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
-            status.text = if (cancelled) {
-                "Recovery request cancelled. The pending hold and any unconsumed grant were revoked."
-            } else {
-                "No cancellable recovery request was found."
-            }
-        }
-    }
-
-    private fun withFreshOwnerSession(
-        callable: String,
-        onSuccess: (Any?) -> Unit
-    ) {
-        if (!hasAlertContext) {
-            status.text = "Open the original recovery alert notification to acknowledge or cancel."
-            return
-        }
         val user = FirebaseAuth.getInstance().currentUser
-        if (user == null) {
-            status.text = "Complete primary-owner email-link sign-in first."
+        if (!hasAlertContext || user == null || tenantId.isBlank() || deviceHash.isBlank() || eventId.isBlank()) {
+            status.text = "Open the original owner alert and complete primary-owner sign-in first."
             return
         }
-        status.text = "Verifying the fresh primary-owner session..."
+        cancelButton.isEnabled = false
+        status.text = "Requesting a one-time passkey cancellation challenge..."
         user.getIdToken(true).addOnCompleteListener { tokenTask ->
             if (!tokenTask.isSuccessful) {
-                status.text = "Primary-owner authentication is unavailable. Recovery remains locked."
+                cancelButton.isEnabled = true
+                status.text = "Fresh owner authentication is unavailable. Recovery remains unchanged."
                 return@addOnCompleteListener
             }
-            FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
-                .getHttpsCallable(callable)
-                .call(mapOf(
-                    "tenantId" to tenantId,
-                    "deviceIdHash" to deviceHash,
-                    "eventId" to eventId,
-                    "ackToken" to ackToken
-                ))
-                .addOnCompleteListener { task ->
-                    if (!task.isSuccessful) {
-                        status.text = "The owner action was rejected. Reauthenticate with the primary email link if needed."
-                    } else {
-                        onSuccess(task.result?.data)
+            val functions = FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
+            functions.getHttpsCallable("createRecoveryOwnerActionOptions").call(mapOf(
+                "tenantId" to tenantId, "deviceIdHash" to deviceHash,
+                "action" to "cancel", "requestId" to eventId
+            )).addOnCompleteListener { challengeTask ->
+                if (!challengeTask.isSuccessful) {
+                    cancelButton.isEnabled = true
+                    status.text = "The server rejected the passkey cancellation challenge. Recovery remains unchanged."
+                    return@addOnCompleteListener
+                }
+                val payload = challengeTask.result?.data as? Map<*, *>
+                val challengeId = payload?.get("challengeId") as? String
+                val options = payload?.get("options") as? Map<*, *>
+                if (challengeId.isNullOrBlank() || options == null) {
+                    cancelButton.isEnabled = true
+                    status.text = "The server returned an invalid cancellation challenge."
+                    return@addOnCompleteListener
+                }
+                lifecycleScope.launch {
+                    try {
+                        val requestJson = JSONObject(options).toString()
+                        val credential = CredentialManager.create(this@RecoveryOwnerAlertActivity).getCredential(
+                            this@RecoveryOwnerAlertActivity,
+                            GetCredentialRequest(listOf(GetPublicKeyCredentialOption(requestJson)))
+                        ).credential as? PublicKeyCredential
+                            ?: throw IllegalStateException("Credential provider did not return a public-key assertion.")
+                        val credentialResponse = jsonObjectToMap(JSONObject(credential.authenticationResponseJson))
+                        functions.getHttpsCallable("completeRecoveryOwnerPasskeyAction").call(mapOf(
+                            "tenantId" to tenantId, "deviceIdHash" to deviceHash,
+                            "action" to "cancel", "requestId" to eventId,
+                            "challengeId" to challengeId, "credentialResponse" to credentialResponse
+                        )).addOnCompleteListener { completion ->
+                            val cancelled = completion.isSuccessful &&
+                                (completion.result?.data as? Map<*, *>)?.get("cancelled") == true
+                            if (cancelled) {
+                                NotificationManagerCompat.from(this@RecoveryOwnerAlertActivity).cancel(NOTIFICATION_ID)
+                                status.text = "Passkey verified. The pending recovery request and any unconsumed grant were revoked."
+                            } else {
+                                status.text = "The server rejected the passkey cancellation. Recovery remains unchanged."
+                                cancelButton.isEnabled = true
+                            }
+                        }
+                    } catch (_: Exception) {
+                        cancelButton.isEnabled = true
+                        status.text = "Passkey authentication was cancelled or unavailable. Recovery remains unchanged."
                     }
                 }
+            }
         }
     }
 
