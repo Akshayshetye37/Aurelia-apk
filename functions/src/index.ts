@@ -720,69 +720,12 @@ export const consumeRecoveryGrant = onCall(
   }
 );
 
-/** The authenticated owner can cancel a pending recovery hold or unconsumed grant. */
+/** Legacy cancellation is deliberately disabled; all owner cancellations require a WebAuthn assertion. */
 export const cancelRecoveryRequest = onCall(
   { region: REGION, enforceAppCheck: true },
-  async request => {
-    const owner = requireFreshPrimaryOwner(request);
-    if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
-    const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
-    await requireRecoveryOwnerBinding(owner.tenantId, owner.uid);
-    await requireAttestedDevice(owner.tenantId, deviceIdHash, owner.uid);
-    const cooldownRef = db.doc(`recoveryCooldowns/${owner.tenantId}`);
-    const ownerDeviceRef = db.doc(`recoveryOwnerDevices/${owner.tenantId}_${deviceIdHash}`);
-    const attestationRef = db.doc(`recoveryDeviceAttestations/${owner.tenantId}_${deviceIdHash}`);
-    const cancelled = await db.runTransaction(async tx => {
-      const [cooldownSnapshot, ownerDeviceSnapshot, attestationSnapshot] = await Promise.all([
-        tx.get(cooldownRef), tx.get(ownerDeviceRef), tx.get(attestationRef)
-      ]);
-      const ownerDevice = ownerDeviceSnapshot.data();
-      const attestation = attestationSnapshot.data();
-      if (!ownerDevice || ownerDevice.ownerUid !== owner.uid ||
-          ownerDevice.deviceIdHash !== deviceIdHash || ownerDevice.active !== true ||
-          !attestation || attestation.ownerUid !== owner.uid || attestation.status !== "VERIFIED" ||
-          !["TRUSTED_ENVIRONMENT", "STRONG_BOX"].includes(attestation.securityLevel) ||
-          attestation.verifiedBootState !== "VERIFIED" || attestation.deviceLocked !== true) throw GENERIC;
-      const pending = cooldownSnapshot.data();
-      if (!pending || pending.state === "CANCELLED" || pending.state === "CONSUMED") return false;
-      if (pending.ownerUid !== owner.uid ||
-          !["ALERT_PENDING", "APPROVED", "PENDING", "ISSUED"].includes(pending.state)) throw GENERIC;
-      const grantJti = typeof pending.grantJti === "string" ? pending.grantJti : null;
-      const grantRef = grantJti ? db.doc(`recoveryGrants/${grantJti}`) : null;
-      const eventId = typeof pending.alertEventId === "string" ? pending.alertEventId : null;
-      const eventRef = eventId ? db.doc(`recoverySecurityEvents/${eventId}`) : null;
-      const grantSnapshot = grantRef ? await tx.get(grantRef) : null;
-      const eventSnapshot = eventRef ? await tx.get(eventRef) : null;
-      if (grantSnapshot?.exists && grantSnapshot.data()?.state === "CONSUMED") return false;
-      tx.update(cooldownRef, {
-        state: "CANCELLED", cancelledAt: FieldValue.serverTimestamp(), cancelledAtSec: Math.floor(Date.now() / 1000),
-        cancelledByUid: owner.uid, cancelledByDeviceHash: deviceIdHash,
-        // Keep the terminal state for race arbitration, but erase the pending hold,
-        // alert routing and grant linkage so cancellation cannot be resumed.
-        ownerUid: FieldValue.delete(), deviceIdHash: FieldValue.delete(),
-        phoneHash: FieldValue.delete(), requestedAt: FieldValue.delete(),
-        alertEventId: FieldValue.delete(), grantJti: FieldValue.delete(),
-        eligibleAt: FieldValue.delete(), alertedDeviceHashes: FieldValue.delete(),
-        grantExpiresAt: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp()
-      });
-      if (grantRef && grantSnapshot?.exists) {
-        tx.update(grantRef, { state: "REVOKED", revokedAt: FieldValue.serverTimestamp() });
-      }
-      if (eventRef && eventSnapshot?.exists) {
-        tx.update(eventRef, {
-          notificationDelivery: "OWNER_CANCELLED", cancelledAt: FieldValue.serverTimestamp(),
-          ackTokenHashes: FieldValue.delete(), ackTokenExpiresAt: FieldValue.delete(),
-          fcmAcceptedDeviceHashes: FieldValue.delete(), phoneHash: FieldValue.delete()
-        });
-      }
-      const auditRef = db.collection("recoverySecurityEvents").doc(randomUUID());
-      tx.create(auditRef, {
-        tenantId: owner.tenantId, type: "RECOVERY_REQUEST_CANCELLED",
-        deviceIdHash, createdAt: FieldValue.serverTimestamp()
-      });
-      return true;
-    });
-    return { cancelled };
+  async () => {
+    requireRecoveryEnabled();
+    throw new HttpsError("failed-precondition", "Owner cancellation requires a verified passkey assertion.");
   }
 );
 
@@ -844,6 +787,7 @@ export {
   completeRecoveryPasskeyEnrollment,
   retryRecoveryPasskeyEnrollmentAlert,
   createRecoveryOwnerActionOptions,
+  getRecoveryOwnerPendingAction,
   getRecoveryOwnerActionReadiness,
   completeRecoveryOwnerPasskeyAction,
   acknowledgeRecoveryOwnerAlert
