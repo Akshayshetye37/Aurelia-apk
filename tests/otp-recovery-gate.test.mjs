@@ -197,3 +197,30 @@ test('owner alert UI completes server-verified email-link primary authentication
   assert.match(patcher, /android:pathPrefix="\/__\/auth"/);
   assert.match(patcher, /android:launchMode="singleTask"/);
 });
+
+
+test('owner recovery acknowledgement requires a fresh verified passkey factor, not email-link alone', () => {
+  const backend = read('functions/src/index.ts');
+  const guardStart = backend.indexOf('function requireFreshPasskeyOwner');
+  const guardEnd = backend.indexOf('async function requireRecoveryOwnerBinding', guardStart);
+  const guard = backend.slice(guardStart, guardEnd);
+  assert.match(guard, /requireFreshPrimaryOwner\\(request\\)/);
+  assert.match(guard, /ownerAuthFactor !== "passkey"/);
+  assert.match(guard, /email_verified !== true/);
+  const ackStart = backend.indexOf('export const acknowledgeRecoveryOwnerAlert = onCall');
+  const ackEnd = backend.indexOf('/** OTP proof may issue', ackStart);
+  assert.match(backend.slice(ackStart, ackEnd), /requireFreshPasskeyOwner\\(request\\)/);
+});
+
+test('destructive reset requires a fresh verified owner session bound to the enrolled tenant', () => {
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.match(gate, /private fun authorizeDestructiveReset/);
+  assert.match(gate, /getIdToken\\(true\\)/);
+  assert.match(gate, /email_verified/);
+  assert.match(gate, /now - authTime >= 300/);
+  assert.match(gate, /now - factorTime >= 300/);
+  assert.match(gate, /tenant != binding.tenantId/);
+  const resetStart = gate.indexOf('private fun showDestructiveResetPrompt');
+  const resetEnd = gate.indexOf('private fun authorizeDestructiveReset', resetStart);
+  assert.match(gate.slice(resetStart, resetEnd), /authorizeDestructiveReset/);
+});
