@@ -12,6 +12,9 @@ import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
 import com.aurelia.pms.security.RecoveryDeviceIdentity
 import com.google.android.gms.tasks.Tasks
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessaging
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -413,28 +416,45 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
     }
 
     private fun cancelPendingRecovery() {
-        status.text = "Checking owner authorization…"
+        status.text = "Checking the fresh primary-owner session..."
         RecoveryTenantIdentity.getPrimaryOwnerTenant().addOnCompleteListener { ownerTask ->
             runOnUiThread {
                 if (!ownerTask.isSuccessful) {
-                    status.text = "Sign in again as the property owner to cancel recovery."
+                    status.text = "Sign in again as the property owner before cancelling recovery."
                     return@runOnUiThread
                 }
+                val tenant = ownerTask.result
                 val deviceHash = runCatching { RecoveryDeviceIdentity.deviceIdHash() }.getOrNull()
                 if (deviceHash == null) {
                     status.text = "This device has no verified recovery identity."
                     return@runOnUiThread
                 }
-                // The callable independently verifies the canonical owner UID,
-                // fresh primary factor and enrolled hardware-attested device.
-                client.cancelRecoveryRequest(ownerTask.result, deviceHash).addOnCompleteListener { cancelTask ->
-                    runOnUiThread {
-                        status.text = if (cancelTask.isSuccessful && cancelTask.result == true) {
-                            "Pending account recovery was cancelled."
-                        } else {
-                            "No cancellable recovery request was found, or owner verification failed."
-                        }
+                val user = FirebaseAuth.getInstance().currentUser
+                if (user == null) {
+                    status.text = "Complete primary-owner email-link sign-in before cancelling recovery."
+                    return@runOnUiThread
+                }
+                user.getIdToken(true).addOnCompleteListener { tokenTask ->
+                    if (!tokenTask.isSuccessful) {
+                        status.text = "Fresh owner authentication is unavailable. Recovery remains unchanged."
+                        return@addOnCompleteListener
                     }
+                    FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
+                        .getHttpsCallable("getRecoveryOwnerPendingAction")
+                        .call(mapOf("tenantId" to tenant, "deviceIdHash" to deviceHash))
+                        .addOnCompleteListener { contextTask ->
+                            val data = contextTask.result?.data as? Map<*, *>
+                            val requestId = data?.get("requestId") as? String
+                            if (!contextTask.isSuccessful || data?.get("available") != true || requestId.isNullOrBlank()) {
+                                status.text = "No cancellable recovery request was found, or owner/device verification failed."
+                                return@addOnCompleteListener
+                            }
+                            startActivity(Intent(this, RecoveryOwnerAlertActivity::class.java)
+                                .putExtra(RecoveryOwnerAlertActivity.EXTRA_TENANT_ID, tenant)
+                                .putExtra(RecoveryOwnerAlertActivity.EXTRA_DEVICE_HASH, deviceHash)
+                                .putExtra(RecoveryOwnerAlertActivity.EXTRA_EVENT_ID, requestId)
+                                .putExtra(RecoveryOwnerAlertActivity.EXTRA_ACTION, "cancel"))
+                        }
                 }
             }
         }
