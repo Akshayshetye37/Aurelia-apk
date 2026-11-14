@@ -21,22 +21,27 @@ test("recovery workflow preserves separate phase-one and phase-two process-death
   assert.ok(workflow.includes('run_instrumentation_test process-death-phase-two "$phase_two"'));
 });
 
-test("host force-stops the exact phase-one process without manufacturing a replacement", () => {
-  assert.ok(workflow.includes('before_pid="$(wait_for_target_pid)"'));
+test("host force-stops both app and exact AndroidJUnitRunner process without manufacturing a replacement", () => {
+  assert.ok(workflow.includes('instrumentation_package="com.aurelia.pms.test"'));
+  assert.ok(workflow.includes('before_pid="$(wait_for_instrumentation_pid)"'));
+  assert.ok(workflow.includes('pidof "$instrumentation_package"'));
   assert.ok(workflow.includes('Phase-one instrumentation process exited before the explicit force-stop boundary.'));
   assert.ok(workflow.includes('install -r "$app_apk"'));
   assert.ok(workflow.includes('install -r -t "$test_apk"'));
   assert.ok(workflow.includes('shell am instrument -w -r -e class "$selector"'));
   assert.ok(workflow.includes('"$adb_bin" shell am force-stop com.aurelia.pms'));
+  assert.ok(workflow.includes('"$adb_bin" shell am force-stop "$instrumentation_package"'));
+  assert.ok(workflow.includes('for package in com.aurelia.pms "$instrumentation_package"; do'));
   assert.ok(workflow.includes('if [[ -n "$after_stop" ]]'));
   assert.ok(!workflow.includes('monkey -p com.aurelia.pms'));
 });
 
-test("phase two itself must leave a new target process without a synthetic app launch", () => {
+test("phase two itself must leave a new instrumentation process without a synthetic app launch", () => {
   const phaseTwo = workflow.indexOf('run_instrumentation_test process-death-phase-two "$phase_two"');
   const pidCheck = workflow.indexOf('if [[ "$after_pid" == "$before_pid" ]]', phaseTwo);
   assert.ok(phaseTwo >= 0 && pidCheck > phaseTwo);
-  assert.ok(workflow.includes("Phase-two instrumentation did not leave a newly started target process."));
+  assert.ok(workflow.includes("Phase-two instrumentation did not start a new test process."));
+  assert.ok(workflow.includes('after_pid="$(wait_for_instrumentation_pid)"'));
   assert.ok(!workflow.includes("launch_target_app"));
   assert.ok(!workflow.includes("monkey -p com.aurelia.pms"));
 });
