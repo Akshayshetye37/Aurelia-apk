@@ -3,7 +3,7 @@ name: Recovery Functions CI
 on:
   workflow_dispatch:
   push:
-    branches: [work/p0-storage-hardening]
+    branches: [work/p0-storage-hardening, work/otp-recovery-hardening]
     paths:
       - 'functions/**'
       - 'firestore.rules'
@@ -63,6 +63,9 @@ jobs:
 
       - name: Run Auth and Firestore emulator recovery state-machine tests
         shell: bash
+        env:
+          # Emulator-only Digital Asset Links fixture; deployed functions default to false.
+          WEBAUTHN_ASSETLINKS_VERIFIED: "true"
         run: |
           set -euo pipefail
           firebase emulators:exec --only auth,firestore --project demo-aurelia-recovery "cd functions && npm run test:emulator" 2>&1 | sed -E 's/To verify the phone number .* use the code .*/[REDACTED Firebase Auth Emulator verification code]/' | tee recovery-emulator-runtime.log

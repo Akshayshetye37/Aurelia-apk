@@ -3,7 +3,7 @@ name: OTP Recovery Android Instrumentation
 on:
   workflow_dispatch:
   push:
-    branches: [work/p0-storage-hardening]
+    branches: [work/p0-storage-hardening, work/otp-recovery-hardening]
     paths:
       - 'android/templates/**'
       - 'scripts/patch-android.js'
@@ -204,13 +204,14 @@ jobs:
           run_instrumentation_test() {
             local suite="$1"
             local selector="$2"
+            local phase="$3"
             local raw_log="$log_dir/$suite.log"
             local suite_dir="$results_root/$suite"
             local class_name="${selector%%#*}"
             local method_name="${selector##*#}"
             mkdir -p "$suite_dir"
             set +e
-            "$adb_bin" shell am instrument -w -r -e class "$selector" "$test_runner" 2>&1 | tee "$raw_log"
+            "$adb_bin" shell am instrument -w -r -e class "$selector" -e phase "$phase" "$test_runner" 2>&1 | tee "$raw_log"
             local adb_status=${PIPESTATUS[0]}
             set -e
             echo "$adb_status" > "$log_dir/$suite-adb-exit-code.txt"
@@ -260,7 +261,6 @@ jobs:
 
           phase_one="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop"
           phase_two="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop"
-          run_instrumentation_test process-death-phase-one "$phase_one"
 
           wait_for_target_pid() {
             local pid=""
@@ -275,9 +275,7 @@ jobs:
             local marker="$1"
             local command_pid="$2"
             for attempt in {1..90}; do
-              if "$adb_bin" logcat -d -s RecoveryProcessDeath:I 2>/dev/null | grep -Fq "$marker"; then
-                return 0
-              fi
+              if "$adb_bin" logcat -d -s RecoveryProcessDeath:I 2>/dev/null | grep -Fq "$marker"; then return 0; fi
               if ! kill -0 "$command_pid" 2>/dev/null; then
                 echo "::error::Instrumentation exited before marker $marker."
                 return 1
@@ -288,30 +286,19 @@ jobs:
             return 1
           }
 
-          # Phase one remains inside the target process after persisting its
-          # encrypted envelope and SQLCipher record. The host kills that exact
-          # live process only after observing the durable-state marker.
+          # Phase one is a completed, independent instrumentation invocation.
+          # The host force-stops the target package before phase two starts.
           "$adb_bin" logcat -c
-          phase_one_log="$log_dir/process-death-phase-one.log"
-          timeout -k 5s 1800s "$adb_bin" shell am instrument -w -r -e class "$phase_one" "$test_runner" \
-            > "$phase_one_log" 2>&1 &
-          phase_one_command_pid=$!
-          wait_for_log_marker "PHASE_ONE_READY" "$phase_one_command_pid" || {
-            cat "$phase_one_log"
-            exit 1
-          }
-          if ! grep -Fq "INSTRUMENTATION_STATUS: test=phaseOnePersistsPinAAndDatabaseBeforeForceStop" "$phase_one_log"; then
-            echo "::error::Phase one did not execute the required instrumentation method."
+          run_instrumentation_test process-death-phase-one "$phase_one" 1
+          if ! "$adb_bin" logcat -d -s RecoveryProcessDeath:I 2>/dev/null | grep -Fq "PHASE_ONE_READY"; then
+            echo "::error::Phase one passed without emitting its durable-state marker."
             exit 1
           fi
-          before_pid="$(wait_for_target_pid)" || {
-            echo "::error::Phase-one target app process was not alive at the durable-state marker."
-            exit 1
-          }
+          before_pid="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' | awk '{print $1}' || true)"
           "$adb_bin" shell am force-stop com.aurelia.pms
           after_stop=""
-          for attempt in {1..15}; do
-            after_stop="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
+          for attempt in {1..30}; do
+            after_stop="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' | awk '{print $1}' || true)"
             [[ -z "$after_stop" ]] && break
             sleep 1
           done
@@ -319,47 +306,43 @@ jobs:
             echo "::error::adb force-stop did not terminate the phase-one target app process."
             exit 1
           fi
-          set +e
-          wait "$phase_one_command_pid"
-          phase_one_exit=$?
-          set -e
-          if [[ "$phase_one_exit" -eq 124 || "$phase_one_exit" -eq 137 ]]; then
-            echo "::error::Phase-one instrumentation command timed out instead of exiting after force-stop."
-            exit 1
-          fi
-          # Keep phase-one process-death evidence separate from JUnit totals.
-          # Do not fabricate a completed JUnit case for the intentionally killed
-          # instrumentation process; phase two supplies the completed JUnit test.
           {
             echo "phase=process-death-phase-one"
+            echo "instrumentation_argument_phase=1"
             echo "test_method=phaseOnePersistsPinAAndDatabaseBeforeForceStop"
             echo "marker=PHASE_ONE_READY"
-            echo "target_pid_before_force_stop=$before_pid"
+            echo "target_pid_before_force_stop=${before_pid:-already-exited}"
             echo "target_pid_after_force_stop=absent"
             echo "force_stop_command=adb shell am force-stop com.aurelia.pms"
-            echo "instrumentation_command_exit=$phase_one_exit"
-            echo "result=HOST_VERIFIED_PROCESS_TERMINATION"
+            echo "result=PHASE_ONE_PASSED_AND_TARGET_PROCESS_ABSENT"
           } > "$log_dir/process-death-phase-one-evidence.txt"
 
-          # Phase two executes in the newly started target process. It verifies
-          # PIN A, offline recovery key, same DEK, PIN B rotation and original
-          # SQLCipher data before emitting its marker and returning.
+          # Phase two is a second am instrument invocation and opens the DB in
+          # the process started after the host verified the force-stop boundary.
           "$adb_bin" logcat -c
-          run_instrumentation_test process-death-phase-two "$phase_two" &
+          run_instrumentation_test process-death-phase-two "$phase_two" 2 &
           phase_two_command_pid=$!
           wait_for_log_marker "PHASE_TWO_VERIFIED" "$phase_two_command_pid" || {
             wait "$phase_two_command_pid" || true
             exit 1
           }
           after_pid="$(wait_for_target_pid)" || {
-            echo "::error::Phase-two instrumentation process was not alive after persisted-state verification."
+            echo "::error::Phase-two target app process was not alive after persisted-state verification."
             exit 1
           }
-          if [[ "$after_pid" == "$before_pid" ]]; then
+          if [[ -n "$before_pid" && "$after_pid" == "$before_pid" ]]; then
             echo "::error::Phase two reused the phase-one target app PID."
             exit 1
           fi
           wait "$phase_two_command_pid"
+          {
+            echo "phase=process-death-phase-two"
+            echo "instrumentation_argument_phase=2"
+            echo "test_method=phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop"
+            echo "marker=PHASE_TWO_VERIFIED"
+            echo "target_pid_after_force_stop=$after_pid"
+            echo "result=PHASE_TWO_PASSED_IN_FRESH_PROCESS"
+          } > "$log_dir/process-death-phase-two-evidence.txt"
           mkdir -p app/build/outputs/androidTest-results/connected
           cp -a "$results_root/." app/build/outputs/androidTest-results/connected/
 

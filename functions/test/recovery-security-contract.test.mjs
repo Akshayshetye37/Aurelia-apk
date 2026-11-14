@@ -8,6 +8,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
 const functions = read('functions/src/index.ts');
+const passkeys = read('functions/src/passkeys.ts');
+const recoveryConfig = read('functions/src/recovery-config.ts');
+const allFunctions = functions + '\n' + passkeys + '\n' + recoveryConfig;
 const rules = read('firestore.rules');
 const identity = read('android/templates/FirebasePhoneIdentity.kt');
 const grantClient = read('android/templates/RecoveryGrantClient.kt');
@@ -51,6 +54,14 @@ test('rate limit counters commit before rejected requests return', () => {
   assert.match(rate, /if \(!allowed\) throw/);
   assert.ok(rate.indexOf('tx.set(ref') < rate.indexOf('if (!allowed)'));
   assert.match(rate, /if \(!allowed\) throw new HttpsError/);
+  const passkeyRate = passkeys.slice(passkeys.indexOf('async function spendPasskeyRateLimit'), passkeys.indexOf('function challengeRef'));
+  assert.match(passkeyRate, /nextCount > 30/);
+  assert.match(passkeyRate, /15 \* 60_000/);
+  assert.match(passkeyRate, /60 \* 60_000/);
+  assert.match(passkeyRate, /24 \* 60 \* 60_000/);
+  assert.ok(rules.includes('recoveryPasskeyRateLimits'));
+  assert.match(rules, /match \/tenants\/\{tenantId\}\/recoveryPasskeys\/\{passkeyId\}/);
+  assert.match(passkeys, /\/recoveryPasskeys/);
 });
 
 test('backend never deletes Firebase phone-auth users', () => {
@@ -101,11 +112,19 @@ test('recovery requires a 24-hour cooldown and a fresh phone-auth event before g
   assert.match(issuance, /recoveryCooldowns\/\$\{tenantId\}/);
   assert.match(issuance, /state: "ALERT_PENDING"/);
   assert.match(issuance, /pendingState === "ALERT_PENDING"/);
-  const acknowledgement = functions.slice(functions.indexOf("export const acknowledgeRecoveryOwnerAlert"), functions.indexOf("export const issueRecoveryGrant"));
+  const acknowledgement = passkeys.slice(passkeys.indexOf("async function completeOwnerAction"));
+  assert.match(acknowledgement, /verifyAuthenticationResponse/);
+  assert.match(acknowledgement, /expectedOrigin: config\.origins/);
+  assert.match(acknowledgement, /expectedRPID: config\.rpID/);
+  assert.match(passkeys, /SimpleWebAuthn validates expectedOrigin/);
+  assert.match(acknowledgement, /requireUserVerification: true/);
+  assert.match(acknowledgement, /authenticationInfo\.userVerified/);
   assert.match(acknowledgement, /state: "APPROVED"/);
-  assert.match(acknowledgement, /requireFreshPrimaryOwner\(request\)/);
   assert.match(acknowledgement, /notificationDeliveredAt/);
-  assert.match(acknowledgement, /alertedDeviceHashes\.includes\(deviceIdHash\)/);
+  assert.match(acknowledgement, /alertedDeviceHashes\.includes\(deviceHash\)/);
+  assert.match(acknowledgement, /tx\.update\(ref, \{ state: "CONSUMED"/);
+  assert.doesNotMatch(allFunctions, /requireFreshPasskeyOwner/);
+  assert.doesNotMatch(allFunctions, /ownerAuthFactor !== "passkey"/);
   assert.match(issuance, /nowMs < eligibleAt/);
   assert.match(issuance, /status: "COOLDOWN"/);
   assert.match(issuance, /status: "ISSUED"/);
@@ -154,7 +173,7 @@ test('Android verifies the pinned ES256 signature before server consumption and 
   assert.match(grantClient, /task\.isSuccessful && task\.result == true/);
   assert.match(grantClient, /startedAtElapsedMs = SystemClock\.elapsedRealtime\(\)/);
   assert.match(grantClient, /SystemClock\.elapsedRealtime\(\) - startedAtElapsedMs/);
-  assert.match(recoveryGate, /fun armAfterServerConsumption\(remainingGrantMs: Long\)/);
+  assert.match(recoveryGate, /fun armAfterServerConsumption\(jti: String, remainingGrantMs: Long\)/);
   assert.doesNotMatch(recoveryGate, /System\.currentTimeMillis\(\)/);
 });
 
@@ -180,23 +199,28 @@ test('hardware attestation is challenge-bound, server-verified and rejects softw
 
 test('recovery cannot proceed until owner alert is posted and acknowledged by the attested device', () => {
   assert.match(functions, /registerRecoveryOwnerDevice = onCall/);
-  const registerAlertDevice = functions.slice(functions.indexOf('export const registerRecoveryOwnerDevice'), functions.indexOf('export const acknowledgeRecoveryOwnerAlert'));
+  const registerAlertDevice = functions.slice(functions.indexOf('export const registerRecoveryOwnerDevice'), functions.indexOf('export const issueRecoveryGrant'));
   assert.match(registerAlertDevice, /const owner = requireFreshPrimaryOwner\(request\)/);
   assert.match(registerAlertDevice, /existingDevice && \(existingDevice\.ownerUid !== owner\.uid/);
   assert.match(registerAlertDevice, /ownerUid: owner\.uid, fcmToken: token/);
   assert.match(functions, /recoveryOwnerDevices/);
-  assert.ok(functions.includes('cooldown.alertedDeviceHashes.includes(deviceIdHash)'));
+  assert.ok(passkeys.includes('cooldown.alertedDeviceHashes.includes(deviceHash)'));
   assert.ok(functions.includes('Promise.allSettled(ownerDevices.map'));
-  assert.ok(functions.includes('cooldown.alertedDeviceHashes.includes(deviceIdHash)'));
+  assert.ok(passkeys.includes('cooldown.alertedDeviceHashes.includes(deviceHash)'));
   assert.match(functions, /getMessaging\(\)\.send/);
   assert.match(functions, /state: "ALERT_PENDING"/);
-  assert.match(functions, /acknowledgeRecoveryOwnerAlert = onCall/);
-  assert.match(functions, /notificationAcknowledgedAt/);
+  assert.match(passkeys, /acknowledgeRecoveryOwnerAlert = onCall/);
+  assert.match(passkeys, /createRecoveryPasskeyEnrollmentOptions = onCall/);
+  assert.match(passkeys, /completeRecoveryPasskeyEnrollment = onCall/);
+  assert.match(passkeys, /createRecoveryOwnerActionOptions = onCall/);
+  assert.match(passkeys, /completeRecoveryOwnerPasskeyAction = onCall/);
+  assert.match(passkeys, /notificationAcknowledgedAt/);
   assert.match(functions, /ackTokenHashes,/);
-  assert.match(functions, /ackTokenHashes\?\.\[deviceIdHash\]/);
-  assert.match(functions, /ownerAckTokenDigest\(owner\.uid, eventId, deviceIdHash, ackToken\)/);
+  assert.match(passkeys, /equalAckDigest/);
+  assert.match(passkeys, /ackTokenHashes\?\.\[deviceHash\]/);
+  assert.match(functions, /ownerAckTokenDigest\(phoneRecord\.ownerUid, eventRef\.id, hash, token\)/);
   assert.match(functions, /alertAckTokens\.get\(device\.deviceIdHash\)/);
-  assert.match(functions, /tx\.update\(alertEventRef, \{/);
+  assert.match(passkeys, /tx\.update\(eventRef, \{/);
   assert.match(functions, /fcmAcceptedDeviceHashes: FieldValue\.delete\(\)/);
   assert.ok(messageService.includes('getNotificationChannel(CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE'));
   assert.doesNotMatch(messageService, /acknowledgeRecoveryOwnerAlert/);
@@ -207,15 +231,15 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(ownerAlertActivity, /acknowledgeRecoveryOwnerAlert/);
   assert.match(ownerAlertActivity, /cancelRecoveryRequest/);
   assert.match(ownerAlertActivity, /getIdToken\(true\)/);
-  assert.match(functions, /eligibleAt = Date\.now\(\) \+ RECOVERY_COOLDOWN_MS/);
+  assert.match(passkeys, /eligibleAt = now \+ 24 \* 60 \* 60_000/);
   assert.match(functions, /Owner alert was not acknowledged; recovery remains blocked/);
   assert.match(functions, /cancelRecoveryRequest = onCall/);
   const cancel = functions.slice(functions.indexOf("export const cancelRecoveryRequest"), functions.indexOf("export const cancelRecoveryPhoneChange"));
   assert.match(cancel, /requireFreshPrimaryOwner\(request\)/);
   assert.doesNotMatch(cancel, /pending\.deviceIdHash !== deviceIdHash/);
   assert.match(cancel, /state: "CANCELLED"/);
-  assert.match(functions, /ownerAuthFactor/);
-  assert.match(functions, /ownerAuthFactorAuthTime/);
+  assert.match(allFunctions, /ownerAuthFactor/);
+  assert.match(allFunctions, /ownerAuthFactorAuthTime/);
   assert.match(messageService, /NotificationManagerCompat\.from\(this\)\.areNotificationsEnabled\(\)/);
   assert.doesNotMatch(messageService, /acknowledgeRecoveryOwnerAlert/);
   assert.doesNotMatch(messageService, /Tasks\.await/);
@@ -253,15 +277,19 @@ test('persisted recovery state is never re-encrypted under a silently regenerate
 });
 
 test('every recovery callable enforces App Check and phone-change activation rejects future auth_time', () => {
-  const callables = functions.match(/export const \w+ = onCall\([\s\S]*?\n\);/g) ?? [];
+  const callables = allFunctions.match(/export const \w+ = onCall\([\s\S]*?\n\);/g) ?? [];
   assert.ok(callables.length >= 5);
-  assert.match(functions, /defineString\("RECOVERY_ENABLED", \{ default: "false" \}\)/);
+  assert.match(allFunctions, /defineString\("RECOVERY_ENABLED", \{ default: "false" \}\)/);
+  const passkeyAction = passkeys.slice(passkeys.indexOf('async function completeOwnerAction'), passkeys.indexOf('export const completeRecoveryOwnerPasskeyAction'));
+  assert.match(passkeyAction, /requireEnabled\(\)/);
   for (const callable of callables) {
     assert.match(callable, /enforceAppCheck: true/);
     if (/cancelRecoveryRequest|cancelRecoveryPhoneChange/.test(callable)) {
-      assert.doesNotMatch(callable, /requireRecoveryEnabled\(\)/);
+      assert.doesNotMatch(callable, /require(?:Recovery)?Enabled\(\)/);
+    } else if (/completeRecoveryOwnerPasskeyAction|acknowledgeRecoveryOwnerAlert/.test(callable)) {
+      assert.match(callable, /completeOwnerAction/);
     } else {
-      assert.match(callable, /requireRecoveryEnabled\(\)/);
+      assert.match(callable, /require(?:Recovery)?Enabled\(\)/);
     }
   }
   const activation = functions.slice(functions.indexOf('export const activateRecoveryPhoneChange'));
@@ -322,7 +350,7 @@ test('owner email-link exchange verifies the one-time link before minting primar
   assert.match(functions, /auth\?\.token\.email_verified === true/);
   assert.match(functions, /factorAuthTime > authTime/);
   assert.match(functions, /ackTokenExpiresAt/);
-  assert.match(functions, /Number\(event\.ackTokenExpiresAt\) <= Date\.now\(\)/);
+  assert.match(passkeys, /Number\(event\.ackTokenExpiresAt\) <= now/);
   assert.match(functions, /pendingState === "CANCELLED"/);
   assert.match(functions, /proof\.authTime <= Number\(pending\?\.cancelledAtSec\)/);
   assert.match(functions, /cancelledAtSec: Math\.floor\(Date\.now\(\) \/ 1000\)/);
@@ -337,11 +365,12 @@ test('owner email-link enrollment does not require an attested device key before
 });
 
 
-test('owner alert acknowledgement binds PHONE_PEPPER as a deployed callable secret', () => {
-  const acknowledgement = functions.slice(
-    functions.indexOf('export const acknowledgeRecoveryOwnerAlert'),
-    functions.indexOf('export const issueRecoveryGrant')
-  );
-  assert.match(acknowledgement, /secrets: \[PHONE_PEPPER\]/);
-  assert.match(acknowledgement, /ownerAckTokenDigest/);
+test('owner alert acknowledgement uses server-verified WebAuthn and a one-time FCM proof', () => {
+  const acknowledgement = passkeys.slice(passkeys.indexOf('async function completeOwnerAction'));
+  assert.match(acknowledgement, /verifyAuthenticationResponse/);
+  assert.match(acknowledgement, /equalAckDigest/);
+  assert.match(acknowledgement, /state: "CONSUMED"/);
+  assert.match(passkeys, /type AuthenticatorTransport/);
+  assert.doesNotMatch(passkeys, /AuthenticatorTransportFuture/);
+  assert.match(passkeys, /deviceIdHash: deviceHash, createdAt/);
 });

@@ -10,42 +10,58 @@ const nativeWorkflow = fs.readFileSync(
 );
 const nativeRunner = fs.readFileSync("scripts/run-native-sqlite-contracts.sh", "utf8");
 
-test("recovery workflow preserves separate phase-one and phase-two process-death invocations", () => {
+test("recovery workflow runs two explicit instrumentation phases with host force-stop between them", () => {
   assert.ok(workflow.includes(
     'phase_one="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop"'
   ));
   assert.ok(workflow.includes(
     'phase_two="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop"'
   ));
-  assert.ok(workflow.includes('run_instrumentation_test process-death-phase-one "$phase_one"'));
-  assert.ok(workflow.includes('run_instrumentation_test process-death-phase-two "$phase_two"'));
+  assert.ok(workflow.includes('run_instrumentation_test process-death-phase-one "$phase_one" 1'));
+  assert.ok(workflow.includes('run_instrumentation_test process-death-phase-two "$phase_two" 2'));
+  assert.ok(workflow.includes('-e phase "$phase"'));
+  assert.ok(workflow.includes('"$adb_bin" shell am force-stop com.aurelia.pms'));
+  assert.ok(workflow.includes('for attempt in {1..30}'));
+  assert.ok(workflow.includes('if [[ -n "$after_stop" ]]'));
+  assert.ok(workflow.includes('process-death-phase-one-evidence.txt'));
+  assert.ok(workflow.includes('process-death-phase-two-evidence.txt'));
 });
 
-test("phase one holds the tested target process until the host force-stops it", () => {
+test("phase one returns only after durable cleanup and records the checksum before force-stop", () => {
   const processDeathTest = fs.readFileSync(
     "android/templates/instrumentation/RecoveryProcessDeathInstrumentedTest.java", "utf8"
   );
   assert.ok(processDeathTest.includes('Log.i("RecoveryProcessDeath", "PHASE_ONE_READY")'));
-  assert.ok(processDeathTest.includes("Thread.sleep(30 * 60 * 1000L)"));
-  assert.ok(workflow.includes('timeout -k 5s 1800s "$adb_bin" shell am instrument -w -r -e class "$phase_one"'));
-  assert.ok(workflow.includes('wait_for_log_marker "PHASE_ONE_READY"'));
-  assert.ok(workflow.includes('before_pid="$(wait_for_target_pid)"'));
-  assert.ok(workflow.includes('"$adb_bin" shell am force-stop com.aurelia.pms'));
-  assert.ok(workflow.includes('Phase-one target app process was not alive at the durable-state marker.'));
-  assert.ok(workflow.includes('if [[ -n "$after_stop" ]]'));
-  assert.ok(workflow.includes('process-death-phase-one-evidence.txt'));
-  assert.ok(workflow.includes('Do not fabricate a completed JUnit case'));
-  assert.ok(!workflow.includes('monkey -p com.aurelia.pms'));
+  assert.ok(processDeathTest.includes('requirePhase("1")'));
+  assert.ok(processDeathTest.includes("newRecoveryLockout(context).beginAttempt()"));
+  assert.ok(processDeathTest.includes("recoveryThrottle.lockoutFailureCount()"));
+  assert.ok(processDeathTest.includes("recoveryThrottle.completeAttempt()"));
+  assert.ok(processDeathTest.includes("global recovery-key failures reset only after durable PIN-envelope commit"));
+  assert.ok(processDeathTest.includes("sha256Hex(persistedValue)"));
+  assert.doesNotMatch(processDeathTest, /Thread\.sleep\(30 \* 60 \* 1000L\)/);
+  const phaseOne = processDeathTest.slice(
+    processDeathTest.indexOf("phaseOnePersistsPinAAndDatabaseBeforeForceStop"),
+    processDeathTest.indexOf("phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop")
+  );
+  const cleanup = phaseOne.indexOf("manager.lock()", phaseOne.indexOf("finally"));
+  const gateArm = phaseOne.indexOf("armAfterServerConsumption");
+  assert.ok(cleanup >= 0 && gateArm > cleanup, "final cleanup must happen before the test gate is armed");
+  assert.ok(workflow.includes('run_instrumentation_test process-death-phase-one "$phase_one" 1'));
+  assert.ok(workflow.includes('PHASE_ONE_READY'));
+  assert.ok(workflow.includes('pidof com.aurelia.pms'));
+  assert.ok(workflow.includes('target_pid_after_force_stop=absent'));
 });
 
-test("phase two proves a fresh process and persisted recovery state before returning", () => {
+test("phase two opens the database in the second invocation and verifies the phase-one checksum", () => {
   const processDeathTest = fs.readFileSync(
     "android/templates/instrumentation/RecoveryProcessDeathInstrumentedTest.java", "utf8"
   );
   assert.ok(processDeathTest.includes('Log.i("RecoveryProcessDeath", "PHASE_TWO_VERIFIED")'));
+  assert.ok(processDeathTest.includes('requirePhase("2")'));
   assert.ok(processDeathTest.includes("SystemClock.sleep(3000L)"));
-  const phaseTwo = workflow.indexOf('run_instrumentation_test process-death-phase-two "$phase_two" &');
-  const pidCheck = workflow.indexOf('if [[ "$after_pid" == "$before_pid" ]]', phaseTwo);
+  assert.ok(processDeathTest.includes('sha256Hex(persistedData.getString("value"))'));
+  const phaseTwo = workflow.indexOf('run_instrumentation_test process-death-phase-two "$phase_two" 2 &');
+  const pidCheck = workflow.indexOf('if [[ -n "$before_pid" && "$after_pid" == "$before_pid" ]]', phaseTwo);
   assert.ok(phaseTwo >= 0 && pidCheck > phaseTwo);
   assert.ok(workflow.includes('wait_for_log_marker "PHASE_TWO_VERIFIED"'));
   assert.ok(workflow.includes('after_pid="$(wait_for_target_pid)"'));

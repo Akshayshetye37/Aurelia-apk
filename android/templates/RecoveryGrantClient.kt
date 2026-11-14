@@ -162,7 +162,7 @@ class RecoveryGrantClient private constructor(
             }.getOrDefault(false) else false
             val remainingGrantMs = 5 * 60_000L - (SystemClock.elapsedRealtime() - startedAtElapsedMs)
             val armed = consumed && recorded && runCatching {
-                RecoveryGate.armAfterServerConsumption(remainingGrantMs)
+                RecoveryGate.armAfterServerConsumption(verified.jti, remainingGrantMs)
             }.isSuccess
             if (armed) {
                 onResult(true)

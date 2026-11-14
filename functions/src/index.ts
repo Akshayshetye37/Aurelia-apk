@@ -7,13 +7,13 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import { createHash, createHmac, createPrivateKey, createPublicKey, randomUUID, randomBytes, timingSafeEqual } from "node:crypto";
 import { importPKCS8, importSPKI, jwtVerify, SignJWT } from "jose";
 import { GoogleAuth } from "google-auth-library";
+import { RECOVERY_ENABLED } from "./recovery-config.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
 const PHONE_PEPPER = defineSecret("PHONE_PEPPER");
 const RECOVERY_SIGNING_KEY_PKCS8 = defineSecret("RECOVERY_SIGNING_KEY_PKCS8");
 // Fail closed by default; only qualified staging may opt in after gate evidence.
-const RECOVERY_ENABLED = defineString("RECOVERY_ENABLED", { default: "false" });
 const RECOVERY_SIGNING_KEY_ID = defineString("RECOVERY_SIGNING_KEY_ID", { default: "active-1" });
 const GENERIC = new HttpsError("permission-denied", "Verification failed.");
 const ISSUER = "aurelia-recovery";
@@ -43,12 +43,10 @@ function requireFreshPrimaryOwner(request: CallableRequest<unknown>): { uid: str
   const provider = firebase?.sign_in_provider;
   const emailLink = factor === "email_link" && provider === "custom" &&
     auth?.token.email_verified === true && typeof auth?.token.email === "string";
-  const passkey = factor === "passkey" && provider === "custom";
   if (!auth || auth.token.role !== "owner" || !Number.isInteger(authTime) ||
       authTime > now || now - authTime >= 300 ||
       !Number.isInteger(factorAuthTime) || factorAuthTime > authTime ||
-      authTime - factorAuthTime >= 300 ||
-      (!emailLink && !passkey)) throw GENERIC;
+      authTime - factorAuthTime >= 300 || !emailLink) throw GENERIC;
   return { uid: auth.uid, tenantId: validateTenantId(auth.token.tenantId) };
 }
 
@@ -473,63 +471,6 @@ export const registerRecoveryOwnerDevice = onCall(
 );
 
 /** The owner app acknowledges that the recovery alert was posted on the attested device. */
-export const acknowledgeRecoveryOwnerAlert = onCall(
-  { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER] },
-  async request => {
-    requireRecoveryEnabled();
-    const owner = requireFreshPrimaryOwner(request);
-    const tenantId = owner.tenantId;
-    if (request.data?.tenantId !== tenantId) throw GENERIC;
-    const deviceIdHash = validateDeviceHash(request.data?.deviceIdHash);
-    const eventId = requiredString(request.data?.eventId, 64);
-    const ackToken = requiredString(request.data?.ackToken, 64);
-    if (!/^[0-9a-f-]{36}$/i.test(eventId) || !/^[A-Za-z0-9_-]{43}$/.test(ackToken)) throw GENERIC;
-    await requireRecoveryOwnerBinding(tenantId, owner.uid);
-    await requireAttestedDevice(tenantId, deviceIdHash, owner.uid);
-    const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
-    const eventRef = db.doc(`recoverySecurityEvents/${eventId}`);
-    const ownerDeviceRef = db.doc(`recoveryOwnerDevices/${tenantId}_${deviceIdHash}`);
-    const attestationRef = db.doc(`recoveryDeviceAttestations/${tenantId}_${deviceIdHash}`);
-    const eligibleAt = Date.now() + RECOVERY_COOLDOWN_MS;
-    await db.runTransaction(async tx => {
-      const [cooldownSnapshot, eventSnapshot, ownerDeviceSnapshot, attestationSnapshot] = await Promise.all([
-        tx.get(cooldownRef), tx.get(eventRef), tx.get(ownerDeviceRef), tx.get(attestationRef)
-      ]);
-      const cooldown = cooldownSnapshot.data();
-      const event = eventSnapshot.data();
-      const ownerDevice = ownerDeviceSnapshot.data();
-      const attestation = attestationSnapshot.data();
-      if (!ownerDevice || ownerDevice.ownerUid !== owner.uid ||
-          ownerDevice.deviceIdHash !== deviceIdHash || ownerDevice.active !== true ||
-          !attestation || attestation.ownerUid !== owner.uid || attestation.status !== "VERIFIED" ||
-          !["TRUSTED_ENVIRONMENT", "STRONG_BOX"].includes(attestation.securityLevel) ||
-          attestation.verifiedBootState !== "VERIFIED" || attestation.deviceLocked !== true) throw GENERIC;
-      if (!cooldown || cooldown.state !== "ALERT_PENDING" ||
-          cooldown.alertEventId !== eventId ||
-          !Array.isArray(cooldown.alertedDeviceHashes) ||
-          !cooldown.alertedDeviceHashes.includes(deviceIdHash) ||
-          !event || event.tenantId !== tenantId || event.ownerUid !== owner.uid ||
-          event.requestId !== eventId || event.type !== "RECOVERY_COOLDOWN_STARTED" ||
-          event.acknowledgedAt || Number(event.ackTokenExpiresAt) <= Date.now() ||
-          !equalDigest(event.ackTokenHashes?.[deviceIdHash],
-            ownerAckTokenDigest(owner.uid, eventId, deviceIdHash, ackToken))) throw GENERIC;
-      tx.update(cooldownRef, {
-        state: "APPROVED", eligibleAt,
-        notificationDeliveredAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp()
-      });
-      tx.update(eventRef, {
-        acknowledgedAt: FieldValue.serverTimestamp(),
-        notificationAcknowledgedAt: FieldValue.serverTimestamp(),
-        notificationDelivery: "APP_ACKNOWLEDGED",
-        ackTokenHashes: FieldValue.delete(),
-        ackTokenExpiresAt: FieldValue.delete()
-      });
-    });
-    return { acknowledged: true, eligibleAt };
-  }
-);
-
 /** OTP proof may issue one grant per Firebase phone-auth event (uid + auth_time). */
 export const issueRecoveryGrant = onCall(
   { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER, RECOVERY_SIGNING_KEY_PKCS8] },
@@ -896,3 +837,14 @@ export const activateRecoveryPhoneChange = onCall(
     return { state: "VERIFIED" };
   }
 );
+
+
+export {
+  createRecoveryPasskeyEnrollmentOptions,
+  completeRecoveryPasskeyEnrollment,
+  retryRecoveryPasskeyEnrollmentAlert,
+  createRecoveryOwnerActionOptions,
+  getRecoveryOwnerActionReadiness,
+  completeRecoveryOwnerPasskeyAction,
+  acknowledgeRecoveryOwnerAlert
+} from "./passkeys.js";

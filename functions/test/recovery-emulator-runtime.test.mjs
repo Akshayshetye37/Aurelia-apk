@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 import { createHash, createHmac, generateKeyPairSync } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { SignJWT } from 'jose';
+import { TestWebAuthnAuthenticator } from './webauthn-test-authenticator.mjs';
 
 const PROJECT_ID = 'demo-aurelia-recovery';
 const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
 const PHONE_PEPPER = 'emulator-only-phone-pepper-not-for-production';
 const SIGNING_KEY_ID = 'emulator-key-1';
+const RP_ID = 'aurelia.test.example';
+const RP_ORIGIN = 'android:apk-key-hash:' + Buffer.alloc(32, 0x5a).toString('base64url');
 const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 
@@ -21,6 +24,9 @@ process.env.RECOVERY_SIGNING_KEY_ID = SIGNING_KEY_ID;
 process.env.PHONE_PEPPER = PHONE_PEPPER;
 process.env.RECOVERY_SIGNING_KEY_PKCS8 = privateKeyPem;
 process.env.FIREBASE_WEB_API_KEY = 'fake-api-key';
+process.env.WEBAUTHN_RP_ID = RP_ID;
+process.env.WEBAUTHN_RP_NAME = 'Aurelia PMS Emulator';
+process.env.WEBAUTHN_ANDROID_ORIGINS = RP_ORIGIN;
 
 const [{ getAuth }, { getFirestore }, { getMessaging }, functions] = await Promise.all([
   import('firebase-admin/auth'),
@@ -31,18 +37,41 @@ const [{ getAuth }, { getFirestore }, { getMessaging }, functions] = await Promi
 const auth = getAuth();
 const db = getFirestore();
 const sentMessages = [];
+const authenticators = new Map();
 const messaging = getMessaging();
 messaging.send = async message => {
   sentMessages.push(message);
   return 'emulator-fcm-message-' + sentMessages.length;
+};
+messaging.sendEachForMulticast = async message => {
+  sentMessages.push(message);
+  return { successCount: message.tokens.length, failureCount: 0, responses: message.tokens.map(() => ({ success: true })) };
 };
 
 function emulatorIpForTenant(tenantId) {
   return 'emulator-ip-' + createHash('sha256').update(String(tenantId)).digest('hex').slice(0, 32);
 }
 
-function callable(fn, data, requestAuth = null, ip = data?.tenantId ? emulatorIpForTenant(data.tenantId) : '127.0.0.1') {
+async function callable(fn, data, requestAuth = null, ip = data?.tenantId ? emulatorIpForTenant(data.tenantId) : '127.0.0.1') {
   assert.equal(typeof fn.run, 'function', 'Firebase callable exposes its runtime handler');
+  if (fn === functions.acknowledgeRecoveryOwnerAlert && requestAuth?.__testPasskey === true) {
+    const options = requestAuth.__testPasskeyOptions ?? {};
+    const owner = ownerAuth(requestAuth.uid, data.tenantId, {
+      ...options, provider: 'custom', factor: 'email_link', emailVerified: options.emailVerified ?? true
+    });
+    const ceremony = await callable(functions.createRecoveryOwnerActionOptions, {
+      tenantId: data.tenantId, deviceIdHash: data.deviceIdHash,
+      action: 'ack', requestId: data.eventId
+    }, owner, ip);
+    const authenticator = authenticators.get(data.tenantId);
+    assert.ok(authenticator, 'tenant fixture has a registered WebAuthn test authenticator');
+    const credentialResponse = authenticator.assert({
+      rpId: RP_ID, origin: RP_ORIGIN, challenge: ceremony.options.challenge,
+      userVerified: options.userVerified !== false, counter: options.counter
+    });
+    data = { ...data, requestId: data.eventId, challengeId: ceremony.challengeId, credentialResponse };
+    requestAuth = owner;
+  }
   return fn.run({
     data,
     auth: requestAuth,
@@ -100,6 +129,14 @@ function ownerAuth(uid, tenantId, options = {}) {
   };
 }
 
+function passkeyOwnerAuth(uid, tenantId, options = {}) {
+  const primary = { ...options, provider: options.provider ?? 'custom', factor: 'email_link', emailVerified: options.emailVerified ?? true };
+  const session = ownerAuth(uid, tenantId, primary);
+  session.__testPasskey = true;
+  session.__testPasskeyOptions = options;
+  return session;
+}
+
 function phoneOnlyOwnerAuth(uid, tenantId) {
   const session = ownerAuth(uid, tenantId, { provider: 'phone', factor: undefined });
   assert.equal(session.token.ownerAuthFactor, undefined,
@@ -107,7 +144,7 @@ function phoneOnlyOwnerAuth(uid, tenantId) {
   return session;
 }
 
-async function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, ownerDeviceHashes }) {
+async function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, ownerDeviceHashes, enrollPasskey = true }) {
   await db.doc(`tenants/${tenantId}/security/recoveryOwner`).set({
     tenantId, ownerUid, createdAt: new Date(), provisionedBy: 'emulator-fixture'
   });
@@ -127,6 +164,27 @@ async function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, owner
       active: true, tokenHash: 'emulator-token-hash'
     });
   }
+
+  if (!enrollPasskey) return;
+  const enrollment = await callable(functions.createRecoveryPasskeyEnrollmentOptions, {
+    tenantId, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth(ownerUid, tenantId));
+  const authenticator = new TestWebAuthnAuthenticator(tenantId);
+  const registration = authenticator.register({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: enrollment.options.challenge
+  });
+  const enrolled = await callable(functions.completeRecoveryPasskeyEnrollment, {
+    tenantId, deviceIdHash: recoveryDeviceHash, challengeId: enrollment.challengeId,
+    credentialResponse: registration
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(enrolled.registered, true);
+  assert.equal(enrolled.alertAccepted, true, 'independent owner device receives passkey enrollment alert');
+  const credentialHash = createHash('sha256').update(registration.id).digest('hex');
+  await db.doc(`tenants/${tenantId}/recoveryPasskeys/${credentialHash}`).update({
+    state: 'COOLDOWN', alertAccepted: true, activeAfterMs: 0
+  });
+  authenticators.set(tenantId, authenticator);
+  sentMessages.length = 0;
 }
 
 test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold, fresh OTP, five-minute grant and one-time JTI', async () => {
@@ -179,7 +237,7 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   assert.ok(secondOwnerAlert?.data.ackToken, 'independent owner device receives its one-time acknowledgement token');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: oldAckToken
-  }, ownerAuth(ownerUid, tenantId)), 'an older notification token is invalidated when a retry rotates the proof');
+  }, passkeyOwnerAuth(ownerUid, tenantId)), 'an older notification token is invalidated when a retry rotates the proof');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, phoneOnlyOwnerAuth(ownerUid, tenantId)), 'phone-only owner session cannot acknowledge');
@@ -189,24 +247,31 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   'password-only session cannot masquerade as server-verified email-link authentication');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) + 60 })), 'future auth_time is rejected');
+  }, passkeyOwnerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) + 60 })), 'future auth_time is rejected');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) - 301 })), 'stale primary authentication is rejected');
+  }, passkeyOwnerAuth(ownerUid, tenantId, { authTime: Math.floor(Date.now() / 1000) - 301 })), 'stale primary authentication is rejected');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth('different-owner-uid', tenantId)), 'wrong owner UID cannot acknowledge');
+  }, passkeyOwnerAuth('different-owner-uid', tenantId)), 'wrong owner UID cannot acknowledge');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: recoveryDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId)),
+  }, passkeyOwnerAuth(ownerUid, tenantId)),
   'the recovery-requesting device cannot acknowledge its own owner alert');
+  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
+  }, ownerAuth(ownerUid, tenantId)), 'email-link-only session cannot acknowledge the hold');
+  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
+  }, passkeyOwnerAuth(ownerUid, tenantId, { factorAuthTime: Math.floor(Date.now() / 1000) - 300 })),
+  'passkey factor older than five minutes cannot acknowledge the hold');
   const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' }));
+  }, passkeyOwnerAuth(ownerUid, tenantId, { factor: 'passkey' }));
   assert.equal(acknowledged.acknowledged, true, 'an independently enrolled, attested passkey owner device may acknowledge');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' })), 'owner acknowledgement token is single-use');
+  }, passkeyOwnerAuth(ownerUid, tenantId, { factor: 'passkey' })), 'owner acknowledgement token is single-use');
   assert.ok(acknowledged.eligibleAt >= Date.now() + 23 * 60 * 60_000);
   cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(cooldown.state, 'APPROVED');
@@ -404,13 +469,13 @@ test('only an owner device whose FCM endpoint accepted the alert may start the c
     const invalidToken = 'x'.repeat(43);
     await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
       tenantId, deviceIdHash: secondOwnerDeviceHash, eventId: cooldown.alertEventId, ackToken: invalidToken
-    }, ownerAuth(ownerUid, tenantId)), 'an endpoint that rejected FCM cannot acknowledge delivery');
+    }, passkeyOwnerAuth(ownerUid, tenantId)), 'an endpoint that rejected FCM cannot acknowledge delivery');
     await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
       tenantId, deviceIdHash: recoveryDeviceHash, eventId: cooldown.alertEventId, ackToken: invalidToken
-    }, ownerAuth(ownerUid, tenantId)), 'the recovery-requesting device cannot acknowledge its own alert');
+    }, passkeyOwnerAuth(ownerUid, tenantId)), 'the recovery-requesting device cannot acknowledge its own alert');
     const acknowledged = await callable(functions.acknowledgeRecoveryOwnerAlert, {
       tenantId, deviceIdHash: thirdOwnerDeviceHash, eventId: cooldown.alertEventId, ackToken: thirdOwnerAlert.data.ackToken
-    }, ownerAuth(ownerUid, tenantId));
+    }, passkeyOwnerAuth(ownerUid, tenantId));
     assert.equal(acknowledged.acknowledged, true);
   } finally {
     messaging.send = original;
@@ -424,7 +489,7 @@ test('recovery is blocked when no independent attested owner notification device
   const recoveryDeviceHash = '9'.repeat(64);
   await seedTenant({
     tenantId, phone, ownerUid, recoveryDeviceHash,
-    ownerDeviceHashes: [recoveryDeviceHash]
+    ownerDeviceHashes: [recoveryDeviceHash], enrollPasskey: false
   });
   const phoneToken = await phoneAuthToken(phone);
   await assert.rejects(
@@ -455,7 +520,7 @@ test('an independent owner can acknowledge before the FCM send response returns'
       deviceIdHash: message.data.deviceIdHash,
       eventId: message.data.eventId,
       ackToken: message.data.ackToken
-    }, ownerAuth(ownerUid, tenantId));
+    }, passkeyOwnerAuth(ownerUid, tenantId));
     return 'emulator-fcm-accepted-after-owner-ack';
   };
   try {
@@ -501,8 +566,8 @@ test('independent primary owner cancels the old hold and fresh OTP starts a new 
   'future owner auth_time cannot cancel');
   const cancelled = await callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: independentDeviceHash
-  }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' }));
-  assert.equal(cancelled.cancelled, true, 'an independently enrolled, attested passkey owner device may cancel');
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(cancelled.cancelled, true, 'a fresh verified owner email-link session may cancel');
   const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(state.state, 'CANCELLED');
   assert.equal(state.cancelledByDeviceHash, independentDeviceHash);
@@ -517,7 +582,7 @@ test('independent primary owner cancels the old hold and fresh OTP starts a new 
     'cancellation audit is limited to tenant, hashed device identity, event type and timestamp');
   const replayedCancellation = await callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: independentDeviceHash
-  }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' }));
+  }, ownerAuth(ownerUid, tenantId));
   assert.equal(replayedCancellation.cancelled, false, 'replayed cancellation is a terminal no-op');
   const cancellationEvents = await db.collection('recoverySecurityEvents')
     .where('tenantId', '==', tenantId).get();
@@ -561,7 +626,7 @@ test('independent primary owner cancels an issued grant; consume is rejected aft
   await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: independentDeviceHash, eventId: cooldown.alertEventId,
     ackToken: ownerAlert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, passkeyOwnerAuth(ownerUid, tenantId));
   await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
   await sleep(1100);
   const issued = await callable(functions.issueRecoveryGrant, {
@@ -601,7 +666,7 @@ test('independent owner can cancel during the approved 24-hour hold', async () =
   await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, passkeyOwnerAuth(ownerUid, tenantId));
   const approved = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(approved.state, 'APPROVED');
   assert.ok(approved.eligibleAt > Date.now());
@@ -630,7 +695,7 @@ test('cancellation racing with grant issue wins the recovery-state transaction',
   await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, passkeyOwnerAuth(ownerUid, tenantId));
   await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
   await sleep(1100);
   const [issueResult, cancelResult] = await Promise.allSettled([
@@ -672,7 +737,7 @@ test('grant consumption racing with cancellation has exactly one winner', async 
   await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, passkeyOwnerAuth(ownerUid, tenantId));
   await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
   await sleep(1100);
   const issued = await callable(functions.issueRecoveryGrant, {
@@ -791,7 +856,7 @@ test('owner acknowledgement token expires after fifteen minutes', async () => {
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId)), 'expired owner acknowledgement is rejected');
+  }, passkeyOwnerAuth(ownerUid, tenantId)), 'expired owner acknowledgement is rejected');
   const unchanged = (await cooldownRef.get()).data();
   assert.equal(unchanged.state, 'ALERT_PENDING');
   assert.equal(unchanged.eligibleAt, null);
@@ -886,7 +951,7 @@ test('revoked owner notification device cannot acknowledge a pending alert', asy
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId)), 'revoked owner device cannot acknowledge');
+  }, passkeyOwnerAuth(ownerUid, tenantId)), 'revoked owner device cannot acknowledge');
   assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'ALERT_PENDING');
 });
 
@@ -912,7 +977,7 @@ test('owner cancellation before grant issue closes the old hold and requires a f
   await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, passkeyOwnerAuth(ownerUid, tenantId));
   await callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: ownerDeviceHash
   }, ownerAuth(ownerUid, tenantId));
@@ -957,7 +1022,7 @@ test('owner cancellation before consume revokes the issued grant permanently', a
   await callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
-  }, ownerAuth(ownerUid, tenantId));
+  }, passkeyOwnerAuth(ownerUid, tenantId));
   await db.doc(`recoveryCooldowns/${tenantId}`).update({ eligibleAt: Date.now() - 1 });
   await sleep(1100);
   const issued = await callable(functions.issueRecoveryGrant, {
@@ -1138,4 +1203,112 @@ test('owner notification endpoint token rotation requires fresh primary authenti
   const updated = (await ref.get()).data();
   assert.equal(updated.fcmToken, replacement);
   assert.equal(updated.ownerUid, ownerUid);
+});
+
+test('WebAuthn owner action challenge is bound to uid, request, action, UV and one-time counter update', async () => {
+  const tenantId = 'tenant-webauthn-contract-01';
+  const ownerUid = 'owner-webauthn-contract-01';
+  const phone = '+15555550199';
+  const recoveryDeviceHash = 'c'.repeat(64);
+  const secondOwnerDeviceHash = 'd'.repeat(64);
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, ownerDeviceHashes: [recoveryDeviceHash, secondOwnerDeviceHash] });
+  const nonce = 'w'.repeat(43);
+  const phoneToken = await phoneAuthToken(phone);
+  const issued = await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce, phoneIdToken: phoneToken
+  });
+  const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  const eventId = cooldown.alertEventId;
+  const event = (await db.doc(`recoverySecurityEvents/${eventId}`).get()).data();
+  assert.ok(event);
+
+  await assert.rejects(callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId
+  }, phoneOnlyOwnerAuth(ownerUid, tenantId)), 'phone OTP alone cannot start an owner passkey ceremony');
+
+  const begin = await callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId
+  }, ownerAuth(ownerUid, tenantId));
+  const authenticator = authenticators.get(tenantId);
+  const assertion = authenticator.assert({ rpId: RP_ID, origin: RP_ORIGIN, challenge: begin.options.challenge });
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
+    challengeId: begin.challengeId, credentialResponse: assertion, ackToken: 'x'.repeat(43)
+  }, ownerAuth('different-owner', tenantId)));
+  const wrongAction = await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId,
+    challengeId: begin.challengeId, credentialResponse: assertion
+  }, ownerAuth(ownerUid, tenantId)));
+  const challengeAfterRejected = (await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).data();
+  assert.equal(challengeAfterRejected.state, 'PENDING', 'rejected cross-uid and wrong-action attempts do not consume the challenge');
+
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
+    challengeId: '00000000-0000-4000-8000-000000000000', credentialResponse: assertion, ackToken: 'x'.repeat(43)
+  }, ownerAuth(ownerUid, tenantId)), 'unknown challenge is rejected without touching the legitimate challenge');
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: '00000000-0000-4000-8000-000000000001',
+    challengeId: begin.challengeId, credentialResponse: assertion, ackToken: 'x'.repeat(43)
+  }, ownerAuth(ownerUid, tenantId)), 'cross-request challenge use is rejected');
+  const wrongChallengeAssertion = authenticator.assert({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: 'z'.repeat(43)
+  });
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
+    challengeId: begin.challengeId, credentialResponse: wrongChallengeAssertion, ackToken: 'x'.repeat(43)
+  }, ownerAuth(ownerUid, tenantId)), 'an assertion signed for another challenge must be rejected');
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).get('state'), 'PENDING',
+    'wrong-challenge assertions must not consume the server challenge');
+
+  const readiness = await callable(functions.getRecoveryOwnerActionReadiness, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(readiness.ready, true, 'readiness requires an eligible passkey and configured RP association');
+
+  const noUvAssertion = authenticator.assert({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: begin.options.challenge, userVerified: false
+  });
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
+    challengeId: begin.challengeId, credentialResponse: noUvAssertion, ackToken: 'x'.repeat(43)
+  }, ownerAuth(ownerUid, tenantId)), 'assertions without UV are rejected');
+
+  const ownerAlert = sentMessages.find(message => message.data?.type === 'RECOVERY_COOLDOWN_STARTED');
+  const ackToken = ownerAlert?.data?.ackToken;
+  assert.ok(ackToken);
+  const validAssertion = authenticator.assert({ rpId: RP_ID, origin: RP_ORIGIN, challenge: begin.options.challenge });
+  const acknowledged = await callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
+    challengeId: begin.challengeId, credentialResponse: validAssertion, ackToken
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(acknowledged.acknowledged, true);
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
+    challengeId: begin.challengeId, credentialResponse: validAssertion, ackToken
+  }, ownerAuth(ownerUid, tenantId)), 'replayed challenge is rejected');
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).get('state'), 'CONSUMED');
+
+  const credentialHash = createHash('sha256').update(authenticator.credentialId).digest('hex');
+  const credentialRef = db.doc(`tenants/${tenantId}/recoveryPasskeys/${credentialHash}`);
+  await credentialRef.update({ counter: 10 });
+  const cancelBegin = await callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId
+  }, ownerAuth(ownerUid, tenantId));
+  const regressed = authenticator.assert({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: cancelBegin.options.challenge, counter: 3
+  });
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId,
+    challengeId: cancelBegin.challengeId, credentialResponse: regressed
+  }, ownerAuth(ownerUid, tenantId)), 'signature counter regression is rejected');
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${cancelBegin.challengeId}`).get()).get('state'), 'PENDING',
+    'counter regression must not consume the legitimate cancellation challenge');
+  const validCancel = authenticator.assert({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: cancelBegin.options.challenge, counter: 11
+  });
+  const cancelled = await callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId,
+    challengeId: cancelBegin.challengeId, credentialResponse: validCancel
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(cancelled.cancelled, true, 'owner may cancel with a valid passkey assertion');
 });

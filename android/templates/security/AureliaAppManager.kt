@@ -167,15 +167,41 @@ class AureliaAppManager(
             recoveryKey.fill(0)
             throw SecurityException("Recovery phone policy could not be authenticated.", failure)
         }
-        if (otpRequired && !RecoveryGate.spendAttempt()) {
+        val otpAttemptAllowed = try {
+            !otpRequired || RecoveryGate.spendAttempt()
+        } catch (failure: Exception) {
+            recoveryKey.fill(0)
+            throw SecurityException("Recovery attempt could not be durably recorded.", failure)
+        }
+        if (!otpAttemptAllowed) {
             recoveryKey.fill(0)
             throw SecurityException("A fresh OTP verification is required to continue recovery.")
         }
-        val recovered = try {
-            crypto.unwrapDataKeyWithRecovery(bundle.getString("recovery"), recoveryKey)
+        // Persist a pending attempt before unwrap. If the process dies, the next
+        // state read charges it as a failure. A verified key clears only the
+        // pending marker; prior failures reset after the new envelope is committed.
+        try {
+            recoveryLockout.beginAttempt()
         } catch (failure: Exception) {
-            recoveryLockout.registerFailure()
-            throw SecurityException("Recovery key verification failed.", failure)
+            recoveryKey.fill(0)
+            throw SecurityException("Recovery key attempt could not be durably throttled.", failure)
+        }
+        val recovered = try {
+            val key = try {
+                crypto.unwrapDataKeyWithRecovery(bundle.getString("recovery"), recoveryKey)
+            } catch (failure: Exception) {
+                recoveryLockout.registerFailure()
+                throw SecurityException("Recovery key verification failed.", failure)
+            }
+            try {
+                recoveryLockout.completeAttempt()
+            } catch (failure: Exception) {
+                // A DEK that was successfully unwrapped must not remain in
+                // memory if the durable pending-attempt marker cannot be cleared.
+                key.fill(0)
+                throw failure
+            }
+            key
         } finally {
             recoveryKey.fill(0)
         }

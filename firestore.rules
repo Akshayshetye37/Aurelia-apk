@@ -6,6 +6,9 @@ service cloud.firestore {
     match /tenants/{tenantId}/security/{document=**} {
       allow read, write: if false;
     }
+    match /tenants/{tenantId}/recoveryPasskeys/{passkeyId} {
+      allow read, write: if false;
+    }
     match /recoveryGrants/{grantId} {
       allow read, write: if false;
     }
@@ -25,6 +28,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /recoveryAttestationChallenges/{challengeId} {
+      allow read, write: if false;
+    }
+    match /recoveryPasskeyChallenges/{challengeId} {
+      allow read, write: if false;
+    }
+    match /recoveryPasskeyRateLimits/{limitId} {
       allow read, write: if false;
     }
     match /recoveryDeviceAttestations/{deviceId} {

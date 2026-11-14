@@ -15,7 +15,9 @@ import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
+import java.security.MessageDigest;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
 import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -39,8 +41,35 @@ public final class RecoveryProcessDeathInstrumentedTest {
   private static final String ENTITY_ID = "persisted_before_force_stop";
   private static final String REBOOT_ENTITY_TYPE = "process_death_reboot";
   private static final String REBOOT_ENTITY_ID = "persisted_before_device_reboot";
+  private static final String GATE_JTI = "2e8d6f1a-3c54-4b17-9a20-6f8d1c3b5a70";
+  private static final String RECOVERY_LOCK_FILE = "aurelia-recovery-lock-state.v1";
+  private static final String RECOVERY_LOCK_ALIAS = "aurelia.pms.recovery-lock-state.v1";
+  private static final String RECOVERY_LOCK_MAGIC = "AURELIA-RECOVERY-LOCK-V1";
+
+  private static void requirePhase(String expected) {
+    assertEquals("host must launch each process-death phase in a separate instrumentation invocation",
+      expected, InstrumentationRegistry.getArguments().getString("phase"));
+  }
+
+  private static String sha256Hex(String value) throws Exception {
+    byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+    char[] alphabet = "0123456789abcdef".toCharArray();
+    char[] encoded = new char[digest.length * 2];
+    for (int i = 0; i < digest.length; i++) {
+      int item = digest[i] & 0xff;
+      encoded[i * 2] = alphabet[item >>> 4];
+      encoded[i * 2 + 1] = alphabet[item & 0x0f];
+    }
+    return new String(encoded);
+  }
+
+  private static com.aurelia.pms.security.AppLockManager newRecoveryLockout(Context context) {
+    return new com.aurelia.pms.security.AppLockManager(
+      context, RECOVERY_LOCK_FILE, RECOVERY_LOCK_ALIAS, RECOVERY_LOCK_MAGIC);
+  }
 
   @Test public void phaseOnePersistsPinAAndDatabaseBeforeForceStop() throws Exception {
+    requirePhase("1");
     Context context = ApplicationProvider.getApplicationContext().createDeviceProtectedStorageContext();
     context.deleteDatabase(DB);
     com.aurelia.pms.security.AureliaEnvelopeStore store =
@@ -67,8 +96,9 @@ public final class RecoveryProcessDeathInstrumentedTest {
       key = manager.currentDataKeyCopy();
       repository = new LocalPmsRepository(context, key);
       repository.initialize();
+      String persistedValue = "survives-real-process-death";
       repository.transactBusinessChange(ENTITY_TYPE, ENTITY_ID, 0,
-        new JSONObject().put("value", "survives-real-process-death"),
+        new JSONObject().put("value", persistedValue).put("checksum", sha256Hex(persistedValue)),
         new JSONObject().put("eventId", "phase-one-event").put("tenantId", "tenant-test")
           .put("propertyId", "property-test").put("deviceId", "device-test")
           .put("entityType", ENTITY_TYPE).put("entityId", ENTITY_ID).put("sequence", 1)
@@ -93,20 +123,40 @@ public final class RecoveryProcessDeathInstrumentedTest {
         Arrays.fill(recovery, '\0');
       }
     }
+    // Arm test state only after cleanup: manager.lock() correctly clears any
+    // prior recovery authorization and must not erase the state under test.
+    com.aurelia.pms.security.RecoveryGate.INSTANCE.armAfterServerConsumption(GATE_JTI, 240_000L);
+    assertTrue("test grant must arm", com.aurelia.pms.security.RecoveryGate.INSTANCE.isOpen());
+    assertTrue("first recovery attempt must be durably spent", com.aurelia.pms.security.RecoveryGate.INSTANCE.spendAttempt(GATE_JTI));
+    assertEquals("two attempts must remain before process death", 2,
+      com.aurelia.pms.security.RecoveryGate.INSTANCE.attemptsLeft());
+    newRecoveryLockout(context).beginAttempt();
     Log.i("RecoveryProcessDeath", "PHASE_ONE_READY");
-    // Hold this exact app process until the host observes the durable marker and
-    // explicitly force-stops it. Returning from AndroidJUnitRunner would itself
-    // stop the target package before the host can kill it.
-    Thread.sleep(30 * 60 * 1000L);
-    fail("Host did not force-stop the phase-one target process.");
   }
 
   @Test public void phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop() throws Exception {
+    requirePhase("2");
     Context context = ApplicationProvider.getApplicationContext().createDeviceProtectedStorageContext();
     com.aurelia.pms.security.AureliaEnvelopeStore store =
       new com.aurelia.pms.security.AureliaEnvelopeStore(context);
     String envelope = store.read();
     assertNotNull("phase one envelope must survive force-stop", envelope);
+    assertTrue("recovery grant must survive genuine process death within its TTL",
+      com.aurelia.pms.security.RecoveryGate.INSTANCE.isOpen());
+    assertEquals("spent attempt count must survive genuine process death", 2,
+      com.aurelia.pms.security.RecoveryGate.INSTANCE.attemptsLeft());
+    assertTrue("remaining attempt must stay bound to the same consumed JTI",
+      com.aurelia.pms.security.RecoveryGate.INSTANCE.spendAttempt(GATE_JTI));
+    assertEquals("one attempt remains after phase-two spend", 1,
+      com.aurelia.pms.security.RecoveryGate.INSTANCE.attemptsLeft());
+
+    com.aurelia.pms.security.AppLockManager recoveryThrottle = newRecoveryLockout(context);
+    assertEquals("an in-flight recovery-key attempt survives process death as a failure", 1,
+      recoveryThrottle.lockoutFailureCount());
+    recoveryThrottle.beginAttempt();
+    recoveryThrottle.completeAttempt();
+    assertEquals("a verified key attempt preserves prior failures", 1,
+      recoveryThrottle.lockoutFailureCount());
 
     com.aurelia.pms.security.AureliaAppManager manager = newManager(context);
     com.aurelia.pms.security.AureliaCryptoEngine crypto =
@@ -140,6 +190,8 @@ public final class RecoveryProcessDeathInstrumentedTest {
 
       store.writeRecoveryReplacement(replacement);
       manager.confirmRecoverySwapCommitted();
+      assertEquals("global recovery-key failures reset only after durable PIN-envelope commit", 0,
+        recoveryThrottle.lockoutFailureCount());
       manager.lock();
       assertFalse("PIN A must be rejected after the post-force-stop commit",
         manager.unlock(oldPin, store.read()));
@@ -150,7 +202,10 @@ public final class RecoveryProcessDeathInstrumentedTest {
       repository.initialize();
       JSONObject entity = repository.getEntity(ENTITY_TYPE, ENTITY_ID);
       assertNotNull("SQLCipher data must survive force-stop and PIN rotation", entity);
-      assertEquals("survives-real-process-death", entity.getJSONObject("data").getString("value"));
+      JSONObject persistedData = entity.getJSONObject("data");
+      assertEquals("survives-real-process-death", persistedData.getString("value"));
+      assertEquals("phase-one payload checksum must survive process death and database reopen",
+        sha256Hex(persistedData.getString("value")), persistedData.getString("checksum"));
       assertEquals(1L, entity.getLong("version"));
     } finally {
       if (repository != null) repository.close();
@@ -214,6 +269,9 @@ public final class RecoveryProcessDeathInstrumentedTest {
       assertTrue("PIN B must unlock the committed envelope before reboot",
         manager.unlock(pinB, store.read()));
       manager.lock();
+      // A real reboot must expire any outstanding recovery authorization.
+      com.aurelia.pms.security.RecoveryGate.INSTANCE.armAfterServerConsumption(GATE_JTI, 240_000L);
+      assertTrue("test grant must be open before device reboot", com.aurelia.pms.security.RecoveryGate.INSTANCE.isOpen());
       assertNotNull("committed PIN B envelope must persist for the reboot phase", store.read());
     } finally {
       if (repository != null) repository.close();
@@ -235,6 +293,10 @@ public final class RecoveryProcessDeathInstrumentedTest {
       new com.aurelia.pms.security.AureliaEnvelopeStore(context);
     String envelope = store.read();
     assertNotNull("committed envelope must survive device reboot", envelope);
+    assertFalse("recovery grant must expire after device reboot",
+      com.aurelia.pms.security.RecoveryGate.INSTANCE.isOpen());
+    assertEquals("rebooted recovery grant must have no remaining attempts", 0,
+      com.aurelia.pms.security.RecoveryGate.INSTANCE.attemptsLeft());
     com.aurelia.pms.security.AureliaAppManager manager = newManager(context);
     char[] pinA = PIN_A.toCharArray();
     char[] pinB = PIN_B.toCharArray();

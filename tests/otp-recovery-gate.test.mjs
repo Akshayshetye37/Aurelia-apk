@@ -4,15 +4,20 @@ import fs from 'node:fs';
 
 const read = path => fs.readFileSync(path, 'utf8');
 
-test('OTP recovery gate is process-local, expires monotonically, and permits three attempts', () => {
+test('OTP recovery gate persists grant-bound attempts in Keystore-encrypted AtomicFile state and expires monotonically across reboot', () => {
   const gate = read('android/templates/security/RecoveryGate.kt');
-  assert.match(gate, /SystemClock\.elapsedRealtime\(\)/);
-  assert.match(gate, /MAX_ATTEMPTS = 3/);
-  assert.match(gate, /TTL_MS = 5 \* 60_000L/);
-  assert.match(gate, /fun armAfterServerConsumption\(remainingGrantMs: Long\)/);
-  assert.match(gate, /fun spendAttempt\(\): Boolean/);
-  assert.match(gate, /fun clear\(\)/);
-  assert.doesNotMatch(gate, /SharedPreferences|AtomicFile|File\(/);
+  assert.ok(gate.includes('SystemClock.elapsedRealtime()'));
+  assert.ok(gate.includes('fun initialize(context: Context)'));
+  assert.ok(gate.includes('fun armAfterServerConsumption(jti: String, remainingGrantMs: Long)'));
+  assert.ok(gate.includes('fun spendAttempt(expectedJti: String? = null): Boolean'));
+  assert.ok(gate.includes('AtomicFile'));
+  assert.ok(gate.includes('AndroidKeyStore'));
+  assert.ok(gate.includes('bootCount'));
+  assert.ok(gate.includes('currentBoot >= 0'));
+  assert.ok(gate.includes('state.bootCount < 0 || state.bootCount != bootCount()'));
+  assert.ok(gate.includes('missing; refusing to reset attempts'));
+  assert.ok(gate.includes('stateUnavailable'));
+  assert.ok(!gate.includes('SharedPreferences'));
 });
 
 test('recovery checksum is validated before an OTP attempt is spent', () => {
@@ -60,6 +65,7 @@ test('recovery phone is encrypted with a non-authentication-bound Android Keysto
 
 test('Android generation copies the OTP recovery gate and encrypted phone store', () => {
   const patcher = read('scripts/patch-android.js');
+  const passkeys = read('functions/src/passkeys.ts');
   assert.match(patcher, /'RecoveryGate\.kt'/);
   assert.match(patcher, /RecoveryPhoneStore\.kt/);
 });
@@ -85,7 +91,8 @@ test('recovery phone registration requires a fresh owner token bound to the tena
   assert.match(ownerGuard, /authTime > now/);
   assert.match(ownerGuard, /now - authTime >= 300/);
   assert.match(ownerGuard, /email_link/);
-  assert.match(ownerGuard, /passkey/);
+  assert.match(ownerGuard, /email_verified === true/);
+  assert.doesNotMatch(ownerGuard, /ownerAuthFactor !== "passkey"/);
 });
 
 test('APK verifies the pinned ES256 signature before server grant consumption', () => {
@@ -107,7 +114,7 @@ test('APK verifies the pinned ES256 signature before server grant consumption', 
   assert.match(patcher, /RECOVERY_GRANT_PUBLIC_KEYS_JSON/);
   assert.match(patcher, /aurelia_recovery_grant_keys\.xml/);
   assert.match(client, /replayStore\.markUsed\(verified\.jti, verified\.expiresAtEpochSec\)/);
-  assert.match(client, /RecoveryGate\.armAfterServerConsumption\(remainingGrantMs\)/);
+  assert.ok(client.includes('RecoveryGate.armAfterServerConsumption(verified.jti, remainingGrantMs)'));
   assert.match(client, /awaitingOwnerAlert/);
   assert.match(lockGate, /24-hour hold has not started yet/);
   assert.doesNotMatch(client, /inspectClaims/);
@@ -132,9 +139,12 @@ test('owner alert must be posted and acknowledged before the recovery cooldown s
   const ownerAlert = read('android/templates/RecoveryOwnerAlertActivity.kt');
   assert.match(backend, /state: "ALERT_PENDING"/);
   assert.match(backend, /getMessaging\(\)\.send/);
-  assert.match(backend, /acknowledgeRecoveryOwnerAlert = onCall/);
-  assert.match(backend, /notificationAcknowledgedAt/);
-  assert.match(backend, /eligibleAt = Date\.now\(\) \+ RECOVERY_COOLDOWN_MS/);
+  const passkeys = read('functions/src/passkeys.ts');
+  assert.match(passkeys, /acknowledgeRecoveryOwnerAlert = onCall/);
+  assert.match(passkeys, /verifyAuthenticationResponse/);
+  assert.match(passkeys, /requireUserVerification: true/);
+  assert.match(passkeys, /notificationAcknowledgedAt/);
+  assert.match(passkeys, /eligibleAt = now \+ 24 \* 60 \* 60_000/);
   assert.match(service, /NotificationManagerCompat\.from\(this\)\.areNotificationsEnabled\(\)/);
   assert.doesNotMatch(service, /acknowledgeRecoveryOwnerAlert/);
   assert.match(ownerAlert, /acknowledgeRecoveryOwnerAlert/);
@@ -193,4 +203,186 @@ test('owner alert UI completes server-verified email-link primary authentication
   assert.match(patcher, /firebaseapp\.com/);
   assert.match(patcher, /android:pathPrefix="\/__\/auth"/);
   assert.match(patcher, /android:launchMode="singleTask"/);
+});
+
+
+test('passkey enrollment starts only after Android device attestation and owner-alert device registration', () => {
+  const owner = read('android/templates/RecoveryOwnerAlertActivity.kt');
+  const phone = read('android/templates/RecoveryPhoneSettingsActivity.kt');
+  const ownerEmail = owner.slice(owner.indexOf('private fun completeOwnerEmailLink'), owner.indexOf('private fun acknowledge'));
+  const phoneRegistration = phone.slice(phone.indexOf('private fun registerNewPhone'), phone.indexOf('private fun registerOwnerAlertEndpoint'));
+  const persist = phone.slice(phone.indexOf('private fun persistRecoveryPhone'), phone.indexOf('private fun cancelPendingRecovery'));
+  assert.ok(ownerEmail.indexOf('RecoveryPhoneSettingsActivity::class.java') < ownerEmail.indexOf('EXTRA_ENROLL_PASSKEY_AFTER_SETUP'));
+  assert.ok(phoneRegistration.indexOf('createRecoveryAttestationChallenge') < phoneRegistration.indexOf('registerOwnerAlertEndpoint'));
+  assert.ok(phoneRegistration.indexOf('registerOwnerAlertEndpoint') < phoneRegistration.indexOf('persistRecoveryPhone'));
+  assert.ok(persist.indexOf('client.registerRecoveryPhone') < persist.indexOf('EXTRA_PASSKEY_ONLY_MODE'));
+  assert.match(phone, /Enroll or add owner passkey/);
+  assert.match(owner, /passkeyOnlyMode/);
+});
+
+test('Android owner alert uses Credential Manager for registration and server-verified acknowledgement', () => {
+  const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
+  const patcher = read('scripts/patch-android.js');
+  const passkeys = read('functions/src/passkeys.ts');
+  assert.match(activity, /CreatePublicKeyCredentialRequest/);
+  assert.match(activity, /GetPublicKeyCredentialOption/);
+  assert.match(activity, /CredentialManager\.create/);
+  assert.match(activity, /registrationResponseJson/);
+  assert.match(activity, /authenticationResponseJson/);
+  assert.match(activity, /createRecoveryPasskeyEnrollmentOptions/);
+  assert.match(activity, /completeRecoveryPasskeyEnrollment/);
+  assert.match(activity, /retryRecoveryPasskeyEnrollmentAlert/);
+  assert.match(activity, /alertAccepted/);
+  assert.match(passkeys, /credentialHash: hash, usableAfterMs/);
+  assert.match(activity, /createRecoveryOwnerActionOptions/);
+  assert.match(activity, /acknowledgeRecoveryOwnerAlert/);
+  assert.match(activity, /challengeId/);
+  assert.match(activity, /ackToken/);
+  assert.match(patcher, /androidx\.credentials:credentials:1\.6\.0/);
+  assert.match(patcher, /credentials-play-services-auth:1\.6\.0/);
+  assert.match(patcher, /lifecycle-runtime-ktx:2\.9\.4/);
+  assert.match(activity, /isEnabled = false/);
+  assert.match(activity, /getRecoveryOwnerActionReadiness/);
+  assert.match(activity, /refreshPasskeyActionReadiness/);
+  assert.match(activity, /acknowledgeButton\.isEnabled = ready && hasAlertContext/);
+  assert.doesNotMatch(activity, /acknowledgeButton\.isEnabled = hasAlertContext/);
+});
+
+test('owner recovery acknowledgement verifies the actual WebAuthn assertion and never trusts a custom passkey claim', () => {
+  const backend = read('functions/src/index.ts');
+  const passkeys = read('functions/src/passkeys.ts');
+  assert.ok(passkeys.includes('verifyAuthenticationResponse'));
+  assert.ok(passkeys.includes('requireUserVerification: true'));
+  assert.ok(passkeys.includes('expectedOrigin: config.origins'));
+  assert.ok(passkeys.includes('expectedRPID: config.rpID'));
+  assert.ok(passkeys.includes('credentialHashes'));
+  assert.ok(passkeys.includes('counter: verification.authenticationInfo.newCounter'));
+  assert.ok(passkeys.includes('state: "CONSUMED"'));
+  assert.ok(passkeys.includes('ownerAuthFactor !== "email_link"'));
+  assert.ok(!backend.includes('requireFreshPasskeyOwner'));
+  assert.ok(!backend.includes('ownerAuthFactor !== "passkey"'));
+});
+
+test('destructive reset requires a fresh verified owner session bound to the enrolled tenant', () => {
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.ok(gate.includes('private fun authorizeDestructiveReset'));
+  assert.ok(gate.includes('getIdToken(true)'));
+  assert.ok(gate.includes('email_verified'));
+  assert.ok(gate.includes('now - authTime >= 300'));
+  assert.ok(gate.includes('now - factorTime >= 300'));
+  assert.ok(gate.includes('tenant != binding.tenantId'));
+  const resetStart = gate.indexOf('private fun showDestructiveResetPrompt');
+  const resetEnd = gate.indexOf('private fun authorizeDestructiveReset', resetStart);
+  assert.ok(gate.slice(resetStart, resetEnd).includes('authorizeDestructiveReset'));
+});
+
+
+test('recovery gate is initialized at application startup and not cleared by onStop', () => {
+  const app = read('android/templates/AureliaApplication.java');
+  const gate = read('android/templates/security/LockGateActivity.kt');
+  assert.ok(app.includes('RecoveryGate.INSTANCE.initialize(this)'));
+  const onStopStart = gate.indexOf('override fun onStop()');
+  const onBackStart = gate.indexOf('override fun onBackPressed()', onStopStart);
+  assert.ok(onStopStart >= 0 && onBackStart > onStopStart);
+  assert.ok(!gate.slice(onStopStart, onBackStart).includes('RecoveryGate.clear()'));
+  assert.ok(gate.slice(onBackStart).includes('RecoveryGate.clear()'));
+});
+
+
+test('recovery key lockout persists independently across grants and escalates after repeated unwrap failures', () => {
+  const manager = read('android/templates/security/AureliaAppManager.kt');
+  const lockout = read('android/templates/security/AppLockManager.kt');
+  assert.ok(manager.includes('aurelia-recovery-lock-state.v1'));
+  assert.ok(manager.includes('recoveryLockout.assertUnlocked()'));
+  assert.ok(manager.includes('recoveryLockout.beginAttempt()'));
+  assert.ok(manager.includes('recoveryLockout.registerFailure()'));
+  assert.ok(manager.includes('recoveryLockout.completeAttempt()'));
+  assert.ok(lockout.includes('fun completeAttempt()'));
+  assert.ok(manager.includes('recoveryLockout.registerSuccess()'));
+  assert.ok(lockout.includes('pendingAttempt'));
+  assert.ok(lockout.includes('A process/device death while an attempt is pending'));
+  assert.ok(lockout.includes('AtomicFile'));
+  assert.ok(lockout.includes('MAX_LOCK_MS = 60 * 60 * 1000L'));
+  assert.ok(lockout.includes('lockDuration(failures)'));
+  assert.ok(lockout.includes('bootCount'));
+  const crypto = read('android/templates/security/AureliaCryptoEngine.kt');
+  assert.ok(crypto.includes('ByteArray(KEY_BYTES)'));
+  assert.ok(crypto.includes('random::nextBytes'));
+});
+
+
+test('email-link owner session can only proceed to acknowledgement through Credential Manager', () => {
+  const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
+  const disabled = activity.indexOf('isEnabled = false');
+  const readinessCheck = activity.indexOf('getRecoveryOwnerActionReadiness');
+  const enableAfterReadiness = activity.indexOf('acknowledgeButton.isEnabled = ready && hasAlertContext');
+  const action = activity.slice(activity.indexOf('private fun acknowledge'), activity.indexOf('private fun enrollRecoveryPasskey'));
+  const challenge = action.indexOf('createRecoveryOwnerActionOptions');
+  const credential = action.indexOf('GetPublicKeyCredentialOption');
+  const serverAck = action.indexOf('acknowledgeRecoveryOwnerAlert');
+  assert.ok(disabled >= 0);
+  assert.ok(readinessCheck > disabled);
+  assert.ok(enableAfterReadiness > readinessCheck);
+  assert.ok(activity.includes('refreshPasskeyActionReadiness()'));
+  assert.ok(challenge > 0 && credential > challenge && serverAck > credential);
+});
+
+
+test('Android process-death runner uses two separate phase invocations and a host force-stop', () => {
+  const workflow = read('.github/workflows/otp-recovery-android-instrumentation.yml');
+  const instrumentation = read('android/templates/instrumentation/RecoveryProcessDeathInstrumentedTest.java');
+  assert.match(workflow, /run_instrumentation_test process-death-phase-one "\$phase_one" 1/);
+  assert.match(workflow, /run_instrumentation_test process-death-phase-two "\$phase_two" 2/);
+  assert.match(workflow, /-e phase "\$phase"/);
+  assert.ok(workflow.includes('shell am force-stop com.aurelia.pms'));
+  assert.match(workflow, /for attempt in \{1\.\.30\}/);
+  assert.match(workflow, /pidof com\.aurelia\.pms/);
+  assert.ok(instrumentation.includes('getArguments().getString("phase")'));
+  assert.ok(instrumentation.includes('sha256Hex(persistedValue)'));
+  assert.ok(instrumentation.includes('sha256Hex(persistedData.getString("value"))'));
+  assert.doesNotMatch(instrumentation, /Thread\.sleep\(30 \* 60 \* 1000L\)/);
+  assert.ok(instrumentation.includes('newRecoveryLockout(context).beginAttempt()'));
+  assert.ok(instrumentation.includes('lockoutFailureCount()'));
+  assert.ok(instrumentation.includes('recoveryThrottle.completeAttempt()'));
+  assert.match(instrumentation, /global recovery-key failures reset only after durable PIN-envelope commit/);
+});
+
+test('pending recovery-key attempts survive crashes without penalizing a verified key', () => {
+  const lockout = read('android/templates/security/AppLockManager.kt');
+  const manager = read('android/templates/security/AureliaAppManager.kt');
+  const start = manager.indexOf('fun recoverWithRecoveryKey');
+  const end = manager.indexOf('fun confirmRecoverySwapCommitted', start);
+  const flow = manager.slice(start, end);
+  assert.ok(flow.indexOf('recoveryLockout.beginAttempt()') < flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
+  assert.ok(flow.indexOf('crypto.unwrapDataKeyWithRecovery') < flow.indexOf('recoveryLockout.completeAttempt()'));
+  assert.match(flow, /catch \(failure: Exception\) \{[\s\S]*?key\.fill\(0\)/);
+  assert.ok(flow.indexOf('recoveryLockout.registerFailure()') > flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
+  assert.match(lockout, /if \(current.pendingAttempt\)[\s\S]*?failures = \(current.failures \+ 1\)/);
+  assert.match(lockout, /fun completeAttempt\(\)[\s\S]*?pendingAttempt = false/);
+});
+
+test('global recovery-key failure throttle is durably armed before every checksum-valid unwrap', () => {
+  const manager = read('android/templates/security/AureliaAppManager.kt');
+  const start = manager.indexOf('fun recoverWithRecoveryKey');
+  const end = manager.indexOf('fun confirmRecoverySwapCommitted', start);
+  const flow = manager.slice(start, end);
+  assert.ok(flow.indexOf('recoveryLockout.beginAttempt()') < flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
+  assert.ok(flow.indexOf('crypto.unwrapDataKeyWithRecovery') < flow.indexOf('recoveryLockout.completeAttempt()'));
+  assert.ok(flow.indexOf('recoveryLockout.registerFailure()') > flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
+  assert.ok(flow.indexOf('recoveryLockout.registerSuccess()') === -1);
+  assert.ok(flow.includes('recoveryKey.fill(0)'));
+  assert.ok(flow.includes('Recovery attempt could not be durably recorded.'));
+  assert.ok(flow.includes('Recovery key attempt could not be durably throttled.'));
+});
+
+
+test('passkey owner acknowledgement enforces the passkey factor timestamp itself under five minutes old', () => {
+  const backend = read('functions/src/index.ts');
+  const passkeys = read('functions/src/passkeys.ts');
+  const start = passkeys.indexOf('function ownerFromFreshEmailLink');
+  const end = passkeys.indexOf('function rpConfig', start);
+  const guard = passkeys.slice(start, end);
+  assert.ok(guard.includes('ownerAuthFactorAuthTime'));
+  assert.ok(guard.includes('authTime - factorAuthTime >= 300'));
+  assert.ok(guard.includes('factorAuthTime > authTime'));
 });
