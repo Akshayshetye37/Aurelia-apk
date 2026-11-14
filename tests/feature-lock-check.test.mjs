@@ -44,4 +44,4 @@ test('rejects path traversal', () => fixture(root => {
 
 test('rejects malformed manifests', () => {
   assert.throws(() => verifyLockManifest(process.cwd(), { schema_version: 2, locks: [] }), /Invalid locked-hashes/);
-}));
+});
