@@ -5,6 +5,40 @@
 **Audit date:** 2026-11-09  
 **Purpose:** Record only the work that remains to make the local-first PMS dependable and to complete optional online payment capabilities. This document supersedes earlier remaining-work lists where their status or wording conflicts with this audit.
 
+## Governing execution order — 2026-11-14
+
+This section is the current execution authority and supersedes conflicting sequencing or status claims in older plans and checklists. Preserve the technical architecture and acceptance criteria below unless this section explicitly changes them.
+
+### Execution environment and evidence rules
+
+- Execution path: GitHub Actions. Do not request a shell, new tooling, production secrets, administrator rights or merge access for the agent.
+- Repository administrators perform the one-time Actions, token, branch-protection and environment configuration described in the operational decision.
+- Run each required workflow against the exact candidate SHA. A change is not accepted until its completed run on that SHA is green, has a non-zero test count, and reports zero failures and zero skips. Preserve the run URL and SHA in the evidence ledger.
+- One small, reviewable commit → run on that exact SHA → inspect the first failing step/log → correct → rerun. Do not weaken or skip checks.
+- PR #22 and PR #23 changes are unverified until their full required suites pass on their own current heads.
+- Workflow dispatch is available as an administrator/manual fallback where the agent's scoped token cannot dispatch. Staging secrets remain environment-gated and approval-protected; never run fork PRs on privileged runners.
+
+### Required sequence
+
+0. **Execution path:** GitHub Actions with least-privilege feature-branch access; no admin, secrets or merge rights.
+1. **CI baseline (P0):** Re-run PMS/R1, payment backend, Recovery Functions, OTP Android instrumentation, Native SQLite and Hardware Attestation on current heads. Diagnose the first failure from raw logs; record baseline SHA and run URL.
+2. **Single source of truth (P0):** This file is canonical. Older checklists and execution plans are marked superseded for sequencing/status. Keep one tracking issue per workstream with acceptance criteria from this file.
+3. **Payment accounting model (P1):** Local PMS journal is the only ledger; backend `paymentFolios` is an intent/provider-evidence cache. Approve backend-to-local folio mapping in writing. Use integer minor units and fixed ISO currency; append-only entries and reversing corrections. Verify ledger/provider evidence invariants.
+4. **Payment state machine (P1):** Enforce intent → provider-verified → device-authorized → journal-committed → read-back verified → receipt → backend-acknowledged. Bind every step to idempotency. Journal, audit and outbox commit in one SQLite transaction. Recheck provider status server-side. Exercise duplicate webhooks, crash/retry at every step, forged receipts, wrong amounts and device acknowledgement without receipt.
+5. **End-to-end receipts (P1):** Bind payment ID, amount, currency, folio ID, ledger-entry hash and enrolled-device signature. Verify once; settlement requires both provider verification and receipt.
+6. **Passkey (P1):** Maintained, exact-version-pinned WebAuthn library and Android Credential Manager. Single-use two-minute challenges bound to UID/request/action; verify origin, RP ID hash, UV, signature and counter; atomically consume challenge and mutate state. Alert and cooldown on enrollment. Host staging/release `assetlinks.json`. Test wrong challenge, replay, UID/action mismatch, missing UV, counter regression, email-link-only and phone-OTP-only rejection.
+7. **OTP recovery (P1):** Finish passkey work first; then Gates 1–2 on the integrated SHA, followed by staging SMS, physical device, App Check/IAM probes and signed APK. Offline recovery key remains the only DEK-unlock mechanism.
+8. **Branch integration (P2):** Stack #18 → #23 → #22. Retarget each PR to the integration branch as its predecessor merges; run the full suite after every merge. Freeze one integration SHA.
+9. **Pay Bridge (P2):** Obtain and review the separate `com.aurelia.paybridge` source before defining signed/versioned IPC, package+certificate caller verification and replay rejection. Keep bridge disabled until independently qualified.
+10. **Physical-device qualification (P2):** One secure-lock-screen device and test SIM; PIN rotation, force-stop, real reboot, replay rejection, lock-screen change fail-closed, biometric re-enrollment, offline use and log scan. Complete Gate 4 evidence.
+11. **Local-first migration (P2):** Versioned reversible migrations; backup first; verify row counts/checksums; keep `uiCutover=false` until persistence acceptance passes and offline CI is green.
+12. **Release qualification:** Signed APK, SHA-256, certificate fingerprints matching Firebase and `assetlinks.json`, and one evidence table with identical candidate SHA for every gate. Written owner sign-off is last.
+
+### Fixed controls — mandatory
+
+`RECOVERY_ENABLED=false`; live collection OFF; automatic settlement and refunds OFF; cloud sync OFF; `uiCutover=false`; no production secrets or unredacted data in chat; payment and OTP remain separate tracks. Do not infer release approval from commits, file writes, unit tests alone or a partial gate.
+
+
 **Implementation update — 2026-11-09:** Local-only release freeze is implemented at `4e7659c42b404b23175df898f16de58bf774d5da`. Both [PMS source/web CI](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42591219837) and [settlement foundation CI](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42591219781) passed on that exact SHA. The global UI cutover remains false; sync, gateway payments, provider activation, CCAvenue and Pay Bridge are disabled; no provider is enabled. Branch protection remains disabled because the connected GitHub integration cannot change repository administration settings. The real-backup accounting diagnostic remains pending because no authorized redacted PMS backup has been supplied.
 
 ## 1. Product contract that every implementation must preserve
