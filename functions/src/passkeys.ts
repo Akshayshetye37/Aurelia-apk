@@ -12,7 +12,7 @@ import {
   verifyRegistrationResponse,
   type AuthenticationResponseJSON,
   type RegistrationResponseJSON,
-  type AuthenticatorTransportFuture
+  type AuthenticatorTransport
 } from "@simplewebauthn/server";
 
 if (!getApps().length) initializeApp();
@@ -174,7 +174,7 @@ export const createRecoveryPasskeyEnrollmentOptions = onCall(
       authenticatorSelection: { residentKey: "required", userVerification: "required" },
       excludeCredentials: existing.docs.map(doc => ({
         id: String(doc.get("credentialId")),
-        transports: (doc.get("transports") ?? []) as AuthenticatorTransportFuture[]
+        transports: (doc.get("transports") ?? []) as AuthenticatorTransport[]
       }))
     });
     const id = randomUUID();
@@ -333,7 +333,7 @@ export const createRecoveryOwnerActionOptions = onCall(
       userVerification: "required",
       allowCredentials: eligible.map(doc => ({
         id: String(doc.get("credentialId")),
-        transports: (doc.get("transports") ?? []) as AuthenticatorTransportFuture[]
+        transports: (doc.get("transports") ?? []) as AuthenticatorTransport[]
       }))
     });
     const id = randomUUID();
@@ -351,19 +351,20 @@ async function completeOwnerAction(request: CallableRequest<unknown>, forcedActi
   requireEnabled();
   const owner = ownerFromFreshEmailLink(request);
   await spendPasskeyRateLimit(owner, "ACTION");
-  if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
-  const id = requiredString(request.data?.challengeId, 64);
-  const deviceHash = requiredString(request.data?.deviceIdHash, 64);
+  const data = request.data as Record<string, unknown>;
+  if (data.tenantId !== owner.tenantId) throw GENERIC;
+  const id = requiredString(data.challengeId, 64);
+  const deviceHash = requiredString(data.deviceIdHash, 64);
   const ref = challengeRef(id);
   const snapshot = await ref.get();
   const challenge = snapshot.data();
-  const action = forcedAction ?? request.data?.action as Action;
-  const requestId = requiredString(request.data?.requestId, 64);
+  const action = forcedAction ?? (data.action as Action);
+  const requestId = requiredString(data.requestId, 64);
   checkChallenge(challenge, owner, "OWNER_ACTION", deviceHash, requestId, action);
   if (action !== "ack" && action !== "cancel") throw GENERIC;
   await requireOwnerBinding(owner);
   await requireAttestedOwnerDevice(owner, deviceHash, true);
-  const response = request.data?.credentialResponse;
+  const response = data.credentialResponse;
   if (!response || typeof response !== "object" || JSON.stringify(response).length > 100_000) throw GENERIC;
   const credentialId = requiredString((response as { id?: unknown }).id, 2048);
   if (!/^[A-Za-z0-9_-]+$/.test(credentialId)) throw GENERIC;
@@ -387,7 +388,7 @@ async function completeOwnerAction(request: CallableRequest<unknown>, forcedActi
       id: String(stored.credentialId),
       publicKey: Buffer.from(String(stored.publicKey), "base64url"),
       counter: Number(stored.counter),
-      transports: (stored.transports ?? []) as AuthenticatorTransportFuture[]
+      transports: (stored.transports ?? []) as AuthenticatorTransport[]
     }
   });
   if (!verification.verified || !verification.authenticationInfo.userVerified) throw GENERIC;
@@ -420,7 +421,7 @@ async function completeOwnerAction(request: CallableRequest<unknown>, forcedActi
         attestation.verifiedBootState !== "VERIFIED" || attestation.deviceLocked !== true ||
         !cooldown || cooldown.ownerUid !== owner.uid || cooldown.alertEventId !== requestId) throw GENERIC;
     if (action === "ack") {
-      const ackToken = requiredString(request.data?.ackToken, 64);
+      const ackToken = requiredString(data.ackToken, 64);
       if (cooldown.state !== "ALERT_PENDING" || !event || event.tenantId !== owner.tenantId ||
           event.ownerUid !== owner.uid || event.requestId !== requestId ||
           event.type !== "RECOVERY_COOLDOWN_STARTED" || event.acknowledgedAt ||
@@ -454,7 +455,7 @@ async function completeOwnerAction(request: CallableRequest<unknown>, forcedActi
       });
       const auditRef = db.collection("recoverySecurityEvents").doc(randomUUID());
       tx.create(auditRef, { tenantId: owner.tenantId, type: "RECOVERY_REQUEST_CANCELLED",
-        deviceIdHash, createdAt: FieldValue.serverTimestamp() });
+        deviceIdHash: deviceHash, createdAt: FieldValue.serverTimestamp() });
     }
     tx.update(credentialRef, { counter: verification.authenticationInfo.newCounter,
       lastUsedAt: FieldValue.serverTimestamp() });

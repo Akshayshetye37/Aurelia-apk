@@ -360,4 +360,7 @@ test('owner alert acknowledgement uses server-verified WebAuthn and a one-time F
   assert.match(acknowledgement, /verifyAuthenticationResponse/);
   assert.match(acknowledgement, /equalAckDigest/);
   assert.match(acknowledgement, /state: "CONSUMED"/);
+  assert.match(passkeys, /type AuthenticatorTransport/);
+  assert.doesNotMatch(passkeys, /AuthenticatorTransportFuture/);
+  assert.match(passkeys, /deviceIdHash: deviceHash, createdAt/);
 });
