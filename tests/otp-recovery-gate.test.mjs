@@ -249,6 +249,6 @@ test('recovery key lockout persists independently across grants and escalates af
   assert.ok(lockout.includes('lockDuration(failures)'));
   assert.ok(lockout.includes('bootCount'));
   const crypto = read('android/templates/security/AureliaCryptoEngine.kt');
-  assert.ok(crypto.includes('ByteArray(32)'));
-  assert.ok(crypto.includes('SecureRandom'));
+  assert.ok(crypto.includes('ByteArray(KEY_BYTES)'));
+  assert.ok(crypto.includes('random::nextBytes'));
 });
