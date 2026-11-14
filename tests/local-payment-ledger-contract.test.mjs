@@ -86,6 +86,7 @@ test('reconciliation never creates a replacement provider order when the origina
   const end = ledger.indexOf('synchronized JSONObject recordAwaitingProvider', start);
   const order = ledger.slice(start, end);
   assert.match(order, /local_status='READY_FOR_ONLINE' AND provider_order_id IS NULL/);
-  assert.match(order, /local_status IN \('ORDER_CREATED','RECONCILIATION_REQUIRED'\) AND provider_order_id=\?/);
+  assert.match(order, /local_status='ORDER_CREATED' AND provider_order_id=\?/);
+  assert.doesNotMatch(order, /RECONCILIATION_REQUIRED/);
   assert.doesNotMatch(order, /provider_order_id IS NULL OR provider_order_id=\?/);
 });

@@ -133,7 +133,7 @@ final class LocalPaymentLedger extends SQLiteOpenHelper {
     ContentValues v = new ContentValues(); v.put("local_status", "ORDER_CREATED");
     v.put("provider_order_id", orderId); v.put("updated_at", System.currentTimeMillis());
     int changed = getWritableDatabase().update("payment_ledger", v,
-        "transaction_id=? AND ((local_status='READY_FOR_ONLINE' AND provider_order_id IS NULL) OR (local_status IN ('ORDER_CREATED','RECONCILIATION_REQUIRED') AND provider_order_id=?))", new String[]{tx, orderId});
+        "transaction_id=? AND ((local_status='READY_FOR_ONLINE' AND provider_order_id IS NULL) OR (local_status='ORDER_CREATED' AND provider_order_id=?))", new String[]{tx, orderId});
     if (changed != 1) throw new IllegalStateException("payment_order_transition_rejected_or_reference_conflict");
     return get(tx);
   }
