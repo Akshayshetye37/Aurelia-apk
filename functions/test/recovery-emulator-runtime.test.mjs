@@ -1179,9 +1179,7 @@ test('owner cancellation permits a fresh OTP to start a new alert cycle', async 
   const cooldownRef = db.doc(`recoveryCooldowns/${tenantId}`);
   const firstCooldown = (await cooldownRef.get()).data();
   assert.equal(firstCooldown.state, 'ALERT_PENDING');
-  const cancelled = await callable(functions.cancelRecoveryRequest, {
-    tenantId, deviceIdHash: ownerDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
+  const cancelled = await cancelRecoveryWithPasskey({ tenantId, ownerUid, deviceHash: ownerDeviceHash });
   assert.equal(cancelled.cancelled, true);
   await sleep(1100); // Firebase phone auth_time has one-second granularity.
   const second = await callable(functions.issueRecoveryGrant, {
