@@ -318,7 +318,7 @@ export const getRecoveryOwnerPendingAction = onCall(
     await requireOwnerBinding(owner);
     await requireAttestedOwnerDevice(owner, deviceHash, true);
     const cooldown = (await db.doc("recoveryCooldowns/" + owner.tenantId).get()).data();
-    if (!cooldown || cooldown.ownerUid !== owner.uid ||
+    if (!cooldown || cooldown.ownerUid !== owner.uid || cooldown.deviceIdHash === deviceHash ||
         !["ALERT_PENDING", "APPROVED", "PENDING", "ISSUED"].includes(cooldown.state) ||
         typeof cooldown.alertEventId !== "string" || !/^[0-9a-f-]{36}$/i.test(cooldown.alertEventId)) {
       return { available: false };
@@ -342,6 +342,7 @@ export const getRecoveryOwnerActionReadiness = onCall(
     await requireAttestedOwnerDevice(owner, deviceHash, true);
     const cooldown = (await db.doc("recoveryCooldowns/" + owner.tenantId).get()).data();
     if (!cooldown || cooldown.alertEventId !== requestId || cooldown.ownerUid !== owner.uid ||
+        cooldown.deviceIdHash === deviceHash ||
         !["ALERT_PENDING", "APPROVED", "PENDING", "ISSUED"].includes(cooldown.state)) return { ready: false };
     if (action === "ack") {
       const event = (await db.doc("recoverySecurityEvents/" + requestId).get()).data();
@@ -377,6 +378,7 @@ export const createRecoveryOwnerActionOptions = onCall(
     await requireAttestedOwnerDevice(owner, deviceHash, true);
     const cooldown = (await db.doc("recoveryCooldowns/" + owner.tenantId).get()).data();
     if (!cooldown || cooldown.alertEventId !== requestId || cooldown.ownerUid !== owner.uid ||
+        cooldown.deviceIdHash === deviceHash ||
         !["ALERT_PENDING", "APPROVED", "PENDING", "ISSUED"].includes(cooldown.state)) throw GENERIC;
     const passkeys = await db.collection("tenants/" + owner.tenantId + "/recoveryPasskeys").get();
     const eligible = passkeys.docs.filter(doc => doc.get("ownerUid") === owner.uid &&
@@ -477,7 +479,8 @@ async function completeOwnerAction(request: CallableRequest<unknown>, forcedActi
         ownerDevice.deviceIdHash !== deviceHash || !attestation || attestation.ownerUid !== owner.uid ||
         attestation.status !== "VERIFIED" || !["TRUSTED_ENVIRONMENT", "STRONG_BOX"].includes(attestation.securityLevel) ||
         attestation.verifiedBootState !== "VERIFIED" || attestation.deviceLocked !== true ||
-        !cooldown || cooldown.ownerUid !== owner.uid || cooldown.alertEventId !== requestId) throw GENERIC;
+        !cooldown || cooldown.ownerUid !== owner.uid || cooldown.alertEventId !== requestId ||
+        cooldown.deviceIdHash === deviceHash) throw GENERIC;
     if (action === "ack") {
       const ackToken = requiredString(data.ackToken, 64);
       if (cooldown.state !== "ALERT_PENDING" || !event || event.tenantId !== owner.tenantId ||
