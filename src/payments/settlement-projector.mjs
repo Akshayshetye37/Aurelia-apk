@@ -15,7 +15,11 @@ function paise(row) { return Number.isSafeInteger(row?.amountPaise) ? row.amount
 
 export class SettlementProjector {
   constructor({ journal, verifier, getLease, getState, findBooking, getBalanceDue, persist, readBack,
-    flush = async () => {}, isEmergencyStopped, audit = () => {}, acknowledge = null,
+    flush = async () => {}, isEmergencyStopped, audit = () => {},
+    acknowledge = async ({ commandId, ledgerEntryHash }) => {
+      const { acknowledgeSettlementCommand } = await import("./payment-device-bridge.mjs");
+      return acknowledgeSettlementCommand({ commandId, ledgerEntryHash });
+    },
     autoSettlementEnabled = AUTO_FOLIO_SETTLEMENT_ENABLED, settle = settlePayment,
     now = () => new Date().toISOString(), locks = globalThis.navigator?.locks } = {}) {
     const required = { getLease, getState, findBooking, getBalanceDue, persist, readBack, isEmergencyStopped };
@@ -78,7 +82,17 @@ export class SettlementProjector {
       const digest = await globalThis.crypto.subtle.digest("SHA-256", canonicalBytes(canonicalRow));
       const ledgerEntryHash = Array.from(new Uint8Array(digest),
         byte => byte.toString(16).padStart(2, "0")).join("");
-      await this.acknowledge({ commandId: command.commandId, ledgerEntryHash, command, binding, persistedRow: canonicalRow });
+      const acknowledgement = await this.acknowledge({
+        commandId: command.commandId, ledgerEntryHash, command, binding, persistedRow: canonicalRow
+      });
+      const transportAck = acknowledgement?.acknowledgement;
+      const receipt = acknowledgement?.receipt;
+      if (transportAck?.acknowledged !== true || transportAck?.settlementPosted !== false ||
+          receipt?.accepted !== true || receipt?.settlementPosted !== true ||
+          receipt?.accountingStatus !== "POSTED_TO_LOCAL_FOLIO") {
+        throw fail("ACCOUNTING_RECEIPT_NOT_ACCEPTED",
+          "A transport acknowledgement is not accounting settlement; a separately accepted signed receipt is required.");
+      }
       await this.journal.markApplied(record.key, record.payloadHash);
       return { status: "applied", duplicate: result.duplicate, key, payment: result.payment };
     } catch (error) {
