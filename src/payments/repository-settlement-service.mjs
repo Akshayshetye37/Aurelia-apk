@@ -259,7 +259,7 @@ export async function settlePaymentToRepository({
     bookingId,
     folioId,
     amountPaise,
-    idempotencyKey: String(idempotencyKey || "").trim() || null,
+    idempotencyKey: ledgerKey,
     evidenceId: evidenceId == null ? null : String(evidenceId)
   };
 
