@@ -32,6 +32,8 @@ jobs:
         run: node --check scripts/assert-android-network-security-build.mjs
       - name: Install project dependencies
         run: npm install --no-audit --no-fund
+      - name: Build web assets required by Capacitor sync
+        run: npm run build
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
