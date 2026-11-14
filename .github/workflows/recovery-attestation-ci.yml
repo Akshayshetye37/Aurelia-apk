@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - work/p0-storage-hardening
+      - 'work/**'
     paths:
       - "payment-backend/attestation-verifier/**"
       - "payment-backend/Dockerfile.attestation"
@@ -19,7 +19,7 @@ on:
       - "tests/otp-recovery-*.test.mjs"
   pull_request:
     branches:
-      - work/p0-storage-hardening
+      - '**'
     paths:
       - "payment-backend/attestation-verifier/**"
       - "payment-backend/Dockerfile.attestation"

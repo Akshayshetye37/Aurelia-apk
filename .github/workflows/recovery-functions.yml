@@ -3,7 +3,7 @@ name: Recovery Functions CI
 on:
   workflow_dispatch:
   push:
-    branches: [work/p0-storage-hardening]
+    branches: ['work/**']
     paths:
       - 'functions/**'
       - 'firestore.rules'

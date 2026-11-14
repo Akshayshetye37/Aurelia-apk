@@ -3,7 +3,7 @@ name: OTP Recovery Android Instrumentation
 on:
   workflow_dispatch:
   push:
-    branches: [work/p0-storage-hardening]
+    branches: ['work/**']
     paths:
       - 'android/templates/**'
       - 'scripts/patch-android.js'
