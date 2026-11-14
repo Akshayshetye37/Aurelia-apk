@@ -341,6 +341,7 @@ test('pending recovery-key attempts survive crashes without penalizing a verifie
   const flow = manager.slice(start, end);
   assert.ok(flow.indexOf('recoveryLockout.beginAttempt()') < flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
   assert.ok(flow.indexOf('crypto.unwrapDataKeyWithRecovery') < flow.indexOf('recoveryLockout.completeAttempt()'));
+  assert.match(flow, /catch \(failure: Exception\) \{[\s\S]*?key\.fill\(0\)/);
   assert.ok(flow.indexOf('recoveryLockout.registerFailure()') > flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
   assert.match(lockout, /if \(current.pendingAttempt\)[\s\S]*?failures = \(current.failures \+ 1\)/);
   assert.match(lockout, /fun completeAttempt\(\)[\s\S]*?pendingAttempt = false/);

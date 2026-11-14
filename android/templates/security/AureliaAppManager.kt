@@ -193,7 +193,14 @@ class AureliaAppManager(
                 recoveryLockout.registerFailure()
                 throw SecurityException("Recovery key verification failed.", failure)
             }
-            recoveryLockout.completeAttempt()
+            try {
+                recoveryLockout.completeAttempt()
+            } catch (failure: Exception) {
+                // A DEK that was successfully unwrapped must not remain in
+                // memory if the durable pending-attempt marker cannot be cleared.
+                key.fill(0)
+                throw failure
+            }
             key
         } finally {
             recoveryKey.fill(0)
