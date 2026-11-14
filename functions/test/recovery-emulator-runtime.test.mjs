@@ -1347,7 +1347,8 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
   const wrongAction = await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId,
     challengeId: begin.challengeId, credentialResponse: assertion
-  }, ownerAuth(ownerUid, tenantId)));
+  }, ownerAuth(ownerUid, tenantId)),
+  'an ack challenge cannot be submitted as a cancel action');
   const challengeAfterRejected = (await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).data();
   assert.equal(challengeAfterRejected.state, 'PENDING', 'rejected cross-uid and wrong-action attempts do not consume the challenge');
 
