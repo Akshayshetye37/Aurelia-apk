@@ -69,3 +69,12 @@ test('backend reconciliation binds an optional checkout payment ID to provider A
   assert.match(paymentServer, /remote\.paymentId !== requestedPaymentId/);
   assert.match(paymentServer, /provider_amount_currency_or_order_mismatch/);
 });
+
+test('verified capture replay is idempotent only for the same provider payment reference', () => {
+  const start = ledger.indexOf('synchronized JSONObject recordVerifiedCapture');
+  const end = ledger.indexOf('synchronized JSONObject get(', start);
+  const capture = ledger.slice(start, end);
+  assert.match(capture, /provider_payment_id IS NULL OR provider_payment_id=\?/);
+  assert.match(capture, /local_status IN \('ORDER_CREATED','AWAITING_PROVIDER','CAPTURED_UNPOSTED','RECONCILIATION_REQUIRED'\)/);
+  assert.match(capture, /payment_capture_transition_rejected/);
+});
