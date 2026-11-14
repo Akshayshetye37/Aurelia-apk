@@ -56,7 +56,12 @@ function requireFreshPrimaryOwner(request: CallableRequest<unknown>): { uid: str
 function requireFreshPasskeyOwner(request: CallableRequest<unknown>): { uid: string; tenantId: string } {
   const owner = requireFreshPrimaryOwner(request);
   const token = request.auth?.token;
-  if (!token || token.ownerAuthFactor !== "passkey" || token.email_verified !== true) throw GENERIC;
+  const now = Math.floor(Date.now() / 1000);
+  const factorAuthTime = Number(token?.ownerAuthFactorAuthTime);
+  if (!token || token.ownerAuthFactor !== "passkey" || token.email_verified !== true ||
+      !Number.isInteger(factorAuthTime) || factorAuthTime > now || now - factorAuthTime >= 300) {
+    throw GENERIC;
+  }
   return owner;
 }
 
