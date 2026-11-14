@@ -56,7 +56,9 @@ async function callable(fn, data, requestAuth = null, ip = data?.tenantId ? emul
   assert.equal(typeof fn.run, 'function', 'Firebase callable exposes its runtime handler');
   if (fn === functions.acknowledgeRecoveryOwnerAlert && requestAuth?.__testPasskey === true) {
     const options = requestAuth.__testPasskeyOptions ?? {};
-    const owner = ownerAuth(requestAuth.uid, data.tenantId, options);
+    const owner = ownerAuth(requestAuth.uid, data.tenantId, {
+      ...options, provider: 'custom', factor: 'email_link', emailVerified: options.emailVerified ?? true
+    });
     const ceremony = await callable(functions.createRecoveryOwnerActionOptions, {
       tenantId: data.tenantId, deviceIdHash: data.deviceIdHash,
       action: 'ack', requestId: data.eventId
@@ -580,7 +582,7 @@ test('independent primary owner cancels the old hold and fresh OTP starts a new 
     'cancellation audit is limited to tenant, hashed device identity, event type and timestamp');
   const replayedCancellation = await callable(functions.cancelRecoveryRequest, {
     tenantId, deviceIdHash: independentDeviceHash
-  }, ownerAuth(ownerUid, tenantId, { factor: 'passkey' }));
+  }, ownerAuth(ownerUid, tenantId));
   assert.equal(replayedCancellation.cancelled, false, 'replayed cancellation is a terminal no-op');
   const cancellationEvents = await db.collection('recoverySecurityEvents')
     .where('tenantId', '==', tenantId).get();
