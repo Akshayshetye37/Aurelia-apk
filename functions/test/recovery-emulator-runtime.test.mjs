@@ -1250,6 +1250,21 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: '00000000-0000-4000-8000-000000000001',
     challengeId: begin.challengeId, credentialResponse: assertion, ackToken: 'x'.repeat(43)
   }, ownerAuth(ownerUid, tenantId)), 'cross-request challenge use is rejected');
+  const wrongChallengeAssertion = authenticator.assert({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: 'z'.repeat(43)
+  });
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
+    challengeId: begin.challengeId, credentialResponse: wrongChallengeAssertion, ackToken: 'x'.repeat(43)
+  }, ownerAuth(ownerUid, tenantId)), 'an assertion signed for another challenge must be rejected');
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).get('state'), 'PENDING',
+    'wrong-challenge assertions must not consume the server challenge');
+
+  const readiness = await callable(functions.getRecoveryOwnerActionReadiness, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(readiness.ready, true, 'readiness requires an eligible passkey and configured RP association');
+
   const noUvAssertion = authenticator.assert({
     rpId: RP_ID, origin: RP_ORIGIN, challenge: begin.options.challenge, userVerified: false
   });

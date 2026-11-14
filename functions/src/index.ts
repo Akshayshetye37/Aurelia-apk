@@ -844,6 +844,7 @@ export {
   completeRecoveryPasskeyEnrollment,
   retryRecoveryPasskeyEnrollmentAlert,
   createRecoveryOwnerActionOptions,
+  getRecoveryOwnerActionReadiness,
   completeRecoveryOwnerPasskeyAction,
   acknowledgeRecoveryOwnerAlert
 } from "./passkeys.js";

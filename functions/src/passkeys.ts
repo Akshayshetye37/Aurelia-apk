@@ -20,6 +20,7 @@ const db = getFirestore();
 const RP_ID = defineString("WEBAUTHN_RP_ID", { default: "" });
 const RP_NAME = defineString("WEBAUTHN_RP_NAME", { default: "Aurelia PMS" });
 const ANDROID_ORIGINS = defineString("WEBAUTHN_ANDROID_ORIGINS", { default: "" });
+const ASSETLINKS_VERIFIED = defineString("WEBAUTHN_ASSETLINKS_VERIFIED", { default: "false" });
 const REGION = "asia-south1";
 const GENERIC = new HttpsError("permission-denied", "Verification failed.");
 const CHALLENGE_TTL_MS = 2 * 60_000;
@@ -57,7 +58,8 @@ function rpConfig(): { rpID: string; rpName: string; origins: string[] } {
   const rpID = RP_ID.value().trim().toLowerCase();
   const rpName = RP_NAME.value().trim();
   const origins = ANDROID_ORIGINS.value().split(",").map(value => value.trim()).filter(Boolean);
-  if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))+$/.test(rpID) ||
+  const emulator = process.env.FUNCTIONS_EMULATOR === "true";
+  if ((!emulator && ASSETLINKS_VERIFIED.value().trim().toLowerCase() !== "true") || !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))+$/.test(rpID) ||
       !rpName || rpName.length > 64 || origins.length === 0 ||
       origins.some(origin => !/^android:apk-key-hash:[A-Za-z0-9_-]{43}$/.test(origin))) {
     throw new HttpsError("failed-precondition", "Passkey relying-party configuration is incomplete.");
@@ -304,6 +306,40 @@ export const retryRecoveryPasskeyEnrollmentAlert = onCall(
     await passkeyRef.update({ state: "COOLDOWN", alertAccepted: true, alertAcceptedAt: FieldValue.serverTimestamp() });
     await eventRef.update({ notificationDelivery: "FCM_ACCEPTED", notificationAcceptedAt: FieldValue.serverTimestamp() });
     return { alertAccepted: true, usableAfterMs: Number(passkey.activeAfterMs) };
+  }
+);
+
+export const getRecoveryOwnerActionReadiness = onCall(
+  { region: REGION, enforceAppCheck: true },
+  async request => {
+    requireEnabled();
+    const owner = ownerFromFreshEmailLink(request);
+    if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
+    const action = request.data?.action as Action;
+    if (action !== "ack" && action !== "cancel") throw GENERIC;
+    const requestId = requiredString(request.data?.requestId, 64);
+    if (!/^[0-9a-f-]{36}$/i.test(requestId)) throw GENERIC;
+    const deviceHash = requiredString(request.data?.deviceIdHash, 64);
+    await requireOwnerBinding(owner);
+    await requireAttestedOwnerDevice(owner, deviceHash, true);
+    const cooldown = (await db.doc("recoveryCooldowns/" + owner.tenantId).get()).data();
+    if (!cooldown || cooldown.alertEventId !== requestId || cooldown.ownerUid !== owner.uid ||
+        !["ALERT_PENDING", "APPROVED", "PENDING", "ISSUED"].includes(cooldown.state)) return { ready: false };
+    if (action === "ack") {
+      const event = (await db.doc("recoverySecurityEvents/" + requestId).get()).data();
+      if (!event || event.tenantId !== owner.tenantId || event.ownerUid !== owner.uid ||
+          event.requestId !== requestId || event.type !== "RECOVERY_COOLDOWN_STARTED" ||
+          event.acknowledgedAt || Number(event.ackTokenExpiresAt) <= Date.now() ||
+          !Array.isArray(cooldown.alertedDeviceHashes) || !cooldown.alertedDeviceHashes.includes(deviceHash) ||
+          typeof event.ackTokenHashes?.[deviceHash] !== "string") return { ready: false };
+    }
+    const passkeys = await db.collection("tenants/" + owner.tenantId + "/recoveryPasskeys").get();
+    const eligible = passkeys.docs.some(doc => doc.get("ownerUid") === owner.uid &&
+      doc.get("state") === "COOLDOWN" && doc.get("alertAccepted") === true &&
+      Number(doc.get("activeAfterMs")) <= Date.now());
+    if (!eligible) return { ready: false };
+    try { rpConfig(); } catch { return { ready: false }; }
+    return { ready: true };
   }
 );
 
