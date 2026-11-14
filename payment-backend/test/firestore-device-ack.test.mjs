@@ -107,6 +107,26 @@ test("identical device acknowledgement is idempotent without becoming settlement
   assert.equal(result.accountingStatus, "PENDING_VERIFICATION");
 });
 
+test("duplicate acknowledgement after receipt acceptance remains transport-only", async () => {
+  const { db, commandPath } = fixture("RECEIPT_ACCEPTED");
+  db.documents.get(commandPath).deviceReceiptId = "device_receipt_001";
+  const result = await acknowledgeSettlementCommand({
+    db, tenantId, deviceId, commandId, body: body({}), now: () => now
+  });
+  assert.equal(result.duplicate, true);
+  assert.equal(result.settlementPosted, false);
+  assert.equal(result.accountingStatus, "POSTED_TO_LOCAL_FOLIO");
+});
+
+test("accepted receipts are never leased again", async () => {
+  const { db, commandPath } = fixture("RECEIPT_ACCEPTED");
+  const result = await leaseNextSettlementCommand({
+    db, tenantId, deviceId, signer: null, settlementAllowed: true, now: () => now
+  });
+  assert.equal(result, null);
+  assert.equal(db.documents.get(commandPath).status, "RECEIPT_ACCEPTED");
+});
+
 test("conflicting receipt cannot overwrite a prior acknowledgement", async () => {
   const { db, commandPath } = fixture("DEVICE_ACKNOWLEDGED_PENDING_VERIFICATION");
   db.documents.get(commandPath).deviceReceiptId = "device_receipt_001";

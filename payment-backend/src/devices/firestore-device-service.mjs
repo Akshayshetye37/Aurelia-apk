@@ -195,7 +195,7 @@ export async function leaseNextSettlementCommand({
     const command = commandSnap.data();
     const current = now();
     const leaseExpires = command.leaseExpiresAt?.toDate?.()?.getTime?.() || 0;
-    if (["PROCESSED", "DEVICE_ACKNOWLEDGED_PENDING_VERIFICATION"].includes(command.status) ||
+    if (["PROCESSED", "DEVICE_ACKNOWLEDGED_PENDING_VERIFICATION", "RECEIPT_ACCEPTED"].includes(command.status) ||
         command.status === "LEASED" && leaseExpires > current.getTime()) return null;
     if (!["PENDING", "LEASED"].includes(command.status)) throw new Error("payment_device_command_state_invalid");
     const leaseToken = crypto.randomBytes(32).toString("base64url");
@@ -281,6 +281,14 @@ export async function acknowledgeSettlementCommand({
         accountingStatus: "PENDING_VERIFICATION",
         cursor: deviceSnap.data().lastAckedSequence
       };
+    }
+
+    if (command.status === "RECEIPT_ACCEPTED") {
+      if (command.deviceReceiptId !== deviceReceiptId || command.payloadHash !== body.payloadHash) {
+        throw new Error("payment_device_acknowledgement_conflict");
+      }
+      return { acknowledged: true, duplicate: true, settlementPosted: false,
+        accountingStatus: "POSTED_TO_LOCAL_FOLIO", cursor: deviceSnap.data().lastAckedSequence };
     }
 
     // Historical PROCESSED records were created by an acknowledgement path
