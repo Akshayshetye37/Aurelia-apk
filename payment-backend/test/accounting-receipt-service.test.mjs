@@ -17,7 +17,7 @@ function receipt(overrides={}){const p={tenantId,deviceId,commandId,sequenceId:1
  currency:"INR",folioId:"folio_001",ledgerEntryHash:"a".repeat(64),issuedAt:"2026-11-14T11:59:00.000Z",...overrides};
  return {...p,signature:crypto.sign("sha256",accountingReceiptSigningBytes(p),keys.privateKey).toString("base64url")};}
 function fixture(r){const id=accountingReceiptId(r),dev=`paymentDevices/${tenantId}/devices/${deviceId}`,
- cmd=dev+"/commands/1",lock="paymentFolioLocks/"+hash(tenantId+":"+r.folioId),inbox="paymentWebhookInbox/webhook_001";
+ cmd=dev+"/commands/1",lock="paymentFolioLocks/"+hash(tenantId+":"+r.folioId),folio="paymentFolios/"+hash(tenantId+":"+r.folioId),inbox="paymentWebhookInbox/webhook_001";
  const db=new DB({[dev]:{tenantId,deviceId,status:"ACTIVE",publicKeySpkiBase64,lastAckedSequence:1},
  [cmd]:{tenantId,deviceId,commandId,sequenceId:1,transactionId:intentId,provider:"razorpay",providerAccountId:"merchant_001",
  providerPaymentId:"pay_001",amountMinor:150000,currency:"INR",folioId:"folio_001",status:"DEVICE_ACKNOWLEDGED_PENDING_VERIFICATION",
@@ -26,15 +26,17 @@ function fixture(r){const id=accountingReceiptId(r),dev=`paymentDevices/${tenant
  providerOrderId:"order_001",providerPaymentId:"pay_001",amountMinor:150000,currency:"INR",folioId:"folio_001",
  state:"CAPTURED",providerVerifiedStatus:"CAPTURED",accountingStatus:"PENDING"},
  [lock]:{tenantId,folioId:r.folioId,intentId,active:true,state:"CAPTURED_PENDING_ACCOUNTING"},
+ [folio]:{tenantId,folioId:r.folioId,currency:"INR",status:"open",balanceMinor:200000,revision:0},
  [inbox]:{tenantId,accountingStatus:"PENDING",processingStatus:"CAPTURED_VERIFIED_PENDING_ACCOUNTING"}});
- return {db,cmd,lock,inbox};}
+ return {db,cmd,lock,folio,inbox};}
 const check=(o={})=>async()=>({captured:true,provider:"razorpay",environment:"test",providerAccountId:"merchant_001",
  orderId:"order_001",paymentId:"pay_001",amountMinor:150000,currency:"INR",observedAt:now.toISOString(),...o});
 const accept=(r,db,verifyProviderStatus=check())=>verifyAndAcceptAccountingReceipt({db,tenantId,deviceId,commandId,receipt:r,verifyProviderStatus,now:()=>now});
-test("signed receipt plus exact provider capture posts once",async()=>{const r=receipt(),{db,cmd,lock,inbox}=fixture(r);
+test("signed receipt plus exact provider capture posts once",async()=>{const r=receipt(),{db,cmd,lock,folio,inbox}=fixture(r);
  const x=await accept(r,db);assert.equal(x.accepted,true);assert.equal(x.duplicate,false);assert.equal(x.settlementPosted,true);
  assert.equal(db.docs.get(cmd).status,"RECEIPT_ACCEPTED");assert.equal(db.docs.get(`paymentIntents/${intentId}`).accountingStatus,"POSTED_TO_LOCAL_FOLIO");
- assert.equal(db.docs.get(lock).active,false);assert.equal(db.docs.get(inbox).accountingStatus,"POSTED");});
+ assert.equal(db.docs.get(lock).active,false);assert.equal(db.docs.get(folio).balanceMinor,50000);
+ assert.equal(db.docs.get(inbox).accountingStatus,"POSTED");});
 test("identical receipt replay is idempotent",async()=>{const r=receipt(),{db}=fixture(r);assert.equal((await accept(r,db)).duplicate,false);assert.equal((await accept(r,db)).duplicate,true);});
 test("forged signature is rejected",async()=>{const r=receipt(),{db}=fixture(r);await assert.rejects(accept({...r,signature:crypto.randomBytes(72).toString("base64url")},db),/accounting_receipt_signature_invalid/);});
 test("receipt replayed against another command is rejected",async()=>{const r=receipt(),{db}=fixture(r);await assert.rejects(verifyAndAcceptAccountingReceipt({db,tenantId,deviceId,
