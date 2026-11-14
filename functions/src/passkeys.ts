@@ -233,11 +233,13 @@ export const completeRecoveryPasskeyEnrollment = onCall(
       throw new HttpsError("failed-precondition", "An independent owner notification device is required before adding a passkey.");
     }
     const activeAfterMs = Date.now() + PASSKEY_COOLDOWN_MS;
+    const ownerBindingRef = db.doc("tenants/" + owner.tenantId + "/security/recoveryOwner");
     await db.runTransaction(async tx => {
-      const currentChallenge = await tx.get(ref);
-      const currentPasskey = await tx.get(passkeyRef);
+      const [currentChallenge, currentPasskey, currentOwnerBinding] = await Promise.all([
+        tx.get(ref), tx.get(passkeyRef), tx.get(ownerBindingRef)
+      ]);
       checkChallenge(currentChallenge.data(), owner, "enroll", deviceHash);
-      if (currentPasskey.exists) throw GENERIC;
+      if (currentOwnerBinding.data()?.ownerUid !== owner.uid || currentPasskey.exists) throw GENERIC;
       tx.update(ref, { state: "CONSUMED", consumedAt: FieldValue.serverTimestamp() });
       tx.create(passkeyRef, {
         tenantId: owner.tenantId, ownerUid: owner.uid, credentialId: credential.id,
@@ -456,15 +458,17 @@ async function completeOwnerAction(request: CallableRequest<unknown>, forcedActi
   const eventRef = db.doc("recoverySecurityEvents/" + requestId);
   const ownerDeviceRef = db.doc("recoveryOwnerDevices/" + owner.tenantId + "_" + deviceHash);
   const attestationRef = db.doc("recoveryDeviceAttestations/" + owner.tenantId + "_" + deviceHash);
+  const ownerBindingRef = db.doc("tenants/" + owner.tenantId + "/security/recoveryOwner");
   const now = Date.now();
   const eligibleAt = now + 24 * 60 * 60_000;
   const result = await db.runTransaction(async tx => {
-    const [challengeNow, credentialNow, cooldownNow, eventNow, ownerDeviceNow, attestationNow] = await Promise.all([
+    const [challengeNow, credentialNow, cooldownNow, eventNow, ownerDeviceNow, attestationNow, ownerBindingNow] = await Promise.all([
       tx.get(ref), tx.get(credentialRef), tx.get(cooldownRef), tx.get(eventRef),
-      tx.get(ownerDeviceRef), tx.get(attestationRef)
+      tx.get(ownerDeviceRef), tx.get(attestationRef), tx.get(ownerBindingRef)
     ]);
     const currentChallenge = challengeNow.data();
     checkChallenge(currentChallenge, owner, "OWNER_ACTION", deviceHash, requestId, action);
+    if (ownerBindingNow.data()?.ownerUid !== owner.uid) throw GENERIC;
     const currentCredential = credentialNow.data();
     if (!currentCredential || currentCredential.ownerUid !== owner.uid ||
         currentCredential.credentialId !== credentialId ||
