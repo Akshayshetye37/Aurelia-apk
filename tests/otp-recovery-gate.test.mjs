@@ -65,6 +65,7 @@ test('recovery phone is encrypted with a non-authentication-bound Android Keysto
 
 test('Android generation copies the OTP recovery gate and encrypted phone store', () => {
   const patcher = read('scripts/patch-android.js');
+  const passkeys = read('functions/src/passkeys.ts');
   assert.match(patcher, /'RecoveryGate\.kt'/);
   assert.match(patcher, /RecoveryPhoneStore\.kt/);
 });
@@ -214,6 +215,9 @@ test('Android owner alert uses Credential Manager for registration and server-ve
   assert.match(activity, /authenticationResponseJson/);
   assert.match(activity, /createRecoveryPasskeyEnrollmentOptions/);
   assert.match(activity, /completeRecoveryPasskeyEnrollment/);
+  assert.match(activity, /retryRecoveryPasskeyEnrollmentAlert/);
+  assert.match(activity, /alertAccepted/);
+  assert.match(passkeys, /credentialHash: hash, usableAfterMs/);
   assert.match(activity, /createRecoveryOwnerActionOptions/);
   assert.match(activity, /acknowledgeRecoveryOwnerAlert/);
   assert.match(activity, /challengeId/);

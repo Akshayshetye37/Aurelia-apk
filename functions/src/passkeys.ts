@@ -268,7 +268,7 @@ export const completeRecoveryPasskeyEnrollment = onCall(
         }
       });
     }
-    return { registered: true, alertAccepted, usableAfterMs: activeAfterMs };
+    return { registered: true, alertAccepted, credentialHash: hash, usableAfterMs: activeAfterMs };
   }
 );
 

@@ -399,14 +399,31 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
                             "tenantId" to tenantId, "deviceIdHash" to deviceHash,
                             "challengeId" to challengeId, "credentialResponse" to credentialResponse
                         )).addOnCompleteListener { completion ->
-                            val enrolled = completion.isSuccessful &&
-                                (completion.result?.data as? Map<*, *>)?.get("registered") == true
-                            status.text = if (enrolled) {
-                                "Passkey enrolled. The independent owner alert was accepted; recovery phone setup can continue."
+                            val result = completion.result?.data as? Map<*, *>
+                            val registered = completion.isSuccessful && result?.get("registered") == true
+                            val alertAccepted = result?.get("alertAccepted") == true
+                            val credentialHash = result?.get("credentialHash") as? String
+                            if (!registered || credentialHash.isNullOrBlank()) {
+                                status.text = "The server rejected passkey enrollment. Recovery phone registration remains locked."
+                                onComplete(false)
+                            } else if (alertAccepted) {
+                                status.text = "Passkey enrolled. The independent owner alert was accepted; recovery phone setup can continue."
+                                onComplete(true)
                             } else {
-                                "The server rejected passkey enrollment. Recovery phone registration remains locked."
+                                status.text = "Passkey enrolled, but the independent owner alert needs retry. Recovery remains locked."
+                                functions.getHttpsCallable("retryRecoveryPasskeyEnrollmentAlert")
+                                    .call(mapOf("credentialHash" to credentialHash))
+                                    .addOnCompleteListener { retry ->
+                                        val notified = retry.isSuccessful &&
+                                            (retry.result?.data as? Map<*, *>)?.get("alertAccepted") == true
+                                        status.text = if (notified) {
+                                            "Passkey enrolled and the independent owner alert was accepted. Recovery phone setup can continue."
+                                        } else {
+                                            "The independent owner alert was not accepted. Recovery phone registration remains locked."
+                                        }
+                                        onComplete(notified)
+                                    }
                             }
-                            onComplete(enrolled)
                         }
                     } catch (_: Exception) {
                         status.text = "Passkey creation was cancelled or unavailable. Recovery phone registration remains locked."
