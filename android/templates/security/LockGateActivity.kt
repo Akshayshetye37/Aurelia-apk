@@ -813,7 +813,8 @@ class LockGateActivity : FragmentActivity() {
     }
 
     override fun onBackPressed() {
-        // Launcher is the only entry path; back exits instead of bypassing the gate.
+        // Closing the recovery UI explicitly revokes the active grant.
+        RecoveryGate.clear()
         super.onBackPressed()
     }
 }
