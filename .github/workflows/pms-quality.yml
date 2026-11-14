@@ -50,6 +50,45 @@ jobs:
       - name: Build production web bundle
         run: npm run build
 
+      - name: Set up Java for Android resource merge verification
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Generate Android project for variant resource verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          if [[ -d android/templates ]]; then
+            mv android/templates "$template_dir"
+          fi
+          if [[ -d android ]]; then
+            rmdir android
+          fi
+          npx cap add android
+          if [[ -d "$template_dir" ]]; then
+            mkdir -p android/templates
+            cp -a "$template_dir/." android/templates/
+          fi
+          test -f android/gradlew
+          test -f android/app/build.gradle
+
+      - name: Apply Android HTTPS policy and sync native project
+        run: |
+          node scripts/patch-android.js
+          npx cap sync android
+
+      - name: Merge generated Android release and debug resources
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace processReleaseResources processDebugResources
+
+      - name: Assert generated release and debug CA trust resources
+        run: node scripts/assert-android-network-security-build.mjs
+
       - name: Enforce production asset privacy boundaries
         run: node scripts/check-release-boundaries.mjs
 
