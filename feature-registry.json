@@ -2917,11 +2917,11 @@
     }
   ],
   "test_baseline": {
-    "minimum_tests": 783,
+    "minimum_tests": 784,
     "scope": [
       "tests/**/*.test.{mjs,js,cjs}",
       "payment-backend/test/**/*.test.{mjs,js,cjs}"
     ],
-    "policy": "Run every discovered root, nested and payment-backend test file in one Node test process; fail on non-zero failures, any skipped tests, missing summary, or total below the verified 783-test baseline. Raise this floor only after reviewing deliberate test-suite expansion."
+    "policy": "Run every discovered root, nested and payment-backend test file in one Node test process; fail on non-zero failures, any skipped tests, missing summary, or total below the verified 784-test baseline. Raise this floor only after reviewing deliberate test-suite expansion."
   }
 }
