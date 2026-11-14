@@ -9,7 +9,7 @@ const fail=code=>{throw new Error(code);};
 const unsigned=r=>Object.fromEntries(FIELDS.map(k=>[k,r[k]]));
 export const accountingReceiptSigningBytes=r=>canonicalBytes({type:TYPE,receipt:unsigned(r)});
 export const accountingReceiptId=r=>sha(accountingReceiptSigningBytes(r));
-function validate({tenantId,deviceId,commandId,receipt}){
+function validate({tenantId,deviceId,commandId,receipt,currentTime}){
  if(!receipt||typeof receipt!=="object"||Array.isArray(receipt)||
  Object.keys(receipt).sort().join(",")!==[...FIELDS,"signature"].sort().join(",")||
  !ID.test(tenantId||"")||!ID.test(deviceId||"")||!UUID.test(commandId||"")||
@@ -21,7 +21,7 @@ function validate({tenantId,deviceId,commandId,receipt}){
  typeof receipt.issuedAt!=="string"||!Number.isFinite(Date.parse(receipt.issuedAt))||
  typeof receipt.signature!=="string"||!/^[A-Za-z0-9_-]{80,128}$/.test(receipt.signature))
  throw new TypeError("invalid_accounting_receipt");
- if(Date.parse(receipt.issuedAt)>Date.now()+300000)fail("accounting_receipt_issued_in_future");
+ if(Date.parse(receipt.issuedAt)>currentTime.getTime()+300000)fail("accounting_receipt_issued_in_future");
  return unsigned(receipt);
 }
 function matches(r,c,i,tenant,device,command){
@@ -34,7 +34,8 @@ function matches(r,c,i,tenant,device,command){
 }
 export async function verifyAndAcceptAccountingReceipt({db,tenantId,deviceId,commandId,receipt,verifyProviderStatus,now=()=>new Date()}){
  if(!db||typeof verifyProviderStatus!=="function")throw new TypeError("accounting_receipt_dependencies_required");
- const payload=validate({tenantId,deviceId,commandId,receipt}), bytes=canonicalBytes({type:TYPE,receipt:payload});
+ const currentTime=now();
+ const payload=validate({tenantId,deviceId,commandId,receipt,currentTime}), bytes=canonicalBytes({type:TYPE,receipt:payload});
  const receiptId=sha(bytes), signature=Buffer.from(receipt.signature,"base64url");
  if(signature.length<64||signature.length>80)fail("accounting_receipt_signature_invalid");
  const deviceRef=paymentDeviceRef(db,tenantId,deviceId);
@@ -58,7 +59,7 @@ export async function verifyAndAcceptAccountingReceipt({db,tenantId,deviceId,com
  const receiptRef=db.collection("paymentAccountingReceipts").doc(sha(tenantId+":"+commandId+":"+receiptId));
  const lockRef=db.collection("paymentFolioLocks").doc(sha(tenantId+":"+payload.folioId));
  const inboxRef=command.webhookInboxId?db.collection("paymentWebhookInbox").doc(command.webhookInboxId):null;
- const acceptedAt=now();
+ const acceptedAt=currentTime;
  return db.runTransaction(async tx=>{
   const refs=[tx.get(deviceRef),tx.get(commandRef),tx.get(intentRef),tx.get(receiptRef),tx.get(lockRef)];
   if(inboxRef)refs.push(tx.get(inboxRef));
