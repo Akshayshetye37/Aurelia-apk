@@ -1437,3 +1437,60 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
   }, ownerAuth(ownerUid, tenantId));
   assert.equal(cancelled.cancelled, true, 'owner may cancel with a valid passkey assertion');
 });
+
+test('owner binding is revalidated atomically before passkey cancellation mutates recovery state', async () => {
+  const tenantId = 'tenant-webauthn-owner-binding-race';
+  const ownerUid = 'owner-webauthn-owner-binding-race';
+  const phone = '+15555550209';
+  const recoveryDeviceHash = 'e'.repeat(64);
+  const independentDeviceHash = 'f'.repeat(64);
+  await seedTenant({
+    tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, independentDeviceHash]
+  });
+  const phoneToken = await phoneAuthToken(phone);
+  await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'r'.repeat(43), phoneIdToken: phoneToken
+  });
+  const cooldown = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
+  const requestId = cooldown.alertEventId;
+  const ceremony = await callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: independentDeviceHash, action: 'cancel', requestId
+  }, ownerAuth(ownerUid, tenantId));
+  const authenticator = authenticators.get(tenantId);
+  const credentialResponse = authenticator.assert({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: ceremony.options.challenge
+  });
+
+  const ownerBindingRef = db.doc(`tenants/${tenantId}/security/recoveryOwner`);
+  const originalDescriptor = Object.getOwnPropertyDescriptor(db, 'runTransaction');
+  const originalRunTransaction = db.runTransaction.bind(db);
+  let transactionCalls = 0;
+  Object.defineProperty(db, 'runTransaction', {
+    configurable: true,
+    writable: true,
+    value: async (updateFunction, options) => {
+      transactionCalls += 1;
+      // First transaction spends the rate-limit counter. Change ownership only
+      // immediately before the later critical action transaction begins.
+      if (transactionCalls === 2) await ownerBindingRef.update({ ownerUid: 'replacement-owner' });
+      return originalRunTransaction(updateFunction, options);
+    }
+  });
+  try {
+    await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+      tenantId, deviceIdHash: independentDeviceHash, action: 'cancel', requestId,
+      challengeId: ceremony.challengeId, credentialResponse
+    }, ownerAuth(ownerUid, tenantId)), 'a stale owner binding must not authorize cancellation');
+  } finally {
+    if (originalDescriptor) Object.defineProperty(db, 'runTransaction', originalDescriptor);
+    else delete db.runTransaction;
+    await ownerBindingRef.update({ ownerUid });
+  }
+
+  assert.equal(transactionCalls, 2, 'the owner binding changes after preflight and before the state transaction');
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${ceremony.challengeId}`).get()).get('state'), 'PENDING',
+    'a rejected owner-binding race does not consume the valid passkey challenge');
+  assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).get('state'), 'ALERT_PENDING',
+    'a rejected owner-binding race leaves the recovery request unchanged');
+});
