@@ -222,6 +222,8 @@ export async function settlePaymentToRepository({
       throw fail("PAYMENT_EVIDENCE_STATE_DIVERGENCE",
         "A matching payment exists but its evidence is not marked approved; reconcile the folio before proceeding.");
     }
+    if (Array.isArray(state.led)) state.led.splice(0, state.led.length, ...clone(canonicalState.led || []));
+    else state.led = clone(canonicalState.led || []);
     Object.assign(booking, clone(workingBooking));
     const cacheRefreshed = refreshLegacyCompatibilityCache(legacyStorage, canonicalState);
     return Object.freeze({ ...result, duplicate: true, canonical: true, ledger: ledgerRow,
