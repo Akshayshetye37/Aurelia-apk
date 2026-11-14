@@ -145,6 +145,7 @@ test("canonical manual payment appends one integer-paise ledger row in the same 
   assert.deepEqual(state.led, [rows[0].data]);
   assert.deepEqual(rows[0].data, {
     id: rows[0].id,
+    recordType: "AURELIA_FINANCIAL_LEDGER_ENTRY_V1",
     tenantId: "tenant-local",
     propertyId: "property-local",
     deviceId: "device-local",
@@ -200,6 +201,7 @@ test("domain projection preserves stable IDs for canonical ledger entries", asyn
   const { bridge } = fixture();
   const entry = {
     id: "payment:0123456789abcdef",
+    recordType: "AURELIA_FINANCIAL_LEDGER_ENTRY_V1",
     tenantId: "tenant-local",
     propertyId: "property-local",
     deviceId: "device-local",
