@@ -27,7 +27,7 @@ class FakeFirestore {
     const tx = {
       get: async ref => {
         const value = this.documents.get(ref.path);
-        return { exists: value !== undefined, data: () => structuredClone(value) };
+        return { exists: value !== undefined, data: () => ({ ...value }) };
       },
       update: (ref, patch) => writes.push({ path: ref.path, patch })
     };
@@ -46,7 +46,16 @@ function fixture(status = "LEASED") {
     [commandPath]: {
       commandId, status, leaseTokenHash: hash(leaseToken), payloadHash,
       leaseExpiresAt: { toDate: () => new Date(now.getTime() + 60_000) },
-      transactionId: "intent_001", folioId: "folio_001"
+      transactionId: "intent_001", folioId: "folio_001", webhookInboxId: "webhook_001"
+    },
+    ["paymentIntents/intent_001"]: {
+      tenantId, accountingStatus: "CAPTURED_PENDING_ACCOUNTING"
+    },
+    ["paymentWebhookInbox/webhook_001"]: {
+      tenantId, accountingStatus: "PENDING", processingStatus: "CAPTURED"
+    },
+    ["paymentFolioLocks/" + hash(tenantId + ":folio_001")]: {
+      intentId: "intent_001", active: true, state: "LOCKED"
     }
   });
   return { db, devicePath, commandPath };
@@ -72,6 +81,15 @@ test("device acknowledgement never claims PMS posting or releases accounting aut
   assert.equal(Object.hasOwn(command, "ledgerAckId"), false);
   assert.equal(db.documents.get(devicePath).lastAckedSequence, 1);
   assert.equal(command.accountingStatus, undefined);
+  assert.deepEqual(db.documents.get("paymentIntents/intent_001"), {
+    tenantId, accountingStatus: "CAPTURED_PENDING_ACCOUNTING"
+  });
+  assert.deepEqual(db.documents.get("paymentWebhookInbox/webhook_001"), {
+    tenantId, accountingStatus: "PENDING", processingStatus: "CAPTURED"
+  });
+  assert.deepEqual(db.documents.get("paymentFolioLocks/" + hash(tenantId + ":folio_001")), {
+    intentId: "intent_001", active: true, state: "LOCKED"
+  });
 });
 
 test("identical device acknowledgement is idempotent without becoming settlement proof", async () => {
