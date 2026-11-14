@@ -7,6 +7,8 @@ on:
       - '**'
   workflow_dispatch:
   push:
+    branches:
+      - work/phase-0-feature-registry
     tags:
       - 'aurelia-approved-*'
 
