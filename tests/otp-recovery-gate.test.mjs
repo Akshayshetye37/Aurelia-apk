@@ -322,7 +322,31 @@ test('email-link owner session can only proceed to acknowledgement through Crede
 });
 
 
-test('global recovery-key failure throttle is durably incremented before every checksum-valid unwrap', () => {
+test('Android process-death runner uses one host-managed phase-one invocation', () => {
+  const workflow = read('.github/workflows/otp-recovery-android-instrumentation.yml');
+  const instrumentation = read('android/templates/instrumentation/RecoveryProcessDeathInstrumentedTest.java');
+  assert.doesNotMatch(workflow, /run_instrumentation_test process-death-phase-one/);
+  assert.match(workflow, /am force-stop com\\.aurelia\\.pms/);
+  assert.match(instrumentation, /newRecoveryLockout\\(context\\)\\.beginAttempt\\(\\)/);
+  assert.match(instrumentation, /lockoutFailureCount\\(\\)/);
+  assert.match(instrumentation, /recoveryThrottle\\.completeAttempt\\(\\)/);
+  assert.match(instrumentation, /global recovery-key failures reset only after durable PIN-envelope commit/);
+});
+
+test('pending recovery-key attempts survive crashes without penalizing a verified key', () => {
+  const lockout = read('android/templates/security/AppLockManager.kt');
+  const manager = read('android/templates/security/AureliaAppManager.kt');
+  const start = manager.indexOf('fun recoverWithRecoveryKey');
+  const end = manager.indexOf('fun confirmRecoverySwapCommitted', start);
+  const flow = manager.slice(start, end);
+  assert.ok(flow.indexOf('recoveryLockout.beginAttempt()') < flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
+  assert.ok(flow.indexOf('crypto.unwrapDataKeyWithRecovery') < flow.indexOf('recoveryLockout.completeAttempt()'));
+  assert.ok(flow.indexOf('recoveryLockout.registerFailure()') > flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
+  assert.match(lockout, /if \(current.pendingAttempt\)[\s\S]*?failures = \(current.failures \+ 1\)/);
+  assert.match(lockout, /fun completeAttempt\(\)[\s\S]*?pendingAttempt = false/);
+});
+
+test('global recovery-key failure throttle is durably armed before every checksum-valid unwrap', () => {
   const manager = read('android/templates/security/AureliaAppManager.kt');
   const start = manager.indexOf('fun recoverWithRecoveryKey');
   const end = manager.indexOf('fun confirmRecoverySwapCommitted', start);

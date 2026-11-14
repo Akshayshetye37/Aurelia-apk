@@ -40,6 +40,14 @@ public final class RecoveryProcessDeathInstrumentedTest {
   private static final String REBOOT_ENTITY_TYPE = "process_death_reboot";
   private static final String REBOOT_ENTITY_ID = "persisted_before_device_reboot";
   private static final String GATE_JTI = "2e8d6f1a-3c54-4b17-9a20-6f8d1c3b5a70";
+  private static final String RECOVERY_LOCK_FILE = "aurelia-recovery-lock-state.v1";
+  private static final String RECOVERY_LOCK_ALIAS = "aurelia.pms.recovery-lock-state.v1";
+  private static final String RECOVERY_LOCK_MAGIC = "AURELIA-RECOVERY-LOCK-V1";
+
+  private static com.aurelia.pms.security.AppLockManager newRecoveryLockout(Context context) {
+    return new com.aurelia.pms.security.AppLockManager(
+      context, RECOVERY_LOCK_FILE, RECOVERY_LOCK_ALIAS, RECOVERY_LOCK_MAGIC);
+  }
 
   @Test public void phaseOnePersistsPinAAndDatabaseBeforeForceStop() throws Exception {
     Context context = ApplicationProvider.getApplicationContext().createDeviceProtectedStorageContext();
@@ -88,6 +96,8 @@ public final class RecoveryProcessDeathInstrumentedTest {
       assertEquals("two attempts must remain before process death", 2,
         com.aurelia.pms.security.RecoveryGate.INSTANCE.attemptsLeft());
       assertTrue("encrypted PIN envelope must be durable before host force-stop", store.read() != null);
+      // Simulate process death after persisting an in-flight global key attempt.
+      newRecoveryLockout(context).beginAttempt();
     } finally {
       if (repository != null) repository.close();
       if (key != null) Arrays.fill(key, (byte) 0);
@@ -123,6 +133,14 @@ public final class RecoveryProcessDeathInstrumentedTest {
     assertEquals("one attempt remains after phase-two spend", 1,
       com.aurelia.pms.security.RecoveryGate.INSTANCE.attemptsLeft());
 
+    com.aurelia.pms.security.AppLockManager recoveryThrottle = newRecoveryLockout(context);
+    assertEquals("an in-flight recovery-key attempt survives process death as a failure", 1,
+      recoveryThrottle.lockoutFailureCount());
+    recoveryThrottle.beginAttempt();
+    recoveryThrottle.completeAttempt();
+    assertEquals("a verified key attempt preserves prior failures", 1,
+      recoveryThrottle.lockoutFailureCount());
+
     com.aurelia.pms.security.AureliaAppManager manager = newManager(context);
     com.aurelia.pms.security.AureliaCryptoEngine crypto =
       new com.aurelia.pms.security.AureliaCryptoEngine();
@@ -155,6 +173,8 @@ public final class RecoveryProcessDeathInstrumentedTest {
 
       store.writeRecoveryReplacement(replacement);
       manager.confirmRecoverySwapCommitted();
+      assertEquals("global recovery-key failures reset only after durable PIN-envelope commit", 0,
+        recoveryThrottle.lockoutFailureCount());
       manager.lock();
       assertFalse("PIN A must be rejected after the post-force-stop commit",
         manager.unlock(oldPin, store.read()));

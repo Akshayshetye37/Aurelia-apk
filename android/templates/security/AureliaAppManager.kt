@@ -178,8 +178,8 @@ class AureliaAppManager(
             throw SecurityException("A fresh OTP verification is required to continue recovery.")
         }
         // Persist a pending attempt before unwrap. If the process dies, the next
-        // state read charges it as a failure. A verified key clears the pending
-        // marker and failure streak; invalid keys increment the durable streak.
+        // state read charges it as a failure. A verified key clears only the
+        // pending marker; prior failures reset after the new envelope is committed.
         try {
             recoveryLockout.beginAttempt()
         } catch (failure: Exception) {

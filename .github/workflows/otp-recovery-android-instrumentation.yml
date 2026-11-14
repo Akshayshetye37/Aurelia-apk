@@ -260,7 +260,8 @@ jobs:
 
           phase_one="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop"
           phase_two="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop"
-          run_instrumentation_test process-death-phase-one "$phase_one"
+          # Phase one runs only in the host-managed background process below.
+          # It intentionally blocks after PHASE_ONE_READY until the host force-stops it.
 
           wait_for_target_pid() {
             local pid=""
