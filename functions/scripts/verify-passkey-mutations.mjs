@@ -29,7 +29,7 @@ function applyMutation(label, replacements, expectedFailure) {
     mutated = mutated.replace(before, after);
   }
   fs.writeFileSync(sourcePath, mutated);
-  execute("npm", ["run", "build"], label + " TypeScript build");
+  execute("npm", ["--prefix", "functions", "run", "build"], label + " TypeScript build");
   const result = spawnSync("firebase", ["emulators:exec", "--only", "auth,firestore", "--project",
     "demo-aurelia-recovery", testCommand], {
     cwd: path.resolve(functionsDir, ".."),
@@ -47,7 +47,7 @@ function applyMutation(label, replacements, expectedFailure) {
   }
   console.log(label + ": mutation was detected by the targeted emulator test.");
   fs.writeFileSync(sourcePath, original);
-  execute("npm", ["run", "build"], label + " restore build");
+  execute("npm", ["--prefix", "functions", "run", "build"], label + " restore build");
 }
 
 try {
@@ -68,6 +68,6 @@ try {
   ], "an ack challenge cannot be submitted as a cancel action");
 } finally {
   fs.writeFileSync(sourcePath, original);
-  execute("npm", ["run", "build"], "restore original passkey implementation");
+  execute("npm", ["--prefix", "functions", "run", "build"], "restore original passkey implementation");
 }
 console.log("All three passkey guard mutations were detected; original source restored and rebuilt.");
