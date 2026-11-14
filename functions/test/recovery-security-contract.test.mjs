@@ -9,7 +9,8 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
 const functions = read('functions/src/index.ts');
 const passkeys = read('functions/src/passkeys.ts');
-const allFunctions = functions + '\n' + passkeys;
+const recoveryConfig = read('functions/src/recovery-config.ts');
+const allFunctions = functions + '\n' + passkeys + '\n' + recoveryConfig;
 const rules = read('firestore.rules');
 const identity = read('android/templates/FirebasePhoneIdentity.kt');
 const grantClient = read('android/templates/RecoveryGrantClient.kt');
@@ -198,9 +199,9 @@ test('recovery cannot proceed until owner alert is posted and acknowledged by th
   assert.match(registerAlertDevice, /existingDevice && \(existingDevice\.ownerUid !== owner\.uid/);
   assert.match(registerAlertDevice, /ownerUid: owner\.uid, fcmToken: token/);
   assert.match(functions, /recoveryOwnerDevices/);
-  assert.ok(functions.includes('cooldown.alertedDeviceHashes.includes(deviceIdHash)'));
+  assert.ok(passkeys.includes('cooldown.alertedDeviceHashes.includes(deviceHash)'));
   assert.ok(functions.includes('Promise.allSettled(ownerDevices.map'));
-  assert.ok(functions.includes('cooldown.alertedDeviceHashes.includes(deviceIdHash)'));
+  assert.ok(passkeys.includes('cooldown.alertedDeviceHashes.includes(deviceHash)'));
   assert.match(functions, /getMessaging\(\)\.send/);
   assert.match(functions, /state: "ALERT_PENDING"/);
   assert.match(passkeys, /acknowledgeRecoveryOwnerAlert = onCall/);
@@ -340,7 +341,7 @@ test('owner email-link exchange verifies the one-time link before minting primar
   assert.match(functions, /auth\?\.token\.email_verified === true/);
   assert.match(functions, /factorAuthTime > authTime/);
   assert.match(functions, /ackTokenExpiresAt/);
-  assert.match(functions, /Number\(event\.ackTokenExpiresAt\) <= Date\.now\(\)/);
+  assert.match(passkeys, /Number\(event\.ackTokenExpiresAt\) <= now/);
   assert.match(functions, /pendingState === "CANCELLED"/);
   assert.match(functions, /proof\.authTime <= Number\(pending\?\.cancelledAtSec\)/);
   assert.match(functions, /cancelledAtSec: Math\.floor\(Date\.now\(\) \/ 1000\)/);
