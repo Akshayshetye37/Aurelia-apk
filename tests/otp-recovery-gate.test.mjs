@@ -148,7 +148,8 @@ test('owner alert must be posted and acknowledged before the recovery cooldown s
   assert.match(service, /NotificationManagerCompat\.from\(this\)\.areNotificationsEnabled\(\)/);
   assert.doesNotMatch(service, /acknowledgeRecoveryOwnerAlert/);
   assert.match(ownerAlert, /acknowledgeRecoveryOwnerAlert/);
-  assert.match(ownerAlert, /cancelRecoveryRequest/);
+  assert.match(ownerAlert, /completeRecoveryOwnerPasskeyAction/);
+  assert.doesNotMatch(ownerAlert, /cancelRecoveryRequest/);
   assert.match(ownerAlert, /getIdToken\(true\)/);
   assert.match(service, /RecoveryDeviceIdentity\.deviceIdHash\(\)/);
   assert.match(backend, /cancelRecoveryRequest = onCall/);
@@ -397,4 +398,18 @@ test('Android recovery cancellation requires a Credential Manager passkey assert
   assert.match(cancel, /authenticationResponseJson/);
   assert.doesNotMatch(cancel, /cancelRecoveryRequest/);
   assert.doesNotMatch(cancel, /withFreshOwnerSession/);
+});
+
+
+test('all Android owner cancellation entry points route through the server-bound passkey challenge', () => {
+  const settings = read('android/templates/RecoveryPhoneSettingsActivity.kt');
+  const client = read('android/templates/RecoveryGrantClient.kt');
+  const backend = read('functions/src/index.ts');
+  const passkeys = read('functions/src/passkeys.ts');
+  assert.match(settings, /getRecoveryOwnerPendingAction/);
+  assert.match(settings, /EXTRA_ACTION, "cancel"/);
+  assert.doesNotMatch(settings, /client\.cancelRecoveryRequest/);
+  assert.doesNotMatch(client, /cancelRecoveryRequest/);
+  assert.match(backend, /Owner cancellation requires a verified passkey assertion/);
+  assert.match(passkeys, /getRecoveryOwnerPendingAction = onCall/);
 });
