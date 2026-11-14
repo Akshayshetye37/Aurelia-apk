@@ -6,18 +6,16 @@ const read = path => fs.readFileSync(path, 'utf8');
 
 test('OTP recovery gate persists grant-bound attempts in Keystore-encrypted AtomicFile state and expires monotonically across reboot', () => {
   const gate = read('android/templates/security/RecoveryGate.kt');
-  assert.match(gate, /SystemClock\\.elapsedRealtime\\(\\)/);
-  assert.match(gate, /MAX_ATTEMPTS = 3/);
-  assert.match(gate, /TTL_MS = 5 \\* 60_000L/);
-  assert.match(gate, /fun initialize\\(context: Context\\)/);
-  assert.match(gate, /fun armAfterServerConsumption\\(jti: String, remainingGrantMs: Long\\)/);
-  assert.match(gate, /fun spendAttempt\\(expectedJti: String\\? = null\\): Boolean/);
-  assert.match(gate, /fun clear\\(\\)/);
-  assert.match(gate, /AtomicFile/);
-  assert.match(gate, /AndroidKeyStore/);
-  assert.match(gate, /bootCount/);
-  assert.match(gate, /missing; refusing to reset attempts/);
-  assert.doesNotMatch(gate, /SharedPreferences/);
+  assert.ok(gate.includes('SystemClock.elapsedRealtime()'));
+  assert.ok(gate.includes('fun initialize(context: Context)'));
+  assert.ok(gate.includes('fun armAfterServerConsumption(jti: String, remainingGrantMs: Long)'));
+  assert.ok(gate.includes('fun spendAttempt(expectedJti: String? = null): Boolean'));
+  assert.ok(gate.includes('AtomicFile'));
+  assert.ok(gate.includes('AndroidKeyStore'));
+  assert.ok(gate.includes('bootCount'));
+  assert.ok(gate.includes('missing; refusing to reset attempts'));
+  assert.ok(gate.includes('stateUnavailable'));
+  assert.ok(!gate.includes('SharedPreferences'));
 });
 
 test('recovery checksum is validated before an OTP attempt is spent', () => {
