@@ -8,7 +8,8 @@
     "test": "node scripts/run-all-tests.mjs",
     "check:storage-boundaries": "node scripts/check-storage-boundaries.mjs",
     "android:sync": "npx cap sync android",
-    "diagnose:accounting": "node scripts/diagnose-accounting.mjs"
+    "diagnose:accounting": "node scripts/diagnose-accounting.mjs",
+    "status:generate": "node scripts/generate-status.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
