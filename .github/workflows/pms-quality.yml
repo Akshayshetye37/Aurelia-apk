@@ -64,6 +64,9 @@ jobs:
       - name: Generate evidence-based STATUS.md
         run: node scripts/generate-status.mjs
 
+      - name: Fail if committed STATUS.md is stale
+        run: git diff --exit-code -- STATUS.md
+
       - name: Upload generated R1 status
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # actions/upload-artifact v4.6.2
         with:
