@@ -4,6 +4,7 @@ import { getMessaging } from "firebase-admin/messaging";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { defineString } from "firebase-functions/params";
+import { RECOVERY_ENABLED } from "./recovery-config.js";
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -16,7 +17,6 @@ import {
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
-const ENABLED = defineString("RECOVERY_ENABLED", { default: "false" });
 const RP_ID = defineString("WEBAUTHN_RP_ID", { default: "" });
 const RP_NAME = defineString("WEBAUTHN_RP_NAME", { default: "Aurelia PMS" });
 const ANDROID_ORIGINS = defineString("WEBAUTHN_ANDROID_ORIGINS", { default: "" });
@@ -29,7 +29,7 @@ type Owner = { uid: string; tenantId: string };
 type Action = "ack" | "cancel";
 
 function requireEnabled(): void {
-  if (ENABLED.value() !== "true") {
+  if (RECOVERY_ENABLED.value() !== "true") {
     throw new HttpsError("failed-precondition", "Account recovery is disabled.");
   }
 }
@@ -100,6 +100,40 @@ async function requireAttestedOwnerDevice(owner: Owner, deviceHash: string, requ
   }
 }
 
+
+async function spendPasskeyRateLimit(owner: Owner, operation: "ENROLL" | "ACTION" | "ALERT"): Promise<void> {
+  const key = createHash("sha256").update(owner.tenantId).update("|").update(owner.uid).update("|").update(operation).digest("hex");
+  const ref = db.doc("recoveryPasskeyRateLimits/" + key);
+  const now = Date.now();
+  const outcome = await db.runTransaction(async tx => {
+    const snapshot = await tx.get(ref);
+    const current = snapshot.data();
+    const lockUntilMs = Number(current?.lockUntilMs ?? 0);
+    if (lockUntilMs > now) return { blocked: true };
+    const windowStartMs = Number(current?.windowStartMs ?? 0);
+    const inWindow = Number.isFinite(windowStartMs) && now - windowStartMs < 10 * 60_000;
+    const count = inWindow ? Number(current?.count ?? 0) : 0;
+    const strikes = Number(current?.strikes ?? 0);
+    const nextCount = count + 1;
+    if (nextCount > 30) {
+      const delays = [15 * 60_000, 60 * 60_000, 24 * 60 * 60_000];
+      tx.set(ref, {
+        windowStartMs: now, count: nextCount, strikes: strikes + 1,
+        lockUntilMs: now + delays[Math.min(strikes, delays.length - 1)],
+        updatedAt: FieldValue.serverTimestamp()
+      });
+      return { blocked: true };
+    }
+    tx.set(ref, {
+      windowStartMs: inWindow ? windowStartMs : now,
+      count: nextCount, strikes, lockUntilMs: 0,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    return { blocked: false };
+  });
+  if (outcome.blocked) throw new HttpsError("resource-exhausted", "Passkey recovery is temporarily rate limited.");
+}
+
 function challengeRef(id: string) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw GENERIC;
   return db.doc("recoveryPasskeyChallenges/" + id);
@@ -119,6 +153,7 @@ export const createRecoveryPasskeyEnrollmentOptions = onCall(
   async request => {
     requireEnabled();
     const owner = ownerFromFreshEmailLink(request);
+    await spendPasskeyRateLimit(owner, "ENROLL");
     if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
     const deviceHash = requiredString(request.data?.deviceIdHash, 64);
     await requireOwnerBinding(owner);
@@ -157,6 +192,7 @@ export const completeRecoveryPasskeyEnrollment = onCall(
   async request => {
     requireEnabled();
     const owner = ownerFromFreshEmailLink(request);
+    await spendPasskeyRateLimit(owner, "ENROLL");
     if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
     const deviceHash = requiredString(request.data?.deviceIdHash, 64);
     const id = requiredString(request.data?.challengeId, 64);
@@ -241,6 +277,7 @@ export const retryRecoveryPasskeyEnrollmentAlert = onCall(
   async request => {
     requireEnabled();
     const owner = ownerFromFreshEmailLink(request);
+    await spendPasskeyRateLimit(owner, "ALERT");
     const hash = requiredString(request.data?.credentialHash, 64);
     if (!/^[a-f0-9]{64}$/.test(hash)) throw GENERIC;
     await requireOwnerBinding(owner);
@@ -273,6 +310,7 @@ export const createRecoveryOwnerActionOptions = onCall(
   async request => {
     requireEnabled();
     const owner = ownerFromFreshEmailLink(request);
+    await spendPasskeyRateLimit(owner, "ACTION");
     if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
     const action = request.data?.action as Action;
     if (action !== "ack" && action !== "cancel") throw GENERIC;
@@ -312,6 +350,7 @@ export const createRecoveryOwnerActionOptions = onCall(
 async function completeOwnerAction(request: CallableRequest<unknown>, forcedAction?: Action): Promise<Record<string, unknown>> {
   requireEnabled();
   const owner = ownerFromFreshEmailLink(request);
+  await spendPasskeyRateLimit(owner, "ACTION");
   if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
   const id = requiredString(request.data?.challengeId, 64);
   const deviceHash = requiredString(request.data?.deviceIdHash, 64);

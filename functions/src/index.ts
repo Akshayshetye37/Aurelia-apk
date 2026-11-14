@@ -7,13 +7,13 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import { createHash, createHmac, createPrivateKey, createPublicKey, randomUUID, randomBytes, timingSafeEqual } from "node:crypto";
 import { importPKCS8, importSPKI, jwtVerify, SignJWT } from "jose";
 import { GoogleAuth } from "google-auth-library";
+import { RECOVERY_ENABLED } from "./recovery-config.js";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
 const PHONE_PEPPER = defineSecret("PHONE_PEPPER");
 const RECOVERY_SIGNING_KEY_PKCS8 = defineSecret("RECOVERY_SIGNING_KEY_PKCS8");
 // Fail closed by default; only qualified staging may opt in after gate evidence.
-const RECOVERY_ENABLED = defineString("RECOVERY_ENABLED", { default: "false" });
 const RECOVERY_SIGNING_KEY_ID = defineString("RECOVERY_SIGNING_KEY_ID", { default: "active-1" });
 const GENERIC = new HttpsError("permission-denied", "Verification failed.");
 const ISSUER = "aurelia-recovery";

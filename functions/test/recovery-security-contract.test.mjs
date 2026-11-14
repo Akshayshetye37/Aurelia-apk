@@ -53,6 +53,12 @@ test('rate limit counters commit before rejected requests return', () => {
   assert.match(rate, /if \(!allowed\) throw/);
   assert.ok(rate.indexOf('tx.set(ref') < rate.indexOf('if (!allowed)'));
   assert.match(rate, /if \(!allowed\) throw new HttpsError/);
+  const passkeyRate = passkeys.slice(passkeys.indexOf('async function spendPasskeyRateLimit'), passkeys.indexOf('function challengeRef'));
+  assert.match(passkeyRate, /nextCount > 30/);
+  assert.match(passkeyRate, /15 \* 60_000/);
+  assert.match(passkeyRate, /60 \* 60_000/);
+  assert.match(passkeyRate, /24 \* 60 \* 60_000/);
+  assert.ok(rules.includes('recoveryPasskeyRateLimits'));
 });
 
 test('backend never deletes Firebase phone-auth users', () => {

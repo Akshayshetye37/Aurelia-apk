@@ -30,6 +30,9 @@ service cloud.firestore {
     match /recoveryPasskeyChallenges/{challengeId} {
       allow read, write: if false;
     }
+    match /recoveryPasskeyRateLimits/{limitId} {
+      allow read, write: if false;
+    }
     match /recoveryDeviceAttestations/{deviceId} {
       allow read, write: if false;
     }
