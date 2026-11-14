@@ -37,7 +37,8 @@ test("signed receipt plus exact provider capture posts once",async()=>{const r=r
  assert.equal(db.docs.get(cmd).status,"RECEIPT_ACCEPTED");assert.equal(db.docs.get(`paymentIntents/${intentId}`).accountingStatus,"POSTED_TO_LOCAL_FOLIO");
  assert.equal(db.docs.get(lock).active,false);assert.equal(db.docs.get(folio).balanceMinor,200000);
  assert.equal(db.docs.has(folio+`/journalEntries/${intentId}`),false);
- assert.equal(db.docs.get(inbox).accountingStatus,"POSTED");});
+ assert.equal(db.docs.get(inbox).accountingStatus,"POSTED_TO_LOCAL_FOLIO");
+ assert.equal(db.docs.get(inbox).processingStatus,"LOCAL_LEDGER_RECEIPT_ACCEPTED");});
 test("identical receipt replay is idempotent without creating a backend ledger",async()=>{const r=receipt(),{db,folio}=fixture(r);
  const first=await accept(r,db),second=await accept(r,db);
  assert.equal(first.localLedgerPosted,true);assert.equal(first.settlementPosted,false);
