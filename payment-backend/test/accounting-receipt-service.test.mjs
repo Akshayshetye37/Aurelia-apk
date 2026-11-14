@@ -46,3 +46,25 @@ test("wrong amount and folio are rejected even when signed",async t=>{for(const 
 test("provider status must independently confirm capture and exact bindings",async t=>{for(const [n,o] of [["not captured",{captured:false}],["payment",{paymentId:"pay_other"}],
  ["amount",{amountMinor:1}],["currency",{currency:"USD"}],["account",{providerAccountId:"merchant_other"}]])await t.test(n,async()=>{
  const r=receipt(),{db}=fixture(r);await assert.rejects(accept(r,db,check(o)),/payment_provider_status_not_captured_or_mismatched/);});});
+
+test("folio lock must match the exact tenant and folio before accounting can post",async t=>{
+ for(const [name,field,value] of [["tenant","tenantId","tenant_other"],["folio","folioId","folio_other"]])await t.test(name,async()=>{
+  const r=receipt(),{db,lock,folio}=fixture(r),current=db.docs.get(lock);
+  db.docs.set(lock,{...current,[field]:value});
+  await assert.rejects(accept(r,db),/accounting_receipt_state_changed/);
+  assert.equal(db.docs.get(folio).balanceMinor,200000);
+ });
+});
+test("provider verification is re-bound to the current intent inside the posting transaction",async t=>{
+ for(const [name,field,value] of [["environment","environment","live"],["order","providerOrderId","order_other"]])await t.test(name,async()=>{
+  const r=receipt(),{db,folio}=fixture(r);
+  const verify=async()=>{
+   const result=await check()();
+   const path=`paymentIntents/${intentId}`;
+   db.docs.set(path,{...db.docs.get(path),[field]:value});
+   return result;
+  };
+  await assert.rejects(accept(r,db,verify),/payment_provider_status_intent_mismatch/);
+  assert.equal(db.docs.get(folio).balanceMinor,200000);
+ });
+});
