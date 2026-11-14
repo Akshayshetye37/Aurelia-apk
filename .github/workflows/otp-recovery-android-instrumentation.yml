@@ -262,42 +262,48 @@ jobs:
           phase_two="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop"
           run_instrumentation_test process-death-phase-one "$phase_one"
 
-          wait_for_target_pid() {
+          instrumentation_package="com.aurelia.pms.test"
+          wait_for_instrumentation_pid() {
             local pid=""
             for attempt in {1..15}; do
-              pid="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
+              pid="$("$adb_bin" shell pidof "$instrumentation_package" | tr -d '\r' || true)"
               if [[ -n "$pid" ]]; then printf '%s' "$pid"; return 0; fi
               sleep 2
             done
             return 1
           }
-          # The instrumentation process is the target app process. Require that
-          # exact phase-one process to remain alive; do not launch a replacement.
-          before_pid="$(wait_for_target_pid)" || {
+          # The AndroidJUnitRunner executes the recovery code in the test APK
+          # process (com.aurelia.pms.test), not in the installed app's package
+          # process. Capture that exact process before forcing both packages
+          # down; otherwise pidof(com.aurelia.pms) observes the wrong process.
+          before_pid="$(wait_for_instrumentation_pid)" || {
             echo "::error::Phase-one instrumentation process exited before the explicit force-stop boundary."
             exit 1
           }
           "$adb_bin" shell am force-stop com.aurelia.pms
-          after_stop=""
-          for attempt in {1..10}; do
-            after_stop="$("$adb_bin" shell pidof com.aurelia.pms | tr -d '\r' || true)"
-            [[ -z "$after_stop" ]] && break
-            sleep 1
+          "$adb_bin" shell am force-stop "$instrumentation_package"
+          for package in com.aurelia.pms "$instrumentation_package"; do
+            after_stop=""
+            for attempt in {1..10}; do
+              after_stop="$("$adb_bin" shell pidof "$package" | tr -d '\r' || true)"
+              [[ -z "$after_stop" ]] && break
+              sleep 1
+            done
+            if [[ -n "$after_stop" ]]; then
+              echo "::error::adb force-stop did not terminate package process: $package"
+              exit 1
+            fi
           done
-          if [[ -n "$after_stop" ]]; then
-            echo "::error::adb force-stop did not terminate the target app process."
-            exit 1
-          fi
 
           run_instrumentation_test process-death-phase-two "$phase_two"
-          # Phase two itself must start a new target process; no monkey/app relaunch
-          # is allowed to manufacture a passing PID after the test has exited.
-          after_pid="$(wait_for_target_pid)" || {
-            echo "::error::Phase-two instrumentation did not leave a newly started target process."
+          # A fresh AndroidJUnitRunner process must execute phase two after the
+          # explicit force-stop. Do not launch a monkey or app process as a proxy.
+          after_pid="$(wait_for_instrumentation_pid)" || {
+            echo "::error::Phase-two instrumentation did not start a new test process."
             exit 1
           }
           if [[ "$after_pid" == "$before_pid" ]]; then
-            echo "::error::Phase two did not produce a newly started target app process."
+            echo "::error::Phase two reused the phase-one instrumentation PID."
             exit 1
           fi
           mkdir -p app/build/outputs/androidTest-results/connected
