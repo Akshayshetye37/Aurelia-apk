@@ -1,0 +1,2919 @@
+{
+  "schema_version": 1,
+  "repository": "Akshayshetye37/Aurelia-apk",
+  "baseline": {
+    "branch": "feature/multi-provider-payment-backend",
+    "sha": "3fc72fd6b6f69e59c8cbc7441c04624acc455723",
+    "inventory_branch": "work/phase-0-feature-registry",
+    "inventory_base_sha": "3fc72fd6b6f69e59c8cbc7441c04624acc455723",
+    "created_at": "2026-11-15"
+  },
+  "rules": {
+    "verified": "Only completed green GitHub Actions run on the exact feature SHA, with non-zero tests, zero failures and zero skips; run URL and counts mandatory.",
+    "locked": "VERIFIED plus immutable lock tag lock/<id>-v1 and file hashes recorded. No current entry is locked.",
+    "unknown": "All unproven entries remain UNVERIFIED; no guessed test mappings count as evidence.",
+    "flags": "RECOVERY_ENABLED=false; live collection OFF; automatic settlement/refunds OFF; cloud sync OFF; uiCutover=false."
+  },
+  "totals": {
+    "tracked_files": 292,
+    "implementation_entries": 125,
+    "test_files": 92,
+    "verified": 0,
+    "locked": 0,
+    "unverified": 125
+  },
+  "repository_files": [
+    {
+      "path": ".github/workflows/build-apk.yml",
+      "blob_sha": "1ddfe59be06579a96bb082ea366ed51d3f4b9a02"
+    },
+    {
+      "path": ".github/workflows/build-pms-debug-apk.yml",
+      "blob_sha": "2307ac2f053644b245a93f628edd9b56cbde5d40"
+    },
+    {
+      "path": ".github/workflows/payment-backend-ci.yml",
+      "blob_sha": "dae49a9bf866a2ed3378b17f42450f6230d9c40c"
+    },
+    {
+      "path": ".github/workflows/payment-backend-infra.yml",
+      "blob_sha": "f5087d1c8c001754fdeee0d63c3aa16317d56ec2"
+    },
+    {
+      "path": ".github/workflows/pms-quality.yml",
+      "blob_sha": "88a0b86c08ee1daa341ab336a256408bdc7bffe5"
+    },
+    {
+      "path": ".github/workflows/r1-local-first.yml",
+      "blob_sha": "c1750f722d13f0ca5edbf3394e65fd2f0a9020e4"
+    },
+    {
+      "path": ".github/workflows/settlement-foundation-ci.yml",
+      "blob_sha": "698dbf250966e872580ec65706295087ec425603"
+    },
+    {
+      "path": ".gitignore",
+      "blob_sha": "3ec77765d7cd74dfec82acf3f3ed9adcb8c71a02"
+    },
+    {
+      "path": "README.md",
+      "blob_sha": "8b49e029516cc64f968c35fdc7e217e9d4f616ac"
+    },
+    {
+      "path": "STATUS.md",
+      "blob_sha": "e8826a9fa1516fafd0e6c848ae08c1e94441a7dc"
+    },
+    {
+      "path": "android/templates/CapacitorPmsStoragePlugin.java",
+      "blob_sha": "dd7afbd4e27827a88fd1a4e3bf99dec051fb6e2c"
+    },
+    {
+      "path": "android/templates/FirebasePhoneIdentity.kt",
+      "blob_sha": "ffd5f635de94a785fbdbc2ada7d79735425c05f0"
+    },
+    {
+      "path": "android/templates/LocalGatewayVault.java",
+      "blob_sha": "ccfc190f78e33319c5819cb24fdaa0d2db6dad3b"
+    },
+    {
+      "path": "android/templates/LocalPaymentLedger.java",
+      "blob_sha": "c9af1948d010763eb9dcf368509dad9472cfecdf"
+    },
+    {
+      "path": "android/templates/LocalPmsRepository.java",
+      "blob_sha": "f0c2170b56cbd7d321ee3bb15c94fcc3dc8c00c4"
+    },
+    {
+      "path": "android/templates/NotificationQueueDb.java",
+      "blob_sha": "43efb8638843d71b0bcd77b65743fdec7d4d8d3e"
+    },
+    {
+      "path": "android/templates/PAY_BRIDGE_IPC_CONTRACT.md",
+      "blob_sha": "443c2274d13208d6299f2f8f88743c81643f3a14"
+    },
+    {
+      "path": "android/templates/PAY_BRIDGE_MANIFEST_TEMPLATE.xml",
+      "blob_sha": "65829b90babfb526d221dbffef3771eae36b40b4"
+    },
+    {
+      "path": "android/templates/PayBridgeClient.java",
+      "blob_sha": "36db128e22e877b84fba9199ecf8eff4a8ebd286"
+    },
+    {
+      "path": "android/templates/PayBridgeProtocol.java",
+      "blob_sha": "3024ee62471c088531e45ac5bcca3123c9bddaa1"
+    },
+    {
+      "path": "android/templates/RecoveryFirebaseAuthFactory.kt",
+      "blob_sha": "19920a68b4b57fda7ae55f3a35e40181669d9c71"
+    },
+    {
+      "path": "android/templates/UPINotificationListener.java",
+      "blob_sha": "91ae1c3451951d934c3a6e1fea529cccc30292b8"
+    },
+    {
+      "path": "android/templates/security/AppLockManager.kt",
+      "blob_sha": "983977243dd592f008476e12fc0062b8eb7595f4"
+    },
+    {
+      "path": "android/templates/security/AureliaAppManager.kt",
+      "blob_sha": "ece4b1dfb22ff541916926543514d5e57f44bad5"
+    },
+    {
+      "path": "android/templates/security/AureliaCryptoEngine.kt",
+      "blob_sha": "54bca40d25e09a5115a0ba6373bf6034bae8bdf1"
+    },
+    {
+      "path": "android/templates/security/AureliaEnvelopeStore.kt",
+      "blob_sha": "06ebdbf56d24d1374653d20a4b3df850d079b083"
+    },
+    {
+      "path": "android/templates/security/AureliaSecurityRuntime.kt",
+      "blob_sha": "b3bcde01b2c52faf3f2003a9e9ffbc0bb7ff622c"
+    },
+    {
+      "path": "android/templates/security/BiometricVaultManager.kt",
+      "blob_sha": "55a64508e6c36a6416860e17585e428fed2c625e"
+    },
+    {
+      "path": "android/templates/security/LockGateActivity.kt",
+      "blob_sha": "ef6eb9c15deb6c478e57eac1dc21c1e2b66694e2"
+    },
+    {
+      "path": "android/templates/security/PaymentDeviceClient.kt",
+      "blob_sha": "284c821a7108e4e4b2f8ca3399b00edce3ff9c30"
+    },
+    {
+      "path": "android/templates/security/PaymentDeviceKeyStore.kt",
+      "blob_sha": "04a32807c0ce0755b4aed3d4de54074eb6114ffa"
+    },
+    {
+      "path": "android/templates/security/SettlementEnvelopeVerifier.kt",
+      "blob_sha": "94e9961d846b0434bea7d5e1a2ce2a758ddcdffa"
+    },
+    {
+      "path": "assets/aurelia-icon-foreground.svg",
+      "blob_sha": "c2c8b0cd56d8e7f5e6a9d992b2eb7d47dcde7e0a"
+    },
+    {
+      "path": "assets/aurelia-icon.jpg",
+      "blob_sha": "108323192877c9614d3a5a0c0148f8fa391ad034"
+    },
+    {
+      "path": "assets/aurelia-icon.png",
+      "blob_sha": "c02911b3058673b0eafb9c1a246c67b993f9abef"
+    },
+    {
+      "path": "assets/aurelia-icon.svg",
+      "blob_sha": "24a4187759eb4b2521e78b51f3478519b4983af4"
+    },
+    {
+      "path": "capacitor.config.json",
+      "blob_sha": "1d72309eb301bb8d49548c254c4b81f4cf17717a"
+    },
+    {
+      "path": "docs/ANDROID-INTEGRATION.md",
+      "blob_sha": "f25996d247529f4543047076d3008d3f53e1016d"
+    },
+    {
+      "path": "docs/ANDROID_REBUILD.md",
+      "blob_sha": "10169c86c83750a2cdc1562cbd2a4d90e82e7687"
+    },
+    {
+      "path": "docs/BACKUP-ARCHITECTURE.md",
+      "blob_sha": "6b836103b8aa661d35c4c8de5abaf95b16095252"
+    },
+    {
+      "path": "docs/BACKUP-SERVER-CONTRACT.md",
+      "blob_sha": "c9bc8d1d31cac39073a29d996035cde86a5f05e3"
+    },
+    {
+      "path": "docs/CENTRAL_PAYMENT_CONTROL_PLANE.md",
+      "blob_sha": "520f332f1711e780c279dc29e78f7ddc577e8292"
+    },
+    {
+      "path": "docs/DEVICE_LOCAL_PAYMENT_ENGINE_SPEC.md",
+      "blob_sha": "2211e757d0873c5532efbcfc009d0ee5f319611a"
+    },
+    {
+      "path": "docs/END_TO_END_REMEDIATION_PLAN.md",
+      "blob_sha": "0320d76550753b62126eb61e10f0a57b79f27b8f"
+    },
+    {
+      "path": "docs/FIREBASE-PHONE-IDENTITY.md",
+      "blob_sha": "d550a47d840f0045ab92ad11c8d48f45bd2c9035"
+    },
+    {
+      "path": "docs/HYBRID_PAYMENT_ARCHITECTURE.md",
+      "blob_sha": "dc14b879ddfbb378ccc1f22ab796ebf7c53e6911"
+    },
+    {
+      "path": "docs/IMPLEMENTATION_STRATEGY.md",
+      "blob_sha": "0e7c0edcd243b5ad6523b5be96747059c26c9bc5"
+    },
+    {
+      "path": "docs/LOCAL-FIRST-BACKEND.md",
+      "blob_sha": "eb0e36a453774745dce6479a88781ccec41117ac"
+    },
+    {
+      "path": "docs/LOCAL_FIRST_CUTOVER_EXECUTION.md",
+      "blob_sha": "f02c4a95172eabb0b0baf462df9488fcdb2b6b7d"
+    },
+    {
+      "path": "docs/LOCAL_FIRST_HYBRID_PAYMENT_ARCHITECTURE.md",
+      "blob_sha": "e965d38670af0eaff5a476c397b3c413d15756f1"
+    },
+    {
+      "path": "docs/LOCAL_FIRST_SYNC_ARCHITECTURE.md",
+      "blob_sha": "2ba303a9ce288b5f5f6c9b29b2f60704cafd632b"
+    },
+    {
+      "path": "docs/NATIVE-DEVICE-DELIVERY-BOUNDARY.md",
+      "blob_sha": "788c9b25346e29f0ca574f16fd17a6a216e18755"
+    },
+    {
+      "path": "docs/NATIVE-PAYMENT-DEVICE-IDENTITY.md",
+      "blob_sha": "5bc541bde5b25dad8aeeeeaa8adb7f016119d781"
+    },
+    {
+      "path": "docs/NATIVE-SECURITY-AND-RECOVERY.md",
+      "blob_sha": "4dcc2bbe54dfec0c3e2fecf677705ff2b32a1e98"
+    },
+    {
+      "path": "docs/PAYMENT-MATCHING.md",
+      "blob_sha": "512b5d060753dfcfb70b519a01bb521da478b601"
+    },
+    {
+      "path": "docs/PAYMENT-PROVIDER-INTEGRATION.md",
+      "blob_sha": "7baec538f6d51d9d4250e645c2650fb81e3dc7b1"
+    },
+    {
+      "path": "docs/PAYMENT-READINESS-CHECKLIST.md",
+      "blob_sha": "5ec077cb1ec53fa82f4af14e89d21568d24ef73a"
+    },
+    {
+      "path": "docs/PAYMENT_FOLIO_MAPPING.md",
+      "blob_sha": "8669c3a6906dc1f2d926778763afb83f221ac2e1"
+    },
+    {
+      "path": "docs/PAYMENT_IMPLEMENTATION_PLAN.md",
+      "blob_sha": "81e70f073ddddcf5ecccd900cbeaf421b3009643"
+    },
+    {
+      "path": "docs/PAYMENT_PROVIDER_ONBOARDING.md",
+      "blob_sha": "779c00fccd74bbeeaf3fc45b6eb428a5c7a8302e"
+    },
+    {
+      "path": "docs/PIN-BACKUP-RECOVERY-STRATEGY.md",
+      "blob_sha": "34e72f0d61682092fc21cf5914d93f33d3072f94"
+    },
+    {
+      "path": "docs/PIN-RECOVERY-API-CONTRACT.md",
+      "blob_sha": "f5ad0076b1e06a7596f7a71793661b9ba82fd1ea"
+    },
+    {
+      "path": "docs/PMS-PAYMENT-ORCHESTRATION.md",
+      "blob_sha": "aeb91962865ca143ca73318f336fe0ca7df87f3c"
+    },
+    {
+      "path": "docs/PMS_ACCOUNTING_SCHEMA.md",
+      "blob_sha": "108ec9ffd373352fc6d5aa44ff865628ecacbb82"
+    },
+    {
+      "path": "docs/PMS_PAY_BRIDGE_INTEGRATION.md",
+      "blob_sha": "76154f873650f549fbc4ac537c6a2dcf65b616c1"
+    },
+    {
+      "path": "docs/PROVIDER_INTEGRATION_STATUS.md",
+      "blob_sha": "187909a88dac88fafd5176b182580c30ddfd05af"
+    },
+    {
+      "path": "docs/REMAINING_WORK_AUDIT_2026-11-09.md",
+      "blob_sha": "f9b9eed88d3661bfad52e3f2f02f7350398a5941"
+    },
+    {
+      "path": "docs/RESTORE-INDEX-HTML.md",
+      "blob_sha": "7b13a46aa609b5867c2756144c570d55cc7ddf2f"
+    },
+    {
+      "path": "docs/SECURITY.md",
+      "blob_sha": "1c7a39eae3ea2083835220d3e1e9273596902d29"
+    },
+    {
+      "path": "docs/SEVEN_PROVIDER_ACCEPTANCE.md",
+      "blob_sha": "27891c61f0678027f233cf93c1003b3c4bf8ff74"
+    },
+    {
+      "path": "docs/SMART-CHECKPOINT.md",
+      "blob_sha": "903191ddced066970c62108632ccd2568b51a617"
+    },
+    {
+      "path": "docs/audit/accounting-write-paths.md",
+      "blob_sha": "789b0591da6ff7a933a5cff65ee7697ef75dab03"
+    },
+    {
+      "path": "docs/audit/phase-1-findings.md",
+      "blob_sha": "1500afbe67a3d5ef866797e017d56928d3332388"
+    },
+    {
+      "path": "docs/patches/gateway-alignment-fix.css",
+      "blob_sha": "27bda14249d794d80c18a172cbd26107737729db"
+    },
+    {
+      "path": "docs/payment-settlement-write-path-audit.md",
+      "blob_sha": "2738ddd1234f8f2c5769369d89abf54d095abdbd"
+    },
+    {
+      "path": "firestore.indexes.json",
+      "blob_sha": "d8dc25e2e539df1d62df920610d2f7245ef2b7f0"
+    },
+    {
+      "path": "index.html",
+      "blob_sha": "a437bc3414fdedb4b3dbbfc2d5839ee44355b4d3"
+    },
+    {
+      "path": "package.json",
+      "blob_sha": "6632a0e92af7d88968533e7b6ffdb340f48dbfe1"
+    },
+    {
+      "path": "payment-backend/.env.cloud.example",
+      "blob_sha": "61aa15456819613d4d6505123cdf9794b7a1bf84"
+    },
+    {
+      "path": "payment-backend/.env.example",
+      "blob_sha": "783564d7c476c4226ef29ea40d2b46549031ba38"
+    },
+    {
+      "path": "payment-backend/CLOUD_RUN.md",
+      "blob_sha": "138f2aba1d4c6c81ca1698a0a50c51163b338c3c"
+    },
+    {
+      "path": "payment-backend/Caddyfile",
+      "blob_sha": "de1616b78fb9e3e909f2ccb364ca86c8faa6ffcd"
+    },
+    {
+      "path": "payment-backend/DEPLOYMENT.md",
+      "blob_sha": "877333846808d99a8ba21a573d489a855563060d"
+    },
+    {
+      "path": "payment-backend/Dockerfile",
+      "blob_sha": "4f7281775e7197bb448962d6376fad8e5d01a4b2"
+    },
+    {
+      "path": "payment-backend/Dockerfile.cloud",
+      "blob_sha": "efaebfd986f7dbda22d3d50f013ce92256bb57b0"
+    },
+    {
+      "path": "payment-backend/FOLIO-PROVISIONING.md",
+      "blob_sha": "b97265b750df30b9f2b5e12148bb90df9297c729"
+    },
+    {
+      "path": "payment-backend/LOCAL-DOCKER.md",
+      "blob_sha": "154f8a56d01de6223ced7dfd9a02ea28902c9a35"
+    },
+    {
+      "path": "payment-backend/README.md",
+      "blob_sha": "f9360af5db58750801035a88627ec5c97adc1a23"
+    },
+    {
+      "path": "payment-backend/attestation-verifier/build.gradle.kts",
+      "blob_sha": "d15a8aff7e8918c0af012e19f2237a43484af68c"
+    },
+    {
+      "path": "payment-backend/attestation-verifier/settings.gradle.kts",
+      "blob_sha": "8a84b53e04d8b218a91d86ba5d9c471589f82f92"
+    },
+    {
+      "path": "payment-backend/attestation-verifier/src/main/kotlin/com/aurelia/attestation/Main.kt",
+      "blob_sha": "7163da8cdd7fa2980e56990727b43499edd71951"
+    },
+    {
+      "path": "payment-backend/compose.yaml",
+      "blob_sha": "a470fd8db8280d575c0d2091175f206cf134ef36"
+    },
+    {
+      "path": "payment-backend/docs/OFFICIAL_PROVIDER_CONTRACTS.md",
+      "blob_sha": "37b01e5ba59d549d820aafcb218ca0ec989929e3"
+    },
+    {
+      "path": "payment-backend/firestore.rules",
+      "blob_sha": "2045da510fad6da12e1211c721404fd64661b794"
+    },
+    {
+      "path": "payment-backend/infra/terraform/README.md",
+      "blob_sha": "b0e74daa83f0426ded219eecff1045a734a47127"
+    },
+    {
+      "path": "payment-backend/infra/terraform/main.tf",
+      "blob_sha": "61c2156499d1d993c948551c50f4e3f8133d598f"
+    },
+    {
+      "path": "payment-backend/infra/terraform/variables.tf",
+      "blob_sha": "12837850a24c4736e3f0933c60fa716b1047611b"
+    },
+    {
+      "path": "payment-backend/infra/terraform/versions.tf",
+      "blob_sha": "5bc9da0bce077a6593280898f3ee357e548b8bb5"
+    },
+    {
+      "path": "payment-backend/package.json",
+      "blob_sha": "197da920f36d309045f7ce62ac107f34976aa9c9"
+    },
+    {
+      "path": "payment-backend/src/devices/firestore-device-service.mjs",
+      "blob_sha": "0661eaaea33a1936d739bf1f9fd77ebc99f7c97f"
+    },
+    {
+      "path": "payment-backend/src/http/async-route-errors.mjs",
+      "blob_sha": "75e88db399472b9d073c80e13e9bfc9ed0f3658d"
+    },
+    {
+      "path": "payment-backend/src/http/graceful-shutdown.mjs",
+      "blob_sha": "570b270b8d75c8b53dd5def7ee958d321d45ce90"
+    },
+    {
+      "path": "payment-backend/src/http/payment-route-errors.mjs",
+      "blob_sha": "e61444de69281c68946d979fb13dd1a4288fd6da"
+    },
+    {
+      "path": "payment-backend/src/http/public-http-error.mjs",
+      "blob_sha": "619ee86dac20aca3630c0a66ec50f15daaa4331f"
+    },
+    {
+      "path": "payment-backend/src/http/readiness-probe.mjs",
+      "blob_sha": "945062577edd8ae132f63a688694d2c3e2af060f"
+    },
+    {
+      "path": "payment-backend/src/http/server-timeouts.mjs",
+      "blob_sha": "473ce2ab51563648d9bf4deb1644abe8b0490d99"
+    },
+    {
+      "path": "payment-backend/src/intents/firestore-repository.mjs",
+      "blob_sha": "e309c56ad14b5dcb32ed8ec0c75c695e46869c58"
+    },
+    {
+      "path": "payment-backend/src/intents/folio-settlement.mjs",
+      "blob_sha": "3448d3ed96763de5bf14c61d686e53230b3d0513"
+    },
+    {
+      "path": "payment-backend/src/intents/intent-state-machine.mjs",
+      "blob_sha": "ddca335561071db2874959c4ae991a8cb065aa88"
+    },
+    {
+      "path": "payment-backend/src/local-server.mjs",
+      "blob_sha": "7d601cc6d5e6df6b204da37408d1e79c13baf32d"
+    },
+    {
+      "path": "payment-backend/src/payment-controls/active-provider-selection.mjs",
+      "blob_sha": "1f04f2abcddbcc92673f181f3dacb59fae495611"
+    },
+    {
+      "path": "payment-backend/src/payment-controls/firestore-controls.mjs",
+      "blob_sha": "9ee1c140da7ce40aa9157f23479ef09ab4c4914f"
+    },
+    {
+      "path": "payment-backend/src/payment-domain.mjs",
+      "blob_sha": "3a0e511ff8b74e243c14bf42ef1165b5b0ac74e6"
+    },
+    {
+      "path": "payment-backend/src/providers/adapter-contract.mjs",
+      "blob_sha": "b6d3866b8f561868d656dffc6166720ab6d93340"
+    },
+    {
+      "path": "payment-backend/src/providers/cashfree.mjs",
+      "blob_sha": "3b78088bc0098d913d189b54554ad82176861392"
+    },
+    {
+      "path": "payment-backend/src/providers/ccavenue.mjs",
+      "blob_sha": "209e2910ce74b285462b006df2b01b800cf35639"
+    },
+    {
+      "path": "payment-backend/src/providers/checkout-contract.mjs",
+      "blob_sha": "daaf1f5d1664786aa3c7b6abdd6e8f782eb70aab"
+    },
+    {
+      "path": "payment-backend/src/providers/factory.mjs",
+      "blob_sha": "9fd32c296f756d94f9cb13c7e0f0319b667f1a41"
+    },
+    {
+      "path": "payment-backend/src/providers/jiopay-adapter.mjs",
+      "blob_sha": "734325ba9bc5fce4d95211ff0b386f06e6705a73"
+    },
+    {
+      "path": "payment-backend/src/providers/merchant-scaffolds.mjs",
+      "blob_sha": "af9b01809abb23cebd60554b041158b4f07819af"
+    },
+    {
+      "path": "payment-backend/src/providers/paytm-adapter.mjs",
+      "blob_sha": "904717cf383db5a8249a8fb6d1471a18065d4f52"
+    },
+    {
+      "path": "payment-backend/src/providers/payu-adapter.mjs",
+      "blob_sha": "2fb385cd8cd13b6f98ee24be069aedf7d0f0fd59"
+    },
+    {
+      "path": "payment-backend/src/providers/payu-crypto.mjs",
+      "blob_sha": "c07be6046c441dace5551b097925b803695249f3"
+    },
+    {
+      "path": "payment-backend/src/providers/phonepe-adapter.mjs",
+      "blob_sha": "84b3b3e56554135e435c46a7cc6cac8037b489a3"
+    },
+    {
+      "path": "payment-backend/src/providers/phonepe-crypto.mjs",
+      "blob_sha": "ee92c0468f938131eda6fb9db77d1325919d88c5"
+    },
+    {
+      "path": "payment-backend/src/providers/razorpay.mjs",
+      "blob_sha": "54c0874933fef5a98e5b3cc9df7502253cf5360e"
+    },
+    {
+      "path": "payment-backend/src/providers/registry.mjs",
+      "blob_sha": "fb9711eeb24e77c0594512332ebea9540f9144c5"
+    },
+    {
+      "path": "payment-backend/src/providers/unimplemented-merchant-error.mjs",
+      "blob_sha": "7370b0870ce1d960402a9751727c6d6b23624841"
+    },
+    {
+      "path": "payment-backend/src/qualification/provider-acceptance.mjs",
+      "blob_sha": "7e2fbed87f280646c0f75377d24829d33aa31ab6"
+    },
+    {
+      "path": "payment-backend/src/secrets/secret-version-management.mjs",
+      "blob_sha": "966a9ad1fc1ff47b94e981a29a54133739b7fb7a"
+    },
+    {
+      "path": "payment-backend/src/server.mjs",
+      "blob_sha": "ac04a2d9004489e95f570287123c01545e79419e"
+    },
+    {
+      "path": "payment-backend/src/settlement/authorization-signer.mjs",
+      "blob_sha": "a9b6ab72ed445cac368105adf975287a321a19dc"
+    },
+    {
+      "path": "payment-backend/src/shared/canonical.mjs",
+      "blob_sha": "ca6089d6b41a1dcbc4d848a96e802ae3558d15b3"
+    },
+    {
+      "path": "payment-backend/src/webhooks/provider-webhook-router.mjs",
+      "blob_sha": "57701768e5ff785f6217c9c8a352a5aadd56d1b4"
+    },
+    {
+      "path": "payment-backend/src/webhooks/provider-webhook-state.mjs",
+      "blob_sha": "b8daf177f0ba9bc4e138d62785449a8c6123f171"
+    },
+    {
+      "path": "payment-backend/src/workers/reconciliation-engine.mjs",
+      "blob_sha": "d984b90834259be483a29b8b7170449bcf46b680"
+    },
+    {
+      "path": "payment-backend/test/active-provider-selection.test.mjs",
+      "blob_sha": "df7cccb350433daccd1101a2263f5065450f6cc5"
+    },
+    {
+      "path": "payment-backend/test/async-route-errors.test.mjs",
+      "blob_sha": "bc8c96860e62ec863591aaa566275390760032ed"
+    },
+    {
+      "path": "payment-backend/test/attestation-verifier-contract.test.mjs",
+      "blob_sha": "8e02abb21cd377a7e895069f2ce46db1e427e797"
+    },
+    {
+      "path": "payment-backend/test/device-protocol.integration.test.mjs",
+      "blob_sha": "a5c8c3d3b33737d5d0c8590e5a6e295efb23b2f6"
+    },
+    {
+      "path": "payment-backend/test/firestore-repository.test.mjs",
+      "blob_sha": "f5788293e684f4afa1e176881c247e9050b7d2be"
+    },
+    {
+      "path": "payment-backend/test/firestore-rules.test.mjs",
+      "blob_sha": "19d496e15fc970b03f8779a3baccfd871b221cf2"
+    },
+    {
+      "path": "payment-backend/test/graceful-shutdown.test.mjs",
+      "blob_sha": "a9bfc55023eed1f3986c3580d5e7c8f346b01bd4"
+    },
+    {
+      "path": "payment-backend/test/intent-state-machine.test.mjs",
+      "blob_sha": "1f6fb2e278bceee6c85012a3e13c1f9106ec61d5"
+    },
+    {
+      "path": "payment-backend/test/jiopay-adapter.test.mjs",
+      "blob_sha": "12a03189aea037873334f564b32ed438b5023603"
+    },
+    {
+      "path": "payment-backend/test/local-server-contract.test.mjs",
+      "blob_sha": "b1878ced39326a2f1ae134833a78300346ba7d9b"
+    },
+    {
+      "path": "payment-backend/test/payment-controls.test.mjs",
+      "blob_sha": "542a8bf7a66d5607f9f24983cae5de73f0efe5ab"
+    },
+    {
+      "path": "payment-backend/test/payment-route-errors.test.mjs",
+      "blob_sha": "1327dc098f0cd74f88b418d48d1f940f73085f65"
+    },
+    {
+      "path": "payment-backend/test/paytm-adapter.test.mjs",
+      "blob_sha": "b11951729bc0947b4e5c6c020dd0951734bf8263"
+    },
+    {
+      "path": "payment-backend/test/payu-adapter.test.mjs",
+      "blob_sha": "b960f1e49bdb1637f0e5cc9ac0105dc91af0e271"
+    },
+    {
+      "path": "payment-backend/test/phonepe-adapter.test.mjs",
+      "blob_sha": "4e78dba891b30dc98d8fcf7cc4e197d8510efe95"
+    },
+    {
+      "path": "payment-backend/test/provider-acceptance.test.mjs",
+      "blob_sha": "7e6aff492e07c86205b5428124b751c59cbd3ec4"
+    },
+    {
+      "path": "payment-backend/test/provider-adapters.test.mjs",
+      "blob_sha": "b99e40882898db389276f9d97a30225724aae142"
+    },
+    {
+      "path": "payment-backend/test/provider-crypto-scaffolds.test.mjs",
+      "blob_sha": "ab9d8a5f7f1be4fedb8fea179e18ba89f724da45"
+    },
+    {
+      "path": "payment-backend/test/provider-registry.test.mjs",
+      "blob_sha": "b33a3a5745dcd93d4e7d722b11713dac1884efd0"
+    },
+    {
+      "path": "payment-backend/test/provider-webhook-state.test.mjs",
+      "blob_sha": "ef6bc3ae48cb83f2684ae85beea0dcb3c405e152"
+    },
+    {
+      "path": "payment-backend/test/public-http-error.test.mjs",
+      "blob_sha": "15cf8ab2097db1cfdd2cf0c24c9a27c35de6e184"
+    },
+    {
+      "path": "payment-backend/test/readiness-probe.test.mjs",
+      "blob_sha": "f9624ed96222a83aa2158a6cc28bd650312ca4af"
+    },
+    {
+      "path": "payment-backend/test/reconciliation-engine.test.mjs",
+      "blob_sha": "87e444ac852aaa661dbe0886bdaa717aa1e07be5"
+    },
+    {
+      "path": "payment-backend/test/refund-status.test.mjs",
+      "blob_sha": "c94a3a7adef32ae4dfa1bc2be9d71a82f079d7d8"
+    },
+    {
+      "path": "payment-backend/test/secret-version-management.test.mjs",
+      "blob_sha": "5f47792aa776fff9c81b5aedc422abbf695f808c"
+    },
+    {
+      "path": "payment-backend/test/security-contract.test.mjs",
+      "blob_sha": "d6b5a8ac70e4fbef9065d8e1ff718a316ab67b42"
+    },
+    {
+      "path": "payment-backend/test/server-timeouts.test.mjs",
+      "blob_sha": "4e04b90d083e47630e8e03914852431ea5232c42"
+    },
+    {
+      "path": "payment-backend/test/settlement-authorization-signer.test.mjs",
+      "blob_sha": "631e12ae628e322fc45a182080ff89f617c8e4a2"
+    },
+    {
+      "path": "payment-backend/test/webhook-event-integrity.test.mjs",
+      "blob_sha": "b5c82c3498c5f7d64447cde68ed7532a7d7d1cf6"
+    },
+    {
+      "path": "scripts/check-release-boundaries.mjs",
+      "blob_sha": "01ba4ac481a92347746967b0a81e4eea2d6d4cbd"
+    },
+    {
+      "path": "scripts/check-storage-boundaries.mjs",
+      "blob_sha": "519ce017b767a0614ed22be2f67c8f9986e0574a"
+    },
+    {
+      "path": "scripts/diagnose-accounting.mjs",
+      "blob_sha": "d5229c37cdb4cea71bb321c9274f08e32522141e"
+    },
+    {
+      "path": "scripts/generate-status.mjs",
+      "blob_sha": "8c59f4f6b9a25c628c51e7413f842c42b23d51ef"
+    },
+    {
+      "path": "scripts/patch-android.js",
+      "blob_sha": "ee4290096f7f62fa051a2de60fdcdf77bc187c94"
+    },
+    {
+      "path": "scripts/patch-upi-reconciliation.js",
+      "blob_sha": "a7ffb38b6a774cdb8bd142dee7bf98ec15bb995b"
+    },
+    {
+      "path": "scripts/prepare-web.js",
+      "blob_sha": "48e6377a3d13fe2de84ce45540918e42928f7e06"
+    },
+    {
+      "path": "scripts/regenerate-android-safe.sh",
+      "blob_sha": "224656be77363511cf7403ed5b7d98f650f891d5"
+    },
+    {
+      "path": "src/bookings/cancellation-policy.mjs",
+      "blob_sha": "ea742a7c3ae23eab80a280963671bd8c882c9e2a"
+    },
+    {
+      "path": "src/features/payments/reconciliation-bridge.js",
+      "blob_sha": "82348d3b70a64cec5efe32e170a3d1ce7c5c765e"
+    },
+    {
+      "path": "src/features/payments/reconciliation-panel.js",
+      "blob_sha": "1c295744b4e945d0e48df6fc9acb10cbd875a27c"
+    },
+    {
+      "path": "src/payments/accounting-consistency-diagnostic.mjs",
+      "blob_sha": "dd3ca18db756120b48e4ab3244b90557ad435ac7"
+    },
+    {
+      "path": "src/payments/backend-router.mjs",
+      "blob_sha": "4417eed85e0c57600e66292f0ff3c5b2fb747098"
+    },
+    {
+      "path": "src/payments/canonical.mjs",
+      "blob_sha": "1b63f46b6c43795299e68d4b8099100a568d8a7b"
+    },
+    {
+      "path": "src/payments/evidence-store.mjs",
+      "blob_sha": "8e185a7ebf003c0cf8f6f5bfd0f79843d6058266"
+    },
+    {
+      "path": "src/payments/indexeddb-payment-intent-store.mjs",
+      "blob_sha": "5685bde0995c5ba864562cc5dd8e76a203501499"
+    },
+    {
+      "path": "src/payments/parsers/axis.mjs",
+      "blob_sha": "b4df620626bd160b24c1dc849da39cf8fbd70293"
+    },
+    {
+      "path": "src/payments/parsers/bob.mjs",
+      "blob_sha": "21f891483df5df6374d80f1fe827d9c7e8c41604"
+    },
+    {
+      "path": "src/payments/parsers/common.mjs",
+      "blob_sha": "7761ddcca1cdf093981b9ee08ed00d352cf60d9f"
+    },
+    {
+      "path": "src/payments/parsers/hdfc.mjs",
+      "blob_sha": "5afe47738979eb73a1f9b68bcedffbf509e2464f"
+    },
+    {
+      "path": "src/payments/parsers/icici.mjs",
+      "blob_sha": "2a73410cf42ff61c853bcf54ae9919a66845faa0"
+    },
+    {
+      "path": "src/payments/parsers/kotak.mjs",
+      "blob_sha": "1304ce751db10f63971040478c919e469498453c"
+    },
+    {
+      "path": "src/payments/parsers/sbi.mjs",
+      "blob_sha": "78e04ebc26aa5dbb05292616461d27edbeeb867f"
+    },
+    {
+      "path": "src/payments/parsers/uco.mjs",
+      "blob_sha": "691c6d8f389545d42c0da53ae5f026ef60129877"
+    },
+    {
+      "path": "src/payments/pay-bridge-orchestrator.mjs",
+      "blob_sha": "3e27c7521fb44105ba49449e2b4311efdbf61289"
+    },
+    {
+      "path": "src/payments/payment-device-bridge.mjs",
+      "blob_sha": "78021f1d61a9431b4ff3f044470d37b52d94bacb"
+    },
+    {
+      "path": "src/payments/payment-engine.mjs",
+      "blob_sha": "71dfd2b80b7398ca957962e649897d6c52684932"
+    },
+    {
+      "path": "src/payments/payment-safety-gate.mjs",
+      "blob_sha": "15cda982d43f4cbd8bab071b57586509393ba51e"
+    },
+    {
+      "path": "src/payments/provider-platform.mjs",
+      "blob_sha": "564d9e75ca4402e3681b6b7c2a123a56b2182c3d"
+    },
+    {
+      "path": "src/payments/reconciliation-service.mjs",
+      "blob_sha": "64306c6d3252296432f745df4ce9c678ed47ec67"
+    },
+    {
+      "path": "src/payments/repository-settlement-service.mjs",
+      "blob_sha": "8bb30b8a92846e26dce1288c64cfb2232a61c07f"
+    },
+    {
+      "path": "src/payments/settlement-apply.mjs",
+      "blob_sha": "42b00d6551ab7a4eb9b14731184d18e776e392bf"
+    },
+    {
+      "path": "src/payments/settlement-authorization.mjs",
+      "blob_sha": "678bb787a94c121293b553eb744f01a783e2635b"
+    },
+    {
+      "path": "src/payments/settlement-gate.mjs",
+      "blob_sha": "0b9c5dd76f03c9cc11866fa576c83c8041d02a72"
+    },
+    {
+      "path": "src/payments/settlement-journal.mjs",
+      "blob_sha": "820c6c97429b7b36c7951a599da0c4385cf51b70"
+    },
+    {
+      "path": "src/payments/settlement-projector.mjs",
+      "blob_sha": "044f3174e5162177f60ce792fe93cf6dd5255189"
+    },
+    {
+      "path": "src/payments/settlement-service.mjs",
+      "blob_sha": "1cfb53cadc766948aab72d467f8a6c3dab4e8bcf"
+    },
+    {
+      "path": "src/payments/settlement-trust.mjs",
+      "blob_sha": "df264de238a75e47f0427147a6c9f54c3b797669"
+    },
+    {
+      "path": "src/payments/smart-checkpoint.mjs",
+      "blob_sha": "0923f7e8c3afa7899cb811dfb69d8c27ba4ecda2"
+    },
+    {
+      "path": "src/services/payment-api.mjs",
+      "blob_sha": "773cbd57e528e0a6a4801b346a4741e852852747"
+    },
+    {
+      "path": "src/storage/capacitor-pms-storage.mjs",
+      "blob_sha": "c97a2800781886c54f4d34c26e4df3bb4f919167"
+    },
+    {
+      "path": "src/storage/indexeddb-evidence-store.mjs",
+      "blob_sha": "4a10e358b11eebc721c206d1f62bbdb43d6f44bc"
+    },
+    {
+      "path": "src/storage/indexeddb-payment-intent-store.mjs",
+      "blob_sha": "af79c25dc080d881bd063cbd9d8986820ec32958"
+    },
+    {
+      "path": "src/storage/indexeddb-pms-repository.mjs",
+      "blob_sha": "714c7e533783f0f1ebae29dc5fd975d58051dae5"
+    },
+    {
+      "path": "src/storage/indexeddb-settlement-journal.mjs",
+      "blob_sha": "386fdead7002c3a2909fc7e456debf1b58fe6cab"
+    },
+    {
+      "path": "src/storage/pms-bootstrap-coordinator.mjs",
+      "blob_sha": "80fc6eb3d3ea4e0c251d42e546a6b5264e6aa1a4"
+    },
+    {
+      "path": "src/storage/pms-domain-cutover.mjs",
+      "blob_sha": "d8cd0640b878194963aac43a89b76bb968881080"
+    },
+    {
+      "path": "src/storage/pms-expense-repository.mjs",
+      "blob_sha": "7e433cd9f7f7912638b1e4152ad2cb471f9a8d6e"
+    },
+    {
+      "path": "src/storage/pms-inventory-repository.mjs",
+      "blob_sha": "ae343223e0d60762dfecf0bdf1cf4c4609196db8"
+    },
+    {
+      "path": "src/storage/pms-legacy-compatibility-cache.mjs",
+      "blob_sha": "4c9058b164d745604b4d3107238ec7039d26cf8c"
+    },
+    {
+      "path": "src/storage/pms-local-first-write-coordinator.mjs",
+      "blob_sha": "3521b154235ef75d7a1e3bc4f90c0720f6665e51"
+    },
+    {
+      "path": "src/storage/pms-local-identity.mjs",
+      "blob_sha": "e929d44b99a0c0c899250b74fcf55e08aaa046e1"
+    },
+    {
+      "path": "src/storage/pms-operational-feedback.mjs",
+      "blob_sha": "250efdb925eca31b6950b5290975dba5d08c8729"
+    },
+    {
+      "path": "src/storage/pms-repository-bridge.mjs",
+      "blob_sha": "a82cfb6bcbf8129a812f0329257d162db02dba8a"
+    },
+    {
+      "path": "src/storage/pms-repository-contract.mjs",
+      "blob_sha": "8d13f0a41bbda8655f9f82b5d532c04adcae0eab"
+    },
+    {
+      "path": "src/storage/pms-restaurant-sale-repository.mjs",
+      "blob_sha": "e3f87f91d33a02cc6173621c12d24da72647cf06"
+    },
+    {
+      "path": "src/storage/pms-restaurant-table-repository.mjs",
+      "blob_sha": "cdc43cb344ea19c0706ac92bb0581f518cedb49e"
+    },
+    {
+      "path": "src/storage/pms-room-read-cutover.mjs",
+      "blob_sha": "857db09241e73d050f17882d3dcc57549460f702"
+    },
+    {
+      "path": "src/storage/pms-settings-repository.mjs",
+      "blob_sha": "d7c0bb22e2db47ff8ec0f3593d53fd6b6e6124e9"
+    },
+    {
+      "path": "src/storage/repository-operational-mutation-service.mjs",
+      "blob_sha": "7bc721b4159cae6994c56e97aa854b0a0754df30"
+    },
+    {
+      "path": "src/storage/repository-reservation-service.mjs",
+      "blob_sha": "3298de8a77f9db058fa42d8f818ce673aac698f0"
+    },
+    {
+      "path": "src/storage/room-inventory-service.mjs",
+      "blob_sha": "bd4bb8d98a696390f1f535b24343ea512b3b0653"
+    },
+    {
+      "path": "src/storage/storage-errors.mjs",
+      "blob_sha": "008a0515f2e2e18a0fee05bbe7173b8e5529a826"
+    },
+    {
+      "path": "src/sync/local-sync-coordinator.mjs",
+      "blob_sha": "351ca9aa1b17d934489ae3715ac53a8d1da59869"
+    },
+    {
+      "path": "tests/accounting-consistency-diagnostic.test.mjs",
+      "blob_sha": "f690cd3b2ce8781dda044e2a229d118b1f728799"
+    },
+    {
+      "path": "tests/android-photo-picker.test.mjs",
+      "blob_sha": "e7e01069248fa0836bc1270e752ad0fe05c83dc9"
+    },
+    {
+      "path": "tests/backend-router.test.mjs",
+      "blob_sha": "ebed9150f070653c07261ab2d8d908c77c054175"
+    },
+    {
+      "path": "tests/backup-architecture.test.mjs",
+      "blob_sha": "8e09391b5c392e5d6b3d2490ad65478a079f5cd2"
+    },
+    {
+      "path": "tests/backup-import-limits.test.mjs",
+      "blob_sha": "6df21fcd1dfdae3d253dd58000e64e7910f06ae5"
+    },
+    {
+      "path": "tests/cancellation-policy.test.mjs",
+      "blob_sha": "3cd64fb28527b08edd0b36ee126d36c089462305"
+    },
+    {
+      "path": "tests/capacitor-pms-storage.test.mjs",
+      "blob_sha": "7516c36e2d86e8180c197c2b0f7d0ce9ef22e40a"
+    },
+    {
+      "path": "tests/device-local-payment-contract.test.mjs",
+      "blob_sha": "3389a9c0ec35c4712009fdf0b249729ffb005779"
+    },
+    {
+      "path": "tests/evidence-store.test.mjs",
+      "blob_sha": "8c0eff1ab51c6279721adf0b3ec7bad787a9ff8e"
+    },
+    {
+      "path": "tests/firebase-phone-identity-integration.test.mjs",
+      "blob_sha": "d7c2daa831b62a08f79b24394e64f39b8297d405"
+    },
+    {
+      "path": "tests/imported-booking-integrity.test.mjs",
+      "blob_sha": "b4d81a833cca5c54efa028053bef78d34d92cc85"
+    },
+    {
+      "path": "tests/index-startup.test.mjs",
+      "blob_sha": "c1e76444327e5de1c28d1ac6e5f8b3476cdc97cf"
+    },
+    {
+      "path": "tests/indexeddb-payment-intent-store.test.mjs",
+      "blob_sha": "a6c27427d2b01259b3eb467c5027c3a7764b9a38"
+    },
+    {
+      "path": "tests/indexeddb-pms-repository.test.mjs",
+      "blob_sha": "2a5f1a83e30d3bb720c75c733596cd299597627c"
+    },
+    {
+      "path": "tests/inline-scripts-syntax.test.mjs",
+      "blob_sha": "e4534cdf4b64b882615d54290f43bc2edd9ef647"
+    },
+    {
+      "path": "tests/invoice-export-safety.test.mjs",
+      "blob_sha": "1efd2edb9e2e6fe23b5fdd66f00dd02fdb991c38"
+    },
+    {
+      "path": "tests/json-import-transaction.test.mjs",
+      "blob_sha": "e30e02423fda688a847057d1f9264638b092623c"
+    },
+    {
+      "path": "tests/local-gateway-vault.test.mjs",
+      "blob_sha": "b290cd1c1cd0d519ac57aa15d07e44a73867e2df"
+    },
+    {
+      "path": "tests/local-only-release-profile.test.mjs",
+      "blob_sha": "9ed35f7e09c06192cb36dc99cf5ae1d861ca0839"
+    },
+    {
+      "path": "tests/local-only-release.test.mjs",
+      "blob_sha": "37c959571e84d18ba0315248ab91b5e52a1ce969"
+    },
+    {
+      "path": "tests/local-payment-ledger-contract.test.mjs",
+      "blob_sha": "32bab8bd02824a1ced41c0e24846af31a984f01c"
+    },
+    {
+      "path": "tests/native-security-generation.test.mjs",
+      "blob_sha": "34e66be27d09129d0c5cb4972b3f3d80aa5e9dc6"
+    },
+    {
+      "path": "tests/native-security-template.test.mjs",
+      "blob_sha": "9c75c5da7c5a762fb8d58dd080f93c9f9c225b30"
+    },
+    {
+      "path": "tests/pay-bridge-orchestrator.test.mjs",
+      "blob_sha": "e638a86f61c366892f78ded9f25db00e42df9f17"
+    },
+    {
+      "path": "tests/pay-bridge-pms-contract.test.mjs",
+      "blob_sha": "9df585ecc3c777c88a372995e168c18903c0f2c9"
+    },
+    {
+      "path": "tests/payment-provider-onboarding-ui.test.mjs",
+      "blob_sha": "7a63cd5eccd4d153c9a73253f8d8dbc56a346b34"
+    },
+    {
+      "path": "tests/payment-safety-gate.test.mjs",
+      "blob_sha": "ba0f4154dfd5c3bd7ac06b96cd5d5ed9c1e09c76"
+    },
+    {
+      "path": "tests/payments.test.mjs",
+      "blob_sha": "ca150964528cd77868549ead5abe0bd9bbe4858c"
+    },
+    {
+      "path": "tests/persistence-strict.test.mjs",
+      "blob_sha": "58f5cdae6da37692b0d41954e8d3c8f98e5214a0"
+    },
+    {
+      "path": "tests/pms-bootstrap-coordinator.test.mjs",
+      "blob_sha": "302d2bb45be124ca9f1197c862f04bfb85a321d7"
+    },
+    {
+      "path": "tests/pms-domain-cutover.test.mjs",
+      "blob_sha": "67f846b27e95d093ed25e97d0383f697a1c4e41f"
+    },
+    {
+      "path": "tests/pms-expense-repository.test.mjs",
+      "blob_sha": "8d35e50e82b755bd571ece61fb31b6256940b185"
+    },
+    {
+      "path": "tests/pms-inventory-repository.test.mjs",
+      "blob_sha": "3fbcc202f8b0d9a85a77a8157ecb6c3937c81036"
+    },
+    {
+      "path": "tests/pms-local-first-write-coordinator.test.mjs",
+      "blob_sha": "14cf6b1ebc7b4c2611e8a5a88ae4d473f480c914"
+    },
+    {
+      "path": "tests/pms-local-identity.test.mjs",
+      "blob_sha": "f2e1df35ed199cdc6c9ae591485afdf71bbc8ba8"
+    },
+    {
+      "path": "tests/pms-operational-feedback.test.mjs",
+      "blob_sha": "26dd9531d0a3f396bf6946f88900fd5f8ea485a1"
+    },
+    {
+      "path": "tests/pms-repository-bridge.test.mjs",
+      "blob_sha": "4dfe3f8f160733da45d85e7014a090dd9505d2c5"
+    },
+    {
+      "path": "tests/pms-restaurant-sale-repository.test.mjs",
+      "blob_sha": "816a2d1b809b34c5a530128c3264dc6706179f7b"
+    },
+    {
+      "path": "tests/pms-restaurant-table-repository.test.mjs",
+      "blob_sha": "438229870240e10cb105ddfbe3211f5972e66944"
+    },
+    {
+      "path": "tests/pms-room-read-cutover.test.mjs",
+      "blob_sha": "973062c04b05a0f1adc33e0f9f23505bc0d6f232"
+    },
+    {
+      "path": "tests/pms-settings-repository.test.mjs",
+      "blob_sha": "ce02096172ade801420353e2c1359f6c0b6326ce"
+    },
+    {
+      "path": "tests/production-empty-state.test.mjs",
+      "blob_sha": "897c9b27ed919aed0821cd797455158179960076"
+    },
+    {
+      "path": "tests/provider-platform.test.mjs",
+      "blob_sha": "a5f6ffdd8c526cc5a7afcda80bab8e8b938b9f69"
+    },
+    {
+      "path": "tests/reconciliation-bridge.test.mjs",
+      "blob_sha": "1b8e5b45cc348261e9a64c7db6a3bc0f070e43c5"
+    },
+    {
+      "path": "tests/reconciliation-service.test.mjs",
+      "blob_sha": "4122033dfd39a5d563ecf86091b505214a6c3a51"
+    },
+    {
+      "path": "tests/release-boundaries.test.mjs",
+      "blob_sha": "b9b45d339cf4c379ec52cddb27dab8fb47531bb6"
+    },
+    {
+      "path": "tests/release-defaults.test.mjs",
+      "blob_sha": "f53943b545015cb2a1e8d710a87b641858742ed6"
+    },
+    {
+      "path": "tests/repository-operational-mutation-service.test.mjs",
+      "blob_sha": "2d0560ce1f95dbb0a400881fecf926d0ca7c9735"
+    },
+    {
+      "path": "tests/repository-reservation-service.test.mjs",
+      "blob_sha": "d8e058c064db941aaaf8f58712077fca8fbdc178"
+    },
+    {
+      "path": "tests/repository-settlement-service.test.mjs",
+      "blob_sha": "0ea9cc4101c4847dde90c17c3eaed72934f8a87e"
+    },
+    {
+      "path": "tests/room-inventory-service.test.mjs",
+      "blob_sha": "61badf664b40ee04e43431913561bce41f743969"
+    },
+    {
+      "path": "tests/services/payment-api.test.mjs",
+      "blob_sha": "44b4674629dd1ccb98d8add027c2407c7b4c006c"
+    },
+    {
+      "path": "tests/settlement-apply.test.mjs",
+      "blob_sha": "003ef9853b5f077c771655912885de5880c74837"
+    },
+    {
+      "path": "tests/settlement-journal.test.mjs",
+      "blob_sha": "dd3b6fd8121d311a45b24f53434f75ed2cf50ced"
+    },
+    {
+      "path": "tests/settlement-projector.test.mjs",
+      "blob_sha": "2552f8ede8a07cb8e60d2e0e90c404e5193f6c44"
+    },
+    {
+      "path": "tests/settlement-service.test.mjs",
+      "blob_sha": "df8e8ebe9f3a4320b7fc7b9a9f77a1995a79e978"
+    },
+    {
+      "path": "tests/smart-checkpoint.test.mjs",
+      "blob_sha": "d95ae3e12aff90e93f9df791da5c618367647378"
+    },
+    {
+      "path": "tests/staff-payment-review-persistence.test.mjs",
+      "blob_sha": "06aeb57343370ed7af45ec4f003be0b3e23aa1f7"
+    },
+    {
+      "path": "tests/storage-boundaries.test.mjs",
+      "blob_sha": "e2e720e2f28775d29450ea514d209d29f59ef451"
+    },
+    {
+      "path": "tests/storage-errors.test.mjs",
+      "blob_sha": "4e9fded58b5e775585e12ff5b6a148057f41b118"
+    },
+    {
+      "path": "tests/storage-write-failure.test.mjs",
+      "blob_sha": "ba4fb1c83a112d7fb16bff2bde4a25aeee171631"
+    },
+    {
+      "path": "tests/storage/indexeddb-pms-repository.test.mjs",
+      "blob_sha": "475b9f8dc65639beb3f0f1d37d140a89215a83b9"
+    },
+    {
+      "path": "tests/sync/local-sync-coordinator.test.mjs",
+      "blob_sha": "41764a24c9146ead8945abf78845a5ad19ad2acb"
+    }
+  ],
+  "features": [
+    {
+      "id": "android-native-integrations-001",
+      "feature": "android-native-integrations",
+      "files": [
+        "android/templates/CapacitorPmsStoragePlugin.java"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "dd7afbd4e27827a88fd1a4e3bf99dec051fb6e2c"
+    },
+    {
+      "id": "android-native-integrations-002",
+      "feature": "android-native-integrations",
+      "files": [
+        "android/templates/FirebasePhoneIdentity.kt"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "ffd5f635de94a785fbdbc2ada7d79735425c05f0"
+    },
+    {
+      "id": "android-native-integrations-003",
+      "feature": "android-native-integrations",
+      "files": [
+        "android/templates/LocalGatewayVault.java"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "ccfc190f78e33319c5819cb24fdaa0d2db6dad3b"
+    },
+    {
+      "id": "android-native-integrations-004",
+      "feature": "android-native-integrations",
+      "files": [
+        "android/templates/LocalPaymentLedger.java"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "c9af1948d010763eb9dcf368509dad9472cfecdf"
+    },
+    {
+      "id": "android-native-integrations-005",
+      "feature": "android-native-integrations",
+      "files": [
+        "android/templates/LocalPmsRepository.java"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "f0c2170b56cbd7d321ee3bb15c94fcc3dc8c00c4"
+    },
+    {
+      "id": "android-native-integrations-006",
+      "feature": "android-native-integrations",
+      "files": [
+        "android/templates/NotificationQueueDb.java"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "43efb8638843d71b0bcd77b65743fdec7d4d8d3e"
+    },
+    {
+      "id": "android-native-integrations-007",
+      "feature": "android-native-integrations",
+      "files": [
+        "android/templates/PAY_BRIDGE_IPC_CONTRACT.md"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "443c2274d13208d6299f2f8f88743c81643f3a14"
+    },
+    {
+      "id": "android-native-integrations-008",
+      "feature": "android-native-integrations",
+      "files": [
+        "android/templates/PAY_BRIDGE_MANIFEST_TEMPLATE.xml"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "65829b90babfb526d221dbffef3771eae36b40b4"
+    },
+    {
+      "id": "android-native-integrations-009",
+      "feature": "android-native-integrations",
+      "files": [
+        "android/templates/PayBridgeClient.java"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "36db128e22e877b84fba9199ecf8eff4a8ebd286"
+    },
+    {
+      "id": "android-native-integrations-010",
+      "feature": "android-native-integrations",
+      "files": [
+        "android/templates/PayBridgeProtocol.java"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "3024ee62471c088531e45ac5bcca3123c9bddaa1"
+    },
+    {
+      "id": "android-native-integrations-011",
+      "feature": "android-native-integrations",
+      "files": [
+        "android/templates/RecoveryFirebaseAuthFactory.kt"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "19920a68b4b57fda7ae55f3a35e40181669d9c71"
+    },
+    {
+      "id": "android-native-integrations-012",
+      "feature": "android-native-integrations",
+      "files": [
+        "android/templates/UPINotificationListener.java"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "91ae1c3451951d934c3a6e1fea529cccc30292b8"
+    },
+    {
+      "id": "android-device-security-013",
+      "feature": "android-device-security",
+      "files": [
+        "android/templates/security/AppLockManager.kt"
+      ],
+      "tests": [
+        "payment-backend/test/security-contract.test.mjs",
+        "tests/native-security-generation.test.mjs",
+        "tests/native-security-template.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "983977243dd592f008476e12fc0062b8eb7595f4"
+    },
+    {
+      "id": "android-device-security-014",
+      "feature": "android-device-security",
+      "files": [
+        "android/templates/security/AureliaAppManager.kt"
+      ],
+      "tests": [
+        "payment-backend/test/security-contract.test.mjs",
+        "tests/native-security-generation.test.mjs",
+        "tests/native-security-template.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "ece4b1dfb22ff541916926543514d5e57f44bad5"
+    },
+    {
+      "id": "android-device-security-015",
+      "feature": "android-device-security",
+      "files": [
+        "android/templates/security/AureliaCryptoEngine.kt"
+      ],
+      "tests": [
+        "payment-backend/test/security-contract.test.mjs",
+        "tests/native-security-generation.test.mjs",
+        "tests/native-security-template.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "54bca40d25e09a5115a0ba6373bf6034bae8bdf1"
+    },
+    {
+      "id": "android-device-security-016",
+      "feature": "android-device-security",
+      "files": [
+        "android/templates/security/AureliaEnvelopeStore.kt"
+      ],
+      "tests": [
+        "payment-backend/test/security-contract.test.mjs",
+        "tests/native-security-generation.test.mjs",
+        "tests/native-security-template.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "06ebdbf56d24d1374653d20a4b3df850d079b083"
+    },
+    {
+      "id": "android-device-security-017",
+      "feature": "android-device-security",
+      "files": [
+        "android/templates/security/AureliaSecurityRuntime.kt"
+      ],
+      "tests": [
+        "payment-backend/test/security-contract.test.mjs",
+        "tests/native-security-generation.test.mjs",
+        "tests/native-security-template.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "b3bcde01b2c52faf3f2003a9e9ffbc0bb7ff622c"
+    },
+    {
+      "id": "android-device-security-018",
+      "feature": "android-device-security",
+      "files": [
+        "android/templates/security/BiometricVaultManager.kt"
+      ],
+      "tests": [
+        "payment-backend/test/security-contract.test.mjs",
+        "tests/native-security-generation.test.mjs",
+        "tests/native-security-template.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "55a64508e6c36a6416860e17585e428fed2c625e"
+    },
+    {
+      "id": "android-device-security-019",
+      "feature": "android-device-security",
+      "files": [
+        "android/templates/security/LockGateActivity.kt"
+      ],
+      "tests": [
+        "payment-backend/test/security-contract.test.mjs",
+        "tests/native-security-generation.test.mjs",
+        "tests/native-security-template.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "ef6eb9c15deb6c478e57eac1dc21c1e2b66694e2"
+    },
+    {
+      "id": "android-device-security-020",
+      "feature": "android-device-security",
+      "files": [
+        "android/templates/security/PaymentDeviceClient.kt"
+      ],
+      "tests": [
+        "payment-backend/test/security-contract.test.mjs",
+        "tests/native-security-generation.test.mjs",
+        "tests/native-security-template.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "284c821a7108e4e4b2f8ca3399b00edce3ff9c30"
+    },
+    {
+      "id": "android-device-security-021",
+      "feature": "android-device-security",
+      "files": [
+        "android/templates/security/PaymentDeviceKeyStore.kt"
+      ],
+      "tests": [
+        "payment-backend/test/security-contract.test.mjs",
+        "tests/native-security-generation.test.mjs",
+        "tests/native-security-template.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "04a32807c0ce0755b4aed3d4de54074eb6114ffa"
+    },
+    {
+      "id": "android-device-security-022",
+      "feature": "android-device-security",
+      "files": [
+        "android/templates/security/SettlementEnvelopeVerifier.kt"
+      ],
+      "tests": [
+        "payment-backend/test/security-contract.test.mjs",
+        "tests/native-security-generation.test.mjs",
+        "tests/native-security-template.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "94e9961d846b0434bea7d5e1a2ce2a758ddcdffa"
+    },
+    {
+      "id": "legacy-ui-and-pms-entrypoint-023",
+      "feature": "legacy-ui-and-pms-entrypoint",
+      "files": [
+        "index.html"
+      ],
+      "tests": [
+        "tests/index-startup.test.mjs",
+        "tests/indexeddb-payment-intent-store.test.mjs",
+        "tests/indexeddb-pms-repository.test.mjs",
+        "tests/storage/indexeddb-pms-repository.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "a437bc3414fdedb4b3dbbfc2d5839ee44355b4d3"
+    },
+    {
+      "id": "device-attestation-024",
+      "feature": "device-attestation",
+      "files": [
+        "payment-backend/attestation-verifier/src/main/kotlin/com/aurelia/attestation/Main.kt"
+      ],
+      "tests": [
+        "tests/pms-domain-cutover.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "7163da8cdd7fa2980e56990727b43499edd71951"
+    },
+    {
+      "id": "optional-payment-backend-025",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/devices/firestore-device-service.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "0661eaaea33a1936d739bf1f9fd77ebc99f7c97f"
+    },
+    {
+      "id": "optional-payment-backend-026",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/http/async-route-errors.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/async-route-errors.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "75e88db399472b9d073c80e13e9bfc9ed0f3658d"
+    },
+    {
+      "id": "optional-payment-backend-027",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/http/graceful-shutdown.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/graceful-shutdown.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "570b270b8d75c8b53dd5def7ee958d321d45ce90"
+    },
+    {
+      "id": "optional-payment-backend-028",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/http/payment-route-errors.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/payment-route-errors.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "e61444de69281c68946d979fb13dd1a4288fd6da"
+    },
+    {
+      "id": "optional-payment-backend-029",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/http/public-http-error.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/public-http-error.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "619ee86dac20aca3630c0a66ec50f15daaa4331f"
+    },
+    {
+      "id": "optional-payment-backend-030",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/http/readiness-probe.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/readiness-probe.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "945062577edd8ae132f63a688694d2c3e2af060f"
+    },
+    {
+      "id": "optional-payment-backend-031",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/http/server-timeouts.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/server-timeouts.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "473ce2ab51563648d9bf4deb1644abe8b0490d99"
+    },
+    {
+      "id": "optional-payment-backend-032",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/intents/firestore-repository.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/firestore-repository.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "e309c56ad14b5dcb32ed8ec0c75c695e46869c58"
+    },
+    {
+      "id": "optional-payment-backend-033",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/intents/folio-settlement.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "3448d3ed96763de5bf14c61d686e53230b3d0513"
+    },
+    {
+      "id": "optional-payment-backend-034",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/intents/intent-state-machine.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/intent-state-machine.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "ddca335561071db2874959c4ae991a8cb065aa88"
+    },
+    {
+      "id": "optional-payment-backend-035",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/local-server.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/local-server-contract.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "7d601cc6d5e6df6b204da37408d1e79c13baf32d"
+    },
+    {
+      "id": "optional-payment-backend-036",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/payment-controls/active-provider-selection.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/active-provider-selection.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "1f04f2abcddbcc92673f181f3dacb59fae495611"
+    },
+    {
+      "id": "optional-payment-backend-037",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/payment-controls/firestore-controls.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/payment-controls.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "9ee1c140da7ce40aa9157f23479ef09ab4c4914f"
+    },
+    {
+      "id": "optional-payment-backend-038",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/payment-domain.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "3a0e511ff8b74e243c14bf42ef1165b5b0ac74e6"
+    },
+    {
+      "id": "optional-payment-backend-039",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/adapter-contract.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "b6d3866b8f561868d656dffc6166720ab6d93340"
+    },
+    {
+      "id": "optional-payment-backend-040",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/cashfree.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "3b78088bc0098d913d189b54554ad82176861392"
+    },
+    {
+      "id": "optional-payment-backend-041",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/ccavenue.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "209e2910ce74b285462b006df2b01b800cf35639"
+    },
+    {
+      "id": "optional-payment-backend-042",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/checkout-contract.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "daaf1f5d1664786aa3c7b6abdd6e8f782eb70aab"
+    },
+    {
+      "id": "optional-payment-backend-043",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/factory.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "9fd32c296f756d94f9cb13c7e0f0319b667f1a41"
+    },
+    {
+      "id": "optional-payment-backend-044",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/jiopay-adapter.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/jiopay-adapter.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "734325ba9bc5fce4d95211ff0b386f06e6705a73"
+    },
+    {
+      "id": "optional-payment-backend-045",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/merchant-scaffolds.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "af9b01809abb23cebd60554b041158b4f07819af"
+    },
+    {
+      "id": "optional-payment-backend-046",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/paytm-adapter.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/paytm-adapter.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "904717cf383db5a8249a8fb6d1471a18065d4f52"
+    },
+    {
+      "id": "optional-payment-backend-047",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/payu-adapter.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/payu-adapter.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "2fb385cd8cd13b6f98ee24be069aedf7d0f0fd59"
+    },
+    {
+      "id": "optional-payment-backend-048",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/payu-crypto.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "c07be6046c441dace5551b097925b803695249f3"
+    },
+    {
+      "id": "optional-payment-backend-049",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/phonepe-adapter.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/phonepe-adapter.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "84b3b3e56554135e435c46a7cc6cac8037b489a3"
+    },
+    {
+      "id": "optional-payment-backend-050",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/phonepe-crypto.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "ee92c0468f938131eda6fb9db77d1325919d88c5"
+    },
+    {
+      "id": "optional-payment-backend-051",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/razorpay.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "54c0874933fef5a98e5b3cc9df7502253cf5360e"
+    },
+    {
+      "id": "optional-payment-backend-052",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/registry.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/provider-registry.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "fb9711eeb24e77c0594512332ebea9540f9144c5"
+    },
+    {
+      "id": "optional-payment-backend-053",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/providers/unimplemented-merchant-error.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "7370b0870ce1d960402a9751727c6d6b23624841"
+    },
+    {
+      "id": "optional-payment-backend-054",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/qualification/provider-acceptance.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/provider-acceptance.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "7e2fbed87f280646c0f75377d24829d33aa31ab6"
+    },
+    {
+      "id": "optional-payment-backend-055",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/secrets/secret-version-management.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/secret-version-management.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "966a9ad1fc1ff47b94e981a29a54133739b7fb7a"
+    },
+    {
+      "id": "optional-payment-backend-056",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/server.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/local-server-contract.test.mjs",
+        "payment-backend/test/server-timeouts.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "ac04a2d9004489e95f570287123c01545e79419e"
+    },
+    {
+      "id": "optional-payment-backend-057",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/settlement/authorization-signer.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/settlement-authorization-signer.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "a9b6ab72ed445cac368105adf975287a321a19dc"
+    },
+    {
+      "id": "optional-payment-backend-058",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/shared/canonical.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "ca6089d6b41a1dcbc4d848a96e802ae3558d15b3"
+    },
+    {
+      "id": "optional-payment-backend-059",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/webhooks/provider-webhook-router.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "57701768e5ff785f6217c9c8a352a5aadd56d1b4"
+    },
+    {
+      "id": "optional-payment-backend-060",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/webhooks/provider-webhook-state.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/provider-webhook-state.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "b8daf177f0ba9bc4e138d62785449a8c6123f171"
+    },
+    {
+      "id": "optional-payment-backend-061",
+      "feature": "optional-payment-backend",
+      "files": [
+        "payment-backend/src/workers/reconciliation-engine.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/reconciliation-engine.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "d984b90834259be483a29b8b7170449bcf46b680"
+    },
+    {
+      "id": "build-and-maintenance-tools-062",
+      "feature": "build-and-maintenance-tools",
+      "files": [
+        "scripts/check-release-boundaries.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "01ba4ac481a92347746967b0a81e4eea2d6d4cbd"
+    },
+    {
+      "id": "build-and-maintenance-tools-063",
+      "feature": "build-and-maintenance-tools",
+      "files": [
+        "scripts/check-storage-boundaries.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "519ce017b767a0614ed22be2f67c8f9986e0574a"
+    },
+    {
+      "id": "build-and-maintenance-tools-064",
+      "feature": "build-and-maintenance-tools",
+      "files": [
+        "scripts/diagnose-accounting.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "d5229c37cdb4cea71bb321c9274f08e32522141e"
+    },
+    {
+      "id": "build-and-maintenance-tools-065",
+      "feature": "build-and-maintenance-tools",
+      "files": [
+        "scripts/generate-status.mjs"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "8c59f4f6b9a25c628c51e7413f842c42b23d51ef"
+    },
+    {
+      "id": "build-and-maintenance-tools-066",
+      "feature": "build-and-maintenance-tools",
+      "files": [
+        "scripts/patch-android.js"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "ee4290096f7f62fa051a2de60fdcdf77bc187c94"
+    },
+    {
+      "id": "build-and-maintenance-tools-067",
+      "feature": "build-and-maintenance-tools",
+      "files": [
+        "scripts/patch-upi-reconciliation.js"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "a7ffb38b6a774cdb8bd142dee7bf98ec15bb995b"
+    },
+    {
+      "id": "build-and-maintenance-tools-068",
+      "feature": "build-and-maintenance-tools",
+      "files": [
+        "scripts/prepare-web.js"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "48e6377a3d13fe2de84ce45540918e42928f7e06"
+    },
+    {
+      "id": "build-and-maintenance-tools-069",
+      "feature": "build-and-maintenance-tools",
+      "files": [
+        "scripts/regenerate-android-safe.sh"
+      ],
+      "tests": [],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "224656be77363511cf7403ed5b7d98f650f891d5"
+    },
+    {
+      "id": "booking-lifecycle-070",
+      "feature": "booking-lifecycle",
+      "files": [
+        "src/bookings/cancellation-policy.mjs"
+      ],
+      "tests": [
+        "tests/cancellation-policy.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "ea742a7c3ae23eab80a280963671bd8c882c9e2a"
+    },
+    {
+      "id": "local-payment-and-settlement-071",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/features/payments/reconciliation-bridge.js"
+      ],
+      "tests": [
+        "tests/reconciliation-bridge.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "82348d3b70a64cec5efe32e170a3d1ce7c5c765e"
+    },
+    {
+      "id": "local-payment-and-settlement-072",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/features/payments/reconciliation-panel.js"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "1c295744b4e945d0e48df6fc9acb10cbd875a27c"
+    },
+    {
+      "id": "local-payment-and-settlement-073",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/accounting-consistency-diagnostic.mjs"
+      ],
+      "tests": [
+        "tests/accounting-consistency-diagnostic.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "dd3ca18db756120b48e4ab3244b90557ad435ac7"
+    },
+    {
+      "id": "local-payment-and-settlement-074",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/backend-router.mjs"
+      ],
+      "tests": [
+        "tests/backend-router.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "4417eed85e0c57600e66292f0ff3c5b2fb747098"
+    },
+    {
+      "id": "local-payment-and-settlement-075",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/canonical.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "1b63f46b6c43795299e68d4b8099100a568d8a7b"
+    },
+    {
+      "id": "local-payment-and-settlement-076",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/evidence-store.mjs"
+      ],
+      "tests": [
+        "tests/evidence-store.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "8e185a7ebf003c0cf8f6f5bfd0f79843d6058266"
+    },
+    {
+      "id": "local-payment-and-settlement-077",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/indexeddb-payment-intent-store.mjs"
+      ],
+      "tests": [
+        "tests/indexeddb-payment-intent-store.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "5685bde0995c5ba864562cc5dd8e76a203501499"
+    },
+    {
+      "id": "local-payment-and-settlement-078",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/parsers/axis.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "b4df620626bd160b24c1dc849da39cf8fbd70293"
+    },
+    {
+      "id": "local-payment-and-settlement-079",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/parsers/bob.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "21f891483df5df6374d80f1fe827d9c7e8c41604"
+    },
+    {
+      "id": "local-payment-and-settlement-080",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/parsers/common.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "7761ddcca1cdf093981b9ee08ed00d352cf60d9f"
+    },
+    {
+      "id": "local-payment-and-settlement-081",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/parsers/hdfc.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "5afe47738979eb73a1f9b68bcedffbf509e2464f"
+    },
+    {
+      "id": "local-payment-and-settlement-082",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/parsers/icici.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "2a73410cf42ff61c853bcf54ae9919a66845faa0"
+    },
+    {
+      "id": "local-payment-and-settlement-083",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/parsers/kotak.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "1304ce751db10f63971040478c919e469498453c"
+    },
+    {
+      "id": "local-payment-and-settlement-084",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/parsers/sbi.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "78e04ebc26aa5dbb05292616461d27edbeeb867f"
+    },
+    {
+      "id": "local-payment-and-settlement-085",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/parsers/uco.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "691c6d8f389545d42c0da53ae5f026ef60129877"
+    },
+    {
+      "id": "local-payment-and-settlement-086",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/pay-bridge-orchestrator.mjs"
+      ],
+      "tests": [
+        "tests/pay-bridge-orchestrator.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "3e27c7521fb44105ba49449e2b4311efdbf61289"
+    },
+    {
+      "id": "local-payment-and-settlement-087",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/payment-device-bridge.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "78021f1d61a9431b4ff3f044470d37b52d94bacb"
+    },
+    {
+      "id": "local-payment-and-settlement-088",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/payment-engine.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "71dfd2b80b7398ca957962e649897d6c52684932"
+    },
+    {
+      "id": "local-payment-and-settlement-089",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/payment-safety-gate.mjs"
+      ],
+      "tests": [
+        "tests/payment-safety-gate.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "15cda982d43f4cbd8bab071b57586509393ba51e"
+    },
+    {
+      "id": "local-payment-and-settlement-090",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/provider-platform.mjs"
+      ],
+      "tests": [
+        "tests/provider-platform.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "564d9e75ca4402e3681b6b7c2a123a56b2182c3d"
+    },
+    {
+      "id": "local-payment-and-settlement-091",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/reconciliation-service.mjs"
+      ],
+      "tests": [
+        "tests/reconciliation-service.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "64306c6d3252296432f745df4ce9c678ed47ec67"
+    },
+    {
+      "id": "local-payment-and-settlement-092",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/repository-settlement-service.mjs"
+      ],
+      "tests": [
+        "tests/repository-settlement-service.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "8bb30b8a92846e26dce1288c64cfb2232a61c07f"
+    },
+    {
+      "id": "local-payment-and-settlement-093",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/settlement-apply.mjs"
+      ],
+      "tests": [
+        "tests/settlement-apply.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "42b00d6551ab7a4eb9b14731184d18e776e392bf"
+    },
+    {
+      "id": "local-payment-and-settlement-094",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/settlement-authorization.mjs"
+      ],
+      "tests": [
+        "payment-backend/test/settlement-authorization-signer.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "678bb787a94c121293b553eb744f01a783e2635b"
+    },
+    {
+      "id": "local-payment-and-settlement-095",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/settlement-gate.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "0b9c5dd76f03c9cc11866fa576c83c8041d02a72"
+    },
+    {
+      "id": "local-payment-and-settlement-096",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/settlement-journal.mjs"
+      ],
+      "tests": [
+        "tests/settlement-journal.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "820c6c97429b7b36c7951a599da0c4385cf51b70"
+    },
+    {
+      "id": "local-payment-and-settlement-097",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/settlement-projector.mjs"
+      ],
+      "tests": [
+        "tests/settlement-projector.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "044f3174e5162177f60ce792fe93cf6dd5255189"
+    },
+    {
+      "id": "local-payment-and-settlement-098",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/settlement-service.mjs"
+      ],
+      "tests": [
+        "tests/repository-settlement-service.test.mjs",
+        "tests/settlement-service.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "1cfb53cadc766948aab72d467f8a6c3dab4e8bcf"
+    },
+    {
+      "id": "local-payment-and-settlement-099",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/settlement-trust.mjs"
+      ],
+      "tests": [
+        "tests/payments.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "df264de238a75e47f0427147a6c9f54c3b797669"
+    },
+    {
+      "id": "local-payment-and-settlement-100",
+      "feature": "local-payment-and-settlement",
+      "files": [
+        "src/payments/smart-checkpoint.mjs"
+      ],
+      "tests": [
+        "tests/smart-checkpoint.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "0923f7e8c3afa7899cb811dfb69d8c27ba4ecda2"
+    },
+    {
+      "id": "application-services-101",
+      "feature": "application-services",
+      "files": [
+        "src/services/payment-api.mjs"
+      ],
+      "tests": [
+        "tests/services/payment-api.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "773cbd57e528e0a6a4801b346a4741e852852747"
+    },
+    {
+      "id": "local-first-storage-102",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/capacitor-pms-storage.mjs"
+      ],
+      "tests": [
+        "tests/capacitor-pms-storage.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "c97a2800781886c54f4d34c26e4df3bb4f919167"
+    },
+    {
+      "id": "local-first-storage-103",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/indexeddb-evidence-store.mjs"
+      ],
+      "tests": [
+        "tests/capacitor-pms-storage.test.mjs",
+        "tests/storage-boundaries.test.mjs",
+        "tests/storage-errors.test.mjs",
+        "tests/storage-write-failure.test.mjs",
+        "tests/storage/indexeddb-pms-repository.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "4a10e358b11eebc721c206d1f62bbdb43d6f44bc"
+    },
+    {
+      "id": "local-first-storage-104",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/indexeddb-payment-intent-store.mjs"
+      ],
+      "tests": [
+        "tests/indexeddb-payment-intent-store.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "af79c25dc080d881bd063cbd9d8986820ec32958"
+    },
+    {
+      "id": "local-first-storage-105",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/indexeddb-pms-repository.mjs"
+      ],
+      "tests": [
+        "tests/indexeddb-pms-repository.test.mjs",
+        "tests/storage/indexeddb-pms-repository.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "714c7e533783f0f1ebae29dc5fd975d58051dae5"
+    },
+    {
+      "id": "local-first-storage-106",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/indexeddb-settlement-journal.mjs"
+      ],
+      "tests": [
+        "tests/capacitor-pms-storage.test.mjs",
+        "tests/storage-boundaries.test.mjs",
+        "tests/storage-errors.test.mjs",
+        "tests/storage-write-failure.test.mjs",
+        "tests/storage/indexeddb-pms-repository.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "386fdead7002c3a2909fc7e456debf1b58fe6cab"
+    },
+    {
+      "id": "local-first-storage-107",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-bootstrap-coordinator.mjs"
+      ],
+      "tests": [
+        "tests/pms-bootstrap-coordinator.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "80fc6eb3d3ea4e0c251d42e546a6b5264e6aa1a4"
+    },
+    {
+      "id": "local-first-storage-108",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-domain-cutover.mjs"
+      ],
+      "tests": [
+        "tests/pms-domain-cutover.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "d8cd0640b878194963aac43a89b76bb968881080"
+    },
+    {
+      "id": "local-first-storage-109",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-expense-repository.mjs"
+      ],
+      "tests": [
+        "tests/pms-expense-repository.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "7e433cd9f7f7912638b1e4152ad2cb471f9a8d6e"
+    },
+    {
+      "id": "local-first-storage-110",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-inventory-repository.mjs"
+      ],
+      "tests": [
+        "tests/pms-inventory-repository.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "ae343223e0d60762dfecf0bdf1cf4c4609196db8"
+    },
+    {
+      "id": "local-first-storage-111",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-legacy-compatibility-cache.mjs"
+      ],
+      "tests": [
+        "tests/capacitor-pms-storage.test.mjs",
+        "tests/storage-boundaries.test.mjs",
+        "tests/storage-errors.test.mjs",
+        "tests/storage-write-failure.test.mjs",
+        "tests/storage/indexeddb-pms-repository.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "4c9058b164d745604b4d3107238ec7039d26cf8c"
+    },
+    {
+      "id": "local-first-storage-112",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-local-first-write-coordinator.mjs"
+      ],
+      "tests": [
+        "tests/pms-local-first-write-coordinator.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "3521b154235ef75d7a1e3bc4f90c0720f6665e51"
+    },
+    {
+      "id": "local-first-storage-113",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-local-identity.mjs"
+      ],
+      "tests": [
+        "tests/pms-local-identity.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "e929d44b99a0c0c899250b74fcf55e08aaa046e1"
+    },
+    {
+      "id": "local-first-storage-114",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-operational-feedback.mjs"
+      ],
+      "tests": [
+        "tests/pms-operational-feedback.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "250efdb925eca31b6950b5290975dba5d08c8729"
+    },
+    {
+      "id": "local-first-storage-115",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-repository-bridge.mjs"
+      ],
+      "tests": [
+        "tests/pms-repository-bridge.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "a82cfb6bcbf8129a812f0329257d162db02dba8a"
+    },
+    {
+      "id": "local-first-storage-116",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-repository-contract.mjs"
+      ],
+      "tests": [
+        "tests/capacitor-pms-storage.test.mjs",
+        "tests/storage-boundaries.test.mjs",
+        "tests/storage-errors.test.mjs",
+        "tests/storage-write-failure.test.mjs",
+        "tests/storage/indexeddb-pms-repository.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "8d13f0a41bbda8655f9f82b5d532c04adcae0eab"
+    },
+    {
+      "id": "local-first-storage-117",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-restaurant-sale-repository.mjs"
+      ],
+      "tests": [
+        "tests/pms-restaurant-sale-repository.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "e3f87f91d33a02cc6173621c12d24da72647cf06"
+    },
+    {
+      "id": "local-first-storage-118",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-restaurant-table-repository.mjs"
+      ],
+      "tests": [
+        "tests/pms-restaurant-table-repository.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "cdc43cb344ea19c0706ac92bb0581f518cedb49e"
+    },
+    {
+      "id": "local-first-storage-119",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-room-read-cutover.mjs"
+      ],
+      "tests": [
+        "tests/pms-room-read-cutover.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "857db09241e73d050f17882d3dcc57549460f702"
+    },
+    {
+      "id": "local-first-storage-120",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/pms-settings-repository.mjs"
+      ],
+      "tests": [
+        "tests/pms-settings-repository.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "d7c0bb22e2db47ff8ec0f3593d53fd6b6e6124e9"
+    },
+    {
+      "id": "local-first-storage-121",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/repository-operational-mutation-service.mjs"
+      ],
+      "tests": [
+        "tests/repository-operational-mutation-service.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "7bc721b4159cae6994c56e97aa854b0a0754df30"
+    },
+    {
+      "id": "local-first-storage-122",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/repository-reservation-service.mjs"
+      ],
+      "tests": [
+        "tests/repository-reservation-service.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "3298de8a77f9db058fa42d8f818ce673aac698f0"
+    },
+    {
+      "id": "local-first-storage-123",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/room-inventory-service.mjs"
+      ],
+      "tests": [
+        "tests/room-inventory-service.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "bd4bb8d98a696390f1f535b24343ea512b3b0653"
+    },
+    {
+      "id": "local-first-storage-124",
+      "feature": "local-first-storage",
+      "files": [
+        "src/storage/storage-errors.mjs"
+      ],
+      "tests": [
+        "tests/storage-errors.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "008a0515f2e2e18a0fee05bbe7173b8e5529a826"
+    },
+    {
+      "id": "optional-cloud-sync-125",
+      "feature": "optional-cloud-sync",
+      "files": [
+        "src/sync/local-sync-coordinator.mjs"
+      ],
+      "tests": [
+        "tests/sync/local-sync-coordinator.test.mjs"
+      ],
+      "status": "UNVERIFIED",
+      "evidence": null,
+      "reason": "No completed green run on an exact SHA has been reconciled to this inventory entry. Do not infer verification from source presence or unrelated suite results.",
+      "file_blob_sha": "351ca9aa1b17d934489ae3715ac53a8d1da59869"
+    }
+  ]
+}
