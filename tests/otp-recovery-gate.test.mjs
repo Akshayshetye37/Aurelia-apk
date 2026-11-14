@@ -236,3 +236,19 @@ test('recovery gate is initialized at application startup and not cleared by onS
   assert.ok(!gate.slice(onStopStart, onBackStart).includes('RecoveryGate.clear()'));
   assert.ok(gate.slice(onBackStart).includes('RecoveryGate.clear()'));
 });
+
+
+test('recovery key lockout persists independently across grants and escalates after repeated unwrap failures', () => {
+  const manager = read('android/templates/security/AureliaAppManager.kt');
+  const lockout = read('android/templates/security/AppLockManager.kt');
+  assert.ok(manager.includes('aurelia-recovery-lock-state.v1'));
+  assert.ok(manager.includes('recoveryLockout.assertUnlocked()'));
+  assert.ok(manager.includes('recoveryLockout.registerFailure()'));
+  assert.ok(lockout.includes('AtomicFile'));
+  assert.ok(lockout.includes('MAX_LOCK_MS = 60 * 60 * 1000L'));
+  assert.ok(lockout.includes('lockDuration(failures)'));
+  assert.ok(lockout.includes('bootCount'));
+  const crypto = read('android/templates/security/AureliaCryptoEngine.kt');
+  assert.ok(crypto.includes('ByteArray(32)'));
+  assert.ok(crypto.includes('SecureRandom'));
+});
