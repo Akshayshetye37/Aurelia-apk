@@ -33,7 +33,8 @@ test("phase one holds the tested target process until the host force-stops it", 
   assert.ok(workflow.includes('"$adb_bin" shell am force-stop com.aurelia.pms'));
   assert.ok(workflow.includes('Phase-one target app process was not alive at the durable-state marker.'));
   assert.ok(workflow.includes('if [[ -n "$after_stop" ]]'));
-  assert.ok(workflow.includes('process-death-phase-one/TEST-process-death-phase-one.xml'));
+  assert.ok(workflow.includes('process-death-phase-one-evidence.txt'));
+  assert.ok(workflow.includes('Do not fabricate a completed JUnit case'));
   assert.ok(!workflow.includes('monkey -p com.aurelia.pms'));
 });
 

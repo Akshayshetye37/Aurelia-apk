@@ -327,17 +327,19 @@ jobs:
             echo "::error::Phase-one instrumentation command timed out instead of exiting after force-stop."
             exit 1
           fi
-          # This host-side JUnit case is emitted only after the durable marker
-          # and explicit target-PID termination have both been verified.
-          mkdir -p "$results_root/process-death-phase-one"
-          cat > "$results_root/process-death-phase-one/TEST-process-death-phase-one.xml" <<'XML'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <testsuite name="process-death-phase-one" tests="1" failures="0" errors="0" skipped="0">
-            <testcase classname="com.aurelia.pms.RecoveryProcessDeathInstrumentedTest" name="phaseOnePersistsPinAAndDatabaseBeforeForceStop">
-              <system-out>Assertions completed, durable marker observed, target PID force-stopped by host.</system-out>
-            </testcase>
-          </testsuite>
-          XML
+          # Keep phase-one process-death evidence separate from JUnit totals.
+          # Do not fabricate a completed JUnit case for the intentionally killed
+          # instrumentation process; phase two supplies the completed JUnit test.
+          {
+            echo "phase=process-death-phase-one"
+            echo "test_method=phaseOnePersistsPinAAndDatabaseBeforeForceStop"
+            echo "marker=PHASE_ONE_READY"
+            echo "target_pid_before_force_stop=$before_pid"
+            echo "target_pid_after_force_stop=absent"
+            echo "force_stop_command=adb shell am force-stop com.aurelia.pms"
+            echo "instrumentation_command_exit=$phase_one_exit"
+            echo "result=HOST_VERIFIED_PROCESS_TERMINATION"
+          } > "$log_dir/process-death-phase-one-evidence.txt"
 
           # Phase two executes in the newly started target process. It verifies
           # PIN A, offline recovery key, same DEK, PIN B rotation and original
