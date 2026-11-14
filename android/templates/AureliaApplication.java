@@ -3,7 +3,7 @@ package com.aurelia.pms;
 import android.app.Application;
 import android.util.Log;
 
-import com.google.firebase.FirebaseApp;
+import com.google.firebase.FirebaseApp;\nimport com.aurelia.pms.security.RecoveryGate;
 import com.google.firebase.appcheck.FirebaseAppCheck;
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory;
 
@@ -13,7 +13,7 @@ import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderF
  */
 public final class AureliaApplication extends Application {
     @Override public void onCreate() {
-        super.onCreate();
+        super.onCreate();\n        // Load durable recovery authorization before any activity can inspect it.\n        RecoveryGate.INSTANCE.initialize(this);
         try {
             FirebaseApp firebaseApp = FirebaseApp.initializeApp(this);
             if (firebaseApp == null) return;
