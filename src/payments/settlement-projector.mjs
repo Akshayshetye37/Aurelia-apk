@@ -1,6 +1,7 @@
 import { settlePayment } from "./settlement-service.mjs";
 import { AUTO_FOLIO_SETTLEMENT_ENABLED } from "./settlement-gate.mjs";
 import { IndexedDbSettlementJournal } from "./settlement-journal.mjs";
+import { canonicalBytes } from "./canonical.mjs";
 
 const PERMANENT_FAILURES = new Set([
   "BOOKING_NOT_FOUND", "BOOKING_NOT_SETTLEABLE", "IDEMPOTENCY_KEY_CONFLICT",
@@ -14,7 +15,7 @@ function paise(row) { return Number.isSafeInteger(row?.amountPaise) ? row.amount
 
 export class SettlementProjector {
   constructor({ journal, verifier, getLease, getState, findBooking, getBalanceDue, persist, readBack,
-    flush = async () => {}, isEmergencyStopped, audit = () => {},
+    flush = async () => {}, isEmergencyStopped, audit = () => {}, acknowledge = null,
     autoSettlementEnabled = AUTO_FOLIO_SETTLEMENT_ENABLED, settle = settlePayment,
     now = () => new Date().toISOString(), locks = globalThis.navigator?.locks } = {}) {
     const required = { getLease, getState, findBooking, getBalanceDue, persist, readBack, isEmergencyStopped };
@@ -22,7 +23,7 @@ export class SettlementProjector {
     if (!journal || !verifier) throw fail("SETTLEMENT_PROJECTOR_UNAVAILABLE", "journal and verifier are required");
     if (persist.synchronous !== true || persist.constructor?.name === "AsyncFunction") throw fail("SETTLEMENT_PROJECTOR_UNAVAILABLE", "persist must be explicitly marked as a synchronous durable adapter");
     Object.assign(this, { journal, verifier, getLease, getState, findBooking, getBalanceDue, persist, readBack, flush,
-      isEmergencyStopped, audit, autoSettlementEnabled, settle, now, locks });
+      isEmergencyStopped, audit, acknowledge, autoSettlementEnabled, settle, now, locks });
     this.tail = Promise.resolve();
   }
   run(fn) {
@@ -68,7 +69,16 @@ export class SettlementProjector {
         persist: this.persist, audit: this.audit, now: this.now
       });
       await this.flush();
-      await this.confirmPersisted(binding);
+      const persistedRow = await this.confirmPersisted(binding);
+      if (typeof this.acknowledge !== "function") {
+        throw fail("ACCOUNTING_RECEIPT_ACKNOWLEDGEMENT_UNAVAILABLE",
+          "A signed device accounting-receipt acknowledgement is required.");
+      }
+      const canonicalRow = JSON.parse(JSON.stringify(persistedRow));
+      const digest = await globalThis.crypto.subtle.digest("SHA-256", canonicalBytes(canonicalRow));
+      const ledgerEntryHash = Array.from(new Uint8Array(digest),
+        byte => byte.toString(16).padStart(2, "0")).join("");
+      await this.acknowledge({ commandId: command.commandId, ledgerEntryHash, command, binding, persistedRow: canonicalRow });
       await this.journal.markApplied(record.key, record.payloadHash);
       return { status: "applied", duplicate: result.duplicate, key, payment: result.payment };
     } catch (error) {

@@ -10,6 +10,7 @@ import java.net.URL
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
@@ -143,6 +144,54 @@ class PaymentDeviceClient(
             body, idToken
         )
     }
+
+    /**
+     * Sends a transport acknowledgement followed by a separate device-signed
+     * ledger receipt. The server independently checks provider capture before
+     * accepting the receipt or releasing the folio lock.
+     */
+    fun acknowledgeWithReceipt(lease: Lease, ledgerEntryHash: String, idToken: String): JSONObject {
+        require(ledgerEntryHash.matches(Regex("[a-f0-9]{64}"))) {
+            "A SHA-256 hash of the persisted PMS ledger entry is required."
+        }
+        require(idToken.length in 20..8192 && !idToken.any { it.isWhitespace() }) {
+            "A fresh Firebase identity token is required."
+        }
+        val command = lease.command
+        validateCommand(command)
+        val payload = JSONObject()
+            .put("tenantId", lease.settlement.getString("tenantId"))
+            .put("deviceId", deviceId)
+            .put("commandId", command.getString("commandId"))
+            .put("sequenceId", command.getLong("sequenceId"))
+            .put("intentId", command.getString("transactionId"))
+            .put("paymentId", command.getString("providerPaymentId"))
+            .put("amountMinor", command.getLong("amountMinor"))
+            .put("currency", command.getString("currency"))
+            .put("folioId", command.getString("folioId"))
+            .put("ledgerEntryHash", ledgerEntryHash)
+            .put("issuedAt", utcTimestamp())
+        val transcript = canonicalJson(
+            JSONObject().put("type", "AURELIA_ACCOUNTING_RECEIPT_V1").put("receipt", payload)
+        ).toByteArray(Charsets.UTF_8)
+        val receiptId = sha256Hex(transcript)
+        val receipt = JSONObject(payload.toString())
+            .put("signature", keyStore.signAccountingReceipt(transcript))
+
+        // If the provider lookup fails after transport acknowledgement, the
+        // command remains pending and the same signed receipt can be retried.
+        val acknowledgement = acknowledge(lease, receiptId, idToken)
+        val accepted = post(
+            "/v1/devices/$deviceId/commands/${command.getString("commandId")}/accounting-receipt",
+            JSONObject().put("receipt", receipt), idToken
+        )
+        return JSONObject().put("acknowledgement", acknowledgement).put("receipt", accepted)
+    }
+
+    private fun utcTimestamp(): String =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }.format(Date())
 
     private fun validateCommand(command: JSONObject) {
         val commandId = command.optString("commandId")

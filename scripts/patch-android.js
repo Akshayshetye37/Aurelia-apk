@@ -1380,16 +1380,19 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         } else if ("paymentDeviceAcknowledge".equals(type)) {
           final String rid = requestId;
           final String commandId = obj.optString("commandId", "");
-          final String ledgerAckId = obj.optString("ledgerAckId", "");
+          final String ledgerEntryHash = obj.optString("ledgerEntryHash", "");
           backupExecutor.execute(() -> {
             try {
               PaymentDeviceClient.Lease lease = paymentDeviceLeases.get(commandId);
               if (paymentDeviceClient == null || lease == null || !lease.getSettlementAuthorized()) {
                 throw new IllegalStateException("No verified, unexpired settlement lease is available.");
               }
+              if (!ledgerEntryHash.matches("[a-f0-9]{64}")) {
+                throw new IllegalArgumentException("A persisted ledger-entry SHA-256 hash is required.");
+              }
               String idToken = obj.optString("idToken", "");
               if (idToken.length() < 20) throw new IllegalArgumentException("Fresh Firebase identity is required.");
-              JSONObject result = paymentDeviceClient.acknowledge(lease, ledgerAckId, idToken);
+              JSONObject result = paymentDeviceClient.acknowledgeWithReceipt(lease, ledgerEntryHash, idToken);
               paymentDeviceLeases.remove(commandId);
               js("window.aureliaNativePaymentDeviceResult && window.aureliaNativePaymentDeviceResult(" + q(rid) + ",true," + q(result.toString()) + ")");
             } catch (Exception error) {

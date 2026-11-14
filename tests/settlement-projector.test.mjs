@@ -136,3 +136,59 @@ test("projector records verified evidence but automatic gateway settlement remai
   assert.equal(state.b[0].p, 0);
   assert.equal((await j.get(result.key)).status, "PENDING");
 });
+
+test("projector keeps a durable local posting pending until the signed server receipt is accepted", async () => {
+  const { lease, authorization } = await envelopes();
+  const state = { b: [{ id: command.bookingId, st: "in", p: 0, pays: [] }], today: 0, aud: [] };
+  let stored = JSON.stringify(state);
+  function persist() { stored = JSON.stringify(state); }
+  persist.synchronous = true;
+  let allowReceipt = false;
+  let acknowledgements = 0;
+  const settle = ({ booking, amount, method, reference, authorization: binding, persist: save, now }) => {
+    const existing = booking.pays.find(row => row.idempotencyKey === binding.idempotencyKey);
+    if (existing) return { ok: true, duplicate: true, payment: existing };
+    const payment = {
+      a: amount, amountPaise: binding.amountPaise, m: method, r: reference, at: now(),
+      auto: true, source: "verified_gateway", bookingId: binding.bookingId,
+      verificationConfirmed: true, idempotencyKey: binding.idempotencyKey,
+      provider: binding.provider, providerTransactionId: binding.providerTransactionId,
+      tenantId: binding.tenantId, deviceId: binding.deviceId,
+      providerAccountId: binding.providerAccountId, environment: binding.environment,
+      authorizationId: binding.authorizationId, leaseId: binding.leaseId
+    };
+    booking.pays.push(payment);
+    booking.p = amount;
+    save();
+    return { ok: true, duplicate: false, payment };
+  };
+  const j = journal("projector-receipt-ack");
+  const projector = new SettlementProjector({
+    journal: j, verifier: verifier(), getLease: async () => lease,
+    getState: () => state, findBooking: (s, id) => s.b.find(b => b.id === id),
+    getBalanceDue: () => 5000, persist, readBack: async () => JSON.parse(stored),
+    isEmergencyStopped: () => false, autoSettlementEnabled: true, settle,
+    acknowledge: async ({ commandId, ledgerEntryHash }) => {
+      acknowledgements += 1;
+      assert.equal(commandId, command.commandId);
+      assert.match(ledgerEntryHash, /^[a-f0-9]{64}$/);
+      if (!allowReceipt) {
+        const error = new Error("Provider status lookup unavailable");
+        error.code = "PROVIDER_STATUS_UNAVAILABLE";
+        throw error;
+      }
+      return { accepted: true };
+    },
+    now: () => iso(NOW)
+  });
+  const first = await projector.submit({ command, authorization });
+  assert.equal(first.status, "pending");
+  assert.equal(first.code, "PROVIDER_STATUS_UNAVAILABLE");
+  assert.equal((await j.get(first.key)).status, "PENDING");
+  assert.equal(state.b[0].pays.length, 1);
+  allowReceipt = true;
+  const recovered = await projector.project(first.key);
+  assert.equal(recovered.status, "applied");
+  assert.equal(acknowledgements, 2);
+  assert.equal((await j.get(first.key)).status, "APPLIED");
+});
