@@ -89,15 +89,7 @@ public final class RecoveryProcessDeathInstrumentedTest {
       Arrays.fill(key, (byte) 0);
       key = null;
       manager.lock();
-      // Test-only synthetic consumed JTI: spend one attempt before the host force-stop.
-      com.aurelia.pms.security.RecoveryGate.INSTANCE.armAfterServerConsumption(GATE_JTI, 240_000L);
-      assertTrue("test grant must arm", com.aurelia.pms.security.RecoveryGate.INSTANCE.isOpen());
-      assertTrue("first recovery attempt must be durably spent", com.aurelia.pms.security.RecoveryGate.INSTANCE.spendAttempt(GATE_JTI));
-      assertEquals("two attempts must remain before process death", 2,
-        com.aurelia.pms.security.RecoveryGate.INSTANCE.attemptsLeft());
       assertTrue("encrypted PIN envelope must be durable before host force-stop", store.read() != null);
-      // Simulate process death after persisting an in-flight global key attempt.
-      newRecoveryLockout(context).beginAttempt();
     } finally {
       if (repository != null) repository.close();
       if (key != null) Arrays.fill(key, (byte) 0);
@@ -110,6 +102,14 @@ public final class RecoveryProcessDeathInstrumentedTest {
         Arrays.fill(recovery, '\0');
       }
     }
+    // Arm test state only after cleanup: manager.lock() correctly clears any
+    // prior recovery authorization and must not erase the state under test.
+    com.aurelia.pms.security.RecoveryGate.INSTANCE.armAfterServerConsumption(GATE_JTI, 240_000L);
+    assertTrue("test grant must arm", com.aurelia.pms.security.RecoveryGate.INSTANCE.isOpen());
+    assertTrue("first recovery attempt must be durably spent", com.aurelia.pms.security.RecoveryGate.INSTANCE.spendAttempt(GATE_JTI));
+    assertEquals("two attempts must remain before process death", 2,
+      com.aurelia.pms.security.RecoveryGate.INSTANCE.attemptsLeft());
+    newRecoveryLockout(context).beginAttempt();
     Log.i("RecoveryProcessDeath", "PHASE_ONE_READY");
     // Hold this exact app process until the host observes the durable marker and
     // explicitly force-stops it. Returning from AndroidJUnitRunner would itself

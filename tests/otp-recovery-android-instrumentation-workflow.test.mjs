@@ -32,6 +32,13 @@ test("phase one holds the tested target process until the host force-stops it", 
   assert.ok(processDeathTest.includes("recoveryThrottle.lockoutFailureCount()"));
   assert.ok(processDeathTest.includes("recoveryThrottle.completeAttempt()"));
   assert.ok(processDeathTest.includes("global recovery-key failures reset only after durable PIN-envelope commit"));
+  const phaseOne = processDeathTest.slice(
+    processDeathTest.indexOf("phaseOnePersistsPinAAndDatabaseBeforeForceStop"),
+    processDeathTest.indexOf("phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop")
+  );
+  const cleanup = phaseOne.indexOf("manager.lock()", phaseOne.indexOf("finally"));
+  const gateArm = phaseOne.indexOf("armAfterServerConsumption");
+  assert.ok(cleanup >= 0 && gateArm > cleanup, "the final cleanup lock must happen before the test gate is armed");
   assert.ok(workflow.includes('timeout -k 5s 1800s "$adb_bin" shell am instrument -w -r -e class "$phase_one"'));
   assert.ok(workflow.includes('wait_for_log_marker "PHASE_ONE_READY"'));
   assert.ok(workflow.includes('before_pid="$(wait_for_target_pid)"'));
