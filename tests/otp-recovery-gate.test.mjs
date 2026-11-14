@@ -4,7 +4,7 @@ import fs from 'node:fs';
 
 const read = path => fs.readFileSync(path, 'utf8');
 
-test('OTP recovery gate is process-local, expires monotonically, and permits three attempts', () => {
+test('OTP recovery gate persists grant-bound attempts in Keystore-encrypted AtomicFile state and expires monotonically across reboot', () => {
   const gate = read('android/templates/security/RecoveryGate.kt');
   assert.match(gate, /SystemClock\.elapsedRealtime\(\)/);
   assert.match(gate, /MAX_ATTEMPTS = 3/);
