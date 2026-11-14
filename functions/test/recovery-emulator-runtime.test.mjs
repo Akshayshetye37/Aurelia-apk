@@ -200,7 +200,7 @@ async function preparePasskeyOwnerAction({ tenantId, ownerUid, deviceHash, actio
     rpId: RP_ID, origin: RP_ORIGIN, challenge: challenge.options.challenge
   });
   return {
-    requestId,
+    requestId, challengeId: challenge.challengeId,
     complete: () => callable(functions.completeRecoveryOwnerPasskeyAction, {
       tenantId, deviceIdHash: deviceHash, action, requestId,
       challengeId: challenge.challengeId, credentialResponse
@@ -731,6 +731,7 @@ test('cancellation racing with grant issue wins the recovery-state transaction',
   ]);
   assert.equal(cancelResult.status, 'fulfilled');
   assert.equal(cancelResult.value.cancelled, true);
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${cancellation.challengeId}`).get()).get('state'), 'CONSUMED');
   const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   assert.equal(state.state, 'CANCELLED');
   if (issueResult.status === 'fulfilled' && issueResult.value.status === 'ISSUED') {
@@ -775,6 +776,8 @@ test('grant consumption racing with cancellation has exactly one winner', async 
     cancellation.complete()
   ]);
   assert.equal(cancelResult.status, 'fulfilled');
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${cancellation.challengeId}`).get()).get('state'), 'CONSUMED',
+    'the valid cancellation assertion spends its challenge even when grant consumption wins');
   const state = (await db.doc(`recoveryCooldowns/${tenantId}`).get()).data();
   const grant = (await db.doc(`recoveryGrants/${payload.jti}`).get()).data();
   if (consumeResult.status === 'fulfilled') {
