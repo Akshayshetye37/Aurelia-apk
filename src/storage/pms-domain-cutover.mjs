@@ -109,7 +109,7 @@ function records(snapshot, migrationId) {
   if (!Array.isArray(sales)) throw new TypeError("Legacy restaurant sales must be an array.");
   const saleIds = new Set();
   sales.forEach((row, index) => {
-    if (!row || typeof row !== "object") {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
       throw new Error("Malformed legacy restaurant sale at index " + index);
     }
     const id = safeId(row.id ?? ("legacy-restaurant-sale-" + (index + 1)), "restaurant sale identity");
@@ -128,7 +128,7 @@ function records(snapshot, migrationId) {
     add("expense", id, { ...clone(row), id }, "exp");
   });
   snapshot.led.forEach((row, index) => {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
+    if (!row || typeof row !== "object") {
       throw new Error("Malformed legacy ledger row at index " + index);
     }
     if (!Array.isArray(row) && row.recordType === "AURELIA_FINANCIAL_LEDGER_ENTRY_V1") {
