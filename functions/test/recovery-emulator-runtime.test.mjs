@@ -196,7 +196,7 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   }, phoneOnlyOwnerAuth(ownerUid, tenantId)), 'phone-only owner session cannot acknowledge');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
-  }, passkeyOwnerAuth(ownerUid, tenantId, { provider: 'password' })),
+  }, ownerAuth(ownerUid, tenantId, { provider: 'password' })),
   'password-only session cannot masquerade as server-verified email-link authentication');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
