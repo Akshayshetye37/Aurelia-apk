@@ -308,6 +308,25 @@ export const retryRecoveryPasskeyEnrollmentAlert = onCall(
   }
 );
 
+export const getRecoveryOwnerPendingAction = onCall(
+  { region: REGION, enforceAppCheck: true },
+  async request => {
+    requireEnabled();
+    const owner = ownerFromFreshEmailLink(request);
+    if (request.data?.tenantId !== owner.tenantId) throw GENERIC;
+    const deviceHash = requiredString(request.data?.deviceIdHash, 64);
+    await requireOwnerBinding(owner);
+    await requireAttestedOwnerDevice(owner, deviceHash, true);
+    const cooldown = (await db.doc("recoveryCooldowns/" + owner.tenantId).get()).data();
+    if (!cooldown || cooldown.ownerUid !== owner.uid ||
+        !["ALERT_PENDING", "APPROVED", "PENDING", "ISSUED"].includes(cooldown.state) ||
+        typeof cooldown.alertEventId !== "string" || !/^[0-9a-f-]{36}$/i.test(cooldown.alertEventId)) {
+      return { available: false };
+    }
+    return { available: true, requestId: cooldown.alertEventId };
+  }
+);
+
 export const getRecoveryOwnerActionReadiness = onCall(
   { region: REGION, enforceAppCheck: true },
   async request => {
