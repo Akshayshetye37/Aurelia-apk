@@ -91,7 +91,8 @@ test('recovery phone registration requires a fresh owner token bound to the tena
   assert.match(ownerGuard, /authTime > now/);
   assert.match(ownerGuard, /now - authTime >= 300/);
   assert.match(ownerGuard, /email_link/);
-  assert.match(ownerGuard, /passkey/);
+  assert.match(ownerGuard, /email_verified === true/);
+  assert.doesNotMatch(ownerGuard, /ownerAuthFactor !== "passkey"/);
 });
 
 test('APK verifies the pinned ES256 signature before server grant consumption', () => {
@@ -287,11 +288,16 @@ test('recovery key lockout persists independently across grants and escalates af
 });
 
 
-test('email-link owner session cannot present an acknowledgement action without passkey support', () => {
+test('email-link owner session can only proceed to acknowledgement through Credential Manager', () => {
   const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
-  assert.ok(activity.includes('text = "Passkey approval not configured"'));
-  assert.ok(activity.includes('isEnabled = false'));
-  assert.ok(activity.includes('A passkey is required to acknowledge the alert'));
+  const disabled = activity.indexOf('isEnabled = false');
+  const enableAfterOwnerAuth = activity.indexOf('acknowledgeButton.isEnabled = hasAlertContext');
+  const challenge = activity.indexOf('createRecoveryOwnerActionOptions');
+  const credential = activity.indexOf('GetPublicKeyCredentialOption');
+  const serverAck = activity.indexOf('acknowledgeRecoveryOwnerAlert');
+  assert.ok(disabled >= 0);
+  assert.ok(enableAfterOwnerAuth > disabled);
+  assert.ok(challenge > 0 && credential > challenge && serverAck > credential);
 });
 
 
