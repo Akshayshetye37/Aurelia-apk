@@ -65,7 +65,7 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
         val record = store.read()
         status = TextView(this).apply {
             text = when (record.state) {
-                RecoveryPhoneStore.State.UNSET -> "Important: SMS OTP only authorizes recovery; it does not unlock the database or replace your offline recovery key. You must enter that key to restore access. If you lose both this device and the offline recovery key, your encrypted data cannot be recovered."
+                RecoveryPhoneStore.State.UNSET -> "Important: SMS OTP resets account access only. It does not recover, regenerate, or replace a lost offline recovery key, and it cannot decrypt the database. You must enter that key to restore access. If you lose both this device and the offline recovery key, your encrypted data cannot be recovered."
                 RecoveryPhoneStore.State.UNVERIFIED -> "Phone verification was not completed."
                 RecoveryPhoneStore.State.VERIFIED -> "Verified recovery phone: ${record.maskedCurrent()}"
                 RecoveryPhoneStore.State.CHANGE_PENDING -> "Current: ${record.maskedCurrent()}\nPending: ${record.pendingE164?.let { mask(it) }}\nChange activates after the 48-hour security delay."
@@ -105,7 +105,7 @@ class RecoveryPhoneSettingsActivity : FragmentActivity() {
                 }
             })
             addView(TextView(this@RecoveryPhoneSettingsActivity).apply {
-                text = "SMS OTP never unlocks the database. Your offline recovery key is still required. If both this device and that key are lost, the encrypted data is permanently unrecoverable."
+                text = "SMS OTP resets account access only; it never recovers, regenerates, or replaces a lost offline recovery key and never unlocks the database. Your original offline recovery key is still required. If both this device and that key are lost, the encrypted data is permanently unrecoverable."
                 textSize = 13f
                 setTextColor(android.graphics.Color.LTGRAY)
                 setPadding(0, 0, 0, 20)
