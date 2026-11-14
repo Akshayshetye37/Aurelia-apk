@@ -54,8 +54,10 @@ object RecoveryGate {
         check(remainingGrantMs in 1..TTL_MS) {
             "A live, five-minute recovery grant consumed by the backend is required."
         }
+        val currentBoot = bootCount()
+        check(currentBoot >= 0) { "Reliable boot identity is unavailable; recovery is disabled on this device." }
         val now = SystemClock.elapsedRealtime()
-        writeState(State(jti, MAX_ATTEMPTS, now, now + remainingGrantMs, bootCount()))
+        writeState(State(jti, MAX_ATTEMPTS, now, now + remainingGrantMs, currentBoot))
     }
 
     @Synchronized
@@ -112,7 +114,7 @@ object RecoveryGate {
         val now = SystemClock.elapsedRealtime()
         // API 24+ exposes a boot counter. On older supported builds, monotonic time
         // moving backwards is sufficient to detect a reboot; API 23 recovery is gated off.
-        if (state.bootCount >= 0 && state.bootCount != bootCount()) return true
+        if (state.bootCount < 0 || state.bootCount != bootCount()) return true
         if (now < state.startedElapsed) return true
         return now >= state.deadlineElapsed
     }
