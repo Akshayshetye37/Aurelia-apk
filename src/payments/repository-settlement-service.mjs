@@ -146,7 +146,7 @@ export async function settlePaymentToRepository({
     }
     if (String(method || "").toUpperCase() !== "UPI" ||
         moneyToPaise(reviewEvidence.amt, "Evidence amount") !== amountPaise ||
-        String(reviewEvidence.ref || "").trim().replace(/\\s+/g, "").toUpperCase() !==
+        String(reviewEvidence.ref || "").trim().replace(/\s+/g, "").toUpperCase() !==
           String(reference || "").trim().replace(/\\s+/g, "").toUpperCase()) {
       throw fail("PAYMENT_EVIDENCE_BINDING_MISMATCH", "The payment amount, UPI reference and selected evidence do not match.");
     }
