@@ -30,7 +30,7 @@
 ## Unified test policy
 
 - Test file scope: tests/**/*.test.{mjs,js,cjs}, payment-backend/test/**/*.test.{mjs,js,cjs}
-- Minimum executed tests: 783
+- Minimum executed tests: 784
 - Acceptance: exact candidate SHA; non-zero tests; zero failures; zero skipped; executed count at or above registry minimum.
 
 ## Release defaults (must remain OFF)
