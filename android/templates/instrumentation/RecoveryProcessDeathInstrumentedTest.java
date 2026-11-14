@@ -1,6 +1,7 @@
 package com.aurelia.pms;
 
 import android.content.Context;
+import android.content.Intent;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
@@ -91,6 +92,7 @@ public final class RecoveryProcessDeathInstrumentedTest {
         Arrays.fill(recovery, '\0');
       }
     }
+    keepTargetApplicationProcessAlive(context);
   }
 
   @Test public void phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop() throws Exception {
@@ -158,6 +160,7 @@ public final class RecoveryProcessDeathInstrumentedTest {
       store.delete();
       context.deleteDatabase(DB);
     }
+    keepTargetApplicationProcessAlive(context);
   }
 
 
@@ -248,6 +251,17 @@ public final class RecoveryProcessDeathInstrumentedTest {
       store.delete();
       context.deleteDatabase(DB);
     }
+  }
+
+  /**
+   * Keep the real target-package process alive after AndroidJUnitRunner returns.
+   * The host then captures and force-stops this exact PID before phase two.
+   */
+  private static void keepTargetApplicationProcessAlive(Context context) {
+    Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+    assertNotNull("target application must expose its launcher activity", launch);
+    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+    context.startActivity(launch);
   }
 
   private static SecretKey fixtureKey() throws Exception {
