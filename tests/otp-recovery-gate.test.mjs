@@ -306,9 +306,10 @@ test('email-link owner session can only proceed to acknowledgement through Crede
   const activity = read('android/templates/RecoveryOwnerAlertActivity.kt');
   const disabled = activity.indexOf('isEnabled = false');
   const enableAfterOwnerAuth = activity.indexOf('acknowledgeButton.isEnabled = hasAlertContext');
-  const challenge = activity.indexOf('createRecoveryOwnerActionOptions');
-  const credential = activity.indexOf('GetPublicKeyCredentialOption');
-  const serverAck = activity.indexOf('acknowledgeRecoveryOwnerAlert');
+  const action = activity.slice(activity.indexOf('private fun acknowledge'), activity.indexOf('private fun enrollRecoveryPasskey'));
+  const challenge = action.indexOf('createRecoveryOwnerActionOptions');
+  const credential = action.indexOf('GetPublicKeyCredentialOption');
+  const serverAck = action.indexOf('acknowledgeRecoveryOwnerAlert');
   assert.ok(disabled >= 0);
   assert.ok(enableAfterOwnerAuth > disabled);
   assert.ok(challenge > 0 && credential > challenge && serverAck > credential);
