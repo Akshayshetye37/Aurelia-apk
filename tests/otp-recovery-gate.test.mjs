@@ -262,3 +262,15 @@ test('email-link owner session cannot present an acknowledgement action without 
   assert.ok(activity.includes('isEnabled = false'));
   assert.ok(activity.includes('A passkey is required to acknowledge the alert'));
 });
+
+
+test('global recovery-key failure throttle is durably incremented before every checksum-valid unwrap', () => {
+  const manager = read('android/templates/security/AureliaAppManager.kt');
+  const start = manager.indexOf('fun recoverWithRecoveryKey');
+  const end = manager.indexOf('fun confirmRecoverySwapCommitted', start);
+  const flow = manager.slice(start, end);
+  assert.ok(flow.indexOf('recoveryLockout.registerFailure()') < flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
+  assert.ok(flow.includes('recoveryKey.fill(0)'));
+  assert.ok(flow.includes('Recovery attempt could not be durably recorded.'));
+  assert.ok(flow.includes('Recovery key attempt could not be durably throttled.'));
+});
