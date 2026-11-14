@@ -293,6 +293,8 @@ test('recovery key lockout persists independently across grants and escalates af
   assert.ok(manager.includes('recoveryLockout.assertUnlocked()'));
   assert.ok(manager.includes('recoveryLockout.beginAttempt()'));
   assert.ok(manager.includes('recoveryLockout.registerFailure()'));
+  assert.ok(manager.includes('recoveryLockout.completeAttempt()'));
+  assert.ok(lockout.includes('fun completeAttempt()'));
   assert.ok(manager.includes('recoveryLockout.registerSuccess()'));
   assert.ok(lockout.includes('pendingAttempt'));
   assert.ok(lockout.includes('A process/device death while an attempt is pending'));
@@ -326,8 +328,9 @@ test('global recovery-key failure throttle is durably incremented before every c
   const end = manager.indexOf('fun confirmRecoverySwapCommitted', start);
   const flow = manager.slice(start, end);
   assert.ok(flow.indexOf('recoveryLockout.beginAttempt()') < flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
-  assert.ok(flow.indexOf('crypto.unwrapDataKeyWithRecovery') < flow.indexOf('recoveryLockout.registerSuccess()'));
+  assert.ok(flow.indexOf('crypto.unwrapDataKeyWithRecovery') < flow.indexOf('recoveryLockout.completeAttempt()'));
   assert.ok(flow.indexOf('recoveryLockout.registerFailure()') > flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
+  assert.ok(flow.indexOf('recoveryLockout.registerSuccess()') === -1);
   assert.ok(flow.includes('recoveryKey.fill(0)'));
   assert.ok(flow.includes('Recovery attempt could not be durably recorded.'));
   assert.ok(flow.includes('Recovery key attempt could not be durably throttled.'));

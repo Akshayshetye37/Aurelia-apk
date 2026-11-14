@@ -193,7 +193,7 @@ class AureliaAppManager(
                 recoveryLockout.registerFailure()
                 throw SecurityException("Recovery key verification failed.", failure)
             }
-            recoveryLockout.registerSuccess()
+            recoveryLockout.completeAttempt()
             key
         } finally {
             recoveryKey.fill(0)

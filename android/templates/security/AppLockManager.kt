@@ -114,6 +114,16 @@ class AppLockManager(
         writeState(State(failures, until, bootCount(), pendingAttempt = false))
     }
 
+    /** Mark a verified unwrap complete without resetting failures until envelope commit. */
+    @Synchronized
+    fun completeAttempt() {
+        val current = readState()
+        if (!current.pendingAttempt) {
+            throw SecurityException("No durable recovery-key attempt is pending.")
+        }
+        writeState(current.copy(pendingAttempt = false))
+    }
+
     @Synchronized
     fun registerSuccess() {
         writeState(State(0, 0L, bootCount(), pendingAttempt = false))
