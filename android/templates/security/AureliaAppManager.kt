@@ -177,18 +177,24 @@ class AureliaAppManager(
             recoveryKey.fill(0)
             throw SecurityException("A fresh OTP verification is required to continue recovery.")
         }
-        // Persist the cross-grant crypto throttle BEFORE attempting the unwrap.
-        // A process kill after a wrong key cannot erase the failure increment.
+        // Persist a pending attempt before unwrap. If the process dies, the next
+        // state read charges it as a failure. A verified key clears the pending
+        // marker and failure streak; invalid keys increment the durable streak.
         try {
-            recoveryLockout.registerFailure()
+            recoveryLockout.beginAttempt()
         } catch (failure: Exception) {
             recoveryKey.fill(0)
             throw SecurityException("Recovery key attempt could not be durably throttled.", failure)
         }
         val recovered = try {
-            crypto.unwrapDataKeyWithRecovery(bundle.getString("recovery"), recoveryKey)
-        } catch (failure: Exception) {
-            throw SecurityException("Recovery key verification failed.", failure)
+            val key = try {
+                crypto.unwrapDataKeyWithRecovery(bundle.getString("recovery"), recoveryKey)
+            } catch (failure: Exception) {
+                recoveryLockout.registerFailure()
+                throw SecurityException("Recovery key verification failed.", failure)
+            }
+            recoveryLockout.registerSuccess()
+            key
         } finally {
             recoveryKey.fill(0)
         }

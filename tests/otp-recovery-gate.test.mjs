@@ -291,7 +291,11 @@ test('recovery key lockout persists independently across grants and escalates af
   const lockout = read('android/templates/security/AppLockManager.kt');
   assert.ok(manager.includes('aurelia-recovery-lock-state.v1'));
   assert.ok(manager.includes('recoveryLockout.assertUnlocked()'));
+  assert.ok(manager.includes('recoveryLockout.beginAttempt()'));
   assert.ok(manager.includes('recoveryLockout.registerFailure()'));
+  assert.ok(manager.includes('recoveryLockout.registerSuccess()'));
+  assert.ok(lockout.includes('pendingAttempt'));
+  assert.ok(lockout.includes('A process/device death while an attempt is pending'));
   assert.ok(lockout.includes('AtomicFile'));
   assert.ok(lockout.includes('MAX_LOCK_MS = 60 * 60 * 1000L'));
   assert.ok(lockout.includes('lockDuration(failures)'));
@@ -321,7 +325,9 @@ test('global recovery-key failure throttle is durably incremented before every c
   const start = manager.indexOf('fun recoverWithRecoveryKey');
   const end = manager.indexOf('fun confirmRecoverySwapCommitted', start);
   const flow = manager.slice(start, end);
-  assert.ok(flow.indexOf('recoveryLockout.registerFailure()') < flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
+  assert.ok(flow.indexOf('recoveryLockout.beginAttempt()') < flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
+  assert.ok(flow.indexOf('crypto.unwrapDataKeyWithRecovery') < flow.indexOf('recoveryLockout.registerSuccess()'));
+  assert.ok(flow.indexOf('recoveryLockout.registerFailure()') > flow.indexOf('crypto.unwrapDataKeyWithRecovery'));
   assert.ok(flow.includes('recoveryKey.fill(0)'));
   assert.ok(flow.includes('Recovery attempt could not be durably recorded.'));
   assert.ok(flow.includes('Recovery key attempt could not be durably throttled.'));

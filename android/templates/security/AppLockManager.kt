@@ -47,23 +47,48 @@ class AppLockManager(
     data class State(
         val failures: Int,
         val lockedUntilElapsed: Long,
-        val bootCount: Int
+        val bootCount: Int,
+        val pendingAttempt: Boolean = false
     )
 
     @Synchronized
     fun state(): State {
-        val state = readState()
+        var current = readState()
         val currentBoot = bootCount()
-        if (state.bootCount != currentBoot && state.lockedUntilElapsed > 0L) {
+        // A process/device death while an attempt is pending is conservatively
+        // treated as a failed attempt. The counter cannot be reset by killing the app.
+        if (current.pendingAttempt) {
+            val failures = (current.failures + 1).coerceAtMost(30)
+            val until = if (failures >= MAX_ATTEMPTS) {
+                SystemClock.elapsedRealtime() + lockDuration(failures)
+            } else 0L
+            current = State(failures, until, currentBoot, pendingAttempt = false)
+            writeState(current)
+        }
+        if (current.bootCount != currentBoot && current.lockedUntilElapsed > 0L) {
             // Do not let a reboot erase an active lockout or make wall-clock time authoritative.
-            val restarted = state.copy(
-                lockedUntilElapsed = SystemClock.elapsedRealtime() + lockDuration(state.failures),
+            val restarted = current.copy(
+                lockedUntilElapsed = SystemClock.elapsedRealtime() + lockDuration(current.failures),
                 bootCount = currentBoot
             )
             writeState(restarted)
             return restarted
         }
-        return state
+        if (current.bootCount != currentBoot) {
+            current = current.copy(bootCount = currentBoot)
+            writeState(current)
+        }
+        return current
+    }
+
+    /** Persist an in-flight attempt before any recovery-key unwrap operation. */
+    @Synchronized
+    fun beginAttempt() {
+        val current = state()
+        if (current.lockedUntilElapsed - SystemClock.elapsedRealtime() > 0L) {
+            throw SecurityException("Recovery key retry is temporarily locked.")
+        }
+        writeState(current.copy(pendingAttempt = true))
     }
 
     /** Stable test seam; callers cannot mutate the authenticated retry state. */
@@ -81,17 +106,17 @@ class AppLockManager(
 
     @Synchronized
     fun registerFailure() {
-        val current = state()
+        val current = readState()
         val failures = (current.failures + 1).coerceAtMost(30)
         val until = if (failures >= MAX_ATTEMPTS) {
             SystemClock.elapsedRealtime() + lockDuration(failures)
         } else 0L
-        writeState(State(failures, until, bootCount()))
+        writeState(State(failures, until, bootCount(), pendingAttempt = false))
     }
 
     @Synchronized
     fun registerSuccess() {
-        writeState(State(0, 0L, bootCount()))
+        writeState(State(0, 0L, bootCount(), pendingAttempt = false))
     }
 
     private fun lockDuration(failures: Int): Long {
@@ -117,7 +142,7 @@ class AppLockManager(
             require(failures in 0..30)
             val deadline = json.getLong("lockedUntilElapsed")
             require(deadline >= 0L)
-            State(failures, deadline, json.getInt("bootCount"))
+            State(failures, deadline, json.getInt("bootCount"), json.optBoolean("pendingAttempt", false))
         } catch (failure: Exception) {
             throw SecurityException("Local lock state is corrupt; refusing unlock.", failure)
         } finally {
@@ -131,6 +156,7 @@ class AppLockManager(
             .put("failures", state.failures)
             .put("lockedUntilElapsed", state.lockedUntilElapsed)
             .put("bootCount", state.bootCount)
+            .put("pendingAttempt", state.pendingAttempt)
             .toString().toByteArray(Charsets.UTF_8)
         val encrypted = try { encrypt(plain) } finally { plain.fill(0) }
         var stream: java.io.FileOutputStream? = null
