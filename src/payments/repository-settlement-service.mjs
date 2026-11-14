@@ -40,7 +40,7 @@ async function ledgerEntityId(tenantId, idempotencyKey) {
   if (!globalThis.crypto?.subtle || !globalThis.TextEncoder) {
     throw fail("LEDGER_IDENTITY_CRYPTO_UNAVAILABLE", "Secure payment ledger identity generation is unavailable.");
   }
-  const bytes = new TextEncoder().encode(String(tenantId) + "\\u0000" + idempotencyKey);
+  const bytes = new TextEncoder().encode(String(tenantId) + "\u0000" + idempotencyKey);
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   const hex = Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, "0")).join("");
   return "payment:" + hex;
@@ -99,7 +99,7 @@ export async function settlePaymentToRepository({
   const amountPaise = moneyToPaise(amount, "Payment amount");
   const ledgerKey = String(idempotencyKey || "").trim() ||
     (String(reference || "").trim() ? "ref:" + String(reference).trim() : "");
-  if (!ledgerKey || ledgerKey.length > 256 || /[\\u0000-\\u001f\\u007f]/.test(ledgerKey)) {
+  if (!ledgerKey || ledgerKey.length > 256 || /[\u0000-\u001f\u007f]/.test(ledgerKey)) {
     throw fail("PAYMENT_IDEMPOTENCY_KEY_REQUIRED", "A stable payment idempotency key is required before posting.");
   }
   // Flush snapshots queued by the compatibility UI before taking entity
