@@ -34,6 +34,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Install payment backend dependencies for unified suite
+        run: npm --prefix payment-backend ci --no-audit --no-fund
+
       - name: Run PMS regression suite
         run: npm test
 
