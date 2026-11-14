@@ -112,8 +112,8 @@ object RecoveryGate {
 
     private fun expired(state: State): Boolean {
         val now = SystemClock.elapsedRealtime()
-        // API 24+ exposes a boot counter. On older supported builds, monotonic time
-        // moving backwards is sufficient to detect a reboot; API 23 recovery is gated off.
+        // Recovery is available only when Android exposes a reliable boot counter.
+        // A missing counter or a changed counter expires the grant fail-closed.
         if (state.bootCount < 0 || state.bootCount != bootCount()) return true
         if (now < state.startedElapsed) return true
         return now >= state.deadlineElapsed
