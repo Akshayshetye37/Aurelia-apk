@@ -766,10 +766,11 @@ class LockGateActivity : FragmentActivity() {
     }
 
     override fun onStop() {
-        // Keep the encrypted attempt counter intact across process death. The
-        // explicit user-leave path still revokes the active grant.
+        // Persist grant attempts across activity recreation and process death.
+        // Explicit user departure still revokes the active grant.
         super.onStop()
     }
+
     override fun onBackPressed() {
         // Launcher is the only entry path; back exits instead of bypassing the gate.
         super.onBackPressed()
