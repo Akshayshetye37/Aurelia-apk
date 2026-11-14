@@ -1,9 +1,11 @@
 name: Aurelia payment backend CI
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - feature/multi-provider-payment-backend
+      - 'work/**'
     paths:
       - "payment-backend/**"
       - ".github/workflows/payment-backend-ci.yml"

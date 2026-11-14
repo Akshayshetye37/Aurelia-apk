@@ -1,6 +1,7 @@
 name: PMS source tests and production web packaging
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - '**'
