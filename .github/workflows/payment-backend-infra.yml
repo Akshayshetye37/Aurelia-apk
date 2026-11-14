@@ -22,8 +22,8 @@ jobs:
       run:
         working-directory: payment-backend/infra/terraform
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
         with:
           terraform_version: "1.9.8"
       # Run formatting before provider initialization so HCL style failures are isolated.
