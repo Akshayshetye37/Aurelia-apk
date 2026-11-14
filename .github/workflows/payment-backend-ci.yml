@@ -39,8 +39,10 @@ jobs:
           node-version: "22"
       - name: Install backend dependencies
         run: npm ci --no-audit --no-fund
-      - name: Run payment backend contract and security tests
-        run: npm test
+      - name: Install root dependencies for unified suite
+        run: npm --prefix .. ci --no-audit --no-fund
+      - name: Run unified root, nested and backend test suite
+        run: npm --prefix .. test
       - name: Verify payment backend JavaScript syntax
         run: |
           find src test -type f -name '*.mjs' -print0 | xargs -0 -n1 node --check
