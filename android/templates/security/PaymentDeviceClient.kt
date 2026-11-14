@@ -20,7 +20,9 @@ import java.util.concurrent.TimeUnit
  * This is deliberately transport and protocol validation only. It does not
  * mutate PMS folios, approve accounting, or acknowledge a command on its own.
  * A future projector must require owner/staff approval, persist an idempotent
- * ledger receipt, re-read the folio, and only then call acknowledge().
+ * ledger receipt, re-read the folio, and only then call acknowledge(). The cloud
+ * acknowledgement remains a device report; a separate trusted accounting
+ * receipt is required before the backend may mark a folio as posted.
  */
 class PaymentDeviceClient(
     applianceBaseUrl: String,
@@ -97,7 +99,9 @@ class PaymentDeviceClient(
     /**
      * Acknowledges a command only when the caller supplies the ID of a durable
      * local ledger receipt. This class cannot establish that receipt itself.
-     * The caller is responsible for approval, atomic persistence and read-back.
+     * The cloud endpoint stores it as device-reported metadata only; it does
+     * not independently verify the PMS commit or mark accounting as posted.
+     * The caller remains responsible for approval, atomic persistence and read-back.
      */
     fun acknowledge(lease: Lease, ledgerAckId: String, idToken: String? = null): JSONObject {
         val command = lease.command

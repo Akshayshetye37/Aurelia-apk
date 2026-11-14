@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { acknowledgeSettlementCommand } from "../src/devices/firestore-device-service.mjs";
+import { acknowledgeSettlementCommand, leaseNextSettlementCommand } from "../src/devices/firestore-device-service.mjs";
 
 const hash = value => crypto.createHash("sha256").update(value).digest("hex");
 const tenantId = "tenant_001";
@@ -126,6 +126,16 @@ test("legacy PROCESSED acknowledgements require reconciliation instead of being 
     }),
     /legacy_device_acknowledgement_requires_reconciliation/
   );
+});
+
+test("device-acknowledged commands are not leased again while accounting verification is pending", async () => {
+  const { db, commandPath } = fixture("DEVICE_ACKNOWLEDGED_PENDING_VERIFICATION");
+  const result = await leaseNextSettlementCommand({
+    db, tenantId, deviceId, signer: null, settlementAllowed: true, now: () => now
+  });
+  assert.equal(result, null);
+  assert.equal(db.documents.get(commandPath).status, "DEVICE_ACKNOWLEDGED_PENDING_VERIFICATION");
+  assert.equal(db.documents.get(commandPath).leaseAttempts, undefined);
 });
 
 test("invalid lease, sequence and payload bindings are rejected", async t => {
