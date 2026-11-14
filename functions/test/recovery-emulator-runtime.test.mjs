@@ -999,9 +999,7 @@ test('owner cancellation before grant issue closes the old hold and requires a f
     tenantId, deviceIdHash: ownerDeviceHash, eventId: cooldown.alertEventId,
     ackToken: alert.data.ackToken
   }, passkeyOwnerAuth(ownerUid, tenantId));
-  await callable(functions.cancelRecoveryRequest, {
-    tenantId, deviceIdHash: ownerDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
+  await cancelRecoveryWithPasskey({ tenantId, ownerUid, deviceHash: ownerDeviceHash });
   await assert.rejects(callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce: 'g'.repeat(43),
     phoneIdToken: firstPhoneToken
@@ -1051,9 +1049,7 @@ test('owner cancellation before consume revokes the issued grant permanently', a
   });
   assert.equal(issued.status, 'ISSUED');
   const payload = JSON.parse(Buffer.from(issued.grant.split('.')[1], 'base64url').toString('utf8'));
-  const cancelled = await callable(functions.cancelRecoveryRequest, {
-    tenantId, deviceIdHash: ownerDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
+  const cancelled = await cancelRecoveryWithPasskey({ tenantId, ownerUid, deviceHash: ownerDeviceHash });
   assert.equal(cancelled.cancelled, true);
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
