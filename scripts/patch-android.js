@@ -512,8 +512,8 @@ function addNativeSecurityDependencies(contents, kotlinDsl) {
     ['androidx.biometric:biometric:1.2.0-alpha05', 'androidx.biometric:biometric'],
     ['net.zetetic:sqlcipher-android:4.17.0@aar', 'net.zetetic:sqlcipher-android'],
     ['androidx.sqlite:sqlite:2.6.2', 'androidx.sqlite:sqlite'],
-    ['androidx.credentials:credentials:1.5.0', 'androidx.credentials:credentials'],
-    ['androidx.credentials:credentials-play-services-auth:1.5.0', 'androidx.credentials:credentials-play-services-auth'],
+    ['androidx.credentials:credentials:1.6.0', 'androidx.credentials:credentials'],
+    ['androidx.credentials:credentials-play-services-auth:1.6.0', 'androidx.credentials:credentials-play-services-auth'],
     ['androidx.lifecycle:lifecycle-runtime-ktx:2.9.4', 'androidx.lifecycle:lifecycle-runtime-ktx']
   ];
   for (const [coordinate, marker] of dependencies) {

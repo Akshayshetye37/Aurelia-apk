@@ -104,6 +104,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
         purpose = "alert"
         if (::acknowledgeButton.isInitialized) {
             acknowledgeButton.visibility = View.VISIBLE
+            acknowledgeButton.isEnabled = false
             cancelButton.visibility = View.VISIBLE
         }
         return true
@@ -286,15 +287,50 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
                                             }
                                         }
                                 } else {
-                                    acknowledgeButton.isEnabled = hasAlertContext
                                     acknowledgeButton.text = "Acknowledge with passkey"
-                                    status.text = "Primary owner email session verified. Use the passkey on this device to acknowledge; the server verifies the assertion and applies the hold atomically."
+                                    refreshPasskeyActionReadiness()
                                 }
                             }
                         }
                 }
         }.onFailure {
             status.text = "Owner email-link verification is unavailable. Recovery remains locked."
+        }
+    }
+
+    private fun refreshPasskeyActionReadiness() {
+        acknowledgeButton.isEnabled = false
+        if (!hasAlertContext || tenantId.isBlank() || deviceHash.isBlank() || eventId.isBlank() || ackToken.isBlank()) {
+            status.text = "Open the original owner alert and complete email-link sign-in first."
+            return
+        }
+        val user = FirebaseAuth.getInstance().currentUser
+        if (user == null) {
+            status.text = "Primary-owner email-link sign-in is required before passkey acknowledgement."
+            return
+        }
+        user.getIdToken(true).addOnCompleteListener { tokenTask ->
+            if (!tokenTask.isSuccessful) {
+                acknowledgeButton.isEnabled = false
+                status.text = "Fresh owner authentication is unavailable. Passkey acknowledgement remains disabled."
+                return@addOnCompleteListener
+            }
+            FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1")
+                .getHttpsCallable("getRecoveryOwnerActionReadiness")
+                .call(mapOf(
+                    "tenantId" to tenantId, "deviceIdHash" to deviceHash,
+                    "action" to "ack", "requestId" to eventId
+                )).addOnCompleteListener { readinessTask ->
+                    val data = readinessTask.result?.data as? Map<*, *>
+                    val ready = readinessTask.isSuccessful && data?.get("ready") == true
+                    acknowledgeButton.isEnabled = ready && hasAlertContext
+                    acknowledgeButton.text = if (ready) "Acknowledge with passkey" else "Passkey association not ready"
+                    status.text = if (ready) {
+                        "Passkey and RP association are ready. Confirm with the enrolled device credential."
+                    } else {
+                        "Passkey acknowledgement remains disabled until the enrolled credential, cooldown and verified RP app association are ready."
+                    }
+                }
         }
     }
 
@@ -309,7 +345,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
         status.text = "Requesting a one-time owner-action challenge..."
         user.getIdToken(true).addOnCompleteListener { tokenTask ->
             if (!tokenTask.isSuccessful) {
-                acknowledgeButton.isEnabled = true
+                refreshPasskeyActionReadiness()
                 status.text = "The fresh owner session could not be verified. The hold has not started."
                 return@addOnCompleteListener
             }
@@ -318,7 +354,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
                 "tenantId" to tenantId, "deviceIdHash" to deviceHash, "action" to "ack", "requestId" to eventId
             )).addOnCompleteListener { challengeTask ->
                 if (!challengeTask.isSuccessful) {
-                    acknowledgeButton.isEnabled = true
+                    refreshPasskeyActionReadiness()
                     status.text = "The server rejected the passkey challenge request. The hold has not started."
                     return@addOnCompleteListener
                 }
@@ -326,7 +362,7 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
                 val challengeId = payload?.get("challengeId") as? String
                 val options = payload?.get("options") as? Map<*, *>
                 if (challengeId.isNullOrBlank() || options == null) {
-                    acknowledgeButton.isEnabled = true
+                    refreshPasskeyActionReadiness()
                     status.text = "The server returned an invalid passkey challenge."
                     return@addOnCompleteListener
                 }
@@ -351,11 +387,11 @@ class RecoveryOwnerAlertActivity : AppCompatActivity() {
                                 status.text = "Passkey verified. The 24-hour security hold has started."
                             } else {
                                 status.text = "The server rejected the passkey assertion. The hold has not started."
-                                acknowledgeButton.isEnabled = true
+                                refreshPasskeyActionReadiness()
                             }
                         }
                     } catch (_: Exception) {
-                        acknowledgeButton.isEnabled = true
+                        refreshPasskeyActionReadiness()
                         status.text = "Passkey authentication was cancelled or unavailable. No acknowledgement was recorded."
                     }
                 }
