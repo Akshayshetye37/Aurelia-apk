@@ -137,7 +137,10 @@ test('owner alert must be posted and acknowledged before the recovery cooldown s
   const ownerAlert = read('android/templates/RecoveryOwnerAlertActivity.kt');
   assert.match(backend, /state: "ALERT_PENDING"/);
   assert.match(backend, /getMessaging\(\)\.send/);
-  assert.match(backend, /acknowledgeRecoveryOwnerAlert = onCall/);
+  const passkeys = read('functions/src/passkeys.ts');
+  assert.match(passkeys, /acknowledgeRecoveryOwnerAlert = onCall/);
+  assert.match(passkeys, /verifyAuthenticationResponse/);
+  assert.match(passkeys, /requireUserVerification: true/);
   assert.match(backend, /notificationAcknowledgedAt/);
   assert.match(backend, /eligibleAt = Date\.now\(\) \+ RECOVERY_COOLDOWN_MS/);
   assert.match(service, /NotificationManagerCompat\.from\(this\)\.areNotificationsEnabled\(\)/);
@@ -201,17 +204,19 @@ test('owner alert UI completes server-verified email-link primary authentication
 });
 
 
-test('owner recovery acknowledgement requires a fresh verified passkey factor, not email-link alone', () => {
+test('owner recovery acknowledgement verifies the actual WebAuthn assertion and never trusts a custom passkey claim', () => {
   const backend = read('functions/src/index.ts');
-  const guardStart = backend.indexOf('function requireFreshPasskeyOwner');
-  const guardEnd = backend.indexOf('async function requireRecoveryOwnerBinding', guardStart);
-  const guard = backend.slice(guardStart, guardEnd);
-  assert.ok(guard.includes('requireFreshPrimaryOwner(request)'));
-  assert.ok(guard.includes('ownerAuthFactor !== "passkey"'));
-  assert.ok(guard.includes('email_verified !== true'));
-  const ackStart = backend.indexOf('export const acknowledgeRecoveryOwnerAlert = onCall');
-  const ackEnd = backend.indexOf('/** OTP proof may issue', ackStart);
-  assert.ok(backend.slice(ackStart, ackEnd).includes('requireFreshPasskeyOwner(request)'));
+  const passkeys = read('functions/src/passkeys.ts');
+  assert.ok(passkeys.includes('verifyAuthenticationResponse'));
+  assert.ok(passkeys.includes('requireUserVerification: true'));
+  assert.ok(passkeys.includes('expectedOrigin: config.origins'));
+  assert.ok(passkeys.includes('expectedRPID: config.rpID'));
+  assert.ok(passkeys.includes('credentialHashes'));
+  assert.ok(passkeys.includes('counter: verification.authenticationInfo.newCounter'));
+  assert.ok(passkeys.includes('state: "CONSUMED"'));
+  assert.ok(passkeys.includes('ownerAuthFactor !== "email_link"'));
+  assert.ok(!backend.includes('requireFreshPasskeyOwner'));
+  assert.ok(!backend.includes('ownerAuthFactor !== "passkey"'));
 });
 
 test('destructive reset requires a fresh verified owner session bound to the enrolled tenant', () => {

@@ -39,10 +39,13 @@ function ownerFromFreshEmailLink(request: CallableRequest<unknown>): Owner {
   const token = auth?.token;
   const now = Math.floor(Date.now() / 1000);
   const authTime = Number(token?.auth_time);
+  const factorAuthTime = Number(token?.ownerAuthFactorAuthTime);
   const firebase = token?.firebase as { sign_in_provider?: unknown } | undefined;
   if (!auth || token?.role !== "owner" || token.email_verified !== true ||
       token.ownerAuthFactor !== "email_link" || firebase?.sign_in_provider !== "custom" ||
-      !Number.isInteger(authTime) || authTime > now || now - authTime >= 300) {
+      !Number.isInteger(authTime) || authTime > now || now - authTime >= 300 ||
+      !Number.isInteger(factorAuthTime) || factorAuthTime > authTime ||
+      authTime - factorAuthTime >= 300) {
     throw GENERIC;
   }
   const tenantId = token.tenantId;
@@ -175,7 +178,7 @@ export const completeRecoveryPasskeyEnrollment = onCall(
       requireUserVerification: true
     });
     const info = verification.registrationInfo;
-    if (!verification.verified || !info || !info.userVerified ||
+    if (!verification.verified || !info || info.fmt !== "none" || !info.userVerified ||
         info.origin === undefined || info.rpID !== config.rpID) throw GENERIC;
     const credential = info.credential;
     const hash = credentialHash(credential.id);
@@ -249,17 +252,18 @@ export const retryRecoveryPasskeyEnrollmentAlert = onCall(
       doc.get("deviceIdHash") !== passkey.enrolledDeviceHash && typeof doc.get("fcmToken") === "string")
       .map(doc => String(doc.get("fcmToken"))).slice(0, 500);
     if (tokens.length === 0) throw new HttpsError("failed-precondition", "No independent owner notification device is available.");
-    const event = await db.collection("recoverySecurityEvents")
-      .where("tenantId", "==", owner.tenantId).where("credentialHash", "==", hash)
-      .where("type", "==", "RECOVERY_PASSKEY_ENROLLED").limit(1).get();
-    if (event.empty) throw GENERIC;
+    const eventId = requiredString(passkey.enrollmentEventId, 64);
+    const eventRef = db.doc("recoverySecurityEvents/" + eventId);
+    const event = await eventRef.get();
+    if (!event.exists || event.get("ownerUid") !== owner.uid ||
+        event.get("credentialHash") !== hash || event.get("type") !== "RECOVERY_PASSKEY_ENROLLED") throw GENERIC;
     const result = await getMessaging().sendEachForMulticast({
       tokens, notification: { title: "Aurelia recovery passkey added", body: "A new owner passkey is pending its 24-hour security cooldown." },
-      data: { type: "RECOVERY_PASSKEY_ENROLLED", tenantId: owner.tenantId, eventId: event.docs[0].id, credentialHash: hash }
+      data: { type: "RECOVERY_PASSKEY_ENROLLED", tenantId: owner.tenantId, eventId, credentialHash: hash }
     });
     if (result.successCount === 0) throw new HttpsError("unavailable", "Owner notification could not be delivered.");
     await passkeyRef.update({ state: "COOLDOWN", alertAccepted: true, alertAcceptedAt: FieldValue.serverTimestamp() });
-    await event.docs[0].ref.update({ notificationDelivery: "FCM_ACCEPTED", notificationAcceptedAt: FieldValue.serverTimestamp() });
+    await eventRef.update({ notificationDelivery: "FCM_ACCEPTED", notificationAcceptedAt: FieldValue.serverTimestamp() });
     return { alertAccepted: true, usableAfterMs: Number(passkey.activeAfterMs) };
   }
 );

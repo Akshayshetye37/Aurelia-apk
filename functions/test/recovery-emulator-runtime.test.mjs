@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 import { createHash, createHmac, generateKeyPairSync } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { SignJWT } from 'jose';
+import { TestWebAuthnAuthenticator } from './webauthn-test-authenticator.mjs';
 
 const PROJECT_ID = 'demo-aurelia-recovery';
 const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
 const PHONE_PEPPER = 'emulator-only-phone-pepper-not-for-production';
 const SIGNING_KEY_ID = 'emulator-key-1';
+const RP_ID = 'aurelia.test.example';
+const RP_ORIGIN = 'android:apk-key-hash:' + Buffer.alloc(32, 0x5a).toString('base64url');
 const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 
@@ -21,6 +24,9 @@ process.env.RECOVERY_SIGNING_KEY_ID = SIGNING_KEY_ID;
 process.env.PHONE_PEPPER = PHONE_PEPPER;
 process.env.RECOVERY_SIGNING_KEY_PKCS8 = privateKeyPem;
 process.env.FIREBASE_WEB_API_KEY = 'fake-api-key';
+process.env.WEBAUTHN_RP_ID = RP_ID;
+process.env.WEBAUTHN_RP_NAME = 'Aurelia PMS Emulator';
+process.env.WEBAUTHN_ANDROID_ORIGINS = RP_ORIGIN;
 
 const [{ getAuth }, { getFirestore }, { getMessaging }, functions] = await Promise.all([
   import('firebase-admin/auth'),
@@ -31,18 +37,39 @@ const [{ getAuth }, { getFirestore }, { getMessaging }, functions] = await Promi
 const auth = getAuth();
 const db = getFirestore();
 const sentMessages = [];
+const authenticators = new Map();
 const messaging = getMessaging();
 messaging.send = async message => {
   sentMessages.push(message);
   return 'emulator-fcm-message-' + sentMessages.length;
+};
+messaging.sendEachForMulticast = async message => {
+  sentMessages.push(message);
+  return { successCount: message.tokens.length, failureCount: 0, responses: message.tokens.map(() => ({ success: true })) };
 };
 
 function emulatorIpForTenant(tenantId) {
   return 'emulator-ip-' + createHash('sha256').update(String(tenantId)).digest('hex').slice(0, 32);
 }
 
-function callable(fn, data, requestAuth = null, ip = data?.tenantId ? emulatorIpForTenant(data.tenantId) : '127.0.0.1') {
+async function callable(fn, data, requestAuth = null, ip = data?.tenantId ? emulatorIpForTenant(data.tenantId) : '127.0.0.1') {
   assert.equal(typeof fn.run, 'function', 'Firebase callable exposes its runtime handler');
+  if (fn === functions.acknowledgeRecoveryOwnerAlert && requestAuth?.__testPasskey === true) {
+    const options = requestAuth.__testPasskeyOptions ?? {};
+    const owner = ownerAuth(requestAuth.uid, data.tenantId, options);
+    const ceremony = await callable(functions.createRecoveryOwnerActionOptions, {
+      tenantId: data.tenantId, deviceIdHash: data.deviceIdHash,
+      action: 'ack', requestId: data.eventId
+    }, owner, ip);
+    const authenticator = authenticators.get(data.tenantId);
+    assert.ok(authenticator, 'tenant fixture has a registered WebAuthn test authenticator');
+    const credentialResponse = authenticator.assert({
+      rpId: RP_ID, origin: RP_ORIGIN, challenge: ceremony.options.challenge,
+      userVerified: options.userVerified !== false, counter: options.counter
+    });
+    data = { ...data, requestId: data.eventId, challengeId: ceremony.challengeId, credentialResponse };
+    requestAuth = owner;
+  }
   return fn.run({
     data,
     auth: requestAuth,
@@ -101,14 +128,11 @@ function ownerAuth(uid, tenantId, options = {}) {
 }
 
 function passkeyOwnerAuth(uid, tenantId, options = {}) {
-  const authTime = options.authTime ?? Math.floor(Date.now() / 1000);
-  return ownerAuth(uid, tenantId, {
-    ...options,
-    provider: 'custom',
-    factor: 'passkey',
-    emailVerified: true,
-    factorAuthTime: options.factorAuthTime ?? authTime
-  });
+  const primary = { ...options, provider: options.provider ?? 'custom', factor: 'email_link', emailVerified: options.emailVerified ?? true };
+  const session = ownerAuth(uid, tenantId, primary);
+  session.__testPasskey = true;
+  session.__testPasskeyOptions = options;
+  return session;
 }
 
 function phoneOnlyOwnerAuth(uid, tenantId) {
@@ -138,6 +162,26 @@ async function seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, owner
       active: true, tokenHash: 'emulator-token-hash'
     });
   }
+
+  const enrollment = await callable(functions.createRecoveryPasskeyEnrollmentOptions, {
+    tenantId, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth(ownerUid, tenantId));
+  const authenticator = new TestWebAuthnAuthenticator(tenantId);
+  const registration = authenticator.register({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: enrollment.options.challenge
+  });
+  const enrolled = await callable(functions.completeRecoveryPasskeyEnrollment, {
+    tenantId, deviceIdHash: recoveryDeviceHash, challengeId: enrollment.challengeId,
+    credentialResponse: registration
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(enrolled.registered, true);
+  assert.equal(enrolled.alertAccepted, true, 'independent owner device receives passkey enrollment alert');
+  const credentialHash = createHash('sha256').update(registration.id).digest('hex');
+  await db.doc(`tenants/${tenantId}/security/recoveryPasskeys/${credentialHash}`).update({
+    state: 'COOLDOWN', alertAccepted: true, activeAfterMs: 0
+  });
+  authenticators.set(tenantId, authenticator);
+  sentMessages.length = 0;
 }
 
 test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold, fresh OTP, five-minute grant and one-time JTI', async () => {
@@ -1156,4 +1200,62 @@ test('owner notification endpoint token rotation requires fresh primary authenti
   const updated = (await ref.get()).data();
   assert.equal(updated.fcmToken, replacement);
   assert.equal(updated.ownerUid, ownerUid);
+});
+
+test('WebAuthn owner action challenge is bound to uid, request, action, UV and one-time counter update', async () => {
+  const tenantId = 'tenant-webauthn-contract-01';
+  const ownerUid = 'owner-webauthn-contract-01';
+  const phone = '+15555550199';
+  const recoveryDeviceHash = 'c'.repeat(64);
+  const secondOwnerDeviceHash = 'd'.repeat(64);
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash, ownerDeviceHashes: [recoveryDeviceHash, secondOwnerDeviceHash] });
+  const nonce = 'w'.repeat(43);
+  const phoneToken = await phoneAuthToken(phone);
+  const issued = await callable(functions.issueRecoveryGrant, {
+    tenantId, deviceIdHash: recoveryDeviceHash, nonce, phoneIdToken: phoneToken
+  });
+  const event = (await db.doc(`recoverySecurityEvents/${issued.eventId}`).get()).data();
+  assert.ok(event);
+
+  const begin = await callable(functions.createRecoveryOwnerActionOptions, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: issued.eventId
+  }, ownerAuth(ownerUid, tenantId));
+  const authenticator = authenticators.get(tenantId);
+  const assertion = authenticator.assert({ rpId: RP_ID, origin: RP_ORIGIN, challenge: begin.options.challenge });
+  const invalidUid = await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: issued.eventId,
+    challengeId: begin.challengeId, credentialResponse: assertion, ackToken: 'x'.repeat(43)
+  }, ownerAuth('different-owner', tenantId)));
+  assert.ok(invalidUid);
+
+  const wrongAction = await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: issued.eventId,
+    challengeId: begin.challengeId, credentialResponse: assertion
+  }, ownerAuth(ownerUid, tenantId)));
+  assert.ok(wrongAction);
+  const challengeAfterRejected = (await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).data();
+  assert.equal(challengeAfterRejected.state, 'PENDING', 'rejected cross-uid and wrong-action attempts do not consume the challenge');
+
+  const noUvAssertion = authenticator.assert({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: begin.options.challenge, userVerified: false
+  });
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: issued.eventId,
+    challengeId: begin.challengeId, credentialResponse: noUvAssertion, ackToken: 'x'.repeat(43)
+  }, ownerAuth(ownerUid, tenantId)), 'assertions without UV are rejected');
+
+  const ownerAlert = sentMessages.find(message => message.data?.type === 'RECOVERY_COOLDOWN_STARTED');
+  const ackToken = ownerAlert?.data?.ackToken;
+  assert.ok(ackToken);
+  const validAssertion = authenticator.assert({ rpId: RP_ID, origin: RP_ORIGIN, challenge: begin.options.challenge });
+  const acknowledged = await callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: issued.eventId,
+    challengeId: begin.challengeId, credentialResponse: validAssertion, ackToken
+  }, ownerAuth(ownerUid, tenantId));
+  assert.equal(acknowledged.acknowledged, true);
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: issued.eventId,
+    challengeId: begin.challengeId, credentialResponse: validAssertion, ackToken
+  }, ownerAuth(ownerUid, tenantId)), 'replayed challenge is rejected');
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).get('state'), 'CONSUMED');
 });
