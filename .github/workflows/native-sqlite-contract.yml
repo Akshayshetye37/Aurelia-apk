@@ -3,10 +3,10 @@ name: Aurelia native SQLite contract
 on:
   push:
     branches:
-      - work/p0-storage-hardening
+      - 'work/**'
   pull_request:
     branches:
-      - feature/multi-provider-payment-backend
+      - '**'
   workflow_dispatch:
 
 permissions:
