@@ -1273,6 +1273,13 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
     challengeId: begin.challengeId, credentialResponse: noUvAssertion, ackToken: 'x'.repeat(43)
   }, ownerAuth(ownerUid, tenantId)), 'assertions without UV are rejected');
 
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'ack', requestId: eventId,
+    challengeId: begin.challengeId, credentialResponse: undefined, ackToken
+  }, ownerAuth(ownerUid, tenantId)), 'email-link-only owner session without a WebAuthn assertion is rejected');
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${begin.challengeId}`).get()).get('state'), 'PENDING',
+    'email-link-only rejection leaves the legitimate challenge usable');
+
   const ownerAlert = sentMessages.find(message => message.data?.type === 'RECOVERY_COOLDOWN_STARTED');
   const ackToken = ownerAlert?.data?.ackToken;
   assert.ok(ackToken);
@@ -1294,6 +1301,15 @@ test('WebAuthn owner action challenge is bound to uid, request, action, UV and o
   const cancelBegin = await callable(functions.createRecoveryOwnerActionOptions, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId
   }, ownerAuth(ownerUid, tenantId));
+  const unchangedCounter = authenticator.assert({
+    rpId: RP_ID, origin: RP_ORIGIN, challenge: cancelBegin.options.challenge, counter: 10
+  });
+  await assert.rejects(callable(functions.completeRecoveryOwnerPasskeyAction, {
+    tenantId, deviceIdHash: secondOwnerDeviceHash, action: 'cancel', requestId: eventId,
+    challengeId: cancelBegin.challengeId, credentialResponse: unchangedCounter
+  }, ownerAuth(ownerUid, tenantId)), 'a non-increasing signature counter is rejected');
+  assert.equal((await db.doc(`recoveryPasskeyChallenges/${cancelBegin.challengeId}`).get()).get('state'), 'PENDING',
+    'non-increasing counter rejection leaves the challenge usable');
   const regressed = authenticator.assert({
     rpId: RP_ID, origin: RP_ORIGIN, challenge: cancelBegin.options.challenge, counter: 3
   });
