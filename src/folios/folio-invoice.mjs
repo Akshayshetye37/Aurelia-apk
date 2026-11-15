@@ -26,12 +26,11 @@ const dateFromOffset = value => {
 };
 const ageAt = (dob, referenceDate = new Date()) => {
   if (!dob) return null;
-  const birth = new Date(dob);
-  if (!Number.isFinite(birth.getTime())) return null;
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  if (today.getMonth() < birth.getMonth() ||
-      (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age -= 1;
+  const birth = new Date(dob), reference = new Date(referenceDate);
+  if (!Number.isFinite(birth.getTime()) || !Number.isFinite(reference.getTime())) return null;
+  let age = reference.getFullYear() - birth.getFullYear();
+  if (reference.getMonth() < birth.getMonth() ||
+      (reference.getMonth() === birth.getMonth() && reference.getDate() < birth.getDate())) age -= 1;
   return age;
 };
 export function validateGstin(value, label = "GSTIN") {
@@ -159,8 +158,9 @@ export function buildFolioInvoice({
   if (paidMinor > grossMinor) throw new RangeError("Recorded payments exceed the calculated invoice total; reconcile the folio before issuing an invoice");
   const dueMinor = grossMinor - paidMinor;
   const occupants = Array.isArray(guest?.occ) ? guest.occ.filter(row => text(row?.n)) : [];
+  const ageReferenceDate = safeDate(booking.scheduledCheckIn) || safeDate(booking.actualCheckInAt) || dateFromOffset(booking.in) || invoiceDate;
   const childCount = occupants.filter(row =>
-    /child|minor/i.test(text(row?.rel)) || (ageAt(row?.dob) != null && ageAt(row?.dob) < 18)
+    /child|minor/i.test(text(row?.rel)) || (ageAt(row?.dob, ageReferenceDate) != null && ageAt(row?.dob, ageReferenceDate) < 18)
   ).length;
   const adultCount = 1 + occupants.length - childCount;
   return Object.freeze({
