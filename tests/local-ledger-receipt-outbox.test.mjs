@@ -95,7 +95,7 @@ test('restarting receipt creation reuses the original signed receipt from the ou
       status: 'ACTIVE', hardwareAttested: true
     },
     ledgerEntry: {
-      id: 'entry_123', hash: 'a'.repeat(64),
+      id: 'entry_123', idempotencyKey: 'payment-intent:123e4567-e89b-42d3-a456-426614174000', hash: 'a'.repeat(64),
       committedAt: new Date(NOW - 1000).toISOString()
     },
     readBack: async id => ({
@@ -113,4 +113,55 @@ test('restarting receipt creation reuses the original signed receipt from the ou
   assert.equal(second.receipt.signature, first.receipt.signature);
   assert.equal(signingCalls, 1);
   assert.ok(publicKey);
+});
+
+
+test('local journal post is keyed by intent and repeated posting reuses one entry and one receipt', async () => {
+  const { store } = outbox();
+  const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const entries = new Map();
+  let postCalls = 0, signingCalls = 0;
+  const intent = {
+    intentId: '123e4567-e89b-42d3-a456-426614174000', tenantId: 'tenant_123',
+    folioId: 'folio_123', provider: 'razorpay', environment: 'test',
+    providerOrderId: 'order_123', providerPaymentId: 'pay_123',
+    amountMinor: 12500, currency: 'INR'
+  };
+  const device = {
+    deviceId: 'device_123', keyId: 'key_123', attestationId: 'attestation_123',
+    status: 'ACTIVE', hardwareAttested: true
+  };
+  const postLocalEntry = async ({ idempotencyKey }) => {
+    postCalls++;
+    if (!entries.has(idempotencyKey)) entries.set(idempotencyKey, {
+      id: 'entry_123', idempotencyKey, hash: 'a'.repeat(64),
+      committedAt: new Date(NOW - 1000).toISOString()
+    });
+    return entries.get(idempotencyKey);
+  };
+  const options = {
+    postLocalEntry, outbox: store, intent, device,
+    readBack: async id => [...entries.values()].find(entry => entry.id === id) || null,
+    sign: async bytes => {
+      signingCalls++;
+      return crypto.sign('sha256', Buffer.from(bytes), privateKey);
+    },
+    now: () => new Date(NOW), cryptoImpl: crypto.webcrypto
+  };
+  const first = await postAndQueueLocalLedgerReceipt(options);
+  const second = await postAndQueueLocalLedgerReceipt(options);
+  assert.equal(postCalls, 2);
+  assert.equal(entries.size, 1);
+  assert.equal(first.receipt.receiptId, second.receipt.receiptId);
+  assert.equal(second.duplicate, true);
+  assert.equal(signingCalls, 1);
+});
+
+test('local receipt refuses a local post adapter that drops the payment-intent idempotency key', async () => {
+  const { store } = outbox();
+  await assert.rejects(postAndQueueLocalLedgerReceipt({
+    outbox: store,
+    intent: { intentId: '123e4567-e89b-42d3-a456-426614174000' },
+    postLocalEntry: async () => ({ id: 'entry_1' })
+  }), /LOCAL_RECEIPT_LOCAL_POST_IDEMPOTENCY_MISSING/);
 });
