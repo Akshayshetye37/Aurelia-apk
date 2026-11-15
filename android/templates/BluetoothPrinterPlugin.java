@@ -28,6 +28,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 @CapacitorPlugin(
   name = "AureliaPrinter",
@@ -39,6 +42,7 @@ public final class BluetoothPrinterPlugin extends Plugin {
   private static final UUID SPP = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
   private static final int MAX_BYTES = 262144;
   private final ExecutorService io = Executors.newFixedThreadPool(2);
+  private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor();
 
   private BluetoothAdapter adapter() {
     BluetoothManager manager = (BluetoothManager) getContext().getSystemService(Context.BLUETOOTH_SERVICE);
@@ -135,7 +139,15 @@ public final class BluetoothPrinterPlugin extends Plugin {
         if (device.getBondState() != BluetoothDevice.BOND_BONDED) throw new IllegalStateException("PRINTER_NOT_PAIRED");
         adapter.cancelDiscovery();
         socket = device.createRfcommSocketToServiceRecord(SPP);
-        socket.connect();
+        BluetoothSocket connectingSocket = socket;
+        ScheduledFuture<?> connectTimeout = watchdog.schedule(() -> {
+          try { connectingSocket.close(); } catch (Exception ignored) { }
+        }, 15, TimeUnit.SECONDS);
+        try {
+          socket.connect();
+        } finally {
+          connectTimeout.cancel(false);
+        }
         try (OutputStream output = socket.getOutputStream()) {
           for (int offset = 0; offset < data.length; offset += 512) {
             int count = Math.min(512, data.length - offset);
@@ -159,7 +171,7 @@ public final class BluetoothPrinterPlugin extends Plugin {
     Integer requestedPort = call.getInt("port");
     int port = requestedPort == null ? 9100 : requestedPort;
     byte[] data = decodeData(call);
-    if (host == null || host.length() > 253 || port < 1 || port > 65535 || data == null) {
+    if (host == null || host.length() > 253 || port != 9100 || data == null) {
       call.reject("Invalid LAN printer address or print payload", "PRINT_REQUEST_INVALID");
       return;
     }
@@ -216,6 +228,7 @@ public final class BluetoothPrinterPlugin extends Plugin {
 
   @Override protected void handleOnDestroy() {
     io.shutdownNow();
+    watchdog.shutdownNow();
     super.handleOnDestroy();
   }
 }
