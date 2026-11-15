@@ -31,15 +31,15 @@ test('native SQLite instrumentation fails closed instead of using software emula
 
 
 
-test('native SQLite gate executes both selected suites with exactly 35 tests and no skips', () => {
-  assert.equal(repositoryTestCount, 29);
+test('native SQLite gate executes both selected suites with exactly 36 tests and no skips', () => {
+  assert.equal(repositoryTestCount, 30);
   assert.equal(securityTestCount, 6);
-  assert.equal(repositoryTestCount + securityTestCount, 35);
-  assert.ok(workflow.includes('totals.tests !== 35'));
+  assert.equal(repositoryTestCount + securityTestCount, 36);
+  assert.ok(workflow.includes('totals.tests !== 36'));
   assert.ok(workflow.includes('totals.failures !== 0'));
   assert.ok(workflow.includes('totals.errors !== 0'));
   assert.ok(workflow.includes('totals.skipped !== 0'));
-  assert.ok(workflow.includes('Expected exactly 35 executed repository and recovery-security tests, zero failures, zero errors and zero skipped tests.'));
+  assert.ok(workflow.includes('Expected exactly 36 executed repository and recovery-security tests, zero failures, zero errors and zero skipped tests.'));
   assert.ok(workflow.includes('AureliaSecurityInstrumentedTest'));
   assert.ok(emulatorScript.includes('locksettings set-pin'));
   assert.ok(emulatorScript.includes('android.settings.FINGERPRINT_ENROLL'));
