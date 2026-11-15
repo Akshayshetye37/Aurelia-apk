@@ -278,7 +278,25 @@ private object DocumentValidator {
         val n = o.opt(key) as? Number ?: return false; val d = n.toDouble()
         return d.isFinite() && d > 0 && d <= 100000 && d * 1000 % 1.0 == 0.0
     }
-    private fun date(s: String) = try { java.time.Instant.parse(s); s.endsWith("Z") && s.length <= 30 } catch (_: Exception) { false }
+    // API 23-compatible strict UTC timestamp validation (no java.time runtime dependency).
+    private fun date(s: String): Boolean {
+        val m = Regex("^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,3}))?Z$").matchEntire(s) ?: return false
+        return try {
+            val c = java.util.GregorianCalendar(java.util.TimeZone.getTimeZone("UTC"), java.util.Locale.ROOT)
+            c.isLenient = false
+            c.clear()
+            c.set(java.util.Calendar.YEAR, m.groupValues[1].toInt())
+            c.set(java.util.Calendar.MONTH, m.groupValues[2].toInt() - 1)
+            c.set(java.util.Calendar.DAY_OF_MONTH, m.groupValues[3].toInt())
+            c.set(java.util.Calendar.HOUR_OF_DAY, m.groupValues[4].toInt())
+            c.set(java.util.Calendar.MINUTE, m.groupValues[5].toInt())
+            c.set(java.util.Calendar.SECOND, m.groupValues[6].toInt())
+            val fraction = m.groupValues[7]
+            c.set(java.util.Calendar.MILLISECOND, if (fraction.isEmpty()) 0 else (fraction + "00").take(3).toInt())
+            c.timeInMillis
+            true
+        } catch (_: Exception) { false }
+    }
     private fun array(o: JSONObject, key: String, min: Int, max: Int) = o.optJSONArray(key)?.takeIf { it.length() in min..max }
     private fun hotel(o: JSONObject) = keys(o, setOf("name"), setOf("address", "phone", "gstin")) &&
         text(o, "name", 120) && optional(o, "address", 300) && optional(o, "phone", 32) &&

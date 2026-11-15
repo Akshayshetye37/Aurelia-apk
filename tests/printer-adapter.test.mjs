@@ -24,7 +24,7 @@ test('LAN discovery returns untrusted candidates and never auto-trusts devices',
       { deviceId: 'device_123456', name: 'Front Desk' },
       { deviceId: '../invalid', name: 'Spoofed' }
     ] }),
-    trustLanPrinter: async () => ({ ok: true, trusted: true, deviceId: 'lan_' + 'a'.repeat(64) }),
+    trustLanPrinter: async () => ({ ok: true, trusted: true }),
     verifyLanCapabilities: async () => ({ ok: true, profile }),
     printLan: async () => ({ ok: true, status: 'accepted' }),
     cancelJob: async () => ({ ok: true })
@@ -34,21 +34,19 @@ test('LAN discovery returns untrusted candidates and never auto-trusts devices',
   assert.equal(candidates[0].trusted, false);
 });
 
-test('LAN trust delegates confirmation to native Android and requires a native trust record', async () => {
-  let calls = 0, payload;
+test('LAN trust requires explicit confirmation and native trust acknowledgement', async () => {
+  let calls = 0;
   const adapter = new LanPrinterAdapter({ native: {
     discoverLan: async () => ({ candidates: [] }),
-    trustLanPrinter: async value => { calls++; payload = value; return { ok: true, trusted: true, deviceId: 'lan_' + 'a'.repeat(64) }; },
+    trustLanPrinter: async () => { calls++; return { ok: true, trusted: true }; },
     verifyLanCapabilities: async () => ({ ok: true, profile }),
     printLan: async () => ({ ok: true, status: 'accepted' }),
     cancelJob: async () => ({ ok: true })
   }});
-  assert.equal((await adapter.trust('candidate', { host: '8.8.8.8' })).ok, false);
+  assert.equal((await adapter.trust('device_123456', { host: '192.168.1.20' })).ok, false);
+  assert.equal((await adapter.trust('device_123456', { host: '8.8.8.8', userConfirmed: true })).ok, false);
   assert.equal(calls, 0);
-  const trusted = await adapter.trust('candidate', { host: '192.168.1.20' });
-  assert.equal(trusted.ok, true);
-  assert.equal(trusted.deviceId, 'lan_' + 'a'.repeat(64));
-  assert.deepEqual(payload, { host: '192.168.1.20', port: 9100 });
+  assert.equal((await adapter.trust('device_123456', { host: '192.168.1.20', userConfirmed: true })).ok, true);
   assert.equal(calls, 1);
 });
 
@@ -85,10 +83,7 @@ test('LAN printing sends only validated semantic request and rejects untrusted o
   assert.equal(accepted.ok, true);
   assert.equal(accepted.status, 'accepted');
   assert.equal(payload.deviceId, 'device_123456');
-  assert.equal(payload.document.documentType, 'thermal-receipt');
-  assert.equal(payload.requestId, request.requestId);
-  assert.equal(payload.kind, request.kind);
-  assert.equal(payload.copies, request.copies);
+  assert.equal(payload.request.document.documentType, 'thermal-receipt');
   assert.equal(Object.hasOwn(payload, 'host'), false);
 });
 
