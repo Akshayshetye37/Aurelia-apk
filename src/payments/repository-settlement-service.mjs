@@ -465,6 +465,10 @@ export async function reversePaymentToRepository({
   const snapshotIndex = snapshotState.b.findIndex(row => String(row?.id) === bookingId);
   if (snapshotIndex < 0) throw fail("BOOKING_NOT_FOUND", "Booking is missing from the canonical PMS snapshot.");
   const snapshotBooking = snapshotState.b[snapshotIndex];
+  const originalSnapshotEntry = snapshotState.led.find(row => row?.id === originalId);
+  if (!sameJson(originalSnapshotEntry, original)) {
+    throw fail("PAYMENT_LEDGER_DIVERGENCE", "The original payment is missing or differs in the canonical recovery snapshot.");
+  }
   if (bookingRow?.data && !sameJson(comparableBooking(bookingRow.data), comparableBooking(snapshotBooking))) {
     throw fail("CANONICAL_BOOKING_DIVERGENCE", "Canonical booking entity and recovery snapshot disagree.");
   }
@@ -483,8 +487,16 @@ export async function reversePaymentToRepository({
       throw fail("LEDGER_REVERSAL_IDEMPOTENCY_CONFLICT", "Reversal idempotency key is already bound to different or incomplete data.");
     }
     Object.assign(booking, workingBooking);
+    state.today = snapshotState.today;
+    if (Array.isArray(state.led)) state.led.splice(0, state.led.length, ...clone(snapshotState.led));
+    else state.led = clone(snapshotState.led);
+    if (Array.isArray(state.aud)) state.aud.splice(0, state.aud.length, ...clone(snapshotState.aud || []));
     return Object.freeze({ ok: true, duplicate: true, canonical: true, ledger: existingReversal,
       bookingVersion: bookingRow?.version ?? 0, folioVersion: folioRow?.version ?? 0 });
+  }
+
+  if ((workingBooking.paymentReversals || []).some(row => row?.id === reversalId)) {
+    throw fail("PAYMENT_REVERSAL_PROJECTION_DIVERGENCE", "A reversal projection exists without its immutable ledger entry.");
   }
 
   const priorReversals = ledgerRows
@@ -578,7 +590,7 @@ export async function reversePaymentToRepository({
     throw fail("PAYMENT_REVERSAL_READBACK_MISMATCH", "Reversal committed but exact local read-back failed; reconcile before retrying.");
   }
 
-  refreshLegacyCompatibilityCache(legacyStorage, snapshotState);
+  const cacheRefreshed = refreshLegacyCompatibilityCache(legacyStorage, snapshotState);
   const liveBookings = state.b;
   const merged = snapshotState.b.map(saved => {
     const live = liveBookings.find(row => String(row?.id) === String(saved?.id));
@@ -588,13 +600,14 @@ export async function reversePaymentToRepository({
   liveBookings.splice(0, liveBookings.length, ...merged);
   state.today = snapshotState.today;
   if (Array.isArray(state.aud)) state.aud.splice(0, state.aud.length, ...clone(snapshotState.aud));
-  state.led.splice(0, state.led.length, ...clone(snapshotState.led));
+  if (Array.isArray(state.led)) state.led.splice(0, state.led.length, ...clone(snapshotState.led));
+  else state.led = clone(snapshotState.led);
   Object.assign(booking, clone(workingBooking));
 
   return Object.freeze({
     ok: true, duplicate: false, canonical: true, ledger: storedLedger,
     entity: storedBooking, folio: storedFolio, snapshotVersion: storedSnapshot.version,
-    cacheRefreshed: true, bookingVersion: committed.entities[0].version,
+    cacheRefreshed, bookingVersion: committed.entities[0].version,
     folioVersion: committed.entities[1].version
   });
 }
