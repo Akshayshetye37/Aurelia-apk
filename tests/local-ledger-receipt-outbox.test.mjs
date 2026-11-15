@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { IDBFactory } from 'fake-indexeddb';
 import { IndexedDbLocalLedgerReceiptOutbox } from '../src/storage/indexeddb-local-ledger-receipt-outbox.mjs';
-import { createAndQueueLocalLedgerReceipt } from '../src/payments/local-ledger-receipt.mjs';
+import { createAndQueueLocalLedgerReceipt, postAndQueueLocalLedgerReceipt } from '../src/payments/local-ledger-receipt.mjs';
 
 const NOW = Date.parse('2026-11-15T12:00:00.000Z');
 const receipt = (overrides = {}) => ({
