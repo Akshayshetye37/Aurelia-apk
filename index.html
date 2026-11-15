@@ -3773,7 +3773,7 @@ pay=async function(i){
 // Local-only release profile: no cloud sync, gateway checkout, Pay Bridge or provider activation.
 window.AURELIA_LOCAL_ONLY_RELEASE=Object.freeze({
  uiCutover:false,cloudSync:false,sync:false,gatewayPayments:false,payBridge:false,
- ccavenue:false,enabledProviders:Object.freeze([])
+ ccavenue:false,BT_PRINTING_ENABLED:false,enabledProviders:Object.freeze([])
 });
 // Provider checkout is intentionally routed through the authenticated LAN engine.
 // The browser receives only the public checkout token/key; provider secrets stay server-side.
