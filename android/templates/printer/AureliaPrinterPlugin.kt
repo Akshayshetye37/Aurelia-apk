@@ -277,6 +277,26 @@ private class PrinterTrustStore(context: Context) {
     }
     fun remove(id: String) = synchronized(lock) { val root = read(); root.remove(id); write(root) }
     fun markVerified(id: String, at: Long, profileHash: String) = synchronized(lock) { val root = read(); val record = root.optJSONObject(id) ?: throw IllegalStateException("not_trusted"); record.put("profileVerified", true).put("calibratedAt", at).put("profileHash", profileHash); write(root) }
+    fun claimJob(key: String): JSONObject? = synchronized(lock) {
+        val root = read()
+        val jobs = root.optJSONObject("_jobs") ?: JSONObject()
+        val hash = hex(MessageDigest.getInstance("SHA-256").digest(key.toByteArray(StandardCharsets.UTF_8)))
+        val now = System.currentTimeMillis()
+        val previous = jobs.optJSONObject(hash)
+        if (previous != null && now - previous.optLong("timestamp", 0L) < 5 * 60 * 1000L) return@synchronized JSONObject(previous.toString())
+        jobs.put(hash, JSONObject().put("timestamp", now).put("status", "uncertain").put("ok", false).put("error", "delivery_in_progress"))
+        root.put("_jobs", jobs)
+        write(root)
+        null
+    }
+    fun finishJob(key: String, status: String, ok: Boolean, error: String) = synchronized(lock) {
+        val root = read()
+        val jobs = root.optJSONObject("_jobs") ?: JSONObject()
+        val hash = hex(MessageDigest.getInstance("SHA-256").digest(key.toByteArray(StandardCharsets.UTF_8)))
+        jobs.put(hash, JSONObject().put("timestamp", System.currentTimeMillis()).put("status", status).put("ok", ok).put("error", error))
+        root.put("_jobs", jobs)
+        write(root)
+    }
 
     private fun parse(id: String, o: JSONObject?): Record? {
         if (o == null || !id.matches(Regex("^lan_[a-f0-9]{64}$"))) return null
