@@ -936,7 +936,27 @@ app.get('/v1/payments/intents/:intentId/refunds/:refundId', requireTenantAdmin, 
 
 app.get('/v1/admin/refunds/review', requireTenantAdmin, async (req, res) => {
   try {
-    const snapshot = await db.collection('paymentRefunds')
+    let snapshot = await db.collection('paymentRefunds')
+      .where('tenantId', '==', req.tenant.id).limit(100).get();
+    // Opening the queue promotes overdue provider-confirmed refunds to human
+    // review only. It never posts or repairs a local reversal.
+    for (const doc of snapshot.docs) {
+      const record = doc.data();
+      if (record.state !== REFUND_STATES.PROVIDER_CONFIRMED || !refundRequiresHumanReview(record)) continue;
+      await db.runTransaction(async tx => {
+        const current = await tx.get(doc.ref);
+        if (!current.exists || current.data().state !== REFUND_STATES.PROVIDER_CONFIRMED ||
+            !refundRequiresHumanReview(current.data())) return;
+        const transition = transitionRefund(current.data(), {
+          eventId: 'human-review:' + doc.id, type: 'review_timeout'
+        });
+        tx.update(doc.ref, {
+          ...transition.record, humanReviewQueue: true,
+          updatedAt: FieldValue.serverTimestamp()
+        });
+      });
+    }
+    snapshot = await db.collection('paymentRefunds')
       .where('tenantId', '==', req.tenant.id).limit(100).get();
     const items = snapshot.docs.map(doc => ({ refundId: doc.id, ...doc.data() }))
       .filter(record => record.state === REFUND_STATES.HUMAN_REVIEW)
