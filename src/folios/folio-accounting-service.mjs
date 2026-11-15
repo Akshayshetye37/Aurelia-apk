@@ -188,7 +188,7 @@ export async function issueFolioInvoice({
         mutate: entity => Object.assign(entity, {
           id: auditId, action: "invoice_issued", actor: "local_staff",
           folioId: targetFolioId, bookingId, invoiceNumber, financialYear,
-          invoiceHash, issuedAt, paymentReconciliation
+          invoiceHash, issuedAt, paymentReconciliation, taxSummary, taxLines
         })
       }
     ];
