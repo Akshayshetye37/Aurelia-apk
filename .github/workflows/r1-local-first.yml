@@ -26,7 +26,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
+      - name: Enforce verified feature locks
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: node scripts/feature-lock-guard.mjs
       - name: Assert checkout is the event SHA
         run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
       - name: Set up Node.js
