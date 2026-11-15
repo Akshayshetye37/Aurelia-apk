@@ -125,7 +125,7 @@ export function buildFolioInvoice({
     ? guest.occ.map(x => text(x?.n)).filter(Boolean)
     : [];
   const primaryGuest = text(guest?.n || booking.g);
-  const guestCount = 1 + occupants.length;
+  const ageAt = dob => { if (!dob) return null; const birth = new Date(dob); if (!Number.isFinite(birth.getTime())) return null; const today = new Date(); let age = today.getFullYear() - birth.getFullYear(); const beforeBirthday = today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate()); if (beforeBirthday) age -= 1; return age; };\n  const childCount = guest?.occ?.filter(x => /child|minor/i.test(text(x?.rel)) || (ageAt(x?.dob) != null && ageAt(x?.dob) < 18)).length || 0;\n  const adultCount = 1 + occupants.length - childCount;\n  const offsetDate = value => { const n = Number(value); if (!Number.isFinite(n)) return null; const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + n); return d.toISOString(); };
   return Object.freeze({
     invoiceNumber: text(booking.iv),
     folioNumber: text(booking.folioId || "booking-" + booking.id),
