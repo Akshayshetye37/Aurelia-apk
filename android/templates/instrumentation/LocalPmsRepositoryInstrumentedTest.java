@@ -1034,4 +1034,73 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertEquals(10, repository.listEntities("legacy").length());
   }
 
+  @Test public void paymentReversalAppendsImmutableEntryAndCommitsProjectionsAtomically() throws Exception {
+    String originalId = "payment:original-71";
+    String reversalId = "payment:reversal-71";
+    JSONObject original = new JSONObject()
+      .put("id", originalId)
+      .put("recordType", "AURELIA_FINANCIAL_LEDGER_ENTRY_V1")
+      .put("tenantId", "tenant-test").put("propertyId", "property-test").put("deviceId", "device-test")
+      .put("bookingId", "71").put("folioId", "folio-71")
+      .put("amountPaise", 12500).put("currency", "INR")
+      .put("transactionType", "PAYMENT_RECEIVED").put("reversalOf", JSONObject.NULL)
+      .put("idempotencyKey", "original-payment-71");
+    repository.transactBusinessChange("ledger", originalId, 0, original,
+      event("payment-original-event", "ledger", originalId, 1));
+
+    JSONObject reversal = new JSONObject()
+      .put("id", reversalId)
+      .put("recordType", "AURELIA_FINANCIAL_LEDGER_ENTRY_V1")
+      .put("tenantId", "tenant-test").put("propertyId", "property-test").put("deviceId", "device-test")
+      .put("bookingId", "71").put("folioId", "folio-71")
+      .put("amountPaise", 5000).put("currency", "INR")
+      .put("transactionType", "PAYMENT_REVERSAL").put("reversalOf", originalId)
+      .put("idempotencyKey", "reversal-payment-71").put("reason", "Duplicate receipt");
+
+    JSONArray changes = new JSONArray()
+      .put(new JSONObject().put("entityType", "booking").put("entityId", "71").put("expectedVersion", 0)
+        .put("data", new JSONObject().put("id", "71").put("p", 75))
+        .put("event", event("payment-reversal-booking", "booking", "71", 1)))
+      .put(new JSONObject().put("entityType", "folio").put("entityId", "folio-71").put("expectedVersion", 0)
+        .put("data", new JSONObject().put("id", "folio-71").put("paidPaise", 7500).put("balanceDuePaise", 92500))
+        .put("event", event("payment-reversal-folio", "folio", "folio-71", 1)))
+      .put(new JSONObject().put("entityType", "ledger").put("entityId", reversalId).put("expectedVersion", 0)
+        .put("data", reversal)
+        .put("event", event("payment-reversal-ledger", "ledger", reversalId, 1)))
+      .put(new JSONObject().put("entityType", "audit").put("entityId", "snapshot-payment-71").put("expectedVersion", 0)
+        .put("data", new JSONObject().put("snapshot", new JSONObject()
+          .put("bookingId", "71").put("paidPaise", 7500)
+          .put("ledger", new JSONArray().put(original).put(reversal))))
+        .put("event", event("payment-reversal-snapshot", "audit", "snapshot-payment-71", 1)));
+
+    JSONArray committed = repository.transactBusinessBatch(changes);
+    assertEquals(4, committed.length());
+    assertEquals(12500, repository.getEntity("ledger", originalId).getJSONObject("data").getInt("amountPaise"));
+    assertEquals(originalId, repository.getEntity("ledger", reversalId).getJSONObject("data").getString("reversalOf"));
+    assertEquals(7500, repository.getEntity("folio", "folio-71").getJSONObject("data").getInt("paidPaise"));
+
+    boolean rewriteRejected = false;
+    try {
+      repository.transactBusinessChange("ledger", originalId, 1,
+        new JSONObject(original.toString()).put("amountPaise", 1),
+        event("payment-original-rewrite", "ledger", originalId, 2));
+    } catch (IllegalStateException expected) { rewriteRejected = "LEDGER_APPEND_ONLY".equals(expected.getMessage()); }
+    assertTrue("the original payment entry must remain immutable", rewriteRejected);
+    assertEquals(12500, repository.getEntity("ledger", originalId).getJSONObject("data").getInt("amountPaise"));
+
+    JSONArray invalidBatch = new JSONArray()
+      .put(new JSONObject().put("entityType", "ledger").put("entityId", reversalId).put("expectedVersion", 1)
+        .put("data", new JSONObject(reversal.toString()).put("amountPaise", 1))
+        .put("event", event("payment-reversal-rewrite", "ledger", reversalId, 2)))
+      .put(new JSONObject().put("entityType", "guest").put("entityId", "must-not-commit").put("expectedVersion", 0)
+        .put("data", data("partial-write"))
+        .put("event", event("payment-reversal-partial", "guest", "must-not-commit", 1)));
+    boolean batchRejected = false;
+    try { repository.transactBusinessBatch(invalidBatch); }
+    catch (IllegalStateException expected) { batchRejected = "LEDGER_APPEND_ONLY".equals(expected.getMessage()); }
+    assertTrue("a batch cannot rewrite a reversal or partially commit another entity", batchRejected);
+    assertNull(repository.getEntity("guest", "must-not-commit"));
+    assertEquals(5000, repository.getEntity("ledger", reversalId).getJSONObject("data").getInt("amountPaise"));
+  }
+
 }
