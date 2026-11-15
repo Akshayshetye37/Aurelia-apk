@@ -33,13 +33,13 @@ function eventHash(event) {
 }
 
 export function createRefundRecord({
-  refundId, intentId, tenantId, provider, environment, providerOrderId,
+  refundId, intentId, tenantId, provider, providerAccountId, environment, providerOrderId,
   providerPaymentId, originalAmountMinor, amountMinor, currency = 'INR',
   idempotencyKey, requestedBy, now = () => new Date().toISOString()
 } = {}) {
   if (!ID.test(refundId || '') || !ID.test(intentId || '') ||
       !ID.test(tenantId || '') || !ID.test(provider || '') ||
-      !ID.test(environment || '') || !ID.test(providerOrderId || '') ||
+      !ID.test(providerAccountId || '') || !ID.test(environment || '') || !ID.test(providerOrderId || '') ||
       !ID.test(providerPaymentId || '') || !ID.test(idempotencyKey || '') ||
       !ID.test(requestedBy || '') ||
       !Number.isSafeInteger(originalAmountMinor) || originalAmountMinor <= 0 ||
@@ -50,7 +50,7 @@ export function createRefundRecord({
   const createdAt = now();
   if (!Number.isFinite(Date.parse(createdAt))) fail('refund_clock_invalid');
   return Object.freeze({
-    refundId, intentId, tenantId, provider, environment, providerOrderId,
+    refundId, intentId, tenantId, provider, providerAccountId, environment, providerOrderId,
     providerPaymentId, originalAmountMinor, amountMinor, currency,
     idempotencyKey, requestedBy, state: REFUND_STATES.REQUESTED,
     createdAt, updatedAt: createdAt, version: 1,
