@@ -1,4 +1,5 @@
 import { assertCompatibilityUiAllowed } from "../storage/pms-authority-state.mjs";
+import { validateGstin } from "./folio-invoice.mjs";
 
 const clone = value => value == null ? value : structuredClone(value);
 const text = value => String(value ?? "").trim();
@@ -200,6 +201,7 @@ export async function createSplitFolio({
   const bookingKey = safeId(bookingId, "booking ID");
   if (masterId === childId) throw new TypeError("A split folio must have a different ID from its master");
   if (!Array.isArray(allocations) || !allocations.length) throw new TypeError("At least one split allocation is required");
+  if (guest?.companyGstin) validateGstin(guest.companyGstin, "Split guest GSTIN");
   const normalized = allocations.map(allocation => Object.freeze({
     chargeId: safeId(allocation?.chargeId, "charge ID"),
     amountPaise: paise(allocation.amountPaise, "Allocation amount")
@@ -319,6 +321,7 @@ export function buildSplitFolioInvoice({ masterInvoice, splitFolio, invoiceDate 
   if (!masterInvoice || !splitFolio || !Array.isArray(splitFolio.allocations) || !splitFolio.allocations.length) {
     throw new TypeError("Master invoice and persisted split-folio allocations are required");
   }
+  if (splitFolio.billingGuest?.companyGstin) validateGstin(splitFolio.billingGuest.companyGstin, "Split guest GSTIN");
   const lineItems = splitFolio.allocations.map(allocation => {
     const source = allocation.chargeSnapshot;
     if (!source || !Number.isSafeInteger(source.grossMinor) || source.grossMinor <= 0) {
