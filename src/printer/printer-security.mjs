@@ -2,14 +2,18 @@ export const MAX_PRINTER_DOCUMENT_BYTES = 1024 * 1024;
 
 const fail = error => ({ ok: false, error });
 const pass = value => ({ ok: true, value });
-const ownKeysOnly = (value, allowed) =>
-  value && typeof value === 'object' && !Array.isArray(value) &&
-  Object.keys(value).every(key => allowed.includes(key));
+const ownKeysOnly = (value, allowed) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  return Object.keys(descriptors).every(key => allowed.includes(key) &&
+    Object.hasOwn(descriptors[key], 'value') && !descriptors[key].get && !descriptors[key].set);
+};
 
 function isPrivateIpv4(host) {
   const parts = host.split('.');
   if (parts.length !== 4 || parts.some(part => !/^(0|[1-9]\\d{0,2})$/.test(part) || Number(part) > 255)) return false;
-  const [a, b] = parts.map(Number);
+  const [a, b, c, d] = parts.map(Number);
+  if (d === 0 || d === 255) return false;
   return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 }
 
@@ -76,9 +80,13 @@ function inspectDocument(value, depth = 0) {
   if (typeof value === 'string') return new TextEncoder().encode(value).byteLength <= 16_384;
   if (Array.isArray(value)) return value.length <= 500 && value.every(item => inspectDocument(item, depth + 1));
   if (typeof value !== 'object') return false;
-  const keys = Object.keys(value);
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const keys = Object.keys(descriptors);
   if (keys.length > 100 || keys.some(key => FORBIDDEN_DOCUMENT_KEYS.has(key))) return false;
-  return keys.every(key => key.length <= 128 && inspectDocument(value[key], depth + 1));
+  return keys.every(key => key.length <= 128 && Object.hasOwn(descriptors[key], 'value') &&
+    !descriptors[key].get && !descriptors[key].set && inspectDocument(descriptors[key].value, depth + 1));
 }
 
 export function validatePrintRequest(input) {
@@ -97,10 +105,18 @@ export function validatePrintRequest(input) {
   if (new TextEncoder().encode(serialized).byteLength > MAX_PRINTER_DOCUMENT_BYTES) {
     return fail('document_too_large');
   }
+  const snapshot = JSON.parse(serialized);
+  const freezeDeep = value => {
+    if (value && typeof value === 'object') {
+      Object.values(value).forEach(freezeDeep);
+      Object.freeze(value);
+    }
+    return value;
+  };
   return pass(Object.freeze({
     requestId: input.requestId,
     kind: input.kind,
     copies: input.copies,
-    document: input.document
+    document: freezeDeep(snapshot)
   }));
 }
