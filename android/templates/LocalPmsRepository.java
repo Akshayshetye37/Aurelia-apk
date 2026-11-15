@@ -12,7 +12,7 @@ import org.json.JSONObject;
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String NAME = "aurelia-pms-encrypted.db";
-  private static final int VERSION = 5;
+  private static final int VERSION = 6;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   private final Context appContext;
@@ -71,6 +71,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     db.execSQL("CREATE TABLE pms_migrations(migration_key TEXT PRIMARY KEY NOT NULL,migration_id TEXT NOT NULL,source_key TEXT NOT NULL,completed_at INTEGER NOT NULL,entity_count INTEGER NOT NULL)");
     db.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL,source_timestamp TEXT NOT NULL,created_at INTEGER NOT NULL,format_version INTEGER NOT NULL)");
     createAuditAppendOnlyTriggers(db);
+    createLedgerAppendOnlyTriggers(db);
   }
   @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {
     if(oldVersion<2) db.execSQL("ALTER TABLE pms_outbox ADD COLUMN acknowledged_at INTEGER");
@@ -81,7 +82,10 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     if(oldVersion<5) {
       db.execSQL("DROP TRIGGER IF EXISTS pms_audit_no_update");
       db.execSQL("DROP TRIGGER IF EXISTS pms_audit_no_delete");
+    }
+    if(oldVersion<6) {
       createAuditAppendOnlyTriggers(db);
+      createLedgerAppendOnlyTriggers(db);
     }
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
@@ -239,7 +243,13 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     db.execSQL("CREATE TRIGGER IF NOT EXISTS pms_audit_no_delete BEFORE DELETE ON pms_entities WHEN OLD.entity_type='audit' AND OLD.entity_id<>'legacy_snapshot:aurelia_lodge_v2' BEGIN SELECT RAISE(ABORT,'audit_append_only'); END");
   }
 
+  private static void createLedgerAppendOnlyTriggers(SQLiteDatabase db) {
+    db.execSQL("CREATE TRIGGER IF NOT EXISTS pms_ledger_no_update BEFORE UPDATE ON pms_entities WHEN OLD.entity_type='ledger' BEGIN SELECT RAISE(ABORT,'ledger_append_only'); END");
+    db.execSQL("CREATE TRIGGER IF NOT EXISTS pms_ledger_no_delete BEFORE DELETE ON pms_entities WHEN OLD.entity_type='ledger' BEGIN SELECT RAISE(ABORT,'ledger_append_only'); END");
+  }
+
   private static void writeEntityVersion(SQLiteDatabase db,String type,String id,long expectedVersion,JSONObject data,long now) {
+    if("ledger".equals(type) && expectedVersion>0) throw new IllegalStateException("LEDGER_APPEND_ONLY");
     ContentValues values=new ContentValues();
     values.put("version",expectedVersion+1);
     values.put("data_json",data.toString());
