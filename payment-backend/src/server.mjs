@@ -5,6 +5,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
+import { createLocalLedgerReceiptService } from './intents/local-ledger-receipt.mjs';
 import { implementedProviderAdapters, providerQualificationStatus, createProviderAdapter } from './providers/factory.mjs';
 import { PROVIDERS } from './providers/registry.mjs';
 import { assertWebhookReplayIntegrity } from './webhooks/provider-webhook-router.mjs';
@@ -813,6 +814,56 @@ app.post('/v1/payments/intents/:intentId/reconcile', requireTenantPaymentActor, 
     return fail(res, response.status, response.error);
   }
 });
+
+app.post('/v1/payments/intents/:intentId/local-receipt', requireTenantPaymentActor,
+  express.json({ limit: '16kb', strict: true }), async (req, res) => {
+    if (!req.body || req.body.intentId !== req.params.intentId) {
+      return fail(res, 400, 'local_ledger_receipt_intent_mismatch');
+    }
+    try {
+      // Bring the intent to a provider-verified CAPTURED state if needed. The
+      // receipt service then performs a second, fresh provider status lookup.
+      await paymentRepository.reconcilePaymentIntent(req.actor.uid, req.params.intentId);
+      const receiptService = createLocalLedgerReceiptService({
+        repository: paymentRepository,
+        verifyDeviceAttestation: async ({ deviceId, keyId, attestationId }) => {
+          const snapshot = await paymentDeviceRef(db, req.tenant.id, deviceId).get();
+          if (!snapshot.exists) return { verified: false };
+          const device = snapshot.data();
+          const hardwareBacked = device.status === 'ACTIVE' &&
+            ['TRUSTED_ENVIRONMENT', 'STRONG_BOX'].includes(device.attestationSecurityLevel) &&
+            device.attestationVerifiedBootState === 'VERIFIED' &&
+            device.attestationDeviceLocked === true &&
+            typeof device.attestationVerifiedAt === 'string';
+          if (!hardwareBacked || device.keyId !== keyId || device.attestationId !== attestationId ||
+              typeof device.publicKeySpkiBase64 !== 'string') {
+            return { verified: false };
+          }
+          return {
+            verified: true, hardwareBacked: true, deviceId,
+            keyId: device.keyId, attestationId: device.attestationId,
+            publicKey: crypto.createPublicKey({
+              key: Buffer.from(device.publicKeySpkiBase64, 'base64'),
+              type: 'spki', format: 'der'
+            })
+          };
+        },
+        verifyProviderCapture: ({ intentId }) =>
+          paymentRepository.verifyProviderCaptureForReceipt(req.actor.uid, intentId)
+      });
+      return res.status(202).json(await receiptService.accept(req.body));
+    } catch (error) {
+      const knownConflict = [
+        'payment_intent_not_found', 'payment_intent_not_awaiting_local_receipt',
+        'receipt_intent_binding_mismatch', 'receipt_id_already_consumed',
+        'payment_intent_receipt_already_accepted', 'provider_capture_binding_mismatch',
+        'device_attestation_binding_mismatch'
+      ].includes(String(error?.message || ''));
+      const response = paymentRouteError(error);
+      return fail(res, knownConflict ? 409 : response.status >= 500 ? response.status : 422,
+        response.error || 'local_ledger_receipt_rejected');
+    }
+  });
 
 app.get('/v1/payments/intents/:intentId', requireTenantPaymentActor, async (req, res) => {
   try {
