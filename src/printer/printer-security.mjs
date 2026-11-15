@@ -5,15 +5,19 @@ const pass = value => ({ ok: true, value });
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 
 function strictRecord(value, required, optional = []) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return false;
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  const keys = Reflect.ownKeys(descriptors);
-  const allowed = new Set([...required, ...optional]);
-  return required.every(key => hasOwn(descriptors, key)) &&
-    keys.every(key => typeof key === 'string' && allowed.has(key) && hasOwn(descriptors[key], 'value') &&
-      !descriptors[key].get && !descriptors[key].set);
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return false;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const keys = Reflect.ownKeys(descriptors);
+    const allowed = new Set([...required, ...optional]);
+    return required.every(key => hasOwn(descriptors, key)) &&
+      keys.every(key => typeof key === 'string' && allowed.has(key) && hasOwn(descriptors[key], 'value') &&
+        !descriptors[key].get && !descriptors[key].set);
+  } catch {
+    return false;
+  }
 }
 
 const textValue = (value, max = 256, { optional = false } = {}) =>
@@ -91,7 +95,8 @@ export function validatePrinterProfile(input) {
   if (!strictRecord(input, [
     'transport', 'protocol', 'paperWidthMm', 'printableDots', 'dpi', 'verification', 'verified'
   ])) return fail('invalid_profile');
-  if (!Object.hasOwn(PROFILE_PROTOCOLS, input.transport) ||
+  if (typeof input.transport !== 'string' || typeof input.protocol !== 'string' ||
+      !Object.hasOwn(PROFILE_PROTOCOLS, input.transport) ||
       !PROFILE_PROTOCOLS[input.transport].includes(input.protocol)) return fail('unsupported_transport_protocol');
   if (input.verified !== true || !['manufacturer_capability', 'calibrated'].includes(input.verification)) {
     return fail('verified_capability_required');
@@ -215,7 +220,11 @@ function inspectDocument(value, depth = 0) {
 }
 
 export function validatePrintDocument(input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input) || !inspectDocument(input)) {
+  try {
+    if (!input || typeof input !== 'object' || Array.isArray(input) || !inspectDocument(input)) {
+      return fail('invalid_document');
+    }
+  } catch {
     return fail('invalid_document');
   }
   let serialized;
@@ -223,9 +232,14 @@ export function validatePrintDocument(input) {
   if (new TextEncoder().encode(serialized).byteLength > MAX_PRINTER_DOCUMENT_BYTES) {
     return fail('document_too_large');
   }
-  const valid = input.documentType === 'kitchen-ticket'
-    ? validKitchenDocument(input)
-    : validFolioDocument(input);
+  let valid = false;
+  try {
+    valid = input.documentType === 'kitchen-ticket'
+      ? validKitchenDocument(input)
+      : validFolioDocument(input);
+  } catch {
+    return fail('invalid_semantic_document');
+  }
   if (!valid) return fail('invalid_semantic_document');
   const snapshot = JSON.parse(serialized);
   const freezeDeep = value => {
