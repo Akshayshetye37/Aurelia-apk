@@ -321,3 +321,13 @@ test('restaurant table settlement records the sale and clears the table only aft
   assert.match(handler, /await commitRestaurantSettlementState/);
   assert.doesNotMatch(handler, /persist\(\)/);
 });
+
+
+test('device enrollment exposes only the backend-registered hardware key identity for receipt signing', () => {
+  const bridge = read('src/payments/payment-device-bridge.mjs');
+  assert.match(bridge, /enrollment\.keyId/);
+  assert.match(bridge, /enrollment\.attestationId/);
+  assert.match(bridge, /enrollment\.attestationSecurityLevel/);
+  assert.match(bridge, /window\.AureliaPaymentDeviceEnrollment = enrollmentContext/);
+  assert.match(bridge, /hardwareAttested/);
+});
