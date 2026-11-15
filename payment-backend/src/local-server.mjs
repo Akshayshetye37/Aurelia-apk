@@ -343,6 +343,7 @@ function originGuard(req, res, next) {
 app.use(originGuard);
 app.use((req, res, next) => {
   if (!req.secure) return fail(res, 403, 'https_required');
+  res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   next();
 });
 app.use(express.json({ limit: '512kb', strict: true, type: req => !req.path.startsWith('/v1/webhooks/') }));
