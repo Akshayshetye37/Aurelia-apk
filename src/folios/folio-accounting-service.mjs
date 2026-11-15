@@ -89,6 +89,13 @@ export async function issueFolioInvoice({
   if (invoice.lineItems.some(line => !line.taxProfile || !line.taxProfile.id)) {
     throw fail("TAX_PROFILE_MISSING", "Every invoice charge requires an explicit configured tax profile, including an explicit zero-rate/exempt profile.");
   }
+  const invoicePaymentsPaise = (Array.isArray(invoice.payments) ? invoice.payments : []).reduce((total, payment) => {
+    const amountMinor = paise(payment.amountMinor, "Invoice payment");
+    return total + amountMinor;
+  }, 0);
+  if (invoicePaymentsPaise !== paise(invoice.totals.paidMinor ?? 0, "Invoice paid total")) {
+    throw fail("INVOICE_PAYMENT_RECONCILIATION_REQUIRED", "Invoice payment rows do not match the invoice paid total.");
+  }
   const paymentReconciliation = reconcileLegacyPaymentTotals(booking);
   if (!paymentReconciliation.matched) {
     throw fail("LEGACY_PAYMENT_RECONCILIATION_REQUIRED",
