@@ -113,7 +113,7 @@ class AureliaPrinterPlugin : Plugin() {
         if (record == null) { call.reject("not_trusted"); return }
         executor.execute {
             val peer = resolvePinnedPeer(record)
-            if (peer == null) { call.reject("peer_address_changed_or_public"); return@execute }
+            if (peer == null) { store.finishJob(ledgerKey, "failed", false, "peer_address_changed_or_public"); call.reject("peer_address_changed_or_public"); return@execute }
             val socket = java.net.Socket()
             try {
                 socket.connect(java.net.InetSocketAddress(peer, 9100), 5000)
@@ -188,8 +188,8 @@ class AureliaPrinterPlugin : Plugin() {
             activeSockets[requestId] = socket
             try {
                 socket.tcpNoDelay = true
-                socket.connect(java.net.InetSocketAddress(peer, 9100), 5000)
                 val bytes = EscPosRenderer.render(kind ?: "", validation.normalizedDocument!!, copies)
+                socket.connect(java.net.InetSocketAddress(peer, 9100), 5000)
                 val completed = writeWithHardTimeout(socket, bytes)
                 val error = if (completed) "printer_acknowledgement_unavailable" else "write_interrupted_delivery_uncertain"
                 store.finishJob(ledgerKey, "uncertain", true, error)
@@ -303,8 +303,21 @@ private class PrinterTrustStore(context: Context) {
         val jobs = root.optJSONObject("_jobs") ?: JSONObject()
         val hash = hex(MessageDigest.getInstance("SHA-256").digest(key.toByteArray(StandardCharsets.UTF_8)))
         val now = System.currentTimeMillis()
+        val iterator = jobs.keys()
+        val stale = mutableListOf<String>()
+        while (iterator.hasNext()) {
+            val candidate = iterator.next()
+            val item = jobs.optJSONObject(candidate)
+            if (item == null || now - item.optLong("timestamp", 0L) >= 5 * 60 * 1000L) stale.add(candidate)
+        }
+        stale.forEach { jobs.remove(it) }
         val previous = jobs.optJSONObject(hash)
-        if (previous != null && now - previous.optLong("timestamp", 0L) < 5 * 60 * 1000L) return@synchronized JSONObject(previous.toString())
+        if (previous != null) return@synchronized JSONObject(previous.toString())
+        while (jobs.length() >= 200) {
+            val first = jobs.keys()
+            if (!first.hasNext()) break
+            jobs.remove(first.next())
+        }
         jobs.put(hash, JSONObject().put("timestamp", now).put("status", "uncertain").put("ok", false).put("error", "delivery_in_progress"))
         root.put("_jobs", jobs)
         write(root)
