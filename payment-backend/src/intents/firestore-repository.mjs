@@ -102,6 +102,100 @@ export class FirestorePaymentRepository {
     this.clock = clock;
   }
 
+  async getIntent(intentId) {
+    if (typeof intentId !== 'string' || !/^[0-9a-f-]{36}$/i.test(intentId)) {
+      throw new TypeError('invalid_payment_intent_lookup');
+    }
+    const snapshot = await this.db.collection('paymentIntents').doc(intentId).get();
+    return snapshot.exists ? { intentId: snapshot.id, ...snapshot.data() } : null;
+  }
+
+  /**
+   * Atomically accepts local-ledger evidence only. This transaction never
+   * creates a financial journal entry and never reads or updates a folio balance.
+   * Receipt and intent uniqueness are enforced by deterministic document IDs.
+   */
+  async acceptReceiptAtomically({ receipt, expectedIntent, acceptedAt }) {
+    if (!receipt || !expectedIntent || typeof acceptedAt !== 'string' ||
+        typeof receipt.receiptId !== 'string' || !/^[A-Za-z0-9._:-]{1,200}$/.test(receipt.receiptId) ||
+        typeof receipt.intentId !== 'string' || !/^[0-9a-f-]{36}$/i.test(receipt.intentId)) {
+      throw new TypeError('invalid_local_ledger_receipt_commit');
+    }
+    const intentRef = this.db.collection('paymentIntents').doc(receipt.intentId);
+    const receiptRef = this.db.collection('paymentAccountingReceipts').doc(digest(receipt.receiptId));
+    const intentReceiptRef = this.db.collection('paymentIntentReceiptLocks').doc(digest(receipt.intentId));
+    const receiptHash = digest(JSON.stringify(receipt));
+
+    return this.db.runTransaction(async tx => {
+      const [intentSnap, receiptSnap, intentReceiptSnap] = await Promise.all([
+        tx.get(intentRef), tx.get(receiptRef), tx.get(intentReceiptRef)
+      ]);
+      if (!intentSnap.exists) throw new Error('payment_intent_not_found');
+      const intent = intentSnap.data();
+      const fields = [
+        'intentId', 'tenantId', 'folioId', 'provider', 'environment',
+        'providerOrderId', 'providerPaymentId', 'amountMinor', 'currency'
+      ];
+      if (fields.some(field => intent[field] !== expectedIntent[field]) ||
+          fields.some(field => intent[field] !== receipt[field])) {
+        throw new Error('receipt_intent_binding_mismatch');
+      }
+
+      if (receiptSnap.exists) {
+        const prior = receiptSnap.data();
+        if (prior.receiptId === receipt.receiptId && prior.intentId === receipt.intentId &&
+            prior.receiptHash === receiptHash) {
+          return { accepted: true, duplicate: true };
+        }
+        throw new Error('receipt_id_already_consumed');
+      }
+      if (intentReceiptSnap.exists) {
+        const prior = intentReceiptSnap.data();
+        if (prior.receiptId === receipt.receiptId && prior.receiptHash === receiptHash) {
+          return { accepted: true, duplicate: true };
+        }
+        throw new Error('payment_intent_receipt_already_accepted');
+      }
+      if (intent.state !== 'CAPTURED' ||
+          !['AWAITING_LOCAL_RECEIPT', 'RECEIPT_ACCEPTED'].includes(intent.accountingStatus)) {
+        throw new Error('payment_intent_not_awaiting_local_receipt');
+      }
+      if (intent.accountingStatus === 'RECEIPT_ACCEPTED') {
+        throw new Error('accepted_receipt_registry_missing');
+      }
+
+      tx.update(intentRef, {
+        accountingStatus: 'RECEIPT_ACCEPTED',
+        localLedgerReceiptId: receipt.receiptId,
+        localLedgerEntryId: receipt.ledgerEntryId,
+        localLedgerEntryHash: receipt.ledgerEntryHash,
+        localLedgerReceiptAcceptedAt: acceptedAt,
+        updatedAt: acceptedAt
+      });
+      tx.create(intentReceiptRef, {
+        receiptId: receipt.receiptId, receiptHash,
+        intentId: receipt.intentId, tenantId: receipt.tenantId,
+        acceptedAt
+      });
+      // This is intentionally the final write: rejected validation never
+      // reserves the receipt ID, and Firestore commits all three writes atomically.
+      tx.create(receiptRef, {
+        receiptId: receipt.receiptId, receiptHash,
+        intentId: receipt.intentId, tenantId: receipt.tenantId,
+        folioId: receipt.folioId, provider: receipt.provider,
+        environment: receipt.environment, providerOrderId: receipt.providerOrderId,
+        providerPaymentId: receipt.providerPaymentId, amountMinor: receipt.amountMinor,
+        currency: receipt.currency, deviceId: receipt.deviceId,
+        keyId: receipt.keyId, attestationId: receipt.attestationId,
+        ledgerEntryId: receipt.ledgerEntryId, ledgerEntryHash: receipt.ledgerEntryHash,
+        readBackConfirmation: receipt.readBackConfirmation,
+        issuedAt: receipt.issuedAt, expiresAt: receipt.expiresAt,
+        signature: receipt.signature, acceptedAt
+      });
+      return { accepted: true, duplicate: false };
+    });
+  }
+
   async getPaymentIntent(authUid, intentId) {
     if (typeof authUid !== 'string' || !authUid || typeof intentId !== 'string' || !/^[0-9a-f-]{36}$/i.test(intentId)) {
       throw new TypeError('invalid_payment_intent_lookup');
