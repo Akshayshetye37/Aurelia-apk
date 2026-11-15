@@ -17,7 +17,7 @@ on:
       - ".github/workflows/payment-backend-ci.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: aurelia-payment-backend-${{ github.ref }}
@@ -37,8 +37,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install backend dependencies
-        run: npm install --no-audit --no-fund
+      - name: Generate root dependency lockfile
+        run: npm install --package-lock-only --no-audit --no-fund
+        working-directory: .
+      - name: Generate payment backend dependency lockfile
+        run: npm install --package-lock-only --no-audit --no-fund
+      - name: Verify root clean install
+        run: npm ci --no-audit --no-fund
+        working-directory: .
+      - name: Verify payment backend clean install
+        run: npm ci --no-audit --no-fund
+      - name: Run complete PMS regression suite
+        run: npm test
+        working-directory: .
       - name: Run payment backend contract and security tests
         run: npm run test:ci
       - name: Verify payment backend JavaScript syntax
@@ -58,3 +69,20 @@ jobs:
         run: terraform -chdir=infra/terraform init -backend=false -input=false
       - name: Validate Cloud Run infrastructure
         run: terraform -chdir=infra/terraform validate
+
+      - name: Commit generated lockfiles on work branches
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/work/')
+        working-directory: .
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json payment-backend/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfiles are already current."
+            exit 0
+          fi
+          git commit -m "build: add reproducible npm lockfiles"
+          git push origin "HEAD:${BRANCH_NAME}"
