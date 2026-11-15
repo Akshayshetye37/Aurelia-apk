@@ -21,11 +21,14 @@ test('trust requires native confirmation and an authenticated encrypted Keystore
   assert.match(source, /updateAAD/);
   assert.match(source, /noBackupFilesDir/);
 });
-test('print boundary accepts a device identifier and refuses unqualified profiles', () => {
+test('print boundary accepts a device identifier and enforces verified calibration', () => {
   const source = read('android/templates/printer/AureliaPrinterPlugin.kt');
   const method = source.slice(source.indexOf('fun printLan'), source.indexOf('@PluginMethod\n    fun cancelJob'));
   assert.doesNotMatch(method, /getString\("host"\)|getInt\("port"\)/);
-  assert.match(method, /printer_profile_calibration_required/);
+  assert.match(method, /record\.verified/);
+  assert.match(method, /store\.claimJob/);
+  assert.match(method, /writeWithHardTimeout/);
+  assert.match(method, /status\", \"uncertain/);
 });
 test('trust resolves all DNS answers and rejects mixed public/private results', () => {
   const source = read('android/templates/printer/AureliaPrinterPlugin.kt');
@@ -46,4 +49,23 @@ test('native renderer is bounded and emits only fixed ESC/POS commands', () => {
   assert.match(source, /StandardCharsets\.UTF_8/);
   assert.match(source, /0x1b, 0x40/);
   assert.match(source, /0x1d, 0x56/);
+});
+
+test('native calibration requires a pinned peer, bounded write and explicit operator confirmation', () => {
+  const source = read('android/templates/printer/AureliaPrinterPlugin.kt');
+  const method = source.slice(source.indexOf('fun calibrateLanPrinter'), source.indexOf('fun verifyLanCapabilities'));
+  assert.match(method, /resolvePinnedPeer/);
+  assert.match(method, /writeWithHardTimeout/);
+  assert.match(method, /Did the Aurelia test page print correctly/);
+  assert.match(method, /store\.markVerified/);
+  assert.match(source, /InetSocketAddress\(peer, 9100\)/);
+  assert.match(source, /TimeUnit\.SECONDS/);
+});
+test('raw TCP jobs are idempotent for five minutes and cancellation never claims success', () => {
+  const source = read('android/templates/printer/AureliaPrinterPlugin.kt');
+  assert.match(source, /5 \* 60 \* 1000L/);
+  assert.match(source, /fun claimJob/);
+  assert.match(source, /cancel_not_supported_on_raw_tcp/);
+  const cancel = source.slice(source.indexOf('fun cancelJob'), source.indexOf('override fun handleOnDestroy'));
+  assert.doesNotMatch(cancel, /socket\.close/);
 });
