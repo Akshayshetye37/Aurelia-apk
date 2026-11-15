@@ -101,3 +101,10 @@ Run only against a redacted local PMS export and a read-only Firestore export:
 node scripts/reconcile-legacy-folios.mjs --local <local-export.json> --firestore <firestore-export.json>
 
 The script reports MATCH or REVIEW_REQUIRED and never writes, repairs, archives, or deletes either source. No reconciliation has been run yet because the redacted PMS backup and accounting-owner approval have not been supplied. Historical Firestore records must be archived, not deleted, after the dry-run and written approval.
+
+
+## Scheduled refund exception monitoring
+
+The backend now includes a dedicated Cloud Run Job at `payment-backend/src/refunds/review-scan-job.mjs`. Terraform provisions a Cloud Scheduler trigger every five minutes using an OAuth service-account token to invoke the Cloud Run Jobs API. The job scans provider-confirmed refunds, promotes those missing a local reversal after 30 minutes to `HUMAN_REVIEW`, and creates one durable `paymentRefundReviewAlerts/{refundId}` record. Each new alert emits a structured Cloud Logging event at severity `ALERT`.
+
+The scanner is idempotent and never calls a provider or writes a financial ledger entry. The queue GET endpoint remains a read/refresh path, not the scheduler. The schedule becomes active only after the Terraform change is applied to the staging project; no cloud resources were provisioned from this repository change.
