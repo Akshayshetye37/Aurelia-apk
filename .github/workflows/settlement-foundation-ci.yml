@@ -1,9 +1,11 @@
 name: Aurelia settlement foundation CI
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - feature/multi-provider-payment-backend
+      - 'work/**'
     paths:
       - "src/payments/**"
       - "tests/**"
