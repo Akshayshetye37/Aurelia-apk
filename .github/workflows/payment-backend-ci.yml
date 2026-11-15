@@ -15,6 +15,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/payment-backend-ci.yml"
+      - ".github/workflows/same-sha-payment-evidence.yml"
   pull_request:
     branches:
       - feature/multi-provider-payment-backend
