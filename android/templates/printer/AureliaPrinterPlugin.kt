@@ -243,21 +243,15 @@ class AureliaPrinterPlugin : Plugin() {
         super.handleOnDestroy()
     }
 
-    private fun reserveRecentJob(key: String): Boolean {
+    private fun reserveRecentJob(key: String): Boolean = synchronized(recentJobLedger) {
         val now = System.currentTimeMillis()
-        val previous = recentJobLedger.putIfAbsent(key, now)
-        if (previous != null) {
-            if (now - previous < 5 * 60 * 1000L) return false
-            if (!recentJobLedger.replace(key, previous, now)) return false
+        val iterator = recentJobLedger.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (now - entry.value >= 5 * 60 * 1000L) recentJobLedger.remove(entry.key, entry.value)
         }
-        if (recentJobLedger.size > 200) {
-            val iterator = recentJobLedger.entries.iterator()
-            while (iterator.hasNext()) {
-                val entry = iterator.next()
-                if (now - entry.value >= 5 * 60 * 1000L) recentJobLedger.remove(entry.key, entry.value)
-            }
-        }
-        return true
+        if (recentJobLedger.size >= 200) return@synchronized false
+        recentJobLedger.putIfAbsent(key, now) == null
     }
 
     private fun resolvePinnedPeer(record: PrinterTrustStore.Record): InetAddress? {
