@@ -177,8 +177,11 @@ class AureliaPrinterPlugin : Plugin() {
         if (kind == "invoice" || layout == "80mm") { call.reject("printer_profile_layout_mismatch"); return }
         val ledgerKey = id + "|" + requestId
         if (!reserveRecentJob(ledgerKey)) {
-            call.resolve(JSObject().put("ok", false).put("status", "uncertain").put("requestId", requestId)
-                .put("duplicate", true).put("error", "recent_duplicate_request"))
+            val previous = try { store.getJob(ledgerKey) } catch (_: Exception) { null }
+            call.resolve(JSObject().put("ok", previous?.optBoolean("ok", false) ?: false)
+                .put("status", previous?.optString("status", "uncertain") ?: "uncertain")
+                .put("requestId", requestId).put("duplicate", true)
+                .put("error", previous?.optString("error", "delivery_in_progress") ?: "delivery_in_progress"))
             return
         }
         val prior = try { store.claimJob(ledgerKey) } catch (_: Exception) { call.reject("job_ledger_unavailable"); return }
@@ -326,6 +329,10 @@ private class PrinterTrustStore(context: Context) {
     }
     fun remove(id: String) = synchronized(lock) { val root = read(); root.remove(id); write(root) }
     fun markVerified(id: String, at: Long, profileHash: String) = synchronized(lock) { val root = read(); val record = root.optJSONObject(id) ?: throw IllegalStateException("not_trusted"); record.put("profileVerified", true).put("calibratedAt", at).put("profileHash", profileHash); write(root) }
+    fun getJob(key: String): JSONObject? = synchronized(lock) {
+        val hash = hex(MessageDigest.getInstance("SHA-256").digest(key.toByteArray(StandardCharsets.UTF_8)))
+        read().optJSONObject("_jobs")?.optJSONObject(hash)?.let { JSONObject(it.toString()) }
+    }
     fun claimJob(key: String): JSONObject? = synchronized(lock) {
         val root = read()
         val jobs = root.optJSONObject("_jobs") ?: JSONObject()
