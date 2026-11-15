@@ -33,7 +33,7 @@ function scanCompatible({ rootDir = process.cwd(), includeLegacyIndex = true } =
   const root = path.resolve(rootDir);
   const targets = walk(path.join(root, "src"), root);
   const indexPath = path.join(root, "index.html");
-  if (includeLegacyIndex && fs.existsSync(indexPath)) targets.push({ full: indexPath, relative: "index.html" });
+  if (fs.existsSync(indexPath)) targets.push({ full: indexPath, relative: "index.html" });
   const violations = [];
 
   for (const file of targets) {
@@ -61,7 +61,11 @@ function scanCompatible({ rootDir = process.cwd(), includeLegacyIndex = true } =
   // The strict adapter contract is checked whenever the source tree contains the adapter.
   // Small isolated test fixtures may omit it; the legacy string API remains fail-closed.
   const adapterPath = path.join(root, "src/storage/legacy-web-storage.mjs");
-  if (fs.existsSync(adapterPath)) {
+  if (!fs.existsSync(adapterPath)) {
+    if (fs.existsSync(path.join(root, "package.json"))) {
+      violations.push("src/storage/legacy-web-storage.mjs: required strict storage adapter missing");
+    }
+  } else {
     const adapter = fs.readFileSync(adapterPath, "utf8");
     if (!adapter.includes("ALLOWED_MIGRATION_KEYS") || !adapter.includes("ALLOWED_PREFERENCE_KEYS") ||
         !adapter.includes("PREFERENCE_STORAGE_KEY_NOT_ALLOWED") || !adapter.includes("LEGACY_STORAGE_KEY_NOT_ALLOWED")) {
