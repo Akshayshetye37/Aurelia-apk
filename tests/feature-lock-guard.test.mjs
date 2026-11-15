@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateFeatureRegistry } from '../scripts/feature-lock-guard.mjs';
+import { validateFeatureRegistry, validateRegistryEvolution } from '../scripts/feature-lock-guard.mjs';
 
 const evidence = {
   sha: 'a'.repeat(40), runId: 123,
@@ -44,4 +44,18 @@ test('unverified features do not get a false green or lock status', () => {
   }, []);
   assert.equal(result.verified, 0);
   assert.equal(result.locked, 0);
+});
+
+
+test('existing locked registry entries cannot be removed, downgraded or have file boundaries weakened', () => {
+  const prior = { version: 1, features: [feature({
+    status: 'locked', lockedAt: '2026-11-15T12:00:00.000Z',
+    ownerApproval: 'approved-by-owner'
+  })] };
+  assert.equal(validateRegistryEvolution(prior, structuredClone(prior)), true);
+  assert.throws(() => validateRegistryEvolution(prior, { version: 1, features: [] }),
+    /locked_feature_registry_mutation_requires_owner_approval/);
+  assert.throws(() => validateRegistryEvolution(prior, {
+    version: 1, features: [feature({ files: ['src/'] })]
+  }), /locked_feature_registry_mutation_requires_owner_approval/);
 });
