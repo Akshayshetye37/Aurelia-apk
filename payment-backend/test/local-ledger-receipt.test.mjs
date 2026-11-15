@@ -167,3 +167,12 @@ test('rejects an attestation key that does not match receipt identity', async ()
   await assert.rejects(service.accept(fixture()), /device_attestation_binding_mismatch/);
   assert.equal(writes.length, 0);
 });
+
+
+test('missing receipt identity is rejected before repository commit', async () => {
+  const { service, writes } = setup();
+  const receipt = fixture();
+  delete receipt.receiptId;
+  await assert.rejects(service.accept(receipt), /invalid_local_ledger_receipt/);
+  assert.equal(writes.length, 0);
+});
