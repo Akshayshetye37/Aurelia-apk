@@ -79,7 +79,7 @@ export async function issueFolioInvoice({
   if (!invoice || typeof invoice !== "object" || !Array.isArray(invoice.lineItems) || !invoice.totals) {
     throw new TypeError("A complete calculated invoice snapshot is required");
   }
-  const paymentReconciliation = reconcileLegacyPaymentTotals(booking);
+  if (invoice.lineItems.some(line => !line.taxProfile || !line.taxProfile.id)) {\n    throw fail("TAX_PROFILE_MISSING", "Every invoice charge requires an explicit configured tax profile, including an explicit zero-rate/exempt profile.");\n  }\n  const paymentReconciliation = reconcileLegacyPaymentTotals(booking);
   if (!paymentReconciliation.matched) {
     throw fail("LEGACY_PAYMENT_RECONCILIATION_REQUIRED",
       "Invoice issuance blocked: booking.p and booking.pays differ by " +
@@ -234,7 +234,7 @@ export async function createSplitFolio({
       if ((used.get(item.chargeId) || 0) + item.amountPaise > sourceAmount) {
         throw fail("SPLIT_ALLOCATION_ALREADY_USED", "The requested amount has already been allocated to another split folio.");
       }
-      return { chargeId: item.chargeId, amountPaise: item.amountPaise, sourceDescription: text(source.description || source.label || source[0]) };
+      return { chargeId: item.chargeId, amountPaise: item.amountPaise, sourceDescription: text(source.description || source.label || source[0]), chargeSnapshot: clone(source) };
     });
     const allocationTotalPaise = allocated.reduce((sum, row) => sum + row.amountPaise, 0);
     const ledgerId = "folio-split-" + childId;
@@ -297,4 +297,56 @@ export async function createSplitFolio({
     }
   }
   throw fail("SPLIT_FOLIO_CONTENTION", "The master folio changed repeatedly; no split was created.");
+}
+
+/** Build a split invoice from the immutable source invoice line snapshots. */
+export function buildSplitFolioInvoice({ masterInvoice, splitFolio, invoiceDate = new Date().toISOString() } = {}) {
+  if (!masterInvoice || !splitFolio || !Array.isArray(splitFolio.allocations) || !splitFolio.allocations.length) {
+    throw new TypeError("Master invoice and persisted split-folio allocations are required");
+  }
+  const lineItems = splitFolio.allocations.map(allocation => {
+    const source = allocation.chargeSnapshot;
+    if (!source || !Number.isSafeInteger(source.grossMinor) || source.grossMinor <= 0) {
+      throw fail("SPLIT_SOURCE_SNAPSHOT_INVALID", "A split allocation has no valid immutable source invoice line.");
+    }
+    const grossMinor = paise(allocation.amountPaise, "Split allocation");
+    if (grossMinor > source.grossMinor) throw fail("SPLIT_ALLOCATION_EXCEEDS_CHARGE", "Split amount exceeds the original invoice line.");
+    const taxMinor = Math.round(grossMinor * (source.taxMinor || 0) / source.grossMinor);
+    const taxableMinor = grossMinor - taxMinor;
+    const cgstMinor = source.taxMinor ? Math.round(taxMinor * (source.cgstMinor || 0) / source.taxMinor) : 0;
+    const sgstMinor = source.taxMinor ? Math.round(taxMinor * (source.sgstMinor || 0) / source.taxMinor) : 0;
+    const igstMinor = taxMinor - cgstMinor - sgstMinor;
+    return Object.freeze({
+      ...clone(source), id: "split-" + splitFolio.id + "-" + allocation.chargeId,
+      sourceChargeId: allocation.chargeId, grossMinor, amountMinor: grossMinor,
+      taxableMinor, taxMinor, cgstMinor, sgstMinor, igstMinor,
+      lineDiscountMinor: 0, netAmountMinor: grossMinor,
+      description: allocation.sourceDescription || source.description
+    });
+  });
+  const sum = key => lineItems.reduce((total, line) => total + line[key], 0);
+  const grossMinor = sum("grossMinor"), taxMinor = sum("taxMinor");
+  return Object.freeze({
+    ...clone(masterInvoice),
+    invoiceNumber: "",
+    folioNumber: splitFolio.id,
+    masterFolioNumber: masterInvoice.folioNumber,
+    invoiceDate: new Date(invoiceDate).toISOString(),
+    billedTo: Object.freeze({
+      ...clone(masterInvoice.billedTo),
+      name: text(splitFolio.billingGuest?.name || splitFolio.billingGuest?.n || masterInvoice.billedTo.name),
+      address: text(splitFolio.billingGuest?.address || splitFolio.billingGuest?.addr),
+      phone: text(splitFolio.billingGuest?.phone || splitFolio.billingGuest?.ph),
+      companyName: text(splitFolio.billingGuest?.companyName),
+      companyGstin: text(splitFolio.billingGuest?.companyGstin),
+      occupants: Object.freeze([])
+    }),
+    lineItems: Object.freeze(lineItems),
+    totals: Object.freeze({
+      subtotalMinor: sum("taxableMinor"), taxMinor, grossMinor,
+      discountMinor: 0, paidMinor: 0, dueMinor: grossMinor,
+      cgstMinor: sum("cgstMinor"), sgstMinor: sum("sgstMinor"), igstMinor: sum("igstMinor")
+    }),
+    split: Object.freeze({ masterFolioId: splitFolio.masterFolioId, allocations: clone(splitFolio.allocations) })
+  });
 }
