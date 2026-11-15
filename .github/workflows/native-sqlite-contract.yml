@@ -293,10 +293,10 @@ jobs:
             }
           }
           console.log("Exact SQLCipher instrumentation acceptance:", JSON.stringify(totals));
-          // The two selected emulator suites contain 29 repository tests and
-          // 6 authenticated recovery/Keystore tests. Require all 35 to execute.
-          if (totals.files === 0 || totals.tests !== 35 || totals.failures !== 0 || totals.errors !== 0 || totals.skipped !== 0) {
-            console.error("::error::Expected exactly 35 executed repository and recovery-security tests, zero failures, zero errors and zero skipped tests.");
+          // The two selected emulator suites contain 30 repository tests and
+          // 6 authenticated recovery/Keystore tests. Require all 36 to execute.
+          if (totals.files === 0 || totals.tests !== 36 || totals.failures !== 0 || totals.errors !== 0 || totals.skipped !== 0) {
+            console.error("::error::Expected exactly 36 executed repository and recovery-security tests, zero failures, zero errors and zero skipped tests.");
             process.exit(1);
           }
           NODE
