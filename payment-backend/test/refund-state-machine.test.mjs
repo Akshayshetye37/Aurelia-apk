@@ -8,7 +8,7 @@ const NOW = Date.parse('2026-11-15T12:00:00.000Z');
 const iso = ms => new Date(ms).toISOString();
 const base = () => createRefundRecord({
   refundId: 'refund_123', intentId: '123e4567-e89b-42d3-a456-426614174000',
-  tenantId: 'tenant_123', provider: 'razorpay', environment: 'test',
+  tenantId: 'tenant_123', provider: 'razorpay', providerAccountId: 'account_123', environment: 'test',
   providerOrderId: 'order_123', providerPaymentId: 'pay_123',
   originalAmountMinor: 10000, amountMinor: 2500,
   idempotencyKey: 'refund-idempotency-123', requestedBy: 'owner_123',
