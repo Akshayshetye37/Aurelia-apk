@@ -44,6 +44,7 @@ test('LAN trust requires explicit confirmation and native trust acknowledgement'
     cancelJob: async () => ({ ok: true })
   }});
   assert.equal((await adapter.trust('device_123456', { host: '192.168.1.20' })).ok, false);
+  assert.equal((await adapter.trust('device_123456', { host: '8.8.8.8', userConfirmed: true })).ok, false);
   assert.equal(calls, 0);
   assert.equal((await adapter.trust('device_123456', { host: '192.168.1.20', userConfirmed: true })).ok, true);
   assert.equal(calls, 1);
