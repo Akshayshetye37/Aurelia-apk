@@ -440,7 +440,7 @@ test('late provider-verified capture supersedes a prior failure but never posts 
   status = 'captured';
   const late = await s.repo.reconcilePaymentIntent('user_123', created.intentId);
   assert.equal(late.status, 'CAPTURED');
-  assert.equal(late.accountingStatus, 'PENDING');
+  assert.equal(late.accountingStatus, 'AWAITING_LOCAL_RECEIPT');
 });
 
 
@@ -506,4 +506,87 @@ test('provider checkout response cannot redefine the persisted intent amount', a
   assert.equal(intent.status, 'UNKNOWN');
   assert.equal(intent.checkoutData, null);
   assert.equal(s.dispatches, 1);
+});
+
+
+function receiptFixture(overrides = {}) {
+  return {
+    receiptId: 'receipt_test_123', intentId: '123e4567-e89b-42d3-a456-426614174000',
+    tenantId: 'hotel_123', folioId: 'folio_123', provider: 'razorpay',
+    environment: 'test', providerOrderId: 'order_123', providerPaymentId: 'pay_123',
+    amountMinor: 450000, currency: 'INR', deviceId: 'device_123',
+    keyId: 'key_123', attestationId: 'attestation_123',
+    ledgerEntryId: 'entry_123', ledgerEntryHash: 'a'.repeat(64),
+    readBackConfirmation: { confirmed: true, ledgerEntryId: 'entry_123', ledgerEntryHash: 'a'.repeat(64) },
+    issuedAt: '2026-11-15T12:00:00.000Z', expiresAt: '2026-11-15T12:05:00.000Z',
+    signature: 'signed-receipt-fixture', ...overrides
+  };
+}
+function seedCapturedIntent(db, intentId = '123e4567-e89b-42d3-a456-426614174000') {
+  db.seed('paymentIntents/' + intentId, {
+    intentId, tenantId: 'hotel_123', folioId: 'folio_123',
+    provider: 'razorpay', environment: 'test', providerOrderId: 'order_123',
+    providerPaymentId: 'pay_123', amountMinor: 450000, currency: 'INR',
+    state: 'CAPTURED', accountingStatus: 'AWAITING_LOCAL_RECEIPT'
+  });
+  return intentId;
+}
+
+test('local receipt acceptance writes evidence only and never changes the Firestore folio ledger', async () => {
+  const s = setup();
+  const intentId = seedCapturedIntent(s.db);
+  const beforeFolio = await s.db.get('paymentFolios/' + paymentFolioDocumentId('hotel_123', 'folio_123'));
+  const receipt = receiptFixture({ intentId });
+  const expectedIntent = { ...receipt };
+  const result = await s.repo.acceptReceiptAtomically({
+    receipt, expectedIntent, acceptedAt: '2026-11-15T12:01:00.000Z'
+  });
+  assert.deepEqual(result, { accepted: true, duplicate: false });
+  const storedIntent = await s.db.get('paymentIntents/' + intentId);
+  assert.equal(storedIntent.accountingStatus, 'RECEIPT_ACCEPTED');
+  assert.equal(storedIntent.localLedgerEntryId, 'entry_123');
+  assert.equal(storedIntent.localLedgerEntryHash, 'a'.repeat(64));
+  const afterFolio = await s.db.get('paymentFolios/' + paymentFolioDocumentId('hotel_123', 'folio_123'));
+  assert.deepEqual(afterFolio, beforeFolio);
+  assert.equal((await s.db.get('paymentAccountingReceipts/' + createHash('sha256').update(receipt.receiptId).digest('hex'))).ledgerEntryId, 'entry_123');
+});
+
+test('same receipt replay is idempotent and does not create another financial record', async () => {
+  const s = setup();
+  const intentId = seedCapturedIntent(s.db);
+  const receipt = receiptFixture({ intentId });
+  const input = { receipt, expectedIntent: { ...receipt }, acceptedAt: '2026-11-15T12:01:00.000Z' };
+  assert.deepEqual(await s.repo.acceptReceiptAtomically(input), { accepted: true, duplicate: false });
+  assert.deepEqual(await s.repo.acceptReceiptAtomically(input), { accepted: true, duplicate: true });
+  assert.equal(s.db.docs.size, 5); // membership, folio snapshot, intent, intent lock, receipt evidence
+});
+
+test('only one receipt is accepted per intent, and a different receipt ID is not consumed', async () => {
+  const s = setup();
+  const intentId = seedCapturedIntent(s.db);
+  const first = receiptFixture({ intentId });
+  await s.repo.acceptReceiptAtomically({
+    receipt: first, expectedIntent: { ...first }, acceptedAt: '2026-11-15T12:01:00.000Z'
+  });
+  const second = receiptFixture({ intentId, receiptId: 'receipt_test_456' });
+  await assert.rejects(s.repo.acceptReceiptAtomically({
+    receipt: second, expectedIntent: { ...second }, acceptedAt: '2026-11-15T12:02:00.000Z'
+  }), /payment_intent_receipt_already_accepted/);
+  const secondReceiptPath = 'paymentAccountingReceipts/' + createHash('sha256').update(second.receiptId).digest('hex');
+  assert.equal(await s.db.get(secondReceiptPath), undefined);
+});
+
+test('invalid binding does not consume receipt identity before a valid retry', async () => {
+  const s = setup();
+  const intentId = seedCapturedIntent(s.db);
+  const receipt = receiptFixture({ intentId });
+  await assert.rejects(s.repo.acceptReceiptAtomically({
+    receipt, expectedIntent: { ...receipt, amountMinor: 450001 },
+    acceptedAt: '2026-11-15T12:01:00.000Z'
+  }), /receipt_intent_binding_mismatch/);
+  const path = 'paymentAccountingReceipts/' + createHash('sha256').update(receipt.receiptId).digest('hex');
+  assert.equal(await s.db.get(path), undefined);
+  assert.deepEqual(await s.repo.acceptReceiptAtomically({
+    receipt, expectedIntent: { ...receipt }, acceptedAt: '2026-11-15T12:01:00.000Z'
+  }), { accepted: true, duplicate: false });
 });
