@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const workflows = [
-  [".github/workflows/build-apk.yml", "work/**"],
+  [".github/workflows/build-debug-apk-ci.yml", "work/**"],
   [".github/workflows/payment-backend-ci.yml", "work/**"],
   [".github/workflows/payment-backend-infra.yml", "work/**"],
   [".github/workflows/pms-quality.yml", "'**'"],
@@ -25,3 +25,10 @@ for (const [workflowPath, expectedBranchPattern] of workflows) {
     );
   });
 }
+
+test("release APK workflow remains tag-gated and disabled until explicit approval", () => {
+  const source = readFileSync(resolve(".github/workflows/build-apk.yml"), "utf8");
+  assert.match(source, /tags:\s*\n\s*-\s*['"]aurelia-approved-\*['"]/);
+  assert.match(source, /if:\s*\$\{\{\s*false\s*\}\}/);
+  assert.doesNotMatch(source, /work\/\*\*/);
+});
