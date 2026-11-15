@@ -31,7 +31,7 @@ test("direct browser database access outside src/storage is rejected", () => {
     writeFileSync(path.join(root, "src", "storage", "adapter.mjs"), "export const db = indexedDB.open('ok');");
     const result = scanStorageBoundaries({ rootDir: root, includeLegacyIndex: false });
     assert.equal(result.violations.length, 1);
-    assert.match(result.violations[0], /src\\/payments\\/bad\\.mjs/);
+    assert.ok(result.violations[0].includes("src/payments/bad.mjs"));
   } finally { cleanup(root); }
 });
 
@@ -40,7 +40,7 @@ test("legacy UI direct Web Storage remains rejected", () => {
   try {
     writeFileSync(path.join(root, "index.html"), Array(33).fill("localStorage").join(";"));
     const result = scanStorageBoundaries({ rootDir: root });
-    assert.ok(result.violations.some(message => /index\\.html/.test(message)));
+    assert.ok(result.violations.some(message => message.includes("index.html")));
   } finally { cleanup(root); }
 });
 
