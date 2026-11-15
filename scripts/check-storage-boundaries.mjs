@@ -7,13 +7,16 @@ const FORBIDDEN = [
   { name: "Web Storage API", pattern: /\b(?:localStorage|sessionStorage)\b/ },
   { name: "volatile persistence fallback", pattern: /\b(?:memoryFallback|fallbackToMemory|volatileFallback|inMemoryPersistence|ramPersistenceFallback)\b/i }
 ];
+const STORAGE_ACCESS = /\b(?:localStorage|sessionStorage|indexedDB)\b|\b(?:openDatabase|CapacitorSQLite|SQLiteConnection|SQLiteDBConnection)\b|@capacitor-community\/sqlite/g;
+const LEGACY_SNAPSHOT_KEY = /aurelia_lodge_v2/;
 
 function walk(directory, root, files = []) {
+  if (!fs.existsSync(directory)) return files;
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const full = path.join(directory, entry.name);
     const relative = path.relative(root, full).split(path.sep).join("/");
     if (entry.isDirectory()) {
-      if (["node_modules", "www", "android", "tests", "docs", ".git"].includes(entry.name)) continue;
+      if (["node_modules", "www", "android", "tests", "docs", ".git", "dist", "build"].includes(entry.name)) continue;
       walk(full, root, files);
     } else if (EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
       files.push({ full, relative });
@@ -22,7 +25,62 @@ function walk(directory, root, files = []) {
   return files;
 }
 
-export function scanStorageBoundaries(root = process.cwd()) {
+function lineNumbers(source, matches) {
+  return [...new Set(matches.map(match => source.slice(0, match.index).split("\n").length))];
+}
+
+function scanCompatible({ rootDir = process.cwd(), includeLegacyIndex = true } = {}) {
+  const root = path.resolve(rootDir);
+  const targets = walk(path.join(root, "src"), root);
+  const indexPath = path.join(root, "index.html");
+  if (includeLegacyIndex && fs.existsSync(indexPath)) targets.push({ full: indexPath, relative: "index.html" });
+  const violations = [];
+
+  for (const file of targets) {
+    const source = fs.readFileSync(file.full, "utf8");
+    const isStorageModule = file.relative.startsWith("src/storage/");
+    for (const rule of FORBIDDEN) {
+      // Preserve the security-base exception for the single allowlisted adapter only.
+      if (file.relative === "src/storage/legacy-web-storage.mjs" && rule.name === "Web Storage API") continue;
+      if (rule.pattern.test(source)) violations.push(file.relative + ": " + rule.name);
+    }
+    if (isStorageModule) continue;
+
+    const storageMatches = [...source.matchAll(STORAGE_ACCESS)];
+    if (storageMatches.length) {
+      violations.push(file.relative + " accesses browser/native storage outside src/storage (" +
+        storageMatches.length + " occurrence(s); lines " + lineNumbers(source, storageMatches).join(", ") + ")");
+    }
+    const legacyMatches = [...source.matchAll(new RegExp(LEGACY_SNAPSHOT_KEY.source, "g"))];
+    if (legacyMatches.length) {
+      violations.push(file.relative + " references the legacy business snapshot key outside its migration boundary (lines " +
+        lineNumbers(source, legacyMatches).join(", ") + ")");
+    }
+  }
+
+  // The strict adapter contract is checked whenever the source tree contains the adapter.
+  // Small isolated test fixtures may omit it; the legacy string API remains fail-closed.
+  const adapterPath = path.join(root, "src/storage/legacy-web-storage.mjs");
+  if (fs.existsSync(adapterPath)) {
+    const adapter = fs.readFileSync(adapterPath, "utf8");
+    if (!adapter.includes("ALLOWED_MIGRATION_KEYS") || !adapter.includes("ALLOWED_PREFERENCE_KEYS") ||
+        !adapter.includes("PREFERENCE_STORAGE_KEY_NOT_ALLOWED") || !adapter.includes("LEGACY_STORAGE_KEY_NOT_ALLOWED")) {
+      violations.push("src/storage/legacy-web-storage.mjs: strict migration/preference key allowlists missing");
+    }
+  }
+  return Object.freeze({ inspectedFiles: targets.length, scannedFiles: targets.length, violations: Object.freeze(violations) });
+}
+
+/**
+ * Backward-compatible API:
+ * - string input preserves the security-base fail-closed behavior and return shape;
+ * - object input supports the ledger test contract and returns structured violations.
+ * The security-base checks are never disabled by includeLegacyIndex.
+ */
+export function scanStorageBoundaries(arg = process.cwd()) {
+  if (typeof arg !== "string") return scanCompatible(arg ?? {});
+
+  const root = arg;
   const targets = [];
   for (const relative of ["index.html", "src"]) {
     const full = path.join(root, relative);
@@ -35,8 +93,6 @@ export function scanStorageBoundaries(root = process.cwd()) {
   for (const file of targets) {
     const source = fs.readFileSync(file.full, "utf8");
     for (const rule of FORBIDDEN) {
-      // All Web Storage access is confined to one adapter whose runtime key
-      // allowlist permits only legacy migration markers and approved preferences.
       if (file.relative === "src/storage/legacy-web-storage.mjs" && rule.name === "Web Storage API") continue;
       if (rule.pattern.test(source)) violations.push(file.relative + ": " + rule.name);
     }
@@ -55,5 +111,10 @@ export function scanStorageBoundaries(root = process.cwd()) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const result = scanStorageBoundaries();
-  process.stdout.write("Storage boundary check passed (" + result.scannedFiles + " application files scanned).\n");
+  if (result.violations?.length) {
+    process.stderr.write("Storage boundary check failed:\n- " + result.violations.join("\n- ") + "\n");
+    process.exitCode = 1;
+  } else {
+    process.stdout.write("Storage boundary check passed (" + result.scannedFiles + " application files scanned).\n");
+  }
 }
