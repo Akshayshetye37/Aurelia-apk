@@ -165,3 +165,23 @@ test("a payment reversal cannot cross booking or folio boundaries", async () => 
   assert.equal((await f.bridge.listEntities("ledger")).length, 1);
   assert.equal(otherBooking.p, 0);
 });
+
+
+test("reversal fails closed when the canonical folio projection has diverged", async () => {
+  const f = fixture();
+  const original = await postOriginalPayment(f);
+  const folio = await f.bridge.fetchEntity("folio", "folio-71");
+  await f.bridge.mutateEntity({
+    entityType: "folio", entityId: "folio-71", expectedVersion: folio.version,
+    eventType: "test.folio_diverged",
+    mutate: row => { row.paidPaise = 99999; }
+  });
+
+  await assert.rejects(reversePaymentToRepository({
+    ...f, balanceDueFor, originalLedgerEntryId: original.id,
+    amountPaise: 5000, idempotencyKey: "reversal-diverged-folio-71",
+    reason: "Must reject divergent folio", now: () => "2026-11-15T13:00:00.000Z"
+  }), error => error.code === "CANONICAL_FOLIO_DIVERGENCE");
+  assert.equal(f.booking.p, 125);
+  assert.equal((await f.bridge.listEntities("ledger")).length, 1);
+});
