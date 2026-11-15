@@ -1,0 +1,4 @@
+# Release and feature-lock registry changes require repository-owner review.
+/.github/feature-locks.json @Akshayshetye37
+/scripts/feature-lock-guard.mjs @Akshayshetye37
+/.github/workflows/feature-lock-guard.yml @Akshayshetye37
