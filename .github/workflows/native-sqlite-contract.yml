@@ -1,0 +1,472 @@
+name: Aurelia native SQLite contract
+
+on:
+  push:
+    branches:
+      - 'work/**'
+  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurelia-native-sqlite-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  android-sqlite-instrumentation:
+    needs: [indexeddb-contract]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Enable and require hardware KVM before any Android work
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          for attempt in {1..15}; do
+            [[ -c /dev/kvm ]] && break
+            sleep 1
+          done
+          if [[ ! -c /dev/kvm ]]; then
+            echo "::error::/dev/kvm is absent; refusing software emulation."
+            exit 1
+          fi
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then sudo chmod 0666 /dev/kvm; fi
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            echo "::error::/dev/kvm must be readable and writable by the runner."
+            exit 1
+          fi
+          ls -l /dev/kvm
+          echo "KVM device exists and is writable."
+      - name: Checkout exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Download deterministic repository property vectors
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aurelia-property-sequences-${{ github.sha }}
+          path: tests/fixtures
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Set up Java
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install application dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+
+      - name: Run source regression suite
+        run: npm test
+
+      - name: Enforce canonical storage boundary
+        run: node scripts/check-storage-boundaries.mjs
+
+      - name: Prepare web application
+        run: npm run build
+
+      - name: Generate Android project from repository templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          if [[ -d android/templates ]]; then mv android/templates "$template_dir"; fi
+          if [[ -d android ]]; then rmdir android; fi
+          npx cap add android
+          if [[ -d "$template_dir" ]]; then mkdir -p android/templates && cp -a "$template_dir/." android/templates/; fi
+          test -f android/gradlew
+          test -f android/app/build.gradle
+
+      - name: Apply native PMS and instrumentation configuration
+        run: node scripts/patch-android.js
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Install Android 34 emulator image
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$SDKMANAGER" ]]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -perm -u+x | sort | tail -n 1)"
+          fi
+          test -x "$SDKMANAGER"
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          license_status=${PIPESTATUS[1]}
+          set -o pipefail
+          test "$license_status" -eq 0
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-34" \
+            "platforms;android-35" \
+            "build-tools;34.0.0" \
+            "build-tools;35.0.0" \
+            "emulator"
+          mkdir -p "$RUNNER_TEMP/aurelia-emulator"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+
+      - name: Fast compile Android instrumentation Java tests
+        timeout-minutes: 10
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace --max-workers=2 \
+            compileDebugAndroidTestJavaWithJavac
+
+      - name: Verify Kotlin test-runtime dependency alignment
+        timeout-minutes: 8
+        shell: bash
+        working-directory: android
+        run: |
+          set -euo pipefail
+          log_dir="$RUNNER_TEMP/aurelia-emulator"
+          ./gradlew --no-daemon --stacktrace \
+            :capacitor-cordova-android-plugins:dependencyInsight \
+            --dependency org.jetbrains.kotlin:kotlin-stdlib-jdk8 \
+            --configuration debugAndroidTestRuntimeClasspath 2>&1 | tee "$log_dir/kotlin-jdk8-dependency-insight.log"
+          ./gradlew --no-daemon --stacktrace \
+            :capacitor-cordova-android-plugins:dependencyInsight \
+            --dependency org.jetbrains.kotlin:kotlin-stdlib-jdk7 \
+            --configuration debugAndroidTestRuntimeClasspath 2>&1 | tee "$log_dir/kotlin-jdk7-dependency-insight.log"
+          if grep -E 'kotlin-stdlib-jdk(7|8):1\\.6\\.21' "$log_dir"/kotlin-jdk*-dependency-insight.log; then
+            echo "::error::Legacy Kotlin JDK stdlib versions remain in the androidTest runtime graph."
+            exit 1
+          fi
+
+      - name: Compile native sources, unit tests and instrumentation APK
+        timeout-minutes: 20
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          log_dir="$RUNNER_TEMP/aurelia-emulator"
+          mkdir -p "$log_dir"
+          set +e
+          ./gradlew --no-daemon --stacktrace --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8' \
+            compileDebugJavaWithJavac \
+            compileReleaseJavaWithJavac \
+            testDebugUnitTest \
+            assembleDebug \
+            assembleDebugAndroidTest 2>&1 | tee "$log_dir/compile-native-gradle.log"
+          gradle_status=${PIPESTATUS[0]}
+          echo "$gradle_status" > "$log_dir/compile-gradle-exit-code.txt"
+          exit "$gradle_status"
+
+      - name: Verify native ABI and instrumentation APK contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_apk="android/app/build/outputs/apk/debug/app-debug.apk"
+          test_apk="android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
+          test -f "$app_apk"
+          test -f "$test_apk"
+          if ! unzip -Z1 "$app_apk" | grep -Fxq 'lib/x86_64/libsqlcipher.so'; then
+            echo "::error::The app APK does not contain SQLCipher's x86_64 native library."
+            unzip -Z1 "$app_apk" | grep '^lib/' || true
+            exit 1
+          fi
+          dex_symbols="$(mktemp)"
+          while IFS= read -r dex; do
+            unzip -p "$test_apk" "$dex" | strings >> "$dex_symbols"
+          done < <(unzip -Z1 "$test_apk" | grep 'classes.*dex' || true)
+          for test_class in LocalPmsRepositoryInstrumentedTest AureliaSecurityInstrumentedTest; do
+            if ! grep -q "$test_class" "$dex_symbols"; then
+              echo "::error::The androidTest APK does not contain $test_class."
+              exit 1
+            fi
+          done
+          if ! grep -q 'AndroidJUnitRunner' "$dex_symbols"; then
+            echo "::error::The androidTest APK does not contain AndroidJUnitRunner symbols."
+            exit 1
+          fi
+          echo "SQLCipher x86_64 library and instrumentation test classes are present."
+
+      - name: Verify packaged Android backup exclusions
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_apk="android/app/build/outputs/apk/debug/app-debug.apk"
+          aapt="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          test -f "$app_apk"
+          test -x "$aapt"
+          "$aapt" dump xmltree "$app_apk" AndroidManifest.xml > "$RUNNER_TEMP/aurelia-packaged-manifest.txt"
+          manifest="$RUNNER_TEMP/aurelia-packaged-manifest.txt"
+          grep -q 'android:allowBackup' "$manifest"
+          grep -Eq 'android:allowBackup.*(0x0|false)' "$manifest"
+          grep -q 'android:fullBackupContent' "$manifest"
+          grep -q 'android:dataExtractionRules' "$manifest"
+          unzip -Z1 "$app_apk" | grep -q 'res/xml/aurelia_backup_rules.xml'
+          unzip -Z1 "$app_apk" | grep -q 'res/xml/aurelia_data_extraction_rules.xml'
+          echo "Packaged APK manifest disables backup and contains both exclusion rule resources."
+
+      - name: Boot accelerated API 30 emulator and run SQLite contracts (attempt 1)
+        id: emulator_attempt_1
+        continue-on-error: true
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          cores: 4
+          ram-size: 4096M
+          heap-size: 512M
+          emulator-boot-timeout: 900
+          disable-linux-hw-accel: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-snapshot-save -noaudio -no-boot-anim
+          working-directory: android
+          script: bash ../scripts/run-native-sqlite-contracts.sh 1
+
+      - name: Retry emulator boot once (never retry a test failure)
+        id: emulator_attempt_2
+        if: steps.emulator_attempt_1.outcome == 'failure' && steps.emulator_attempt_1.outputs.booted != 'true'
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          cores: 4
+          ram-size: 4096M
+          heap-size: 512M
+          emulator-boot-timeout: 900
+          disable-linux-hw-accel: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-snapshot-save -noaudio -no-boot-anim
+          working-directory: android
+          script: bash ../scripts/run-native-sqlite-contracts.sh 2
+
+      - name: Fail if first boot succeeded but its test run failed
+        if: steps.emulator_attempt_1.outcome == 'failure' && steps.emulator_attempt_1.outputs.booted == 'true'
+        run: |
+          echo "::error::The emulator booted successfully; the instrumentation test failed. Test retries are prohibited."
+          exit 1
+
+      - name: Enforce instrumentation test results and ban ignored tests
+        if: always()
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-android-instrumentation-results.mjs android/app/build/outputs/androidTest-results/connected android/templates
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import path from "node:path";
+          const root = "android/app/build/outputs/androidTest-results/connected";
+          const walk = dir => fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+            const full = path.join(dir, entry.name);
+            return entry.isDirectory() ? walk(full) : [full];
+          }) : [];
+          const files = walk(root).filter(file => file.endsWith(".xml"));
+          const totals = { files: files.length, tests: 0, failures: 0, errors: 0, skipped: 0 };
+          const attrs = tag => Object.fromEntries([...tag.matchAll(/([A-Za-z_:][A-Za-z0-9_:.-]*)[ ]*=[ ]*["']([^"']*)["']/g)]
+            .map(match => [match[1], Number(match[2])]));
+          for (const file of files) {
+            const xml = fs.readFileSync(file, "utf8");
+            const tags = [...xml.matchAll(/<(testsuites|testsuite)[^>]*>/g)]
+              .map(match => ({ name: match[1], values: attrs(match[0]) }));
+            if (!tags.length) throw new Error(`JUnit XML has no testsuite element: ${file}`);
+            const aggregate = tags.find(tag => tag.name === "testsuites");
+            const selected = aggregate && ["tests", "failures", "errors", "skipped"].every(key => key in aggregate.values)
+              ? [aggregate] : tags.filter(tag => tag.name === "testsuite");
+            for (const suite of selected) for (const key of ["tests", "failures", "errors", "skipped"]) {
+              totals[key] += suite.values[key] ?? 0;
+            }
+          }
+          console.log("Exact SQLCipher instrumentation acceptance:", JSON.stringify(totals));
+          // The two selected emulator suites contain 30 repository tests and
+          // 6 authenticated recovery/Keystore tests. Require all 36 to execute.
+          if (totals.files === 0 || totals.tests !== 36 || totals.failures !== 0 || totals.errors !== 0 || totals.skipped !== 0) {
+            console.error("::error::Expected exactly 36 executed repository and recovery-security tests, zero failures, zero errors and zero skipped tests.");
+            process.exit(1);
+          }
+          NODE
+
+      - name: Capture emulator, instrumentation and APK diagnostics
+        if: always()
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set +e
+          log_dir=".aurelia-emulator"
+          diag_dir="android/app/build/diagnostics"
+          mkdir -p "$log_dir" "$diag_dir"
+          {
+            echo '=== runner / emulator process ==='
+            date -u
+            ps -efww | grep -E '[e]mulator|[q]emu|[a]db' || true
+            if [[ -f "$log_dir/emulator.pid" ]]; then
+              pid="$(cat "$log_dir/emulator.pid")"
+              echo "emulator_pid=$pid"
+              tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true
+              echo
+              readlink "/proc/$pid/fd/1" 2>/dev/null || true
+              readlink "/proc/$pid/fd/2" 2>/dev/null || true
+            fi
+            echo '=== adb devices ==='
+            timeout -k 2s 5s adb devices -l
+            echo '=== adb wait-for-device (bounded) ==='
+            timeout -k 2s 8s adb wait-for-device
+            echo "wait_for_device_exit=$?"
+            echo '=== boot properties ==='
+            timeout -k 2s 5s adb shell getprop sys.boot_completed
+            timeout -k 2s 5s adb shell getprop ro.build.fingerprint
+            timeout -k 2s 5s adb shell getprop ro.build.version.sdk
+            echo '=== instrumentation registry ==='
+            timeout -k 2s 5s adb shell pm list instrumentation -f
+            echo '=== app/test package install state ==='
+            echo 'app APK install path:'
+            timeout -k 2s 5s adb shell pm path com.aurelia.pms
+            echo 'test APK install path:'
+            timeout -k 2s 5s adb shell pm path com.aurelia.pms.test
+            timeout -k 2s 5s adb shell dumpsys package com.aurelia.pms.test
+            echo '=== app/test process exit history ==='
+            timeout -k 2s 5s adb shell dumpsys activity exit-info com.aurelia.pms
+            timeout -k 2s 5s adb shell dumpsys activity exit-info com.aurelia.pms.test
+          } > "$diag_dir/device-state.txt" 2>&1
+          timeout -k 2s 8s adb logcat -b crash -d -v threadtime > "$diag_dir/logcat-crash.txt" 2>&1 || true
+          timeout -k 2s 8s adb logcat -b all -d -v threadtime > "$diag_dir/logcat-full.txt" 2>&1 || true
+          timeout -k 2s 8s adb logcat -b all -d -v threadtime '*:S' AndroidRuntime:E DEBUG:E libc:F linker:E ActivityManager:E ActivityTaskManager:E Instrumentation:E TestRunner:V SQLiteLog:E > "$diag_dir/logcat-startup-filtered.txt" 2>&1 || true
+          if [[ -f "$log_dir/emulator.stdout-stderr.log" ]]; then cp "$log_dir/emulator.stdout-stderr.log" "$diag_dir/emulator.stdout-stderr.log"; fi
+          if [[ -f "$log_dir/connectedDebugAndroidTest.log" ]]; then cp "$log_dir/connectedDebugAndroidTest.log" "$diag_dir/connectedDebugAndroidTest.log"; fi
+          if [[ -f "$log_dir/logcat-full.txt" ]]; then cp "$log_dir/logcat-full.txt" "$diag_dir/logcat-full.txt"; fi
+          if [[ -f "$log_dir/logcat-crash.txt" ]]; then cp "$log_dir/logcat-crash.txt" "$diag_dir/logcat-crash.txt"; fi
+          if [[ -f "$log_dir/emulator-build-fingerprint.txt" ]]; then cp "$log_dir/emulator-build-fingerprint.txt" "$diag_dir/emulator-build-fingerprint.txt"; fi
+          if [[ -f "$log_dir/compile-native-gradle.log" ]]; then cp "$log_dir/compile-native-gradle.log" "$diag_dir/compile-native-gradle.log"; fi
+          if [[ -f "$log_dir/compile-gradle-exit-code.txt" ]]; then cp "$log_dir/compile-gradle-exit-code.txt" "$diag_dir/compile-gradle-exit-code.txt"; fi
+          for report in "$log_dir"/kotlin-*-dependency-insight.log; do
+            [[ -f "$report" ]] && cp "$report" "$diag_dir/"
+          done
+          if [[ -f "$log_dir/gradle-exit-code.txt" ]]; then cp "$log_dir/gradle-exit-code.txt" "$diag_dir/gradle-exit-code.txt"; fi
+          for apk in android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; do
+            [[ -f "$apk" ]] || continue
+            name="$(basename "$apk" .apk)"
+            {
+              echo "=== $apk ==="
+              unzip -l "$apk"
+              echo '=== native ABI libraries ==='
+              unzip -Z1 "$apk" | grep -E '^lib/(x86_64|arm64-v8a)/.*\.so$' || true
+              echo '=== test/runner DEX symbols ==='
+              unzip -Z1 "$apk" | grep 'classes.*dex' | while IFS= read -r dex; do
+                unzip -p "$apk" "$dex" | strings | grep -E 'LocalPmsRepositoryInstrumentedTest|AndroidJUnitRunner|com/aurelia/pms' || true
+              done
+            } > "$diag_dir/$name-apk-inspection.txt" 2>&1
+          done
+          {
+            echo "app_apk_present=$([[ -f android/app/build/outputs/apk/debug/app-debug.apk ]] && echo yes || echo no)"
+            echo "test_apk_present=$([[ -f android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk ]] && echo yes || echo no)"
+            echo "emulator_log_present=$([[ -f "$log_dir/emulator.stdout-stderr.log" ]] && echo yes || echo no)"
+            echo "instrumentation_log_present=$([[ -f "$log_dir/connectedDebugAndroidTest.log" ]] && echo yes || echo no)"
+          } > "$diag_dir/diagnostic-summary.txt"
+          cp -a "$log_dir/." "$diag_dir/emulator-runtime/" 2>/dev/null || true
+          exit 0
+
+      - name: Upload native instrumentation diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aurelia-native-sqlite-${{ github.sha }}
+          path: |
+            android/app/build/outputs/androidTest-results/connected/**
+            android/app/build/reports/androidTests/connected/**
+            android/app/build/diagnostics/**
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            ${{ runner.temp }}/aurelia-emulator/**
+          if-no-files-found: warn
+          retention-days: 14
+
+  indexeddb-contract:
+    name: Repository parity / IndexedDB contract
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Install dependencies
+        timeout-minutes: 8
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - name: Install pinned fast-check property test dependency
+        timeout-minutes: 3
+        run: npm install --no-save --package-lock=false fast-check@3.23.2
+      - name: Run shared and generated IndexedDB repository contracts
+        timeout-minutes: 5
+        env:
+          AURELIA_PROPERTY_FIXTURE_PATH: ${{ runner.temp }}/pms-repository-property-sequences.json
+        run: node --test tests/storage/indexeddb-pms-repository.test.mjs tests/storage/repository-property-parity.test.mjs
+      - name: Upload deterministic property vectors for SQLite execution
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aurelia-property-sequences-${{ github.sha }}
+          path: ${{ runner.temp }}/pms-repository-property-sequences.json
+          if-no-files-found: error
+          retention-days: 7
+
+  secret-scan:
+    name: Security / secret scan
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact candidate and full history for Gitleaks range scan
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Scan repository for committed credentials
+        run: node scripts/check-secrets.mjs
+      - name: Scan full git history with Gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_ENABLE_SUMMARY: "true"
+
+  repository-parity:
+    name: Repository contract parity (IndexedDB + SQLite)
+    needs: [indexeddb-contract, android-sqlite-instrumentation, secret-scan]
+    if: always()
+    runs-on: ubuntu-22.04
+    timeout-minutes: 2
+    steps:
+      - name: Require both real-engine contract suites to pass
+        env:
+          INDEXEDDB_RESULT: ${{ needs.indexeddb-contract.result }}
+          SQLITE_RESULT: ${{ needs.android-sqlite-instrumentation.result }}
+          SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
+        run: |
+          echo "IndexedDB contract: $INDEXEDDB_RESULT"
+          echo "Android SQLite instrumentation: $SQLITE_RESULT"
+          echo "Secret scan: $SECRET_SCAN_RESULT"
+          test "$INDEXEDDB_RESULT" = "success"
+          test "$SQLITE_RESULT" = "success"
+          test "$SECRET_SCAN_RESULT" = "success"
