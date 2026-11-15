@@ -240,3 +240,30 @@ test('cloud receipt route does not invoke the legacy Firestore folio settlement 
   assert.equal(source.includes('settleVerifiedPaymentIntent'), false);
   assert.equal(source.includes('folio-settlement.mjs'), false);
 });
+
+
+test('refund request is non-dispatching and provider execution requires a separate independent owner approval', () => {
+  const requestStart = source.indexOf("app.post('/v1/payments/intents/:intentId/refunds'");
+  const approveStart = source.indexOf("app.post('/v1/payments/intents/:intentId/refunds/:refundId/approve'");
+  const requestEnd = source.indexOf("app.post('/v1/payments/intents/:intentId/refunds/:refundId/approve'", requestStart);
+  const requestRoute = source.slice(requestStart, requestEnd);
+  const approveEnd = source.indexOf("app.get('/v1/payments/intents/:intentId/refunds/:refundId'", approveStart);
+  const approvalRoute = source.slice(approveStart, approveEnd);
+  assert.ok(requestStart >= 0 && approveStart > requestStart);
+  assert.ok(requestRoute.includes("state: REFUND_STATES.REQUESTED") || requestRoute.includes("createRefundRecord"));
+  assert.equal(requestRoute.includes("adapter.createRefund("), false);
+  assert.ok(approvalRoute.includes("req.tenant.role !== 'owner'"));
+  assert.ok(approvalRoute.includes("original.requestedBy === req.actor.uid"));
+  assert.ok(approvalRoute.includes("type: 'provider_dispatch_started'"));
+  assert.ok(approvalRoute.includes("adapter.createRefund("));
+  assert.ok(approvalRoute.includes("adapter.getRefundStatus("));
+});
+
+test('provider-confirmed refunds wait for local reversal and overdue cases enter human review', () => {
+  assert.ok(source.includes("REFUND_STATES.PROVIDER_CONFIRMED"));
+  assert.ok(source.includes("REFUND_STATES.LOCAL_REVERSAL_POSTED"));
+  assert.ok(source.includes("REFUND_STATES.RECEIPT_ACCEPTED"));
+  assert.ok(source.includes("refundRequiresHumanReview(record)"));
+  assert.ok(source.includes("humanReviewQueue: true"));
+  assert.ok(source.includes("PROVIDER_CONFIRMED_LOCAL_REVERSAL_MISSING"));
+});
