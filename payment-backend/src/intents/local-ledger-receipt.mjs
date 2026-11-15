@@ -21,7 +21,18 @@ function unsignedReceipt(receipt) {
 }
 
 function assertReceiptShape(receipt) {
+  const allowed = new Set([
+    'receiptId', 'intentId', 'tenantId', 'folioId', 'provider', 'environment',
+    'providerOrderId', 'providerPaymentId', 'amountMinor', 'currency',
+    'deviceId', 'keyId', 'attestationId', 'ledgerEntryId', 'ledgerEntryHash',
+    'readBackConfirmation', 'issuedAt', 'expiresAt', 'signature'
+  ]);
+  const readBackAllowed = new Set(['confirmed', 'ledgerEntryId', 'ledgerEntryHash', 'committedAt']);
   if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt) ||
+      Object.keys(receipt).some(key => !allowed.has(key)) ||
+      !receipt.readBackConfirmation || typeof receipt.readBackConfirmation !== 'object' ||
+      Array.isArray(receipt.readBackConfirmation) ||
+      Object.keys(receipt.readBackConfirmation).some(key => !readBackAllowed.has(key)) ||
       !IDENTIFIER.test(receipt.receiptId || '') ||
       !/^[0-9a-f-]{36}$/i.test(receipt.intentId || '') ||
       !IDENTIFIER.test(receipt.tenantId || '') ||
