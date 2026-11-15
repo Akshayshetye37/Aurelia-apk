@@ -42,3 +42,10 @@ The local PMS journal (SQLite on Android; IndexedDB in browser/PWA) is the sole 
 - Approval date: **PENDING**
 
 Until all approval fields are completed and the evidence is linked, this mapping is not approved and live collection remains OFF.
+
+
+## Implementation status (work branch)
+
+The local receipt contract and backend evidence acceptance path are implemented on work/local-ledger-receipt. The legacy Firestore settlement writer remains present but is hard-disabled by LEGACY_FIRESTORE_SETTLEMENT_ENABLED=false. It is not imported by the Cloud Run server.
+
+The read-only dry-run tool is payment-backend/scripts/reconcile-legacy-folios.mjs. It compares normalized local and Firestore folio balances and journal entries without modifying either source. It has not been run: the redacted PMS backup and written accounting-owner mapping approval remain external inputs. Do not archive or delete historical Firestore records until that review is complete.
