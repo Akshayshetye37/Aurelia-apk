@@ -182,6 +182,30 @@ export class IndexedDbLocalLedgerReceiptOutbox {
     return { record: clone(record), duplicate: false };
   }
 
+  async markRejected(receiptId, rejectionCode, now = this.now()) {
+    safeId(receiptId, 'receipt_id');
+    safeId(String(rejectionCode || ''), 'rejection_code');
+    const db = await this.database();
+    const tx = openWrite(db);
+    const done = complete(tx); done.catch(() => {});
+    const store = tx.objectStore(STORE);
+    const record = await request(store.get(receiptId));
+    if (!record) throw new Error('receipt_outbox_record_not_found');
+    if (record.status === 'REJECTED') {
+      if (record.rejectionCode !== rejectionCode) throw new Error('receipt_outbox_rejection_conflict');
+      await done;
+      return { record: clone(record), duplicate: true };
+    }
+    if (record.status !== 'PENDING') throw new Error('receipt_outbox_not_pending');
+    Object.assign(record, {
+      status: 'REJECTED', rejectedAt: now,
+      rejectionCode: String(rejectionCode), updatedAt: now
+    });
+    store.put(record);
+    await done;
+    return { record: clone(record), duplicate: false };
+  }
+
   async sweepExpired(now = this.now()) {
     const nowMs = Date.parse(now);
     if (!Number.isFinite(nowMs)) throw new TypeError('invalid_receipt_outbox_clock');
