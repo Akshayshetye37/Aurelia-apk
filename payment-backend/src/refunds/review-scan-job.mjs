@@ -12,7 +12,6 @@ try {
     severity: 'INFO', event: 'REFUND_REVIEW_SCAN_COMPLETED', ...result,
     alerts: undefined
   }) + '\n');
-  if (result.alertsCreated > 0) process.exitCode = 2;
 } catch (error) {
   process.stderr.write(JSON.stringify({
     severity: 'ERROR', event: 'REFUND_REVIEW_SCAN_FAILED',
