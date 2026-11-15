@@ -88,7 +88,14 @@ export function createPrintService({ repository, transports = {}, flags = DEFAUL
       billNo: receipt?.billNo || label?.reference || 'LABEL',
       staffId: String(staff.id),
       staffRole: String(staff.role),
-      printer: { id: String(printer.id), modelId: support.model.id, name: support.model.name },
+      printer: {
+        id: String(printer.id),
+        modelId: support.model.id,
+        name: support.model.name,
+        address: printer.address ? String(printer.address) : '',
+        host: printer.host ? String(printer.host) : '',
+        port: Number.isSafeInteger(printer.port) ? printer.port : 9100
+      },
       transport,
       protocol: support.protocol,
       jobKind,
