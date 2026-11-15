@@ -6,6 +6,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { FirestorePaymentRepository } from './intents/firestore-repository.mjs';
 import { createLocalLedgerReceiptService } from './intents/local-ledger-receipt.mjs';
+import { createRefundRecord, transitionRefund, refundRequiresHumanReview, REFUND_STATES } from './refunds/refund-state-machine.mjs';
 import { implementedProviderAdapters, providerQualificationStatus, createProviderAdapter } from './providers/factory.mjs';
 import { PROVIDERS } from './providers/registry.mjs';
 import { assertWebhookReplayIntegrity } from './webhooks/provider-webhook-router.mjs';
@@ -628,15 +629,16 @@ function refundLookupInput(record) {
   }
 }
 async function updateRefundEvidence(refundRef, intentRef, remote, record) {
-  if (!remote || (remote.refundId && record.provider !== 'razorpay' && remote.refundId !== record.refundId) ||
+  if (!remote || (remote.provider && remote.provider !== record.provider) ||
+      (remote.refundId && record.provider !== 'razorpay' && remote.refundId !== record.refundId) ||
       (remote.amountMinor != null && remote.amountMinor !== record.amountMinor) ||
-      (remote.currency != null && remote.currency !== 'INR') ||
-      (remote.paymentId != null && ['razorpay', 'cashfree', 'payu'].includes(record.provider) &&
-        String(remote.paymentId) !== record.providerPaymentId) ||
+      (remote.currency != null && remote.currency !== record.currency) ||
+      (remote.paymentId != null && String(remote.paymentId) !== record.providerPaymentId) ||
       (remote.orderId != null && remote.orderId !== record.providerOrderId)) {
     throw new Error('provider_refund_binding_mismatch');
   }
-  const next = refundState(record.provider, remote.status);
+  const providerState = refundState(record.provider, remote.status);
+  const eventId = 'provider:' + record.refundId + ':' + String(remote.status || 'UNKNOWN').toUpperCase();
   await db.runTransaction(async tx => {
     const [refundSnap, intentSnap] = await Promise.all([tx.get(refundRef), tx.get(intentRef)]);
     if (!refundSnap.exists || !intentSnap.exists ||
@@ -644,20 +646,55 @@ async function updateRefundEvidence(refundRef, intentRef, remote, record) {
       throw new Error('refund_binding_not_found');
     }
     const current = refundSnap.data(), intent = intentSnap.data();
-    if (current.state === 'FAILED' || current.state === 'SUCCEEDED') return;
-    const patch = { state: next, providerStatus: String(remote.status || 'UNKNOWN'),
-      providerRefundId: remote.refundId || current.providerRefundId || null,
-      providerRequestId: remote.providerRequestId || current.providerRequestId || null,
-      updatedAt: FieldValue.serverTimestamp() };
-    tx.update(refundRef, patch);
-    if (next === 'FAILED') {
-      tx.update(intentRef, { refundReservedMinor: Math.max(0, Number(intent.refundReservedMinor || 0) - record.amountMinor),
-        updatedAt: FieldValue.serverTimestamp() });
+    if ([REFUND_STATES.FAILED, REFUND_STATES.PROVIDER_CONFIRMED,
+         REFUND_STATES.LOCAL_REVERSAL_POSTED, REFUND_STATES.RECEIPT_ACCEPTED,
+         REFUND_STATES.HUMAN_REVIEW].includes(current.state)) return;
+
+    let next = current;
+    if (providerState === 'SUCCEEDED') {
+      next = transitionRefund(current, {
+        eventId, type: 'provider_confirmed',
+        payload: { evidence: {
+          verified: true, provider: record.provider,
+          providerOrderId: record.providerOrderId,
+          providerPaymentId: record.providerPaymentId,
+          amountMinor: record.amountMinor, currency: record.currency,
+          providerRefundId: remote.refundId || record.refundId,
+          status: String(remote.status || 'UNKNOWN')
+        } }
+      }, { now: () => new Date().toISOString() }).record;
+    } else if (providerState === 'FAILED') {
+      next = transitionRefund(current, {
+        eventId, type: 'provider_failed',
+        payload: { evidence: {
+          verified: true, provider: record.provider,
+          providerOrderId: record.providerOrderId,
+          providerPaymentId: record.providerPaymentId,
+          amountMinor: record.amountMinor, currency: record.currency,
+          status: String(remote.status || 'FAILED')
+        } }
+      }, { now: () => new Date().toISOString() }).record;
+    } else {
+      tx.update(refundRef, {
+        providerStatus: String(remote.status || 'UNKNOWN'),
+        providerRefundId: remote.refundId || current.providerRefundId || null,
+        providerRequestId: remote.providerRequestId || current.providerRequestId || null,
+        updatedAt: FieldValue.serverTimestamp()
+      });
+      return;
+    }
+    tx.update(refundRef, { ...next, updatedAt: FieldValue.serverTimestamp() });
+    if (next.state === REFUND_STATES.FAILED) {
+      tx.update(intentRef, {
+        refundReservedMinor: Math.max(0, Number(intent.refundReservedMinor || 0) - record.amountMinor),
+        updatedAt: FieldValue.serverTimestamp()
+      });
     }
   });
   const latest = await refundRef.get();
   return latest.exists ? latest.data() : null;
 }
+
 
 app.post('/v1/payments/intents/:intentId/refunds', requireTenantAdmin,
   express.json({ limit: '2kb', strict: true }), async (req, res) => {
