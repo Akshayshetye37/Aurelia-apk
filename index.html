@@ -626,10 +626,29 @@ openS(`<h2 class="foil">Check out</h2><div class="lab">${esc(b.g)} · Room ${esc
 <label class="fld"><span>Actual check-out time (editable)</span><input id="actual-checkout-time" type="time" value="${pre}" required></label>
 <button class="btn" style="width:100%;margin-top:8px" onclick="completeCheckOut(${i})">Confirm check-out</button>`)}
 async function completeCheckOut(i){const b=bk(i);if(!b)return;if(dueB(b)>0){toast('Settle '+K(dueB(b))+' before check-out');return}const t=$('#actual-checkout-time')?.value||b.checkOutTime||defCheckOutTime();if(!t){toast('Check-out time is mandatory');return}const r=rm(b.room);try{const result=await commitStayMutation({booking:b,room:r,eventType:'booking.checked_out',auditAction:'Check-out',auditDetail:b.g+' · Room '+b.room+' · '+t,apply:()=>{b.checkOutTime=t;b.actualCheckOutAt=new Date().toISOString();b.actualCheckOutDate=new Date().toISOString().slice(0,10);b.st='done';if(r)r.s='clean'}});closeS();render();toast(result.cacheRefreshed===false?'Check-out saved to device storage; compatibility cache refresh failed.':b.g+' checked out at '+t)}catch(error){toast(error.message||'Check-out was not saved')}}
-function inv(i){const b=bk(i),L=[[`Room ${b.room} · ${nts(b)} nights`,roomCharge(b)],...b.ch],s=S.set;openS(`<h2 class="foil">${esc(s.name)}</h2><div class="lab">${esc(s.addr)} · ${esc(s.phone)} · ${esc(s.tax)}</div><div style="margin:16px 0"><b>${esc(b.g)}</b><div class="lab">
-${offsetDDMMYYYY(b.in)} ${esc(b.checkInTime||defCheckInTime())} → ${offsetDDMMYYYY(b.out)} ${esc(b.checkOutTime||defCheckOutTime())}<br>
-${b.actualCheckInAt?'Checked in: '+dateDDMMYYYY(new Date(b.actualCheckInAt))+' '+new Date(b.actualCheckInAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+' · ':''}${b.actualCheckOutAt?'Checked out: '+dateDDMMYYYY(new Date(b.actualCheckOutAt))+' '+new Date(b.actualCheckOutAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):''}
-</div></div>${L.map(x=>`<div class="ln"><span>${esc(x[0])}</span><span>${K(x[1])}</span></div>`).join('')}<div class="ln"><span>Paid</span><span>${K(b.p||0)}</span></div><div class="row" style="margin-top:10px"><span class="lab">Balance</span><span class="tot">${K(dueB(b))}</span></div><button class="btn" style="width:100%;margin-top:14px" onclick="shr(${i})">Share invoice</button>`)}
+function inv(i){
+ const b=bk(i);if(!b){toast('Booking not found');return}
+ const guest=gOf(b.g)||{},room=rm(b.room)||{};
+ const invoice=window.AureliaFolioInvoice?.build({
+  booking:b,guest,room,settings:S.set,roomCharge:roomCharge(b),
+  paidAmount:paid(b),balanceDue:dueB(b),invoiceDate:new Date().toISOString()
+ });
+ if(!invoice){toast('Folio invoice module is unavailable');return}
+ const money=n=>K(n/100),fmtDate=value=>{if(!value)return '—';const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleDateString('en-GB'):'—'};
+ const rows=invoice.lineItems.map(line=>'<tr><td>'+esc(fmtDate(line.date))+'</td><td>'+esc(line.description)+(line.outlet?' · '+esc(line.outlet):'')+(line.reference?' · Check #'+esc(line.reference):'')+'</td><td>'+esc(line.sac||'—')+'</td><td class="num">'+money(line.amountMinor)+'</td></tr>').join('');
+ const occupants=invoice.billedTo.occupants.length?invoice.billedTo.occupants.map((name,index)=>'<div>'+String(index+1)+'. '+esc(name)+'</div>').join(''):'<div>None recorded</div>';
+ const payments=invoice.payments.map(p=>'<div class="ln"><span>'+esc(p.method||'Payment')+(p.reference?' · '+esc(p.reference):'')+'</span><span>−'+money(p.amountMinor)+'</span></div>').join('');
+ const taxRows=(label,value)=>value?'<div class="ln"><span>'+label+'</span><span>'+money(value)+'</span></div>':'';
+ openS('<article class="invoice" id="invd" style="background:#fff;color:#18251e;padding:18px;border-radius:12px;font:13px/1.45 Arial,sans-serif">'+
+ '<header style="display:flex;justify-content:space-between;gap:12px;border-bottom:2px solid #244b37;padding-bottom:12px"><div><h2 style="color:#244b37;margin:0">'+esc(invoice.property.legalName||S.set.name)+'</h2><div>'+esc(invoice.property.address)+'</div><div>'+esc(invoice.property.phone)+'</div><div>GSTIN: '+esc(invoice.property.gstin||'Not configured')+'</div></div><div style="text-align:right"><b>FOLIO INVOICE</b><div>'+esc(invoice.invoiceNumber||'Not issued')+'</div><small>Folio: '+esc(invoice.folioNumber)+'</small><br><small>'+fmtDate(invoice.invoiceDate)+'</small></div></header>'+
+ '<section style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 0;border-bottom:1px solid #ccd5ce"><div><b>Primary billed guest</b><div>'+esc(invoice.billedTo.name)+'</div><div>'+esc(invoice.billedTo.address)+'</div><div>'+esc(invoice.billedTo.phone)+'</div><div>'+esc(invoice.billedTo.companyName)+'</div><div>Company GSTIN: '+esc(invoice.billedTo.companyGstin||'—')+'</div></div><div><b>Occupancy & stay</b><div>Room '+esc(invoice.stay.roomNumber)+' · '+esc(invoice.stay.roomType)+'</div><div>'+invoice.billedTo.adults+' Adults · '+invoice.billedTo.children+' Children · '+invoice.stay.nights+' nights</div><div>Check-in: '+esc(invoice.stay.checkInTime||'—')+' · Check-out: '+esc(invoice.stay.checkOutTime||'—')+'</div><b>Accompanying occupants</b>'+occupants+'</div></section>'+
+ '<table style="width:100%;border-collapse:collapse;margin-top:12px"><thead><tr style="text-align:left;border-bottom:1px solid #aebbb2"><th>Date</th><th>Description / Outlet / POS reference</th><th>SAC</th><th class="num" style="text-align:right">Amount</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+ '<section style="max-width:360px;margin:14px 0 0 auto"><div class="ln"><span>Taxable subtotal</span><span>'+money(invoice.totals.subtotalMinor)+'</span></div>'+taxRows('CGST',invoice.totals.cgstMinor)+taxRows('SGST',invoice.totals.sgstMinor)+taxRows('IGST',invoice.totals.igstMinor)+taxRows('Total GST',invoice.totals.taxMinor)+taxRows('Discount',invoice.totals.discountMinor)+
+ '<div class="ln" style="font-weight:bold;border-top:2px solid #244b37"><span>Grand total</span><span>'+money(invoice.totals.grossMinor-invoice.totals.discountMinor)+'</span></div>'+payments+
+ '<div class="ln" style="font-weight:bold"><span>Paid</span><span>'+money(invoice.totals.paidMinor)+'</span></div><div class="ln" style="font-weight:bold"><span>Balance due</span><span>'+money(invoice.totals.dueMinor)+'</span></div></section>'+
+ '<footer style="display:flex;justify-content:space-between;gap:20px;margin-top:30px"><div>Guest signature: ____________________</div><div>Authorized signatory / stamp: ____________________</div></footer><p style="text-align:center;margin-top:18px">Thank you for staying with us.</p></article>'+
+ '<div class="row noprint" style="margin-top:14px;gap:6px"><button class="btn sm ghost" onclick="shr('+i+')">Share</button><button class="btn sm" onclick="nat({type:\'printInvoice\',html:$(\'#invd\').outerHTML})||window.print()">Print / Save PDF</button></div>');
+}
 async function shr(i){const b=bk(i);if(!b){toast('Booking not found');return}const text=itx(b);if(nat({type:'shareText',title:'Invoice '+(b.iv||''),text}))return;try{if(navigator.share){await navigator.share({title:'Invoice '+(b.iv||''),text});return}if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(text);toast('Invoice summary copied')}else{toast('Sharing is not available in this browser')}}catch(e){if(e&&e.name!=='AbortError')toast('Invoice sharing failed. Try again.')}}
 /* More menu and modules */
 const TL=[['guests','Guests','Profiles, IDs, occupants and vehicles','Guests'],['hk','Housekeeping','Cleaning and release','Housekeeping'],['inv','Inventory','Stock, purchases and issues','POS'],['exp','Expenses','Record and void','Expenses'],['rep','Reports','Takings, collections, balances','Reports'],['aud','Audit','Every recorded action','Audit'],['io','Import and export','Copies of your data','Import/Export'],['set','Settings','Identity, controls, terms, health','']];
@@ -5533,6 +5552,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 </script>
 <script type="module" id="aurelia-async-runtime-bootstrap">
 import { PmsBootstrapCoordinator } from "./src/storage/pms-bootstrap-coordinator.mjs";
+import { buildFolioInvoice, formatFolioMinor } from "./src/folios/folio-invoice.mjs";
 import { createLegacyMigrationStorage, createPreferenceStorage, readLegacyPhotoFallbackEntries, deleteLegacyPhotoFallbackEntries } from "./src/storage/legacy-web-storage.mjs";
 import { createPhotoArchive } from "./src/storage/photo-archive.mjs";
 import { createBackupVaultStore } from "./src/storage/backup-vault-store.mjs";
@@ -5544,6 +5564,7 @@ import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCata
 import { commitReservationToRepository } from "./src/storage/repository-reservation-service.mjs";
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
+window.AureliaFolioInvoice = Object.freeze({ build: buildFolioInvoice, formatMinor: formatFolioMinor });
 const legacyStorage = createLegacyMigrationStorage();
 window.AureliaPreferences = createPreferenceStorage({ mode: window.AURELIA_PRODUCTION === true ? "production" : "strict" });
 window.AureliaPhotoArchive = createPhotoArchive({
