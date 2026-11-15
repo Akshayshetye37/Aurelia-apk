@@ -5674,7 +5674,15 @@ try {
   if (!boot || boot.success !== true || !boot.repository) throw new Error("Canonical storage bootstrap did not return a verified repository");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "REPOSITORY_BINDING";
   storageBridge.bindActiveEngine(boot.repository, boot.identity);
-  window.AureliaFolioAccounting = Object.freeze({\n    issueInvoice: options => issueFolioInvoice({ bridge: boot.bridge, ...options }),\n    createSplit: options => createSplitFolio({ bridge: boot.bridge, ...options }),\n    buildSplitInvoice: buildSplitFolioInvoice,\n    buildRemainingInvoice: buildRemainingFolioInvoice,\n    getFolio: folioId => boot.bridge.fetchEntity("folio", folioId),\n    listFolios: () => boot.bridge.listEntities("folio"),\n    recordSplitPayment: options => recordSplitFolioPayment({ bridge: boot.bridge, ...options })\n  });
+  window.AureliaFolioAccounting = Object.freeze({
+    issueInvoice: options => issueFolioInvoice({ bridge: boot.bridge, ...options }),
+    createSplit: options => createSplitFolio({ bridge: boot.bridge, ...options }),
+    buildSplitInvoice: buildSplitFolioInvoice,
+    buildRemainingInvoice: buildRemainingFolioInvoice,
+    getFolio: folioId => boot.bridge.fetchEntity("folio", folioId),
+    listFolios: () => boot.bridge.listEntities("folio"),
+    recordSplitPayment: options => recordSplitFolioPayment({ bridge: boot.bridge, ...options })
+  });
   const canonicalSettings = await boot.settingsRepository.get();
   window.__AURELIA_CANONICAL_SETTINGS = canonicalSettings.version > 0 ? canonicalSettings.data : null;
   const canonicalTableRows = await boot.bridge.listEntities("restaurant_table");
