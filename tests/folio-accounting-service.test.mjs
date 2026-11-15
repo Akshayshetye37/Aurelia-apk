@@ -54,6 +54,8 @@ test("invoice number, invoice snapshot, ledger and audit commit atomically", asy
   const audit = await bridge.fetchEntity("audit", "invoice-audit-FY2026-27-00000001");
   assert.equal(ledger.data.invoiceNumber, first.invoice.invoiceNumber);
   assert.equal(audit.data.invoiceHash, first.invoiceHash);
+  assert.equal(audit.data.taxSummary.grossMinor, 10000);
+  assert.equal(audit.data.taxLines[0].taxProfileId, "room-zero");
   const duplicate = await issueFolioInvoice({
     bridge, folioId: "folio-1", booking, invoice,
     now: () => "2026-11-16T12:00:00.000Z", cryptoImpl: webcrypto
