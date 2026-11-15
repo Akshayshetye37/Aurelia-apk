@@ -5,7 +5,7 @@ import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
 import {
-  buildSplitFolioInvoice, createSplitFolio, financialYearFor, issueFolioInvoice, reconcileLegacyPaymentTotals
+  buildRemainingFolioInvoice, buildSplitFolioInvoice, createSplitFolio, financialYearFor, issueFolioInvoice, reconcileLegacyPaymentTotals
 } from "../src/folios/folio-accounting-service.mjs";
 
 let fixtureNumber = 0;
@@ -155,4 +155,23 @@ test("split invoice preserves source line tax and uses the split billing identit
   assert.equal(split.totals.grossMinor, 5000);
   assert.equal(split.totals.taxMinor, 763);
   assert.equal(split.invoiceNumber, "");
+});
+
+test("remaining master invoice excludes amounts assigned to split folios", () => {
+  const masterInvoice = {
+    invoiceNumber: "", lineItems: [
+      { id: "room-night-1", grossMinor: 10000, taxableMinor: 8475, taxMinor: 1525,
+        cgstMinor: 763, sgstMinor: 762, igstMinor: 0 },
+      { id: "food-1", grossMinor: 5000, taxableMinor: 5000, taxMinor: 0,
+        cgstMinor: 0, sgstMinor: 0, igstMinor: 0 }
+    ],
+    totals: { grossMinor: 15000, paidMinor: 0 }
+  };
+  const remaining = buildRemainingFolioInvoice({
+    masterInvoice,
+    masterFolio: { splitAllocations: [{ allocations: [{ chargeId: "room-night-1", amountPaise: 4000 }] }] }
+  });
+  assert.equal(remaining.totals.grossMinor, 11000);
+  assert.equal(remaining.lineItems.find(x => x.id === "room-night-1").grossMinor, 6000);
+  assert.equal(remaining.lineItems.find(x => x.id === "food-1").grossMinor, 5000);
 });
