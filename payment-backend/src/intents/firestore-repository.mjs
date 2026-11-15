@@ -318,6 +318,18 @@ export class FirestorePaymentRepository {
     }
     let record = snapshot.data();
     if (['CAPTURED', 'FAILED_TO_INITIATE'].includes(record.state)) {
+      if (record.state === 'CAPTURED' &&
+          !['AWAITING_LOCAL_RECEIPT', 'RECEIPT_ACCEPTED'].includes(record.accountingStatus)) {
+        const now = this.clock().toISOString();
+        await this.db.runTransaction(async tx => {
+          const current = await tx.get(intentRef);
+          if (!current.exists || current.data().tenantId !== tenantId ||
+              current.data().state !== 'CAPTURED') return;
+          if (!['AWAITING_LOCAL_RECEIPT', 'RECEIPT_ACCEPTED'].includes(current.data().accountingStatus)) {
+            tx.update(intentRef, { accountingStatus: 'AWAITING_LOCAL_RECEIPT', updatedAt: now });
+          }
+        });
+      }
       return this.getPaymentIntent(authUid, intentId);
     }
     if (!record.providerAccountId ||
