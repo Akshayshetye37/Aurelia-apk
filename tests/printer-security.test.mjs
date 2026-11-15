@@ -69,7 +69,7 @@ test('folio invoice documents validate strict structured GST and accounting fiel
     { ...invoiceDocument(), lines: [{ ...invoiceDocument().lines[0], taxRateBps: 99999 }] },
     { ...invoiceDocument(), guest: { name: 'Guest\nOne' } },
     { ...invoiceDocument(), guest: { name: 'Guest', unexpected: 'field' } }
-  ]) assert.equal(validatePrintDocument(invalid).ok, false);
+  ]) assert.equal(validatePrintDocument(invalid).ok, false, JSON.stringify(invalid));
 });
 
 test('thermal receipt and kitchen ticket require matching media layout and bounded semantic items', () => {
