@@ -28,6 +28,7 @@ test('print boundary accepts a device identifier and enforces verified calibrati
   assert.match(method, /record\.verified/);
   assert.match(method, /store\.claimJob/);
   assert.match(method, /writeWithHardTimeout/);
+  assert.match(method, /printer_profile_layout_mismatch/);
   assert.match(method, /status\", \"uncertain/);
 });
 test('trust resolves all DNS answers and rejects mixed public/private results', () => {
