@@ -187,6 +187,20 @@ for (const permission of permissionsToRemove) {
   }
 }
 
+// Bluetooth Classic is used only for already-paired printers. No discovery scan,
+// advertising, or location permission is requested.
+const bluetoothPermissionDeclarations = [
+  '<uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />',
+  '<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />',
+  '<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />'
+];
+for (const declaration of bluetoothPermissionDeclarations) {
+  const permissionName = declaration.match(/android:name="([^"]+)"/)[1];
+  if (!manifest.includes('android:name="' + permissionName + '"')) {
+    manifest = manifest.replace('</manifest>', '    ' + declaration + '\n</manifest>');
+  }
+}
+
 // Native PIN gate is the only exported launcher. MainActivity remains internal,
 // so ordinary launcher starts cannot instantiate the PMS WebView before PIN auth.
 if (!manifest.includes('com.aurelia.pms.security.LockGateActivity')) {
