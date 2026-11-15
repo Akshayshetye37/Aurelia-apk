@@ -5,7 +5,7 @@ import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
 import {
-  createSplitFolio, financialYearFor, issueFolioInvoice, reconcileLegacyPaymentTotals
+  buildSplitFolioInvoice, createSplitFolio, financialYearFor, issueFolioInvoice, reconcileLegacyPaymentTotals
 } from "../src/folios/folio-accounting-service.mjs";
 
 let fixtureNumber = 0;
@@ -126,4 +126,33 @@ test("split folio rejects over-allocation and duplicate child IDs", async () => 
     allocations: [{ chargeId: "charge-1", amountPaise: 100 }],
     now: () => "2026-11-16T12:00:00.000Z"
   }), error => error.code === "SPLIT_FOLIO_ALREADY_EXISTS");
+});
+
+test("split invoice preserves source line tax and uses the split billing identity", () => {
+  const masterInvoice = {
+    folioNumber: "folio-master", invoiceNumber: "INV/FY2026-27/000001",
+    billedTo: { name: "Primary Guest", address: "Main address", phone: "123", occupants: [] },
+    property: { legalName: "Aurelia" }, stay: { roomNumber: "12", nights: 1 },
+    lineItems: [], totals: { grossMinor: 10000 }
+  };
+  const splitFolio = {
+    id: "folio-split", masterFolioId: "folio-master",
+    billingGuest: { name: "Second Guest", companyGstin: "27ABCDE1234F1Z5" },
+    allocations: [{
+      chargeId: "room-night-1", amountPaise: 5000, sourceDescription: "Room night",
+      chargeSnapshot: {
+        id: "room-night-1", description: "Room night", grossMinor: 10000,
+        amountMinor: 10000, taxableMinor: 8475, taxMinor: 1525,
+        cgstMinor: 763, sgstMinor: 762, igstMinor: 0,
+        taxProfile: { id: "room", rate: 18, supply: "intrastate", inclusive: true, sac: "996311" }
+      }
+    }]
+  };
+  const split = buildSplitFolioInvoice({ masterInvoice, splitFolio, invoiceDate: "2026-11-16T12:00:00Z" });
+  assert.equal(split.folioNumber, "folio-split");
+  assert.equal(split.billedTo.name, "Second Guest");
+  assert.equal(split.billedTo.companyGstin, "27ABCDE1234F1Z5");
+  assert.equal(split.totals.grossMinor, 5000);
+  assert.equal(split.totals.taxMinor, 763);
+  assert.equal(split.invoiceNumber, "");
 });
