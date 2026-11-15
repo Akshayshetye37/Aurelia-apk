@@ -62,3 +62,10 @@ Terraform creates the external HTTPS-only load balancer and serverless NEG. The 
 - Cloud Run readiness is managed by the platform; the `/readyz` endpoint remains available for external monitoring and deployment verification, not as a Terraform readiness probe.
 - Review the custom Secret Manager role against any future backend code changes. If code starts using additional Secret Manager APIs, update IAM deliberately rather than granting project Owner/Editor.
 - This deployment does not make the payment backend production-ready. The documented folio settlement, reconciliation and PMS integration blockers remain.
+
+
+## Refund exception monitoring
+
+Terraform also provisions a Cloud Run Job (`aurelia-payment-backend-refund-review-scan`) and a Cloud Scheduler trigger every five minutes. The job runs with the backend runtime service account and scans provider-confirmed refunds. After 30 minutes without a local reversal it marks the refund for human review, creates a durable alert record, and emits a Cloud Logging `ALERT` event. It does not contact payment providers or write PMS ledger entries.
+
+Apply this infrastructure only after reviewing the project ID, region, immutable container image digest, and scheduler IAM grant. The schedule is not active until Terraform is applied successfully.
