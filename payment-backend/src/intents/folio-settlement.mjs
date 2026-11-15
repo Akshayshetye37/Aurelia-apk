@@ -1,6 +1,10 @@
 import crypto from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 
+// Hard-off migration guard. Preserve the implementation for audit/reconciliation;
+// it cannot write balances while the PMS local journal is the financial authority.
+export const LEGACY_FIRESTORE_SETTLEMENT_ENABLED = false;
+
 /**
  * Posts an independently provider-verified payment intent to the authoritative
  * Aurelia payment folio. A deterministic journal document is the accounting
@@ -9,6 +13,7 @@ import { FieldValue } from 'firebase-admin/firestore';
  * Call only after the provider adapter has independently verified capture.
  */
 export async function settleVerifiedPaymentIntent({ db, intentId, eventId, providerPaymentId }) {
+  if (!LEGACY_FIRESTORE_SETTLEMENT_ENABLED) throw new Error('legacy_firestore_settlement_disabled');
   if (!db || typeof intentId !== 'string' || !/^[0-9a-f-]{36}$/i.test(intentId) ||
       typeof eventId !== 'string' || !/^[A-Za-z0-9._:-]{1,200}$/.test(eventId) ||
       typeof providerPaymentId !== 'string' || !providerPaymentId) {
