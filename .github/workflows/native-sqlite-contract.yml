@@ -129,7 +129,19 @@ jobs:
           echo '=== generated android/app/build.gradle ==='
           cat android/app/build.gradle
           echo '=== instrumentation source files ==='
-          find android/app/src -type f -name '*InstrumentedTest*' -print -exec sed -n '1,12p' {} \\;
+      - name: Diagnose generated Android instrumentation source layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== generated android/app/build.gradle ==='
+          cat android/app/build.gradle
+          echo '=== instrumentation source files ==='
+          find android/app/src -type f -name '*InstrumentedTest*' -print -exec sed -n '1,12p' {} \;
+          echo '=== required instrumentation sources ==='
+          test -f android/app/src/androidTest/java/com/aurelia/pms/LocalPmsRepositoryInstrumentedTest.java
+          test -f android/app/src/androidTest/java/com/aurelia/pms/security/AureliaSecurityInstrumentedTest.java
+          echo '=== required source package/class declarations ==='
+          grep -nE '^package |class (LocalPmsRepositoryInstrumentedTest|AureliaSecurityInstrumentedTest)' android/app/src/androidTest/java/com/aurelia/pms/LocalPmsRepositoryInstrumentedTest.java android/app/src/androidTest/java/com/aurelia/pms/security/AureliaSecurityInstrumentedTest.java
           echo '=== required instrumentation sources ==='
           test -f android/app/src/androidTest/java/com/aurelia/pms/LocalPmsRepositoryInstrumentedTest.java
           test -f android/app/src/androidTest/java/com/aurelia/pms/security/AureliaSecurityInstrumentedTest.java
