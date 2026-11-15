@@ -15,6 +15,7 @@ export class LanPrinterAdapter extends PrinterAdapter {
     super();
     if (!native || typeof native.discoverLan !== 'function' ||
         typeof native.trustLanPrinter !== 'function' ||
+        typeof native.calibrateLanPrinter !== 'function' ||
         typeof native.verifyLanCapabilities !== 'function' ||
         typeof native.printLan !== 'function' ||
         typeof native.cancelJob !== 'function') {
