@@ -2,7 +2,9 @@ name: Payment backend infrastructure validation
 
 on:
   push:
-    branches: [feature/multi-provider-payment-backend]
+    branches:
+      - feature/multi-provider-payment-backend
+      - 'work/**'
     paths:
       - "payment-backend/infra/terraform/**"
       - ".github/workflows/payment-backend-infra.yml"
