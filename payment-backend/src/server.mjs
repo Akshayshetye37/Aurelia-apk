@@ -1044,7 +1044,8 @@ app.post('/v1/payments/intents/:intentId/local-receipt', requireTenantPaymentAct
         verifyProviderCapture: ({ intentId }) =>
           paymentRepository.verifyProviderCaptureForReceipt(req.actor.uid, intentId)
       });
-      return res.status(202).json(await receiptService.accept(req.body));
+      const accepted = await receiptService.accept(req.body);
+      return res.status(202).json({ ...accepted, receiptId: req.body.receiptId });
     } catch (error) {
       const knownConflict = [
         'payment_intent_not_found', 'payment_intent_not_awaiting_local_receipt',
