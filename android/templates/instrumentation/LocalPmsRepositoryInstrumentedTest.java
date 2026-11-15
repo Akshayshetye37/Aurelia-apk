@@ -1088,6 +1088,22 @@ public final class LocalPmsRepositoryInstrumentedTest {
     assertTrue("the original payment entry must remain immutable", rewriteRejected);
     assertEquals(12500, repository.getEntity("ledger", originalId).getJSONObject("data").getInt("amountPaise"));
 
+    boolean rawUpdateRejected = false;
+    try {
+      repository.getWritableDatabase().execSQL(
+        "UPDATE pms_entities SET data_json=? WHERE entity_type='ledger' AND entity_id=?",
+        new Object[] { new JSONObject(original.toString()).put("amountPaise", 1).toString(), originalId });
+    } catch (RuntimeException expected) { rawUpdateRejected = true; }
+    assertTrue("SQLite trigger must reject direct ledger updates", rawUpdateRejected);
+
+    boolean rawDeleteRejected = false;
+    try {
+      repository.getWritableDatabase().execSQL(
+        "DELETE FROM pms_entities WHERE entity_type='ledger' AND entity_id=?", new Object[] { originalId });
+    } catch (RuntimeException expected) { rawDeleteRejected = true; }
+    assertTrue("SQLite trigger must reject direct ledger deletes", rawDeleteRejected);
+    assertEquals(12500, repository.getEntity("ledger", originalId).getJSONObject("data").getInt("amountPaise"));
+
     JSONArray invalidBatch = new JSONArray()
       .put(new JSONObject().put("entityType", "ledger").put("entityId", reversalId).put("expectedVersion", 1)
         .put("data", new JSONObject(reversal.toString()).put("amountPaise", 1))
