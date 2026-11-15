@@ -33,6 +33,7 @@ import javax.crypto.spec.GCMParameterSpec
 class AureliaPrinterPlugin : Plugin() {
     private val executor = Executors.newSingleThreadExecutor()
     private val activeSockets = ConcurrentHashMap<String, java.net.Socket>()
+    private val watchdog = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
     private val tag = "AureliaPrinter"
     private val store by lazy { PrinterTrustStore(context) }
 
@@ -194,7 +195,7 @@ class AureliaPrinterPlugin : Plugin() {
 
     override fun handleOnDestroy() {
         activeSockets.values.forEach { try { it.close() } catch (_: Exception) {} }
-        activeSockets.clear(); executor.shutdownNow(); super.handleOnDestroy()
+        activeSockets.clear(); executor.shutdownNow(); watchdog.shutdownNow(); super.handleOnDestroy()
     }
 
     private fun validHostSyntax(host: String): Boolean {
@@ -225,7 +226,7 @@ class AureliaPrinterPlugin : Plugin() {
 }
 
 private class PrinterTrustStore(context: Context) {
-    data class Record(val id: String, val host: String, val address: InetAddress, val port: Int, val trustedAt: Long, val lastWriteAt: Long)
+    data class Record(val id: String, val host: String, val address: InetAddress, val port: Int, val trustedAt: Long, val lastWriteAt: Long, val verified: Boolean, val calibratedAt: Long, val profileHash: String?)
     private val file = AtomicFile(File(context.noBackupFilesDir, "printer-trust.v1.enc"))
     private val alias = "com.aurelia.pms.printer-trust.aes256gcm.v1"
     private val lock = Any()
@@ -235,7 +236,7 @@ private class PrinterTrustStore(context: Context) {
             (host + "|" + address.hostAddress + "|" + port).toByteArray(StandardCharsets.UTF_8)))
         val root = read()
         root.put(id, JSONObject().put("host", host).put("address", address.hostAddress).put("port", port)
-            .put("trustedAt", System.currentTimeMillis()).put("lastWriteAt", 0L).put("profileVerified", false))
+            .put("trustedAt", System.currentTimeMillis()).put("lastWriteAt", 0L).put("profileVerified", false).put("calibratedAt", 0L).put("profileHash", ""))
         write(root); id
     }
     fun get(id: String): Record? = synchronized(lock) { parse(id, read().optJSONObject(id)) }
@@ -245,13 +246,16 @@ private class PrinterTrustStore(context: Context) {
         out
     }
     fun remove(id: String) = synchronized(lock) { val root = read(); root.remove(id); write(root) }
+    fun markVerified(id: String, at: Long, profileHash: String) = synchronized(lock) { val root = read(); val record = root.optJSONObject(id) ?: throw IllegalStateException("not_trusted"); record.put("profileVerified", true).put("calibratedAt", at).put("profileHash", profileHash); write(root) }
 
     private fun parse(id: String, o: JSONObject?): Record? {
         if (o == null || !id.matches(Regex("^lan_[a-f0-9]{64}$"))) return null
         return try {
             val host = o.getString("host"); val ip = InetAddress.getByName(o.getString("address"))
             val port = o.getInt("port"); val time = o.getLong("trustedAt"); val last = o.getLong("lastWriteAt")
-            if (port != 9100 || time <= 0 || !safe(ip)) null else Record(id, host, ip, port, time, last)
+            val verified = o.optBoolean("profileVerified", false); val calibratedAt = o.optLong("calibratedAt", 0L); val profileHash = o.optString("profileHash").takeIf { it.isNotBlank() }
+            val expectedId = "lan_" + hex(MessageDigest.getInstance("SHA-256").digest((host + "|" + ip.hostAddress + "|" + port).toByteArray(StandardCharsets.UTF_8)))
+            if (port != 9100 || time <= 0 || !safe(ip) || id != expectedId || (verified && (calibratedAt <= 0 || profileHash == null))) null else Record(id, host, ip, port, time, last, verified, calibratedAt, profileHash)
         } catch (_: Exception) { null }
     }
 
