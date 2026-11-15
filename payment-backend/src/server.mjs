@@ -730,6 +730,7 @@ app.post('/v1/payments/intents/:intentId/refunds', requireTenantAdmin,
       const requested = createRefundRecord({
         refundId, intentId, tenantId: req.tenant.id, provider: intent.provider,
         environment, providerOrderId: intent.providerOrderId,
+        providerAccountId: intent.providerAccountId,
         providerPaymentId: intent.providerPaymentId,
         originalAmountMinor: intent.amountMinor, amountMinor, currency: intent.currency,
         idempotencyKey, requestedBy: req.actor.uid
@@ -759,7 +760,7 @@ app.post('/v1/payments/intents/:intentId/refunds', requireTenantAdmin,
           throw new Error('refund_amount_exceeds_unrefunded_capture');
         }
         const record = {
-          ...requested,
+          ...requested, reason,
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp()
         };
