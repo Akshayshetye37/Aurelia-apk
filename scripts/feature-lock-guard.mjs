@@ -46,6 +46,19 @@ export function validateFeatureRegistry(registry, changedFiles = []) {
   return { features: registry.features.length, verified, locked, changedFiles: changedFiles.length };
 }
 
+export function validateRegistryEvolution(baseRegistry, currentRegistry) {
+  const current = new Map((currentRegistry?.features || []).map(feature => [feature.id, feature]));
+  for (const prior of baseRegistry?.features || []) {
+    if (prior.status !== 'locked') continue;
+    const next = current.get(prior.id);
+    if (!next || next.status !== 'locked' ||
+        JSON.stringify([...(next.files || [])].sort()) !== JSON.stringify([...(prior.files || [])].sort())) {
+      throw new Error('locked_feature_registry_mutation_requires_owner_approval:' + prior.id);
+    }
+  }
+  return true;
+}
+
 export function changedPaths(baseSha, headSha) {
   const output = execFileSync('git', ['diff', '--name-only', baseSha + '...' + headSha], { encoding: 'utf8' });
   return output.split('\n').map(value => value.trim()).filter(Boolean);
@@ -59,6 +72,9 @@ async function main() {
     baseSha = execFileSync('git', ['rev-parse', 'HEAD^'], { encoding: 'utf8' }).trim();
   }
   const changed = changedPaths(baseSha, headSha);
+  const priorRaw = spawnSync('git', ['show', baseSha + ':.github/feature-locks.json'], { encoding: 'utf8' });
+  const priorRegistry = priorRaw.status === 0 ? JSON.parse(priorRaw.stdout) : null;
+  validateRegistryEvolution(priorRegistry, registry);
   const result = validateFeatureRegistry(registry, changed);
   for (const feature of registry.features.filter(item => item.status !== 'unverified')) {
     const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', feature.evidence.sha, headSha]);
