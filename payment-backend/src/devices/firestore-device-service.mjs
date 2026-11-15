@@ -85,6 +85,8 @@ export async function verifyAndRegisterDevice({
   if (!crypto.timingSafeEqual(suppliedSpki, verifiedSpki)) {
     throw new Error("android_attested_public_key_mismatch");
   }
+  const keyId = sha256(verifiedSpki);
+  const attestationId = crypto.randomUUID();
   const ref = paymentDeviceRef(db, tenantId, deviceId);
   await db.runTransaction(async tx => {
     const [deviceSnap, currentChallenge] = await Promise.all([tx.get(ref), tx.get(challengeDocument)]);
@@ -98,7 +100,7 @@ export async function verifyAndRegisterDevice({
     tx.update(challengeDocument, { consumedAt: current });
     tx.update(ref, {
       status: "PENDING", publicKeySpkiBase64: verified.publicKeySpkiBase64,
-      keyAlgorithm: "ECDSA_P256_SHA256",
+      keyAlgorithm: "ECDSA_P256_SHA256", keyId, attestationId,
       attestationVerifiedAt: current.toISOString(),
       attestationSecurityLevel: verified.securityLevel,
       attestationVerifiedBootState: verified.verifiedBootState,
@@ -107,7 +109,7 @@ export async function verifyAndRegisterDevice({
       updatedAt: current
     });
   });
-  return { deviceId, status: "PENDING", attestationSecurityLevel: verified.securityLevel };
+  return { deviceId, status: "PENDING", keyId, attestationId, attestationSecurityLevel: verified.securityLevel };
 }
 
 export async function activatePaymentDevice({ db, tenantId, actorUid, deviceId, now = () => new Date() }) {
