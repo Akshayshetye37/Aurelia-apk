@@ -223,7 +223,7 @@ export async function createSplitFolio({
     ]);
     if (childRow) throw fail("SPLIT_FOLIO_ALREADY_EXISTS", "The split folio ID already exists.");
     if (masterRow?.data?.invoiceIssued) throw fail("MASTER_INVOICE_ALREADY_ISSUED", "A split cannot be created after the master tax invoice has been issued.");
-    if (masterRow?.data?.bookingId && String(masterRow.data.bookingId) !== bookingKey) {
+    const canonicalCharges = Array.isArray(masterRow?.data?.chargeLines) ? masterRow.data.chargeLines :\n      (Array.isArray(masterRow?.data?.invoiceIssued?.lineItems) ? masterRow.data.invoiceIssued.lineItems : null);\n    if (!canonicalCharges) throw fail("SPLIT_CANONICAL_CHARGES_MISSING", "Split folios require canonical charge lines on the master folio; caller-supplied charges are not trusted.");\n    if (masterRow?.data?.bookingId && String(masterRow.data.bookingId) !== bookingKey) {
       throw fail("FOLIO_BOOKING_MISMATCH", "The master folio belongs to another booking.");
     }
     const used = new Map();
