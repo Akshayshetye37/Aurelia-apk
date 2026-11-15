@@ -55,18 +55,21 @@ function getTaxProfile(profiles, key) {
     sac: text(row.sac)
   });
 }
-function normalizeCharge(row, index, profiles) {
+function normalizeCharge(row, index, profiles, settings = {}) {
   const source = Array.isArray(row)
     ? { description: row[0], amount: row[1], category: row[2] || "other" }
     : (row && typeof row === "object" ? row : null);
   if (!source) throw new TypeError("Folio charge " + index + " is malformed");
   const amountMinor = money(source.amount ?? source.a, "Folio charge");
-  const profile = getTaxProfile(profiles, source.taxProfileId);
+  const category = text(source.category) || "other";
+  const configuredProfileId = source.taxProfileId || (category === "room" ? settings.roomTaxProfileId :
+    (["dining", "restaurant", "food", "f&b"].includes(category.toLowerCase()) ? settings.foodTaxProfileId : settings.otherTaxProfileId));
+  const profile = getTaxProfile(profiles, configuredProfileId);
   return Object.freeze({
     id: text(source.id) || "charge-" + index,
     date: safeDate(source.date || source.at),
     description: text(source.description || source.label || source.name) || "Charge",
-    category: text(source.category) || "other",
+    category,
     outlet: text(source.outlet),
     reference: text(source.reference || source.checkNumber),
     sac: profile?.sac || text(source.sac),
@@ -106,11 +109,11 @@ export function buildFolioInvoice({
       amount: dailyMinor / 100,
       category: "room",
       taxProfileId: booking.roomTaxProfileId || settings.roomTaxProfileId
-    }, index, profiles);
+    }, index, profiles, settings);
   });
   const charges = [
     ...roomLines,
-    ...(Array.isArray(booking.ch) ? booking.ch : []).map((row, index) => normalizeCharge(row, nights + index, profiles))
+    ...(Array.isArray(booking.ch) ? booking.ch : []).map((row, index) => normalizeCharge(row, nights + index, profiles, settings))
   ];
   const rawLines = charges.map(line => {
     const tax = taxForLine(line.amountMinor, line.taxProfile);
