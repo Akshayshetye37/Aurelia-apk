@@ -87,7 +87,7 @@ class AureliaPrinterPlugin : Plugin() {
             store.list().forEach { r ->
                 result.put(JSObject().put("deviceId", r.id).put("host", r.host)
                     .put("port", r.port).put("trustedAt", r.trustedAt)
-                    .put("lastSuccessfulWriteAt", r.lastWriteAt).put("profileVerified", false))
+                    .put("lastSuccessfulWriteAt", r.lastWriteAt).put("profileVerified", r.verified).put("calibratedAt", r.calibratedAt).put("profileHash", r.profileHash))
             }
             call.resolve(JSObject().put("devices", result))
         } catch (error: Exception) {
@@ -118,8 +118,7 @@ class AureliaPrinterPlugin : Plugin() {
             try {
                 socket.connect(java.net.InetSocketAddress(peer, 9100), 5000)
                 val testPage = byteArrayOf(0x1b, 0x40, 0x1b, 0x61, 0x01, 0x41, 0x55, 0x52, 0x45, 0x4c, 0x49, 0x41, 0x0a, 0x54, 0x45, 0x53, 0x54, 0x20, 0x50, 0x41, 0x47, 0x45, 0x0a, 0x0a, 0x0a)
-                socket.getOutputStream().write(testPage)
-                socket.getOutputStream().flush()
+                if (!writeWithHardTimeout(socket, testPage)) { call.reject("calibration_write_uncertain"); return@execute }
                 activity?.runOnUiThread {
                     val current = activity
                     if (current == null || current.isFinishing || current.isDestroyed) {
@@ -217,15 +216,14 @@ class AureliaPrinterPlugin : Plugin() {
     fun cancelJob(call: PluginCall) {
         val jobId = call.getString("jobId")
         if (jobId.isNullOrBlank() || !jobId.matches(Regex("^job_[A-Za-z0-9_-]{8,64}$"))) { call.reject("invalid_job_id"); return }
-        val socket = activeSockets[jobId]
-        if (socket != null) try { socket.close() } catch (_: Exception) {}
+        // Raw TCP cannot retract bytes already delivered to the printer.
         call.resolve(JSObject().put("ok", false).put("status", "uncertain")
-            .put("error", if (socket == null) "raw_tcp_cannot_confirm_cancellation" else "job_interrupted_delivery_uncertain"))
+            .put("error", "cancel_not_supported_on_raw_tcp"))
     }
 
     override fun handleOnDestroy() {
         activeSockets.values.forEach { try { it.close() } catch (_: Exception) {} }
-        activeSockets.clear(); executor.shutdownNow(); watchdog.shutdownNow(); super.handleOnDestroy()
+        activeSockets.values.forEach { try { it.close() } catch (_: Exception) {} }; activeSockets.clear(); executor.shutdownNow(); watchdog.shutdownNow(); super.handleOnDestroy()
     }
 
     private fun resolvePinnedPeer(record: PrinterTrustStore.Record): InetAddress? {
