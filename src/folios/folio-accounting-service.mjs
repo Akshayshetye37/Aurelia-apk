@@ -264,7 +264,7 @@ export async function createSplitFolio({
         mutate: entity => Object.assign(entity, {
           id: childId, bookingId: bookingKey, masterFolioId: masterId,
           billingGuest: clone(guest || {}), allocations: clone(allocated),
-          allocationTotalPaise, paymentRows: [], invoiceIssued: null,
+          allocationTotalPaise, paidPaise: 0, balanceDuePaise: allocationTotalPaise, paymentRows: [], invoiceIssued: null,
           createdAt: issuedAt, updatedAt: issuedAt, status: "OPEN"
         })
       },
@@ -387,4 +387,43 @@ export function buildRemainingFolioInvoice({ masterInvoice, masterFolio, invoice
       cgstMinor: sum("cgstMinor"), sgstMinor: sum("sgstMinor"), igstMinor: sum("igstMinor")
     })
   });
+}
+
+/** Staff-confirmed payment posting for a child folio; issued invoice snapshots stay immutable. */
+export async function recordSplitFolioPayment({
+  bridge, folioId, amountPaise, method, reference = "", idempotencyKey,
+  verificationConfirmed = false, now = () => new Date().toISOString()
+} = {}) {
+  if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") throw new TypeError("A bound transactional repository bridge is required");
+  await assertCompatibilityUiAllowed(bridge);
+  const id = safeId(folioId, "split folio ID"), amount = paise(amountPaise, "Payment amount");
+  if (!amount) throw new TypeError("Payment amount must be greater than zero");
+  const paymentMethod = text(method);
+  if (!["Cash", "UPI", "Card", "Bank transfer"].includes(paymentMethod)) throw new TypeError("Unsupported split-folio payment method");
+  const key = safeId(idempotencyKey, "payment idempotency key");
+  if (verificationConfirmed !== true) throw fail("PAYMENT_CONFIRMATION_REQUIRED", "Confirm receipt of funds before posting.");
+  const at = new Date(now()).toISOString(), ref = text(reference).slice(0, 120);
+  const row = await bridge.fetchEntity("folio", id);
+  if (!row?.data?.masterFolioId) throw fail("SPLIT_FOLIO_NOT_FOUND", "The requested split folio does not exist.");
+  const existing = Array.isArray(row.data.paymentRows) ? row.data.paymentRows : [];
+  const duplicate = existing.find(payment => payment.idempotencyKey === key || (ref && payment.reference === ref));
+  if (duplicate) return Object.freeze({ duplicate: true, payment: clone(duplicate), folioVersion: row.version });
+  const paid = Number(row.data.paidPaise || 0), due = Number(row.data.balanceDuePaise ?? row.data.allocationTotalPaise ?? 0);
+  if (!Number.isSafeInteger(paid) || !Number.isSafeInteger(due) || amount > due) throw fail("SPLIT_FOLIO_OVERPAYMENT", "Payment exceeds the split folio outstanding balance.");
+  const nextPaid = paid + amount, nextDue = due - amount;
+  const payment = Object.freeze({ id: "split-payment-" + key, idempotencyKey: key, amountPaise: amount, method: paymentMethod, reference: ref, at });
+  const ledgerId = "split-payment-ledger-" + key, auditId = "split-payment-audit-" + key;
+  const payload = eventPayload("folio.split_payment_posted", { folioId: id, masterFolioId: row.data.masterFolioId, amountPaise: amount, method: paymentMethod, reference: ref, idempotencyKey: key }, at);
+  await bridge.mutateEntities([
+    { entityType: "folio", entityId: id, expectedVersion: row.version, eventType: "folio.split_payment_posted", eventPayload: payload,
+      mutate: entity => Object.assign(entity, { paymentRows: [...existing, clone(payment)], paidPaise: nextPaid, balanceDuePaise: nextDue, updatedAt: at, status: nextDue === 0 ? "PAID" : "PARTIALLY_PAID" }) },
+    { entityType: "ledger", entityId: ledgerId, expectedVersion: 0, eventType: "ledger.split_payment_posted", eventPayload: payload,
+      mutate: entity => Object.assign(entity, { id: ledgerId, kind: "split_folio_payment", folioId: id, masterFolioId: row.data.masterFolioId, ...clone(payment) }) },
+    { entityType: "audit", entityId: auditId, expectedVersion: 0, eventType: "audit.split_payment_posted", eventPayload: payload,
+      mutate: entity => Object.assign(entity, { id: auditId, action: "split_folio_payment_posted", folioId: id, masterFolioId: row.data.masterFolioId, ...clone(payment) }) }
+  ]);
+  const saved = await bridge.fetchEntity("folio", id);
+  const stored = saved?.data?.paymentRows?.find(item => item.idempotencyKey === key);
+  if (!stored || saved.data.balanceDuePaise !== nextDue) throw fail("SPLIT_PAYMENT_READBACK_FAILED", "Split-folio payment could not be verified.");
+  return Object.freeze({ duplicate: false, payment: clone(stored), folioVersion: saved.version, paidPaise: nextPaid, balanceDuePaise: nextDue });
 }
