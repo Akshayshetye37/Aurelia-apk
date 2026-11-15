@@ -724,6 +724,7 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 import android.webkit.JavascriptInterface;
 import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
+import com.aurelia.pms.printer.AureliaPrinterPlugin;
 import com.aurelia.pms.security.PaymentDeviceKeyStore;
 import com.aurelia.pms.security.PaymentDeviceClient;
 import com.google.firebase.auth.FirebaseAuth;
@@ -771,6 +772,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   @Override public void onCreate(Bundle savedInstanceState) {
     // Explicit registration is required: the custom plugin is not discovered by package scanning.
     registerPlugin(CapacitorPmsStoragePlugin.class);
+    registerPlugin(AureliaPrinterPlugin.class);
     super.onCreate(savedInstanceState);
     // PMS guest, folio, payment and recovery screens can expose sensitive records.
     getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
@@ -1858,6 +1860,12 @@ console.log('Installed SAF backup, Android Photo Picker, reusable Google ML Kit 
 // Real SQLite instrumentation tests are copied into the generated Android project.
 // These tests exercise LocalPmsRepository itself; JavaScript fake-plugin tests do not
 // count as native SQLite evidence.
+const printerTemplate = path.join(androidDir, 'templates', 'printer', 'AureliaPrinterPlugin.kt');
+if (!fs.existsSync(printerTemplate)) throw new Error('AureliaPrinterPlugin.kt template is missing.');
+const printerSourceDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms', 'printer');
+fs.mkdirSync(printerSourceDir, { recursive: true });
+fs.copyFileSync(printerTemplate, path.join(printerSourceDir, 'AureliaPrinterPlugin.kt'));
+
 const instrumentationTemplate = path.join(androidDir, 'templates', 'instrumentation', 'LocalPmsRepositoryInstrumentedTest.java');
 if (!fs.existsSync(instrumentationTemplate)) throw new Error('LocalPmsRepository instrumentation template is missing.');
 const instrumentationSourceDir = path.join(androidDir, 'app', 'src', 'androidTest', 'java', 'com', 'aurelia', 'pms');

@@ -42,17 +42,18 @@ export class LanPrinterAdapter extends PrinterAdapter {
     }
   }
 
-  async trust(deviceId, { host, port = 9100, userConfirmed = false } = {}) {
-    if (typeof deviceId !== 'string' || !/^[A-Za-z0-9_-]{8,128}$/.test(deviceId) ||
-        typeof host !== 'string' || port !== 9100 || userConfirmed !== true) {
-      return { ok: false, error: 'explicit_printer_trust_required' };
+  async trust(_candidateId, { host, port = 9100 } = {}) {
+    if (typeof host !== 'string' || port !== 9100) {
+      return { ok: false, error: 'invalid_endpoint' };
     }
     const endpoint = validatePrinterEndpoint({ host, port, trustedByUser: true });
     if (!endpoint.ok) return { ok: false, error: endpoint.error };
     try {
-      const result = await this.native.trustLanPrinter({ deviceId, host: endpoint.value.host, port: endpoint.value.port, userConfirmed: true });
-      return result?.ok === true && result.trusted === true
-        ? { ok: true, deviceId, trusted: true }
+      // Native Android displays the confirmation UI and creates the trust record.
+      const result = await this.native.trustLanPrinter({ host: endpoint.value.host, port: endpoint.value.port });
+      return result?.ok === true && result.trusted === true &&
+        typeof result.deviceId === 'string' && /^lan_[a-f0-9]{64}$/.test(result.deviceId)
+        ? { ok: true, deviceId: result.deviceId, trusted: true }
         : { ok: false, error: safeError(result) };
     } catch (error) {
       return { ok: false, error: safeError(error) };
@@ -91,7 +92,10 @@ export class LanPrinterAdapter extends PrinterAdapter {
     try {
       const result = await this.native.printLan({
         deviceId: device.deviceId,
-        request: request.value
+        requestId: request.value.requestId,
+        kind: request.value.kind,
+        copies: request.value.copies,
+        document: request.value.document
       });
       const status = ['accepted', 'printed', 'uncertain', 'failed'].includes(result?.status)
         ? result.status : 'uncertain';
