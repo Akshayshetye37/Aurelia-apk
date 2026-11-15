@@ -219,7 +219,7 @@ export async function createSplitFolio({
       bridge.listEntities("ledger")
     ]);
     if (childRow) throw fail("SPLIT_FOLIO_ALREADY_EXISTS", "The split folio ID already exists.");
-    if (masterRow?.data?.bookingId && String(masterRow.data.bookingId) !== bookingKey) {
+    if (masterRow?.data?.invoiceIssued) throw fail("MASTER_INVOICE_ALREADY_ISSUED", "A split cannot be created after the master tax invoice has been issued.");\n    if (masterRow?.data?.bookingId && String(masterRow.data.bookingId) !== bookingKey) {
       throw fail("FOLIO_BOOKING_MISMATCH", "The master folio belongs to another booking.");
     }
     const used = new Map();
