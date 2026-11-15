@@ -46,6 +46,21 @@ export function validateFeatureRegistry(registry, changedFiles = []) {
   return { features: registry.features.length, verified, locked, changedFiles: changedFiles.length };
 }
 
+export function validateEvidenceFreshness(feature, changedSinceEvidence = []) {
+  if (!feature || !['verified', 'locked'].includes(feature.status)) return true;
+  const stale = changedSinceEvidence.filter(changed =>
+    (feature.files || []).some(path =>
+      changed === path || changed.startsWith(path.endsWith('/') ? path : path + '/')
+    )
+  );
+  if (stale.length) {
+    const error = new Error('verified_feature_evidence_stale:' + feature.id);
+    error.staleFiles = stale;
+    throw error;
+  }
+  return true;
+}
+
 export function validateRegistryEvolution(baseRegistry, currentRegistry) {
   const current = new Map((currentRegistry?.features || []).map(feature => [feature.id, feature]));
   for (const prior of baseRegistry?.features || []) {
@@ -79,6 +94,7 @@ async function main() {
   for (const feature of registry.features.filter(item => item.status !== 'unverified')) {
     const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', feature.evidence.sha, headSha]);
     if (ancestor.status !== 0) throw new Error('feature_evidence_not_in_candidate_history:' + feature.id);
+    validateEvidenceFreshness(feature, changedPaths(feature.evidence.sha, headSha));
   }
   process.stdout.write('FEATURE_LOCK_GUARD_PASSED ' + JSON.stringify(result) + '\n');
 }
