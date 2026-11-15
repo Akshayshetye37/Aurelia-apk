@@ -623,3 +623,21 @@ test('provider capture mismatch is rejected before local receipt acceptance', as
     /provider_capture_binding_mismatch/);
   assert.equal((await s.db.get('paymentIntents/' + intentId)).accountingStatus, 'AWAITING_LOCAL_RECEIPT');
 });
+
+
+test('receipt commit fails closed when the atomic transaction boundary is unavailable', async () => {
+  const s = setup();
+  const intentId = seedCapturedIntent(s.db);
+  const receipt = receiptFixture({ intentId });
+  const runTransaction = s.db.runTransaction;
+  s.db.runTransaction = undefined;
+  await assert.rejects(s.repo.acceptReceiptAtomically({
+    receipt, expectedIntent: { ...receipt }, acceptedAt: '2026-11-15T12:01:00.000Z'
+  }), /runTransaction/);
+  const receiptPath = 'paymentAccountingReceipts/' + createHash('sha256').update(receipt.receiptId).digest('hex');
+  assert.equal(await s.db.get(receiptPath), undefined);
+  s.db.runTransaction = runTransaction;
+  assert.deepEqual(await s.repo.acceptReceiptAtomically({
+    receipt, expectedIntent: { ...receipt }, acceptedAt: '2026-11-15T12:01:00.000Z'
+  }), { accepted: true, duplicate: false });
+});
