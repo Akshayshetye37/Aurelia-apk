@@ -40,13 +40,13 @@ jobs:
           java-version: '21'
 
       - name: Install Node dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Install payment backend dependencies
         run: npm --prefix payment-backend install --no-audit --no-fund
 
       - name: Run PMS regression tests
-        run: npm test
+        run: npm run test:ci
 
       - name: Check payment backend syntax and security contracts
         run: |
