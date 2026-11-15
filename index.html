@@ -574,7 +574,7 @@ async function commitSplitFolio(i){
  if(!allocations.length){toast('Select at least one charge');return}
  try{
   const childId='folio-split-'+b.id+'-'+(globalThis.crypto?.randomUUID?.()||Date.now().toString(36));
-  const result=await window.AureliaFolioAccounting.createSplit({masterFolioId:pending.folioId,childFolioId:childId,bookingId:String(b.id),guest,sourceCharges:pending.sourceCharges,allocations,reason:'separate_guest_billing'});
+  const result=await window.AureliaFolioAccounting.createSplit({masterFolioId:pending.folioId,childFolioId:childId,bookingId:String(b.id),guest,masterChargeLines:pending.sourceCharges,allocations,reason:'separate_guest_billing'});
   window.AureliaPendingSplit=null;
   await inv(i,childId,result.folio);
  }catch(error){toast(error.message||'Split folio transaction failed')}
