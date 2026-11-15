@@ -178,7 +178,7 @@ export async function issueFolioInvoice({
  * available on the master folio. A master version check serializes competing splits.
  */
 export async function createSplitFolio({
-  bridge, masterFolioId, childFolioId, bookingId, guest, allocations,
+  bridge, masterFolioId, childFolioId, bookingId, guest, masterChargeLines = null, allocations,
   reason = "corporate_reimbursement", now = () => new Date().toISOString(),
   maxRetries = 6
 } = {}) {
@@ -210,7 +210,7 @@ export async function createSplitFolio({
     if (masterRow.data?.bookingId && String(masterRow.data.bookingId) !== bookingKey) {
       throw fail("FOLIO_BOOKING_MISMATCH", "The master folio belongs to another booking.");
     }
-    const canonicalCharges = Array.isArray(masterRow.data?.chargeLines) ? masterRow.data.chargeLines : null;
+    const canonicalCharges = Array.isArray(masterRow?.data?.chargeLines) ? masterRow.data.chargeLines :\n      (!masterRow && Array.isArray(masterChargeLines) ? masterChargeLines : null);
     if (!canonicalCharges) throw fail("SPLIT_CANONICAL_CHARGES_MISSING", "Split folios require canonical charge lines on the master folio; caller-supplied charges are not trusted.");
     const sourceMap = new Map(canonicalCharges.map((charge, index) => {
       const id = text(charge?.id) || "legacy-charge-" + index;
@@ -252,7 +252,7 @@ export async function createSplitFolio({
     }, issuedAt);
     const changes = [
       {
-        entityType: "folio", entityId: masterId, expectedVersion: masterRow.version,
+        entityType: "folio", entityId: masterId, expectedVersion: existingVersion(masterRow),
         eventType: "folio.split_allocated", eventPayload: payload,
         mutate: entity => Object.assign(entity, {
           id: masterId, bookingId: bookingKey,
