@@ -5,6 +5,7 @@ const unavailable = async () => {
 export class AureliaPrinterWeb {
   discoverLan = unavailable;
   trustLanPrinter = unavailable;
+  calibrateLanPrinter = unavailable;
   verifyLanCapabilities = unavailable;
   printLan = unavailable;
   cancelJob = unavailable;
