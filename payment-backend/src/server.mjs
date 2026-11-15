@@ -720,64 +720,151 @@ app.post('/v1/payments/intents/:intentId/refunds', requireTenantAdmin,
         if (liveBlock) return fail(res, liveBlock === 'payment_controls_unavailable' ? 503 : 403, liveBlock);
       }
       if (intent.state !== 'CAPTURED' || typeof intent.providerOrderId !== 'string' ||
-          typeof intent.providerPaymentId !== 'string' || !intent.providerPaymentId) return fail(res, 409, 'captured_payment_required');
+          typeof intent.providerPaymentId !== 'string' || !intent.providerPaymentId) {
+        return fail(res, 409, 'captured_payment_required');
+      }
       const refundKey = crypto.createHash('sha256').update(req.tenant.id + ':' + intent.provider + ':' +
         environment + ':' + intent.providerAccountId + ':' + intentId + ':' + idempotencyKey).digest('hex');
       const refundId = 'rf_' + refundKey.slice(0, 17);
       const refundRef = db.collection('paymentRefunds').doc(refundId);
+      const requested = createRefundRecord({
+        refundId, intentId, tenantId: req.tenant.id, provider: intent.provider,
+        environment, providerOrderId: intent.providerOrderId,
+        providerPaymentId: intent.providerPaymentId,
+        originalAmountMinor: intent.amountMinor, amountMinor, currency: intent.currency,
+        idempotencyKey, requestedBy: req.actor.uid
+      });
       const reservation = await db.runTransaction(async tx => {
         const [currentIntentSnap, priorSnap] = await Promise.all([tx.get(intentRef), tx.get(refundRef)]);
-        if (!currentIntentSnap.exists || currentIntentSnap.data().tenantId !== req.tenant.id) throw new Error('payment_intent_not_found');
+        if (!currentIntentSnap.exists || currentIntentSnap.data().tenantId !== req.tenant.id) {
+          throw new Error('payment_intent_not_found');
+        }
         const currentIntent = currentIntentSnap.data();
         if (priorSnap.exists) {
           const prior = priorSnap.data();
           if (prior.tenantId !== req.tenant.id || prior.intentId !== intentId ||
-              prior.amountMinor !== amountMinor || prior.idempotencyKey !== idempotencyKey) throw new Error('idempotency_key_payload_conflict');
+              prior.amountMinor !== amountMinor || prior.idempotencyKey !== idempotencyKey) {
+            throw new Error('idempotency_key_payload_conflict');
+          }
           return { record: prior, created: false };
         }
         if (currentIntent.state !== 'CAPTURED' || currentIntent.provider !== intent.provider ||
-            currentIntent.providerOrderId !== intent.providerOrderId || currentIntent.providerPaymentId !== intent.providerPaymentId) {
+            currentIntent.providerOrderId !== intent.providerOrderId ||
+            currentIntent.providerPaymentId !== intent.providerPaymentId) {
           throw new Error('captured_payment_binding_changed');
         }
         const reserved = Number(currentIntent.refundReservedMinor || 0);
-        if (!Number.isSafeInteger(reserved) || reserved < 0 || amountMinor > currentIntent.amountMinor - reserved) {
+        if (!Number.isSafeInteger(reserved) || reserved < 0 ||
+            amountMinor > currentIntent.amountMinor - reserved) {
           throw new Error('refund_amount_exceeds_unrefunded_capture');
         }
-        const record = { refundId, tenantId: req.tenant.id, intentId, provider: intent.provider,
-          environment, providerAccountId: intent.providerAccountId, providerOrderId: intent.providerOrderId,
-          providerPaymentId: intent.providerPaymentId, amountMinor, currency: 'INR',
-          idempotencyKey, reason, state: 'DISPATCHING', createdAt: FieldValue.serverTimestamp() };
+        const record = {
+          ...requested,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
+        };
         tx.create(refundRef, record);
-        tx.update(intentRef, { refundReservedMinor: reserved + amountMinor, updatedAt: FieldValue.serverTimestamp() });
+        tx.update(intentRef, {
+          refundReservedMinor: reserved + amountMinor,
+          updatedAt: FieldValue.serverTimestamp()
+        });
         return { record, created: true };
       });
-      let record = reservation.record;
-      const { adapter, state } = await providerAdapterForTenant(req.tenant.id, record.provider, record.environment);
-      const accountField = { razorpay: 'keyId', cashfree: 'appId', payu: 'merchantKey',
-        phonepe: 'clientId', paytm: 'mid', jiopay: 'merchantId' }[record.provider];
-      if (state[accountField] !== record.providerAccountId) return fail(res, 409, 'provider_account_binding_mismatch');
-      if (state.credentialsValidated !== true) return fail(res, 409, 'provider_credentials_not_validated');
-      if (!reservation.created) {
-        if (['SUCCEEDED', 'FAILED'].includes(record.state)) return res.status(200).json(record);
-        // DISPATCHING/UNKNOWN is resolved only by provider status lookup; never dispatch a duplicate refund.
-        const lookupId = record.provider === 'razorpay' ? record.providerRefundId : record.refundId;
-        if (!lookupId) return res.status(202).json({ ...record, status: 'UNKNOWN' });
-        const remote = await adapter.getRefundStatus(refundLookupInput(record));
-        record = await updateRefundEvidence(refundRef, intentRef, remote, record);
-        return res.status(202).json(record);
-      }
-      try {
-        const remote = await adapter.createRefund(refundCreateInput(record, reason));
-        if (record.provider === 'razorpay') record.providerRefundId = remote.refundId;
-        record = await updateRefundEvidence(refundRef, intentRef, remote, record);
-        return res.status(202).json(record);
-      } catch {
-        await refundRef.set({ state: 'UNKNOWN', updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
-        return res.status(202).json({ ...record, state: 'UNKNOWN' });
-      }
+      // Requesting a refund never calls the provider. A separate owner approval
+      // is required before a durable dispatch marker and provider API call.
+      return res.status(202).json({
+        ...reservation.record, reason,
+        approvalRequired: reservation.record.state === REFUND_STATES.REQUESTED
+      });
     } catch (error) {
       const response = paymentRouteError(error);
       return fail(res, response.status || 409, response.error || 'refund_request_failed');
+    }
+  });
+
+app.post('/v1/payments/intents/:intentId/refunds/:refundId/approve', requireTenantAdmin,
+  async (req, res) => {
+    const { intentId, refundId } = req.params;
+    if (!/^[0-9a-f-]{36}$/i.test(intentId || '') || !/^rf_[a-f0-9]{17}$/.test(refundId || '')) {
+      return fail(res, 400, 'invalid_refund_approval');
+    }
+    try {
+      const intentRef = db.collection('paymentIntents').doc(intentId);
+      const refundRef = db.collection('paymentRefunds').doc(refundId);
+      const [intentSnap, refundSnap] = await Promise.all([intentRef.get(), refundRef.get()]);
+      if (!intentSnap.exists || intentSnap.data().tenantId !== req.tenant.id ||
+          !refundSnap.exists || refundSnap.data().tenantId !== req.tenant.id ||
+          refundSnap.data().intentId !== intentId) return fail(res, 404, 'refund_not_found');
+      const original = refundSnap.data();
+      if (req.tenant.role !== 'owner' || original.requestedBy === req.actor.uid) {
+        return fail(res, 403, 'refund_independent_owner_approval_required');
+      }
+      if (original.environment !== adapterEnvironmentOf(original.provider, 'test')) {
+        const liveBlock = await liveCollectionBlockReason(req.tenant.id, original.provider);
+        if (liveBlock) return fail(res, liveBlock === 'payment_controls_unavailable' ? 503 : 403, liveBlock);
+      }
+      const { adapter, state } = await providerAdapterForTenant(req.tenant.id, original.provider, original.environment);
+      const accountField = {
+        razorpay: 'keyId', cashfree: 'appId', payu: 'merchantKey',
+        phonepe: 'clientId', paytm: 'mid', jiopay: 'merchantId'
+      }[original.provider];
+      if (state[accountField] !== original.providerAccountId) return fail(res, 409, 'provider_account_binding_mismatch');
+      if (state.credentialsValidated !== true) return fail(res, 409, 'provider_credentials_not_validated');
+
+      const reservation = await db.runTransaction(async tx => {
+        const [currentRefundSnap, currentIntentSnap] = await Promise.all([tx.get(refundRef), tx.get(intentRef)]);
+        if (!currentRefundSnap.exists || !currentIntentSnap.exists ||
+            currentRefundSnap.data().tenantId !== req.tenant.id ||
+            currentIntentSnap.data().tenantId !== req.tenant.id) throw new Error('refund_not_found');
+        let record = currentRefundSnap.data();
+        if (record.state === REFUND_STATES.REQUESTED) {
+          record = transitionRefund(record, {
+            eventId: 'approve:' + refundId,
+            type: 'approve', payload: { approvedBy: req.actor.uid }
+          }).record;
+        }
+        let dispatch = false;
+        if (record.state === REFUND_STATES.APPROVED) {
+          record = transitionRefund(record, {
+            eventId: 'dispatch:' + refundId, type: 'provider_dispatch_started'
+          }).record;
+          dispatch = true;
+        }
+        if (dispatch || record.state !== currentRefundSnap.data().state) {
+          tx.update(refundRef, { ...record, updatedAt: FieldValue.serverTimestamp() });
+        }
+        return { record, dispatch };
+      });
+
+      let record = reservation.record;
+      if ([REFUND_STATES.PROVIDER_CONFIRMED, REFUND_STATES.LOCAL_REVERSAL_POSTED,
+           REFUND_STATES.RECEIPT_ACCEPTED, REFUND_STATES.FAILED,
+           REFUND_STATES.HUMAN_REVIEW].includes(record.state)) {
+        return res.status(200).json(record);
+      }
+
+      if (reservation.dispatch) {
+        try {
+          const remote = await adapter.createRefund(refundCreateInput(record, original.reason || 'Customer refund'));
+          record = await updateRefundEvidence(refundRef, intentRef, remote, record);
+        } catch {
+          await refundRef.set({
+            providerStatus: 'UNKNOWN',
+            providerDispatchError: 'PROVIDER_OUTCOME_UNKNOWN',
+            updatedAt: FieldValue.serverTimestamp()
+          }, { merge: true }).catch(() => {});
+          return res.status(202).json({ ...record, providerStatus: 'UNKNOWN' });
+        }
+      } else {
+        const lookupId = record.provider === 'razorpay' ? record.providerRefundId : record.refundId;
+        if (!lookupId) return res.status(202).json(record);
+        const remote = await adapter.getRefundStatus(refundLookupInput(record));
+        record = await updateRefundEvidence(refundRef, intentRef, remote, record);
+      }
+      return res.status(202).json(record);
+    } catch (error) {
+      const response = paymentRouteError(error);
+      return fail(res, response.status || 409, response.error || 'refund_approval_failed');
     }
   });
 
@@ -795,21 +882,47 @@ app.get('/v1/payments/intents/:intentId/refunds/:refundId', requireTenantAdmin, 
         !refundSnap.exists || refundSnap.data().tenantId !== req.tenant.id ||
         refundSnap.data().intentId !== intentId) return fail(res, 404, 'refund_not_found');
     let record = refundSnap.data();
-    if (['SUCCEEDED', 'FAILED'].includes(record.state)) return res.json(record);
+    if ([REFUND_STATES.RECEIPT_ACCEPTED, REFUND_STATES.FAILED,
+         REFUND_STATES.LOCAL_REVERSAL_POSTED, REFUND_STATES.HUMAN_REVIEW,
+         REFUND_STATES.REQUESTED, REFUND_STATES.APPROVED].includes(record.state)) {
+      return res.status(200).json(record);
+    }
+    if (record.state === REFUND_STATES.PROVIDER_CONFIRMED) {
+      if (refundRequiresHumanReview(record)) {
+        const next = await db.runTransaction(async tx => {
+          const currentSnap = await tx.get(db.collection('paymentRefunds').doc(refundId));
+          if (!currentSnap.exists || currentSnap.data().state !== REFUND_STATES.PROVIDER_CONFIRMED) return currentSnap.data();
+          const transition = transitionRefund(currentSnap.data(), {
+            eventId: 'human-review:' + refundId, type: 'review_timeout'
+          });
+          tx.update(db.collection('paymentRefunds').doc(refundId), {
+            ...transition.record, humanReviewQueue: true,
+            updatedAt: FieldValue.serverTimestamp()
+          });
+          return transition.record;
+        });
+        return res.status(202).json(next);
+      }
+      return res.status(202).json(record);
+    }
+    if (record.state !== REFUND_STATES.PROVIDER_PENDING) return res.status(202).json(record);
     const { adapter, state } = await providerAdapterForTenant(req.tenant.id, record.provider, record.environment);
-    const accountField = { razorpay: 'keyId', cashfree: 'appId', payu: 'merchantKey',
-      phonepe: 'clientId', paytm: 'mid', jiopay: 'merchantId' }[record.provider];
+    const accountField = {
+      razorpay: 'keyId', cashfree: 'appId', payu: 'merchantKey',
+      phonepe: 'clientId', paytm: 'mid', jiopay: 'merchantId'
+    }[record.provider];
     if (state[accountField] !== record.providerAccountId) return fail(res, 409, 'provider_account_binding_mismatch');
     const lookupId = record.provider === 'razorpay' ? record.providerRefundId : record.refundId;
-    if (!lookupId) return res.status(202).json({ ...record, status: 'UNKNOWN' });
+    if (!lookupId) return res.status(202).json(record);
     const remote = await adapter.getRefundStatus(refundLookupInput(record));
     record = await updateRefundEvidence(db.collection('paymentRefunds').doc(refundId),
       db.collection('paymentIntents').doc(intentId), remote, record);
-    return res.status(200).json(record);
+    return res.status(202).json(record);
   } catch {
     return fail(res, 503, 'refund_status_unavailable');
   }
 });
+
 
 app.get('/v1/payments/capabilities', requireTenantPaymentActor, async (req, res) => {
   const activeSelection = await readActiveProvider({ db, tenantId: req.tenant.id });
