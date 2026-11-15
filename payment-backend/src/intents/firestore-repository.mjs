@@ -308,6 +308,7 @@ export class FirestorePaymentRepository {
     }
     const observedAt = this.clock().toISOString();
     let nextState = record.state;
+    let accountingStatus = record.accountingStatus || 'PENDING';
     await this.db.runTransaction(async tx => {
       const currentSnap = await tx.get(intentRef);
       if (!currentSnap.exists || currentSnap.data().tenantId !== tenantId) {
@@ -321,13 +322,23 @@ export class FirestorePaymentRepository {
       }
       if (['CAPTURED', 'FAILED_TO_INITIATE'].includes(current.state)) {
         nextState = current.state;
+        if (current.state === 'CAPTURED' &&
+            !['AWAITING_LOCAL_RECEIPT', 'RECEIPT_ACCEPTED'].includes(current.accountingStatus)) {
+          accountingStatus = 'AWAITING_LOCAL_RECEIPT';
+          tx.update(intentRef, { accountingStatus, updatedAt: observedAt });
+        } else {
+          accountingStatus = current.accountingStatus || accountingStatus;
+        }
         return;
       }
       nextState = transitionIntent(current.state, {
         type: 'provider_status', verified: true, bindingVerified: true, status: providerState
       });
+      accountingStatus = nextState === 'CAPTURED' && current.accountingStatus !== 'RECEIPT_ACCEPTED'
+        ? 'AWAITING_LOCAL_RECEIPT' : (current.accountingStatus || 'PENDING');
       tx.update(intentRef, {
         state: nextState,
+        ...(nextState === 'CAPTURED' ? { accountingStatus } : {}),
         providerPaymentId: remote.paymentId == null ? current.providerPaymentId || null : String(remote.paymentId),
         providerStatusEvidence: {
           provider: record.provider, environment: record.environment,
@@ -349,7 +360,7 @@ export class FirestorePaymentRepository {
       amountMinor: record.amountMinor, currency: record.currency,
       providerOrderId: record.providerOrderId,
       providerPaymentId: remote.paymentId == null ? record.providerPaymentId || null : String(remote.paymentId),
-      accountingStatus: record.accountingStatus || 'PENDING',
+      accountingStatus,
       accountingBlockReason: record.accountingBlockReason || null,
       providerStatus: remote.paymentStatus || remote.orderStatus || 'unknown',
       reconciledAt: observedAt
