@@ -5,7 +5,7 @@ import { indexedDB } from "fake-indexeddb";
 import { IndexedDbPmsRepository } from "../src/storage/indexeddb-pms-repository.mjs";
 import { PmsRepositoryBridge } from "../src/storage/pms-repository-bridge.mjs";
 import {
-  buildRemainingFolioInvoice, buildSplitFolioInvoice, createSplitFolio, financialYearFor, issueFolioInvoice, reconcileLegacyPaymentTotals
+  buildRemainingFolioInvoice, buildSplitFolioInvoice, createSplitFolio, financialYearFor, issueFolioInvoice, reconcileLegacyPaymentTotals, recordSplitFolioPayment
 } from "../src/folios/folio-accounting-service.mjs";
 
 let fixtureNumber = 0;
@@ -175,4 +175,33 @@ test("remaining master invoice excludes amounts assigned to split folios", () =>
   assert.equal(remaining.totals.grossMinor, 11000);
   assert.equal(remaining.lineItems.find(x => x.id === "room-night-1").grossMinor, 6000);
   assert.equal(remaining.lineItems.find(x => x.id === "food-1").grossMinor, 5000);
+});
+
+test("split folio payment posts atomically, idempotently and never overpays", async () => {
+  const { bridge } = fixture();
+  await createSplitFolio({
+    bridge, masterFolioId: "master-payment", childFolioId: "child-payment",
+    bookingId: "booking-payment", sourceCharges: [{ id: "line-1", amount: 100 }],
+    allocations: [{ chargeId: "line-1", amountPaise: 10000 }],
+    now: () => "2026-11-16T12:00:00.000Z"
+  });
+  const input = {
+    bridge, folioId: "child-payment", amountPaise: 4000, method: "UPI",
+    reference: "UTR-SPLIT-1", idempotencyKey: "split-payment-1",
+    verificationConfirmed: true, now: () => "2026-11-16T12:01:00.000Z"
+  };
+  const first = await recordSplitFolioPayment(input);
+  const duplicate = await recordSplitFolioPayment(input);
+  assert.equal(first.duplicate, false);
+  assert.equal(duplicate.duplicate, true);
+  assert.equal(first.balanceDuePaise, 6000);
+  const saved = await bridge.fetchEntity("folio", "child-payment");
+  assert.equal(saved.data.paymentRows.length, 1);
+  assert.equal(saved.data.paidPaise, 4000);
+  assert.equal(saved.data.balanceDuePaise, 6000);
+  assert.ok(await bridge.fetchEntity("ledger", "split-payment-ledger-split-payment-1"));
+  assert.ok(await bridge.fetchEntity("audit", "split-payment-audit-split-payment-1"));
+  await assert.rejects(recordSplitFolioPayment({
+    ...input, amountPaise: 7000, reference: "UTR-SPLIT-2", idempotencyKey: "split-payment-2"
+  }), error => error.code === "SPLIT_FOLIO_OVERPAYMENT");
 });
