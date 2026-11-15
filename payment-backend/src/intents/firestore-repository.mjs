@@ -53,6 +53,15 @@ function validCheckout(provider, checkout) {
 }
 
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
+function stableJson(value) {
+  if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
+  if (value && typeof value === 'object') {
+    return '{' + Object.keys(value).sort().map(key =>
+      JSON.stringify(key) + ':' + stableJson(value[key])
+    ).join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
 export const paymentFolioDocumentId = (tenantId, folioId) => digest(tenantId + ':' + folioId);
 
 function validatePayload(payload) {
@@ -124,7 +133,7 @@ export class FirestorePaymentRepository {
     const intentRef = this.db.collection('paymentIntents').doc(receipt.intentId);
     const receiptRef = this.db.collection('paymentAccountingReceipts').doc(digest(receipt.receiptId));
     const intentReceiptRef = this.db.collection('paymentIntentReceiptLocks').doc(digest(receipt.intentId));
-    const receiptHash = digest(JSON.stringify(receipt));
+    const receiptHash = digest(stableJson(receipt));
 
     return this.db.runTransaction(async tx => {
       const [intentSnap, receiptSnap, intentReceiptSnap] = await Promise.all([
