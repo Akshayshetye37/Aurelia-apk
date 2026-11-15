@@ -31,9 +31,17 @@ function toBase64Url(value) {
  * read back from the authoritative local PMS journal. This module does not
  * post payments, contact the backend, or enable Pay Bridge.
  */
+async function deterministicReceiptId(intentId, ledgerEntryId, cryptoImpl = globalThis.crypto) {
+  if (!cryptoImpl?.subtle) fail('LOCAL_RECEIPT_CRYPTO_UNAVAILABLE');
+  const bytes = new TextEncoder().encode(intentId + ':' + ledgerEntryId);
+  const digest = await cryptoImpl.subtle.digest('SHA-256', bytes);
+  const hex = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  return 'rcpt_' + hex.slice(0, 48);
+}
+
 export async function createLocalLedgerReceipt({
   intent, device, ledgerEntry, readBack, sign,
-  now = () => new Date(), createId = () => globalThis.crypto.randomUUID()
+  now = () => new Date(), createId = null, cryptoImpl = globalThis.crypto
 } = {}) {
   if (!intent || typeof intent !== 'object' || !UUID.test(intent.intentId || '') ||
       !ID.test(intent.tenantId || '') || !ID.test(intent.folioId || '') ||
@@ -71,7 +79,7 @@ export async function createLocalLedgerReceipt({
   }
 
   const unsigned = {
-    receiptId: createId(),
+    receiptId: createId ? createId() : await deterministicReceiptId(intent.intentId, ledgerEntry.id, cryptoImpl),
     intentId: intent.intentId,
     tenantId: intent.tenantId,
     folioId: intent.folioId,
@@ -98,4 +106,28 @@ export async function createLocalLedgerReceipt({
   if (!ID.test(unsigned.receiptId)) fail('LOCAL_RECEIPT_ID_INVALID');
   const signature = toBase64Url(await sign(canonicalBytes(unsigned)));
   return Object.freeze({ ...unsigned, signature });
+}
+
+
+/**
+ * Reuse the same signed receipt across retries and process restarts. The
+ * deterministic receipt ID is derived from intent + local journal entry;
+ * an existing outbox record is returned without re-signing or changing expiry.
+ */
+export async function createAndQueueLocalLedgerReceipt({
+  outbox, intent, device, ledgerEntry, readBack, sign,
+  now = () => new Date(), cryptoImpl = globalThis.crypto
+} = {}) {
+  if (!outbox || typeof outbox.get !== 'function' || typeof outbox.enqueue !== 'function') {
+    fail('LOCAL_RECEIPT_OUTBOX_REQUIRED');
+  }
+  const receiptId = await deterministicReceiptId(intent?.intentId, ledgerEntry?.id, cryptoImpl);
+  const existing = await outbox.get(receiptId);
+  if (existing) return { receipt: existing.receipt, record: existing, duplicate: true };
+  const receipt = await createLocalLedgerReceipt({
+    intent, device, ledgerEntry, readBack, sign, now,
+    createId: () => receiptId, cryptoImpl
+  });
+  const queued = await outbox.enqueue(receipt);
+  return { receipt, record: queued.record, duplicate: queued.duplicate };
 }
