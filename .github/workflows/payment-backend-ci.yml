@@ -8,6 +8,12 @@ on:
       - 'work/**'
     paths:
       - "payment-backend/**"
+      - "src/payments/local-ledger-receipt.mjs"
+      - "src/storage/indexeddb-local-ledger-receipt-outbox.mjs"
+      - "tests/local-ledger-receipt*.test.mjs"
+      - "scripts/verify-pms-test-suite.mjs"
+      - "package.json"
+      - "package-lock.json"
       - ".github/workflows/payment-backend-ci.yml"
   pull_request:
     branches:
