@@ -90,7 +90,7 @@ test("split folio preserves master ledger and creates separately billable child 
   await bridge.mutateEntity({
     entityType: "folio", entityId: "folio-1", expectedVersion: 0,
     eventType: "folio.created",
-    mutate: entity => Object.assign(entity, { id: "folio-1", bookingId: "booking-1", paymentRows: [] })
+    mutate: entity => Object.assign(entity, { id: "folio-1", bookingId: "booking-1", paymentRows: [], chargeLines: [{ id: "room-night-1", description: "Room night", amountPaise: 10000 }] })
   });
   const result = await createSplitFolio({
     bridge, masterFolioId: "folio-1", childFolioId: "folio-1-A",
