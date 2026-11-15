@@ -5,9 +5,12 @@ import { createLocalLedgerReceiptService } from '../src/intents/local-ledger-rec
 
 const NOW = Date.parse('2026-11-15T12:00:00.000Z');
 const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
-const canonical = value => JSON.stringify(Object.fromEntries(
-  Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
-));
+const canonical = value => {
+  if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
+  if (value && typeof value === 'object') return '{' + Object.keys(value).sort()
+    .map(key => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}';
+  return JSON.stringify(value);
+};
 
 function fixture(overrides = {}) {
   const unsigned = {
@@ -70,7 +73,7 @@ function setup({ intentOverrides = {}, attestationOverrides = {}, providerOverri
       amountMinor: 12500, currency: 'INR', ...providerOverrides
     })
   });
-  return { service, writes, intent };
+  return { service, writes, intent, repository };
 }
 
 test('accepts a captured payment only after signed local journal post and read-back proof', async () => {
@@ -86,7 +89,8 @@ test('accepts a captured payment only after signed local journal post and read-b
 
 test('rejects forged signatures without consuming receipt identity', async () => {
   const { service, writes } = setup();
-  const forged = { ...fixture(), ledgerEntryHash: 'b'.repeat(64) };
+  const forged = fixture();
+  forged.ledgerEntryHash = 'b'.repeat(64);
   await assert.rejects(service.accept(forged), /receipt_signature_invalid/);
   assert.equal(writes.length, 0);
 });
@@ -149,9 +153,9 @@ test('validates before atomically consuming receipt ID; a rejected attempt leave
 });
 
 test('rejects an already accepted intent receipt and never posts a second local entry', async () => {
-  const { service, writes } = setup();
+  const { service, writes, repository } = setup();
   // The repository's atomic transaction reports the existing intent receipt.
-  service.repository.acceptReceiptAtomically = async () => ({ accepted: true, duplicate: true });
+  repository.acceptReceiptAtomically = async () => ({ accepted: true, duplicate: true });
   const result = await service.accept(fixture());
   assert.deepEqual(result, { accepted: true, duplicate: true });
   assert.equal(writes.length, 0);
