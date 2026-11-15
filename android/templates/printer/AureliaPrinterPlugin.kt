@@ -113,7 +113,7 @@ class AureliaPrinterPlugin : Plugin() {
         if (record == null) { call.reject("not_trusted"); return }
         executor.execute {
             val peer = resolvePinnedPeer(record)
-            if (peer == null) { call.reject("peer_address_changed_or_public"); return@execute }
+            if (peer == null) { store.finishJob(ledgerKey, "failed", false, "peer_address_changed_or_public"); call.reject("peer_address_changed_or_public"); return@execute }
             val socket = java.net.Socket()
             try {
                 socket.connect(java.net.InetSocketAddress(peer, 9100), 5000)
@@ -170,6 +170,18 @@ class AureliaPrinterPlugin : Plugin() {
         if (!record.verified || record.profileHash.isNullOrBlank()) { call.reject("printer_profile_calibration_required"); return }
         val validation = DocumentValidator.validate(kind, doc)
         if (!validation.ok) { call.reject(validation.error ?: "invalid_document"); return }
+        val ledgerKey = id + "|" + requestId
+        val prior = try { store.claimJob(ledgerKey) } catch (_: Exception) { call.reject("job_ledger_unavailable"); return }
+        if (prior != null) {
+            if (prior.optString("error") == "delivery_in_progress") {
+                call.resolve(JSObject().put("ok", false).put("status", "uncertain").put("requestId", requestId)
+                    .put("duplicate", true).put("error", "delivery_in_progress"))
+            } else {
+                call.resolve(JSObject().put("ok", prior.optBoolean("ok", false)).put("status", prior.optString("status", "uncertain"))
+                    .put("requestId", requestId).put("duplicate", true).put("error", prior.optString("error", "")))
+            }
+            return
+        }
         executor.execute {
             val peer = resolvePinnedPeer(record)
             if (peer == null) { call.reject("peer_address_changed_or_public"); return@execute }
@@ -180,12 +192,20 @@ class AureliaPrinterPlugin : Plugin() {
                 socket.connect(java.net.InetSocketAddress(peer, 9100), 5000)
                 val bytes = EscPosRenderer.render(kind ?: "", validation.normalizedDocument!!, copies)
                 val completed = writeWithHardTimeout(socket, bytes)
+                val error = if (completed) "printer_acknowledgement_unavailable" else "write_interrupted_delivery_uncertain"
+                store.finishJob(ledgerKey, "uncertain", true, error)
                 call.resolve(JSObject().put("ok", true).put("status", "uncertain")
-                    .put("requestId", requestId)
-                    .put("error", if (completed) "printer_acknowledgement_unavailable" else "write_interrupted_delivery_uncertain"))
+                    .put("requestId", requestId).put("error", error))
             } catch (_: Exception) {
-                call.resolve(JSObject().put("ok", false).put("status", "failed")
-                    .put("requestId", requestId).put("error", "connection_or_render_failed"))
+                if (socket.isConnected) {
+                    store.finishJob(ledgerKey, "uncertain", true, "delivery_uncertain_after_connect")
+                    call.resolve(JSObject().put("ok", true).put("status", "uncertain").put("requestId", requestId)
+                        .put("error", "delivery_uncertain_after_connect"))
+                } else {
+                    store.finishJob(ledgerKey, "failed", false, "connection_failed_before_write")
+                    call.resolve(JSObject().put("ok", false).put("status", "failed")
+                        .put("requestId", requestId).put("error", "connection_failed_before_write"))
+                }
             } finally {
                 activeSockets.remove(requestId)
                 try { socket.close() } catch (_: Exception) {}
