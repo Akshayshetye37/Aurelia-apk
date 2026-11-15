@@ -83,15 +83,23 @@ export function buildFolioInvoice({
   }
   const profiles = Array.isArray(settings.folioTaxProfiles) ? settings.folioTaxProfiles : [];
   const nights = Math.max(1, Math.trunc(Number(booking.out) - Number(booking.in)) || 1);
-  const charges = [
-    normalizeCharge({
-      id: "room-" + booking.id,
-      description: "Room accommodation · " + text(booking.room),
-      amount: roomCharge,
+  const roomTotalMinor = money(roomCharge, "Room charge");
+  const roomDailyBase = Math.floor(roomTotalMinor / nights);
+  let roomDailyRemainder = roomTotalMinor - roomDailyBase * nights;
+  const roomLines = Array.from({ length: nights }, (_, index) => {
+    const dailyMinor = roomDailyBase + (roomDailyRemainder-- > 0 ? 1 : 0);
+    return normalizeCharge({
+      id: "room-" + booking.id + "-" + index,
+      date: dateFromOffset(Number(booking.in) + index),
+      description: "Room accommodation · Room " + text(booking.room),
+      amount: dailyMinor / 100,
       category: "room",
       taxProfileId: booking.roomTaxProfileId || settings.roomTaxProfileId
-    }, 0, profiles),
-    ...(Array.isArray(booking.ch) ? booking.ch : []).map((row, index) => normalizeCharge(row, index + 1, profiles))
+    }, index, profiles);
+  });
+  const charges = [
+    ...roomLines,
+    ...(Array.isArray(booking.ch) ? booking.ch : []).map((row, index) => normalizeCharge(row, nights + index, profiles))
   ];
   const rawLines = charges.map(line => {
     const tax = taxForLine(line.amountMinor, line.taxProfile);
