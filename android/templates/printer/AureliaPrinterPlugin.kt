@@ -113,7 +113,7 @@ class AureliaPrinterPlugin : Plugin() {
         if (record == null) { call.reject("not_trusted"); return }
         executor.execute {
             val peer = resolvePinnedPeer(record)
-            if (peer == null) { store.finishJob(ledgerKey, "failed", false, "peer_address_changed_or_public"); call.reject("peer_address_changed_or_public"); return@execute }
+            if (peer == null) { call.reject("peer_address_changed_or_public"); return@execute }
             val socket = java.net.Socket()
             try {
                 socket.connect(java.net.InetSocketAddress(peer, 9100), 5000)
@@ -223,7 +223,10 @@ class AureliaPrinterPlugin : Plugin() {
 
     override fun handleOnDestroy() {
         activeSockets.values.forEach { try { it.close() } catch (_: Exception) {} }
-        activeSockets.values.forEach { try { it.close() } catch (_: Exception) {} }; activeSockets.clear(); executor.shutdownNow(); watchdog.shutdownNow(); super.handleOnDestroy()
+        activeSockets.clear()
+        executor.shutdownNow()
+        watchdog.shutdownNow()
+        super.handleOnDestroy()
     }
 
     private fun resolvePinnedPeer(record: PrinterTrustStore.Record): InetAddress? {
