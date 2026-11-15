@@ -265,5 +265,5 @@ test('provider-confirmed refunds wait for local reversal and overdue cases enter
   assert.ok(source.includes("REFUND_STATES.RECEIPT_ACCEPTED"));
   assert.ok(source.includes("refundRequiresHumanReview(record)"));
   assert.ok(source.includes("humanReviewQueue: true"));
-  assert.ok(source.includes("PROVIDER_CONFIRMED_LOCAL_REVERSAL_MISSING"));
+  assert.ok(refundStateMachine.includes("PROVIDER_CONFIRMED_LOCAL_REVERSAL_MISSING"));
 });
