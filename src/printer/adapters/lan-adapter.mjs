@@ -1,5 +1,6 @@
 import {
   validatePrintRequest,
+  validatePrinterEndpoint,
   validatePrinterProfile
 } from '../printer-security.mjs';
 import { PrinterAdapter, failedPrintResult } from '../printer-adapter.mjs';
@@ -46,8 +47,10 @@ export class LanPrinterAdapter extends PrinterAdapter {
         typeof host !== 'string' || port !== 9100 || userConfirmed !== true) {
       return { ok: false, error: 'explicit_printer_trust_required' };
     }
+    const endpoint = validatePrinterEndpoint({ host, port, trustedByUser: true });
+    if (!endpoint.ok) return { ok: false, error: endpoint.error };
     try {
-      const result = await this.native.trustLanPrinter({ deviceId, host, port, userConfirmed: true });
+      const result = await this.native.trustLanPrinter({ deviceId, host: endpoint.value.host, port: endpoint.value.port, userConfirmed: true });
       return result?.ok === true && result.trusted === true
         ? { ok: true, deviceId, trusted: true }
         : { ok: false, error: safeError(result) };
