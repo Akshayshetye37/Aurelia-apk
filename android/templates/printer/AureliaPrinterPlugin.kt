@@ -198,6 +198,26 @@ class AureliaPrinterPlugin : Plugin() {
         activeSockets.clear(); executor.shutdownNow(); watchdog.shutdownNow(); super.handleOnDestroy()
     }
 
+    private fun resolvePinnedPeer(record: PrinterTrustStore.Record): InetAddress? {
+        val answers = try { InetAddress.getAllByName(record.host).distinctBy { it.hostAddress } } catch (_: Exception) { return null }
+        if (answers.isEmpty() || answers.size > 16 || answers.any { !isPrivateOrLinkLocal(it) }) return null
+        return answers.firstOrNull { it.address.contentEquals(record.address.address) }
+    }
+
+    private fun writeWithHardTimeout(socket: java.net.Socket, bytes: ByteArray): Boolean {
+        val timedOut = java.util.concurrent.atomic.AtomicBoolean(false)
+        val timeout = watchdog.schedule({
+            timedOut.set(true)
+            try { socket.close() } catch (_: Exception) {}
+        }, 8, java.util.concurrent.TimeUnit.SECONDS)
+        return try {
+            socket.getOutputStream().write(bytes)
+            socket.getOutputStream().flush()
+            !timedOut.get()
+        } catch (_: Exception) { false }
+        finally { timeout.cancel(false) }
+    }
+
     private fun validHostSyntax(host: String): Boolean {
         if (host.length > 253 || host.contains("://") || host.any { it <= ' ' || it in "/@?#[]\\" }) return false
         if (host.matches(Regex("[0-9.]+"))) return host.split('.').size == 4 &&
