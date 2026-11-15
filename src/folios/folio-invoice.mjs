@@ -156,7 +156,7 @@ export function buildFolioInvoice({
       legalName: text(settings.legalName || settings.name),
       address: text(settings.addr),
       phone: text(settings.phone),
-      gstin: text(settings.gstin || settings.tax)
+      gstin: text(settings.gstin)
     }),
     billedTo: Object.freeze({
       name: text(guest?.n || booking.g),
