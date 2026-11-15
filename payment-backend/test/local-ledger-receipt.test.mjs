@@ -91,6 +91,7 @@ test('rejects forged signatures without consuming receipt identity', async () =>
   const { service, writes } = setup();
   const forged = fixture();
   forged.ledgerEntryHash = 'b'.repeat(64);
+  forged.readBackConfirmation.ledgerEntryHash = 'b'.repeat(64);
   await assert.rejects(service.accept(forged), /receipt_signature_invalid/);
   assert.equal(writes.length, 0);
 });
