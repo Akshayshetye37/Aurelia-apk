@@ -411,7 +411,7 @@ test('provider capture is independently fetched and bound before intent becomes 
   const reconciled = await s.repo.reconcilePaymentIntent('user_123', created.intentId);
   assert.equal(reconciled.status, 'CAPTURED');
   assert.equal(reconciled.providerPaymentId, 'pay_123');
-  assert.equal(reconciled.accountingStatus, 'PENDING');
+  assert.equal(reconciled.accountingStatus, 'AWAITING_LOCAL_RECEIPT');
 });
 
 test('capture with mismatched amount or currency is rejected without changing intent state', async () => {
