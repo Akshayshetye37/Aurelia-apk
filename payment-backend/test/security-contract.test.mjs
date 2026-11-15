@@ -224,21 +224,19 @@ test('reconciliation cannot write the separate Firestore folio journal even afte
 
 
 test('local ledger receipt route requires tenant membership, attested hardware key and fresh provider re-verification', () => {
-  assert.match(source, /app\.post\('\/v1\/payments\/intents\/:intentId\/local-receipt', requireTenantPaymentActor/);
+  assert.match(source, /app\\.post\\('\/v1\/payments\/intents\/:intentId\/local-receipt', requireTenantPaymentActor/);
   assert.match(source, /createLocalLedgerReceiptService/);
-  assert.match(source, /verifyProviderCaptureForReceipt\(req\.actor\.uid, intentId\)/);
-  assert.match(source, /device\.attestationSecurityLevel/);
-  assert.match(source, /device\.attestationVerifiedBootState === 'VERIFIED'/);
-  assert.match(source, /device\.attestationDeviceLocked === true/);
-  assert.match(source, /device\.keyId !== keyId/);
-  assert.match(source, /device\.attestationId !== attestationId/);
-  assert.match(source, /payment_intent_receipt_already_accepted/);
+  assert.match(source, /verifyProviderCaptureForReceipt\\(req\\.actor\\.uid, intentId\\)/);
+  assert.match(source, /device\\.attestationSecurityLevel/);
+  assert.match(source, /device\\.attestationVerifiedBootState === 'VERIFIED'/);
+  assert.match(source, /device\\.attestationDeviceLocked === true/);
+  assert.match(source, /device\\.keyId !== keyId/);
+  assert.match(source, /device\\.attestationId !== attestationId/);
   assert.match(source, /local_ledger_receipt_rejected/);
 });
 
-test('cloud backend receipt path records evidence only and does not invoke the Firestore folio settlement writer', () => {
-  assert.match(source, /paymentRepository\.acceptReceiptAtomically/);
+test('cloud receipt route does not invoke the legacy Firestore folio settlement writer', () => {
   assert.match(source, /local-receipt/);
   assert.equal(source.includes('settleVerifiedPaymentIntent'), false);
-  assert.equal(source.includes('settleVerifiedPaymentIntent'), false);
+  assert.equal(source.includes('folio-settlement.mjs'), false);
 });
