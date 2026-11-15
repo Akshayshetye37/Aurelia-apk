@@ -20,10 +20,20 @@ Status: security foundation in progress. This document is a design constraint, n
 - **Office/network printers:** prefer Android PrintManager / platform print services / IPP rather than implementing arbitrary PCL or raw network printing.
 - **Android local-network permission:** when targeting Android 17 / API 37 or later, implement the platform local-network permission flow before NSD/mDNS or direct LAN socket access. Re-check the current target-SDK requirements when wiring the native adapter.
 
+## Semantic print-document contract
+
+The JavaScript boundary currently accepts three strict document variants:
+- `folio-invoice` with an A4 layout, hotel identity, invoice identity, primary guest, itemized folio lines, tax summary, payments and reconciled totals.
+- `thermal-receipt` with a 58 mm or 80 mm layout and the same canonical invoice/folio fields.
+- `kitchen-ticket` with a 58 mm or 80 mm layout, outlet/order identity and bounded item/modifier/note fields.
+
+Money is represented as integer minor units (paise for INR), not floating-point currency values. The validator rejects unknown fields, command/markup payload fields, invalid accounting totals, invalid dates, control characters, unbounded collections and mismatched document kinds. It returns an immutable snapshot so later caller mutation cannot change an accepted job. The document is a print projection only; the caller must build it from the saved canonical invoice/folio and must not accept guest-submitted totals as accounting authority.
+
 ## Native bridge and input validation
 
 - Do not add printer commands to the generic AureliaNative.postMessage command surface.
-- Prefer typed Capacitor plugin methods for printer operations. Keep the bridge limited to a small set of actions (discover, select/trust, test, print, cancel/status); reject unknown keys and unknown enum values.
+- A typed JavaScript Capacitor plugin facade and fail-closed web stub exist. The corresponding native Kotlin plugin is not implemented yet; all web-stub calls reject. Do not enable UI entry points until native methods independently validate input and enforce trust.
+- Keep the native bridge limited to a small set of actions (discover candidates, explicitly trust/select, verify capabilities, print, cancel/status); reject unknown keys and unknown enum values.
 - Validate every request natively even when the JavaScript validator has already accepted it. JavaScript validation is defense in depth, not a security boundary.
 - Never accept raw command bytes, arbitrary URLs, host/port pairs, arbitrary file paths, shell commands or caller-provided HTML from the WebView.
 - Bound document bytes, nesting depth, item counts, string lengths, copies, connection timeouts, response sizes and queued jobs. Fail closed on malformed input, permission denial, disconnects and unsupported capabilities.
@@ -48,4 +58,4 @@ Status: security foundation in progress. This document is a design constraint, n
 
 Automated tests must cover malformed/oversized input, unknown fields, command injection, HTML injection, untrusted/public destinations, DNS rebinding/peer-address validation, port restrictions, permission denial, device spoofing, disconnects, timeouts, duplicate jobs, cancellation, profile mismatch and audit redaction. Android instrumentation tests must cover permission and lifecycle behavior. Physical qualification must record exact printer models, firmware, transport, paper width, DPI, print density, cut/drawer behavior and test evidence.
 
-No universal printer compatibility claim is valid without a qualified model/firmware/transport matrix.
+Current implementation status: semantic schema + JavaScript LAN adapter facade + typed Capacitor JS facade are implemented. LAN discovery, trust persistence, peer-address revalidation, socket I/O, native Kotlin plugin, USB/Bluetooth/BLE transports, document renderers and physical qualification are not implemented. The adapter is deliberately unusable without an injected native implementation.\n\nNo universal printer compatibility claim is valid without a qualified model/firmware/transport matrix.
