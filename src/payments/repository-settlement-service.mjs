@@ -35,6 +35,16 @@ function bookingKey(booking) {
 function sameJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
+
+async function ledgerEntityId(tenantId, idempotencyKey) {
+  if (!globalThis.crypto?.subtle || !globalThis.TextEncoder) {
+    throw fail("LEDGER_IDENTITY_CRYPTO_UNAVAILABLE", "Secure payment ledger identity generation is unavailable.");
+  }
+  const bytes = new TextEncoder().encode(String(tenantId) + "\u0000" + idempotencyKey);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  const hex = Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, "0")).join("");
+  return "payment:" + hex;
+}
 function comparableBooking(value) {
   const copy = clone(value);
   if (copy && typeof copy === "object") {
@@ -87,6 +97,10 @@ export async function settlePaymentToRepository({
   const bookingId = bookingKey(booking);
   const folioId = String(booking.folioId || "booking-" + bookingId);
   const amountPaise = moneyToPaise(amount, "Payment amount");
+  const suppliedLedgerKey = String(idempotencyKey || "").trim();
+  if (suppliedLedgerKey.length > 256 || /[\u0000-\u001f\u007f]/.test(suppliedLedgerKey)) {
+    throw fail("PAYMENT_IDEMPOTENCY_KEY_INVALID", "The payment idempotency key is invalid.");
+  }
   // Flush snapshots queued by the compatibility UI before taking entity
   // versions; otherwise an older queued snapshot could race this transaction.
   if (bridge.compatibilityWrite && typeof bridge.compatibilityWrite.then === "function") {
@@ -132,7 +146,7 @@ export async function settlePaymentToRepository({
     }
     if (String(method || "").toUpperCase() !== "UPI" ||
         moneyToPaise(reviewEvidence.amt, "Evidence amount") !== amountPaise ||
-        String(reviewEvidence.ref || "").trim().replace(/\\s+/g, "").toUpperCase() !==
+        String(reviewEvidence.ref || "").trim().replace(/\s+/g, "").toUpperCase() !==
           String(reference || "").trim().replace(/\\s+/g, "").toUpperCase()) {
       throw fail("PAYMENT_EVIDENCE_BINDING_MISMATCH", "The payment amount, UPI reference and selected evidence do not match.");
     }
@@ -149,7 +163,7 @@ export async function settlePaymentToRepository({
     method,
     reference,
     source,
-    idempotencyKey,
+    idempotencyKey: suppliedLedgerKey || undefined,
     balanceDue: balanceDueFor(workingBooking),
     verificationConfirmed,
     persist: () => {},
@@ -165,21 +179,68 @@ export async function settlePaymentToRepository({
     throw fail("PAYMENT_EVIDENCE_STATE_DIVERGENCE",
       "Evidence is marked approved but no matching canonical payment exists; reconcile before posting.");
   }
+  const normalizedReference = /upi|bank|neft|rtgs|imps|card|wallet/i.test(String(method || ""))
+    ? String(reference || "").trim().replace(/\\s+/g, "").toUpperCase()
+    : String(reference || "").trim();
+  const ledgerKey = String(result.payment?.idempotencyKey || suppliedLedgerKey ||
+    (normalizedReference ? "ref:" + normalizedReference : "")).trim();
+  if (!ledgerKey) {
+    throw fail("PAYMENT_IDEMPOTENCY_KEY_REQUIRED", "A stable payment idempotency key is required before posting.");
+  }
+  const ledgerId = await ledgerEntityId(bridge.context.tenantId, ledgerKey);
+  const committedAt = now();
+  const ledgerEntry = {
+    id: ledgerId,
+    recordType: "AURELIA_FINANCIAL_LEDGER_ENTRY_V1",
+    tenantId: bridge.context.tenantId,
+    propertyId: bridge.context.propertyId,
+    deviceId: bridge.context.deviceId,
+    bookingId,
+    folioId,
+    amountPaise,
+    currency: "INR",
+    transactionType: "PAYMENT_RECEIVED",
+    method: String(result.payment?.m || method || ""),
+    reference: String(result.payment?.r || reference || ""),
+    source: String(result.payment?.source || source),
+    idempotencyKey: ledgerKey,
+    reversalOf: null,
+    createdAt: result.payment?.at || committedAt
+  };
+  const ledgerRow = await bridge.fetchEntity("ledger", ledgerId);
   if (result.duplicate) {
+    const snapshotLedgerEntry = Array.isArray(canonicalState.led)
+      ? canonicalState.led.find(row => row?.id === ledgerId)
+      : null;
+    if (!ledgerRow || !sameJson(ledgerRow.data, ledgerEntry) ||
+        !sameJson(snapshotLedgerEntry, ledgerEntry)) {
+      throw fail("PAYMENT_LEDGER_DIVERGENCE",
+        "The existing payment has no matching immutable ledger entry and recovery projection; reconcile before retrying.");
+    }
     // A duplicate is safe only if the canonical record already contains it.
     if (reviewEvidence && reviewEvidence.st !== "matched") {
       throw fail("PAYMENT_EVIDENCE_STATE_DIVERGENCE",
         "A matching payment exists but its evidence is not marked approved; reconcile the folio before proceeding.");
     }
+    if (Array.isArray(state.led)) state.led.splice(0, state.led.length, ...clone(canonicalState.led || []));
+    else state.led = clone(canonicalState.led || []);
     Object.assign(booking, clone(workingBooking));
     const cacheRefreshed = refreshLegacyCompatibilityCache(legacyStorage, canonicalState);
-    return Object.freeze({ ...result, duplicate: true, canonical: true, cacheRefreshed,
-      bookingVersion: bookingRow?.version ?? 0, folioVersion: folioRow?.version ?? 0 });
+    return Object.freeze({ ...result, duplicate: true, canonical: true, ledger: ledgerRow,
+      cacheRefreshed, bookingVersion: bookingRow?.version ?? 0, folioVersion: folioRow?.version ?? 0 });
   }
 
+  if (ledgerRow) {
+    throw fail("PAYMENT_LEDGER_IDEMPOTENCY_CONFLICT",
+      "The payment idempotency key already has a ledger entry but no matching folio payment; reconcile before posting.");
+  }
+  if (!Array.isArray(canonicalState.led)) canonicalState.led = [];
+  if (canonicalState.led.some(row => row?.id === ledgerId)) {
+    throw fail("PAYMENT_LEDGER_SNAPSHOT_CONFLICT", "The recovery snapshot already contains this ledger identity without a matching repository row.");
+  }
+  canonicalState.led.push(clone(ledgerEntry));
   const paidPaise = moneyToPaise(workingBooking.p || 0, "Updated folio paid total", { allowZero: true });
   const balanceDuePaise = moneyToPaise(balanceDueFor(workingBooking), "Updated folio balance", { allowZero: true });
-  const committedAt = now();
   if (reviewEvidence) {
     reviewEvidence.st = "matched";
     reviewEvidence.b = workingBooking.id;
@@ -198,7 +259,7 @@ export async function settlePaymentToRepository({
     bookingId,
     folioId,
     amountPaise,
-    idempotencyKey: String(idempotencyKey || "").trim() || null,
+    idempotencyKey: ledgerKey,
     evidenceId: evidenceId == null ? null : String(evidenceId)
   };
 
@@ -227,6 +288,14 @@ export async function settlePaymentToRepository({
       })
     },
     {
+      entityType: "ledger",
+      entityId: ledgerId,
+      expectedVersion: 0,
+      eventType: "ledger.payment_posted",
+      eventPayload: snapshotPayload,
+      mutate: entity => Object.assign(entity, clone(ledgerEntry))
+    },
+    {
       entityType: SNAPSHOT_TYPE,
       entityId: SNAPSHOT_ID,
       expectedVersion: snapshotRow?.version ?? 0,
@@ -241,16 +310,18 @@ export async function settlePaymentToRepository({
   ]);
 
   // Exact read-back is mandatory before the UI is told the payment succeeded.
-  const [storedBooking, storedFolio, storedSnapshot] = await Promise.all([
+  const [storedBooking, storedFolio, storedLedger, storedSnapshot] = await Promise.all([
     bridge.fetchEntity("booking", bookingId),
     bridge.fetchEntity("folio", folioId),
+    bridge.fetchEntity("ledger", ledgerId),
     bridge.fetchEntity(SNAPSHOT_TYPE, SNAPSHOT_ID)
   ]);
-  if (!storedBooking || !storedFolio || !storedSnapshot ||
+  if (!storedBooking || !storedFolio || !storedLedger || !storedSnapshot ||
       !sameJson(storedBooking.data, workingBooking) ||
       !sameJson(storedFolio.data.paymentRows, workingBooking.pays || []) ||
       storedFolio.data.paidPaise !== paidPaise ||
       storedFolio.data.balanceDuePaise !== balanceDuePaise ||
+      !sameJson(storedLedger.data, ledgerEntry) ||
       !sameJson(storedSnapshot.data.snapshot, canonicalState)) {
     throw fail("PAYMENT_CANONICAL_READBACK_MISMATCH",
       "Payment transaction committed but exact canonical read-back failed. Stop payment entry and reconcile before retrying.");
@@ -277,6 +348,8 @@ export async function settlePaymentToRepository({
   if (Array.isArray(state.sig) && Array.isArray(canonicalState.sig)) {
     state.sig.splice(0, state.sig.length, ...clone(canonicalState.sig));
   }
+  if (Array.isArray(state.led)) state.led.splice(0, state.led.length, ...clone(canonicalState.led));
+  else state.led = clone(canonicalState.led);
   Object.assign(booking, clone(workingBooking));
 
   return Object.freeze({
@@ -285,10 +358,266 @@ export async function settlePaymentToRepository({
     canonical: true,
     entity: storedBooking,
     folio: storedFolio,
+    ledger: storedLedger,
     snapshotVersion: storedSnapshot.version,
     cacheRefreshed,
     bookingVersion: committed.entities[0].version,
     folioVersion: committed.entities[1].version,
     eventSequence: committed.entities[1].version
+  });
+}
+
+
+/**
+ * Appends a full or partial reversal for an existing local payment.
+ * The original payment row is never edited; the reversal, booking/folio
+ * projections, audit record and recovery snapshot commit in one repository
+ * batch and are read back before the caller reports success.
+ */
+export async function reversePaymentToRepository({
+  bridge,
+  state,
+  booking,
+  balanceDueFor,
+  originalLedgerEntryId,
+  amountPaise,
+  idempotencyKey,
+  reason,
+  legacyStorage = getLegacyCompatibilityStorage(),
+  now = () => new Date().toISOString()
+} = {}) {
+  if (!bridge || typeof bridge.fetchEntity !== "function" ||
+      typeof bridge.listEntities !== "function" || typeof bridge.mutateEntities !== "function") {
+    throw new TypeError("A bound transactional PMS repository bridge is required");
+  }
+  if (!state || !Array.isArray(state.b) || !booking || !state.b.includes(booking)) {
+    throw new TypeError("Booking must belong to the supplied live PMS state");
+  }
+  if (typeof balanceDueFor !== "function") throw new TypeError("A canonical folio balance calculator is required");
+  if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) {
+    throw new RangeError("Reversal amount must be a positive safe integer number of paise");
+  }
+  const originalId = String(originalLedgerEntryId || "").trim();
+  if (!originalId || originalId.length > 256 || /[\u0000-\u001f\u007f]/.test(originalId)) {
+    throw new TypeError("Original ledger entry ID is invalid");
+  }
+  const key = String(idempotencyKey || "").trim();
+  if (!key || key.length > 256 || /[\u0000-\u001f\u007f]/.test(key)) {
+    throw fail("LEDGER_REVERSAL_IDEMPOTENCY_KEY_REQUIRED", "A stable reversal idempotency key is required.");
+  }
+  const safeReason = String(reason || "").trim();
+  if (!safeReason || safeReason.length > 256 || /[\u0000-\u001f\u007f]/.test(safeReason)) {
+    throw new TypeError("Reversal reason is required and must be at most 256 characters");
+  }
+  if (bridge.compatibilityWrite && typeof bridge.compatibilityWrite.then === "function") {
+    await bridge.compatibilityWrite;
+  }
+
+  const bookingId = bookingKey(booking);
+  const folioId = String(booking.folioId || "booking-" + bookingId);
+  const reversalId = await ledgerEntityId(bridge.context.tenantId, "reversal:" + key);
+  const [snapshotRow, bookingRow, folioRow, originalRow, ledgerRows] = await Promise.all([
+    bridge.fetchEntity(SNAPSHOT_TYPE, SNAPSHOT_ID),
+    bridge.fetchEntity("booking", bookingId),
+    bridge.fetchEntity("folio", folioId),
+    bridge.fetchEntity("ledger", originalId),
+    bridge.listEntities("ledger")
+  ]);
+  const original = originalRow?.data;
+  if (!original || original.id !== originalId) {
+    throw fail("LEDGER_ORIGINAL_NOT_FOUND", "The original immutable payment ledger entry was not found.");
+  }
+  if (original.recordType !== "AURELIA_FINANCIAL_LEDGER_ENTRY_V1" ||
+      original.transactionType !== "PAYMENT_RECEIVED" || original.reversalOf != null ||
+      original.currency !== "INR" || !Number.isSafeInteger(original.amountPaise) ||
+      original.amountPaise <= 0 || original.tenantId !== bridge.context.tenantId ||
+      original.propertyId !== bridge.context.propertyId || String(original.bookingId) !== bookingId ||
+      original.folioId !== folioId) {
+    throw fail("LEDGER_ORIGINAL_BINDING_MISMATCH", "The original payment does not match this tenant, property, booking and folio.");
+  }
+
+  const ledgerEntry = {
+    id: reversalId,
+    recordType: "AURELIA_FINANCIAL_LEDGER_ENTRY_V1",
+    tenantId: bridge.context.tenantId,
+    propertyId: bridge.context.propertyId,
+    deviceId: bridge.context.deviceId,
+    bookingId,
+    folioId,
+    amountPaise,
+    currency: "INR",
+    transactionType: "PAYMENT_REVERSAL",
+    method: original.method,
+    reference: original.reference,
+    source: "reversal",
+    idempotencyKey: key,
+    reversalOf: originalId,
+    reason: safeReason,
+    createdAt: now()
+  };
+  const existingReversal = ledgerRows.find(row => row.id === reversalId);
+  const snapshotState = snapshotRow?.data?.snapshot
+    ? clone(snapshotRow.data.snapshot)
+    : clone(state);
+  if (!Array.isArray(snapshotState.b) || !Array.isArray(snapshotState.led)) {
+    throw fail("CANONICAL_SNAPSHOT_INVALID", "Canonical PMS snapshot is missing booking or ledger collections.");
+  }
+  const snapshotIndex = snapshotState.b.findIndex(row => String(row?.id) === bookingId);
+  if (snapshotIndex < 0) throw fail("BOOKING_NOT_FOUND", "Booking is missing from the canonical PMS snapshot.");
+  const snapshotBooking = snapshotState.b[snapshotIndex];
+  const originalSnapshotEntry = snapshotState.led.find(row => row?.id === originalId);
+  if (!sameJson(originalSnapshotEntry, original)) {
+    throw fail("PAYMENT_LEDGER_DIVERGENCE", "The original payment is missing or differs in the canonical recovery snapshot.");
+  }
+  if (bookingRow?.data && !sameJson(comparableBooking(bookingRow.data), comparableBooking(snapshotBooking))) {
+    throw fail("CANONICAL_BOOKING_DIVERGENCE", "Canonical booking entity and recovery snapshot disagree.");
+  }
+  const workingBooking = clone(comparableBooking(bookingRow?.data || snapshotBooking));
+
+  if (existingReversal) {
+    const comparable = value => {
+      const copy = clone(value);
+      if (copy && typeof copy === "object") delete copy.createdAt;
+      return copy;
+    };
+    const snapshotEntry = snapshotState.led.find(row => row?.id === reversalId);
+    if (!sameJson(comparable(existingReversal.data), comparable(ledgerEntry)) ||
+        !sameJson(comparable(snapshotEntry), comparable(ledgerEntry)) ||
+        !(workingBooking.paymentReversals || []).some(row => row?.id === reversalId)) {
+      throw fail("LEDGER_REVERSAL_IDEMPOTENCY_CONFLICT", "Reversal idempotency key is already bound to different or incomplete data.");
+    }
+    Object.assign(booking, workingBooking);
+    state.today = snapshotState.today;
+    if (Array.isArray(state.led)) state.led.splice(0, state.led.length, ...clone(snapshotState.led));
+    else state.led = clone(snapshotState.led);
+    if (Array.isArray(state.aud)) state.aud.splice(0, state.aud.length, ...clone(snapshotState.aud || []));
+    return Object.freeze({ ok: true, duplicate: true, canonical: true, ledger: existingReversal,
+      bookingVersion: bookingRow?.version ?? 0, folioVersion: folioRow?.version ?? 0 });
+  }
+
+  if ((workingBooking.paymentReversals || []).some(row => row?.id === reversalId)) {
+    throw fail("PAYMENT_REVERSAL_PROJECTION_DIVERGENCE", "A reversal projection exists without its immutable ledger entry.");
+  }
+
+  const priorReversals = ledgerRows
+    .filter(row => row.data?.transactionType === "PAYMENT_REVERSAL" && row.data?.reversalOf === originalId)
+    .reduce((sum, row) => {
+      const value = row.data?.amountPaise;
+      if (!Number.isSafeInteger(value) || value <= 0 || row.data.currency !== original.currency) {
+        throw fail("LEDGER_REVERSAL_INTEGRITY_ERROR", "An existing reversal entry is malformed.");
+      }
+      const next = sum + value;
+      if (!Number.isSafeInteger(next)) throw new RangeError("Cumulative reversal amount exceeds the safe integer limit");
+      return next;
+    }, 0);
+  if (priorReversals + amountPaise > original.amountPaise) {
+    throw fail("LEDGER_REVERSAL_EXCEEDS_ORIGINAL", "Cumulative reversals cannot exceed the original payment amount.");
+  }
+
+  const paidPaise = moneyToPaise(workingBooking.p || 0, "Updated folio paid total", { allowZero: true });
+  const currentBalanceDuePaise = moneyToPaise(balanceDueFor(workingBooking), "Current folio balance", { allowZero: true });
+  if (folioRow?.data) {
+    if (folioRow.data.id !== folioId || String(folioRow.data.bookingId) !== bookingId ||
+        (Object.hasOwn(folioRow.data, "paidPaise") &&
+          (!Number.isSafeInteger(folioRow.data.paidPaise) || folioRow.data.paidPaise !== paidPaise)) ||
+        (Object.hasOwn(folioRow.data, "balanceDuePaise") &&
+          (!Number.isSafeInteger(folioRow.data.balanceDuePaise) || folioRow.data.balanceDuePaise !== currentBalanceDuePaise))) {
+      throw fail("CANONICAL_FOLIO_DIVERGENCE", "Canonical folio totals or booking binding disagree with the booking projection.");
+    }
+  }
+  if (amountPaise > paidPaise) {
+    throw fail("LEDGER_REVERSAL_EXCEEDS_PAID_TOTAL", "Reversal exceeds the currently recorded folio paid total.");
+  }
+  workingBooking.p = (paidPaise - amountPaise) / 100;
+  const reversalProjection = {
+    id: reversalId, originalLedgerEntryId: originalId, amountPaise,
+    currency: "INR", idempotencyKey: key, reason: safeReason, createdAt: ledgerEntry.createdAt
+  };
+  if (!Array.isArray(workingBooking.paymentReversals)) workingBooking.paymentReversals = [];
+  workingBooking.paymentReversals.push(clone(reversalProjection));
+  snapshotState.b[snapshotIndex] = workingBooking;
+  snapshotState.led.push(clone(ledgerEntry));
+  if (!Array.isArray(snapshotState.aud)) snapshotState.aud = [];
+  snapshotState.aud.unshift({ a: "Payment reversal", d: safeReason + " · " + (amountPaise / 100).toFixed(2) + " INR", at: new Date(ledgerEntry.createdAt) });
+
+  const currentTodayPaise = snapshotState.today == null || snapshotState.today === ""
+    ? 0 : moneyToPaise(snapshotState.today, "Daily payment total", { allowZero: true, allowNegative: true });
+  const nextTodayPaise = currentTodayPaise - amountPaise;
+  if (!Number.isSafeInteger(nextTodayPaise)) throw new RangeError("Daily payment total exceeds the safe integer limit");
+  snapshotState.today = nextTodayPaise / 100;
+  const balanceDuePaise = moneyToPaise(balanceDueFor(workingBooking), "Updated folio balance", { allowZero: true });
+  const committedAt = ledgerEntry.createdAt;
+  const eventPayload = {
+    operation: "payment_reversed", originalLedgerEntryId: originalId,
+    reversalLedgerEntryId: reversalId, bookingId, folioId, amountPaise, idempotencyKey: key
+  };
+  const nextFolio = {
+    ...(folioRow?.data || {}),
+    id: folioId, bookingId,
+    paymentRows: clone(workingBooking.pays || []),
+    reversalRows: clone(workingBooking.paymentReversals),
+    paidPaise: paidPaise - amountPaise,
+    balanceDuePaise,
+    updatedAt: committedAt
+  };
+
+  const committed = await bridge.mutateEntities([
+    {
+      entityType: "booking", entityId: bookingId, expectedVersion: bookingRow?.version ?? 0,
+      eventType: "booking.payment_reversed", eventPayload: eventPayload,
+      mutate: entity => { for (const field of Object.keys(entity)) delete entity[field]; Object.assign(entity, clone(workingBooking)); }
+    },
+    {
+      entityType: "folio", entityId: folioId, expectedVersion: folioRow?.version ?? 0,
+      eventType: "folio.payment_reversed", eventPayload,
+      mutate: entity => { for (const field of Object.keys(entity)) delete entity[field]; Object.assign(entity, clone(nextFolio)); }
+    },
+    {
+      entityType: "ledger", entityId: reversalId, expectedVersion: 0,
+      eventType: "ledger.payment_reversed", eventPayload,
+      mutate: entity => Object.assign(entity, clone(ledgerEntry))
+    },
+    {
+      entityType: SNAPSHOT_TYPE, entityId: SNAPSHOT_ID, expectedVersion: snapshotRow?.version ?? 0,
+      eventType: "pms.snapshot_payment_reversed", eventPayload,
+      mutate: entity => {
+        entity.sourceKey = LEGACY_PMS_SNAPSHOT_KEY;
+        entity.snapshot = clone(snapshotState);
+        entity.updatedAt = committedAt;
+      }
+    }
+  ]);
+
+  const [storedBooking, storedFolio, storedLedger, storedSnapshot] = await Promise.all([
+    bridge.fetchEntity("booking", bookingId), bridge.fetchEntity("folio", folioId),
+    bridge.fetchEntity("ledger", reversalId), bridge.fetchEntity("audit", SNAPSHOT_ID)
+  ]);
+  if (!storedBooking || !storedFolio || !storedLedger || !storedSnapshot ||
+      !sameJson(storedBooking.data, workingBooking) ||
+      !sameJson(storedFolio.data, nextFolio) ||
+      !sameJson(storedLedger.data, ledgerEntry) ||
+      !sameJson(storedSnapshot.data.snapshot, snapshotState)) {
+    throw fail("PAYMENT_REVERSAL_READBACK_MISMATCH", "Reversal committed but exact local read-back failed; reconcile before retrying.");
+  }
+
+  const cacheRefreshed = refreshLegacyCompatibilityCache(legacyStorage, snapshotState);
+  const liveBookings = state.b;
+  const merged = snapshotState.b.map(saved => {
+    const live = liveBookings.find(row => String(row?.id) === String(saved?.id));
+    if (live) { Object.assign(live, clone(saved)); return live; }
+    return clone(saved);
+  });
+  liveBookings.splice(0, liveBookings.length, ...merged);
+  state.today = snapshotState.today;
+  if (Array.isArray(state.aud)) state.aud.splice(0, state.aud.length, ...clone(snapshotState.aud));
+  if (Array.isArray(state.led)) state.led.splice(0, state.led.length, ...clone(snapshotState.led));
+  else state.led = clone(snapshotState.led);
+  Object.assign(booking, clone(workingBooking));
+
+  return Object.freeze({
+    ok: true, duplicate: false, canonical: true, ledger: storedLedger,
+    entity: storedBooking, folio: storedFolio, snapshotVersion: storedSnapshot.version,
+    cacheRefreshed, bookingVersion: committed.entities[0].version,
+    folioVersion: committed.entities[1].version
   });
 }

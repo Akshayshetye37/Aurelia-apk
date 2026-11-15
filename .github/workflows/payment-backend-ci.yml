@@ -32,15 +32,17 @@ jobs:
         working-directory: payment-backend
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # actions/checkout v4.4.0
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # actions/setup-node v4.4.0
         with:
           node-version: "22"
       - name: Install backend dependencies
-        run: npm install --no-audit --no-fund
-      - name: Run payment backend contract and security tests
-        run: npm test
+        run: npm ci --no-audit --no-fund
+      - name: Install root dependencies for unified suite
+        run: npm --prefix .. ci --no-audit --no-fund
+      - name: Run unified root, nested and backend test suite
+        run: npm --prefix .. test
       - name: Verify payment backend JavaScript syntax
         run: |
           find src test -type f -name '*.mjs' -print0 | xargs -0 -n1 node --check
@@ -49,7 +51,7 @@ jobs:
       - name: Verify production image runs as non-root
         run: test "$(docker image inspect aurelia-payment-backend:ci --format '{{.Config.User}}')" = "node"
       - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # hashicorp/setup-terraform v3.1.2
         with:
           terraform_version: "1.9.8"
       - name: Check Terraform formatting

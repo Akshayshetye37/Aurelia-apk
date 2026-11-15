@@ -42,3 +42,14 @@ The local PMS journal (SQLite on Android; IndexedDB in browser/PWA) is the sole 
 - Approval date: **PENDING**
 
 Until all approval fields are completed and the evidence is linked, this mapping is not approved and live collection remains OFF.
+
+## Current implementation evidence (provisional; not accounting approval)
+
+- Canonical manual and staff-reviewed payment postings now append an `AURELIA_FINANCIAL_LEDGER_ENTRY_V1` record with integer `amountPaise`, `transactionType: PAYMENT_RECEIVED`, tenant/property/device, booking/folio, method, reference, source, idempotency key and timestamp.
+- The payment ledger entity, booking projection, folio projection and recovery snapshot are committed in one repository batch and verified by exact read-back.
+- Ledger entities are append-only in both the IndexedDB and Android SQLite repository adapters. Stable payment IDs are derived from a SHA-256 digest of tenant identity plus idempotency key.
+- The same canonical entry is included in the recovery snapshot and retains its stable entity ID during domain projection/restart.
+- A payment without a stable idempotency key is rejected before persistence. A duplicate retry must match the existing ledger row and recovery projection; otherwise it fails closed.
+- Reservation advances, expenses and restaurant sales are not yet routed through this journal. This is an operational payment journal only: it does **not** assign debit/credit accounts, migrate historical `p` / `pays[]` / `payments[]` values, or authorize accounting reports. Those mappings remain pending the accounting owner's written approval and redacted-backup reconciliation.
+
+The mapping above remains **PENDING**. Live collection, automatic settlement and automatic refunds remain OFF.

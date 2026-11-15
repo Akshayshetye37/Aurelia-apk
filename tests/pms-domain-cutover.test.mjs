@@ -215,3 +215,12 @@ test("legacy restaurant sales require stable unique identities after determinist
     /sale IDs are duplicated/
   );
 });
+
+test("projection rejects array-shaped restaurant table rows", async () => {
+  const bridge = fakeBridge(), invalid = snapshot();
+  invalid.t[0] = ["1", 2, []];
+  await assert.rejects(
+    projectLegacyPmsDomains({ bridge, snapshot: invalid, migrationId: "mig-array-table" }),
+    /Malformed legacy restaurant table/
+  );
+});

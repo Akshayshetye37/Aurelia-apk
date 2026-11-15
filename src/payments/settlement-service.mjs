@@ -15,11 +15,12 @@ const MAX_METHOD_LENGTH = 40;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
 const MONEY_TOLERANCE = 1e-7;
 
-export function moneyToPaise(value, label, { allowZero = false } = {}) {
+export function moneyToPaise(value, label, { allowZero = false, allowNegative = false } = {}) {
+  const pattern = allowNegative ? /^-?\d+(?:\.\d{1,2})?$/ : /^\d+(?:\.\d{1,2})?$/;
   const validType = typeof value === "number" ||
-    (typeof value === "string" && /^\d+(?:\.\d{1,2})?$/.test(value.trim()));
+    (typeof value === "string" && pattern.test(value.trim()));
   const amount = validType ? Number(value) : Number.NaN;
-  if (!Number.isFinite(amount) || amount < 0 || (!allowZero && amount <= 0)) {
+  if (!Number.isFinite(amount) || (!allowNegative && amount < 0) || (!allowZero && amount === 0)) {
     throw new RangeError(label + (allowZero ? " must be zero or greater" : " must be greater than zero"));
   }
   const scaled = amount * 100;
@@ -224,8 +225,10 @@ export function settlePayment({
   const priorHistory = Array.isArray(booking.payments) ? booking.payments : [];
   const priorPaid = booking.p;
   const priorToday = state.today;
+  // Daily collection is a net cash movement: a refund/reversal can make the
+  // day's net negative even when the underlying folio balance remains valid.
   const priorTodayPaise = priorToday == null || priorToday === ""
-    ? 0 : moneyToPaise(priorToday, "Daily payment total", { allowZero: true });
+    ? 0 : moneyToPaise(priorToday, "Daily payment total", { allowZero: true, allowNegative: true });
   const priorAudit = Array.isArray(state.aud) ? state.aud.slice() : null;
   const timestamp = now();
 

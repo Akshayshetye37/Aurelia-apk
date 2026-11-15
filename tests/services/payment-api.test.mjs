@@ -35,7 +35,7 @@ test('rejects malformed requests before network dispatch', async () => {
     tokenProvider: async () => token,
     fetchImpl: async () => { called = true; return response(200, {}); }
   });
-  await assert.rejects(client.createIntent({
+  assert.throws(() => client.createIntent({
     folioId: 'folio_123', amountMinor: 10, currency: 'USD',
     provider: 'razorpay', environment: 'test'
   }, { idempotencyKey: 'aurelia-test-key-123' }), /invalid_payment_intent_request/);
