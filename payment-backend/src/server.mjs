@@ -817,7 +817,15 @@ app.post('/v1/payments/intents/:intentId/refunds/:refundId/approve', requireTena
         if (!currentRefundSnap.exists || !currentIntentSnap.exists ||
             currentRefundSnap.data().tenantId !== req.tenant.id ||
             currentIntentSnap.data().tenantId !== req.tenant.id) throw new Error('refund_not_found');
+        const currentIntent = currentIntentSnap.data();
         let record = currentRefundSnap.data();
+        if (currentIntent.state !== 'CAPTURED' ||
+            currentIntent.provider !== record.provider ||
+            currentIntent.providerOrderId !== record.providerOrderId ||
+            currentIntent.providerPaymentId !== record.providerPaymentId ||
+            currentIntent.amountMinor !== record.originalAmountMinor) {
+          throw new Error('captured_payment_binding_changed');
+        }
         if (record.state === REFUND_STATES.REQUESTED) {
           record = transitionRefund(record, {
             eventId: 'approve:' + refundId,
@@ -857,6 +865,7 @@ app.post('/v1/payments/intents/:intentId/refunds/:refundId/approve', requireTena
           return res.status(202).json({ ...record, providerStatus: 'UNKNOWN' });
         }
       } else {
+        // A retry after the durable dispatch marker is status-only; never dispatch a duplicate refund.
         const lookupId = record.provider === 'razorpay' ? record.providerRefundId : record.refundId;
         if (!lookupId) return res.status(202).json(record);
         const remote = await adapter.getRefundStatus(refundLookupInput(record));
@@ -924,6 +933,19 @@ app.get('/v1/payments/intents/:intentId/refunds/:refundId', requireTenantAdmin, 
   }
 });
 
+
+app.get('/v1/admin/refunds/review', requireTenantAdmin, async (req, res) => {
+  try {
+    const snapshot = await db.collection('paymentRefunds')
+      .where('tenantId', '==', req.tenant.id).limit(100).get();
+    const items = snapshot.docs.map(doc => ({ refundId: doc.id, ...doc.data() }))
+      .filter(record => record.state === REFUND_STATES.HUMAN_REVIEW)
+      .sort((a, b) => String(a.humanReviewOpenedAt || '').localeCompare(String(b.humanReviewOpenedAt || '')));
+    return res.json({ count: items.length, items });
+  } catch {
+    return fail(res, 503, 'refund_human_review_queue_unavailable');
+  }
+});
 
 app.get('/v1/payments/capabilities', requireTenantPaymentActor, async (req, res) => {
   const activeSelection = await readActiveProvider({ db, tenantId: req.tenant.id });
