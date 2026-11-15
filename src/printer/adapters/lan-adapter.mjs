@@ -60,6 +60,21 @@ export class LanPrinterAdapter extends PrinterAdapter {
     }
   }
 
+  async calibrate(device) {
+    if (!device || device.transport !== 'tcp' || device.trusted !== true ||
+        typeof device.deviceId !== 'string' || !/^lan_[a-f0-9]{64}$/.test(device.deviceId)) {
+      return { ok: false, error: 'trusted_lan_device_required' };
+    }
+    try {
+      const result = await this.native.calibrateLanPrinter({ deviceId: device.deviceId });
+      return result?.ok === true && result.verified === true
+        ? { ok: true, verified: true, calibratedAt: result.calibratedAt, profileHash: result.profileHash }
+        : { ok: false, error: safeError(result) };
+    } catch (error) {
+      return { ok: false, error: safeError(error) };
+    }
+  }
+
   async verifyCapabilities(device) {
     if (!device || device.transport !== 'tcp' || device.trusted !== true ||
         typeof device.deviceId !== 'string' || !/^[A-Za-z0-9_-]{8,128}$/.test(device.deviceId)) {
