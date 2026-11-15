@@ -590,3 +590,36 @@ test('invalid binding does not consume receipt identity before a valid retry', a
     receipt, expectedIntent: { ...receipt }, acceptedAt: '2026-11-15T12:01:00.000Z'
   }), { accepted: true, duplicate: false });
 });
+
+
+test('receipt acceptance independently re-verifies captured provider identity and amount', async () => {
+  const s = setup({ getPaymentStatus: async input => ({
+    orderId: input.orderId, paymentId: 'pay_123', paymentStatus: 'captured',
+    captured: true, amountMinor: 450000, currency: 'INR'
+  }) });
+  const intentId = seedCapturedIntent(s.db);
+  const intent = await s.db.get('paymentIntents/' + intentId);
+  intent.providerAccountId = 'test';
+  s.db.seed('paymentIntents/' + intentId, intent);
+  const evidence = await s.repo.verifyProviderCaptureForReceipt('user_123', intentId);
+  assert.equal(evidence.captured, true);
+  assert.equal(evidence.providerPaymentId, 'pay_123');
+  assert.equal(evidence.amountMinor, 450000);
+  const updated = await s.db.get('paymentIntents/' + intentId);
+  assert.equal(updated.accountingStatus, 'AWAITING_LOCAL_RECEIPT');
+  assert.equal(updated.localLedgerEntryId, undefined);
+});
+
+test('provider capture mismatch is rejected before local receipt acceptance', async () => {
+  const s = setup({ getPaymentStatus: async input => ({
+    orderId: input.orderId, paymentId: 'pay_123', paymentStatus: 'captured',
+    captured: true, amountMinor: 450001, currency: 'INR'
+  }) });
+  const intentId = seedCapturedIntent(s.db);
+  const intent = await s.db.get('paymentIntents/' + intentId);
+  intent.providerAccountId = 'test';
+  s.db.seed('paymentIntents/' + intentId, intent);
+  await assert.rejects(s.repo.verifyProviderCaptureForReceipt('user_123', intentId),
+    /provider_capture_binding_mismatch/);
+  assert.equal((await s.db.get('paymentIntents/' + intentId)).accountingStatus, 'AWAITING_LOCAL_RECEIPT');
+});
