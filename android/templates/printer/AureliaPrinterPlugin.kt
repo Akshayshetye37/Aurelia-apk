@@ -149,8 +149,9 @@ class AureliaPrinterPlugin : Plugin() {
         if (record == null) { call.reject("not_trusted"); return }
         if (!record.verified) { call.reject("printer_profile_calibration_required"); return }
         call.resolve(JSObject().put("ok", true).put("profile", JSObject()
-            .put("transport", "tcp").put("paperWidthMm", 58).put("printableDots", 384)
-            .put("dpi", 203).put("profileHash", record.profileHash)))
+            .put("transport", "tcp").put("protocol", "escpos")
+            .put("paperWidthMm", 58).put("printableDots", 384).put("dpi", 203)
+            .put("verification", "calibrated").put("verified", true)))
     }
 
     @PluginMethod
