@@ -23,11 +23,17 @@ async function digest(value, cryptoImpl) {
   const bytes = await cryptoImpl.subtle.digest("SHA-256", new TextEncoder().encode(stableJson(value)));
   return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, "0")).join("");
 }
-export function financialYearFor(value) {
+export function financialYearFor(value, timeZone = "Asia/Kolkata") {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) throw new TypeError("A valid invoice issue date is required");
-  const year = date.getUTCFullYear();
-  const start = date.getUTCMonth() >= 3 ? year : year - 1;
+  let year, month;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit" }).formatToParts(date);
+    year = Number(parts.find(part => part.type === "year")?.value);
+    month = Number(parts.find(part => part.type === "month")?.value);
+  } catch { throw new TypeError("A valid property timezone is required for financial-year numbering"); }
+  if (!Number.isSafeInteger(year) || !Number.isSafeInteger(month) || month < 1 || month > 12) throw new TypeError("Unable to resolve the property financial year");
+  const start = month >= 4 ? year : year - 1;
   return "FY" + start + "-" + String((start + 1) % 100).padStart(2, "0");
 }
 function amountFromPayment(row) {
@@ -89,7 +95,7 @@ export async function issueFolioInvoice({
       paymentReconciliation.differencePaise + " paise. Reconcile historical payments first.");
   }
   const issuedAt = new Date(now()).toISOString();
-  const financialYear = financialYearFor(issuedAt);
+  const financialYear = financialYearFor(issuedAt, invoice.property?.timeZone || "Asia/Kolkata");
   const sequenceId = "gst-invoice-sequence-" + financialYear;
   const folioRow = await bridge.fetchEntity("folio", targetFolioId);
   if (folioRow?.data?.invoiceIssued) {
@@ -103,7 +109,9 @@ export async function issueFolioInvoice({
     if (!Number.isSafeInteger(nextNumber) || nextNumber < 1 || nextNumber >= Number.MAX_SAFE_INTEGER) {
       throw fail("INVOICE_SEQUENCE_EXHAUSTED", "The financial-year invoice sequence is invalid or exhausted.");
     }
-    const invoiceNumber = text(prefix).replace(/[^A-Za-z0-9-]/g, "").slice(0, 12) + "/" + financialYear + "/" + String(nextNumber).padStart(6, "0");
+    const invoicePrefix = text(prefix).replace(/[^A-Za-z0-9-]/g, "").slice(0, 12);
+    if (!invoicePrefix) throw new TypeError("A valid invoice prefix is required");
+    const invoiceNumber = invoicePrefix + "/" + financialYear + "/" + String(nextNumber).padStart(6, "0");
     const issuedInvoice = Object.freeze({
       ...clone(invoice), invoiceNumber, financialYear, issuedAt,
       folioNumber: targetFolioId, bookingId,
