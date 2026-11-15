@@ -170,6 +170,8 @@ class AureliaPrinterPlugin : Plugin() {
         if (!record.verified || record.profileHash.isNullOrBlank()) { call.reject("printer_profile_calibration_required"); return }
         val validation = DocumentValidator.validate(kind, doc)
         if (!validation.ok) { call.reject(validation.error ?: "invalid_document"); return }
+        val layout = doc.optString("layout")
+        if (kind == "invoice" || layout == "80mm") { call.reject("printer_profile_layout_mismatch"); return }
         val ledgerKey = id + "|" + requestId
         val prior = try { store.claimJob(ledgerKey) } catch (_: Exception) { call.reject("job_ledger_unavailable"); return }
         if (prior != null) {
