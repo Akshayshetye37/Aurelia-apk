@@ -49,3 +49,23 @@ for(const name of ['pay-bridge-orchestrator.mjs','indexeddb-payment-intent-store
  fs.copyFileSync(source,path.join(settlementDest,name));
 }
 console.log('Prepared optional local settlement, payment orchestration, intent journal and evidence modules for Capacitor');
+
+const printingSource = path.join(root, 'src', 'printing');
+const printingDest = path.join(dest, 'src', 'printing');
+const printingModules = [
+  'printer-catalog.mjs',
+  'receipt-model.mjs',
+  'receipt-layout.mjs',
+  'escpos.mjs',
+  'zpl.mjs',
+  'print-queue-repository.mjs',
+  'print-service.mjs',
+  'native-printer-transport.mjs'
+];
+fs.mkdirSync(printingDest, { recursive: true });
+for (const name of printingModules) {
+  const source = path.join(printingSource, name);
+  if (!fs.existsSync(source)) throw new Error('Printing module not found: ' + source);
+  fs.copyFileSync(source, path.join(printingDest, name));
+}
+console.log('Prepared printer profiles, receipt encoders and native print service modules');
