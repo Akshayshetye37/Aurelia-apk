@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../src/server.mjs', import.meta.url), 'utf8');
+const refundStateMachine = await readFile(new URL('../src/refunds/refund-state-machine.mjs', import.meta.url), 'utf8');
 
 test('admin and payment actor authorization enforce tenant membership, verified email and MFA', () => {
   // Accept the production bearer-token normalization while pinning the
