@@ -100,6 +100,12 @@ export async function enrollPaymentDevice({ applianceBaseUrl, deviceId = crypto.
   if (!["PENDING", "ACTIVE"].includes(enrollment?.status)) throw new Error("Appliance did not accept the attested device enrollment");
   const activation = await postJson(base.origin, "/v1/admin/devices/" + encodeURIComponent(deviceId) + "/activate", {}, tokenProvider);
   if (activation?.status !== "ACTIVE") throw new Error("Owner-controlled device activation did not complete");
+  if (typeof enrollment?.keyId !== "string" || !/^[a-f0-9]{64}$/.test(enrollment.keyId) ||
+      typeof enrollment?.attestationId !== "string" || !/^[A-Za-z0-9._:-]{1,200}$/.test(enrollment.attestationId)) {
+    throw new Error("Appliance did not return the enrolled hardware key identity");
+  }
+  const securityLevel = enrollment.attestationSecurityLevel || identity.securityLevel;
+  const hardwareAttested = ["TRUSTED_ENVIRONMENT", "STRONG_BOX"].includes(securityLevel);
 
   const configured = await nativeRequest("paymentDeviceConfigure", {
     applianceBaseUrl: base.origin, deviceId
@@ -107,9 +113,14 @@ export async function enrollPaymentDevice({ applianceBaseUrl, deviceId = crypto.
   if (configured?.configured !== true || configured.deviceId !== deviceId) {
     throw new Error("Native payment-device transport could not be configured");
   }
+  const enrollmentContext = Object.freeze({
+    deviceId, keyId: enrollment.keyId, attestationId: enrollment.attestationId,
+    status: "ACTIVE", securityLevel, hardwareAttested
+  });
   window.AureliaPaymentDeviceId = deviceId;
   window.AureliaPaymentApiBaseUrl = base.origin;
-  return { deviceId, status: "ACTIVE", securityLevel: identity.securityLevel, activation };
+  window.AureliaPaymentDeviceEnrollment = enrollmentContext;
+  return { ...enrollmentContext, activation };
 }
 
 export async function leaseNextSettlementCommand({ tokenProvider = getPaymentDeviceIdToken } = {}) {
