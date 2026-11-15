@@ -178,11 +178,12 @@ export async function issueFolioInvoice({
  * available on the master folio. A master version check serializes competing splits.
  */
 export async function createSplitFolio({
-  bridge, masterFolioId, childFolioId, bookingId, guest, sourceCharges,
-  allocations, reason = "corporate_reimbursement", now = () => new Date().toISOString(),
+  bridge, masterFolioId, childFolioId, bookingId, guest, allocations,
+  reason = "corporate_reimbursement", now = () => new Date().toISOString(),
   maxRetries = 6
 } = {}) {
-  if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function") {
+  if (!bridge || typeof bridge.fetchEntity !== "function" || typeof bridge.mutateEntities !== "function" ||
+      typeof bridge.listEntities !== "function") {
     throw new TypeError("A bound transactional repository bridge is required");
   }
   await assertCompatibilityUiAllowed(bridge);
@@ -190,45 +191,31 @@ export async function createSplitFolio({
   const childId = safeId(childFolioId, "split folio ID");
   const bookingKey = safeId(bookingId, "booking ID");
   if (masterId === childId) throw new TypeError("A split folio must have a different ID from its master");
-  if (!Array.isArray(sourceCharges) || !Array.isArray(allocations) || !allocations.length) {
-    throw new TypeError("Source charges and at least one split allocation are required");
-  }
-  const normalized = allocations.map((allocation, index) => {
-    const chargeId = safeId(allocation?.chargeId, "charge ID");
-    return Object.freeze({ chargeId, amountPaise: paise(allocation.amountPaise, "Allocation amount"), index });
-  });
+  if (!Array.isArray(allocations) || !allocations.length) throw new TypeError("At least one split allocation is required");
+  const normalized = allocations.map(allocation => Object.freeze({
+    chargeId: safeId(allocation?.chargeId, "charge ID"),
+    amountPaise: paise(allocation.amountPaise, "Allocation amount")
+  }));
   if (new Set(normalized.map(x => x.chargeId)).size !== normalized.length) {
     throw new TypeError("Duplicate charge allocations are not allowed");
   }
-  const sourceMap = new Map(sourceCharges.map((charge, index) => [
-    text(charge?.id) || "legacy-charge-" + index,
-    { ...clone(charge), id: text(charge?.id) || "legacy-charge-" + index }
-  ]));
-  for (const allocation of normalized) {
-    const source = sourceMap.get(allocation.chargeId);
-    if (!source) throw fail("SPLIT_SOURCE_CHARGE_MISSING", "A split allocation references a missing source charge.");
-    const amount = source.amountPaise != null ? paise(source.amountPaise, "Source charge amount") :
-      Math.round(Number(source.amount || source.a || 0) * 100);
-    if (!Number.isSafeInteger(amount) || amount < 0 || allocation.amountPaise > amount) {
-      throw fail("SPLIT_ALLOCATION_EXCEEDS_CHARGE", "A split allocation exceeds its source charge.");
-    }
-  }
   const issuedAt = new Date(now()).toISOString();
   for (let attempt = 0; attempt < maxRetries; attempt += 1) {
-    const [masterRow, childRow, allFolios, ledgerRows] = await Promise.all([
-      bridge.fetchEntity("folio", masterId),
-      bridge.fetchEntity("folio", childId),
-      bridge.listEntities("folio"),
-      bridge.listEntities("ledger")
+    const [masterRow, childRow, allFolios] = await Promise.all([
+      bridge.fetchEntity("folio", masterId), bridge.fetchEntity("folio", childId), bridge.listEntities("folio")
     ]);
+    if (!masterRow) throw fail("MASTER_FOLIO_MISSING", "The canonical master folio does not exist.");
     if (childRow) throw fail("SPLIT_FOLIO_ALREADY_EXISTS", "The split folio ID already exists.");
-    if (masterRow?.data?.invoiceIssued) throw fail("MASTER_INVOICE_ALREADY_ISSUED", "A split cannot be created after the master tax invoice has been issued.");
-    const canonicalCharges = Array.isArray(masterRow?.data?.chargeLines) ? masterRow.data.chargeLines :
-      (Array.isArray(masterRow?.data?.invoiceIssued?.lineItems) ? masterRow.data.invoiceIssued.lineItems : null);
-    if (!canonicalCharges) throw fail("SPLIT_CANONICAL_CHARGES_MISSING", "Split folios require canonical charge lines on the master folio; caller-supplied charges are not trusted.");
-    if (masterRow?.data?.bookingId && String(masterRow.data.bookingId) !== bookingKey) {
+    if (masterRow.data?.invoiceIssued) throw fail("MASTER_INVOICE_ALREADY_ISSUED", "A split cannot be created after the master tax invoice has been issued.");
+    if (masterRow.data?.bookingId && String(masterRow.data.bookingId) !== bookingKey) {
       throw fail("FOLIO_BOOKING_MISMATCH", "The master folio belongs to another booking.");
     }
+    const canonicalCharges = Array.isArray(masterRow.data?.chargeLines) ? masterRow.data.chargeLines : null;
+    if (!canonicalCharges) throw fail("SPLIT_CANONICAL_CHARGES_MISSING", "Split folios require canonical charge lines on the master folio; caller-supplied charges are not trusted.");
+    const sourceMap = new Map(canonicalCharges.map((charge, index) => {
+      const id = text(charge?.id) || "legacy-charge-" + index;
+      return [id, { ...clone(charge), id }];
+    }));
     const used = new Map();
     for (const row of allFolios) {
       for (const entry of row.data?.splitAllocations || []) {
@@ -237,22 +224,29 @@ export async function createSplitFolio({
     }
     const allocated = normalized.map(item => {
       const source = sourceMap.get(item.chargeId);
-      const sourceAmount = source.amountPaise != null ? paise(source.amountPaise, "Source charge amount") : Math.round(Number(source.amount || source.a || 0) * 100);
-      if ((used.get(item.chargeId) || 0) + item.amountPaise > sourceAmount) {
-        throw fail("SPLIT_ALLOCATION_ALREADY_USED", "The requested amount has already been allocated to another split folio.");
+      if (!source) throw fail("SPLIT_SOURCE_CHARGE_MISSING", "A split allocation references a charge absent from the canonical master folio.");
+      const sourceAmount = source.amountPaise != null ? paise(source.amountPaise, "Source charge amount") :
+        source.grossMinor != null ? paise(source.grossMinor, "Source charge amount") :
+        Math.round(Number(source.amount ?? source.a ?? 0) * 100);
+      if (!Number.isSafeInteger(sourceAmount) || sourceAmount < 0 ||
+          (used.get(item.chargeId) || 0) + item.amountPaise > sourceAmount) {
+        throw fail("SPLIT_ALLOCATION_ALREADY_USED", "The requested allocation exceeds the unallocated source charge amount.");
       }
-      return { chargeId: item.chargeId, amountPaise: item.amountPaise, sourceDescription: text(source.description || source.label || source[0]), chargeSnapshot: clone(source) };
+      return {
+        chargeId: item.chargeId, amountPaise: item.amountPaise,
+        sourceDescription: text(source.description || source.label || source[0]),
+        chargeSnapshot: clone(source)
+      };
     });
     const allocationTotalPaise = allocated.reduce((sum, row) => sum + row.amountPaise, 0);
-    const ledgerId = "folio-split-" + childId;
-    const auditId = "folio-split-audit-" + childId;
+    const ledgerId = "folio-split-" + childId, auditId = "folio-split-audit-" + childId;
     const payload = eventPayload("folio.split_created", {
       masterFolioId: masterId, splitFolioId: childId, bookingId: bookingKey,
       allocationTotalPaise, allocations: allocated, reason: text(reason).slice(0, 120)
     }, issuedAt);
     const changes = [
       {
-        entityType: "folio", entityId: masterId, expectedVersion: existingVersion(masterRow),
+        entityType: "folio", entityId: masterId, expectedVersion: masterRow.version,
         eventType: "folio.split_allocated", eventPayload: payload,
         mutate: entity => Object.assign(entity, {
           id: masterId, bookingId: bookingKey,
@@ -267,8 +261,8 @@ export async function createSplitFolio({
         mutate: entity => Object.assign(entity, {
           id: childId, bookingId: bookingKey, masterFolioId: masterId,
           billingGuest: clone(guest || {}), allocations: clone(allocated),
-          allocationTotalPaise, paidPaise: 0, balanceDuePaise: allocationTotalPaise, paymentRows: [], invoiceIssued: null,
-          createdAt: issuedAt, updatedAt: issuedAt, status: "OPEN"
+          allocationTotalPaise, paidPaise: 0, balanceDuePaise: allocationTotalPaise,
+          paymentRows: [], invoiceIssued: null, createdAt: issuedAt, updatedAt: issuedAt, status: "OPEN"
         })
       },
       {
@@ -293,8 +287,7 @@ export async function createSplitFolio({
     try {
       await batchCommit(bridge, changes);
       const saved = await bridge.fetchEntity("folio", childId);
-      if (!saved || saved.data.masterFolioId !== masterId ||
-          saved.data.allocationTotalPaise !== allocationTotalPaise) {
+      if (!saved || saved.data.masterFolioId !== masterId || saved.data.allocationTotalPaise !== allocationTotalPaise) {
         throw fail("SPLIT_FOLIO_READBACK_FAILED", "Split folio could not be verified after commit.");
       }
       return Object.freeze({ duplicate: false, folio: clone(saved.data), version: saved.version });
