@@ -154,6 +154,7 @@ test("split invoice preserves source line tax and uses the split billing identit
   const splitFolio = {
     id: "folio-split", masterFolioId: "folio-master",
     billingGuest: { name: "Second Guest", companyGstin: "27ABCDE1234F1Z5" },
+    paymentRows: [{ amountPaise: 1000, method: "UPI", reference: "UTR-SPLIT", at: "2026-11-16T12:00:00Z" }], paidPaise: 1000,
     allocations: [{
       chargeId: "room-night-1", amountPaise: 5000, sourceDescription: "Room night",
       chargeSnapshot: {
@@ -170,6 +171,9 @@ test("split invoice preserves source line tax and uses the split billing identit
   assert.equal(split.billedTo.companyGstin, "27ABCDE1234F1Z5");
   assert.equal(split.totals.grossMinor, 5000);
   assert.equal(split.totals.taxMinor, 763);
+  assert.equal(split.totals.paidMinor, 1000);
+  assert.equal(split.totals.dueMinor, 4000);
+  assert.equal(split.payments[0].reference, "UTR-SPLIT");
   assert.equal(split.invoiceNumber, "");
 });
 
