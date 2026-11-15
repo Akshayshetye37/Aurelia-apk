@@ -34,14 +34,14 @@ const ageAt = dob => {
       (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age -= 1;
   return age;
 };
-function getTaxProfile(profiles, key) {
+export function validateGstin(value, label = "GSTIN") {\n  const gstin = text(value).toUpperCase();\n  if (!gstin) return "";\n  if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin)) {\n    throw new TypeError(label + " must be a valid 15-character GSTIN");\n  }\n  return gstin;\n}\nfunction getTaxProfile(profiles, key) {
   const row = Array.isArray(profiles) ? profiles.find(item => item && String(item.id) === String(key)) : null;
   if (!row) return null;
   const rate = Number(row.rate);
   if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw new TypeError("Configured tax rate must be between 0 and 100");
   return Object.freeze({
     id: text(row.id), rate,
-    supply: row.supply === "interstate" ? "interstate" : "intrastate",
+    supply: (() => { if (!["interstate", "intrastate", "exempt"].includes(row.supply)) throw new TypeError("Tax profile supply must be explicitly configured"); return row.supply; })(),
     inclusive: row.inclusive === true,
     sac: text(row.sac)
   });
@@ -81,7 +81,7 @@ export function buildFolioInvoice({
   if (!booking || typeof booking !== "object" || booking.id == null) {
     throw new TypeError("A persisted booking with a stable ID is required");
   }
-  const profiles = Array.isArray(settings.folioTaxProfiles) ? settings.folioTaxProfiles : [];
+  const profiles = Array.isArray(settings.folioTaxProfiles) ? settings.folioTaxProfiles : [];\n  const propertyGstin = validateGstin(settings.gstin, "Property GSTIN");\n  const guestGstin = validateGstin(guest?.companyGstin || guest?.gstin, "Guest GSTIN");
   const nights = Math.max(1, Math.trunc(Number(booking.out) - Number(booking.in)) || 1);
   const roomTotalMinor = money(roomCharge, "Room charge");
   const roomDailyBase = Math.floor(roomTotalMinor / nights);
@@ -156,14 +156,14 @@ export function buildFolioInvoice({
       legalName: text(settings.legalName || settings.name),
       address: text(settings.addr),
       phone: text(settings.phone),
-      gstin: text(settings.gstin)
+      gstin: propertyGstin
     }),
     billedTo: Object.freeze({
       name: text(guest?.n || booking.g),
       address: text(guest?.address || guest?.addr),
       phone: text(guest?.ph),
       companyName: text(guest?.companyName),
-      companyGstin: text(guest?.companyGstin),
+      companyGstin: guestGstin,
       occupants: Object.freeze(occupants.map(row => text(row.n))),
       adults: Number.isSafeInteger(Number(booking.adults)) ? Number(booking.adults) : adultCount,
       children: Number.isSafeInteger(Number(booking.children)) ? Number(booking.children) : childCount
