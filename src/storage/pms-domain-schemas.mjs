@@ -46,7 +46,11 @@ const schemas = {
   restaurant_table: base,
   restaurant_sale: base,
   settings: base,
-  audit: base,\n  folio_sequence: base.superRefine((row, context) => {\n    if (typeof row.financialYear !== "string" || !/^FY[0-9]{4}-[0-9]{2}$/.test(row.financialYear)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["financialYear"], message: "invalid financial year" });\n    if (!Number.isSafeInteger(row.nextNumber) || row.nextNumber < 1) context.addIssue({ code: z.ZodIssueCode.custom, path: ["nextNumber"], message: "nextNumber must be a positive safe integer" });\n  })
+  audit: base,
+  folio_sequence: base.superRefine((row, context) => {
+    if (typeof row.financialYear !== "string" || !/^FY[0-9]{4}-[0-9]{2}$/.test(row.financialYear)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["financialYear"], message: "invalid financial year" });
+    if (!Number.isSafeInteger(row.nextNumber) || row.nextNumber < 1) context.addIssue({ code: z.ZodIssueCode.custom, path: ["nextNumber"], message: "nextNumber must be a positive safe integer" });
+  })
 };
 
 export const PMS_DOMAIN_SCHEMAS = Object.freeze(schemas);
