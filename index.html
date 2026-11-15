@@ -5611,7 +5611,8 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 </script>
 <script type="module" id="aurelia-async-runtime-bootstrap">
 import { PmsBootstrapCoordinator } from "./src/storage/pms-bootstrap-coordinator.mjs";
-import { buildFolioInvoice, formatFolioMinor } from "./src/folios/folio-invoice.mjs";\nimport { issueFolioInvoice, createSplitFolio, buildSplitFolioInvoice, buildRemainingFolioInvoice, recordSplitFolioPayment } from "./src/folios/folio-accounting-service.mjs";
+import { buildFolioInvoice, formatFolioMinor } from "./src/folios/folio-invoice.mjs";
+import { issueFolioInvoice, createSplitFolio, buildSplitFolioInvoice, buildRemainingFolioInvoice, recordSplitFolioPayment } from "./src/folios/folio-accounting-service.mjs";
 import { createLegacyMigrationStorage, createPreferenceStorage, readLegacyPhotoFallbackEntries, deleteLegacyPhotoFallbackEntries } from "./src/storage/legacy-web-storage.mjs";
 import { createPhotoArchive } from "./src/storage/photo-archive.mjs";
 import { createBackupVaultStore } from "./src/storage/backup-vault-store.mjs";
