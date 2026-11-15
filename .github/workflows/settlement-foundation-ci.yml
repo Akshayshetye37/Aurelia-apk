@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: "22"
       - name: Install application dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Syntax-check settlement modules
         run: |
           node --check src/payments/canonical.mjs
@@ -50,6 +50,6 @@ jobs:
           node --check src/payments/payment-device-bridge.mjs
           node --check tests/settlement-projector.test.mjs
       - name: Run full application test suite
-        run: npm test
+        run: npm run test:ci
       - name: Build production web assets
         run: npm run build
