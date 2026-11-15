@@ -114,5 +114,10 @@ test('printer validation fails closed on malformed and unknown input', () => {
   symbolDocument[Symbol('hidden')] = 'unexpected';
   assert.equal(validatePrintDocument(symbolDocument).ok, false);
   assert.equal(validatePrintRequest(null).ok, false);
+  const hostile = new Proxy({}, { getPrototypeOf() { throw new Error('trap'); } });
+  assert.equal(validatePrinterEndpoint(hostile).ok, false);
+  assert.equal(validatePrinterProfile(hostile).ok, false);
+  assert.equal(validatePrintDocument(hostile).ok, false);
+  assert.equal(validatePrintRequest(hostile).ok, false);
   assert.equal(validatePrintRequest({ requestId: 'job_12345678', kind: 'shell', copies: 1, document: {} }).ok, false);
 });
