@@ -108,6 +108,7 @@ test("split folio preserves master ledger and creates separately billable child 
 
 test("split folio rejects over-allocation and duplicate child IDs", async () => {
   const { bridge } = fixture();
+  await bridge.mutateEntity({ entityType: "folio", entityId: "folio-master", expectedVersion: 0, eventType: "folio.created", mutate: entity => Object.assign(entity, { id: "folio-master", bookingId: "booking-1", chargeLines: [{ id: "charge-1", amountPaise: 1000 }] }) });
   await createSplitFolio({
     bridge, masterFolioId: "folio-master", childFolioId: "folio-child-1",
     bookingId: "booking-1", sourceCharges: [{ id: "charge-1", amount: 10 }],
