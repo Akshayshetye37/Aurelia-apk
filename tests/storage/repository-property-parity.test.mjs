@@ -71,7 +71,7 @@ async function runSequence(caseIndex, operations) {
 
   const expected = [...model.entries()]
     .map(([id, value]) => ({ id, version: value.version, data: value.data }))
-    .sort((a, b) => a.data.createdAt.localeCompare(b.data.createdAt) || a.id.localeCompare(b.id));
+    .sort((a, b) => a.id.localeCompare(b.id));
   const actual = (await repository.listEntities("folio"))
     .filter(row => row.id.startsWith("property-" + caseIndex + "-"))
     .map(row => ({ id: row.id, version: row.version, data: row.data }));
