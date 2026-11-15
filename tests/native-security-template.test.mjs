@@ -170,6 +170,10 @@ test('Capacitor PMS SQLite plugin is copied and explicitly registered before Mai
   assert.match(plugin, /repository\(\)\.transactBusinessChange\(/);
   assert.doesNotMatch(plugin, /beginTransaction|endTransaction|setTransactionSuccessful/);
   assert.match(patcher, /CapacitorPmsStoragePlugin\.java/);
+  assert.match(patcher, /LocalPmsRepositoryInstrumentedTest/);
+  assert.match(patcher, /AureliaSecurityInstrumentedTest/);
+  assert.match(patcher, /androidTest/);
+  assert.match(patcher, /Instrumentation package declaration mismatch/);
   assert.match(patcher, /registerPlugin\(CapacitorPmsStoragePlugin\.class\)/);
   assert.match(patcher, /registerPlugin\(CapacitorPmsStoragePlugin\.class\);[\s\S]*?super\.onCreate/);
 });

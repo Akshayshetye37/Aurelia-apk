@@ -122,6 +122,18 @@ jobs:
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
 
+      - name: Diagnose generated Android instrumentation source layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== generated android/app/build.gradle ==='
+          cat android/app/build.gradle
+          echo '=== instrumentation source files ==='
+          find android/app/src -type f -name '*InstrumentedTest*' -print -exec sed -n '1,12p' {} \\;
+          echo '=== required instrumentation sources ==='
+          test -f android/app/src/androidTest/java/com/aurelia/pms/LocalPmsRepositoryInstrumentedTest.java
+          test -f android/app/src/androidTest/java/com/aurelia/pms/security/AureliaSecurityInstrumentedTest.java
+
       - name: Fast compile Android instrumentation Java tests
         timeout-minutes: 10
         working-directory: android
@@ -199,6 +211,10 @@ jobs:
             echo "::error::The androidTest APK does not contain AndroidJUnitRunner symbols."
             exit 1
           fi
+          echo '=== built androidTest APK class inventory ==='
+          unzip -l "$test_apk"
+          echo '=== built androidTest APK DEX test symbols ==='
+          grep -E 'LocalPmsRepositoryInstrumentedTest|AureliaSecurityInstrumentedTest|AndroidJUnitRunner' "$dex_symbols"
           echo "SQLCipher x86_64 library and instrumentation test classes are present."
 
       - name: Verify packaged Android backup exclusions

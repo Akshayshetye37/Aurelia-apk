@@ -368,6 +368,27 @@ const debugFaultSourceDir = path.join(androidDir, 'app', 'src', 'debug', 'java',
 fs.mkdirSync(debugFaultSourceDir, { recursive: true });
 fs.copyFileSync(debugFaultTemplate, path.join(debugFaultSourceDir, 'LocalPmsFaultInjection.java'));
 
+// Copy the required Java instrumentation suites into the app module's
+// androidTest source set. Validate source existence, package and class selector.
+const instrumentationTemplates = [
+  { source: path.join(androidDir, 'templates', 'instrumentation', 'LocalPmsRepositoryInstrumentedTest.java'),
+    destination: path.join(appModuleDir, 'src', 'androidTest', 'java', 'com', 'aurelia', 'pms', 'LocalPmsRepositoryInstrumentedTest.java'),
+    packageName: 'com.aurelia.pms', className: 'LocalPmsRepositoryInstrumentedTest' },
+  { source: path.join(androidDir, 'templates', 'instrumentation', 'AureliaSecurityInstrumentedTest.java'),
+    destination: path.join(appModuleDir, 'src', 'androidTest', 'java', 'com', 'aurelia', 'pms', 'security', 'AureliaSecurityInstrumentedTest.java'),
+    packageName: 'com.aurelia.pms.security', className: 'AureliaSecurityInstrumentedTest' }
+];
+for (const item of instrumentationTemplates) {
+  if (!fs.existsSync(item.source)) throw new Error('Required instrumentation template is missing: ' + item.source);
+  const sourceText = fs.readFileSync(item.source, 'utf8');
+  if (!sourceText.includes('package ' + item.packageName + ';')) throw new Error('Instrumentation package declaration mismatch: ' + item.source);
+  if (!sourceText.includes('class ' + item.className)) throw new Error('Required instrumentation class declaration missing: ' + item.className);
+  fs.mkdirSync(path.dirname(item.destination), { recursive: true });
+  fs.copyFileSync(item.source, item.destination);
+  if (!fs.existsSync(item.destination)) throw new Error('Instrumentation source copy failed: ' + item.destination);
+}
+
+
 function addNativeSecurityDependencies(contents, kotlinDsl) {
   if (!/dependencies\s*\{/.test(contents)) {
     throw new Error('App Gradle file has no dependencies block; native security dependencies were not added.');
