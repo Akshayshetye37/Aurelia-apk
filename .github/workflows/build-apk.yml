@@ -2,7 +2,10 @@ name: Build and verify Aurelia PMS APK
 
 # Release builds are deliberately gated; do not build until all ten acceptance gates are signed off.
 on:
+  workflow_dispatch:
   push:
+    branches:
+      - 'work/**'
     tags:
       - 'aurelia-approved-*'
 
