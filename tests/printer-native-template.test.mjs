@@ -66,6 +66,8 @@ test('raw TCP jobs are idempotent for five minutes and cancellation never claims
   const source = read('android/templates/printer/AureliaPrinterPlugin.kt');
   assert.match(source, /5 \* 60 \* 1000L/);
   assert.match(source, /fun claimJob/);
+  assert.match(source, /fun getJob/);
+  assert.match(source, /reserveRecentJob/);
   assert.match(source, /cancel_not_supported_on_raw_tcp/);
   const cancel = source.slice(source.indexOf('fun cancelJob'), source.indexOf('override fun handleOnDestroy'));
   assert.doesNotMatch(cancel, /socket\.close/);
