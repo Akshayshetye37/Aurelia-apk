@@ -6,7 +6,8 @@ import {
 import { PrinterAdapter, failedPrintResult } from '../printer-adapter.mjs';
 
 const safeError = error => {
-  const code = typeof error?.code === 'string' ? error.code : '';
+  const code = typeof error?.code === 'string' ? error.code :
+    typeof error?.error === 'string' ? error.error : '';
   return /^[a-z0-9_]{1,64}$/.test(code) ? code : 'lan_printer_operation_failed';
 };
 
