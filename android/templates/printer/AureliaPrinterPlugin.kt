@@ -33,6 +33,7 @@ import javax.crypto.spec.GCMParameterSpec
 class AureliaPrinterPlugin : Plugin() {
     private val executor = Executors.newSingleThreadExecutor()
     private val activeSockets = ConcurrentHashMap<String, java.net.Socket>()
+    private val recentJobLedger = ConcurrentHashMap<String, Long>()
     private val watchdog = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
     private val tag = "AureliaPrinter"
     private val store by lazy { PrinterTrustStore(context) }
@@ -175,6 +176,11 @@ class AureliaPrinterPlugin : Plugin() {
         val layout = doc.optString("layout")
         if (kind == "invoice" || layout == "80mm") { call.reject("printer_profile_layout_mismatch"); return }
         val ledgerKey = id + "|" + requestId
+        if (!reserveRecentJob(ledgerKey)) {
+            call.resolve(JSObject().put("ok", false).put("status", "uncertain").put("requestId", requestId)
+                .put("duplicate", true).put("error", "recent_duplicate_request"))
+            return
+        }
         val prior = try { store.claimJob(ledgerKey) } catch (_: Exception) { call.reject("job_ledger_unavailable"); return }
         if (prior != null) {
             if (prior.optString("error") == "delivery_in_progress") {
@@ -232,6 +238,23 @@ class AureliaPrinterPlugin : Plugin() {
         executor.shutdownNow()
         watchdog.shutdownNow()
         super.handleOnDestroy()
+    }
+
+    private fun reserveRecentJob(key: String): Boolean {
+        val now = System.currentTimeMillis()
+        val previous = recentJobLedger.putIfAbsent(key, now)
+        if (previous != null) {
+            if (now - previous < 5 * 60 * 1000L) return false
+            if (!recentJobLedger.replace(key, previous, now)) return false
+        }
+        if (recentJobLedger.size > 200) {
+            val iterator = recentJobLedger.entries.iterator()
+            while (iterator.hasNext()) {
+                val entry = iterator.next()
+                if (now - entry.value >= 5 * 60 * 1000L) recentJobLedger.remove(entry.key, entry.value)
+            }
+        }
+        return true
     }
 
     private fun resolvePinnedPeer(record: PrinterTrustStore.Record): InetAddress? {
