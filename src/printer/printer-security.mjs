@@ -31,10 +31,15 @@ const quantity = value =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 100000 &&
   Math.round(value * 1000) === value * 1000;
 
-const isoDateTime = value =>
-  typeof value === 'string' && value.length <= 30 &&
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value) &&
-  Number.isFinite(Date.parse(value));
+const isoDateTime = value => {
+  if (typeof value !== 'string' || value.length > 30) return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?Z$/.exec(value);
+  if (!match) return false;
+  const [, year, month, day, hour, minute, second] = match;
+  const daysInMonth = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
+  return Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= daysInMonth &&
+    Number(hour) <= 23 && Number(minute) <= 59 && Number(second) <= 59 && Number.isFinite(Date.parse(value));
+};
 
 const arrayOf = (value, min, max, predicate) =>
   Array.isArray(value) && value.length >= min && value.length <= max && value.every(predicate);
