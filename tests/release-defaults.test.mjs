@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
-const requiredFalseFlags = ["uiCutover", "cloudSync", "sync", "gatewayPayments", "payBridge", "ccavenue"];
+const requiredFalseFlags = ["uiCutover", "cloudSync", "sync", "gatewayPayments", "payBridge", "ccavenue", "BT_PRINTING_ENABLED"];
 
 function releaseProfile(source) {
   const match = source.match(/window\.AURELIA_LOCAL_ONLY_RELEASE\s*=\s*Object\.freeze\(\s*\{([\s\S]*?)\}\s*\)/);
