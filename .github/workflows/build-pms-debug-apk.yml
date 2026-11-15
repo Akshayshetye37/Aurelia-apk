@@ -4,6 +4,18 @@ name: Validate Aurelia PMS Debug Build (not for Pay Bridge pairing)
 # The resulting debug APK is not a signed production release and is not compatible with the Pay Bridge pairing.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'work/**'
+    paths:
+      - "src/**"
+      - "public/**"
+      - "android/**"
+      - "capacitor.config.*"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/patch-android.js"
+      - ".github/workflows/build-pms-debug-apk.yml"
 
 permissions:
   contents: read
