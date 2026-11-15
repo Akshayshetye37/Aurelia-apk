@@ -22,6 +22,7 @@ const device = {
 };
 const ledgerEntry = {
   id: 'gw:tenant_123:razorpay:test:account:pay_123',
+  idempotencyKey: 'payment-intent:123e4567-e89b-42d3-a456-426614174000',
   hash: 'a'.repeat(64), committedAt: new Date(NOW - 1000).toISOString()
 };
 const sign = async bytes => crypto.sign('sha256', Buffer.from(bytes), privateKey);
