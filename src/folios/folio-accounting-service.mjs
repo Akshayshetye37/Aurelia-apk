@@ -375,6 +375,7 @@ export function buildSplitFolioInvoice({ masterInvoice, splitFolio, invoiceDate 
       companyGstin: text(splitFolio.billingGuest?.companyGstin),
       occupants: Object.freeze([])
     }),
+    payments: Object.freeze(payments),
     lineItems: Object.freeze(lineItems),
     totals: Object.freeze({
       subtotalMinor: sum("taxableMinor"), taxMinor, grossMinor,
