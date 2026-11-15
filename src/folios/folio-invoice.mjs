@@ -24,7 +24,7 @@ const dateFromOffset = value => {
   date.setDate(date.getDate() + offset);
   return date.toISOString();
 };
-const ageAt = dob => {
+const ageAt = (dob, referenceDate = new Date()) => {
   if (!dob) return null;
   const birth = new Date(dob);
   if (!Number.isFinite(birth.getTime())) return null;
