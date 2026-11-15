@@ -79,7 +79,10 @@ export async function issueFolioInvoice({
   if (!invoice || typeof invoice !== "object" || !Array.isArray(invoice.lineItems) || !invoice.totals) {
     throw new TypeError("A complete calculated invoice snapshot is required");
   }
-  if (invoice.lineItems.some(line => !line.taxProfile || !line.taxProfile.id)) {\n    throw fail("TAX_PROFILE_MISSING", "Every invoice charge requires an explicit configured tax profile, including an explicit zero-rate/exempt profile.");\n  }\n  const paymentReconciliation = reconcileLegacyPaymentTotals(booking);
+  if (invoice.lineItems.some(line => !line.taxProfile || !line.taxProfile.id)) {
+    throw fail("TAX_PROFILE_MISSING", "Every invoice charge requires an explicit configured tax profile, including an explicit zero-rate/exempt profile.");
+  }
+  const paymentReconciliation = reconcileLegacyPaymentTotals(booking);
   if (!paymentReconciliation.matched) {
     throw fail("LEGACY_PAYMENT_RECONCILIATION_REQUIRED",
       "Invoice issuance blocked: booking.p and booking.pays differ by " +
@@ -219,7 +222,8 @@ export async function createSplitFolio({
       bridge.listEntities("ledger")
     ]);
     if (childRow) throw fail("SPLIT_FOLIO_ALREADY_EXISTS", "The split folio ID already exists.");
-    if (masterRow?.data?.invoiceIssued) throw fail("MASTER_INVOICE_ALREADY_ISSUED", "A split cannot be created after the master tax invoice has been issued.");\n    if (masterRow?.data?.bookingId && String(masterRow.data.bookingId) !== bookingKey) {
+    if (masterRow?.data?.invoiceIssued) throw fail("MASTER_INVOICE_ALREADY_ISSUED", "A split cannot be created after the master tax invoice has been issued.");
+    if (masterRow?.data?.bookingId && String(masterRow.data.bookingId) !== bookingKey) {
       throw fail("FOLIO_BOOKING_MISMATCH", "The master folio belongs to another booking.");
     }
     const used = new Map();
