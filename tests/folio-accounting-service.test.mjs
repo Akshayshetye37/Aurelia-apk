@@ -26,7 +26,7 @@ const booking = {
   pays: [{ a: 50, m: "UPI", r: "UTR-1" }]
 };
 const invoice = {
-  invoiceNumber: "", lineItems: [{ id: "room-1", grossMinor: 10000, taxMinor: 0, cgstMinor: 0, sgstMinor: 0, igstMinor: 0, taxProfile: { id: "room-zero", rate: 0, supply: "intrastate", inclusive: true, sac: "996311" } }],
+  invoiceNumber: "", lineItems: [{ id: "room-1", grossMinor: 10000, taxableMinor: 10000, taxMinor: 0, cgstMinor: 0, sgstMinor: 0, igstMinor: 0, taxProfile: { id: "room-zero", rate: 0, supply: "intrastate", inclusive: true, sac: "996311" } }],
   totals: { grossMinor: 10000, taxMinor: 0, subtotalMinor: 10000 }
 };
 
