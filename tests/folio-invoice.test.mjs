@@ -12,7 +12,7 @@ const booking = {
   pays: [{ a: 500, m: "UPI", r: "UTR123", at: "2026-11-16T10:00:00Z" }]
 };
 const settings = {
-  name: "Aurelia PMS", addr: "Property address", gstin: "PROPERTY-GSTIN",
+  name: "Aurelia PMS", addr: "Property address", gstin: "27ABCDE1234F1Z5",
   folioTaxProfiles: [
     { id: "food", rate: 18, supply: "intrastate", inclusive: true, sac: "996331" }
   ]
