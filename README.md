@@ -236,3 +236,17 @@ Latest observed native workflow: [Aurelia native SQLite contract run #170](https
 ## Definition of production-ready
 
 All required code paths, automated tests, real Android instrumentation, physical-device qualification, owner-authorized migration/accounting parity, second-device backup/restore, security review, repository governance and release authorization must be complete on the **same exact release-candidate SHA**. No older SHA, mock-only test, compile-only result or synthetic dataset substitutes for that evidence.
+
+## Folio invoice work — current branch implementation
+
+The folio invoice projection and PMS screen now support:
+
+- Primary guest billing details, optional company name/GSTIN, and registered accompanying occupants.
+- Room number/category, stay dates and check-in/check-out times.
+- Dated nightly accommodation lines, extra charges and restaurant charges.
+- Restaurant outlet and generated POS check reference on room-posted dining charges.
+- Explicit, configurable room and restaurant tax profiles, SAC labels, inclusive/exclusive pricing, and intrastate CGST/SGST versus interstate IGST calculations.
+- Tax-aware folio totals and manual payment posting through the canonical repository settlement boundary.
+- A printable folio invoice view with property identity, guest details, itemization, tax summary, payment summary and signature areas.
+
+**Important release limitations:** this does not yet qualify as a production GST invoicing system. Tax profiles must be configured and reviewed by the property's accounting/tax owner; the app does not verify tax rates or SAC applicability against government records. Invoice numbering is not issued automatically by this view. Split folios, separate sequential tax invoices, per-person payment allocation, and transactional charge transfer between folios are not implemented. Do not use this view as a substitute for those controls or represent a draft folio as a statutory tax invoice. Existing legacy booking/payment data also requires reconciliation before tax-inclusive balances are relied on operationally.
