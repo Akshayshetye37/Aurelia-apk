@@ -71,9 +71,13 @@ function assertReceiptLifetime(receipt, now, maxAgeMs) {
 function assertReadBack(receipt) {
   const proof = receipt.readBackConfirmation;
   if (proof.confirmed !== true) throw new Error('ledger_readback_required');
+  const committedAt = Date.parse(proof.committedAt);
+  const issuedAt = Date.parse(receipt.issuedAt);
   if (proof.ledgerEntryId !== receipt.ledgerEntryId ||
       proof.ledgerEntryHash !== receipt.ledgerEntryHash ||
-      !Number.isFinite(Date.parse(proof.committedAt))) {
+      !Number.isFinite(committedAt) || !Number.isFinite(issuedAt) ||
+      committedAt > issuedAt + CLOCK_SKEW_MS ||
+      issuedAt - committedAt > DEFAULT_MAX_AGE_MS) {
     throw new Error('ledger_readback_mismatch');
   }
 }
