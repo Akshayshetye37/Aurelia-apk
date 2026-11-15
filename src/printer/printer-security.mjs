@@ -9,10 +9,10 @@ function strictRecord(value, required, optional = []) {
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) return false;
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  const keys = Object.keys(descriptors);
+  const keys = Reflect.ownKeys(descriptors);
   const allowed = new Set([...required, ...optional]);
   return required.every(key => hasOwn(descriptors, key)) &&
-    keys.every(key => allowed.has(key) && hasOwn(descriptors[key], 'value') &&
+    keys.every(key => typeof key === 'string' && allowed.has(key) && hasOwn(descriptors[key], 'value') &&
       !descriptors[key].get && !descriptors[key].set);
 }
 
@@ -188,14 +188,24 @@ function inspectDocument(value, depth = 0) {
   if (typeof value === 'number') return Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER;
   if (typeof value === 'string') return new TextEncoder().encode(value).byteLength <= 16_384 &&
     !/[\u0000-\u001f\u007f]/.test(value);
-  if (Array.isArray(value)) return value.length <= 500 && value.every(item => inspectDocument(item, depth + 1));
+  if (Array.isArray(value)) {
+    if (value.length > 500) return false;
+    const keys = Reflect.ownKeys(value);
+    if (keys.length !== value.length + 1 || !keys.includes('length')) return false;
+    for (let index = 0; index < value.length; index++) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !hasOwn(descriptor, 'value') || descriptor.get || descriptor.set ||
+          !inspectDocument(descriptor.value, depth + 1)) return false;
+    }
+    return true;
+  }
   if (typeof value !== 'object') return false;
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) return false;
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  const keys = Object.keys(descriptors);
+  const keys = Reflect.ownKeys(descriptors);
   if (keys.length > 100) return false;
-  return keys.every(key => key.length <= 128 && hasOwn(descriptors[key], 'value') &&
+  return keys.every(key => typeof key === 'string' && key.length <= 128 && hasOwn(descriptors[key], 'value') &&
     !descriptors[key].get && !descriptors[key].set && inspectDocument(descriptors[key].value, depth + 1));
 }
 
