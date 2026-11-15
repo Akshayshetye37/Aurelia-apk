@@ -2,12 +2,42 @@ export const MAX_PRINTER_DOCUMENT_BYTES = 1024 * 1024;
 
 const fail = error => ({ ok: false, error });
 const pass = value => ({ ok: true, value });
-const ownKeysOnly = (value, allowed) => {
+const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+
+function strictRecord(value, required, optional = []) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  return Object.keys(descriptors).every(key => allowed.includes(key) &&
-    Object.hasOwn(descriptors[key], 'value') && !descriptors[key].get && !descriptors[key].set);
-};
+  const keys = Object.keys(descriptors);
+  const allowed = new Set([...required, ...optional]);
+  return required.every(key => hasOwn(descriptors, key)) &&
+    keys.every(key => allowed.has(key) && hasOwn(descriptors[key], 'value') &&
+      !descriptors[key].get && !descriptors[key].set);
+}
+
+const textValue = (value, max = 256, { optional = false } = {}) =>
+  (optional && value === undefined) ||
+  (typeof value === 'string' && value.length > 0 && value.length <= max &&
+    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value) && value.trim() === value);
+
+const optionalText = (record, key, max = 256) =>
+  !hasOwn(record, key) || textValue(record[key], max);
+
+const integer = (value, min = 0, max = Number.MAX_SAFE_INTEGER) =>
+  Number.isSafeInteger(value) && value >= min && value <= max;
+
+const quantity = value =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 100000 &&
+  Math.round(value * 1000) === value * 1000;
+
+const isoDateTime = value =>
+  typeof value === 'string' && value.length <= 30 &&
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value) &&
+  Number.isFinite(Date.parse(value));
+
+const arrayOf = (value, min, max, predicate) =>
+  Array.isArray(value) && value.length >= min && value.length <= max && value.every(predicate);
 
 function isPrivateIpv4(host) {
   const parts = host.split('.');
@@ -37,7 +67,7 @@ function isAllowedPrinterHost(host) {
 }
 
 export function validatePrinterEndpoint(input) {
-  if (!ownKeysOnly(input, ['host', 'port', 'trustedByUser'])) return fail('invalid_endpoint');
+  if (!strictRecord(input, ['host', 'port', 'trustedByUser'])) return fail('invalid_endpoint');
   if (input.trustedByUser !== true) return fail('explicit_trust_required');
   if (!isAllowedPrinterHost(input.host)) return fail('untrusted_network_target');
   if (input.port !== 9100) return fail('unsupported_printer_port');
@@ -53,7 +83,7 @@ const PROFILE_PROTOCOLS = Object.freeze({
 });
 
 export function validatePrinterProfile(input) {
-  if (!ownKeysOnly(input, [
+  if (!strictRecord(input, [
     'transport', 'protocol', 'paperWidthMm', 'printableDots', 'dpi', 'verification', 'verified'
   ])) return fail('invalid_profile');
   if (!Object.hasOwn(PROFILE_PROTOCOLS, input.transport) ||
@@ -71,43 +101,117 @@ export function validatePrinterProfile(input) {
   return pass(Object.freeze({ ...input }));
 }
 
-const FORBIDDEN_DOCUMENT_KEYS = new Set([
-  '__proto__', 'prototype', 'constructor', 'raw', 'rawBytes', 'commands', 'commandBytes',
-  'escpos', 'zpl', 'tspl', 'html', 'markup', 'javascript', 'script'
-]);
+function validHotel(value) {
+  return strictRecord(value, ['name'], ['address', 'phone', 'gstin']) &&
+    textValue(value.name, 120) && optionalText(value, 'address', 300) &&
+    optionalText(value, 'phone', 32) &&
+    (!hasOwn(value, 'gstin') || (textValue(value.gstin, 15) && /^[0-9A-Z]{15}$/.test(value.gstin)));
+}
+
+function validInvoice(value) {
+  return strictRecord(value, ['number', 'issuedAt', 'currency']) &&
+    textValue(value.number, 64) && isoDateTime(value.issuedAt) &&
+    typeof value.currency === 'string' && /^[A-Z]{3}$/.test(value.currency);
+}
+
+function validGuest(value) {
+  return strictRecord(value, ['name'], ['roomNumber', 'bookingReference']) &&
+    textValue(value.name, 120) && optionalText(value, 'roomNumber', 32) &&
+    optionalText(value, 'bookingReference', 64);
+}
+
+function validLine(value) {
+  return strictRecord(value, [
+    'description', 'category', 'quantity', 'unitAmountMinor', 'totalAmountMinor', 'taxRateBps', 'taxAmountMinor'
+  ]) && textValue(value.description, 180) &&
+    ['room', 'pos', 'extra_bed', 'incidentals', 'food', 'other'].includes(value.category) &&
+    quantity(value.quantity) && integer(value.unitAmountMinor) && integer(value.totalAmountMinor) &&
+    integer(value.taxRateBps, 0, 10000) && integer(value.taxAmountMinor);
+}
+
+function validTaxSummary(value) {
+  return strictRecord(value, ['rateBps', 'taxableAmountMinor', 'taxAmountMinor']) &&
+    integer(value.rateBps, 0, 10000) && integer(value.taxableAmountMinor) && integer(value.taxAmountMinor);
+}
+
+function validPayment(value) {
+  return strictRecord(value, ['method', 'amountMinor'], ['reference']) &&
+    ['cash', 'card', 'upi', 'bank_transfer', 'other'].includes(value.method) &&
+    integer(value.amountMinor, 1) && optionalText(value, 'reference', 80);
+}
+
+function validTotals(value) {
+  return strictRecord(value, [
+    'subtotalMinor', 'discountMinor', 'taxMinor', 'grandTotalMinor', 'paidMinor', 'dueMinor'
+  ]) && Object.values(value).every(item => integer(item)) &&
+    value.grandTotalMinor === value.subtotalMinor - value.discountMinor + value.taxMinor &&
+    value.paidMinor + value.dueMinor === value.grandTotalMinor;
+}
+
+function validFolioDocument(value) {
+  if (!strictRecord(value, [
+    'documentType', 'layout', 'hotel', 'invoice', 'guest', 'lines', 'taxSummary', 'payments', 'totals'
+  ])) return false;
+  if (!['folio-invoice', 'thermal-receipt'].includes(value.documentType)) return false;
+  if (value.documentType === 'folio-invoice' && value.layout !== 'a4') return false;
+  if (value.documentType === 'thermal-receipt' && !['58mm', '80mm'].includes(value.layout)) return false;
+  if (!validHotel(value.hotel) || !validInvoice(value.invoice) || !validGuest(value.guest)) return false;
+  if (!arrayOf(value.lines, 1, 300, validLine) ||
+      !arrayOf(value.taxSummary, 0, 20, validTaxSummary) ||
+      !arrayOf(value.payments, 0, 100, validPayment) || !validTotals(value.totals)) return false;
+  const lineTotal = value.lines.reduce((sum, line) => sum + line.totalAmountMinor, 0);
+  const taxTotal = value.taxSummary.reduce((sum, tax) => sum + tax.taxAmountMinor, 0);
+  const paymentTotal = value.payments.reduce((sum, payment) => sum + payment.amountMinor, 0);
+  return Number.isSafeInteger(lineTotal) && lineTotal === value.totals.subtotalMinor &&
+    taxTotal === value.totals.taxMinor && paymentTotal === value.totals.paidMinor;
+}
+
+function validKitchenDocument(value) {
+  if (!strictRecord(value, ['documentType', 'layout', 'hotel', 'order', 'items'])) return false;
+  if (value.documentType !== 'kitchen-ticket' || !['58mm', '80mm'].includes(value.layout) ||
+      !validHotel(value.hotel)) return false;
+  const order = value.order;
+  if (!strictRecord(order, ['number', 'createdAt', 'outlet'], ['table']) ||
+      !textValue(order.number, 64) || !isoDateTime(order.createdAt) ||
+      !textValue(order.outlet, 80) || !optionalText(order, 'table', 32)) return false;
+  return arrayOf(value.items, 1, 200, item =>
+    strictRecord(item, ['name', 'quantity'], ['modifiers', 'notes']) &&
+    textValue(item.name, 120) && quantity(item.quantity) &&
+    (!hasOwn(item, 'modifiers') || arrayOf(item.modifiers, 0, 20, modifier => textValue(modifier, 100))) &&
+    optionalText(item, 'notes', 240)
+  );
+}
 
 function inspectDocument(value, depth = 0) {
   if (depth > 12) return false;
   if (value === null || typeof value === 'boolean') return true;
   if (typeof value === 'number') return Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER;
-  if (typeof value === 'string') return new TextEncoder().encode(value).byteLength <= 16_384;
+  if (typeof value === 'string') return new TextEncoder().encode(value).byteLength <= 16_384 &&
+    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value);
   if (Array.isArray(value)) return value.length <= 500 && value.every(item => inspectDocument(item, depth + 1));
   if (typeof value !== 'object') return false;
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) return false;
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const keys = Object.keys(descriptors);
-  if (keys.length > 100 || keys.some(key => FORBIDDEN_DOCUMENT_KEYS.has(key))) return false;
-  return keys.every(key => key.length <= 128 && Object.hasOwn(descriptors[key], 'value') &&
+  if (keys.length > 100) return false;
+  return keys.every(key => key.length <= 128 && hasOwn(descriptors[key], 'value') &&
     !descriptors[key].get && !descriptors[key].set && inspectDocument(descriptors[key].value, depth + 1));
 }
 
-export function validatePrintRequest(input) {
-  if (!ownKeysOnly(input, ['requestId', 'kind', 'copies', 'document'])) return fail('invalid_print_request');
-  if (typeof input.requestId !== 'string' || !/^job_[A-Za-z0-9_-]{8,64}$/.test(input.requestId)) {
-    return fail('invalid_request_id');
+export function validatePrintDocument(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input) || !inspectDocument(input)) {
+    return fail('invalid_document');
   }
-  if (!['invoice', 'receipt', 'kitchen_ticket', 'label', 'test_page'].includes(input.kind)) {
-    return fail('unsupported_document_kind');
-  }
-  if (!Number.isInteger(input.copies) || input.copies < 1 || input.copies > 3) return fail('invalid_copy_count');
-  if (!input.document || typeof input.document !== 'object' || Array.isArray(input.document) ||
-      !inspectDocument(input.document)) return fail('invalid_document');
   let serialized;
-  try { serialized = JSON.stringify(input.document); } catch { return fail('invalid_document'); }
+  try { serialized = JSON.stringify(input); } catch { return fail('invalid_document'); }
   if (new TextEncoder().encode(serialized).byteLength > MAX_PRINTER_DOCUMENT_BYTES) {
     return fail('document_too_large');
   }
+  const valid = input.documentType === 'kitchen-ticket'
+    ? validKitchenDocument(input)
+    : validFolioDocument(input);
+  if (!valid) return fail('invalid_semantic_document');
   const snapshot = JSON.parse(serialized);
   const freezeDeep = value => {
     if (value && typeof value === 'object') {
@@ -116,10 +220,28 @@ export function validatePrintRequest(input) {
     }
     return value;
   };
+  return pass(freezeDeep(snapshot));
+}
+
+export function validatePrintRequest(input) {
+  if (!strictRecord(input, ['requestId', 'kind', 'copies', 'document'])) return fail('invalid_print_request');
+  if (typeof input.requestId !== 'string' || !/^job_[A-Za-z0-9_-]{8,64}$/.test(input.requestId)) {
+    return fail('invalid_request_id');
+  }
+  if (!['invoice', 'receipt', 'kitchen_ticket'].includes(input.kind)) return fail('unsupported_document_kind');
+  if (!integer(input.copies, 1, 3)) return fail('invalid_copy_count');
+  const document = validatePrintDocument(input.document);
+  if (!document.ok) return document;
+  const expectedType = {
+    invoice: 'folio-invoice',
+    receipt: 'thermal-receipt',
+    kitchen_ticket: 'kitchen-ticket'
+  }[input.kind];
+  if (document.value.documentType !== expectedType) return fail('document_kind_mismatch');
   return pass(Object.freeze({
     requestId: input.requestId,
     kind: input.kind,
     copies: input.copies,
-    document: freezeDeep(snapshot)
+    document: document.value
   }));
 }
