@@ -97,6 +97,8 @@ jobs:
 
       - name: Sync Capacitor Android project
         run: npx cap sync android
+      - name: Enforce Android HTTPS and cleartext policy
+        run: node scripts/enforce-android-network-security.mjs
 
       - name: Build debug APK
         working-directory: android
