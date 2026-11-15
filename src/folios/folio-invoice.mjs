@@ -47,6 +47,7 @@ function getTaxProfile(profiles, key) {
   if (!row) return null;
   const rate = Number(row.rate);
   if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw new TypeError("Configured tax rate must be between 0 and 100");
+  if (row.supply === "exempt" && rate !== 0) throw new TypeError("Exempt tax profiles must use a zero tax rate");
   return Object.freeze({
     id: text(row.id), rate,
     supply: (() => { if (!["interstate", "intrastate", "exempt"].includes(row.supply)) throw new TypeError("Tax profile supply must be explicitly configured"); return row.supply; })(),
@@ -152,7 +153,8 @@ export function buildFolioInvoice({
   const taxMinor = lineItems.reduce((sum, line) => sum + line.taxMinor, 0);
   const grossMinor = lineItems.reduce((sum, line) => sum + line.netAmountMinor, 0);
   const paidMinor = money(paidAmount, "Paid amount");
-  const dueMinor = money(balanceDue, "Balance due");
+  if (paidMinor > grossMinor) throw new RangeError("Recorded payments exceed the calculated invoice total; reconcile the folio before issuing an invoice");
+  const dueMinor = grossMinor - paidMinor;
   const occupants = Array.isArray(guest?.occ) ? guest.occ.filter(row => text(row?.n)) : [];
   const childCount = occupants.filter(row =>
     /child|minor/i.test(text(row?.rel)) || (ageAt(row?.dob) != null && ageAt(row?.dob) < 18)
@@ -166,7 +168,8 @@ export function buildFolioInvoice({
       legalName: text(settings.legalName || settings.name),
       address: text(settings.addr),
       phone: text(settings.phone),
-      gstin: propertyGstin
+      gstin: propertyGstin,
+      timeZone: text(settings.timeZone || "Asia/Kolkata")
     }),
     billedTo: Object.freeze({
       name: text(guest?.n || booking.g),
