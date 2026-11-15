@@ -22,9 +22,9 @@ function isPrivateIpv4(host) {
 
 function isAllowedPrinterHost(host) {
   if (typeof host !== 'string' || host.length > 253 || host !== host.trim()) return false;
-  if (/[\\s/@?#\\[\\]\\\\]/.test(host) || host.includes('://')) return false;
+  if (host.split('').some(character => character <= ' ' || '/@?#[]\\'.includes(character)) || host.includes('://')) return false;
   if (isPrivateIpv4(host)) return true;
-  if (/^\\d{1,3}(?:\\.\\d{1,3}){3}$/.test(host)) return false;
+  if (host.split('.').length === 4 && host.split('.').every(part => /^[0-9]+$/.test(part))) return false;
   if (host.includes(':')) {
     const value = host.toLowerCase();
     return /^[0-9a-f:]+$/.test(value) && (value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe80:'));
