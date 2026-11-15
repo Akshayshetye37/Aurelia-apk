@@ -46,7 +46,15 @@ const schemas = {
   restaurant_table: base,
   restaurant_sale: base,
   settings: base,
-  audit: base
+  audit: base,
+  print_job: base.superRefine((row, context) => {
+    if (row.status !== undefined && !["QUEUED", "PRINTING", "PRINTED", "RETRY_REQUIRED", "UNKNOWN", "FAILED"].includes(row.status)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["status"], message: "unsupported print job state" });
+    }
+    if (row.attempts !== undefined && (!Number.isSafeInteger(row.attempts) || row.attempts < 0 || row.attempts > 2)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["attempts"], message: "print attempts must be 0..2" });
+    }
+  })
 };
 
 export const PMS_DOMAIN_SCHEMAS = Object.freeze(schemas);
