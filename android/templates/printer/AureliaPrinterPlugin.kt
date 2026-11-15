@@ -167,19 +167,29 @@ class AureliaPrinterPlugin : Plugin() {
         if (doc == null) { call.reject("invalid_document"); return }
         val record = try { store.get(id) } catch (_: Exception) { call.reject("trust_store_unavailable"); return }
         if (record == null) { call.reject("not_trusted"); return }
+        if (!record.verified || record.profileHash.isNullOrBlank()) { call.reject("printer_profile_calibration_required"); return }
         val validation = DocumentValidator.validate(kind, doc)
         if (!validation.ok) { call.reject(validation.error ?: "invalid_document"); return }
-        // Re-resolve immediately before any future socket connection. Reject mixed
-        // public/private answers and require the exact address approved by the user.
         executor.execute {
-            val answers = try { InetAddress.getAllByName(record.host).distinctBy { it.hostAddress } }
-            catch (_: Exception) { call.reject("dns_resolution_failed"); return@execute }
-            if (answers.isEmpty() || answers.size > 16 || answers.any { !isPrivateOrLinkLocal(it) } ||
-                answers.none { it.address.contentEquals(record.address.address) }) {
-                call.reject("peer_address_changed_or_public"); return@execute
+            val peer = resolvePinnedPeer(record)
+            if (peer == null) { call.reject("peer_address_changed_or_public"); return@execute }
+            val socket = java.net.Socket()
+            activeSockets[requestId] = socket
+            try {
+                socket.tcpNoDelay = true
+                socket.connect(java.net.InetSocketAddress(peer, 9100), 5000)
+                val bytes = EscPosRenderer.render(kind ?: "", validation.normalizedDocument!!, copies)
+                val completed = writeWithHardTimeout(socket, bytes)
+                call.resolve(JSObject().put("ok", true).put("status", "uncertain")
+                    .put("requestId", requestId)
+                    .put("error", if (completed) "printer_acknowledgement_unavailable" else "write_interrupted_delivery_uncertain"))
+            } catch (_: Exception) {
+                call.resolve(JSObject().put("ok", false).put("status", "failed")
+                    .put("requestId", requestId).put("error", "connection_or_render_failed"))
+            } finally {
+                activeSockets.remove(requestId)
+                try { socket.close() } catch (_: Exception) {}
             }
-            // Deliberately fail closed until profile calibration is implemented.
-            call.reject("printer_profile_calibration_required")
         }
     }
 
