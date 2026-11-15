@@ -159,7 +159,7 @@ export function createLocalLedgerReceiptService({
 
       const signatureBytes = Buffer.from(receipt.signature, 'base64url');
       const validSignature = crypto.verify(
-        null,
+        'sha256',
         Buffer.from(canonicalJson(unsignedReceipt(receipt))),
         attestation.publicKey,
         signatureBytes
