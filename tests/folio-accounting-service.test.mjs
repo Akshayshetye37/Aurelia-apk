@@ -30,9 +30,9 @@ const invoice = {
   totals: { grossMinor: 10000, taxMinor: 0, subtotalMinor: 10000 }
 };
 
-test("financial year is April through March in UTC", () => {
-  assert.equal(financialYearFor("2026-03-31T23:59:59Z"), "FY2025-26");
-  assert.equal(financialYearFor("2026-04-01T00:00:00Z"), "FY2026-27");
+test("financial year follows the India local April boundary", () => {
+  assert.equal(financialYearFor("2026-03-31T18:29:59Z"), "FY2025-26");
+  assert.equal(financialYearFor("2026-03-31T18:30:00Z"), "FY2026-27");
 });
 
 test("legacy paid scalar must reconcile exactly with payment rows", () => {
