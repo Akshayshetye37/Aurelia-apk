@@ -66,7 +66,7 @@ test('folio invoice documents validate strict structured GST and accounting fiel
     { ...invoiceDocument(), invoice: { ...invoiceDocument().invoice, currency: 'XXX' } },
     { ...invoiceDocument(), totals: { ...invoiceDocument().totals, dueMinor: -1 } },
     { ...invoiceDocument(), lines: [{ ...invoiceDocument().lines[0], taxRateBps: 99999 }] },
-    { ...invoiceDocument(), guest: { name: '<script>alert(1)</script>' } },
+    { ...invoiceDocument(), guest: { name: 'Guest\nOne' } },
     { ...invoiceDocument(), guest: { name: 'Guest', unexpected: 'field' } }
   ]) assert.equal(validatePrintDocument(invalid).ok, false);
 });
