@@ -10,7 +10,7 @@ for(const name of ['pms-repository-contract.mjs','pms-local-identity.mjs','index
  if(!fs.existsSync(source))throw new Error('PMS storage module not found: '+source);
  fs.copyFileSync(source,path.join(storageDest,name));
 }
-const settlementSrc=path.join(root,'src','payments','settlement-service.mjs');
+const folioDest=path.join(dest,'src','folios');\nfs.mkdirSync(folioDest,{recursive:true});\nfor(const name of ['folio-invoice.mjs','folio-accounting-service.mjs']){\n const source=path.join(root,'src','folios',name);\n if(!fs.existsSync(source))throw new Error('Folio module not found: '+source);\n fs.copyFileSync(source,path.join(folioDest,name));\n}\nconst settlementSrc=path.join(root,'src','payments','settlement-service.mjs');
 if(!fs.existsSync(settlementSrc))throw new Error('Settlement service not found: '+settlementSrc);
 const settlementDest=path.join(dest,'src','payments');
 fs.mkdirSync(settlementDest,{recursive:true});
