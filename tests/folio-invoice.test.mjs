@@ -88,3 +88,13 @@ test("GSTIN validation rejects malformed registration numbers", async () => {
   assert.equal(validateGstin("27ABCDE1234F1Z5"), "27ABCDE1234F1Z5");
   assert.throws(() => validateGstin("PROPERTY-GSTIN"), /valid 15-character GSTIN/);
 });
+
+test("occupant adult and child counts use age on the stay check-in date", () => {
+  const invoice = buildFolioInvoice({
+    booking: { ...booking, scheduledCheckIn: "2026-02-28T14:00:00Z" },
+    guest: { n: "Primary Guest", occ: [{ n: "Guest Child", dob: "2008-03-01", rel: "" }] },
+    settings: {}, roomCharge: 0, paidAmount: 0, balanceDue: 0
+  });
+  assert.equal(invoice.billedTo.children, 1);
+  assert.equal(invoice.billedTo.adults, 1);
+});
