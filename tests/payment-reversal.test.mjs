@@ -82,7 +82,7 @@ test("reversal retries are idempotent and changed payload reuse is rejected", as
   assert.equal(f.booking.p, 75);
 });
 
-test("reversal rejects non-integer, negative, cross-folio and cumulative over-reversal attempts", async () => {
+test("reversal rejects non-integer, negative, missing-original and cumulative over-reversal attempts", async () => {
   const f = fixture();
   const original = await postOriginalPayment(f);
   const base = {
@@ -139,4 +139,29 @@ test("a historical payment reversal is a signed daily net movement and later rec
     now: () => "2026-11-15T14:00:00.000Z"
   });
   assert.equal(f.state.today, -25);
+});
+
+
+test("a payment reversal cannot cross booking or folio boundaries", async () => {
+  const f = fixture();
+  const original = await postOriginalPayment(f);
+  const otherBooking = {
+    id: 72, folioId: "folio-72", g: "Other Guest", room: "202", st: "in",
+    p: 0, pays: [], payments: [], ch: [], rate: 1000
+  };
+  f.state.b.push(otherBooking);
+  const snapshot = await f.bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  await f.bridge.persistCompatibilitySnapshot({
+    ...snapshot.data.snapshot,
+    b: [...snapshot.data.snapshot.b, otherBooking]
+  });
+
+  await assert.rejects(reversePaymentToRepository({
+    ...f, booking: otherBooking, balanceDueFor,
+    originalLedgerEntryId: original.id, amountPaise: 1000,
+    idempotencyKey: "cross-folio-reversal-72", reason: "Cross-folio attack",
+    now: () => "2026-11-15T13:00:00.000Z"
+  }), error => error.code === "LEDGER_ORIGINAL_BINDING_MISMATCH");
+  assert.equal((await f.bridge.listEntities("ledger")).length, 1);
+  assert.equal(otherBooking.p, 0);
 });
