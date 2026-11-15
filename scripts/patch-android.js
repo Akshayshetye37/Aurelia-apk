@@ -715,6 +715,9 @@ fs.copyFileSync(pmsPlaintextMigrationTemplate, path.join(javaDir, 'PmsPlaintextD
 const pmsStoragePluginTemplate = path.join(androidDir, 'templates', 'CapacitorPmsStoragePlugin.java');
 if (!fs.existsSync(pmsStoragePluginTemplate)) throw new Error('CapacitorPmsStoragePlugin.java template is missing.');
 fs.copyFileSync(pmsStoragePluginTemplate, path.join(javaDir, 'CapacitorPmsStoragePlugin.java'));
+const bluetoothPrinterTemplate = path.join(androidDir, 'templates', 'BluetoothPrinterPlugin.java');
+if (!fs.existsSync(bluetoothPrinterTemplate)) throw new Error('BluetoothPrinterPlugin.java template is missing.');
+fs.copyFileSync(bluetoothPrinterTemplate, path.join(javaDir, 'BluetoothPrinterPlugin.java'));
 
 const javaPath = path.join(javaDir, 'MainActivity.java');
 const java = String.raw`
@@ -788,6 +791,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   @Override public void onCreate(Bundle savedInstanceState) {
     // Explicit registration is required: the custom plugin is not discovered by package scanning.
     registerPlugin(CapacitorPmsStoragePlugin.class);
+    registerPlugin(BluetoothPrinterPlugin.class);
     super.onCreate(savedInstanceState);
     // PMS guest, folio, payment and recovery screens can expose sensitive records.
     getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
