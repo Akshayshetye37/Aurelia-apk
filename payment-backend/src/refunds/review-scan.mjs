@@ -22,7 +22,6 @@ export async function scanOverdueRefunds({
   const currentMs = currentTime instanceof Date ? currentTime.getTime() : Date.parse(currentTime);
   if (!Number.isFinite(currentMs)) throw new TypeError('refund_review_scan_clock_invalid');
   const scanTime = new Date(currentMs).toISOString();
-  const cutoff = new Date(currentMs - reviewAfterMs);
   let cursor = null, scanned = 0, promoted = 0, alreadyQueued = 0;
   const alerts = [];
 
