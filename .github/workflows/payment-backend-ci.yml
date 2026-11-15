@@ -40,7 +40,7 @@ jobs:
       - name: Install backend dependencies
         run: npm install --no-audit --no-fund
       - name: Run payment backend contract and security tests
-        run: npm test
+        run: npm run test:ci
       - name: Verify payment backend JavaScript syntax
         run: |
           find src test -type f -name '*.mjs' -print0 | xargs -0 -n1 node --check
