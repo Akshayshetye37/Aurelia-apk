@@ -179,6 +179,7 @@ test("remaining master invoice excludes amounts assigned to split folios", () =>
 
 test("split folio payment posts atomically, idempotently and never overpays", async () => {
   const { bridge } = fixture();
+  await bridge.mutateEntity({ entityType: "folio", entityId: "master-payment", expectedVersion: 0, eventType: "folio.created", mutate: entity => Object.assign(entity, { id: "master-payment", bookingId: "booking-payment", chargeLines: [{ id: "line-1", amountPaise: 10000 }] }) });
   await createSplitFolio({
     bridge, masterFolioId: "master-payment", childFolioId: "child-payment",
     bookingId: "booking-payment", sourceCharges: [{ id: "line-1", amount: 100 }],
