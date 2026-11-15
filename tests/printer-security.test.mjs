@@ -17,7 +17,9 @@ test('LAN printer endpoints require explicit user trust and a restricted private
     { host: '192.168.1.40', port: 80, trustedByUser: true },
     { host: 'http://192.168.1.40', port: 9100, trustedByUser: true },
     { host: 'user:pass@printer.local', port: 9100, trustedByUser: true },
-    { host: '255.255.255.255', port: 9100, trustedByUser: true }
+    { host: '255.255.255.255', port: 9100, trustedByUser: true },
+    { host: '192.168.1.255', port: 9100, trustedByUser: true },
+    { host: '192.168.1.0', port: 9100, trustedByUser: true }
   ]) assert.equal(validatePrinterEndpoint(endpoint).ok, false, JSON.stringify(endpoint));
 });
 
@@ -46,7 +48,11 @@ test('print requests accept semantic bounded documents, never caller-supplied ra
     copies: 1,
     document: { invoiceNumber: 'INV-2026-001', lines: [{ label: 'Room charge', quantity: 1, amountMinor: 250000 }] }
   };
-  assert.equal(validatePrintRequest(valid).ok, true);
+  const accepted = validatePrintRequest(valid);
+  assert.equal(accepted.ok, true);
+  valid.document.lines[0].amountMinor = 1;
+  assert.equal(accepted.value.document.lines[0].amountMinor, 250000);
+  assert.equal(Object.isFrozen(accepted.value.document.lines[0]), true);
   assert.equal(validatePrintRequest({ ...valid, rawBytes: 'G0...' }).ok, false);
   assert.equal(validatePrintRequest({ ...valid, html: '<script>alert(1)</script>' }).ok, false);
   assert.equal(validatePrintRequest({ ...valid, copies: 99 }).ok, false);
