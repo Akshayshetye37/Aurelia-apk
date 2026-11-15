@@ -350,3 +350,37 @@ export function buildSplitFolioInvoice({ masterInvoice, splitFolio, invoiceDate 
     split: Object.freeze({ masterFolioId: splitFolio.masterFolioId, allocations: clone(splitFolio.allocations) })
   });
 }
+
+/** Exclude charges already assigned to child folios without rewriting source rows. */
+export function buildRemainingFolioInvoice({ masterInvoice, masterFolio, invoiceDate = new Date().toISOString() } = {}) {
+  if (!masterInvoice || !masterFolio) throw new TypeError("Master invoice and master folio are required");
+  const allocated = new Map();
+  for (const split of masterFolio.splitAllocations || []) {
+    for (const row of split.allocations || []) allocated.set(row.chargeId, (allocated.get(row.chargeId) || 0) + row.amountPaise);
+  }
+  const lines = masterInvoice.lineItems.map(source => {
+    const used = allocated.get(source.id) || 0;
+    const grossMinor = Math.max(0, source.grossMinor - used);
+    if (!grossMinor) return null;
+    const taxMinor = source.grossMinor ? Math.round(grossMinor * (source.taxMinor || 0) / source.grossMinor) : 0;
+    const taxableMinor = grossMinor - taxMinor;
+    const cgstMinor = source.taxMinor ? Math.round(taxMinor * (source.cgstMinor || 0) / source.taxMinor) : 0;
+    const sgstMinor = source.taxMinor ? Math.round(taxMinor * (source.sgstMinor || 0) / source.taxMinor) : 0;
+    const igstMinor = taxMinor - cgstMinor - sgstMinor;
+    return Object.freeze({ ...clone(source), grossMinor, amountMinor: grossMinor, taxableMinor,
+      taxMinor, cgstMinor, sgstMinor, igstMinor, netAmountMinor: grossMinor,
+      splitAllocatedMinor: used });
+  }).filter(Boolean);
+  const sum = key => lines.reduce((total, line) => total + line[key], 0);
+  const grossMinor = sum("grossMinor"), taxMinor = sum("taxMinor");
+  return Object.freeze({
+    ...clone(masterInvoice), invoiceNumber: "", invoiceDate: new Date(invoiceDate).toISOString(),
+    lineItems: Object.freeze(lines),
+    totals: Object.freeze({
+      subtotalMinor: sum("taxableMinor"), taxMinor, grossMinor,
+      discountMinor: 0, paidMinor: masterInvoice.totals.paidMinor || 0,
+      dueMinor: Math.max(0, grossMinor - (masterInvoice.totals.paidMinor || 0)),
+      cgstMinor: sum("cgstMinor"), sgstMinor: sum("sgstMinor"), igstMinor: sum("igstMinor")
+    })
+  });
+}
