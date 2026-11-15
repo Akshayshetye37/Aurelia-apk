@@ -63,6 +63,21 @@ test("invoice number, invoice snapshot, ledger and audit commit atomically", asy
   assert.equal((await bridge.fetchEntity("folio_sequence", "gst-invoice-sequence-FY2026-27")).data.nextNumber, 2);
 });
 
+test("concurrent invoice issuance allocates unique sequential numbers", async () => {
+  const { bridge } = fixture();
+  const [first, second] = await Promise.all([
+    issueFolioInvoice({ bridge, folioId: "folio-race-1", booking, invoice,
+      now: () => "2026-11-16T12:00:00.000Z", cryptoImpl: webcrypto }),
+    issueFolioInvoice({ bridge, folioId: "folio-race-2", booking: { ...booking, id: "booking-2" }, invoice,
+      now: () => "2026-11-16T12:00:00.000Z", cryptoImpl: webcrypto })
+  ]);
+  assert.deepEqual(
+    [first.invoice.invoiceNumber, second.invoice.invoiceNumber].sort(),
+    ["INV/FY2026-27/000001", "INV/FY2026-27/000002"]
+  );
+  assert.equal((await bridge.fetchEntity("folio_sequence", "gst-invoice-sequence-FY2026-27")).data.nextNumber, 3);
+});
+
 test("unreconciled historical payments block invoice issuance without consuming sequence", async () => {
   const { bridge } = fixture();
   await assert.rejects(issueFolioInvoice({
