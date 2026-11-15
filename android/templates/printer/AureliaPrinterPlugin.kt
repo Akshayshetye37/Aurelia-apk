@@ -105,11 +105,52 @@ class AureliaPrinterPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun calibrateLanPrinter(call: PluginCall) {
+        val id = call.getString("deviceId")
+        if (id.isNullOrBlank() || !id.matches(Regex("^lan_[a-f0-9]{64}$"))) { call.reject("device_id_required"); return }
+        val record = try { store.get(id) } catch (_: Exception) { call.reject("trust_store_unavailable"); return }
+        if (record == null) { call.reject("not_trusted"); return }
+        executor.execute {
+            val peer = resolvePinnedPeer(record)
+            if (peer == null) { call.reject("peer_address_changed_or_public"); return@execute }
+            val socket = java.net.Socket()
+            try {
+                socket.connect(java.net.InetSocketAddress(peer, 9100), 5000)
+                val testPage = byteArrayOf(0x1b, 0x40, 0x1b, 0x61, 0x01, 0x41, 0x55, 0x52, 0x45, 0x4c, 0x49, 0x41, 0x0a, 0x54, 0x45, 0x53, 0x54, 0x20, 0x50, 0x41, 0x47, 0x45, 0x0a, 0x0a, 0x0a)
+                socket.getOutputStream().write(testPage)
+                socket.getOutputStream().flush()
+                activity?.runOnUiThread {
+                    val current = activity
+                    if (current == null || current.isFinishing || current.isDestroyed) {
+                        call.reject("calibration_confirmation_unavailable"); return@runOnUiThread
+                    }
+                    AlertDialog.Builder(current)
+                        .setTitle("Confirm printer calibration")
+                        .setMessage("Did the Aurelia test page print correctly on the selected printer?")
+                        .setNegativeButton("No") { _, _ -> call.reject("calibration_not_confirmed") }
+                        .setPositiveButton("Yes, correct") { _, _ ->
+                            try {
+                                val hash = "sha256:" + hex(MessageDigest.getInstance("SHA-256").digest("escpos-test-v1|raw9100".toByteArray(StandardCharsets.UTF_8)))
+                                store.markVerified(id, System.currentTimeMillis(), hash)
+                                call.resolve(JSObject().put("ok", true).put("verified", true).put("profileHash", hash))
+                            } catch (_: Exception) { call.reject("calibration_store_unavailable") }
+                        }.setOnCancelListener { call.reject("calibration_not_confirmed") }.show()
+                } ?: call.reject("calibration_confirmation_unavailable")
+            } catch (_: Exception) { call.reject("calibration_connection_failed") }
+            finally { try { socket.close() } catch (_: Exception) {} }
+        }
+    }
+
+    @PluginMethod
     fun verifyLanCapabilities(call: PluginCall) {
         val id = call.getString("deviceId")
-        if (id.isNullOrBlank() || store.get(id) == null) { call.reject("not_trusted"); return }
-        // A socket connection cannot prove ESC/POS, paper width, DPI or cutter support.
-        call.reject("printer_profile_calibration_required")
+        if (id.isNullOrBlank()) { call.reject("not_trusted"); return }
+        val record = try { store.get(id) } catch (_: Exception) { call.reject("trust_store_unavailable"); return }
+        if (record == null) { call.reject("not_trusted"); return }
+        if (!record.verified) { call.reject("printer_profile_calibration_required"); return }
+        call.resolve(JSObject().put("ok", true).put("profile", JSObject()
+            .put("transport", "tcp").put("paperWidthMm", 58).put("printableDots", 384)
+            .put("dpi", 203).put("profileHash", record.profileHash)))
     }
 
     @PluginMethod
