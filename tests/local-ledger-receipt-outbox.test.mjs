@@ -99,7 +99,7 @@ test('restarting receipt creation reuses the original signed receipt from the ou
       committedAt: new Date(NOW - 1000).toISOString()
     },
     readBack: async id => ({
-      id, hash: 'a'.repeat(64), committedAt: new Date(NOW - 1000).toISOString()
+      id, idempotencyKey: 'payment-intent:123e4567-e89b-42d3-a456-426614174000', hash: 'a'.repeat(64), committedAt: new Date(NOW - 1000).toISOString()
     }),
     sign, now: () => new Date(NOW), cryptoImpl: crypto.webcrypto
   };
