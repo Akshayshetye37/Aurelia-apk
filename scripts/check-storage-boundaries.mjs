@@ -16,7 +16,7 @@ function walk(directory, root, files = []) {
     const full = path.join(directory, entry.name);
     const relative = path.relative(root, full).split(path.sep).join("/");
     if (entry.isDirectory()) {
-      if (["node_modules", "www", "android", "tests", "docs", ".git", "dist", "build"].includes(entry.name)) continue;
+      if (["node_modules", "www", "android", "tests", "docs", ".git"].includes(entry.name)) continue;
       walk(full, root, files);
     } else if (EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
       files.push({ full, relative });
