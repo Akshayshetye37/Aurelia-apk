@@ -215,7 +215,10 @@ test('native SQLite outbox claim captures validated immutable lease arguments', 
 test('native SQLite upgrades persist migration provenance and use UTC WAL timestamps', () => {
   const repository = read('android/templates/LocalPmsRepository.java');
   const plugin = read('android/templates/CapacitorPmsStoragePlugin.java');
-  assert.match(repository, /private static final int VERSION = 5/);
+  assert.match(repository, /private static final int VERSION = 6/);
+  assert.match(repository, /pms_ledger_no_update/);
+  assert.match(repository, /pms_ledger_no_delete/);
+  assert.match(repository, /LEDGER_APPEND_ONLY/);
   assert.match(repository, /setWriteAheadLoggingEnabled\(true\)/);
   assert.match(repository, /ALTER TABLE pms_migration_snapshots ADD COLUMN source_timestamp/);
   assert.match(repository, /ALTER TABLE pms_migration_snapshots ADD COLUMN format_version/);
