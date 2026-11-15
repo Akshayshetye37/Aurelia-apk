@@ -515,6 +515,16 @@ export async function reversePaymentToRepository({
   }
 
   const paidPaise = moneyToPaise(workingBooking.p || 0, "Updated folio paid total", { allowZero: true });
+  const currentBalanceDuePaise = moneyToPaise(balanceDueFor(workingBooking), "Current folio balance", { allowZero: true });
+  if (folioRow?.data) {
+    if (folioRow.data.id !== folioId || String(folioRow.data.bookingId) !== bookingId ||
+        (Object.hasOwn(folioRow.data, "paidPaise") &&
+          (!Number.isSafeInteger(folioRow.data.paidPaise) || folioRow.data.paidPaise !== paidPaise)) ||
+        (Object.hasOwn(folioRow.data, "balanceDuePaise") &&
+          (!Number.isSafeInteger(folioRow.data.balanceDuePaise) || folioRow.data.balanceDuePaise !== currentBalanceDuePaise))) {
+      throw fail("CANONICAL_FOLIO_DIVERGENCE", "Canonical folio totals or booking binding disagree with the booking projection.");
+    }
+  }
   if (amountPaise > paidPaise) {
     throw fail("LEDGER_REVERSAL_EXCEEDS_PAID_TOTAL", "Reversal exceeds the currently recorded folio paid total.");
   }
