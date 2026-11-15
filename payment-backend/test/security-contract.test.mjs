@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../src/server.mjs', import.meta.url), 'utf8');
+const localSource = await readFile(new URL('../src/local-server.mjs', import.meta.url), 'utf8');
 
 test('admin and payment actor authorization enforce tenant membership, verified email and MFA', () => {
   // Accept the production bearer-token normalization while pinning the
@@ -220,4 +221,9 @@ test('reconciliation cannot write the separate Firestore folio journal even afte
   assert.match(source, /enforcePaymentControl\(req, res, 'native_settlement_bridge'\)/);
   assert.match(source, /authoritative_pms_ledger_mapping_not_implemented/);
   assert.doesNotMatch(source, /runDurableReconciliationWorker\(/);
+});
+
+test('local appliance API rejects cleartext and emits HSTS only after HTTPS validation', () => {
+  assert.match(localSource, /if \(!req\.secure\) return fail\(res, 403, 'https_required'\)/);
+  assert.match(localSource, /res\.set\('Strict-Transport-Security', 'max-age=31536000; includeSubDomains'\)/);
 });
