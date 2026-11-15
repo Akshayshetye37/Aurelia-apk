@@ -64,3 +64,41 @@ test('ZPL label encoder escapes control syntax and emits a complete format', () 
   assert.ok(text.includes('_5E'));
   assert.ok(text.includes('_7E'));
 });
+
+import { createPrintService } from '../src/printing/print-service.mjs';
+const fakeRepo = () => { const jobs = new Map(), logs = []; return {
+  async enqueue(job) { jobs.set(job.jobId, structuredClone(job)); },
+  async getJob(id) { return jobs.has(id) ? structuredClone(jobs.get(id)) : null; },
+  async updateJob(id, patch) { Object.assign(jobs.get(id), patch); return structuredClone(jobs.get(id)); },
+  async appendPrintLog(row) { logs.push(Object.freeze({ ...row })); },
+  async listQueued() { return [...jobs.values()].filter(job => ['QUEUED','RETRY_REQUIRED'].includes(job.status)).map(structuredClone); },
+  jobs, logs
+}; };
+const sampleReceipt = () => createReceiptModel({ kind: 'guest-invoice', billNo: 'INV-9', hotelName: 'Aurelia', items: [{ name: 'Room', qtyMilli: 1000, unitMinor: 10001 }], totals: [{ label: 'Total', minor: 10001 }] });
+const samplePrinter = { id: 'desk-1', modelId: 'generic-bt-58mm', address: '00:11:22:33:44:55' };
+const sampleStaff = { id: 'staff-1', role: 'front_desk' };
+
+test('printer feature remains disabled by default', async () => {
+  const service = createPrintService({ repository: fakeRepo(), transports: { 'bluetooth-spp': async () => ({ success: true, bytesWritten: 1 }) } });
+  await assert.rejects(service.submit({ printer: samplePrinter, transport: 'bluetooth-spp', jobKind: 'invoice', receipt: sampleReceipt(), staff: sampleStaff }), /PRINTER_FEATURE_DISABLED/);
+});
+test('pre-write failure retries once and logs only the successful copy', async () => {
+  const repository = fakeRepo(); let calls = 0;
+  const service = createPrintService({ repository, flags: { BT_PRINTING_ENABLED: true }, transports: { 'bluetooth-spp': async ({ bytes }) => (++calls === 1 ? { success: false, bytesWritten: 0, code: 'DISCONNECTED' } : { success: true, bytesWritten: bytes.length }) } });
+  const result = await service.submit({ printer: samplePrinter, transport: 'bluetooth-spp', jobKind: 'invoice', receipt: sampleReceipt(), staff: sampleStaff });
+  assert.equal(calls, 2); assert.equal(result.status, 'PRINTED'); assert.equal(result.attempts, 2); assert.equal(repository.logs.length, 1);
+});
+test('partial write is UNKNOWN and is never automatically retried', async () => {
+  const repository = fakeRepo(); let calls = 0;
+  const service = createPrintService({ repository, flags: { BT_PRINTING_ENABLED: true }, transports: { 'bluetooth-spp': async () => { calls++; return { success: false, bytesWritten: 12 }; } } });
+  const result = await service.submit({ printer: samplePrinter, transport: 'bluetooth-spp', jobKind: 'invoice', receipt: sampleReceipt(), staff: sampleStaff });
+  assert.equal(calls, 1); assert.equal(result.status, 'UNKNOWN'); assert.equal(repository.logs.length, 0);
+});
+test('reprints require a supervisor role and increment the duplicate marker', async () => {
+  const repository = fakeRepo();
+  const service = createPrintService({ repository, flags: { BT_PRINTING_ENABLED: true }, transports: { 'bluetooth-spp': async ({ bytes }) => ({ success: true, bytesWritten: bytes.length }) } });
+  const original = await service.submit({ printer: samplePrinter, transport: 'bluetooth-spp', jobKind: 'invoice', receipt: sampleReceipt(), staff: sampleStaff });
+  await assert.rejects(service.reprint(original.jobId, sampleStaff), /PRINTER_REPRINT_ROLE_REQUIRED/);
+  const duplicate = await service.reprint(original.jobId, { id: 'manager-1', role: 'manager' });
+  assert.equal(duplicate.copyNumber, 1); assert.equal(duplicate.receipt.reprint, 1); assert.equal(repository.logs.length, 2);
+});
