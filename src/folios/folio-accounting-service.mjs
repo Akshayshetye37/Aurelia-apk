@@ -130,8 +130,28 @@ export async function issueFolioInvoice({
     const auditId = "invoice-audit-" + financialYear + "-" + String(nextNumber).padStart(8, "0");
     const currentFolio = await bridge.fetchEntity("folio", targetFolioId);
     if (currentFolio?.data?.invoiceIssued) return Object.freeze({ duplicate: true, invoice: clone(currentFolio.data.invoiceIssued), folioVersion: currentFolio.version });
+    const taxSummary = {
+      subtotalMinor: paise(issuedInvoice.totals.subtotalMinor, "Invoice taxable subtotal"),
+      taxMinor: paise(issuedInvoice.totals.taxMinor, "Invoice tax total"),
+      cgstMinor: paise(issuedInvoice.totals.cgstMinor || 0, "CGST"),
+      sgstMinor: paise(issuedInvoice.totals.sgstMinor || 0, "SGST"),
+      igstMinor: paise(issuedInvoice.totals.igstMinor || 0, "IGST"),
+      discountMinor: paise(issuedInvoice.totals.discountMinor || 0, "Invoice discount"),
+      grossMinor: paise(issuedInvoice.totals.grossMinor, "Invoice gross total")
+    };
+    const taxLines = issuedInvoice.lineItems.map(line => ({
+      lineId: safeId(line.id, "invoice line ID"),
+      taxProfileId: text(line.taxProfile?.id),
+      sac: text(line.sac || line.taxProfile?.sac),
+      rate: Number(line.taxProfile?.rate ?? 0),
+      supply: text(line.taxProfile?.supply),
+      inclusive: line.taxProfile?.inclusive === true,
+      taxableMinor: paise(line.taxableMinor, "Taxable line amount"),
+      taxMinor: paise(line.taxMinor, "Line tax amount")
+    }));
     const payload = eventPayload("folio.invoice_issued", {
-      folioId: targetFolioId, bookingId, invoiceNumber, financialYear, invoiceHash
+      folioId: targetFolioId, bookingId, invoiceNumber, financialYear, invoiceHash,
+      taxSummary, taxLines
     }, issuedAt);
     const changes = [
       {
