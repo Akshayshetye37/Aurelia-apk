@@ -9,6 +9,7 @@ export const PrinterNative = Object.freeze({
   trustLanPrinter: input => AureliaPrinter.trustLanPrinter(input),
   getTrustedLanDevices: () => AureliaPrinter.getTrustedLanDevices(),
   revokeLanTrust: input => AureliaPrinter.revokeLanTrust(input),
+  calibrateLanPrinter: input => AureliaPrinter.calibrateLanPrinter(input),
   verifyLanCapabilities: input => AureliaPrinter.verifyLanCapabilities(input),
   printLan: input => AureliaPrinter.printLan(input),
   cancelJob: input => AureliaPrinter.cancelJob(input),
