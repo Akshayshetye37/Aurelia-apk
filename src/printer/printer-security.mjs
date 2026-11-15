@@ -116,7 +116,7 @@ function validHotel(value) {
 function validInvoice(value) {
   return strictRecord(value, ['number', 'issuedAt', 'currency']) &&
     textValue(value.number, 64) && isoDateTime(value.issuedAt) &&
-    typeof value.currency === 'string' && /^[A-Z]{3}$/.test(value.currency);
+    typeof value.currency === 'string' && /^[A-Z]{3}$/.test(value.currency) && value.currency !== 'XXX';
 }
 
 function validGuest(value) {
