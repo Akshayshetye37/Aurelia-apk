@@ -117,3 +117,26 @@ test("failed reversal transaction leaves the live booking and append-only ledger
   assert.equal((await f.bridge.listEntities("ledger")).length, 1);
   assert.equal((await f.bridge.fetchEntity("folio", "folio-71")).data.paidPaise, 12500);
 });
+
+
+test("a historical payment reversal is a signed daily net movement and later receipts remain valid", async () => {
+  const f = fixture();
+  const original = await postOriginalPayment(f);
+  const snapshot = await f.bridge.fetchEntity("audit", "legacy_snapshot:aurelia_lodge_v2");
+  await f.bridge.persistCompatibilitySnapshot({ ...snapshot.data.snapshot, today: 0 });
+  f.state.today = 0;
+
+  await reversePaymentToRepository({
+    ...f, balanceDueFor, originalLedgerEntryId: original.id,
+    amountPaise: 5000, idempotencyKey: "reversal-historical-71",
+    reason: "Prior-day payment correction", now: () => "2026-11-15T13:00:00.000Z"
+  });
+  assert.equal(f.state.today, -50);
+
+  await settlePaymentToRepository({
+    ...f, balanceDueFor, amount: 25, method: "Cash", source: "manual",
+    idempotencyKey: "new-payment-after-reversal-71", verificationConfirmed: true,
+    now: () => "2026-11-15T14:00:00.000Z"
+  });
+  assert.equal(f.state.today, -25);
+});
