@@ -256,6 +256,7 @@ export async function createSplitFolio({
         eventType: "folio.split_allocated", eventPayload: payload,
         mutate: entity => Object.assign(entity, {
           id: masterId, bookingId: bookingKey,
+          ...(Array.isArray(entity.chargeLines) ? {} : { chargeLines: clone(canonicalCharges) }),
           splitAllocations: [...(Array.isArray(entity.splitAllocations) ? entity.splitAllocations : []),
             { splitFolioId: childId, allocations: clone(allocated), allocationTotalPaise, createdAt: issuedAt }],
           updatedAt: issuedAt
