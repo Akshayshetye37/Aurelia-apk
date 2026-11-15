@@ -11,8 +11,11 @@ const ownKeysOnly = (value, allowed) => {
 
 function isPrivateIpv4(host) {
   const parts = host.split('.');
-  if (parts.length !== 4 || parts.some(part => !/^(0|[1-9]\\d{0,2})$/.test(part) || Number(part) > 255)) return false;
-  const [a, b, c, d] = parts.map(Number);
+  if (parts.length !== 4 || parts.some(part =>
+    !/^[0-9]+$/.test(part) || part.length > 3 || Number(part) > 255 ||
+    (part.length > 1 && part.startsWith('0'))
+  )) return false;
+  const [a, b, , d] = parts.map(Number);
   if (d === 0 || d === 255) return false;
   return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 }
