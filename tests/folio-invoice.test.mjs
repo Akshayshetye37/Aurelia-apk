@@ -26,7 +26,7 @@ test("folio invoice includes primary guest, sharers, stay and POS reference", ()
   assert.equal(invoice.billedTo.name, "Primary Guest");
   assert.deepEqual(invoice.billedTo.occupants, ["Second Guest", "Child"]);
   assert.equal(invoice.billedTo.adults, 3);
-  assert.equal(invoice.stay.nights, 2);
+  assert.equal(invoice.stay.nights, 2);\n  assert.equal(invoice.lineItems.filter(line => line.category === "room").length, 2);
   assert.equal(invoice.lineItems[1].outlet, "Restaurant");
   assert.equal(invoice.lineItems[1].reference, "POS-108");
   assert.equal(invoice.lineItems[1].sac, "996331");
@@ -37,7 +37,7 @@ test("tax is calculated per configured profile and split by place of supply", ()
     booking, guest: { n: "Primary Guest" }, settings, roomCharge: 2000,
     paidAmount: 500, balanceDue: 2680
   });
-  const food = invoice.lineItems[1];
+  const food = invoice.lineItems.find(line => line.id === "food-1");
   assert.equal(food.amountMinor, 118000);
   assert.equal(food.taxableMinor, 100000);
   assert.equal(food.taxMinor, 18000);
