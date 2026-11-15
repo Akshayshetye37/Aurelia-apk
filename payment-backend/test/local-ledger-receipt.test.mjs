@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { createLocalLedgerReceiptService } from '../src/intents/local-ledger-receipt.mjs';
 
 const NOW = Date.parse('2026-11-15T12:00:00.000Z');
-const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const canonical = value => {
   if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
   if (value && typeof value === 'object') return '{' + Object.keys(value).sort()
@@ -39,7 +39,7 @@ function fixture(overrides = {}) {
     expiresAt: new Date(NOW + 60_000).toISOString(),
     ...overrides
   };
-  const signature = crypto.sign(null, Buffer.from(canonical(unsigned)), privateKey).toString('base64url');
+  const signature = crypto.sign('sha256', Buffer.from(canonical(unsigned)), privateKey).toString('base64url');
   return { ...unsigned, signature };
 }
 
@@ -132,7 +132,7 @@ test('binds receipt to tenant, folio, intent, provider, payment, amount and curr
   const receipt = fixture({ amountMinor: 12501 });
   // Re-sign so the mismatch is semantic, not a signature failure.
   const { signature, ...unsigned } = receipt;
-  const signed = { ...unsigned, signature: crypto.sign(null, Buffer.from(canonical(unsigned)), privateKey).toString('base64url') };
+  const signed = { ...unsigned, signature: crypto.sign('sha256', Buffer.from(canonical(unsigned)), privateKey).toString('base64url') };
   await assert.rejects(service.accept(signed), /receipt_intent_binding_mismatch/);
   assert.equal(writes.length, 0);
 });
