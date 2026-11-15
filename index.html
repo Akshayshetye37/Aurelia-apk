@@ -637,7 +637,7 @@ function inv(i){
  });
  if(!invoice){toast('Folio invoice module is unavailable');return}
  const money=n=>K(n/100),fmtDate=value=>{if(!value)return '—';const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleDateString('en-GB'):'—'};
- const rows=invoice.lineItems.map(line=>'<tr><td>'+esc(fmtDate(line.date))+'</td><td>'+esc(line.description)+(line.outlet?' · '+esc(line.outlet):'')+(line.reference?' · Check #'+esc(line.reference):'')+'</td><td>'+esc(line.sac||'—')+'</td><td class="num">'+money(line.amountMinor)+'</td></tr>').join('');
+ const rows=invoice.lineItems.map(line=>'<tr><td>'+esc(fmtDate(line.date))+'</td><td>'+esc(line.description)+(line.outlet?' · '+esc(line.outlet):'')+(line.reference?' · Check #'+esc(line.reference):'')+'</td><td>'+esc(line.sac||'—')+'</td><td class="num">'+money(line.grossMinor)+'</td></tr>').join('');
  const occupants=invoice.billedTo.occupants.length?invoice.billedTo.occupants.map((name,index)=>'<div>'+String(index+1)+'. '+esc(name)+'</div>').join(''):'<div>None recorded</div>';
  const payments=invoice.payments.map(p=>'<div class="ln"><span>'+esc(p.method||'Payment')+(p.reference?' · '+esc(p.reference):'')+'</span><span>−'+money(p.amountMinor)+'</span></div>').join('');
  const taxRows=(label,value)=>value?'<div class="ln"><span>'+label+'</span><span>'+money(value)+'</span></div>':'';
