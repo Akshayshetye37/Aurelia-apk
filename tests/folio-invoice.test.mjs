@@ -82,3 +82,9 @@ test("invalid money and invalid configured tax rates fail closed", () => {
 test("minor-unit formatting is deterministic", () => {
   assert.equal(formatFolioMinor(12345), "123.45");
 });
+
+test("GSTIN validation rejects malformed registration numbers", async () => {
+  const { validateGstin } = await import("../src/folios/folio-invoice.mjs");
+  assert.equal(validateGstin("27ABCDE1234F1Z5"), "27ABCDE1234F1Z5");
+  assert.throws(() => validateGstin("PROPERTY-GSTIN"), /valid 15-character GSTIN/);
+});
