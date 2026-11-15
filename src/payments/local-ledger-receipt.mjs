@@ -54,7 +54,8 @@ export async function createLocalLedgerReceipt({
       !ID.test(device.deviceId || '') || !ID.test(device.keyId || '') ||
       !ID.test(device.attestationId || '')) fail('LOCAL_RECEIPT_DEVICE_NOT_ATTESTED');
 
-  if (!ledgerEntry || !ID.test(ledgerEntry.id || '') || !HASH.test(ledgerEntry.hash || '') ||
+  if (!ledgerEntry || !ID.test(ledgerEntry.id || '') ||
+      ledgerEntry.idempotencyKey !== 'payment-intent:' + intent.intentId || !HASH.test(ledgerEntry.hash || '') ||
       typeof ledgerEntry.committedAt !== 'string' ||
       !Number.isFinite(Date.parse(ledgerEntry.committedAt)) ||
       typeof readBack !== 'function' || typeof sign !== 'function') {
@@ -73,6 +74,7 @@ export async function createLocalLedgerReceipt({
 
   const persisted = await readBack(ledgerEntry.id);
   if (!persisted || persisted.id !== ledgerEntry.id ||
+      persisted.idempotencyKey !== ledgerEntry.idempotencyKey ||
       persisted.hash !== ledgerEntry.hash ||
       persisted.committedAt !== ledgerEntry.committedAt) {
     fail('LOCAL_RECEIPT_READBACK_MISMATCH');
@@ -130,4 +132,28 @@ export async function createAndQueueLocalLedgerReceipt({
   });
   const queued = await outbox.enqueue(receipt);
   return { receipt, record: queued.record, duplicate: queued.duplicate };
+}
+
+
+/**
+ * Adapter boundary for the authoritative local journal. postLocalEntry must
+ * implement one atomic create-or-return operation keyed by payment intent ID.
+ * Repeated calls therefore return the same local entry and the outbox reuses
+ * the same signed receipt. This does not enable or invoke Pay Bridge.
+ */
+export async function postAndQueueLocalLedgerReceipt({
+  postLocalEntry, outbox, intent, device, readBack, sign,
+  now = () => new Date(), cryptoImpl = globalThis.crypto
+} = {}) {
+  if (typeof postLocalEntry !== 'function' || !intent?.intentId) {
+    fail('LOCAL_RECEIPT_LOCAL_POSTER_REQUIRED');
+  }
+  const idempotencyKey = 'payment-intent:' + intent.intentId;
+  const ledgerEntry = await postLocalEntry({ intent, idempotencyKey });
+  if (!ledgerEntry || ledgerEntry.idempotencyKey !== idempotencyKey) {
+    fail('LOCAL_RECEIPT_LOCAL_POST_IDEMPOTENCY_MISSING');
+  }
+  return createAndQueueLocalLedgerReceipt({
+    outbox, intent, device, ledgerEntry, readBack, sign, now, cryptoImpl
+  });
 }
