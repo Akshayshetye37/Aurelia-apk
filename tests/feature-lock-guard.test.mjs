@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateFeatureRegistry, validateRegistryEvolution } from '../scripts/feature-lock-guard.mjs';
+import { validateFeatureRegistry, validateRegistryEvolution, validateEvidenceFreshness } from '../scripts/feature-lock-guard.mjs';
 
 const evidence = {
   sha: 'a'.repeat(40), runId: 123,
@@ -58,4 +58,12 @@ test('existing locked registry entries cannot be removed, downgraded or have fil
   assert.throws(() => validateRegistryEvolution(prior, {
     version: 1, features: [feature({ files: ['src/'] })]
   }), /locked_feature_registry_mutation_requires_owner_approval/);
+});
+
+
+test('verified evidence becomes stale when any feature source or test file changes afterward', () => {
+  const verified = feature();
+  assert.equal(validateEvidenceFreshness(verified, ['README.md']), true);
+  assert.throws(() => validateEvidenceFreshness(verified, ['src/payments/example.mjs']),
+    /verified_feature_evidence_stale/);
 });
