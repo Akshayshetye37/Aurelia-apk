@@ -64,6 +64,7 @@ test('folio invoice documents validate strict structured GST and accounting fiel
     { ...invoiceDocument(), rawBytes: 'ESC' },
     { ...invoiceDocument(), layout: '80mm' },
     { ...invoiceDocument(), invoice: { ...invoiceDocument().invoice, currency: 'XXX' } },
+    { ...invoiceDocument(), invoice: { ...invoiceDocument().invoice, issuedAt: '2026-02-30T10:30:00.000Z' } },
     { ...invoiceDocument(), totals: { ...invoiceDocument().totals, dueMinor: -1 } },
     { ...invoiceDocument(), lines: [{ ...invoiceDocument().lines[0], taxRateBps: 99999 }] },
     { ...invoiceDocument(), guest: { name: 'Guest\nOne' } },
@@ -107,6 +108,11 @@ test('printer validation fails closed on malformed and unknown input', () => {
   assert.equal(validatePrinterEndpoint(null).ok, false);
   assert.equal(validatePrinterProfile(null).ok, false);
   assert.equal(validatePrintDocument(null).ok, false);
+  const sparseLines = new Array(1);
+  assert.equal(validatePrintDocument({ ...invoiceDocument(), lines: sparseLines }).ok, false);
+  const symbolDocument = invoiceDocument();
+  symbolDocument[Symbol('hidden')] = 'unexpected';
+  assert.equal(validatePrintDocument(symbolDocument).ok, false);
   assert.equal(validatePrintRequest(null).ok, false);
   assert.equal(validatePrintRequest({ requestId: 'job_12345678', kind: 'shell', copies: 1, document: {} }).ok, false);
 });
