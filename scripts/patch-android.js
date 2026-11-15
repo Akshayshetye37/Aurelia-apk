@@ -397,6 +397,27 @@ if (fs.existsSync(appGradleGroovy)) {
   throw new Error('Generated Android app Gradle file was not found; native security dependencies cannot be wired.');
 }
 
+// Align Kotlin stdlib modules across every generated Android subproject.
+ // Cordova plugins can otherwise retain jdk7/jdk8 1.6.21 beside stdlib 1.8.22.
+const rootGradleGroovy = path.join(androidDir, 'build.gradle');
+if (!fs.existsSync(rootGradleGroovy)) throw new Error('Generated root build.gradle is missing; Kotlin dependency alignment cannot be applied.');
+const kotlinAlignment = `
+allprojects {
+  configurations.configureEach {
+    resolutionStrategy.force(
+      'org.jetbrains.kotlin:kotlin-stdlib:1.8.22',
+      'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22',
+      'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+    )
+  }
+}
+`;
+let rootGradle = fs.readFileSync(rootGradleGroovy, 'utf8');
+if (!rootGradle.includes("kotlin-stdlib-jdk8:1.8.22")) {
+  rootGradle += '\\n' + kotlinAlignment;
+  fs.writeFileSync(rootGradleGroovy, rootGradle);
+}
+
 const hasGoogleServicesConfig = fs.existsSync(path.join(appModuleDir, 'google-services.json'));
 
 function addFirebaseDependencies(contents, kotlinDsl) {
