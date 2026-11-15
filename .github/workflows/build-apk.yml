@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - work/phase-0-feature-registry
+      - 'work/**'
     tags:
       - 'aurelia-approved-*'
 
