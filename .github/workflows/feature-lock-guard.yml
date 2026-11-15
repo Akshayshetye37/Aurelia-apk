@@ -1,0 +1,35 @@
+name: Aurelia feature lock guard
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'work/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurelia-feature-lock-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  feature-lock-guard:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate verified evidence and protected file boundaries
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: node scripts/feature-lock-guard.mjs
+      - name: Run PMS suite with non-zero count and zero-skip guard
+        run: |
+          npm ci --no-audit --no-fund
+          npm run test:ci
