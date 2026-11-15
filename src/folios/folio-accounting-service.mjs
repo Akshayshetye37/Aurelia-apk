@@ -218,8 +218,14 @@ export async function createSplitFolio({
     }));
     const used = new Map();
     for (const row of allFolios) {
-      for (const entry of row.data?.splitAllocations || []) {
-        for (const item of entry.allocations || []) used.set(item.chargeId, (used.get(item.chargeId) || 0) + item.amountPaise);
+      const entries = [
+        ...(Array.isArray(row.data?.splitAllocations) ? row.data.splitAllocations : []),
+        ...(Array.isArray(row.data?.allocations) ? [{ allocations: row.data.allocations }] : [])
+      ];
+      for (const entry of entries) {
+        for (const item of entry.allocations || []) {
+          used.set(item.chargeId, (used.get(item.chargeId) || 0) + paise(item.amountPaise, "Existing split allocation"));
+        }
       }
     }
     const allocated = normalized.map(item => {
