@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "policy": "verified means test evidence exists; locked requires separate owner approval and is not implied by verification",
+  "features": [
+    {
+      "id": "backend-local-ledger-receipt-acceptance",
+      "status": "verified",
+      "files": [
+        "payment-backend/src/intents/local-ledger-receipt.mjs",
+        "payment-backend/src/intents/firestore-repository.mjs",
+        "payment-backend/src/server.mjs",
+        "payment-backend/src/devices/firestore-device-service.mjs",
+        "payment-backend/test/local-ledger-receipt.test.mjs",
+        "payment-backend/test/firestore-repository.test.mjs",
+        "payment-backend/test/security-contract.test.mjs"
+      ],
+      "evidence": {
+        "sha": "0065b9ea38953e08c7c7fffcd9a90047370e49f0",
+        "runId": 43717191661,
+        "runUrl": "https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/43717191661",
+        "tests": 265,
+        "failures": 0,
+        "skips": 0
+      }
+    },
+    {
+      "id": "pms-local-ledger-receipt-contract-and-browser-outbox",
+      "status": "verified",
+      "files": [
+        "src/payments/local-ledger-receipt.mjs",
+        "src/storage/indexeddb-local-ledger-receipt-outbox.mjs",
+        "src/payments/payment-device-bridge.mjs",
+        "tests/local-ledger-receipt.test.mjs",
+        "tests/local-ledger-receipt-outbox.test.mjs",
+        "tests/device-local-payment-contract.test.mjs"
+      ],
+      "evidence": {
+        "sha": "0065b9ea38953e08c7c7fffcd9a90047370e49f0",
+        "runId": 43717191647,
+        "runUrl": "https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/43717191647",
+        "tests": 525,
+        "failures": 0,
+        "skips": 0
+      }
+    },
+    {
+      "id": "refund-provider-ordering-and-human-review-state-machine",
+      "status": "verified",
+      "files": [
+        "payment-backend/src/refunds/refund-state-machine.mjs",
+        "payment-backend/src/server.mjs",
+        "payment-backend/test/refund-state-machine.test.mjs",
+        "payment-backend/test/security-contract.test.mjs"
+      ],
+      "evidence": {
+        "sha": "0065b9ea38953e08c7c7fffcd9a90047370e49f0",
+        "runId": 43717191661,
+        "runUrl": "https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/43717191661",
+        "tests": 265,
+        "failures": 0,
+        "skips": 0
+      }
+    },
+    {
+      "id": "legacy-firestore-settlement-hard-off",
+      "status": "verified",
+      "files": [
+        "payment-backend/src/intents/folio-settlement.mjs",
+        "payment-backend/test/legacy-firestore-settlement-disabled.test.mjs"
+      ],
+      "evidence": {
+        "sha": "0065b9ea38953e08c7c7fffcd9a90047370e49f0",
+        "runId": 43717191661,
+        "runUrl": "https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/43717191661",
+        "tests": 265,
+        "failures": 0,
+        "skips": 0
+      }
+    }
+  ]
+}
