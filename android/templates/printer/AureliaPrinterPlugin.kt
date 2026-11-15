@@ -131,8 +131,10 @@ class AureliaPrinterPlugin : Plugin() {
                         .setPositiveButton("Yes, correct") { _, _ ->
                             try {
                                 val hash = "sha256:" + hex(MessageDigest.getInstance("SHA-256").digest("escpos-test-v1|raw9100".toByteArray(StandardCharsets.UTF_8)))
-                                store.markVerified(id, System.currentTimeMillis(), hash)
-                                call.resolve(JSObject().put("ok", true).put("verified", true).put("profileHash", hash))
+                                val calibratedAt = System.currentTimeMillis()
+                                store.markVerified(id, calibratedAt, hash)
+                                call.resolve(JSObject().put("ok", true).put("verified", true)
+                                    .put("calibratedAt", calibratedAt).put("profileHash", hash))
                             } catch (_: Exception) { call.reject("calibration_store_unavailable") }
                         }.setOnCancelListener { call.reject("calibration_not_confirmed") }.show()
                 } ?: call.reject("calibration_confirmation_unavailable")
