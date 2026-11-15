@@ -4,7 +4,8 @@ name: Recovery Functions CI
 on:
   workflow_dispatch:
   push:
-    branches: [work/p0-storage-hardening, work/otp-recovery-hardening]
+    branches:
+      - 'work/**'
     paths:
       - 'payment-backend/test/**'
       - 'functions/**'
