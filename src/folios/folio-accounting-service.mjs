@@ -344,6 +344,15 @@ export function buildSplitFolioInvoice({ masterInvoice, splitFolio, invoiceDate 
   });
   const sum = key => lineItems.reduce((total, line) => total + line[key], 0);
   const grossMinor = sum("grossMinor"), taxMinor = sum("taxMinor");
+  const payments = (Array.isArray(splitFolio.paymentRows) ? splitFolio.paymentRows : []).map(row => Object.freeze({
+    method: text(row.method), reference: text(row.reference), at: row.at || null,
+    amountMinor: paise(row.amountPaise, "Split payment")
+  }));
+  const paidMinor = payments.reduce((total, payment) => total + payment.amountMinor, 0);
+  if (paidMinor > grossMinor) throw fail("SPLIT_PAYMENT_RECONCILIATION_REQUIRED", "Split-folio payments exceed its allocated invoice total.");
+  if (splitFolio.paidPaise != null && paise(splitFolio.paidPaise, "Split paid total") !== paidMinor) {
+    throw fail("SPLIT_PAYMENT_RECONCILIATION_REQUIRED", "Split-folio payment rows do not match the saved paid total.");
+  }
   return Object.freeze({
     ...clone(masterInvoice),
     invoiceNumber: "",
@@ -362,7 +371,7 @@ export function buildSplitFolioInvoice({ masterInvoice, splitFolio, invoiceDate 
     lineItems: Object.freeze(lineItems),
     totals: Object.freeze({
       subtotalMinor: sum("taxableMinor"), taxMinor, grossMinor,
-      discountMinor: 0, paidMinor: 0, dueMinor: grossMinor,
+      discountMinor: 0, paidMinor, dueMinor: grossMinor - paidMinor,
       cgstMinor: sum("cgstMinor"), sgstMinor: sum("sgstMinor"), igstMinor: sum("igstMinor")
     }),
     split: Object.freeze({ masterFolioId: splitFolio.masterFolioId, allocations: clone(splitFolio.allocations) })
