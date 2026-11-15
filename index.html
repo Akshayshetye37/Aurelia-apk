@@ -5555,7 +5555,7 @@ window.aureliaSettlementRecovery = journalPromise.then(async journal => ({
 </script>
 <script type="module" id="aurelia-async-runtime-bootstrap">
 import { PmsBootstrapCoordinator } from "./src/storage/pms-bootstrap-coordinator.mjs";
-import { buildFolioInvoice, formatFolioMinor } from "./src/folios/folio-invoice.mjs";\nimport { issueFolioInvoice, createSplitFolio, buildSplitFolioInvoice } from "./src/folios/folio-accounting-service.mjs";
+import { buildFolioInvoice, formatFolioMinor } from "./src/folios/folio-invoice.mjs";\nimport { issueFolioInvoice, createSplitFolio, buildSplitFolioInvoice, buildRemainingFolioInvoice } from "./src/folios/folio-accounting-service.mjs";
 import { createLegacyMigrationStorage, createPreferenceStorage, readLegacyPhotoFallbackEntries, deleteLegacyPhotoFallbackEntries } from "./src/storage/legacy-web-storage.mjs";
 import { createPhotoArchive } from "./src/storage/photo-archive.mjs";
 import { createBackupVaultStore } from "./src/storage/backup-vault-store.mjs";
@@ -5616,7 +5616,7 @@ try {
   const boot = await bootstrapper.initializeApplication();
   if (!boot || boot.success !== true || !boot.repository) throw new Error("Canonical storage bootstrap did not return a verified repository");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "REPOSITORY_BINDING";
-  storageBridge.bindActiveEngine(boot.repository, boot.identity);\n  window.AureliaFolioAccounting = Object.freeze({\n    issueInvoice: options => issueFolioInvoice({ bridge: boot.bridge, ...options }),\n    createSplit: options => createSplitFolio({ bridge: boot.bridge, ...options }),\n    buildSplitInvoice: buildSplitFolioInvoice\n  });
+  storageBridge.bindActiveEngine(boot.repository, boot.identity);\n  window.AureliaFolioAccounting = Object.freeze({\n    issueInvoice: options => issueFolioInvoice({ bridge: boot.bridge, ...options }),\n    createSplit: options => createSplitFolio({ bridge: boot.bridge, ...options }),\n    buildSplitInvoice: buildSplitFolioInvoice,\n    buildRemainingInvoice: buildRemainingFolioInvoice,\n    getFolio: folioId => boot.bridge.fetchEntity("folio", folioId)\n  });
   const canonicalSettings = await boot.settingsRepository.get();
   window.__AURELIA_CANONICAL_SETTINGS = canonicalSettings.version > 0 ? canonicalSettings.data : null;
   const canonicalTableRows = await boot.bridge.listEntities("restaurant_table");
