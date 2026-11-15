@@ -196,6 +196,85 @@ export class FirestorePaymentRepository {
     });
   }
 
+  async verifyProviderCaptureForReceipt(authUid, intentId) {
+    if (typeof authUid !== 'string' || !authUid ||
+        typeof intentId !== 'string' || !/^[0-9a-f-]{36}$/i.test(intentId)) {
+      throw new TypeError('invalid_payment_receipt_verification');
+    }
+    const membershipSnap = await this.db.collection('paymentMemberships').doc(authUid).get();
+    const membership = membershipSnap.exists ? membershipSnap.data() : null;
+    if (!membership || membership.status !== 'active' || !ID.test(membership.tenantId || '') ||
+        !['owner', 'admin', 'staff'].includes(membership.role)) {
+      throw new Error('active_tenant_membership_required');
+    }
+    const intentRef = this.db.collection('paymentIntents').doc(intentId);
+    const intentSnap = await intentRef.get();
+    if (!intentSnap.exists || intentSnap.data().tenantId !== membership.tenantId) {
+      throw new Error('payment_intent_not_found');
+    }
+    const intent = intentSnap.data();
+    if (!intent.providerAccountId || !PROVIDERS.has(intent.provider) ||
+        !ENVIRONMENTS[intent.provider]?.has(intent.environment)) {
+      throw new Error('provider_order_binding_unavailable');
+    }
+    const credentials = await this.secretManager.getProviderSecrets(
+      membership.tenantId, intent.provider, intent.environment
+    );
+    if (providerAccountIdentifier(intent.provider, credentials) !== intent.providerAccountId) {
+      throw new Error('provider_account_binding_mismatch');
+    }
+    const adapter = this.providerFactory(intent.provider, {
+      credentials, environment: intent.environment
+    });
+    if (typeof adapter.getPaymentStatus !== 'function') {
+      throw new Error('provider_status_lookup_unavailable');
+    }
+    const remote = await adapter.getPaymentStatus({
+      orderId: intent.providerOrderId, paymentId: intent.providerPaymentId
+    });
+    if (!remote || remote.orderId !== intent.providerOrderId ||
+        String(remote.paymentId ?? '') !== String(intent.providerPaymentId ?? '') ||
+        remote.captured !== true ||
+        mapVerifiedProviderStatus(intent.provider, remote.paymentStatus || remote.orderStatus) !== 'CAPTURED' ||
+        remote.amountMinor !== intent.amountMinor || remote.currency !== intent.currency) {
+      throw new Error('provider_capture_binding_mismatch');
+    }
+    const observedAt = this.clock().toISOString();
+    await this.db.runTransaction(async tx => {
+      const currentSnap = await tx.get(intentRef);
+      if (!currentSnap.exists || currentSnap.data().tenantId !== membership.tenantId) {
+        throw new Error('payment_intent_not_found');
+      }
+      const current = currentSnap.data();
+      if (current.providerOrderId !== intent.providerOrderId ||
+          current.providerPaymentId !== intent.providerPaymentId ||
+          current.amountMinor !== intent.amountMinor || current.currency !== intent.currency ||
+          current.state !== 'CAPTURED') {
+        throw new Error('payment_intent_changed_during_receipt_verification');
+      }
+      if (current.accountingStatus !== 'RECEIPT_ACCEPTED') {
+        tx.update(intentRef, {
+          accountingStatus: 'AWAITING_LOCAL_RECEIPT',
+          providerStatusEvidence: {
+            provider: intent.provider, environment: intent.environment,
+            providerAccountId: intent.providerAccountId,
+            orderId: remote.orderId, paymentId: String(remote.paymentId),
+            status: String(remote.paymentStatus || remote.orderStatus),
+            captured: true, amountMinor: remote.amountMinor,
+            currency: remote.currency, observedAt
+          },
+          lastProviderReceiptVerificationAt: observedAt,
+          updatedAt: observedAt
+        });
+      }
+    });
+    return {
+      captured: true, provider: intent.provider, environment: intent.environment,
+      providerOrderId: intent.providerOrderId, providerPaymentId: String(remote.paymentId),
+      amountMinor: remote.amountMinor, currency: remote.currency, verifiedAt: observedAt
+    };
+  }
+
   async getPaymentIntent(authUid, intentId) {
     if (typeof authUid !== 'string' || !authUid || typeof intentId !== 'string' || !/^[0-9a-f-]{36}$/i.test(intentId)) {
       throw new TypeError('invalid_payment_intent_lookup');
