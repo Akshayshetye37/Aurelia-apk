@@ -361,13 +361,22 @@ for (const file of [
   fs.copyFileSync(source, path.join(securitySourceDir, file));
 }
 
+// Debug-only crash injection: deliberately excluded from release source sets.
+const debugFaultTemplate = path.join(androidDir, 'templates', 'debug', 'LocalPmsFaultInjection.java');
+if (!fs.existsSync(debugFaultTemplate)) throw new Error('Debug fault-injection template is missing.');
+const debugFaultSourceDir = path.join(androidDir, 'app', 'src', 'debug', 'java', 'com', 'aurelia', 'pms', 'debug');
+fs.mkdirSync(debugFaultSourceDir, { recursive: true });
+fs.copyFileSync(debugFaultTemplate, path.join(debugFaultSourceDir, 'LocalPmsFaultInjection.java'));
+
 function addNativeSecurityDependencies(contents, kotlinDsl) {
   if (!/dependencies\s*\{/.test(contents)) {
     throw new Error('App Gradle file has no dependencies block; native security dependencies were not added.');
   }
   const dependencies = [
     ['org.bouncycastle:bcprov-jdk18on:1.80', 'org.bouncycastle:bcprov-jdk18on'],
-    ['androidx.biometric:biometric:1.2.0-alpha05', 'androidx.biometric:biometric']
+    ['androidx.biometric:biometric:1.2.0-alpha05', 'androidx.biometric:biometric'],
+    ['net.zetetic:sqlcipher-android:4.17.0@aar', 'net.zetetic:sqlcipher-android'],
+    ['androidx.sqlite:sqlite:2.6.2', 'androidx.sqlite:sqlite']
   ];
   for (const [coordinate, marker] of dependencies) {
     if (contents.includes(marker)) continue;
@@ -526,6 +535,9 @@ fs.copyFileSync(localPaymentLedgerTemplate, path.join(javaDir, 'LocalPaymentLedg
 const localPmsRepositoryTemplate = path.join(androidDir, 'templates', 'LocalPmsRepository.java');
 if (!fs.existsSync(localPmsRepositoryTemplate)) throw new Error('LocalPmsRepository.java template is missing.');
 fs.copyFileSync(localPmsRepositoryTemplate, path.join(javaDir, 'LocalPmsRepository.java'));
+const pmsPlaintextMigrationTemplate = path.join(androidDir, 'templates', 'PmsPlaintextDatabaseMigration.java');
+if (!fs.existsSync(pmsPlaintextMigrationTemplate)) throw new Error('PmsPlaintextDatabaseMigration.java template is missing.');
+fs.copyFileSync(pmsPlaintextMigrationTemplate, path.join(javaDir, 'PmsPlaintextDatabaseMigration.java'));
 const pmsStoragePluginTemplate = path.join(androidDir, 'templates', 'CapacitorPmsStoragePlugin.java');
 if (!fs.existsSync(pmsStoragePluginTemplate)) throw new Error('CapacitorPmsStoragePlugin.java template is missing.');
 fs.copyFileSync(pmsStoragePluginTemplate, path.join(javaDir, 'CapacitorPmsStoragePlugin.java'));
