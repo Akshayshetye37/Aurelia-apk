@@ -414,7 +414,7 @@ allprojects {
 `;
 let rootGradle = fs.readFileSync(rootGradleGroovy, 'utf8');
 if (!rootGradle.includes("kotlin-stdlib-jdk8:1.8.22")) {
-  rootGradle += '\\n' + kotlinAlignment;
+  rootGradle += '\n' + kotlinAlignment;
   fs.writeFileSync(rootGradleGroovy, rootGradle);
 }
 
