@@ -19,7 +19,7 @@ function strictRecord(value, required, optional = []) {
 const textValue = (value, max = 256, { optional = false } = {}) =>
   (optional && value === undefined) ||
   (typeof value === 'string' && value.length > 0 && value.length <= max &&
-    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value) && value.trim() === value);
+    !/[\u0000-\u001f\u007f]/.test(value) && value.trim() === value);
 
 const optionalText = (record, key, max = 256) =>
   !hasOwn(record, key) || textValue(record[key], max);
@@ -187,7 +187,7 @@ function inspectDocument(value, depth = 0) {
   if (value === null || typeof value === 'boolean') return true;
   if (typeof value === 'number') return Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER;
   if (typeof value === 'string') return new TextEncoder().encode(value).byteLength <= 16_384 &&
-    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value);
+    !/[\u0000-\u001f\u007f]/.test(value);
   if (Array.isArray(value)) return value.length <= 500 && value.every(item => inspectDocument(item, depth + 1));
   if (typeof value !== 'object') return false;
   const prototype = Object.getPrototypeOf(value);
