@@ -5,7 +5,8 @@ locals {
     "firestore.googleapis.com",
     "secretmanager.googleapis.com",
     "iam.googleapis.com",
-    "compute.googleapis.com"
+    "compute.googleapis.com",
+    "cloudscheduler.googleapis.com"
   ])
 }
 
@@ -323,4 +324,95 @@ output "load_balancer_ip" {
 output "payment_backend_https_url" {
   value       = "https://${var.domain_name}"
   description = "Public HTTPS endpoint routed through the managed global load balancer."
+}
+
+# Dedicated Cloud Run Job performs the 30-minute refund review scan. It has
+# the same narrowly scoped runtime identity as the API and never posts ledger
+# entries or calls payment providers.
+resource "google_cloud_run_v2_job" "refund_review_scan" {
+  project             = var.project_id
+  name                = "${var.service_name}-refund-review-scan"
+  location            = var.region
+  deletion_protection = true
+
+  template {
+    task_count  = 1
+    parallelism = 1
+
+    template {
+      service_account = google_service_account.runtime.email
+      timeout         = "300s"
+      max_retries     = 1
+
+      containers {
+        image   = var.container_image
+        command = ["node"]
+        args    = ["src/refunds/review-scan-job.mjs"]
+
+        env {
+          name  = "GOOGLE_CLOUD_PROJECT"
+          value = var.project_id
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    google_project_service.required,
+    google_project_iam_member.firestore_user
+  ]
+}
+
+resource "google_service_account" "refund_review_scheduler" {
+  project      = var.project_id
+  account_id   = "${var.service_name}-refund-scheduler"
+  display_name = "Aurelia refund review scheduler"
+  depends_on   = [google_project_service.required]
+}
+
+resource "google_cloud_run_v2_job_iam_member" "refund_review_scheduler" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_job.refund_review_scan.name
+  role     = "roles/run.developer"
+  member   = "serviceAccount:${google_service_account.refund_review_scheduler.email}"
+}
+
+resource "google_cloud_scheduler_job" "refund_review_scan" {
+  project          = var.project_id
+  region           = var.region
+  name             = "${var.service_name}-refund-review-scan"
+  description      = "Promote provider-confirmed refunds without local reversals to human review."
+  schedule         = "*/5 * * * *"
+  time_zone        = "Etc/UTC"
+  attempt_deadline = "320s"
+
+  retry_config {
+    retry_count          = 2
+    max_retry_duration   = "600s"
+    min_backoff_duration = "30s"
+    max_backoff_duration = "120s"
+    max_doublings        = 2
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.project_id}/locations/${var.region}/jobs/${google_cloud_run_v2_job.refund_review_scan.name}:run"
+    body        = base64encode("{}")
+
+    oauth_token {
+      service_account_email = google_service_account.refund_review_scheduler.email
+      scope                 = "https://www.googleapis.com/auth/cloud-platform"
+    }
+  }
+
+  depends_on = [
+    google_project_service.required,
+    google_cloud_run_v2_job_iam_member.refund_review_scheduler
+  ]
+}
+
+output "refund_review_scan_job_name" {
+  value       = google_cloud_run_v2_job.refund_review_scan.name
+  description = "Scheduled Cloud Run Job that promotes overdue provider refunds to human review."
 }
