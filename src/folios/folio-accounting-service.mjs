@@ -204,13 +204,13 @@ export async function createSplitFolio({
     const [masterRow, childRow, allFolios] = await Promise.all([
       bridge.fetchEntity("folio", masterId), bridge.fetchEntity("folio", childId), bridge.listEntities("folio")
     ]);
-    if (!masterRow) throw fail("MASTER_FOLIO_MISSING", "The canonical master folio does not exist.");
     if (childRow) throw fail("SPLIT_FOLIO_ALREADY_EXISTS", "The split folio ID already exists.");
-    if (masterRow.data?.invoiceIssued) throw fail("MASTER_INVOICE_ALREADY_ISSUED", "A split cannot be created after the master tax invoice has been issued.");
-    if (masterRow.data?.bookingId && String(masterRow.data.bookingId) !== bookingKey) {
+    if (masterRow?.data?.invoiceIssued) throw fail("MASTER_INVOICE_ALREADY_ISSUED", "A split cannot be created after the master tax invoice has been issued.");
+    if (masterRow?.data?.bookingId && String(masterRow.data.bookingId) !== bookingKey) {
       throw fail("FOLIO_BOOKING_MISMATCH", "The master folio belongs to another booking.");
     }
-    const canonicalCharges = Array.isArray(masterRow?.data?.chargeLines) ? masterRow.data.chargeLines :\n      (!masterRow && Array.isArray(masterChargeLines) ? masterChargeLines : null);
+    const canonicalCharges = Array.isArray(masterRow?.data?.chargeLines) ? masterRow.data.chargeLines :
+      (!masterRow && Array.isArray(masterChargeLines) ? masterChargeLines : null);
     if (!canonicalCharges) throw fail("SPLIT_CANONICAL_CHARGES_MISSING", "Split folios require canonical charge lines on the master folio; caller-supplied charges are not trusted.");
     const sourceMap = new Map(canonicalCharges.map((charge, index) => {
       const id = text(charge?.id) || "legacy-charge-" + index;
