@@ -86,12 +86,18 @@ export function buildFolioInvoice({
     }, 0, profiles),
     ...(Array.isArray(booking.ch) ? booking.ch : []).map((row, i) => normalizeCharge(row, i + 1, profiles))
   ];
-  const rawLines = charges.map(line => ({ ...line, ...taxForLine(line.amountMinor, line.taxProfile) }));
-  const rawSubtotalMinor = rawLines.reduce((sum, line) => sum + line.taxableMinor, 0);
+  const rawLines = charges.map(line => {
+    const tax = taxForLine(line.amountMinor, line.taxProfile);
+    const grossMinor = line.taxProfile && !line.taxProfile.inclusive
+      ? line.amountMinor + tax.taxMinor
+      : line.amountMinor;
+    return { ...line, ...tax, grossMinor };
+  });
+  const rawGrossMinor = rawLines.reduce((sum, line) => sum + line.grossMinor, 0);
   const discountMinor = money(booking.dc || 0, "Discount");
-  if (discountMinor > rawSubtotalMinor) throw new RangeError("Discount cannot exceed the taxable subtotal");
+  if (discountMinor > rawGrossMinor) throw new RangeError("Discount cannot exceed the folio total");
   const allocations = rawLines.map(line => {
-    const exact = rawSubtotalMinor ? discountMinor * line.taxableMinor / rawSubtotalMinor : 0;
+    const exact = rawGrossMinor ? discountMinor * line.grossMinor / rawGrossMinor : 0;
     return { base: Math.floor(exact), remainder: exact - Math.floor(exact) };
   });
   let undistributed = discountMinor - allocations.reduce((sum, x) => sum + x.base, 0);
@@ -99,17 +105,20 @@ export function buildFolioInvoice({
     .slice(0, undistributed).forEach(x => { allocations[x.index].base += 1; });
   const lineItems = rawLines.map((line, index) => {
     const lineDiscountMinor = allocations[index].base;
-    const taxableMinor = line.taxableMinor - lineDiscountMinor;
-    const taxMinor = line.taxProfile ? Math.round(taxableMinor * line.taxProfile.rate / 100) : 0;
+    const grossAfterDiscount = line.grossMinor - lineDiscountMinor;
+    const taxableMinor = line.taxProfile?.inclusive
+      ? Math.round(grossAfterDiscount / (1 + line.taxProfile.rate / 100))
+      : line.amountMinor - lineDiscountMinor;
+    const taxMinor = line.taxProfile ? Math.max(0, grossAfterDiscount - taxableMinor) : 0;
     const cgstMinor = line.taxProfile?.supply === "intrastate" ? Math.floor(taxMinor / 2) : 0;
     const sgstMinor = line.taxProfile?.supply === "intrastate" ? taxMinor - cgstMinor : 0;
     const igstMinor = line.taxProfile?.supply === "interstate" ? taxMinor : 0;
     return Object.freeze({ ...line, lineDiscountMinor, taxableMinor, taxMinor, cgstMinor, sgstMinor, igstMinor,
-      netAmountMinor: taxableMinor + taxMinor });
+      netAmountMinor: grossAfterDiscount });
   });
   const subtotalMinor = lineItems.reduce((sum, line) => sum + line.taxableMinor, 0);
   const taxMinor = lineItems.reduce((sum, line) => sum + line.taxMinor, 0);
-  const grossMinor = subtotalMinor + taxMinor;
+  const grossMinor = lineItems.reduce((sum, line) => sum + line.netAmountMinor, 0);
   const paidMinor = money(paidAmount, "Paid amount");
   const dueMinor = money(balanceDue, "Balance due");
   const occupants = Array.isArray(guest?.occ)
