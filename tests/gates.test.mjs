@@ -13,6 +13,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = path.join(ROOT, 'scripts', 'gates');
 const SHA_A = 'a'.repeat(40);
 const SHA_B = 'b'.repeat(40);
+const read = (relative) => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 
 function tempDir(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aurelia-gates-'));
