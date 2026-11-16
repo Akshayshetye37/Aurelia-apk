@@ -10,8 +10,6 @@ on:
       - 'scripts/verify-android-instrumentation-results.mjs'
       - 'functions/src/**'
       - 'functions/test/**'
-      - 'functions/test/**'
-      - 'functions/src/**'
       - 'tests/otp-recovery-*.test.mjs'
       - 'tests/native-security-template.test.mjs'
       - '.github/workflows/recovery-functions.yml'
@@ -19,8 +17,6 @@ on:
       - '.github/workflows/otp-recovery-android-instrumentation.yml'
       - 'gates/required-runs.json'
       - 'scripts/gates/**'
-      - '.github/workflows/otp-recovery-android-instrumentation.yml'
-      - '.github/workflows/recovery-functions.yml'
       - '.github/workflows/payment-backend-ci.yml'
   pull_request:
     paths:
