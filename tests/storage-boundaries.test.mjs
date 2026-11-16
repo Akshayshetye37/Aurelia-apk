@@ -86,3 +86,29 @@ test("security-base string API still rejects Web Storage and volatile fallback v
     assert.throws(() => scanStorageBoundaries(root), /Storage boundary violation/);
   } finally { cleanup(root); }
 });
+
+test("security-base string API preserves every forbidden-pattern rejection", () => {
+  const rejectedTokens = [
+    "localStorage",
+    "sessionStorage",
+    "memoryFallback",
+    "fallbackToMemory",
+    "volatileFallback",
+    "inMemoryPersistence",
+    "ramPersistenceFallback"
+  ];
+  for (const token of rejectedTokens) {
+    const root = fixture("aurelia-boundary-security-rule-");
+    try {
+      mkdirSync(path.join(root, "src", "storage"), { recursive: true });
+      mkdirSync(path.join(root, "src", "features"), { recursive: true });
+      writeFileSync(path.join(root, "src", "storage", "legacy-web-storage.mjs"), ADAPTER);
+      writeFileSync(path.join(root, "src", "features", "rejected.mjs"), "void " + token + ";");
+      assert.throws(
+        () => scanStorageBoundaries(root),
+        /Storage boundary violation/,
+        "security-base scanner must continue rejecting " + token
+      );
+    } finally { cleanup(root); }
+  }
+});
