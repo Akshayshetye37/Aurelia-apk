@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { arg, fail, requireApprovals, requireIndependentTester, requireSha, verifyBundle } from './lib.mjs';
-import { validateSmsAttestation } from './attestation-schema.mjs';
+import { validateSmsAttestation, containsPhoneNumberLikeValue } from './attestation-schema.mjs';
 
 const kind = arg('kind');
 const sha = requireSha(arg('sha'));
