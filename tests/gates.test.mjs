@@ -232,7 +232,7 @@ if (args[0] === 'api') {
   fs.chmodSync(fakeGh, 0o755);
   const controlSha = SHA_B;
   const record = {
-    gate: process.env.FAKE_GATE, status: 'PASS', runId: 123, runAttempt: 1,
+    gate, status: 'PASS', runId: 123, runAttempt: 1,
     repository: 'owner/repo', candidateSha: SHA_A, controlSha,
   };
   const env = {
