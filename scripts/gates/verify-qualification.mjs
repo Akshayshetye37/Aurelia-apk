@@ -76,8 +76,8 @@ const gate4LogScan = readEvidence('4', 'log-scan.json');
 if (!Array.isArray(gate4LogScan.findings) || gate4LogScan.findings.length) fail('Gate 4 device log scan did not pass');
 if (records['5'].details.productionRecoveryEnabled !== false || !records['5'].details.productionProjectId) fail('Gate 5 did not attest production recovery OFF');
 const productionAudit = readEvidence('5', 'production-audit.json');
-if (productionAudit.project !== records['5'].details.productionProjectId || !Array.isArray(productionAudit.problems) || productionAudit.problems.length || !productionAudit.auditedResources?.functions) {
-  fail('Gate 5 production audit evidence is incomplete or reports problems');
+if (productionAudit.project !== records['5'].details.productionProjectId || !Array.isArray(productionAudit.problems) || productionAudit.problems.length || !productionAudit.auditedResources?.functions || !Number.isInteger(productionAudit.firebaseAudit?.androidApps) || productionAudit.firebaseAudit.androidApps < 1 || !Number.isInteger(productionAudit.firebaseAudit?.sha1Fingerprints) || productionAudit.firebaseAudit.sha1Fingerprints < 1 || !Number.isInteger(productionAudit.firebaseAudit?.sha256Fingerprints) || productionAudit.firebaseAudit.sha256Fingerprints < 1 || productionAudit.firebaseAudit.projectTestPhoneNumbers !== 0 || productionAudit.firebaseAudit.tenantTestPhoneNumbers !== 0 || !Number.isInteger(productionAudit.firebaseAudit.tenants)) {
+  fail('Gate 5 production audit evidence is incomplete, lacks Firebase signing inventory, or reports test phone numbers/problems');
 }
 for (const kind of ['sms', 'device']) {
   if (records[kind].details.kind !== kind || !/^[0-9a-f]{64}$/.test(records[kind].details.attestationSha256 ?? '') || records[kind].details.apkSha256 !== apkHash) fail(`${kind} attestation is invalid or for a different Gate 3 APK`);
