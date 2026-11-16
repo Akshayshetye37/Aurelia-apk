@@ -11,6 +11,11 @@ if (!['sms', 'device'].includes(kind)) fail('kind must be sms or device');
 let attestation;
 try { attestation = JSON.parse(process.env.ATTESTATION ?? ''); } catch { fail('attestation is not valid JSON'); }
 if (!attestation || Array.isArray(attestation) || typeof attestation !== 'object') fail('attestation must be a JSON object');
+const raw = JSON.stringify(attestation);
+if (Buffer.byteLength(raw, 'utf8') > 4000) fail('attestation too large');
+if (/\b\d{6}\b/.test(raw)) fail('attestation contains a 6-digit sequence; never record OTPs');
+if (/\+?\d{10,}/.test(raw)) fail('attestation contains a phone-number-like value');
+
 const commonKeys = ['kind', 'apkSha256', 'testedAt', 'tester', 'results'];
 const kindKeys = kind === 'sms'
   ? ['country', 'carrier', 'stagingProjectId']
@@ -18,10 +23,6 @@ const kindKeys = kind === 'sms'
 const unknownKeys = Object.keys(attestation).filter((key) => !commonKeys.concat(kindKeys).includes(key));
 if (unknownKeys.length) fail(`unexpected attestation field(s): ${unknownKeys.join(', ')}`);
 if (!attestation.results || Array.isArray(attestation.results) || typeof attestation.results !== 'object') fail('results must be a JSON object');
-const raw = JSON.stringify(attestation);
-if (Buffer.byteLength(raw, 'utf8') > 4000) fail('attestation too large');
-if (/\b\d{6}\b/.test(raw)) fail('attestation contains a 6-digit sequence; never record OTPs');
-if (/\+?\d{10,}/.test(raw)) fail('attestation contains a phone-number-like value');
 const gate3 = verifyBundle({ repo, runId: gate3Run, gate: '3', workflowFile: 'gate-3-real-sms-staging.yml', controlBranch, dir: 'g3' });
 if (gate3.candidateSha !== sha) fail('Gate 3 belongs to a different candidate');
 if (attestation.kind !== kind) fail('kind mismatch');

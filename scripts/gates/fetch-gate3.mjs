@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { fail, sha256File, verifyBundle } from './lib.mjs';
+import { fail, requireSha, sha256File, verifyBundle } from './lib.mjs';
 
 const { REPO, GATE3_RUN, CONTROL_BRANCH, CANDIDATE_SHA } = process.env;
 if (!REPO || !CONTROL_BRANCH || !/^\d+$/.test(GATE3_RUN ?? '')) fail('Gate 3 run context is incomplete');
