@@ -11,9 +11,11 @@ on:
       - integration/ledger-patch
     paths:
       - gates/qualification-candidate-sha.txt
+      - .github/workflows/gate-1-encrypted-storage.yml
+      - .github/workflows/gate-2-recovery-runtime.yml
 permissions: {}
 concurrency:
-  group: gate-2-${{ inputs.candidate_sha }}
+  group: gate-2-${{ inputs.candidate_sha || github.sha }}
   cancel-in-progress: false
 jobs:
   evidence:
@@ -40,9 +42,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          candidate_sha="$(tr -d '\\r\\n' < gates/qualification-candidate-sha.txt)"
+          candidate_sha="$(cat gates/qualification-candidate-sha.txt)"
           [[ "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]
-          printf 'CANDIDATE_SHA=%s\\n' "$candidate_sha" >> "$GITHUB_ENV"
+          printf 'CANDIDATE_SHA=%s\n' "$candidate_sha" >> "$GITHUB_ENV"
       - name: Candidate is the exact frozen branch head
         run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
       - name: Checkout candidate source for static tripwire only
