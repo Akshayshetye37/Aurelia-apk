@@ -205,11 +205,20 @@ jobs:
         run: |
           set -euo pipefail
           bindings=(
+            "createRecoveryAttestationChallenge:"
+            "verifyRecoveryDeviceAttestation:"
             "registerRecoveryPhone:PHONE_PEPPER"
+            "exchangeOwnerEmailLink:"
+            "confirmRecoveryOwnerBinding:"
             "registerRecoveryOwnerDevice:PHONE_PEPPER"
+            "acknowledgeRecoveryOwnerAlert:"
             "issueRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"
             "consumeRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"
+            "cancelRecoveryRequest:"
+            "cancelRecoveryPhoneChange:"
+            "activateRecoveryPhoneChange:"
           )
+          declare -A runtime_secret_sets=()
           for binding in "${bindings[@]}"; do
             function_name="${binding%%:*}"
             secret_list="${binding#*:}"
@@ -219,18 +228,26 @@ jobs:
               echo "::error::Could not determine runtime service account for $function_name."
               exit 1
             fi
-            IFS=',' read -r -a secrets <<< "$secret_list"
-            for secret in "${secrets[@]}"; do
-              policy="$(gcloud secrets get-iam-policy "$secret" --project "$PROJECT_ID" --format=json)"
-              if ! echo "$policy" | jq -e --arg member "serviceAccount:$runtime_sa" '
-                [.bindings[]? | select(.role=="roles/secretmanager.secretAccessor") |
-                  .members[]? | select(. == $member)] | length > 0
-              ' >/dev/null; then
-                echo "::error::Runtime service account for $function_name lacks secretAccessor on $secret."
-                exit 1
-              fi
-            done
-            echo "PASS: $function_name runtime identity has access to its declared secrets."
+            secret_signature="$(printf '%s' "$secret_list" | tr ',' '\n' | sort | paste -sd, -)"
+            if [[ -n "${runtime_secret_sets[$runtime_sa]+present}" && "${runtime_secret_sets[$runtime_sa]}" != "$secret_signature" ]]; then
+              echo "::error::Functions sharing $runtime_sa have different secret requirements; assign isolated runtime identities."
+              exit 1
+            fi
+            runtime_secret_sets[$runtime_sa]="$secret_signature"
+            if [[ -n "$secret_list" ]]; then
+              IFS=',' read -r -a secrets <<< "$secret_list"
+              for secret in "${secrets[@]}"; do
+                policy="$(gcloud secrets get-iam-policy "$secret" --project "$PROJECT_ID" --format=json)"
+                if ! echo "$policy" | jq -e --arg member "serviceAccount:$runtime_sa" '
+                  [.bindings[]? | select(.role=="roles/secretmanager.secretAccessor") |
+                    .members[]? | select(. == $member)] | length > 0
+                ' >/dev/null; then
+                  echo "::error::Runtime service account for $function_name lacks secretAccessor on $secret."
+                  exit 1
+                fi
+              done
+            fi
+            echo "PASS: $function_name runtime identity matches its exact secret set."
           done
 
       - name: Probe missing and invalid App Check tokens on every recovery callable
