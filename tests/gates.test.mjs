@@ -550,6 +550,13 @@ test('Gate 3 and Gate 6 pin App Check probes to the full recovery callable inven
   assert.match(probeScript, /exactly match the complete recovery callable inventory/);
 });
 
+test('Gate 5 requires the exact secret inventory and unique runtime allowlist', () => {
+  const audit = read('scripts/gates/audit-production.mjs');
+  assert.match(audit, /REQUIRED_SECRETS must contain exactly PHONE_PEPPER and RECOVERY_SIGNING_KEY_PKCS8/);
+  assert.match(audit, /RUNTIME_SERVICE_ACCOUNTS contains duplicate identities/);
+  assert.match(audit, /new Set\(runtimeAccounts\)/);
+});
+
 test('Gate 5 rejects inherited project-level public Cloud Run or Functions invocation', () => {
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }), true);
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/cloudfunctions.invoker', members: ['allAuthenticatedUsers'] }] }), true);
