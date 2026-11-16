@@ -49,3 +49,96 @@ Reviewer signature or approved audit-trail reference: ____________________
 Review date and timezone: ____________________
 
 **No signature is present. Production recovery remains OFF.** The owner must not sign a candidate whose gates are missing, failed, stale or recorded against another SHA. Production enablement requires a separately reviewed, explicit authorization after all six gates pass.
+
+
+## Canonical workflow sequence and evidence inputs
+
+Use only these canonical workflows from the trusted control branch `integration/ledger-patch`:
+
+1. `.github/workflows/gate-3-real-sms-staging.yml` — staging deploy, APK build, signer verification and App Check probes.
+2. `.github/workflows/gate-manual-attestation.yml` with `kind=sms` — reviewer-approved real-SMS test record tied to the Gate 3 APK.
+3. `.github/workflows/gate-4-physical-device.yml` — automated physical handset instrumentation using the exact Gate 3 APK.
+4. `.github/workflows/gate-manual-attestation.yml` with `kind=device` — reviewer-approved record for the additional human-only device cases.
+5. `.github/workflows/gate-5-production-security.yml` — read-only production security audit.
+6. `.github/workflows/gate-6-release-signoff.yml` — final cross-gate evidence and approval verification.
+
+The obsolete `recovery-physical-device-qualification.yml` and `recovery-production-flag-audit.yml` workflows have been removed. Their outputs were not accepted by Gate 6 and must not be used as qualification evidence.
+
+### SMS attestation JSON template
+
+Submit this JSON to the manual-attestation workflow with `kind=sms`. Replace every placeholder with evidence from the exact Gate 3 APK and physical staging test. Do not include the OTP, phone number, SMS body, Firebase `verificationId`, device serial or secrets.
+
+```json
+{
+  "kind": "sms",
+  "apkSha256": "<64-character Gate 3 app APK SHA-256>",
+  "testedAt": "2026-11-16T12:00:00Z",
+  "tester": "<independent GitHub login>",
+  "results": {
+    "validOtp": "VERIFIED",
+    "wrongOtp": "REJECTED",
+    "expiredOtp": "REJECTED",
+    "replayedOtp": "REJECTED",
+    "resendRateLimit": "REJECTED",
+    "otpDoesNotAccessDek": "CONFIRMED",
+    "passkeyAckEnrollAndAssert": "VERIFIED"
+  },
+  "country": "IN",
+  "carrier": "<mobile carrier>",
+  "stagingProjectId": "<Gate 3 staging project ID>",
+  "smsDeliveredAt": "2026-11-16T11:55:00Z",
+  "challengeId": "<UUID v4 from createRecoveryAttestationChallenge>",
+  "deviceLabel": "Pixel 8 Android 15",
+  "deviceIdentitySha256": "<64-character lowercase SHA-256 of redacted device identity>"
+}
+```
+
+### Physical-device attestation JSON template
+
+Submit this JSON to the same manual-attestation workflow with `kind=device`. The before/after checksums must be measured from the same synthetic SQLCipher fixture and must match exactly.
+
+```json
+{
+  "kind": "device",
+  "apkSha256": "<64-character Gate 3 app APK SHA-256>",
+  "testedAt": "2026-11-16T12:00:00Z",
+  "tester": "<independent GitHub login>",
+  "results": {
+    "pinAFailsAfterRecovery": true,
+    "pinBOpensOriginalData": true,
+    "forceStopSurvived": true,
+    "rebootSurvived": true,
+    "replayRejected": true,
+    "lockScreenChangeFailsClosed": true,
+    "ownerCancelDuringHold": true,
+    "offlineNormalUse": true,
+    "logScanClean": true
+  },
+  "deviceModel": "<physical handset model>",
+  "androidVersion": "<Android version>",
+  "verifiedBoot": "green",
+  "bootloaderLocked": true,
+  "dataChecksumBefore": "<64-character lowercase SHA-256>",
+  "dataChecksumAfter": "<same 64-character lowercase SHA-256>"
+}
+```
+
+The manual-attestation workflow requires a distinct tester, a separate workflow trigger actor, and an independent reviewer approval. Never have the tester approve their own attestation.
+
+### Gate 6 run ID input
+
+The `run_ids` input must be a JSON object with exactly these keys and successful workflow run IDs, all for the same candidate SHA and control-branch revision:
+
+```json
+{
+  "1": "<Gate 1 run ID>",
+  "2": "<Gate 2 run ID>",
+  "3": "<Gate 3 run ID>",
+  "4": "<Gate 4 run ID>",
+  "5": "<Gate 5 run ID>",
+  "sms": "<SMS attestation run ID>",
+  "device": "<device attestation run ID>"
+}
+```
+
+Configure `recovery-release-review-1` and `recovery-release-review-2` with protected required reviewers. Gate 6 independently checks for two distinct approvers, neither of whom is the workflow trigger actor or either manual attestation tester. It also checks that the Gate 3 APK signer SHA-256 is present in the production Firebase signing inventory from Gate 5.
