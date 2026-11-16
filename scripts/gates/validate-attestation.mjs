@@ -55,7 +55,7 @@ if (kind === 'sms') {
   if (attestation.verifiedBoot !== 'green' || attestation.bootloaderLocked !== true) fail('device must have verified boot green and a locked bootloader');
   if (!/^[0-9a-f]{64}$/.test(attestation.dataChecksumBefore ?? '') || attestation.dataChecksumBefore !== attestation.dataChecksumAfter) fail('data checksums must be valid and match');
 }
-const attestationApprovers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 1, process.env.ACTOR);
+const attestationApprovers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 1, process.env.ACTOR, ['recovery-attestation']);
 requireIndependentTester(attestationApprovers, attestation.tester);
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/attestation.json', raw);
