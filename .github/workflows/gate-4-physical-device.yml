@@ -195,7 +195,9 @@ jobs:
           if (!/^[A-Z0-9-]{3,32}$/.test(device.deviceLabel ?? '') || device.deviceLabel !== details.deviceLabel || device.deviceLabel !== process.env.DEVICE_LABEL) fail('device label mismatch');
           if (!device.deviceModel || device.deviceModel !== details.deviceModel || device.androidVersion !== details.androidVersion) fail('device identity mismatch');
           if (device.verifiedBoot !== 'green' || device.bootloaderLocked !== true || details.verifiedBoot !== 'green' || details.bootloaderLocked !== true) fail('device boot state is not locked and verified');
-          if (!Array.isArray(scan.findings) || scan.findings.length || !Array.isArray(scan.files) || !scan.files.length) fail('device log scan is not clean');
+          const expectedLogFiles = ['force-stop-phase-one.txt', 'force-stop-phase-two.txt', 'grant-preflight.txt', 'logcat.txt', 'reboot-phase-one.txt', 'reboot-phase-two.txt', 'security-primitives.txt', 'sqlcipher.txt'].sort();
+          const actualLogFiles = Array.isArray(scan.files) ? [...scan.files].sort() : [];
+          if (!Array.isArray(scan.findings) || scan.findings.length || JSON.stringify(actualLogFiles) !== JSON.stringify(expectedLogFiles)) fail('device log scan is incomplete or not clean');
           if (details.apkSha256 !== sha256File('apks/app.apk') || details.testApkSha256 !== sha256File('apks/test.apk')) fail('device evidence APK hashes do not match Gate 3');
           fs.mkdirSync('evidence', { recursive: true });
           for (const name of ['device.json', 'details.json', 'log-scan.json']) fs.copyFileSync(`device-evidence/${name}`, `evidence/${name}`);
