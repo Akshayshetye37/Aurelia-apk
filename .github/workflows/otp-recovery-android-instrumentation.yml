@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - 'work/**'
+      - 'integration/**'
     paths:
       - 'payment-backend/test/**'
       - 'android/templates/**'

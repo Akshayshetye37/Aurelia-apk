@@ -5,8 +5,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/multi-provider-payment-backend
       - 'work/**'
+      - 'integration/**'
     paths:
       - "payment-backend/**"
       - ".github/workflows/payment-backend-ci.yml"

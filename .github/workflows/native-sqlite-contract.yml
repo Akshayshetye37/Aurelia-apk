@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - 'work/**'
+      - 'integration/**'
   pull_request:
     branches:
       - feature/multi-provider-payment-backend
