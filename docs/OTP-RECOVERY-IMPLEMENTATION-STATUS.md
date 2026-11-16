@@ -1,6 +1,15 @@
 # OTP-based Forgot PIN recovery — implementation status
 
-**Release posture: production recovery remains DISABLED. No gate is currently qualified on the final candidate SHA.**
+**Release posture: production recovery remains DISABLED. Gates 1 and 2 have qualified on frozen candidate SHA `a3f483ab8672ab5dfd5dd4ccdb98ce892720663c`; Gates 3–6 remain unqualified.**
+
+## Latest qualification evidence (2026-11-16)
+
+- **Gate 1 — PASS:** control-branch workflow run [43835932330](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/43835932330). Candidate-head validation, required storage workflow verification, evidence bundle creation and GitHub provenance attestation all succeeded. Artifact: `gate-1-evidence` (artifact ID `14209789622`).
+- **Gate 2 — PASS:** control-branch workflow run [43835932275](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/43835932275). Candidate-head validation, recovery workflow verification, protected-flag/App Check tripwire, evidence bundle creation and GitHub provenance attestation all succeeded. Artifact: `gate-2-evidence` (artifact ID `14211041273`).
+- Both gates validate the same frozen candidate SHA above, which was confirmed as the current head of `work/p0-storage-hardening` during execution.
+- Gates 3, 4, 5 and 6 have no successful qualification runs recorded. No real-SMS, physical-device, production-audit or dual-review evidence is claimed.
+- The separate repository hardening PR head `0060ccd0c9a07f735236e7ac2597c16d1450dea9` has all seven PR CI workflows green; this CI result is not substituted for qualification evidence on the frozen candidate.
+- Production `RECOVERY_ENABLED` remains false.
 
 ## Implemented security controls (source only; runtime deployment is not yet qualified)
 
