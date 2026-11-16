@@ -96,9 +96,15 @@ else {
 const runtimeAccounts = list('RUNTIME_SERVICE_ACCOUNTS');
 const auditServiceAccount = process.env.AUDIT_SERVICE_ACCOUNT ?? '';
 if (!runtimeAccounts.length) problems.push('RUNTIME_SERVICE_ACCOUNTS not configured');
+if (new Set(runtimeAccounts).size !== runtimeAccounts.length) problems.push('RUNTIME_SERVICE_ACCOUNTS contains duplicate identities');
 if (!auditServiceAccount) problems.push('AUDIT_SERVICE_ACCOUNT not configured');
 if (auditServiceAccount && runtimeAccounts.includes(auditServiceAccount)) problems.push('audit identity must be distinct from every production runtime identity');
 const requiredSecrets = list('REQUIRED_SECRETS');
+const expectedRecoverySecrets = ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'];
+if (requiredSecrets.length !== expectedRecoverySecrets.length ||
+    expectedRecoverySecrets.some(secret => !requiredSecrets.includes(secret))) {
+  problems.push('REQUIRED_SECRETS must contain exactly PHONE_PEPPER and RECOVERY_SIGNING_KEY_PKCS8');
+}
 const secretPolicies = new Map();
 const allowedSecretPrincipals = new Set([...runtimeAccounts, auditServiceAccount].filter(Boolean).map((account) => `serviceAccount:${account}`));
 if (!requiredSecrets.length) problems.push('REQUIRED_SECRETS not configured');
