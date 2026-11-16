@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { isAttestationFresh } from '../scripts/gates/lib.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
@@ -368,4 +369,12 @@ test('Gate 4 device execution is isolated from hosted provenance attestation', (
   assert.match(attestJob, /runs-on: ubuntu-latest/);
   assert.match(attestJob, /actions\/attest-build-provenance/);
   assert.match(attestJob, /Upload Gate 4 evidence/);
+});
+
+
+test('Gate 6 qualification freshness enforces the seven-day attestation boundary', () => {
+  const now = Date.parse('2026-11-16T12:00:00.000Z');
+  assert.equal(isAttestationFresh('2026-11-09T12:00:00.001Z', now), true);
+  assert.equal(isAttestationFresh('2026-11-09T12:00:00.000Z', now), false);
+  assert.equal(isAttestationFresh('invalid', now), false);
 });
