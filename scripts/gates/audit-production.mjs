@@ -11,16 +11,54 @@ const run = (args) => {
   catch (error) { fail(`gcloud ${args.slice(0, 3).join(' ')} failed: ${error.stderr?.toString().slice(0, 400) || error.message}`); }
 };
 const problems = [];
-const disabled = (value) => value === undefined || value === null || String(value).toLowerCase() === 'false';
-
-for (const fn of run(['functions', 'list', '--project', project])) {
-  const variables = fn.serviceConfig?.environmentVariables ?? fn.environmentVariables ?? {};
-  if (!disabled(variables.RECOVERY_ENABLED)) problems.push(`function ${fn.name}: RECOVERY_ENABLED is not false/unset`);
+const protectedFlagNames = new Set([
+  'RECOVERY_ENABLED',
+  'LIVE_COLLECTION', 'LIVE_COLLECTION_ENABLED',
+  'AUTOMATIC_SETTLEMENT', 'AUTOMATIC_SETTLEMENT_ENABLED',
+  'AUTOMATIC_REFUND', 'AUTOMATIC_REFUNDS', 'AUTOMATIC_REFUND_ENABLED', 'AUTOMATIC_REFUNDS_ENABLED',
+  'CLOUD_SYNC', 'CLOUD_SYNC_ENABLED',
+  'uiCutover',
+  'BT_PRINTING_ENABLED',
+]);
+const off = (v) => v === undefined || v === null || ['false', '0', 'off', 'disabled', 'no', ''].includes(String(v).trim().toLowerCase());
+const auditedResources = { functions: 0, runServices: 0, protectedFlagVariables: 0 };
+function inspectFlag(name, value, resource) {
+  if (!protectedFlagNames.has(name)) return;
+  auditedResources.protectedFlagVariables++;
+  if (!off(value)) problems.push(`${resource}: ${name} is not OFF`);
 }
-for (const service of run(['run', 'services', 'list', '--project', project])) {
-  for (const container of service.spec?.template?.spec?.containers ?? []) {
-    for (const variable of container.env ?? []) {
-      if (variable.name === 'RECOVERY_ENABLED' && !disabled(variable.value)) problems.push(`run service ${service.metadata?.name}: RECOVERY_ENABLED is not false/unset`);
+function inspectFunctionEnv(resource, env) {
+  for (const [name, value] of Object.entries(env ?? {})) inspectFlag(name, value, resource);
+}
+function inspectSecretFlag(resource, entries) {
+  for (const entry of entries ?? []) {
+    const name = entry.key ?? entry.name;
+    if (protectedFlagNames.has(name)) {
+      auditedResources.protectedFlagVariables++;
+      problems.push(`${resource}: ${name} is secret-sourced and cannot be proven OFF`);
+    }
+  }
+}
+const functions = run(['functions', 'list', '--project', P]);
+auditedResources.functions = functions.length;
+if (!functions.length) problems.push('no production Cloud Functions found; runtime flags cannot be verified');
+for (const f of functions) {
+  const resource = `function ${f.name}`;
+  const config = f.serviceConfig ?? f;
+  inspectFunctionEnv(resource, config.environmentVariables ?? f.environmentVariables);
+  inspectSecretFlag(resource, config.secretEnvironmentVariables ?? f.secretEnvironmentVariables);
+}
+const services = run(['run', 'services', 'list', '--project', P]);
+auditedResources.runServices = services.length;
+for (const service of services) {
+  const resource = `run service ${service.metadata?.name ?? service.name}`;
+  const containers = service.spec?.template?.spec?.containers ?? service.template?.containers ?? [];
+  for (const container of containers) {
+    for (const entry of container.env ?? []) {
+      if (!protectedFlagNames.has(entry.name)) continue;
+      auditedResources.protectedFlagVariables++;
+      if (entry.valueSource || entry.valueFrom) problems.push(`${resource}: ${entry.name} is secret-sourced and cannot be proven OFF`);
+      else if (!off(entry.value)) problems.push(`${resource}: ${entry.name} is not OFF`);
     }
   }
 }
