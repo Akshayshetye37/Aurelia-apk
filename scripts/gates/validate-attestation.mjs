@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { arg, fail, requireApprovals, requireIndependentTester, requireSha, verifyBundle } from './lib.mjs';
+import { validateSmsAttestation } from './attestation-schema.mjs';
 
 const kind = arg('kind');
 const sha = requireSha(arg('sha'));
@@ -18,7 +19,7 @@ if (/\+?\d{10,}/.test(raw)) fail('attestation contains a phone-number-like value
 
 const commonKeys = ['kind', 'apkSha256', 'testedAt', 'tester', 'results'];
 const kindKeys = kind === 'sms'
-  ? ['country', 'carrier', 'stagingProjectId']
+  ? ['country', 'carrier', 'stagingProjectId', 'smsDeliveredAt', 'challengeId', 'deviceLabel', 'deviceIdentitySha256']
   : ['deviceModel', 'androidVersion', 'verifiedBoot', 'bootloaderLocked', 'dataChecksumBefore', 'dataChecksumAfter'];
 const unknownKeys = Object.keys(attestation).filter((key) => !commonKeys.concat(kindKeys).includes(key));
 if (unknownKeys.length) fail(`unexpected attestation field(s): ${unknownKeys.join(', ')}`);
@@ -41,6 +42,7 @@ if (unknownResults.length) fail(`unexpected result field(s): ${unknownResults.jo
 for (const [key, value] of Object.entries(expected)) if (attestation.results[key] !== value) fail(`result ${key} must be ${value}`);
 if (kind === 'sms') {
   if (!/^[A-Z]{2}$/.test(attestation.country ?? '') || typeof attestation.carrier !== 'string' || !attestation.carrier.trim() || attestation.carrier.length > 80) fail('carrier and ISO country required');
+  try { validateSmsAttestation(attestation); } catch (error) { fail(error.message); }
   if (attestation.stagingProjectId !== gate3.details.stagingProjectId) fail('staging project mismatch');
 } else {
   if (typeof attestation.deviceModel !== 'string' || !attestation.deviceModel || attestation.deviceModel.length > 80 || typeof attestation.androidVersion !== 'string' || !attestation.androidVersion || attestation.androidVersion.length > 40) fail('device model and Android version required');
