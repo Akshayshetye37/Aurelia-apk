@@ -68,7 +68,7 @@ jobs:
       - name: Write evidence
         run: node scripts/gates/write-evidence.mjs --gate 4 --sha "$CANDIDATE_SHA" --proof proofs/gate4-device.log --proof gates/attestations/gate4-device.json
       - name: Upload evidence
-        uses: actions/upload-artifact@REPLACE_WITH_FULL_40_CHAR_SHA # v4.x
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.x
         with:
           name: gate-4-evidence-${{ inputs.candidate_sha }}
           path: evidence/
@@ -76,6 +76,6 @@ jobs:
           retention-days: 90
 
       - name: Attest evidence record
-        uses: actions/attest-build-provenance@REPLACE_WITH_FULL_40_CHAR_SHA # v2.x
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.x
         with:
           subject-path: evidence/gate-4.json
