@@ -221,19 +221,19 @@ test('staging APK includes release-signed instrumentation companion for physical
   const workflow = read('.github/workflows/recovery-staging-deploy.yml');
   assert.match(workflow, /AURELIA_ANDROID_TEST_BUILD_TYPE: release/);
   assert.match(workflow, /assembleRelease assembleReleaseAndroidTest/);
-  assert.match(workflow, /app-release-androidTest\.apk/);
+  assert.match(workflow, /apks\/test\.apk|test\.apk/);
   assert.match(workflow, /TEST_SHA256.*ACTUAL_SHA256/);
   assert.ok(workflow.includes("app-release.apk\\n%s  app-release-androidTest.apk\\n"));
 });
 
 
 test('physical-device workflow consumes same-SHA release artifact and enforces real locked handset', () => {
-  const workflow = read('.github/workflows/recovery-physical-device-qualification.yml');
+  const workflow = read('.github/workflows/gate-4-physical-device.yml');
   assert.match(workflow, /runs-on: \[self-hosted, linux, x64, aurelia-android-device\]/);
   assert.match(workflow, /\.head_sha == \$sha/);
   assert.match(workflow, /ro\.boot\.verifiedbootstate/);
   assert.match(workflow, /ro\.boot\.flash\.locked/);
-  assert.match(workflow, /am force-stop com\.aurelia\.pms/);
+  assert.match(workflow, /shell am force-stop "\$app"/);
   assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseOne/);
   assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseTwo/);
   assert.match(workflow, /app-release-androidTest\.apk/);
@@ -251,22 +251,22 @@ test('staging deployment workflows refuse to target the production Firebase proj
 
 
 test('production flag audit proves it targets the configured production project', () => {
-  const workflow = read('.github/workflows/recovery-production-flag-audit.yml');
-  assert.match(workflow, /PRODUCTION_PROJECT_ID: \$\{\{ vars\.PRODUCTION_GCP_PROJECT_ID \}\}/);
-  assert.match(workflow, /PROJECT_ID" != "\$PRODUCTION_PROJECT_ID/);
+  const workflow = read('.github/workflows/gate-5-production-security.yml');
+  assert.match(workflow, /GCP_PROJECT_ID: \$\{\{ vars\.PRODUCTION_GCP_PROJECT_ID \}\}/);
+  assert.match(workflow, /PRODUCTION_GCP_PROJECT_ID: \$\{\{ vars\.PRODUCTION_GCP_PROJECT_ID \}\}/);
+  assert.match(read('scripts/gates/audit-production.mjs'), /project !== process\.env\.PRODUCTION_GCP_PROJECT_ID/);
 });
 
 
 test('staging and production audits verify per-function Secret Manager runtime access', () => {
   for (const path of [
     '.github/workflows/recovery-staging-deploy.yml',
-    '.github/workflows/recovery-production-flag-audit.yml'
+    'scripts/gates/audit-production.mjs'
   ]) {
-    const workflow = read(path);
-    assert.match(workflow, /Verify deployed recovery runtime service accounts can access their secrets|Read-only verification of the actual deployed runtime identities/);
-    assert.match(workflow, /gcloud functions describe "\$function_name"/);
-    assert.match(workflow, /roles\/secretmanager\.secretAccessor/);
-    assert.match(workflow, /acknowledgeRecoveryOwnerAlert:PHONE_PEPPER/);
+    const source = read(path);
+    assert.match(source, /gcloud functions describe "\$function_name"/);
+    assert.match(source, /roles\/secretmanager\.secretAccessor/);
+    assert.match(source, /acknowledgeRecoveryOwnerAlert:PHONE_PEPPER/);
   }
 });
 
