@@ -66,8 +66,8 @@ jobs:
           APP_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_REF" != "refs/heads/work/p0-storage-hardening" ]]; then
-            echo "::error::Recovery attestation deployment is allowed only from work/p0-storage-hardening."
+          if [[ "$CANDIDATE_BRANCH" != "work/p0-storage-hardening" ]]; then
+            echo "::error::Recovery attestation deployment is restricted to the configured candidate branch."
             exit 1
           fi
           for name in PROJECT_ID PRODUCTION_PROJECT_ID REGION RUNTIME_SERVICE_ACCOUNT FUNCTIONS_SERVICE_ACCOUNT DEPLOY_SERVICE_ACCOUNT APP_PACKAGE APP_MIN_VERSION APP_SIGNER_SHA256; do
