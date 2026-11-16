@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { fail, gh, requireApprovals, requireSha, verifyBundle } from './lib.mjs';
 import { isProductionAuditEvidenceValid } from './firebase-audit-schema.mjs';
 
@@ -99,7 +100,7 @@ if (!isProductionAuditEvidenceValid(productionAudit, records['5'].details.produc
 for (const kind of ['sms', 'device']) {
   const attestation = readEvidence(kind, 'attestation.json');
   const attestationBytes = fs.readFileSync(`qualification-${kind}/evidence/attestation.json`);
-  const attestationHash = (await import('node:crypto')).default.createHash('sha256').update(attestationBytes).digest('hex');
+  const attestationHash = crypto.createHash('sha256').update(attestationBytes).digest('hex');
   if (records[kind].details.kind !== kind ||
       !/^[0-9a-f]{64}$/.test(records[kind].details.attestationSha256 ?? '') ||
       records[kind].details.attestationSha256 !== attestationHash ||
