@@ -39,3 +39,8 @@ For each case record the candidate SHA, staging project ID, APK SHA-256, signing
 
 
 All recovery staging and verifier deployment workflows are restricted to `work/p0-storage-hardening`. The physical-device workflow also verifies that the successful staging artifact originated from that branch and the exact candidate SHA.
+
+
+## Required real-SMS attestation metadata
+
+The reviewer-approved `sms` attestation must include `smsDeliveredAt` (RFC 3339/ISO timestamp within 15 minutes before `testedAt`), `challengeId` (UUID v4 correlation ID for the actual Firebase Phone Auth challenge), `deviceLabel` (human-readable model/OS label with no serial or phone data), and `deviceIdentitySha256` (64-character lowercase SHA-256 of a redacted device identity). Record the delivery timestamp when the handset receives the SMS and correlate it to the challenge; do not record the OTP, phone number, SMS body, device serial, IMEI, or raw device identifier. The validator rejects missing, stale, future, malformed, or mismatched metadata. The Firebase SDK remains responsible for OTP verification.

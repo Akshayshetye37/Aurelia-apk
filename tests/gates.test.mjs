@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
+import { validateFirebaseFingerprintInventory, countTestPhoneNumbers } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = path.join(ROOT, 'scripts', 'gates');
@@ -346,4 +348,30 @@ test('manual attestation accepts a tester distinct from every approver', () => {
     encoding: 'utf8', timeout: 15_000, maxBuffer: 2 * 1024 * 1024,
   });
   assert.equal(result.status, 0, output(result));
+});
+
+
+test('Gate 3 SMS attestation requires real delivery timestamp, challenge ID and redacted device identity', () => {
+ const now=Date.parse('2026-11-16T12:00:00.000Z'), valid={testedAt:'2026-11-16T11:59:00.000Z',smsDeliveredAt:'2026-11-16T11:55:00.000Z',challengeId:'123e4567-e89b-42d3-a456-426614174000',deviceLabel:'Pixel 8 Android 15',deviceIdentitySha256:'a'.repeat(64)};
+ assert.equal(validateSmsAttestation(valid,now),true);
+ for(const field of ['smsDeliveredAt','challengeId','deviceLabel','deviceIdentitySha256']) { const bad={...valid}; delete bad[field]; assert.throws(()=>validateSmsAttestation(bad,now)); }
+ assert.throws(()=>validateSmsAttestation({...valid,smsDeliveredAt:'2026-11-16T11:00:00.000Z'},now),/within 15 minutes/);
+ assert.throws(()=>validateSmsAttestation({...valid,testedAt:'2026-11-16T11:59:00'},now),/RFC 3339/);
+ assert.throws(()=>validateSmsAttestation({...valid,deviceLabel:'serial=ABC123'},now),/redacted/);
+});
+test('Gate 5 Firebase audit requires exact app and SHA-1/SHA-256 inventories and zero test numbers', () => {
+ const apps=[{appId:'app-one',packageName:'com.aurelia.pms',state:'ACTIVE'}], certs={'app-one':[{certType:'SHA_1',shaHash:'1'.repeat(40)},{certType:'SHA_256',shaHash:'a'.repeat(64)}]};
+ assert.deepEqual(validateFirebaseFingerprintInventory(apps,certs,['app-one'],['1'.repeat(40)],['a'.repeat(64)]),{androidApps:1,sha1Fingerprints:1,sha256Fingerprints:1});
+ assert.throws(()=>validateFirebaseFingerprintInventory(apps,certs,['app-one','app-two'],['1'.repeat(40)],['a'.repeat(64)]),/exactly match/);
+ assert.throws(()=>validateFirebaseFingerprintInventory(apps,certs,['app-one'],['1'.repeat(40)],['b'.repeat(64)]),/SHA-256 inventory/);
+ assert.equal(countTestPhoneNumbers({signIn:{phoneNumber:{testPhoneNumbers:{'+10000000000':'redacted'}}}}),1);
+});
+
+
+test('phone-number scan ignores numeric runs inside SHA-256 digests but rejects phone-like values elsewhere', () => {
+  const digest = '1234567890' + 'a'.repeat(54);
+  assert.equal(containsPhoneNumberLikeValue({ deviceIdentitySha256: digest }), false);
+  assert.equal(containsPhoneNumberLikeValue({ apkSha256: digest }), false);
+  assert.equal(containsPhoneNumberLikeValue({ tester: '9876543210' }), true);
+  assert.equal(containsPhoneNumberLikeValue({ results: { note: 'contact 9876543210' } }), true);
 });

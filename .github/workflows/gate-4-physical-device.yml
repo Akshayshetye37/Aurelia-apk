@@ -1,233 +1,81 @@
-name: Gate 4 - Physical Android device qualification
+name: Gate 4 - Physical Android device
+
 on:
   workflow_dispatch:
     inputs:
       candidate_sha:
-        description: Frozen candidate SHA (40 lowercase hex)
         required: true
         type: string
-      gate3_run_id:
-        description: Successful Gate 3 workflow run ID
+      run_ids:
         required: true
         type: string
+        description: "Upstream runs as gate:runId,gate:runId"
       device_label:
-        description: Redacted device label
         required: true
         type: string
+
 permissions: {}
+
 concurrency:
-  group: gate-4-physical-device
+  group: gate-4-${{ inputs.candidate_sha }}
   cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   device:
-    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    if: github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, linux, x64, aurelia-android-device]
-    environment: recovery-device
-    timeout-minutes: 120
-    permissions:
-      contents: read
-      actions: read
-      attestations: read
+    timeout-minutes: 60
+    environment: recovery-device-lab
+    permissions: {contents: read, actions: read, id-token: write, attestations: write}
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-      GATE3_RUN: ${{ inputs.gate3_run_id }}
-      DEVICE_LABEL: ${{ inputs.device_label }}
-      CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
-      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      CANDIDATE_BRANCH: ${{ vars.FROZEN_CANDIDATE_BRANCH }}
       REPO: ${{ github.repository }}
-      DEVICE_SERIAL: ${{ vars.DEVICE_SERIAL }}
-      DEVICE_SERIAL_ALLOWLIST: ${{ vars.DEVICE_SERIAL_ALLOWLIST }}
+      GITHUB_TOKEN: ${{ github.token }}
       GH_TOKEN: ${{ github.token }}
+      RECOVERY_ENABLED: "false"
+      RUN_IDS: ${{ inputs.run_ids }}
+      REQUIRE: "1,2,3"
+      DEVICE_LABEL: ${{ inputs.device_label }}
     steps:
-      - name: Checkout trusted gate scripts only
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Verify trusted physical-runner tooling
+      - name: Verify frozen candidate
+        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA"
+      - name: Validate device label
+        run: '[[ "$DEVICE_LABEL" =~ ^[A-Za-z0-9._-]{1,64}$ ]]'
+      - name: Verify Gates 1-3 evidence and attestations
+        run: scripts/gates/fetch-and-verify.sh
+      - name: Verify physical, locked, verified-boot device
         run: |
-          set -euo pipefail
-          node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1)'
-          gh version
-          gh attestation verify --help > "$RUNNER_TEMP/gh-attestation-help.txt"
-          grep -q -- '--deny-self-hosted-runners' "$RUNNER_TEMP/gh-attestation-help.txt"
-          adb version
-          jq --version
-          tar --version
-          timeout --version
-          rm -f "$RUNNER_TEMP/gh-attestation-help.txt"
-      - name: Candidate is the exact frozen branch head
-        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
-      - name: Fetch Gate 3 APKs and verify their attested hashes
-        run: node scripts/gates/fetch-gate3.mjs
-      - name: Require the allowlisted physical handset with locked verified boot
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ "$DEVICE_LABEL" =~ ^[A-Z0-9-]{3,32}$ ]]
-          [[ "$DEVICE_SERIAL" =~ ^[A-Za-z0-9._:-]{3,80}$ ]]
-          IFS=',' read -r -a allowed_serials <<< "$DEVICE_SERIAL_ALLOWLIST"
-          allowed=false
-          for allowed_serial in "${allowed_serials[@]}"; do
-            allowed_serial="${allowed_serial//[[:space:]]/}"
-            [[ "$allowed_serial" =~ ^[A-Za-z0-9._:-]{3,80}$ ]] || { echo "::error::Invalid serial in allowlist."; exit 1; }
-            [[ "$allowed_serial" == "$DEVICE_SERIAL" ]] && allowed=true
-          done
-          [[ "$allowed" == "true" ]] || { echo "::error::Device serial is not allowlisted."; exit 1; }
-          timeout -k 5s 90s adb -s "$DEVICE_SERIAL" wait-for-device
-          connected="$(adb devices | awk -v serial="$DEVICE_SERIAL" '$1==serial && $2=="device" {count++} END {print count+0}')"
-          test "$connected" -eq 1
-          prop() { adb -s "$DEVICE_SERIAL" shell getprop "$1" | tr -d '\r'; }
-          test "$(prop ro.kernel.qemu)" != "1"
-          case "$(prop ro.hardware)" in goldfish|ranchu) echo "::error::Emulator hardware detected."; exit 1;; esac
-          sdk="$(prop ro.build.version.sdk)"
-          [[ "$sdk" =~ ^[0-9]+$ ]] && (( sdk >= 24 ))
-          test "$(prop sys.boot_completed)" = "1"
-          test "$(prop ro.boot.verifiedbootstate)" = "green"
-          test "$(prop ro.boot.flash.locked)" = "1"
-          test "$(prop ro.boot.vbmeta.device_state)" = "locked"
-          mkdir -p evidence
-          jq -n --arg label "$DEVICE_LABEL" --arg model "$(prop ro.product.model)" --arg manufacturer "$(prop ro.product.manufacturer)"             --arg version "$(prop ro.build.version.release)" --arg api "$sdk"             --arg fingerprint "$(prop ro.build.fingerprint)"             '{deviceLabel:$label,deviceModel:$model,manufacturer:$manufacturer,androidVersion:$version,apiLevel:$api,buildFingerprint:$fingerprint,verifiedBoot:"green",bootloaderLocked:true}' > evidence/device.json
-      - name: Install hash-verified APKs and run physical recovery phases
-        shell: bash
-        run: |
-          set -euo pipefail
-          app="com.aurelia.pms"
-          runner="com.aurelia.pms.test/androidx.test.runner.AndroidJUnitRunner"
-          temp="$RUNNER_TEMP/aurelia-gate4"
-          rm -rf "$temp"
-          mkdir -p "$temp"
-          adb -s "$DEVICE_SERIAL" uninstall "$app" >/dev/null 2>&1 || true
-          adb -s "$DEVICE_SERIAL" uninstall "$app.test" >/dev/null 2>&1 || true
-          adb -s "$DEVICE_SERIAL" install -r apks/app.apk >/dev/null
-          adb -s "$DEVICE_SERIAL" install -r -t apks/test.apk >/dev/null
-          adb -s "$DEVICE_SERIAL" logcat -c
-          run_test() {
-            name="$1"; selector="$2"; minimum="$3"; output="$temp/$name.txt"
-            set +e
-            timeout -k 5s 1800s adb -s "$DEVICE_SERIAL" shell am instrument -w -r -e class "$selector" "$runner" > "$output" 2>&1
-            status=$?
-            set -e
-            if [[ "$status" -ne 0 ]]; then echo "::error::Instrumentation phase failed: $name"; exit 1; fi
-            node scripts/gates/parse-instrument.mjs "$output" "$minimum"
-          }
-          run_test security-primitives com.aurelia.pms.security.AureliaSecurityInstrumentedTest 6
-          run_test sqlcipher com.aurelia.pms.OtpRecoverySqlCipherInstrumentedTest 1
-          run_test grant-preflight com.aurelia.pms.security.RecoveryGrantVerifierInstrumentedTest 4
-          run_test force-stop-phase-one 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop' 1
-          before_pid="$(adb -s "$DEVICE_SERIAL" shell pidof -s "$app" | tr -d '\r')"
-          test -n "$before_pid"
-          adb -s "$DEVICE_SERIAL" shell am force-stop "$app"
-          after_pid="$(adb -s "$DEVICE_SERIAL" shell pidof -s "$app" | tr -d '\r')"
-          test -z "$after_pid"
-          run_test force-stop-phase-two 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop' 1
-          run_test reboot-phase-one 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOneCommitsPinBForDeviceReboot' 1
-          adb -s "$DEVICE_SERIAL" reboot
-          timeout -k 5s 900s adb -s "$DEVICE_SERIAL" wait-for-device
-          ready=false
-          for _ in $(seq 1 180); do
-            if [[ "$(adb -s "$DEVICE_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)" == "1" ]]; then ready=true; break; fi
-            sleep 5
-          done
-          [[ "$ready" == "true" ]]
-          unlocked=false
-          for _ in $(seq 1 180); do
-            if adb -s "$DEVICE_SERIAL" shell dumpsys user 2>/dev/null | grep -q RUNNING_UNLOCKED; then unlocked=true; break; fi
-            sleep 5
-          done
-          [[ "$unlocked" == "true" ]]
-          test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.verifiedbootstate | tr -d '\r')" = "green"
-          test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.flash.locked | tr -d '\r')" = "1"
-          test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.vbmeta.device_state | tr -d '\r')" = "locked"
-          run_test reboot-phase-two 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoAfterDeviceRebootUnlocksPinBAndReadsDatabase' 1
-          adb -s "$DEVICE_SERIAL" logcat -b all -d -v threadtime > "$temp/logcat.txt"
-          node scripts/gates/scan-logs.mjs "$temp"/*.txt
-          app_hash="$(sha256sum apks/app.apk | awk '{print $1}')"
-          test_hash="$(sha256sum apks/test.apk | awk '{print $1}')"
-          model="$(jq -r .deviceModel evidence/device.json)"
-          version="$(jq -r .androidVersion evidence/device.json)"
-          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg label "$DEVICE_LABEL" --arg model "$model" --arg version "$version"             '{apkSha256:$a,testApkSha256:$t,deviceLabel:$label,deviceModel:$model,androidVersion:$version,verifiedBoot:"green",bootloaderLocked:true}' > evidence/details.json
-      - name: Remove raw device logs and downloaded APKs from the self-hosted runner
-        if: always()
-        run: rm -rf "$RUNNER_TEMP/aurelia-gate4" apks
-      - name: Upload sanitized physical-device evidence for hosted attestation
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+          mkdir -p proofs
+          adb wait-for-device
+          {
+            echo "boot=$(adb shell getprop ro.boot.verifiedbootstate | tr -d '\r')"
+            echo "locked=$(adb shell getprop ro.boot.flash.locked | tr -d '\r')"
+            echo "emulator=$(adb shell getprop ro.kernel.qemu | tr -d '\r')"
+          } | tee proofs/gate4-device.log
+          grep -qx 'boot=green' proofs/gate4-device.log
+          grep -qx 'locked=1' proofs/gate4-device.log
+          ! grep -qx 'emulator=1' proofs/gate4-device.log
+      - name: Validate device attestation (same APK as Gate 3)
+        run: node scripts/gates/validate-attestation.mjs --kind device --file gates/attestations/gate4-device.json --sha "$CANDIDATE_SHA" --match-apk gates/attestations/gate3-sms.json
+      - name: Write evidence
+        run: node scripts/gates/write-evidence.mjs --gate 4 --sha "$CANDIDATE_SHA" --proof proofs/gate4-device.log --proof gates/attestations/gate4-device.json
+      - name: Upload evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.x
         with:
-          name: gate-4-device-evidence
-          path: |
-            evidence/device.json
-            evidence/details.json
-            evidence/log-scan.json
-          if-no-files-found: error
-          retention-days: 14
-  attest:
-    needs: device
-    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    permissions:
-      contents: read
-      actions: read
-      id-token: write
-      attestations: write
-    env:
-      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-      GATE3_RUN: ${{ inputs.gate3_run_id }}
-      CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
-      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
-      DEVICE_LABEL: ${{ inputs.device_label }}
-      REPO: ${{ github.repository }}
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - name: Checkout trusted gate scripts
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          persist-credentials: false
-      - name: Candidate is still the exact frozen branch head
-        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
-      - name: Independently re-fetch Gate 3 and verify APK provenance
-        run: node scripts/gates/fetch-gate3.mjs
-      - name: Download sanitized physical-device evidence
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: gate-4-device-evidence
-          path: device-evidence
-      - name: Verify device evidence and rebind it to the Gate 3 APK hashes
-        run: |
-          set -euo pipefail
-          test "$(find device-evidence -type f | wc -l | tr -d ' ')" -eq 3
-          test -s device-evidence/device.json
-          test -s device-evidence/details.json
-          test -s device-evidence/log-scan.json
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          import { sha256File, fail } from './scripts/gates/lib.mjs';
-          const device = JSON.parse(fs.readFileSync('device-evidence/device.json', 'utf8'));
-          const details = JSON.parse(fs.readFileSync('device-evidence/details.json', 'utf8'));
-          const scan = JSON.parse(fs.readFileSync('device-evidence/log-scan.json', 'utf8'));
-          if (!/^[A-Z0-9-]{3,32}$/.test(device.deviceLabel ?? '') || device.deviceLabel !== details.deviceLabel || device.deviceLabel !== process.env.DEVICE_LABEL) fail('device label mismatch');
-          if (!device.deviceModel || device.deviceModel !== details.deviceModel || device.androidVersion !== details.androidVersion) fail('device identity mismatch');
-          if (device.verifiedBoot !== 'green' || device.bootloaderLocked !== true || details.verifiedBoot !== 'green' || details.bootloaderLocked !== true) fail('device boot state is not locked and verified');
-          const expectedLogFiles = ['force-stop-phase-one.txt', 'force-stop-phase-two.txt', 'grant-preflight.txt', 'logcat.txt', 'reboot-phase-one.txt', 'reboot-phase-two.txt', 'security-primitives.txt', 'sqlcipher.txt'].sort();
-          const actualLogFiles = Array.isArray(scan.files) ? [...scan.files].sort() : [];
-          if (!Array.isArray(scan.findings) || scan.findings.length || JSON.stringify(actualLogFiles) !== JSON.stringify(expectedLogFiles)) fail('device log scan is incomplete or not clean');
-          if (details.apkSha256 !== sha256File('apks/app.apk') || details.testApkSha256 !== sha256File('apks/test.apk')) fail('device evidence APK hashes do not match Gate 3');
-          fs.mkdirSync('evidence', { recursive: true });
-          for (const name of ['device.json', 'details.json', 'log-scan.json']) fs.copyFileSync(`device-evidence/${name}`, `evidence/${name}`);
-          NODE
-      - name: Write and bundle Gate 4 evidence on a hosted runner
-        run: |
-          set -euo pipefail
-          node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
-          node scripts/gates/write-evidence.mjs --gate 4 --sha "$CANDIDATE_SHA" --status PASS
-          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
-      - name: Attest Gate 4 evidence bundle
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
-        with:
-          subject-path: bundle.tar
-      - name: Upload Gate 4 evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: gate-4-evidence
-          path: bundle.tar
+          name: gate-4-evidence-${{ inputs.candidate_sha }}
+          path: evidence/
           if-no-files-found: error
           retention-days: 90
+
+      - name: Attest evidence record
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.x
+        with:
+          subject-path: evidence/gate-4.json
