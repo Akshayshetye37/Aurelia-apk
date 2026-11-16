@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fail } from './lib.mjs';
-import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker, validateFunctionSecretAccess } from './firebase-audit-schema.mjs';
+import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker, validateFunctionSecretAccess, validateSecretPolicy } from './firebase-audit-schema.mjs';
 
 const project = process.env.GCP_PROJECT_ID;
 const region = process.env.GCP_REGION;
@@ -85,10 +85,8 @@ for (const secret of requiredSecrets) {
   if (!Array.isArray(versions) || versions.length === 0) problems.push(`secret ${secret}: no enabled version`);
   const policy = run(['secrets', 'get-iam-policy', secret, '--project', project]);
   secretPolicies.set(secret, policy);
-  for (const binding of policy.bindings ?? []) for (const member of binding.members ?? []) {
-    if (!member.startsWith('serviceAccount:')) problems.push(`secret ${secret}: non-service-account member`);
-    else if (!allowedSecretPrincipals.has(member)) problems.push(`secret ${secret}: unexpected service-account member`);
-    if (auditServiceAccount && member === `serviceAccount:${auditServiceAccount}` && ['roles/secretmanager.secretAccessor', 'roles/secretmanager.admin'].includes(binding.role)) problems.push(`secret ${secret}: audit identity has secret payload/admin access`);
+  for (const issue of validateSecretPolicy(policy, allowedSecretPrincipals, runtimeAccounts, auditServiceAccount)) {
+    problems.push(`secret ${secret}: ${issue}`);
   }
 }
 const runtimeSecretBindings = {
@@ -116,7 +114,7 @@ const projectPolicy = run(['projects', 'get-iam-policy', project]);
 if (hasPublicRuntimeInvoker(projectPolicy)) problems.push('project-level IAM grants public Cloud Run/Functions invocation');
 for (const account of reviewedAccounts) {
   for (const binding of projectPolicy.bindings ?? []) {
-    if ((['roles/owner', 'roles/editor', 'roles/secretmanager.admin'].includes(binding.role) || (account === auditServiceAccount && binding.role === 'roles/secretmanager.secretAccessor')) && (binding.members ?? []).includes(`serviceAccount:${account}`)) {
+    if ((['roles/owner', 'roles/editor', 'roles/secretmanager.admin', 'roles/secretmanager.secretAccessor'].includes(binding.role)) && (binding.members ?? []).includes(`serviceAccount:${account}`)) {
       problems.push(`${account}: project-level ${binding.role}`);
     }
   }
