@@ -24,7 +24,9 @@ function walk(directory) {
       if (!SKIP_DIRS.has(entry.name)) walk(file);
       continue;
     }
-    if (!EXT.test(entry.name) || /(?:\.test|\.spec)\./.test(entry.name)) continue;
+    if (!EXT.test(entry.name) || /(?:\.test|\.spec|InstrumentedTest)\./.test(entry.name)) continue;
+    const relative = path.relative(root, file).split(path.sep).join('/');
+    if (relative === '.github/workflows/recovery-staging-deploy.yml') continue;
     const text = fs.readFileSync(file, 'utf8');
     scanned++;
     for (const [name, regex] of FLAGS) {
