@@ -1,5 +1,5 @@
 name: Recovery Functions CI
-# Exact-SHA gate fan-out: candidate commits run this workstream's full acceptance suite.
+# Exact-SHA gate fan-out: all work branches run the recovery backend and OTP contracts.
 
 on:
   workflow_dispatch:
@@ -24,12 +24,14 @@ on:
       - 'firestore.rules'
       - 'firebase.json'
       - '.github/workflows/recovery-functions.yml'
+      - '.github/workflows/otp-recovery-android-instrumentation.yml'
+      - '.github/workflows/recovery-attestation-ci.yml'
       - 'android/templates/**'
       - 'tests/otp-recovery-*.test.mjs'
       - 'scripts/patch-android.js'
 
 concurrency:
-  group: recovery-functions-${{ github.ref }}
+  group: recovery-functions-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 permissions:
@@ -45,9 +47,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: functions/package.json
-      - name: Install dependencies
-        run: npm install --ignore-scripts
+          cache-dependency-path: functions/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: functions
       - name: Compile TypeScript
         run: npm run build
@@ -55,20 +57,16 @@ jobs:
       - name: Run backend security contract tests
         run: npm test
         working-directory: functions
-
       - name: Verify RECOVERY_ENABLED=false fails closed at runtime
         run: npm run test:disabled
         working-directory: functions
-
       - name: Set up Java 21 for Firebase emulators
         uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
         with:
           distribution: temurin
           java-version: "21"
-
       - name: Install Firebase Emulator CLI
         run: npm install --global firebase-tools@13.31.2
-
       - name: Run Auth and Firestore emulator recovery state-machine tests
         shell: bash
         env:
@@ -77,19 +75,17 @@ jobs:
         run: |
           set -euo pipefail
           firebase emulators:exec --only auth,firestore --project demo-aurelia-recovery "cd functions && npm run test:emulator" 2>&1 | sed -E 's/To verify the phone number .* use the code .*/[REDACTED Firebase Auth Emulator verification code]/' | tee recovery-emulator-runtime.log
-
       - name: Prove passkey guards with emulator-backed mutations
         env:
           WEBAUTHN_ASSETLINKS_VERIFIED: "true"
         run: node functions/scripts/verify-passkey-mutations.mjs
-
       - name: Upload raw Firebase Emulator runtime logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: recovery-emulator-runtime-logs
+          name: recovery-emulator-runtime-logs-${{ github.sha }}
           path: recovery-emulator-runtime.log
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
   otp-contract-tests:
@@ -101,4 +97,4 @@ jobs:
         with:
           node-version: 22
       - name: Run OTP source-contract regression tests
-        run: node --test tests/otp-recovery-gate.test.mjs tests/otp-recovery-end-to-end.test.mjs
+        run: node --test tests/otp-recovery-gate.test.mjs tests/otp-recovery-end-to-end.test.mjs tests/native-security-template.test.mjs
