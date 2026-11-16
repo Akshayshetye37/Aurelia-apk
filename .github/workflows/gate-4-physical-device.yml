@@ -27,8 +27,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-      id-token: write
-      attestations: write
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       GATE3_RUN: ${{ inputs.gate3_run_id }}
@@ -133,9 +131,72 @@ jobs:
           model="$(jq -r .deviceModel evidence/device.json)"
           version="$(jq -r .androidVersion evidence/device.json)"
           jq -n --arg a "$app_hash" --arg t "$test_hash" --arg label "$DEVICE_LABEL" --arg model "$model" --arg version "$version"             '{apkSha256:$a,testApkSha256:$t,deviceLabel:$label,deviceModel:$model,androidVersion:$version,verifiedBoot:"green",bootloaderLocked:true}' > evidence/details.json
-      - name: Write and bundle Gate 4 evidence
+      - name: Upload sanitized physical-device evidence for hosted attestation
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gate-4-device-evidence
+          path: |
+            evidence/device.json
+            evidence/details.json
+            evidence/log-scan.json
+          if-no-files-found: error
+          retention-days: 14
+  attest:
+    needs: device
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      GATE3_RUN: ${{ inputs.gate3_run_id }}
+      CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
+      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout trusted gate scripts
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Candidate is still the exact frozen branch head
+        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
+      - name: Independently re-fetch Gate 3 and verify APK provenance
+        run: node scripts/gates/fetch-gate3.mjs
+      - name: Download sanitized physical-device evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: gate-4-device-evidence
+          path: device-evidence
+      - name: Verify device evidence and rebind it to the Gate 3 APK hashes
         run: |
           set -euo pipefail
+          test "$(find device-evidence -type f | wc -l | tr -d ' ')" -eq 3
+          test -s device-evidence/device.json
+          test -s device-evidence/details.json
+          test -s device-evidence/log-scan.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { sha256File, fail } from './scripts/gates/lib.mjs';
+          const device = JSON.parse(fs.readFileSync('device-evidence/device.json', 'utf8'));
+          const details = JSON.parse(fs.readFileSync('device-evidence/details.json', 'utf8'));
+          const scan = JSON.parse(fs.readFileSync('device-evidence/log-scan.json', 'utf8'));
+          if (!/^[A-Z0-9-]{3,32}$/.test(device.deviceLabel ?? '') || device.deviceLabel !== details.deviceLabel) fail('device label mismatch');
+          if (!device.deviceModel || device.deviceModel !== details.deviceModel || device.androidVersion !== details.androidVersion) fail('device identity mismatch');
+          if (device.verifiedBoot !== 'green' || device.bootloaderLocked !== true || details.verifiedBoot !== 'green' || details.bootloaderLocked !== true) fail('device boot state is not locked and verified');
+          if (!Array.isArray(scan.findings) || scan.findings.length || !Array.isArray(scan.files) || !scan.files.length) fail('device log scan is not clean');
+          if (details.apkSha256 !== sha256File('apks/app.apk') || details.testApkSha256 !== sha256File('apks/test.apk')) fail('device evidence APK hashes do not match Gate 3');
+          fs.mkdirSync('evidence', { recursive: true });
+          for (const name of ['device.json', 'details.json', 'log-scan.json']) fs.copyFileSync(`device-evidence/${name}`, `evidence/${name}`);
+          NODE
+      - name: Write and bundle Gate 4 evidence on a hosted runner
+        run: |
+          set -euo pipefail
+          node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
           node scripts/gates/write-evidence.mjs --gate 4 --sha "$CANDIDATE_SHA" --status PASS
           tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
       - name: Attest Gate 4 evidence bundle

@@ -15,7 +15,6 @@ const findings = [];
 for (const file of files) {
   if (!fs.existsSync(file) || !fs.statSync(file).isFile()) fail(`log file missing: ${file}`);
   if (fs.statSync(file).size > 32 * 1024 * 1024) fail(`${file}: log file exceeds 32 MiB`);
-  if (fs.statSync(file).size > 32 * 1024 * 1024) fail(`${file}: log file exceeds 32 MiB`);
   fs.readFileSync(file, 'utf8').split('\n').forEach((line, index) => {
     for (const [regex, label] of PATTERNS) if (regex.test(line)) findings.push({ file: path.basename(file), line: index + 1, pattern: label });
   });

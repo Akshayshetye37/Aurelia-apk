@@ -28,7 +28,7 @@ if (attestation.kind !== kind) fail('kind mismatch');
 if (attestation.apkSha256 !== gate3.details.apkSha256) fail('attested APK is not the Gate 3 APK');
 const testedAt = Date.parse(attestation.testedAt);
 if (!Number.isFinite(testedAt) || Date.now() - testedAt > 7 * 864e5 || testedAt > Date.now() + 3e5) fail('testedAt missing, future, or older than 7 days');
-if (typeof attestation.tester !== 'string' || !/^[A-Za-z0-9_.@ -]{2,80}$/.test(attestation.tester)) fail('tester identifier required');
+if (typeof attestation.tester !== 'string' || !/^[A-Za-z0-9-]{1,39}$/.test(attestation.tester)) fail('tester must be a GitHub login');
 const expected = kind === 'sms'
   ? { validOtp: 'VERIFIED', wrongOtp: 'REJECTED', expiredOtp: 'REJECTED', replayedOtp: 'REJECTED',
       resendRateLimit: 'REJECTED', otpDoesNotAccessDek: 'CONFIRMED', passkeyAckEnrollAndAssert: 'VERIFIED' }
