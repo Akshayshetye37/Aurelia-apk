@@ -55,7 +55,7 @@ export function isProductionAuditEvidenceValid(audit, expectedProjectId, release
 /** Detect inherited project-level public invocation grants for Cloud Run/Functions. */
 export function hasPublicRuntimeInvoker(policy) {
   return (policy?.bindings ?? []).some(binding =>
-    ['roles/run.invoker', 'roles/cloudfunctions.invoker'].includes(binding.role) &&
+    binding.role === 'roles/run.invoker' &&
     (binding.members ?? []).some(member => member === 'allUsers' || member === 'allAuthenticatedUsers')
   );
 }
