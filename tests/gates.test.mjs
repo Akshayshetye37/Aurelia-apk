@@ -523,3 +523,19 @@ test('Gate 5 enforces exact per-function Secret Manager runtime access', () => {
   assert.match(validateFunctionSecretAccess(functions, bindings, extra, ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'), /accessor set differs/);
   assert.match(validateFunctionSecretAccess(functions, bindings, policies, ['phone@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'), /not in RUNTIME_SERVICE_ACCOUNTS/);
 });
+
+test('candidate validation rejects a SHA that differs from the frozen control-branch pin before GitHub API access', (t) => {
+  const dir = tempDir(t);
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const marker = path.join(dir, 'gh-called');
+  const fakeGh = path.join(bin, 'gh');
+  fs.writeFileSync(fakeGh, `#!/usr/bin/env node\nrequire("node:fs").writeFileSync(${JSON.stringify(marker)}, "called"); process.exit(2);\n`);
+  fs.chmodSync(fakeGh, 0o755);
+  const result = run(t, 'check-candidate.mjs', ['--sha', SHA_B, '--repo', 'owner/repo', '--branch', 'work/p0-storage-hardening'], {
+    PATH: bin + path.delimiter + process.env.PATH,
+  }, dir);
+  assert.equal(result.status, 1);
+  assert.match(output(result), /frozen qualification pin/);
+  assert.equal(fs.existsSync(marker), false, 'GitHub API must not be called for an unpinned candidate');
+});
