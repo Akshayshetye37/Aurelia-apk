@@ -17,6 +17,8 @@ if (head !== sha) fail('candidate is no longer the current branch head; all qual
 const encodedControlBranch = controlBranch.split('/').map(encodeURIComponent).join('/');
 const currentControlHead = gh(`repos/${repo}/git/ref/heads/${encodedControlBranch}`).object?.sha;
 if (currentControlHead !== controlSha) fail('control branch moved; all gate evidence must be regenerated');
+const pinnedCandidateSha = fs.readFileSync('gates/qualification-candidate-sha.txt', 'utf8').trim();
+if (pinnedCandidateSha !== sha) fail('candidate SHA does not match the trusted control-branch qualification pin');
 const workflows = {
   '1': 'gate-1-encrypted-storage.yml', '2': 'gate-2-recovery-runtime.yml',
   '3': 'gate-3-real-sms-staging.yml', '4': 'gate-4-physical-device.yml',

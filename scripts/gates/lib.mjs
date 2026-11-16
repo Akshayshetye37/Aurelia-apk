@@ -52,7 +52,8 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   if (!/^[A-Za-z0-9_.-]+\.ya?ml$/.test(workflowFile)) fail('invalid workflow filename');
   const run = gh(`repos/${repo}/actions/runs/${runId}`);
   if (run.status !== 'completed' || run.conclusion !== 'success') fail(`gate ${gate}: run ${runId} did not succeed`);
-  if (run.event !== 'workflow_dispatch') fail(`gate ${gate}: evidence run was not workflow_dispatch`);
+  const triggerAllowed = run.event === 'workflow_dispatch' || (['1', '2'].includes(String(gate)) && run.event === 'push');
+  if (!triggerAllowed) fail(`gate ${gate}: evidence run used an unsupported trigger ${run.event}`);
   if (run.head_branch !== controlBranch) fail(`gate ${gate}: run was not on control branch ${controlBranch}`);
   if (String(run.path ?? '').split('@')[0] !== `.github/workflows/${workflowFile}`) fail(`gate ${gate}: unexpected workflow path ${run.path}`);
   fs.mkdirSync(dir, { recursive: true });
@@ -78,6 +79,7 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   if (!attestations.length) fail(`gate ${gate}: no verified attestation returned`);
   const repositoryId = String(gh(`repos/${repo}`).id ?? '');
   if (!repositoryId) fail(`gate ${gate}: repository numeric ID could not be resolved`);
+  const expectedTrigger = run.event;
   const expectedInvocation = `https://github.com/${repo}/actions/runs/${runId}/attempts/${run.run_attempt}`;
   const expectedRepository = `https://github.com/${repo}`;
   const expectedRef = `refs/heads/${controlBranch}`;
@@ -94,7 +96,7 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
       certificate.buildSignerDigest === run.head_sha &&
       certificate.runInvocationURI === expectedInvocation &&
       certificate.runnerEnvironment === 'github-hosted' &&
-      certificate.buildTrigger === 'workflow_dispatch';
+      certificate.buildTrigger === expectedTrigger;
   });
   if (!bound) fail(`gate ${gate}: attestation is not bound to run ${runId} attempt ${run.run_attempt}`);
   const archiveEntries = execFileSync('tar', ['-tf', bundle], { encoding: 'utf8' }).split('\n').filter(Boolean);

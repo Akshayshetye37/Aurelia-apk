@@ -11,6 +11,8 @@ on:
       - integration/ledger-patch
     paths:
       - gates/qualification-candidate-sha.txt
+      - scripts/gates/**
+      - tests/gates.test.mjs
       - .github/workflows/gate-1-encrypted-storage.yml
       - .github/workflows/gate-2-recovery-runtime.yml
 permissions: {}

@@ -198,7 +198,7 @@ test('Gate 3 fetch rejects a malformed run ID before GitHub API access', (t) => 
   assert.match(output(result), /bad run ID/);
 });
 
-function runVerifyBundle(t, certificate) {
+function runVerifyBundle(t, certificate, { event = 'workflow_dispatch', gate = '1', workflowFile = 'gate-1-encrypted-storage.yml' } = {}) {
   const dir = tempDir(t);
   const bin = path.join(dir, 'bin');
   fs.mkdirSync(bin, { recursive: true });
@@ -212,8 +212,8 @@ if (args[0] === 'api') {
   if (args[1] === 'repos/owner/repo') console.log(JSON.stringify({ id: 999 }));
   else if (args[1] === 'repos/owner/repo/actions/runs/123') console.log(JSON.stringify({
     status: 'completed', conclusion: 'success', head_branch: 'integration/ledger-patch',
-    path: '.github/workflows/gate-1-encrypted-storage.yml@refs/heads/integration/ledger-patch',
-    event: 'workflow_dispatch', head_sha: process.env.FAKE_CONTROL_SHA, run_attempt: 1
+    path: `.github/workflows/${process.env.FAKE_WORKFLOW_FILE}@refs/heads/integration/ledger-patch`,
+    event: process.env.FAKE_EVENT, head_sha: process.env.FAKE_CONTROL_SHA, run_attempt: 1
   }));
   else process.exit(2);
 } else if (args[0] === 'run' && args[1] === 'download') {
@@ -232,7 +232,7 @@ if (args[0] === 'api') {
   fs.chmodSync(fakeGh, 0o755);
   const controlSha = SHA_B;
   const record = {
-    gate: '1', status: 'PASS', runId: 123, runAttempt: 1,
+    gate: process.env.FAKE_GATE, status: 'PASS', runId: 123, runAttempt: 1,
     repository: 'owner/repo', candidateSha: SHA_A, controlSha,
   };
   const env = {
@@ -241,29 +241,32 @@ if (args[0] === 'api') {
     FAKE_CONTROL_SHA: controlSha,
     FAKE_RECORD: JSON.stringify(record),
     FAKE_CERT: JSON.stringify(certificate),
+    FAKE_EVENT: event,
+    FAKE_GATE: gate,
+    FAKE_WORKFLOW_FILE: workflowFile,
   };
   const libUrl = pathToFileURL(path.join(GATES, 'lib.mjs')).href;
   const code = `import { verifyBundle } from ${JSON.stringify(libUrl)}; verifyBundle({
-    repo: 'owner/repo', runId: '123', gate: '1',
-    workflowFile: 'gate-1-encrypted-storage.yml',
+    repo: 'owner/repo', runId: '123', gate: ${JSON.stringify(gate)},
+    workflowFile: ${JSON.stringify(workflowFile)},
     controlBranch: 'integration/ledger-patch', dir: 'bundle-out'
   });`;
   return spawnSync(process.execPath, ['--input-type=module', '-e', code], {
     cwd: dir, env, encoding: 'utf8', timeout: 15_000, maxBuffer: 2 * 1024 * 1024,
   });
 }
-function validCertificate() {
+function validCertificate({ trigger = 'workflow_dispatch', workflowFile = 'gate-1-encrypted-storage.yml' } = {}) {
   return {
     issuer: 'https://token.actions.githubusercontent.com',
     sourceRepositoryURI: 'https://github.com/owner/repo',
     sourceRepositoryIdentifier: '999',
     sourceRepositoryDigest: SHA_B,
     sourceRepositoryRef: 'refs/heads/integration/ledger-patch',
-    buildSignerURI: 'https://github.com/owner/repo/.github/workflows/gate-1-encrypted-storage.yml@refs/heads/integration/ledger-patch',
+    buildSignerURI: `https://github.com/owner/repo/.github/workflows/${workflowFile}@refs/heads/integration/ledger-patch`,
     buildSignerDigest: SHA_B,
     runInvocationURI: 'https://github.com/owner/repo/actions/runs/123/attempts/1',
     runnerEnvironment: 'github-hosted',
-    buildTrigger: 'workflow_dispatch',
+    buildTrigger: trigger,
   };
 }
 
@@ -283,6 +286,16 @@ test('bundle verification rejects a certificate from a different run or self-hos
   const runnerMismatch = runVerifyBundle(t, selfHosted);
   assert.equal(runnerMismatch.status, 1);
   assert.match(output(runnerMismatch), /not bound to run 123/);
+});
+
+test('bundle verification accepts trusted push evidence only for Gates 1 and 2', (t) => {
+  const gate1 = runVerifyBundle(t, validCertificate({ trigger: 'push' }), { event: 'push', gate: '1' });
+  assert.equal(gate1.status, 0, output(gate1));
+  const gate3 = runVerifyBundle(t, validCertificate({ trigger: 'push', workflowFile: 'gate-3-real-sms-staging.yml' }), {
+    event: 'push', gate: '3', workflowFile: 'gate-3-real-sms-staging.yml',
+  });
+  assert.equal(gate3.status, 1);
+  assert.match(output(gate3), /unsupported trigger push/);
 });
 
 test('required workflow verifier does not ignore a newer in-progress rerun', (t) => {
