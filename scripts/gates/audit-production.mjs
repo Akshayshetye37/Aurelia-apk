@@ -104,7 +104,7 @@ if (!requiredAppCheckServices.length) problems.push('APPCHECK_REQUIRED_SERVICES 
 const projectPolicy = run(['projects', 'get-iam-policy', project]);
 for (const account of reviewedAccounts) {
   for (const binding of projectPolicy.bindings ?? []) {
-    if (['roles/owner', 'roles/editor', 'roles/secretmanager.secretAccessor', 'roles/secretmanager.admin'].includes(binding.role) && (binding.members ?? []).includes(`serviceAccount:${account}`)) {
+    if ((['roles/owner', 'roles/editor', 'roles/secretmanager.admin'].includes(binding.role) || (account === auditServiceAccount && binding.role === 'roles/secretmanager.secretAccessor')) && (binding.members ?? []).includes(`serviceAccount:${account}`)) {
       problems.push(`${account}: project-level ${binding.role}`);
     }
   }
