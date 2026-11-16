@@ -34,3 +34,20 @@ export function firebaseAndroidShaEndpoint(projectId, appId) {
   if (typeof appId !== 'string' || !/^[0-9]+:[0-9]+:android:[0-9a-f]+$/i.test(appId)) fail('Firebase Android app ID is invalid');
   return `https://firebase.googleapis.com/v1beta1/projects/${encodeURIComponent(projectId)}/androidApps/${encodeURIComponent(appId)}/sha`;
 }
+
+/** Validate the Gate 5 audit record and bind the release APK signer to Firebase production. */
+export function isProductionAuditEvidenceValid(audit, expectedProjectId, releaseSignerSha256) {
+  const firebase = audit?.firebaseAudit;
+  return audit?.project === expectedProjectId &&
+    Array.isArray(audit.problems) && audit.problems.length === 0 &&
+    Number.isInteger(audit.auditedResources?.functions) && audit.auditedResources.functions > 0 &&
+    Number.isInteger(firebase?.androidApps) && firebase.androidApps > 0 &&
+    Number.isInteger(firebase?.sha1Fingerprints) && firebase.sha1Fingerprints > 0 &&
+    Number.isInteger(firebase?.sha256Fingerprints) && firebase.sha256Fingerprints > 0 &&
+    Array.isArray(firebase?.sha256CertificateHashes) &&
+    /^[0-9a-f]{64}$/.test(releaseSignerSha256 ?? '') &&
+    firebase.sha256CertificateHashes.includes(releaseSignerSha256) &&
+    firebase.projectTestPhoneNumbers === 0 &&
+    firebase.tenantTestPhoneNumbers === 0 &&
+    Number.isInteger(firebase.tenants) && firebase.tenants >= 0;
+}
