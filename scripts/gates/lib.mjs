@@ -76,19 +76,25 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   }
   const attestations = Array.isArray(verified) ? verified : (verified?.verificationResult ? [verified] : (Array.isArray(verified?.verificationResults) ? verified.verificationResults : []));
   if (!attestations.length) fail(`gate ${gate}: no verified attestation returned`);
-  const expectedRunPath = `/actions/runs/${runId}`;
+  const repositoryId = String(gh(`repos/${repo}`).id ?? '');
+  if (!repositoryId) fail(`gate ${gate}: repository numeric ID could not be resolved`);
+  const expectedInvocation = `https://github.com/${repo}/actions/runs/${runId}/attempts/${run.run_attempt}`;
+  const expectedRepository = `https://github.com/${repo}`;
+  const expectedRef = `refs/heads/${controlBranch}`;
+  const expectedSigner = `https://github.com/${repo}/.github/workflows/${workflowFile}@${expectedRef}`;
   const bound = attestations.some((entry) => {
-    let statement = entry.verificationResult?.statement ?? entry.statement;
-    if (typeof statement === 'string') { try { statement = JSON.parse(statement); } catch { return false; } }
-    const invocation = statement?.predicate?.runDetails?.metadata?.invocationId;
-    if (typeof invocation !== 'string') return false;
-    const runPathIndex = invocation.indexOf(expectedRunPath);
-    if (runPathIndex < 0) return false;
-    const suffix = invocation.slice(runPathIndex + expectedRunPath.length);
-    if (suffix && !suffix.startsWith('/attempts/')) return false;
-    const attemptMarker = '/attempts/';
-    if (!invocation.includes(attemptMarker)) return true;
-    return invocation.split(attemptMarker).at(-1) === String(run.run_attempt);
+    const certificate = entry.verificationResult?.signature?.certificate;
+    if (!certificate) return false;
+    return certificate.issuer === 'https://token.actions.githubusercontent.com' &&
+      certificate.sourceRepositoryURI === expectedRepository &&
+      String(certificate.sourceRepositoryIdentifier) === repositoryId &&
+      certificate.sourceRepositoryDigest === run.head_sha &&
+      certificate.sourceRepositoryRef === expectedRef &&
+      certificate.buildSignerURI === expectedSigner &&
+      certificate.buildSignerDigest === run.head_sha &&
+      certificate.runInvocationURI === expectedInvocation &&
+      certificate.runnerEnvironment === 'github-hosted' &&
+      certificate.buildTrigger === 'workflow_dispatch';
   });
   if (!bound) fail(`gate ${gate}: attestation is not bound to run ${runId} attempt ${run.run_attempt}`);
   const archiveEntries = execFileSync('tar', ['-tf', bundle], { encoding: 'utf8' }).split('\n').filter(Boolean);
