@@ -47,7 +47,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: functions/package-lock.json
+          cache-dependency-path: functions/package.json
       - name: Install locked dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: functions
@@ -85,7 +85,7 @@ jobs:
         with:
           name: recovery-emulator-runtime-logs-${{ github.sha }}
           path: recovery-emulator-runtime.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
   otp-contract-tests:
