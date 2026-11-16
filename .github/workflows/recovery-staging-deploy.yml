@@ -156,6 +156,20 @@ jobs:
           export GOOGLE_SERVICES_PATH="$RUNNER_TEMP/google-services.json"
           node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); const key=p?.api_key?.[0]?.current_key; if(!p || c.project_info?.project_id!==process.env.PROJECT_ID || key!==process.env.FIREBASE_WEB_API_KEY) process.exit(1);'
           gcloud config set project "$PROJECT_ID"
+          actual_verifier_url="$(gcloud run services describe aurelia-recovery-attestation --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+          if [[ -z "$actual_verifier_url" || "$actual_verifier_url" != "$VERIFIER_URL" ]]; then
+            echo "::error::RECOVERY_ATTESTATION_VERIFIER_URL does not match the deployed staging verifier service URL."
+            exit 1
+          fi
+          verifier_policy="$(gcloud run services get-iam-policy aurelia-recovery-attestation --project "$PROJECT_ID" --region "$REGION" --format=json)"
+          if echo "$verifier_policy" | jq -e '[.bindings[]? | select(.role=="roles/run.invoker") | .members[]? | select(.=="allUsers" or .=="allAuthenticatedUsers")] | length > 0' >/dev/null; then
+            echo "::error::Staging attestation verifier has a public invoker binding."
+            exit 1
+          fi
+          if ! echo "$verifier_policy" | jq -e --arg member "serviceAccount:$FUNCTION_SA" '[.bindings[]? | select(.role=="roles/run.invoker") | .members[]? | select(.==$member)] | length == 1' >/dev/null; then
+            echo "::error::Configured Functions caller identity lacks the verifier invoker binding."
+            exit 1
+          fi
           for secret in PHONE_PEPPER RECOVERY_SIGNING_KEY_PKCS8; do
             gcloud secrets describe "$secret" --project "$PROJECT_ID" >/dev/null
             version="$(gcloud secrets versions list "$secret" --project "$PROJECT_ID" --filter='state=ENABLED' --format='value(name)' | head -n 1)"
