@@ -27,6 +27,7 @@ jobs:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       PRODUCTION_GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION }}
+      AUDIT_SERVICE_ACCOUNT: ${{ secrets.GCP_AUDIT_SERVICE_ACCOUNT }}
       ATTESTATION_VERIFIER_SERVICE: ${{ vars.ATTESTATION_VERIFIER_SERVICE }}
       REQUIRED_SECRETS: ${{ vars.REQUIRED_SECRETS }}
       RUNTIME_SERVICE_ACCOUNTS: ${{ vars.RUNTIME_SERVICE_ACCOUNTS }}
@@ -50,7 +51,7 @@ jobs:
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          service_account: ${{ secrets.GCP_AUDIT_SERVICE_ACCOUNT }}
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
       - name: Audit deployed production flags, IAM, secrets and App Check

@@ -43,7 +43,10 @@ for (const secret of requiredSecrets) {
   }
 }
 const runtimeAccounts = list('RUNTIME_SERVICE_ACCOUNTS');
+const auditServiceAccount = process.env.AUDIT_SERVICE_ACCOUNT ?? '';
 if (!runtimeAccounts.length) problems.push('RUNTIME_SERVICE_ACCOUNTS not configured');
+if (!auditServiceAccount) problems.push('AUDIT_SERVICE_ACCOUNT not configured');
+if (auditServiceAccount && runtimeAccounts.includes(auditServiceAccount)) problems.push('audit identity must be distinct from every production runtime identity');
 for (const account of runtimeAccounts) {
   const keys = run(['iam', 'service-accounts', 'keys', 'list', '--iam-account', account, '--managed-by=user', '--project', project]);
   if (keys.length) problems.push(`${account}: user-managed keys exist`);

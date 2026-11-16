@@ -11,6 +11,13 @@ if (!['sms', 'device'].includes(kind)) fail('kind must be sms or device');
 let attestation;
 try { attestation = JSON.parse(process.env.ATTESTATION ?? ''); } catch { fail('attestation is not valid JSON'); }
 if (!attestation || Array.isArray(attestation) || typeof attestation !== 'object') fail('attestation must be a JSON object');
+const commonKeys = ['kind', 'apkSha256', 'testedAt', 'tester', 'results'];
+const kindKeys = kind === 'sms'
+  ? ['country', 'carrier', 'stagingProjectId']
+  : ['deviceModel', 'androidVersion', 'verifiedBoot', 'bootloaderLocked', 'dataChecksumBefore', 'dataChecksumAfter'];
+const unknownKeys = Object.keys(attestation).filter((key) => !commonKeys.concat(kindKeys).includes(key));
+if (unknownKeys.length) fail(`unexpected attestation field(s): ${unknownKeys.join(', ')}`);
+if (!attestation.results || Array.isArray(attestation.results) || typeof attestation.results !== 'object') fail('results must be a JSON object');
 const raw = JSON.stringify(attestation);
 if (Buffer.byteLength(raw, 'utf8') > 4000) fail('attestation too large');
 if (/\b\d{6}\b/.test(raw)) fail('attestation contains a 6-digit sequence; never record OTPs');
@@ -28,12 +35,14 @@ const expected = kind === 'sms'
   : { pinAFailsAfterRecovery: true, pinBOpensOriginalData: true, forceStopSurvived: true, rebootSurvived: true,
       replayRejected: true, lockScreenChangeFailsClosed: true, ownerCancelDuringHold: true,
       offlineNormalUse: true, logScanClean: true };
-for (const [key, value] of Object.entries(expected)) if (attestation.results?.[key] !== value) fail(`result ${key} must be ${value}`);
+const unknownResults = Object.keys(attestation.results).filter((key) => !Object.hasOwn(expected, key));
+if (unknownResults.length) fail(`unexpected result field(s): ${unknownResults.join(', ')}`);
+for (const [key, value] of Object.entries(expected)) if (attestation.results[key] !== value) fail(`result ${key} must be ${value}`);
 if (kind === 'sms') {
-  if (!/^[A-Z]{2}$/.test(attestation.country ?? '') || typeof attestation.carrier !== 'string' || !attestation.carrier.trim()) fail('carrier and ISO country required');
+  if (!/^[A-Z]{2}$/.test(attestation.country ?? '') || typeof attestation.carrier !== 'string' || !attestation.carrier.trim() || attestation.carrier.length > 80) fail('carrier and ISO country required');
   if (attestation.stagingProjectId !== gate3.details.stagingProjectId) fail('staging project mismatch');
 } else {
-  if (typeof attestation.deviceModel !== 'string' || !attestation.deviceModel || typeof attestation.androidVersion !== 'string' || !attestation.androidVersion) fail('device model and Android version required');
+  if (typeof attestation.deviceModel !== 'string' || !attestation.deviceModel || attestation.deviceModel.length > 80 || typeof attestation.androidVersion !== 'string' || !attestation.androidVersion || attestation.androidVersion.length > 40) fail('device model and Android version required');
   if (attestation.verifiedBoot !== 'green' || attestation.bootloaderLocked !== true) fail('device must have verified boot green and a locked bootloader');
   if (!/^[0-9a-f]{64}$/.test(attestation.dataChecksumBefore ?? '') || attestation.dataChecksumBefore !== attestation.dataChecksumAfter) fail('data checksums must be valid and match');
 }
