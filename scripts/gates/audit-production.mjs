@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fail } from './lib.mjs';
-import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker } from './firebase-audit-schema.mjs';
+import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker, validateFunctionSecretAccess } from './firebase-audit-schema.mjs';
 
 const project = process.env.GCP_PROJECT_ID;
 const region = process.env.GCP_REGION;
@@ -77,18 +77,28 @@ if (!runtimeAccounts.length) problems.push('RUNTIME_SERVICE_ACCOUNTS not configu
 if (!auditServiceAccount) problems.push('AUDIT_SERVICE_ACCOUNT not configured');
 if (auditServiceAccount && runtimeAccounts.includes(auditServiceAccount)) problems.push('audit identity must be distinct from every production runtime identity');
 const requiredSecrets = list('REQUIRED_SECRETS');
+const secretPolicies = new Map();
 const allowedSecretPrincipals = new Set([...runtimeAccounts, auditServiceAccount].filter(Boolean).map((account) => `serviceAccount:${account}`));
 if (!requiredSecrets.length) problems.push('REQUIRED_SECRETS not configured');
 for (const secret of requiredSecrets) {
   const versions = run(['secrets', 'versions', 'list', secret, '--project', project, '--filter=state=ENABLED']);
   if (!Array.isArray(versions) || versions.length === 0) problems.push(`secret ${secret}: no enabled version`);
   const policy = run(['secrets', 'get-iam-policy', secret, '--project', project]);
+  secretPolicies.set(secret, policy);
   for (const binding of policy.bindings ?? []) for (const member of binding.members ?? []) {
     if (!member.startsWith('serviceAccount:')) problems.push(`secret ${secret}: non-service-account member`);
     else if (!allowedSecretPrincipals.has(member)) problems.push(`secret ${secret}: unexpected service-account member`);
     if (auditServiceAccount && member === `serviceAccount:${auditServiceAccount}` && ['roles/secretmanager.secretAccessor', 'roles/secretmanager.admin'].includes(binding.role)) problems.push(`secret ${secret}: audit identity has secret payload/admin access`);
   }
 }
+const runtimeSecretBindings = {
+  registerRecoveryPhone: ['PHONE_PEPPER'],
+  registerRecoveryOwnerDevice: ['PHONE_PEPPER'],
+  acknowledgeRecoveryOwnerAlert: ['PHONE_PEPPER'],
+  issueRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
+  consumeRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
+};
+problems.push(...validateFunctionSecretAccess(functions, runtimeSecretBindings, secretPolicies, runtimeAccounts, requiredSecrets));
 const reviewedAccounts = [...new Set([...runtimeAccounts, auditServiceAccount].filter(Boolean))];
 for (const account of reviewedAccounts) {
   const keys = run(['iam', 'service-accounts', 'keys', 'list', '--iam-account', account, '--managed-by=user', '--project', project]);
