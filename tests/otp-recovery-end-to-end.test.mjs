@@ -282,7 +282,11 @@ test('physical-device Gate 4 workflow reboots between committed PIN B and post-r
 
 
 test('recovery deployment and physical qualification are pinned to the frozen candidate branch', () => {
-  assert.match(read('.github/workflows/recovery-staging-deploy.yml'), /refs\/heads\/work\/p0-storage-hardening/);
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  assert.match(staging, /workflow_call:/);
+  assert.doesNotMatch(staging, /workflow_dispatch:/);
+  assert.match(staging, /GATE_CONTROL_BRANCH \|\| 'integration\/ledger-patch'/);
+  assert.match(staging, /check-candidate\.mjs/);
   const verifier = read('.github/workflows/recovery-attestation-deploy.yml');
   assert.match(verifier, /GATE_CONTROL_BRANCH \|\| 'integration\/ledger-patch'/);
   assert.match(verifier, /CANDIDATE_BRANCH \|\| 'work\/p0-storage-hardening'/);
