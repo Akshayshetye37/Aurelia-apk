@@ -19,8 +19,11 @@ function testCountFromLog(log) {
   const nodeCounts = [...log.matchAll(/^[^\r\n]*?(?:#|ℹ)[ \t]*tests[ \t]+(\d+)[ \t]*$/gm)];
   const gradleCounts = [...log.matchAll(/OK\s+\((\d+)\s+tests?\)/g)];
   const jsonCounts = [...log.matchAll(/"tests"\s*:\s*(\d+)/g)];
+  const jestCounts = [...log.matchAll(/Tests:\s*(\d+)\s+passed,\s*(\d+)\s+total/gi)].map((match) => [match[2]]);
+  const vitestCounts = [...log.matchAll(/Tests\s+(\d+)\s+passed\b/gi)];
+  const mochaCounts = [...log.matchAll(/(?:^|\n)\s*(\d+)\s+passing\s*\(/g)];
   const instrumentationCount = (log.match(/^.*INSTRUMENTATION_STATUS_CODE: 0\s*$/gm) ?? []).length;
-  return Math.max(sum(nodeCounts), sum(gradleCounts), sum(jsonCounts), instrumentationCount);
+  return Math.max(sum(nodeCounts), sum(gradleCounts), sum(jsonCounts), sum(jestCounts), sum(vitestCounts), sum(mochaCounts), instrumentationCount);
 }
 function walkFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

@@ -5,11 +5,12 @@ const sha = requireSha(process.env.CANDIDATE_SHA);
 const controlSha = requireSha(process.env.GITHUB_SHA);
 const repo = process.env.REPO;
 const controlBranch = process.env.CONTROL_BRANCH;
+if (!repo || !controlBranch || !/^[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+$/.test(repo)) fail('repository or control branch is invalid');
 let runIds;
 try { runIds = JSON.parse(process.env.RUN_IDS ?? ''); } catch { fail('RUN_IDS is not valid JSON'); }
 if (!runIds || typeof runIds !== 'object' || Array.isArray(runIds)) fail('RUN_IDS must be a JSON object');
 const candidateBranch = process.env.CANDIDATE_BRANCH;
-if (!candidateBranch) fail('CANDIDATE_BRANCH is not configured');
+if (!candidateBranch || candidateBranch.split('/').some((part) => !/^[A-Za-z0-9_.-]+$/.test(part) || part === '..')) fail('CANDIDATE_BRANCH is invalid');
 const encodedBranch = candidateBranch.split('/').map(encodeURIComponent).join('/');
 const head = gh(`repos/${repo}/git/ref/heads/${encodedBranch}`).object?.sha;
 if (head !== sha) fail('candidate is no longer the current branch head; all qualification evidence is invalidated');

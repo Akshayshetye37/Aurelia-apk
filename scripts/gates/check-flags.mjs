@@ -20,6 +20,7 @@ let scanned = 0, onCall = 0, enforced = 0;
 function walk(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const file = path.join(directory, entry.name);
+    if (entry.isSymbolicLink()) fail(`candidate source contains a symbolic link: ${file}`);
     if (entry.isDirectory()) {
       if (!SKIP_DIRS.has(entry.name)) walk(file);
       continue;
