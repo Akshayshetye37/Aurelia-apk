@@ -101,7 +101,7 @@ jobs:
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          service_account: ${{ secrets.STAGING_DEPLOY_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
 
@@ -120,10 +120,10 @@ jobs:
           APP_CHECK_SIGNER_SHA256: ${{ vars.APP_CHECK_SIGNER_SHA256 }}
           ATTESTATION_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
-          KEYSTORE_B64: ${{ secrets.AURELIA_RELEASE_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
+          KEYSTORE_B64: ${{ secrets.STAGING_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.STAGING_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.STAGING_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.STAGING_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           if [[ "$CANDIDATE_BRANCH" != "work/p0-storage-hardening" ]]; then
@@ -151,7 +151,7 @@ jobs:
             exit 1
           fi
           node -e 'const o=JSON.parse(process.env.PUBLIC_KEYS); if(!o[process.env.ACTIVE_KID]) process.exit(1);'
-          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/aurelia-release.jks"
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/aurelia-staging-release.jks"
           echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "$RUNNER_TEMP/google-services.json"
           export GOOGLE_SERVICES_PATH="$RUNNER_TEMP/google-services.json"
           node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); const key=p?.api_key?.[0]?.current_key; if(!p || c.project_info?.project_id!==process.env.PROJECT_ID || key!==process.env.FIREBASE_WEB_API_KEY) process.exit(1);'
@@ -188,7 +188,7 @@ jobs:
             "$ACTIVE_KID" "$VERIFIER_URL" "$FUNCTION_SA" "$FIREBASE_WEB_API_KEY" > "functions/.env.$PROJECT_ID"
           firebase deploy --only functions --project "$PROJECT_ID" --non-interactive
           rm -f "functions/.env.$PROJECT_ID"
-          FUNCTION_JSON="$(gcloud functions describe verifyRecoveryDeviceAttestation --gen2 --project "$PROJECT_ID" --region "asia-south1" --format=json)"
+          FUNCTION_JSON="$(gcloud functions describe verifyRecoveryDeviceAttestation --gen2 --project "$PROJECT_ID" --region "$GCP_REGION" --format=json)"
           echo "$FUNCTION_JSON" | jq -e --arg sa "$FUNCTION_SA" '
             .serviceConfig.serviceAccountEmail == $sa and
             .serviceConfig.environmentVariables.RECOVERY_ENABLED == "true"
@@ -199,7 +199,7 @@ jobs:
         shell: bash
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          REGION: asia-south1
+          REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
         run: |
           set -euo pipefail
           bindings=(
@@ -236,18 +236,18 @@ jobs:
         shell: bash
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          REGION: asia-south1
+          REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
         run: |
           set -euo pipefail
           functions=(createRecoveryAttestationChallenge verifyRecoveryDeviceAttestation registerRecoveryPhone exchangeOwnerEmailLink confirmRecoveryOwnerBinding registerRecoveryOwnerDevice acknowledgeRecoveryOwnerAlert issueRecoveryGrant consumeRecoveryGrant cancelRecoveryRequest cancelRecoveryPhoneChange activateRecoveryPhoneChange)
           for function_name in "${functions[@]}"; do
             url="https://${REGION}-${PROJECT_ID}.cloudfunctions.net/${function_name}"
-            missing_code="$(curl -sS -o "$RUNNER_TEMP/appcheck-missing.json" -w '%{http_code}' -X POST "$url" -H 'Content-Type: application/json' --data '{"data":{}}')"
+            missing_code="$(curl --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 10 -sS -o "$RUNNER_TEMP/appcheck-missing.json" -w '%{http_code}' -X POST "$url" -H 'Content-Type: application/json' --data '{"data":{}}')"
             if [[ "$missing_code" != "401" && "$missing_code" != "403" ]]; then
               echo "::error::${function_name} accepted a request without an App Check token (HTTP $missing_code)."
               exit 1
             fi
-            invalid_code="$(curl -sS -o "$RUNNER_TEMP/appcheck-invalid.json" -w '%{http_code}' -X POST "$url" -H 'Content-Type: application/json' -H 'X-Firebase-AppCheck: invalid-staging-probe-token' --data '{"data":{}}')"
+            invalid_code="$(curl --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 10 -sS -o "$RUNNER_TEMP/appcheck-invalid.json" -w '%{http_code}' -X POST "$url" -H 'Content-Type: application/json' -H 'X-Firebase-AppCheck: invalid-staging-probe-token' --data '{"data":{}}')"
             if [[ "$invalid_code" != "401" && "$invalid_code" != "403" ]]; then
               echo "::error::${function_name} did not reject an invalid App Check token (HTTP $invalid_code)."
               exit 1
@@ -281,10 +281,10 @@ jobs:
         working-directory: candidate
         env:
           RECOVERY_GRANT_PUBLIC_KEYS_JSON: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
-          AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-release.jks
-          AURELIA_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
-          AURELIA_RELEASE_KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
-          AURELIA_RELEASE_KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
+          AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-staging-release.jks
+          STAGING_KEYSTORE_PASSWORD: ${{ secrets.STAGING_KEYSTORE_PASSWORD }}
+          STAGING_KEY_ALIAS: ${{ secrets.STAGING_KEY_ALIAS }}
+          STAGING_KEY_PASSWORD: ${{ secrets.STAGING_KEY_PASSWORD }}
           AURELIA_ANDROID_TEST_BUILD_TYPE: release
         run: |
           set -euo pipefail
@@ -294,10 +294,10 @@ jobs:
       - name: Build staging APK
         working-directory: candidate/android
         env:
-          AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-release.jks
-          AURELIA_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
-          AURELIA_RELEASE_KEY_ALIAS: ${{ secrets.AURELIA_RELEASE_KEY_ALIAS }}
-          AURELIA_RELEASE_KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
+          AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-staging-release.jks
+          STAGING_KEYSTORE_PASSWORD: ${{ secrets.STAGING_KEYSTORE_PASSWORD }}
+          STAGING_KEY_ALIAS: ${{ secrets.STAGING_KEY_ALIAS }}
+          STAGING_KEY_PASSWORD: ${{ secrets.STAGING_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace assembleRelease assembleReleaseAndroidTest
@@ -336,6 +336,14 @@ jobs:
           cat "$RUNNER_TEMP/apk-sha256.txt"
           grep -E 'SHA-1|SHA-256' "$RUNNER_TEMP/apk-certificate.txt"
           grep -E 'SHA-1|SHA-256' "$RUNNER_TEMP/androidTest-certificate.txt"
+
+      - name: Remove staging configuration, response bodies and signing material
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f "$RUNNER_TEMP/google-services.json" "$RUNNER_TEMP/aurelia-staging-release.jks" "$RUNNER_TEMP/recovery-signing-key.pem" "$RUNNER_TEMP/appcheck-missing.json" "$RUNNER_TEMP/appcheck-invalid.json"
+          rm -f candidate/android/app/google-services.json "candidate/functions/.env.$STAGING_PROJECT"
 
       - name: Expose non-secret staging metadata to Gate 3
         id: staging-outputs

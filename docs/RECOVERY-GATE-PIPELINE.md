@@ -36,11 +36,11 @@ Set these at repository or environment scope as indicated:
 
 ## GitHub Actions secrets
 
-- `recovery-staging`: `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, staging Firebase configuration and staging signing credentials required by the existing deployment workflow.
+- `recovery-staging`: `GCP_WORKLOAD_IDENTITY_PROVIDER`, `STAGING_DEPLOY_SERVICE_ACCOUNT` (staging-project-only WIF identity), `GOOGLE_SERVICES_JSON_BASE64`, `STAGING_KEYSTORE_BASE64`, `STAGING_KEYSTORE_PASSWORD`, `STAGING_KEY_ALIAS`, and `STAGING_KEY_PASSWORD`. The signer fingerprint variable must match this staging keystore. Never expose the production release keystore or production deploy identity to candidate build code.
 - `recovery-production-audit`: `GCP_WORKLOAD_IDENTITY_PROVIDER` and **`GCP_AUDIT_SERVICE_ACCOUNT`**. The audit service account must be distinct from all production runtime service accounts and must have read-only access only. Do not reuse the deploy service account.
 - `recovery-device`: no production or staging deployment credentials are needed on the self-hosted handset runner.
 
-The production audit identity needs read-only permissions sufficient to list Cloud Functions and Cloud Run services, inspect service IAM policies, list Secret Manager versions and IAM policies, inspect service-account keys/IAM, and read Firebase App Check enforcement. It must not have deployment, secret payload access, or production mutation permissions.
+The staging WIF identity must be scoped to the staging project only, with no production project access. Candidate build/deploy code can access this identity, so do not reuse a production deploy account or production signing keystore. The production audit identity needs read-only permissions sufficient to list Cloud Functions and Cloud Run services, inspect service IAM policies, list Secret Manager versions and IAM policies, inspect service-account keys/IAM, and read Firebase App Check enforcement. It must not have deployment, secret payload access, or production mutation permissions.
 
 ## Required environment protections
 
