@@ -2,22 +2,46 @@ name: Recovery hardware-attestation verifier deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Frozen candidate SHA on work/p0-storage-hardening
+        required: true
+        type: string
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: recovery-attestation-deploy
+  group: recovery-attestation-deploy-${{ inputs.candidate_sha }}
   cancel-in-progress: false
 
 jobs:
   deploy:
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
     environment: recovery-staging
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Checkout exact candidate
+      - name: Checkout trusted gate tooling
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Verify frozen candidate is the exact candidate branch head
+        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
+
+      - name: Checkout exact candidate source for verifier build
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
+          persist-credentials: false
 
       - name: Authenticate to Google Cloud with Workload Identity Federation
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
@@ -71,6 +95,7 @@ jobs:
           fi
 
       - name: Build isolated verifier image
+        working-directory: candidate
         shell: bash
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -81,7 +106,7 @@ jobs:
           gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
           gcloud artifacts repositories describe aurelia-recovery --location "$REGION" >/dev/null 2>&1 ||
             gcloud artifacts repositories create aurelia-recovery --repository-format=docker --location "$REGION" --description="Aurelia recovery security services"
-          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/aurelia-recovery/device-attestation:$GITHUB_SHA"
+          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/aurelia-recovery/device-attestation:$CANDIDATE_SHA"
           gcloud builds submit --config cloudbuild-recovery-attestation.yaml --substitutions="_IMAGE=$IMAGE" .
 
       - name: Deploy verifier with IAM authentication only
@@ -96,7 +121,7 @@ jobs:
           APP_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
         run: |
           set -euo pipefail
-          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/aurelia-recovery/device-attestation:$GITHUB_SHA"
+          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/aurelia-recovery/device-attestation:$CANDIDATE_SHA"
           gcloud run deploy aurelia-recovery-attestation \
             --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE" \
             --service-account "$RUNTIME_SERVICE_ACCOUNT" \
