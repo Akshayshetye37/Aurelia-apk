@@ -508,7 +508,7 @@ test('Gate 6 requires Gate 3 release signer to be in the attested production Fir
   const audit = {
     project: 'aurelia-prod-12345',
     problems: [],
-    auditedResources: { functions: 5, functionIamPolicies: 5, runServices: 1, runIamPolicies: 1 },
+    auditedResources: { functions: 5, gen1Functions: 5, gen2Functions: 0, functionIamPolicies: 5, runServices: 1, runIamPolicies: 1 },
     firebaseAudit: {
       androidApps: 1,
       sha1Fingerprints: 1,
@@ -523,8 +523,10 @@ test('Gate 6 requires Gate 3 release signer to be in the attested production Fir
   assert.equal(isProductionAuditEvidenceValid(audit, audit.project, 'b'.repeat(64)), false);
   assert.equal(isProductionAuditEvidenceValid({ ...audit, firebaseAudit: { ...audit.firebaseAudit, projectTestPhoneNumbers: 1 } }, audit.project, signer), false);
   assert.equal(isProductionAuditEvidenceValid({ ...audit, problems: ['App Check not enforced'] }, audit.project, signer), false);
-  assert.equal(isProductionAuditEvidenceValid({ ...audit, auditedResources: { functions: 5, functionIamPolicies: 5, runServices: 0, runIamPolicies: 0 } }, audit.project, signer), false);
+  assert.equal(isProductionAuditEvidenceValid({ ...audit, auditedResources: { functions: 5, gen1Functions: 5, gen2Functions: 0, functionIamPolicies: 5, runServices: 0, runIamPolicies: 0 } }, audit.project, signer), false);
   assert.equal(isProductionAuditEvidenceValid({ ...audit, auditedResources: { ...audit.auditedResources, functionIamPolicies: 4 } }, audit.project, signer), false);
+  assert.equal(isProductionAuditEvidenceValid({ ...audit, auditedResources: { ...audit.auditedResources, gen1Functions: 4 } }, audit.project, signer), false);
+  assert.equal(isProductionAuditEvidenceValid({ ...audit, auditedResources: { ...audit.auditedResources, gen2Functions: 1 } }, audit.project, signer), false);
   assert.equal(isProductionAuditEvidenceValid({ ...audit, auditedResources: { ...audit.auditedResources, runIamPolicies: 0 } }, audit.project, signer), false);
 });
 
