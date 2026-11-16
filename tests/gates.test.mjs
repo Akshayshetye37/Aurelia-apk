@@ -539,7 +539,7 @@ test('Gates 3–6 are dispatch-only, candidate-pinned and use protected executio
     assert.match(workflow, /workflow_dispatch:/);
     assert.match(workflow, /candidate_sha:/);
     assert.match(workflow, /integration\/ledger-patch/);
-    assert.match(workflow, /check-candidate\\.mjs/);
+    assert.match(workflow, /check-candidate\.mjs/);
   }
   assert.match(gate3, /uses: \.\/\.github\/workflows\/recovery-staging-deploy\.yml/);
   assert.match(gate3, /actions\/attest-build-provenance/);
@@ -547,14 +547,14 @@ test('Gates 3–6 are dispatch-only, candidate-pinned and use protected executio
   assert.match(gate4, /environment: recovery-device/);
   assert.match(gate4.slice(gate4.indexOf('  attest:')), /runs-on: ubuntu-latest/);
   assert.match(gate5, /environment: recovery-production-audit/);
-  assert.match(gate5, /audit-production\\.mjs/);
+  assert.match(gate5, /audit-production\.mjs/);
   assert.match(gate6, /needs: preflight/);
   assert.match(gate6, /environment: recovery-release-review-1/);
   assert.match(gate6, /environment: recovery-release-review-2/);
-  assert.match(gate6, /verify-qualification\\.mjs/);
+  assert.match(gate6, /verify-qualification\.mjs/);
   const manual = read('.github/workflows/gate-manual-attestation.yml');
   assert.match(manual, /environment: recovery-attestation/);
-  assert.match(manual, /validate-attestation\\.mjs/);
+  assert.match(manual, /validate-attestation\.mjs/);
 });
 
 test('Gate 3 and Gate 6 pin App Check probes to the full recovery callable inventory', () => {
