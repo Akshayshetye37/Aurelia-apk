@@ -48,7 +48,7 @@ if (kind === 'sms') {
   if (!/^[0-9a-f]{64}$/.test(attestation.dataChecksumBefore ?? '') || attestation.dataChecksumBefore !== attestation.dataChecksumAfter) fail('data checksums must be valid and match');
 }
 const attestationApprovers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 1, process.env.ACTOR);
-if (attestationApprovers.some((login) => login.toLowerCase() === a.tester.toLowerCase())) fail('the tester cannot approve their own SMS/device attestation');
+if (attestationApprovers.some((login) => login.toLowerCase() === attestation.tester.toLowerCase())) fail('the tester cannot approve their own SMS/device attestation');
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/attestation.json', raw);
 fs.writeFileSync('evidence/details.json', JSON.stringify({
