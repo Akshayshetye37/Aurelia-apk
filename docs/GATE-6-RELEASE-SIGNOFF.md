@@ -12,8 +12,8 @@ The release candidate must be one immutable 40-character Git commit SHA on `work
 
 | Gate | Required immutable evidence | Pass criteria | Current result |
 |---|---|---|---|
-| 1 — Local encryption | Android instrumentation workflow URL, run ID, candidate SHA, JUnit XML and force-stop phase-one/phase-two logs | Same-DEK recovery, old PIN rejected/new PIN accepted, SQLCipher data intact; genuine app force-stop between phases; zero failures/skips; no plaintext secrets | NOT QUALIFIED on current candidate until latest run completes and same-DEK cases are confirmed |
-| 2 — Firebase grant runtime | Recovery Functions CI URL, emulator runtime artifact, candidate SHA | OTP proof, owner alert/ack, 24-hour hold, fresh OTP, local verifier, consume-once, replay/negative claims, cancellation and race tests pass | Awaiting latest candidate CI |
+| 1 — Local encryption | Android instrumentation workflow URL, run ID, candidate SHA, JUnit XML and force-stop phase-one/phase-two logs | Same-DEK recovery, old PIN rejected/new PIN accepted, SQLCipher data intact; genuine app force-stop between phases; zero failures/skips; no plaintext secrets | PASS — run [43835932330](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/43835932330), frozen candidate SHA |
+| 2 — Firebase grant runtime | Recovery Functions CI URL, emulator runtime artifact, candidate SHA | OTP proof, owner alert/ack, 24-hour hold, fresh OTP, local verifier, consume-once, replay/negative claims, cancellation and race tests pass | PASS — run [43835932275](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/43835932275), same frozen candidate SHA |
 | 3 — Real SMS | Staging workflow URL, APK SHA-256, signer SHA-1/SHA-256, approved test-device run record | Real SMS wrong/expired/replayed/valid OTP and complete grant path on staging handset; no production SMS | NOT RUN |
 | 4 — Physical device | Signed device matrix, raw evidence-store reference, exact APK/source fingerprints | All required cases on every approved handset/API; process death, reboot, PIN rotation, data integrity, biometric revocation, cancellation and offline unlock pass | NOT RUN |
 | 5 — Deployment/security | Verifier deploy run, IAM policy probe, App Check probes, Secret Manager versions, key-rotation evidence, production flag audit | Private verifier; least-privilege invoker; missing/invalid App Check and attestation fail closed; fresh revocation; no secret leakage; production flag false/unset | NOT RUN |
@@ -23,7 +23,7 @@ The release candidate must be one immutable 40-character Git commit SHA on `work
 
 | Field | Value |
 |---|---|
-| Candidate SHA | NOT FROZEN |
+| Candidate SHA | `a3f483ab8672ab5dfd5dd4ccdb98ce892720663c` |
 | Android APK SHA-256 | NOT BUILT |
 | Android instrumentation APK SHA-256 | NOT BUILT |
 | APK signer SHA-1 | NOT BUILT |
@@ -125,9 +125,15 @@ Submit this JSON to the same manual-attestation workflow with `kind=device`. The
 
 The manual-attestation workflow requires a distinct tester, a separate workflow trigger actor, and an independent reviewer approval. Never have the tester approve their own attestation.
 
+
+
+### Gate 3 and Gate 5 runtime identity requirements
+
+Gate 3 probes all 19 exported recovery callables with both missing and invalid App Check tokens. The staging deployment requires distinct `RECOVERY_PHONE_SERVICE_ACCOUNT` and `RECOVERY_GRANT_SERVICE_ACCOUNT` values; the former is bound only to the phone-registration callables and `PHONE_PEPPER`, while the latter is bound to grant issuance/consumption and both `PHONE_PEPPER` and `RECOVERY_SIGNING_KEY_PKCS8`. No-secret callables must not share either secret-bearing identity. Gate 5 requires `RUNTIME_SERVICE_ACCOUNTS` to list every deployed runtime identity and checks exact secret access, project/function/service invocation policies, and production recovery OFF.
+
 ### Gate 6 run ID input
 
-The `run_ids` input must be a JSON object with exactly these keys and successful workflow run IDs, all for the same candidate SHA and control-branch revision:
+The `run_ids` input must be a JSON object with exactly these keys and successful workflow run IDs, all for the same candidate SHA and control-branch revision: All seven run IDs must be positive, distinct IDs; Gate 6 rejects duplicate IDs, stale evidence, incomplete callable probes, mismatched APK/attestation hashes, and incomplete production IAM-policy coverage.
 
 ```json
 {
@@ -141,4 +147,4 @@ The `run_ids` input must be a JSON object with exactly these keys and successful
 }
 ```
 
-Configure `recovery-release-review-1` and `recovery-release-review-2` with protected required reviewers. Gate 6 independently checks for two distinct approvers, neither of whom is the workflow trigger actor or either manual attestation tester. It also checks that the Gate 3 APK signer SHA-256 is present in the production Firebase signing inventory from Gate 5.
+Configure `recovery-release-review-1` and `recovery-release-review-2` as protected GitHub Environments with required reviewers. Each environment must produce an approved deployment-review record; Gate 6 checks that both named environments were approved by two distinct people, neither the workflow trigger actor nor either manual attestation tester. The manual SMS and device workflows must separately be approved through the protected `recovery-attestation` environment. It also checks that the Gate 3 APK signer SHA-256 is present in the production Firebase signing inventory from Gate 5.
