@@ -19,6 +19,11 @@ export function requireSha(value) {
   if (!SHA_RE.test(value ?? '')) fail('candidate SHA must be 40 lowercase hex');
   return value;
 }
+export function isAttestationFresh(completedAt, now = Date.now()) {
+  const timestamp = Date.parse(completedAt ?? '');
+  return Number.isFinite(timestamp) && timestamp <= now + 5 * 60 * 1000 && now - timestamp <= 7 * 864e5;
+}
+
 export const sha256File = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 export function gh(apiPath) {
   if (typeof apiPath !== 'string' || apiPath.startsWith('/') || apiPath.includes('..') || /[\r\n]/.test(apiPath)) fail('invalid GitHub API path');
@@ -52,6 +57,7 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   if (!/^[A-Za-z0-9_.-]+\.ya?ml$/.test(workflowFile)) fail('invalid workflow filename');
   const run = gh(`repos/${repo}/actions/runs/${runId}`);
   if (run.status !== 'completed' || run.conclusion !== 'success') fail(`gate ${gate}: run ${runId} did not succeed`);
+  if (!isAttestationFresh(run.completed_at)) fail(`gate ${gate}: attestation run is older than the 7-day freshness window or has an invalid completion time`);
   const triggerAllowed = run.event === 'workflow_dispatch' || (['1', '2'].includes(String(gate)) && run.event === 'push');
   if (!triggerAllowed) fail(`gate ${gate}: evidence run used an unsupported trigger ${run.event}`);
   if (run.head_branch !== controlBranch) fail(`gate ${gate}: run was not on control branch ${controlBranch}`);
