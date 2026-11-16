@@ -33,13 +33,13 @@ jobs:
       APPCHECK_REQUIRED_SERVICES: ${{ vars.APPCHECK_REQUIRED_SERVICES }}
     steps:
       - name: Checkout trusted gate tooling
-        uses: actions/checkout@${checkout}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
       - name: Candidate is the exact frozen branch head
         run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
       - name: Checkout candidate source for static flag tripwire
-        uses: actions/checkout@${checkout}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ inputs.candidate_sha }}
           path: candidate
@@ -47,12 +47,12 @@ jobs:
       - name: Check candidate flags remain disabled
         run: node scripts/gates/check-flags.mjs candidate
       - name: Authenticate to production with read-only audit identity
-        uses: google-github-actions/auth@${auth}
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@${setupGcloud}
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
       - name: Audit deployed production flags, IAM, secrets and App Check
         run: node scripts/gates/audit-production.mjs
       - name: Write and bundle Gate 5 evidence
@@ -62,11 +62,11 @@ jobs:
           node scripts/gates/write-evidence.mjs --gate 5 --sha "$CANDIDATE_SHA" --status PASS
           tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
       - name: Attest Gate 5 evidence bundle
-        uses: actions/attest-build-provenance@${attest}
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
           subject-path: bundle.tar
       - name: Upload Gate 5 evidence
-        uses: actions/upload-artifact@${upload}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: gate-5-evidence
           path: bundle.tar

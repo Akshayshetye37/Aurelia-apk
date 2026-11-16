@@ -27,13 +27,13 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout trusted gate tooling
-        uses: actions/checkout@${checkout}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
       - name: Candidate is the exact frozen branch head
         run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
       - name: Checkout candidate source for static tripwire only
-        uses: actions/checkout@${checkout}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ inputs.candidate_sha }}
           path: candidate
@@ -48,11 +48,11 @@ jobs:
           node scripts/gates/write-evidence.mjs --gate 2 --sha "$CANDIDATE_SHA" --status PASS
           tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
       - name: Attest Gate 2 evidence bundle
-        uses: actions/attest-build-provenance@${attest}
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
           subject-path: bundle.tar
       - name: Upload Gate 2 evidence
-        uses: actions/upload-artifact@${upload}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: gate-2-evidence
           path: bundle.tar
