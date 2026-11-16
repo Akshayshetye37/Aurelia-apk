@@ -111,3 +111,10 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   if (record.runAttempt !== Number(run.run_attempt)) fail(`gate ${gate}: run attempt mismatch`);
   return record;
 }
+
+export function requireIndependentTester(approvers, tester) {
+  if (!Array.isArray(approvers) || typeof tester !== 'string' || !tester) fail('tester or approver list is invalid');
+  if (approvers.some((login) => typeof login === 'string' && login.toLowerCase() === tester.toLowerCase())) {
+    fail('the tester cannot approve their own SMS/device attestation');
+  }
+}

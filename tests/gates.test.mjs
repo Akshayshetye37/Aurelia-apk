@@ -316,28 +316,21 @@ if (args[0] === 'api') {
   assert.match(output(result), /latest run .* is in_progress\/pending/);
 });
 
-test('manual attestation rejects tester self-approval using the submitted tester identity', (t) => {
-  const dir = tempDir(t);
-  const bin = path.join(dir, 'bin');
-  fs.mkdirSync(bin, { recursive: true });
-  const fakeGh = path.join(bin, 'gh');
-  fs.writeFileSync(fakeGh, `#!/usr/bin/env node
-const args = process.argv.slice(2);
-if (args[0] === 'api' && args[1] === 'repos/owner/repo/actions/runs/321/approvals') {
-  console.log(JSON.stringify([{ state: 'approved', user: { login: 'tester-one' } }]));
-} else { console.error('unexpected API call'); process.exit(2); }
-`);
-  fs.chmodSync(fakeGh, 0o755);
-  const result = spawnSync(process.execPath, [path.join(GATES, 'validate-attestation.mjs'),
-    '--kind', 'sms', '--sha', SHA_A, '--repo', 'owner/repo',
-    '--gate3-run', '123', '--control-branch', 'integration/ledger-patch',
-  ], {
-    cwd: dir,
-    env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`,
-      GITHUB_RUN_ID: '321', ACTOR: 'release-operator',
-      ATTESTATION: JSON.stringify({ kind: 'sms', tester: 'tester-one' }) },
+test('manual attestation rejects a tester who appears in the approval list', () => {
+  const libUrl = pathToFileURL(path.join(GATES, 'lib.mjs')).href;
+  const code = `import { requireIndependentTester } from ${JSON.stringify(libUrl)}; requireIndependentTester(['tester-one'], 'Tester-One');`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
     encoding: 'utf8', timeout: 15_000, maxBuffer: 2 * 1024 * 1024,
   });
   assert.equal(result.status, 1);
   assert.match(output(result), /tester cannot approve their own/);
+});
+
+test('manual attestation accepts a tester distinct from every approver', () => {
+  const libUrl = pathToFileURL(path.join(GATES, 'lib.mjs')).href;
+  const code = `import { requireIndependentTester } from ${JSON.stringify(libUrl)}; requireIndependentTester(['release-reviewer'], 'field-tester');`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
+    encoding: 'utf8', timeout: 15_000, maxBuffer: 2 * 1024 * 1024,
+  });
+  assert.equal(result.status, 0, output(result));
 });
