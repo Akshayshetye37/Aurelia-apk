@@ -6,6 +6,11 @@ on:
         description: Frozen candidate SHA (40 lowercase hex)
         required: true
         type: string
+  push:
+    branches:
+      - integration/ledger-patch
+    paths:
+      - gates/qualification-candidate-sha.txt
 permissions: {}
 concurrency:
   group: gate-2-${{ inputs.candidate_sha }}
@@ -30,6 +35,14 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Resolve frozen candidate SHA for trusted push trigger
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate_sha="$(tr -d '\\r\\n' < gates/qualification-candidate-sha.txt)"
+          [[ "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]
+          printf 'CANDIDATE_SHA=%s\\n' "$candidate_sha" >> "$GITHUB_ENV"
       - name: Candidate is the exact frozen branch head
         run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
       - name: Checkout candidate source for static tripwire only

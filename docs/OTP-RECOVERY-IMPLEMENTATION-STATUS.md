@@ -58,6 +58,8 @@
 
 ## Current qualification control (2026-11-13)
 
+- Frozen qualification candidate SHA is pinned in `gates/qualification-candidate-sha.txt` on the trusted control branch. Updating that pin triggers Gate 1 and Gate 2 automatically; the workflows still verify the candidate is the current head of `work/p0-storage-hardening`. The pin does not enable production recovery.
+
 - Working branch: `work/p0-storage-hardening`.
 - Production recovery flag: `RECOVERY_ENABLED=false` by default; no production enablement has been authorized.
 - Android verifier enforces the locally enrolled owner UID, tenant, pinned key ID, signed claims and five-minute grant lifetime before calling server consumption.
