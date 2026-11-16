@@ -20,7 +20,7 @@ export function validateFirebaseFingerprintInventory(apps, fingerprintsByApp, ex
     if (b.size!==sha256.size || [...b].some(x=>!sha256.has(x))) fail(`Firebase Android app ${id} SHA-256 inventory differs from the approved allowlist`);
     n1+=a.size; n256+=b.size;
   }
-  return {androidApps:actual.size,sha1Fingerprints:n1,sha256Fingerprints:n256};
+  return {androidApps:actual.size,sha1Fingerprints:n1,sha256Fingerprints:n256,sha256CertificateHashes:[...new Set([...ids].flatMap(id => (fingerprintsByApp[id] ?? []).filter(x => x.certType === 'SHA_256').map(x => String(x.shaHash).replaceAll(':','').toLowerCase())))].sort()};
 }
 export function countTestPhoneNumbers(value) {
   let count=0; const visit=node=>{ if(!node||typeof node!=='object') return; for(const [key,child] of Object.entries(node)) {
