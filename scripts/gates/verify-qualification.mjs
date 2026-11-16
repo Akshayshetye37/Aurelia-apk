@@ -74,7 +74,15 @@ const probes = readEvidence('3', 'probes.json');
 const requiredProbeNames = [
   'createRecoveryAttestationChallenge', 'verifyRecoveryDeviceAttestation',
   'registerRecoveryPhone', 'exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
-  'registerRecoveryOwnerDevice', 'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant',
+  'registerRecoveryOwnerDevice',
+  'createRecoveryPasskeyEnrollmentOptions',
+  'completeRecoveryPasskeyEnrollment',
+  'retryRecoveryPasskeyEnrollmentAlert',
+  'getRecoveryOwnerPendingAction',
+  'getRecoveryOwnerActionReadiness',
+  'createRecoveryOwnerActionOptions',
+  'completeRecoveryOwnerPasskeyAction',
+  'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant',
   'consumeRecoveryGrant', 'cancelRecoveryRequest', 'cancelRecoveryPhoneChange',
   'activateRecoveryPhoneChange',
 ];
