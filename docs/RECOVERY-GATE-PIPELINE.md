@@ -49,7 +49,7 @@ Configure these environments in GitHub repository Settings → Environments:
 - `recovery-device`: restrict deployment branches to the control branch and require the dedicated physical-device runner.
 - `recovery-attestation`: at least one required reviewer; enable **Prevent self-review**.
 - `recovery-production-audit`: required reviewer approval; production audit identity only.
-- `recovery-release-review-1` and `recovery-release-review-2`: configure separate, preferably disjoint reviewer groups and enable **Prevent self-review** on both. Gate 6 runs these approvals sequentially and independently verifies two distinct approvers from the workflow-run approval history. SMS/device attestation `tester` fields must be GitHub logins, and neither tester may be one of the final release approvers.
+- `recovery-release-review-1` and `recovery-release-review-2`: configure separate, preferably disjoint reviewer groups and enable **Prevent self-review** on both. Gate 6 runs these approvals sequentially and independently verifies two distinct approvers from the workflow-run approval history. SMS/device attestation `tester` fields must be GitHub logins, and neither tester may be one of the attestation reviewers or final release approvers.
 
 The Gate 6 approval-history API response must be checked on the first authorized Gate 6 run. Gate 6 fails closed if it does not return two distinct approved reviewers or if the triggering actor is among them.
 
