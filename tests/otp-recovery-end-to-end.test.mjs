@@ -320,3 +320,14 @@ test('recovery Android diagnostic collection is bounded and stale SHA runs canno
   assert.ok(workflow.includes('timeout-minutes: 2'));
   assert.ok(workflow.includes('otp-recovery-android-instrumentation-${{ github.ref }}-${{ github.sha }}'));
 });
+
+
+test('Gate 5 production audit binds each recovery callable to only its required runtime secrets', () => {
+  const audit = read('scripts/gates/audit-production.mjs');
+  assert.match(audit, /registerRecoveryPhone: \['PHONE_PEPPER'\]/);
+  assert.match(audit, /registerRecoveryOwnerDevice: \['PHONE_PEPPER'\]/);
+  assert.match(audit, /acknowledgeRecoveryOwnerAlert: \['PHONE_PEPPER'\]/);
+  assert.match(audit, /issueRecoveryGrant: \['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'\]/);
+  assert.match(audit, /consumeRecoveryGrant: \['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'\]/);
+  assert.match(audit, /hasPublicRuntimeInvoker\(projectPolicy\)/);
+});
