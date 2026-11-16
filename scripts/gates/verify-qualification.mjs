@@ -36,8 +36,11 @@ function readEvidence(gate, filename) {
 }
 const gate1Runs = readEvidence('1', 'gate1-runs.json');
 const gate2Runs = readEvidence('2', 'gate2-runs.json');
+const requiredRuns = JSON.parse(fs.readFileSync('gates/required-runs.json', 'utf8'));
 for (const [gate, runs] of [['1', gate1Runs], ['2', gate2Runs]]) {
-  if (!Array.isArray(runs) || runs.length !== 3 || runs.some((item) => item.conclusion !== 'success' || item.headSha !== sha || !Number.isInteger(item.testCount) || item.testCount < 1)) {
+  const expected = requiredRuns[`gate${gate}`];
+  const actualNames = Array.isArray(runs) ? runs.map((item) => item.workflow).sort() : [];
+  if (!Array.isArray(expected) || JSON.stringify(actualNames) !== JSON.stringify([...expected].sort()) || !Array.isArray(runs) || runs.length !== 3 || runs.some((item) => item.conclusion !== 'success' || item.headSha !== sha || item.headBranch !== candidateBranch || !Number.isInteger(item.testCount) || item.testCount < 1)) {
     fail(`gate ${gate}: required workflow runs lack exact-SHA positive test-count evidence`);
   }
 }
@@ -50,9 +53,11 @@ const testApkHash = records['3'].details.testApkSha256;
 if (!/^[0-9a-f]{64}$/.test(apkHash ?? '') || !/^[0-9a-f]{64}$/.test(testApkHash ?? '')) fail('Gate 3 APK hashes are invalid');
 if (!/^[0-9a-f]{64}$/.test(records['3'].details.signerSha256 ?? '')) fail('Gate 3 APK signer fingerprint is invalid');
 const probes = readEvidence('3', 'probes.json');
-if (!Array.isArray(probes) || !probes.length || probes.some((probe) => ![401, 403].includes(probe.status))) fail('Gate 3 App Check negative probes did not all reject');
+const probeNames = new Set(Array.isArray(probes) ? probes.map((probe) => probe.callable) : []);
+const expectedProbeCases = new Set(['no App Check token', 'invalid App Check token']);
+if (!Array.isArray(probes) || !probes.length || probes.length !== probeNames.size * 2 || probes.some((probe) => ![401, 403].includes(probe.status) || !expectedProbeCases.has(probe.case)) || [...probeNames].some((name) => expectedProbeCases.size !== probes.filter((probe) => probe.callable === name).length)) fail('Gate 3 App Check negative probes did not cover every callable twice');
 if (!records['3'].details.stagingProjectId || records['3'].details.stagingProjectId === records['5'].details.productionProjectId) fail('Gate 3 staging project is missing or matches production');
-if (!records['4'].details.deviceModel || records['4'].details.apkSha256 !== apkHash || records['4'].details.testApkSha256 !== testApkHash) fail('Gate 4 device record or APK hash does not match Gate 3');
+if (!records['4'].details.deviceLabel || !records['4'].details.deviceModel || records['4'].details.apkSha256 !== apkHash || records['4'].details.testApkSha256 !== testApkHash) fail('Gate 4 device record or APK hash does not match Gate 3');
 if (records['4'].details.verifiedBoot !== 'green' || records['4'].details.bootloaderLocked !== true) fail('Gate 4 physical device boot state is not locked and verified');
 const gate4LogScan = readEvidence('4', 'log-scan.json');
 if (!Array.isArray(gate4LogScan.findings) || gate4LogScan.findings.length) fail('Gate 4 device log scan did not pass');
@@ -61,7 +66,9 @@ const productionAudit = readEvidence('5', 'production-audit.json');
 if (productionAudit.project !== records['5'].details.productionProjectId || !Array.isArray(productionAudit.problems) || productionAudit.problems.length || !productionAudit.auditedResources?.functions) {
   fail('Gate 5 production audit evidence is incomplete or reports problems');
 }
-for (const kind of ['sms', 'device']) if (records[kind].details.apkSha256 !== apkHash) fail(`${kind} attestation is for a different Gate 3 APK`);
+for (const kind of ['sms', 'device']) {
+  if (records[kind].details.kind !== kind || !/^[0-9a-f]{64}$/.test(records[kind].details.attestationSha256 ?? '') || records[kind].details.apkSha256 !== apkHash) fail(`${kind} attestation is invalid or for a different Gate 3 APK`);
+}
 const approvers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 2, process.env.ACTOR);
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/qualification-result.json', JSON.stringify({

@@ -13,7 +13,7 @@ if (baseUrl.protocol !== 'https:' || baseUrl.username || baseUrl.password || bas
 const expectedHost = `${region}-${project}.cloudfunctions.net`;
 if (baseUrl.hostname !== expectedHost) fail('callable base URL does not belong to the configured staging project and region');
 const base = baseUrl.origin;
-const names = (process.env.RECOVERY_CALLABLES ?? '').split(',').map((name) => name.trim()).filter(Boolean);
+const names = [...new Set((process.env.RECOVERY_CALLABLES ?? '').split(',').map((name) => name.trim()).filter(Boolean))];
 if (!names.length) fail('RECOVERY_CALLABLES is empty');
 for (const name of names) if (!/^[A-Za-z0-9_-]+$/.test(name)) fail('RECOVERY_CALLABLES contains an invalid callable name');
 const cases = [

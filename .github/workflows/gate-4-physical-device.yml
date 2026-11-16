@@ -38,7 +38,6 @@ jobs:
       REPO: ${{ github.repository }}
       DEVICE_SERIAL: ${{ vars.DEVICE_SERIAL }}
       DEVICE_SERIAL_ALLOWLIST: ${{ vars.DEVICE_SERIAL_ALLOWLIST }}
-      TEST_RUNNER: ${{ vars.TEST_RUNNER || 'com.aurelia.pms.test/androidx.test.runner.AndroidJUnitRunner' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout trusted gate scripts only
@@ -55,7 +54,14 @@ jobs:
           set -euo pipefail
           [[ "$DEVICE_LABEL" =~ ^[A-Z0-9-]{3,32}$ ]]
           [[ "$DEVICE_SERIAL" =~ ^[A-Za-z0-9._:-]{3,80}$ ]]
-          case ",$DEVICE_SERIAL_ALLOWLIST," in *,"$DEVICE_SERIAL",*) ;; *) echo "::error::Device serial is not allowlisted."; exit 1;; esac
+          IFS=',' read -r -a allowed_serials <<< "$DEVICE_SERIAL_ALLOWLIST"
+          allowed=false
+          for allowed_serial in "${allowed_serials[@]}"; do
+            allowed_serial="${allowed_serial//[[:space:]]/}"
+            [[ "$allowed_serial" =~ ^[A-Za-z0-9._:-]{3,80}$ ]] || { echo "::error::Invalid serial in allowlist."; exit 1; }
+            [[ "$allowed_serial" == "$DEVICE_SERIAL" ]] && allowed=true
+          done
+          [[ "$allowed" == "true" ]] || { echo "::error::Device serial is not allowlisted."; exit 1; }
           timeout -k 5s 90s adb -s "$DEVICE_SERIAL" wait-for-device
           connected="$(adb devices | awk -v serial="$DEVICE_SERIAL" '$1==serial && $2=="device" {count++} END {print count+0}')"
           test "$connected" -eq 1
@@ -75,13 +81,13 @@ jobs:
         run: |
           set -euo pipefail
           app="com.aurelia.pms"
-          runner="$TEST_RUNNER"
+          runner="com.aurelia.pms.test/androidx.test.runner.AndroidJUnitRunner"
           temp="$RUNNER_TEMP/aurelia-gate4"
           mkdir -p "$temp"
           adb -s "$DEVICE_SERIAL" uninstall "$app" >/dev/null 2>&1 || true
           adb -s "$DEVICE_SERIAL" uninstall "$app.test" >/dev/null 2>&1 || true
-          adb -s "$DEVICE_SERIAL" install apks/app.apk >/dev/null
-          adb -s "$DEVICE_SERIAL" install apks/test.apk >/dev/null
+          adb -s "$DEVICE_SERIAL" install -r apks/app.apk >/dev/null
+          adb -s "$DEVICE_SERIAL" install -r -t apks/test.apk >/dev/null
           run_test() {
             name="$1"; selector="$2"; output="$temp/$name.txt"
             set +e

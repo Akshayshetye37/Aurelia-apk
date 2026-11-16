@@ -32,7 +32,6 @@ Set these at repository or environment scope as indicated:
 | `APPCHECK_REQUIRED_SERVICES` | `recovery-production-audit` environment | Comma-separated Firebase App Check service IDs |
 | `DEVICE_SERIAL` | `recovery-device` environment | Dedicated physical handset serial; never written to evidence |
 | `DEVICE_SERIAL_ALLOWLIST` | `recovery-device` environment | Comma-separated exact allowlist of permitted handset serials |
-| `TEST_RUNNER` | `recovery-device` environment | Android instrumentation runner; defaults to `com.aurelia.pms.test/androidx.test.runner.AndroidJUnitRunner` |
 
 ## GitHub Actions secrets
 
@@ -40,7 +39,7 @@ Set these at repository or environment scope as indicated:
 - `recovery-production-audit`: `GCP_WORKLOAD_IDENTITY_PROVIDER` and **`GCP_AUDIT_SERVICE_ACCOUNT`**. The audit service account must be distinct from all production runtime service accounts and must have read-only access only. Do not reuse the deploy service account.
 - `recovery-device`: no production or staging deployment credentials are needed on the self-hosted handset runner.
 
-The staging WIF identity must be scoped to the staging project only, with no production project access. Candidate build/deploy code can access this identity, so do not reuse a production deploy account or production signing keystore. The production audit identity needs read-only permissions sufficient to list Cloud Functions and Cloud Run services, inspect service IAM policies, list Secret Manager versions and IAM policies, inspect service-account keys/IAM, and read Firebase App Check enforcement. It must not have deployment, secret payload access, or production mutation permissions.
+The staging WIF identity must be scoped to the staging project only, with no production project access; the staging workflow actively verifies that the identity receives `PERMISSION_DENIED` when it attempts to read the production project. Candidate build/deploy code can access this identity, so do not reuse a production deploy account or production signing keystore. The production audit identity needs read-only permissions sufficient to list Cloud Functions and Cloud Run services, inspect service IAM policies, list Secret Manager versions and IAM policies, inspect service-account keys/IAM, and read Firebase App Check enforcement. It must not have deployment, secret payload access, or production mutation permissions.
 
 ## Required environment protections
 
