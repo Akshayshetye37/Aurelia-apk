@@ -221,7 +221,7 @@ test('staging APK includes release-signed instrumentation companion for physical
   const workflow = read('.github/workflows/recovery-staging-deploy.yml');
   assert.match(workflow, /AURELIA_ANDROID_TEST_BUILD_TYPE: release/);
   assert.match(workflow, /assembleRelease assembleReleaseAndroidTest/);
-  assert.match(workflow, /app-release-androidTest\\.apk/);
+  assert.match(workflow, /app-release-androidTest\.apk/);
   assert.match(workflow, /TEST_SHA256.*ACTUAL_SHA256/);
   assert.ok(workflow.includes("app-release.apk\\n%s  app-release-androidTest.apk\\n"));
 });
