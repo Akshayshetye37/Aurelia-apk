@@ -1,0 +1,71 @@
+name: Gate - Reviewer-approved manual SMS or device attestation
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Frozen candidate SHA (40 lowercase hex)
+        required: true
+        type: string
+      kind:
+        description: Manual qualification type
+        required: true
+        type: choice
+        options: [sms, device]
+      gate3_run_id:
+        description: Successful Gate 3 run ID
+        required: true
+        type: string
+      attestation:
+        description: Redacted attestation JSON; never include OTPs, phone numbers or secrets
+        required: true
+        type: string
+permissions: {}
+concurrency:
+  group: manual-attestation-${{ inputs.kind }}-${{ inputs.candidate_sha }}
+  cancel-in-progress: false
+jobs:
+  attest:
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    runs-on: ubuntu-latest
+    environment: recovery-attestation
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      KIND: ${{ inputs.kind }}
+      GATE3_RUN: ${{ inputs.gate3_run_id }}
+      ATTESTATION: ${{ inputs.attestation }}
+      REPO: ${{ github.repository }}
+      CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
+      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      ACTOR: ${{ github.triggering_actor }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout trusted gate tooling
+        uses: actions/checkout@${checkout}
+        with:
+          persist-credentials: false
+      - name: Candidate is the exact frozen branch head
+        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
+      - name: Validate reviewer attestation against the Gate 3 APK
+        run: node scripts/gates/validate-attestation.mjs --kind "$KIND" --sha "$CANDIDATE_SHA" --repo "$REPO" --gate3-run "$GATE3_RUN" --control-branch "$CONTROL_BRANCH"
+      - name: Write and bundle manual attestation
+        run: |
+          set -euo pipefail
+          node scripts/gates/write-evidence.mjs --gate "$KIND" --sha "$CANDIDATE_SHA" --status PASS
+          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
+      - name: Attest manual evidence bundle
+        uses: actions/attest-build-provenance@${attest}
+        with:
+          subject-path: bundle.tar
+      - name: Upload manual evidence
+        uses: actions/upload-artifact@${upload}
+        with:
+          name: gate-${{ inputs.kind }}-evidence
+          path: bundle.tar
+          if-no-files-found: error
+          retention-days: 90

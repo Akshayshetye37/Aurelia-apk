@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   deploy-and-build:
+    if: github.ref == 'refs/heads/work/p0-storage-hardening'
     runs-on: ubuntu-latest
     environment: recovery-staging
     timeout-minutes: 60

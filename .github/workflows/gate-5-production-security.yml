@@ -1,0 +1,74 @@
+name: Gate 5 - Production security and disabled recovery audit
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Frozen candidate SHA (40 lowercase hex)
+        required: true
+        type: string
+permissions: {}
+concurrency:
+  group: gate-5-${{ inputs.candidate_sha }}
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    runs-on: ubuntu-latest
+    environment: recovery-production-audit
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      REPO: ${{ github.repository }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      PRODUCTION_GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      ATTESTATION_VERIFIER_SERVICE: ${{ vars.ATTESTATION_VERIFIER_SERVICE }}
+      REQUIRED_SECRETS: ${{ vars.REQUIRED_SECRETS }}
+      RUNTIME_SERVICE_ACCOUNTS: ${{ vars.RUNTIME_SERVICE_ACCOUNTS }}
+      APPCHECK_REQUIRED_SERVICES: ${{ vars.APPCHECK_REQUIRED_SERVICES }}
+    steps:
+      - name: Checkout trusted gate tooling
+        uses: actions/checkout@${checkout}
+        with:
+          persist-credentials: false
+      - name: Candidate is the exact frozen branch head
+        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
+      - name: Checkout candidate source for static flag tripwire
+        uses: actions/checkout@${checkout}
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
+          persist-credentials: false
+      - name: Check candidate flags remain disabled
+        run: node scripts/gates/check-flags.mjs candidate
+      - name: Authenticate to production with read-only audit identity
+        uses: google-github-actions/auth@${auth}
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@${setupGcloud}
+      - name: Audit deployed production flags, IAM, secrets and App Check
+        run: node scripts/gates/audit-production.mjs
+      - name: Write and bundle Gate 5 evidence
+        run: |
+          set -euo pipefail
+          jq -n --arg project "$GCP_PROJECT_ID" '{productionRecoveryEnabled:false,productionProjectId:$project}' > evidence/details.json
+          node scripts/gates/write-evidence.mjs --gate 5 --sha "$CANDIDATE_SHA" --status PASS
+          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
+      - name: Attest Gate 5 evidence bundle
+        uses: actions/attest-build-provenance@${attest}
+        with:
+          subject-path: bundle.tar
+      - name: Upload Gate 5 evidence
+        uses: actions/upload-artifact@${upload}
+        with:
+          name: gate-5-evidence
+          path: bundle.tar
+          if-no-files-found: error
+          retention-days: 90
