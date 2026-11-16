@@ -500,6 +500,20 @@ test('Gate 6 requires Gate 3 release signer to be in the attested production Fir
   assert.equal(isProductionAuditEvidenceValid({ ...audit, auditedResources: { functions: 5, runServices: 0 } }, audit.project, signer), false);
 });
 
+test('Gate 3 and Gate 6 pin App Check probes to the full recovery callable inventory', () => {
+  const probeScript = read('scripts/gates/staging-probes.mjs');
+  const verifier = read('scripts/gates/verify-qualification.mjs');
+  for (const name of ['createRecoveryAttestationChallenge', 'verifyRecoveryDeviceAttestation',
+    'registerRecoveryPhone', 'exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
+    'registerRecoveryOwnerDevice', 'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant',
+    'consumeRecoveryGrant', 'cancelRecoveryRequest', 'cancelRecoveryPhoneChange',
+    'activateRecoveryPhoneChange']) {
+    assert.ok(probeScript.includes(name), `staging probes must include ${name}`);
+    assert.ok(verifier.includes(name), `Gate 6 must require ${name}`);
+  }
+  assert.match(probeScript, /exactly match the complete recovery callable inventory/);
+});
+
 test('Gate 5 rejects inherited project-level public Cloud Run or Functions invocation', () => {
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }), true);
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/cloudfunctions.invoker', members: ['allAuthenticatedUsers'] }] }), true);
