@@ -24,9 +24,9 @@ jobs:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
       REPO: ${{ github.repository }}
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
       PRODUCTION_GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_REGION: ${{ vars.PRODUCTION_GCP_REGION || vars.GCP_REGION }}
       AUDIT_SERVICE_ACCOUNT: ${{ secrets.GCP_AUDIT_SERVICE_ACCOUNT }}
       ATTESTATION_VERIFIER_SERVICE: ${{ vars.ATTESTATION_VERIFIER_SERVICE }}
       REQUIRED_SECRETS: ${{ vars.REQUIRED_SECRETS }}

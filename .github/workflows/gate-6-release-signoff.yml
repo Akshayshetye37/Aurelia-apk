@@ -15,10 +15,29 @@ concurrency:
   group: gate-6-release-${{ inputs.candidate_sha }}
   cancel-in-progress: false
 jobs:
-  release-review:
+  independent-reviewer-one:
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
-    environment: recovery-release-review
+    environment: recovery-release-review-1
+    timeout-minutes: 15
+    permissions: {}
+    steps:
+      - name: First independent release reviewer approval
+        run: echo "First independent release approval recorded by the protected environment."
+  independent-reviewer-two:
+    needs: independent-reviewer-one
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    runs-on: ubuntu-latest
+    environment: recovery-release-review-2
+    timeout-minutes: 15
+    permissions: {}
+    steps:
+      - name: Second independent release reviewer approval
+        run: echo "Second independent release approval recorded by the protected environment."
+  verify-and-attest:
+    needs: [independent-reviewer-one, independent-reviewer-two]
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
@@ -38,7 +57,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Verify all six gates, matching APK and independent approvals
+      - name: Verify all six gates, matching APK and two distinct independent approvals
         run: node scripts/gates/verify-qualification.mjs
       - name: Write and bundle Gate 6 release-review evidence
         run: |
