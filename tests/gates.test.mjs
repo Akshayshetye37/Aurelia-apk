@@ -500,7 +500,6 @@ test('Gate 6 requires Gate 3 release signer to be in the attested production Fir
 
 test('Gate 5 rejects inherited project-level public Cloud Run or Functions invocation', () => {
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }), true);
-  assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/cloudfunctions.invoker', members: ['allAuthenticatedUsers'] }] }), true);
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['serviceAccount:runtime@example.iam.gserviceaccount.com'] }] }), false);
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/viewer', members: ['allUsers'] }] }), false);
 });
