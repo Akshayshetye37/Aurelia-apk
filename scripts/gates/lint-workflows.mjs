@@ -4,7 +4,7 @@ import { fail } from './lib.mjs';
 
 const directory = '.github/workflows';
 const errors = [];
-const files = fs.readdirSync(directory).filter((file) => /^gate-.*\.ya?ml$/.test(file) || file === 'recovery-staging-deploy.yml');
+const files = fs.readdirSync(directory).filter((file) => /^gate-.*\.ya?ml$/.test(file) || ['recovery-staging-deploy.yml', 'recovery-attestation-deploy.yml'].includes(file));
 if (!files.length) fail('no gate workflow files found');
 for (const file of files) {
   const lines = fs.readFileSync(path.join(directory, file), 'utf8').split('\n');
