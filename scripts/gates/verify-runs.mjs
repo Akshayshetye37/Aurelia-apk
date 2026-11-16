@@ -19,7 +19,7 @@ function testCountFromLog(log) {
   const nodeCounts = [...log.matchAll(/^[^\r\n]*?(?:#|ℹ)[ \t]*tests[ \t]+(\d+)[ \t]*$/gm)];
   const gradleCounts = [...log.matchAll(/OK\s+\((\d+)\s+tests?\)/g)];
   const jsonCounts = [...log.matchAll(/"tests"\s*:\s*(\d+)/g)];
-  const jestCounts = [...log.matchAll(/Tests:\s*(\d+)\s+passed,\s*(\d+)\s+total/gi)].map((match) => [match[2]]);
+  const jestCounts = [...log.matchAll(/Tests:\s*\d+\s+passed,\s*(\d+)\s+total/gi)];
   const vitestCounts = [...log.matchAll(/Tests\s+(\d+)\s+passed\b/gi)];
   const mochaCounts = [...log.matchAll(/(?:^|\n)\s*(\d+)\s+passing\s*\(/g)];
   const instrumentationCount = (log.match(/^.*INSTRUMENTATION_STATUS_CODE: 0\s*$/gm) ?? []).length;
