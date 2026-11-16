@@ -55,8 +55,9 @@ export function isProductionAuditEvidenceValid(audit, expectedProjectId, release
 
 /** Detect inherited project-level public invocation grants for Cloud Run/Functions. */
 export function hasPublicRuntimeInvoker(policy) {
+  const invokerRoles = new Set(['roles/run.invoker', 'roles/cloudfunctions.invoker']);
   return (policy?.bindings ?? []).some(binding =>
-    binding.role === 'roles/run.invoker' &&
+    invokerRoles.has(binding.role) &&
     (binding.members ?? []).some(member => member === 'allUsers' || member === 'allAuthenticatedUsers')
   );
 }
@@ -66,6 +67,7 @@ export function validateFunctionSecretAccess(functions, requiredBindings, secret
   const problems = [];
   const byName = new Map((functions ?? []).map(fn => [String(fn.name ?? '').split('/').pop(), fn]));
   const expectedBySecret = new Map();
+  const functionByRuntimeAccount = new Map();
   for (const [functionName, secrets] of Object.entries(requiredBindings ?? {})) {
     const fn = byName.get(functionName);
     if (!fn) { problems.push(`function ${functionName} is missing from production inventory`); continue; }
@@ -73,6 +75,9 @@ export function validateFunctionSecretAccess(functions, requiredBindings, secret
     const runtimeAccount = config.serviceAccountEmail ?? fn.serviceAccountEmail;
     if (!runtimeAccount) { problems.push(`function ${functionName} has no runtime service account`); continue; }
     if (!allowedRuntimeAccounts.includes(runtimeAccount)) problems.push(`function ${functionName} runtime identity is not in RUNTIME_SERVICE_ACCOUNTS`);
+    const existingFunction = functionByRuntimeAccount.get(runtimeAccount);
+    if (existingFunction) problems.push(`functions ${existingFunction} and ${functionName} share runtime identity ${runtimeAccount}; recovery callable identities must be isolated`);
+    else functionByRuntimeAccount.set(runtimeAccount, functionName);
     for (const secret of secrets) {
       if (!requiredSecrets.includes(secret)) problems.push(`function ${functionName} uses undeclared REQUIRED_SECRETS entry ${secret}`);
       if (!expectedBySecret.has(secret)) expectedBySecret.set(secret, new Set());
