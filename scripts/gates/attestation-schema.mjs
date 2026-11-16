@@ -2,7 +2,7 @@ const fail = (message) => { throw new Error(message); };
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function validateSmsAttestation(attestation, now = Date.now()) {
   if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation)) fail('SMS attestation must be an object');
-  const isoTimestamp = value => typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?(?:Z|[+-]\\d{2}:\\d{2})$/.test(value);
+  const isoTimestamp = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(value);
   if (!isoTimestamp(attestation.smsDeliveredAt) || !isoTimestamp(attestation.testedAt)) fail('smsDeliveredAt and testedAt must be RFC 3339 timestamps with timezone');
   const delivered = Date.parse(attestation.smsDeliveredAt), tested = Date.parse(attestation.testedAt);
   if (!Number.isFinite(delivered) || !Number.isFinite(tested)) fail('smsDeliveredAt and testedAt must be valid ISO timestamps');
