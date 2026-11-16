@@ -32,7 +32,7 @@ export function gh(apiPath) {
 }
 
 export function requireApprovals(repo, runId, minimum, actor) {
-  if (!/^\\d+$/.test(String(runId)) || !Number.isInteger(minimum) || minimum < 1 || typeof actor !== 'string' || !actor) fail('approval threshold, run ID or triggering actor is invalid');
+  if (!/^[0-9]+$/.test(String(runId)) || !Number.isInteger(minimum) || minimum < 1 || typeof actor !== 'string' || !actor) fail('approval threshold, run ID or triggering actor is invalid');
   const history = gh(`repos/${repo}/actions/runs/${runId}/approvals`);
   if (!Array.isArray(history)) fail('workflow approval history response was not an array');
   if (history.some((item) => ['rejected', 'changes_requested'].includes(item.state))) fail('approval history contains a rejected review');
