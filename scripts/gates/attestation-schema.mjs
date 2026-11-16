@@ -13,3 +13,12 @@ export function validateSmsAttestation(attestation, now = Date.now()) {
   if (typeof attestation.deviceIdentitySha256 !== 'string' || !/^[0-9a-f]{64}$/.test(attestation.deviceIdentitySha256)) fail('deviceIdentitySha256 must be a SHA-256 hash of the redacted device identity');
   return true;
 }
+
+const DIGEST_FIELDS = new Set(['apkSha256', 'deviceIdentitySha256', 'dataChecksumBefore', 'dataChecksumAfter']);
+export function containsPhoneNumberLikeValue(value, key = '') {
+  if (DIGEST_FIELDS.has(key)) return false;
+  if (typeof value === 'string') return /\\+?\\d{10,}/.test(value);
+  if (Array.isArray(value)) return value.some((item) => containsPhoneNumberLikeValue(item));
+  if (value && typeof value === 'object') return Object.entries(value).some(([childKey, child]) => containsPhoneNumberLikeValue(child, childKey));
+  return false;
+}
