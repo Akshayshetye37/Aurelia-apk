@@ -356,6 +356,7 @@ test('Gate 3 SMS attestation requires real delivery timestamp, challenge ID and 
  assert.equal(validateSmsAttestation(valid,now),true);
  for(const field of ['smsDeliveredAt','challengeId','deviceLabel','deviceIdentitySha256']) { const bad={...valid}; delete bad[field]; assert.throws(()=>validateSmsAttestation(bad,now)); }
  assert.throws(()=>validateSmsAttestation({...valid,smsDeliveredAt:'2026-11-16T11:00:00.000Z'},now),/within 15 minutes/);
+ assert.throws(()=>validateSmsAttestation({...valid,testedAt:'2026-11-16T11:59:00'},now),/RFC 3339/);
  assert.throws(()=>validateSmsAttestation({...valid,deviceLabel:'serial=ABC123'},now),/redacted/);
 });
 test('Gate 5 Firebase audit requires exact app and SHA-1/SHA-256 inventories and zero test numbers', () => {
