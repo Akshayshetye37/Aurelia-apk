@@ -26,7 +26,10 @@ const workflows = {
 if ((process.env.RUN_IDS ?? '').length > 2000) fail('RUN_IDS exceeds 2000 characters');
 const expectedRunKeys = Object.keys(workflows).sort();
 if (JSON.stringify(Object.keys(runIds).sort()) !== JSON.stringify(expectedRunKeys)) fail('RUN_IDS must contain exactly 1, 2, 3, 4, 5, sms and device');
-for (const key of expectedRunKeys) if (!/^\\d+$/.test(String(runIds[key]))) fail(`invalid run ID for ${key}`);
+for (const key of expectedRunKeys) {
+  const value = String(runIds[key]);
+  if (!value.length || ![...value].every((digit) => digit >= '0' && digit <= '9')) fail(`invalid run ID for ${key}`);
+}
 const records = {};
 for (const [gate, workflowFile] of Object.entries(workflows)) {
   if (!runIds[gate]) fail(`missing run ID for gate ${gate}`);

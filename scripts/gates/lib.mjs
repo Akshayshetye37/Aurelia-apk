@@ -81,8 +81,9 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
     if (typeof statement === 'string') { try { statement = JSON.parse(statement); } catch { return false; } }
     const invocation = statement?.predicate?.runDetails?.metadata?.invocationId;
     if (typeof invocation !== 'string' || !invocation.includes(expectedRunPath)) return false;
-    const attempt = invocation.match(/\\/attempts\\/(\\d+)$/);
-    return !attempt || Number(attempt[1]) === Number(run.run_attempt);
+    const attemptMarker = '/attempts/';
+    if (!invocation.includes(attemptMarker)) return true;
+    return invocation.split(attemptMarker).at(-1) === String(run.run_attempt);
   });
   if (!bound) fail(`gate ${gate}: attestation is not bound to run ${runId} attempt ${run.run_attempt}`);
   const archiveEntries = execFileSync('tar', ['-tf', bundle], { encoding: 'utf8' }).split('\n').filter(Boolean);
