@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fail } from './lib.mjs';
-import { countTestPhoneNumbers, validateFirebaseFingerprintInventory } from './firebase-audit-schema.mjs';
+import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint } from './firebase-audit-schema.mjs';
 
 const project = process.env.GCP_PROJECT_ID;
 const region = process.env.GCP_REGION;
@@ -130,7 +130,7 @@ if (firebaseAppIds.length && allowedSha1.length && allowedSha256.length) {
   } while(pageToken);
   const fingerprintsByApp={};
   for(const appId of firebaseAppIds) {
-    const payload=await firebaseGet(`https://firebase.googleapis.com/v1beta1/projects/-/androidApps/${encodeURIComponent(appId)}/sha`,`Firebase signing fingerprints for ${appId}`);
+    const payload=await firebaseGet(firebaseAndroidShaEndpoint(project, appId),`Firebase signing fingerprints for ${appId}`);
     fingerprintsByApp[appId]=payload.certificates??[];
   }
   try { Object.assign(firebaseAudit,validateFirebaseFingerprintInventory(apps,fingerprintsByApp,firebaseAppIds,allowedSha1,allowedSha256)); }
