@@ -32,13 +32,14 @@ export function gh(apiPath) {
 }
 
 export function requireApprovals(repo, runId, minimum, actor) {
-  if (!/^\d+$/.test(String(runId))) fail('invalid workflow run ID for approval check');
+  if (!/^\\d+$/.test(String(runId)) || !Number.isInteger(minimum) || minimum < 1 || typeof actor !== 'string' || !actor) fail('approval threshold, run ID or triggering actor is invalid');
   const history = gh(`repos/${repo}/actions/runs/${runId}/approvals`);
   if (!Array.isArray(history)) fail('workflow approval history response was not an array');
+  if (history.some((item) => ['rejected', 'changes_requested'].includes(item.state))) fail('approval history contains a rejected review');
   const approved = [...new Set(history
-    .filter((item) => item.state === 'approved' && item.user?.login)
+    .filter((item) => item.state === 'approved' && typeof item.user?.login === 'string')
     .map((item) => item.user.login))];
-  if (actor && approved.includes(actor)) fail('the person who triggered the run cannot approve it');
+  if (approved.some((login) => login.toLowerCase() === actor.toLowerCase())) fail('the person who triggered the run cannot approve it');
   if (approved.length < minimum) fail(`need ${minimum} independent approver(s), found ${approved.length}`);
   return approved;
 }
@@ -80,7 +81,11 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
     let statement = entry.verificationResult?.statement ?? entry.statement;
     if (typeof statement === 'string') { try { statement = JSON.parse(statement); } catch { return false; } }
     const invocation = statement?.predicate?.runDetails?.metadata?.invocationId;
-    if (typeof invocation !== 'string' || !invocation.includes(expectedRunPath)) return false;
+    if (typeof invocation !== 'string') return false;
+    const runPathIndex = invocation.indexOf(expectedRunPath);
+    if (runPathIndex < 0) return false;
+    const suffix = invocation.slice(runPathIndex + expectedRunPath.length);
+    if (suffix && !suffix.startsWith('/attempts/')) return false;
     const attemptMarker = '/attempts/';
     if (!invocation.includes(attemptMarker)) return true;
     return invocation.split(attemptMarker).at(-1) === String(run.run_attempt);
