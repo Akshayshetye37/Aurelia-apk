@@ -157,7 +157,7 @@ test('staging probes reject non-HTTPS and non-staging hosts before network acces
     STAGING_PROJECT_ID: 'aurelia-stage-12345',
     PRODUCTION_PROJECT_ID: 'aurelia-prod-12345',
     STAGING_REGION: 'asia-south1',
-    RECOVERY_CALLABLES: 'issueRecoveryGrant',
+    RECOVERY_CALLABLES: 'createRecoveryAttestationChallenge,verifyRecoveryDeviceAttestation,registerRecoveryPhone,exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,createRecoveryPasskeyEnrollmentOptions,completeRecoveryPasskeyEnrollment,retryRecoveryPasskeyEnrollmentAlert,getRecoveryOwnerPendingAction,getRecoveryOwnerActionReadiness,createRecoveryOwnerActionOptions,completeRecoveryOwnerPasskeyAction,acknowledgeRecoveryOwnerAlert,issueRecoveryGrant,consumeRecoveryGrant,cancelRecoveryRequest,cancelRecoveryPhoneChange,activateRecoveryPhoneChange',
   };
   const http = run(t, 'staging-probes.mjs', [], {
     ...common,
