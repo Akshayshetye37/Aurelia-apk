@@ -262,11 +262,12 @@ test('production flag audit proves it targets the configured production project'
 test('staging and production audits verify per-function Secret Manager runtime access', () => {
   const staging = read('.github/workflows/recovery-staging-deploy.yml');
   assert.match(staging, /roles\/secretmanager\.secretAccessor/);
-  assert.match(staging, /acknowledgeRecoveryOwnerAlert:PHONE_PEPPER/);
+  assert.doesNotMatch(staging, /acknowledgeRecoveryOwnerAlert:PHONE_PEPPER/);
   const production = read('scripts/gates/audit-production.mjs');
   assert.match(production, /roles\/secretmanager\.secretAccessor/);
   assert.match(production, /runtimeSecretBindings/);
   assert.match(production, /validateFunctionSecretAccess/);
+  assert.doesNotMatch(production, /acknowledgeRecoveryOwnerAlert: \['PHONE_PEPPER'\]/);
   assert.match(production, /REQUIRED_SECRETS/);
   assert.match(production, /RUNTIME_SERVICE_ACCOUNTS/);
 });
