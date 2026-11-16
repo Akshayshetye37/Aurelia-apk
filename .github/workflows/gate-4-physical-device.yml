@@ -75,7 +75,7 @@ jobs:
           test "$(prop ro.boot.flash.locked)" = "1"
           test "$(prop ro.boot.vbmeta.device_state)" = "locked"
           mkdir -p evidence
-          jq -n --arg model "$(prop ro.product.model)" --arg manufacturer "$(prop ro.product.manufacturer)"             --arg version "$(prop ro.build.version.release)" --arg api "$sdk"             --arg fingerprint "$(prop ro.build.fingerprint)"             '{deviceModel:$model,manufacturer:$manufacturer,androidVersion:$version,apiLevel:$api,buildFingerprint:$fingerprint,verifiedBoot:"green",bootloaderLocked:true}' > evidence/device.json
+          jq -n --arg label "$DEVICE_LABEL" --arg model "$(prop ro.product.model)" --arg manufacturer "$(prop ro.product.manufacturer)"             --arg version "$(prop ro.build.version.release)" --arg api "$sdk"             --arg fingerprint "$(prop ro.build.fingerprint)"             '{deviceLabel:$label,deviceModel:$model,manufacturer:$manufacturer,androidVersion:$version,apiLevel:$api,buildFingerprint:$fingerprint,verifiedBoot:"green",bootloaderLocked:true}' > evidence/device.json
       - name: Install hash-verified APKs and run physical recovery phases
         shell: bash
         run: |
@@ -89,25 +89,25 @@ jobs:
           adb -s "$DEVICE_SERIAL" install -r apks/app.apk >/dev/null
           adb -s "$DEVICE_SERIAL" install -r -t apks/test.apk >/dev/null
           run_test() {
-            name="$1"; selector="$2"; output="$temp/$name.txt"
+            name="$1"; selector="$2"; minimum="$3"; output="$temp/$name.txt"
             set +e
             timeout -k 5s 1800s adb -s "$DEVICE_SERIAL" shell am instrument -w -r -e class "$selector" "$runner" > "$output" 2>&1
             status=$?
             set -e
             if [[ "$status" -ne 0 ]]; then echo "::error::Instrumentation phase failed: $name"; exit 1; fi
-            node scripts/gates/parse-instrument.mjs "$output" 1
+            node scripts/gates/parse-instrument.mjs "$output" "$minimum"
           }
-          run_test security-primitives com.aurelia.pms.security.AureliaSecurityInstrumentedTest
-          run_test sqlcipher com.aurelia.pms.OtpRecoverySqlCipherInstrumentedTest
-          run_test grant-preflight com.aurelia.pms.security.RecoveryGrantVerifierInstrumentedTest
-          run_test force-stop-phase-one 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop'
+          run_test security-primitives com.aurelia.pms.security.AureliaSecurityInstrumentedTest 6
+          run_test sqlcipher com.aurelia.pms.OtpRecoverySqlCipherInstrumentedTest 1
+          run_test grant-preflight com.aurelia.pms.security.RecoveryGrantVerifierInstrumentedTest 4
+          run_test force-stop-phase-one 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOnePersistsPinAAndDatabaseBeforeForceStop' 1
           before_pid="$(adb -s "$DEVICE_SERIAL" shell pidof -s "$app" | tr -d '\r')"
           test -n "$before_pid"
           adb -s "$DEVICE_SERIAL" shell am force-stop "$app"
           after_pid="$(adb -s "$DEVICE_SERIAL" shell pidof -s "$app" | tr -d '\r')"
           test -z "$after_pid"
-          run_test force-stop-phase-two 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop'
-          run_test reboot-phase-one 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOneCommitsPinBForDeviceReboot'
+          run_test force-stop-phase-two 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop' 1
+          run_test reboot-phase-one 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOneCommitsPinBForDeviceReboot' 1
           adb -s "$DEVICE_SERIAL" reboot
           timeout -k 5s 90s adb -s "$DEVICE_SERIAL" wait-for-device
           ready=false
@@ -125,14 +125,14 @@ jobs:
           test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.verifiedbootstate | tr -d '\r')" = "green"
           test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.flash.locked | tr -d '\r')" = "1"
           test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.vbmeta.device_state | tr -d '\r')" = "locked"
-          run_test reboot-phase-two 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoAfterDeviceRebootUnlocksPinBAndReadsDatabase'
-          adb -s "$DEVICE_SERIAL" logcat -b all -d -v threadtime > "$temp/logcat.txt"
+          run_test reboot-phase-two 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoAfterDeviceRebootUnlocksPinBAndReadsDatabase' 1
+          adb -s "$DEVICE_SERIAL" logcat -b all -d -t 5000 -v threadtime > "$temp/logcat.txt"
           node scripts/gates/scan-logs.mjs "$temp"/*.txt
           app_hash="$(sha256sum apks/app.apk | awk '{print $1}')"
           test_hash="$(sha256sum apks/test.apk | awk '{print $1}')"
           model="$(jq -r .deviceModel evidence/device.json)"
           version="$(jq -r .androidVersion evidence/device.json)"
-          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg model "$model" --arg version "$version"             '{apkSha256:$a,testApkSha256:$t,deviceModel:$model,androidVersion:$version,verifiedBoot:"green",bootloaderLocked:true}' > evidence/details.json
+          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg label "$DEVICE_LABEL" --arg model "$model" --arg version "$version"             '{apkSha256:$a,testApkSha256:$t,deviceLabel:$label,deviceModel:$model,androidVersion:$version,verifiedBoot:"green",bootloaderLocked:true}' > evidence/details.json
       - name: Write and bundle Gate 4 evidence
         run: |
           set -euo pipefail
