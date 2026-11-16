@@ -19,6 +19,6 @@ for (const file of files) {
   });
 }
 fs.mkdirSync('evidence', { recursive: true });
-fs.writeFileSync('evidence/log-scan.json', JSON.stringify({ files: files.map(path.basename), findings }, null, 2));
+fs.writeFileSync('evidence/log-scan.json', JSON.stringify({ files: files.map((file) => path.basename(file)), findings }, null, 2));
 if (findings.length) fail(`${findings.length} sensitive-looking line(s); only redacted evidence/log-scan.json is retained`);
 console.log('log scan clean');

@@ -59,8 +59,9 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   if (!fs.existsSync(bundle) || fs.statSync(bundle).size === 0) fail(`gate ${gate}: evidence bundle missing or empty`);
   execFileSync('gh', ['attestation', 'verify', bundle, '--repo', repo,
     '--signer-workflow', `${repo}/.github/workflows/${workflowFile}`], { stdio: 'inherit' });
-  execFileSync('tar', ['-tf', bundle], { stdio: 'ignore' });
-  execFileSync('tar', ['-xf', bundle, '-C', dir], { stdio: 'inherit' });
+  const archiveEntries = execFileSync('tar', ['-tf', bundle], { encoding: 'utf8' }).split('\\n').filter(Boolean);
+  if (!archiveEntries.length || archiveEntries.some((entry) => entry.startsWith('/') || entry.split('/').some((part) => part === '..') || !entry.startsWith('evidence/'))) fail(`gate ${gate}: unsafe or unexpected evidence archive path`);
+  execFileSync('tar', ['-xf', bundle, '-C', dir, '--no-same-owner', '--no-same-permissions'], { stdio: 'inherit' });
   const recordPath = path.join(dir, 'evidence', 'record.json');
   if (!fs.existsSync(recordPath)) fail(`gate ${gate}: evidence record missing`);
   let record;
