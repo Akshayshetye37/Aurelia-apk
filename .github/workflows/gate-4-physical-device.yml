@@ -74,7 +74,7 @@ jobs:
           done
           [[ "$allowed" == "true" ]] || { echo "::error::Device serial is not allowlisted."; exit 1; }
           timeout -k 5s 90s adb -s "$DEVICE_SERIAL" wait-for-device
-          connected="$(adb devices | awk -v serial="$DEVICE_SERIAL" '$1==serial && $2=="device" {count++} END {print count+0}')"
+          connected="$(timeout -k 5s 15s adb devices -l | awk -v serial="$DEVICE_SERIAL" '$1==serial && $2=="device" {count++} END {print count+0}')"
           test "$connected" -eq 1
           prop() { adb -s "$DEVICE_SERIAL" shell getprop "$1" | tr -d '\r'; }
           test "$(prop ro.kernel.qemu)" != "1"
