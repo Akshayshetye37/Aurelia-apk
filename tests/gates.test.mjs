@@ -61,12 +61,14 @@ test('log scanner writes metadata only and rejects credential-like lines', (t) =
   fs.writeFileSync(file, 'normal startup complete\n');
   const safe = run(t, 'scan-logs.mjs', [file], {}, dir);
   assert.equal(safe.status, 0, output(safe));
-  fs.writeFileSync(file, 'recoveryKey=supersecretvalue\n');
+  fs.writeFileSync(file, 'recoveryKey=supersecretvalue\nOTP is 123456\nGuest phone 9876543210\n');
   const unsafe = run(t, 'scan-logs.mjs', [file], {}, dir);
   assert.equal(unsafe.status, 1);
   const report = fs.readFileSync(path.join(dir, 'evidence', 'log-scan.json'), 'utf8');
   assert.match(report, /credential-like assignment/);
-  assert.doesNotMatch(report, /supersecretvalue/);
+  assert.match(report, /OTP value in message context/);
+  assert.match(report, /full phone number/);
+  assert.doesNotMatch(report, /supersecretvalue|123456|9876543210/);
 });
 
 test('source flag scanner accepts OFF flags and enforced callable App Check', (t) => {

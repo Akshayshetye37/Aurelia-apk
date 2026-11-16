@@ -4,7 +4,8 @@ import { fail } from './lib.mjs';
 
 const PATTERNS = [
   [/(dek|recovery[_ -]?key|\bpin\b|otp|passw(?:or)?d|private[_ -]?key|secret)\s*[:=]\s*\S{6,}/i, 'credential-like assignment'],
-  [/\+\d{10,15}\b/, 'full phone number'],
+  [/\+?\d{10,15}\b/, 'full phone number'],
+  [/\b(?:otp|one[- ]time (?:password|code)|verification code|sms code)\b[^\r\n]{0,40}\b\d{4,8}\b/i, 'OTP value in message context'],
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, 'private key block'],
   [/\b[A-Za-z0-9+/]{43}=(?![A-Za-z0-9+/=])/, '32-byte base64 value'],
   [/To verify the phone number .* use the code \d{4,8}/i, 'Firebase emulator OTP'],
