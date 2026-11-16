@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
+import { isAttestationFresh } from '../scripts/gates/lib.mjs';
 import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -561,4 +562,15 @@ test('Gate 5 rejects broad project roles on runtime and read-only audit identiti
   ] };
   assert.deepEqual(findPrivilegedProjectRoles(policy, account), ['roles/run.admin', 'roles/secretmanager.secretAccessor']);
   assert.deepEqual(findPrivilegedProjectRoles(policy, 'other@example.iam.gserviceaccount.com'), []);
+});
+
+
+test('qualification attestations expire after seven days while allowing small clock skew', () => {
+  const now = Date.parse('2026-11-16T12:00:00.000Z');
+  assert.equal(isAttestationFresh('2026-11-09T12:00:00.000Z', now), true);
+  assert.equal(isAttestationFresh('2026-11-09T11:59:59.999Z', now), false);
+  assert.equal(isAttestationFresh('2026-11-16T12:04:59.999Z', now), true);
+  assert.equal(isAttestationFresh('2026-11-16T12:05:00.001Z', now), false);
+  assert.equal(isAttestationFresh('not-a-date', now), false);
+  assert.equal(isAttestationFresh(undefined, now), false);
 });
