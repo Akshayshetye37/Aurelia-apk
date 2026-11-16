@@ -336,3 +336,36 @@ test('Gate 5 production audit binds each recovery callable to only its required 
   assert.match(audit, /consumeRecoveryGrant: \['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'\]/);
   assert.match(audit, /hasPublicRuntimeInvoker\(projectPolicy\)/);
 });
+
+test('recovery runtime secret access is pinned to the exact per-function least-privilege map', () => {
+  const expected = {
+    registerRecoveryPhone: ['PHONE_PEPPER'],
+    registerRecoveryOwnerDevice: ['PHONE_PEPPER'],
+    issueRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
+    consumeRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
+  };
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  const stagingBlock = staging.match(/bindings=\(\s*([\s\S]*?)\s*\)/)?.[1];
+  assert.ok(stagingBlock, 'staging per-function secret map must exist');
+  const stagingMap = Object.fromEntries([...stagingBlock.matchAll(/"([A-Za-z0-9]+):([A-Z0-9_,]+)"/g)]
+    .map(([, fn, secrets]) => [fn, secrets.split(',')]));
+  assert.deepEqual(stagingMap, expected, 'staging runtime secret map must match the least-privilege contract');
+
+  const production = read('scripts/gates/audit-production.mjs');
+  const productionBlock = production.match(/const runtimeSecretBindings = \{([\s\S]*?)\n\};/)?.[1];
+  assert.ok(productionBlock, 'production per-function secret map must exist');
+  const productionMap = Object.fromEntries([...productionBlock.matchAll(/^\s*([A-Za-z0-9]+): \[([^\]]*)\],?$/gm)]
+    .map(([, fn, secrets]) => [fn, [...secrets.matchAll(/'([A-Z0-9_]+)'/g)].map(([, secret]) => secret)]));
+  assert.deepEqual(productionMap, expected, 'production runtime secret map must match the least-privilege contract');
+  assert.doesNotMatch(stagingBlock, /acknowledgeRecoveryOwnerAlert/);
+  assert.doesNotMatch(productionBlock, /acknowledgeRecoveryOwnerAlert/);
+});
+
+test('Gate 4 device execution is isolated from hosted provenance attestation', () => {
+  const workflow = read('.github/workflows/gate-4-physical-device.yml');
+  const attestJob = workflow.slice(workflow.indexOf('  attest:'));
+  assert.match(workflow, /runs-on: \[self-hosted, linux, x64, aurelia-android-device\]/);
+  assert.match(attestJob, /runs-on: ubuntu-latest/);
+  assert.match(attestJob, /actions\/attest-build-provenance/);
+  assert.match(attestJob, /Upload Gate 4 evidence/);
+});
