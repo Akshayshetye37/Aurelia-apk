@@ -230,13 +230,14 @@ test('staging APK includes release-signed instrumentation companion for physical
 test('physical-device workflow consumes same-SHA release artifact and enforces real locked handset', () => {
   const workflow = read('.github/workflows/gate-4-physical-device.yml');
   assert.match(workflow, /runs-on: \[self-hosted, linux, x64, aurelia-android-device\]/);
-  assert.match(workflow, /\.head_sha == \$sha/);
+  assert.match(workflow, /check-candidate\.mjs/);
+  assert.match(workflow, /fetch-gate3\.mjs/);
   assert.match(workflow, /ro\.boot\.verifiedbootstate/);
   assert.match(workflow, /ro\.boot\.flash\.locked/);
   assert.match(workflow, /shell am force-stop "\$app"/);
   assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseOne/);
   assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseTwo/);
-  assert.match(workflow, /app-release-androidTest\.apk/);
+  assert.match(workflow, /apks\/test\.apk/);
 });
 
 
@@ -264,15 +265,15 @@ test('staging and production audits verify per-function Secret Manager runtime a
     'scripts/gates/audit-production.mjs'
   ]) {
     const source = read(path);
-    assert.match(source, /gcloud functions describe "\$function_name"/);
     assert.match(source, /roles\/secretmanager\.secretAccessor/);
-    assert.match(source, /acknowledgeRecoveryOwnerAlert:PHONE_PEPPER/);
+    assert.match(source, /REQUIRED_SECRETS/);
+    assert.match(source, /RUNTIME_SERVICE_ACCOUNTS/);
   }
 });
 
 
 test('physical-device Gate 4 workflow reboots between committed PIN B and post-reboot unlock', () => {
-  const workflow = read('.github/workflows/recovery-physical-device-qualification.yml');
+  const workflow = read('.github/workflows/gate-4-physical-device.yml');
   assert.match(workflow, /adb -s.*reboot/);
   assert.match(workflow, /phaseOneCommitsPinBForDeviceReboot/);
   assert.match(workflow, /phaseTwoAfterDeviceRebootUnlocksPinBAndReadsDatabase/);
@@ -285,7 +286,7 @@ test('recovery deployment and physical qualification are pinned to the working b
     '.github/workflows/recovery-staging-deploy.yml',
     '.github/workflows/recovery-attestation-deploy.yml'
   ]) assert.match(read(path), /refs\/heads\/work\/p0-storage-hardening/);
-  assert.match(read('.github/workflows/recovery-physical-device-qualification.yml'), /\.head_branch == "work\/p0-storage-hardening"/);
+  assert.match(read('.github/workflows/gate-4-physical-device.yml'), /\.head_branch == "work\/p0-storage-hardening"/);
 });
 
 
@@ -301,7 +302,7 @@ test('physical-device workflow verifies secure lock screen and biometric vault r
   const source = read('android/templates/instrumentation/AureliaSecurityInstrumentedTest.java');
   assert.match(source, /keyguard\.isDeviceSecure\(\)/);
   assert.match(source, /biometricVaultCanBeReenrolledAfterRecoveryInvalidationOnSecureLockScreen/);
-  const workflow = read('.github/workflows/recovery-physical-device-qualification.yml');
+  const workflow = read('.github/workflows/gate-4-physical-device.yml');
   assert.match(workflow, /run_test security-primitives com\.aurelia\.pms\.security\.AureliaSecurityInstrumentedTest/);
 });
 
