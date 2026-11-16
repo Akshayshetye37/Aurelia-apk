@@ -41,7 +41,10 @@ export function isProductionAuditEvidenceValid(audit, expectedProjectId, release
   return audit?.project === expectedProjectId &&
     Array.isArray(audit.problems) && audit.problems.length === 0 &&
     Number.isInteger(audit.auditedResources?.functions) && audit.auditedResources.functions > 0 &&
-    Number.isInteger(audit.auditedResources?.functionIamPolicies) && audit.auditedResources.functionIamPolicies === audit.auditedResources.functions &&
+    Number.isInteger(audit.auditedResources?.gen1Functions) && audit.auditedResources.gen1Functions >= 0 &&
+    Number.isInteger(audit.auditedResources?.gen2Functions) && audit.auditedResources.gen2Functions >= 0 &&
+    audit.auditedResources.gen1Functions + audit.auditedResources.gen2Functions === audit.auditedResources.functions &&
+    Number.isInteger(audit.auditedResources?.functionIamPolicies) && audit.auditedResources.functionIamPolicies === audit.auditedResources.gen1Functions &&
     Number.isInteger(audit.auditedResources?.runServices) && audit.auditedResources.runServices > 0 &&
     Number.isInteger(audit.auditedResources?.runIamPolicies) && audit.auditedResources.runIamPolicies === audit.auditedResources.runServices &&
     Number.isInteger(firebase?.androidApps) && firebase.androidApps > 0 &&
