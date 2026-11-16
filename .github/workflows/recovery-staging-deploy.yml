@@ -1,12 +1,6 @@
 name: Recovery staging deployment and APK
 
 on:
-  workflow_dispatch:
-    inputs:
-      candidate_sha:
-        description: Optional exact candidate SHA for direct staging qualification
-        required: false
-        type: string
   workflow_call:
     inputs:
       candidate_sha:
@@ -43,7 +37,7 @@ concurrency:
 
 jobs:
   deploy-and-build:
-    if: (github.workflow_ref == format('{0}/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/{1}', github.repository, vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')) || (github.workflow_ref == format('{0}/.github/workflows/recovery-staging-deploy.yml@refs/heads/work/p0-storage-hardening', github.repository))
+    if: github.workflow_ref == format('{0}/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/{1}', github.repository, vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
     outputs:
       staging_project_id: ${{ steps.staging-outputs.outputs.staging_project_id }}
@@ -55,7 +49,7 @@ jobs:
     environment: recovery-staging
     timeout-minutes: 60
     env:
-      CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
       CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
       GH_TOKEN: ${{ github.token }}
@@ -74,14 +68,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          case "$GITHUB_WORKFLOW_REF" in
-            "$GITHUB_REPOSITORY/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/$CONTROL_BRANCH")
-              node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$GITHUB_REPOSITORY" --branch "$CANDIDATE_BRANCH" ;;
-            "$GITHUB_REPOSITORY/.github/workflows/recovery-staging-deploy.yml@refs/heads/work/p0-storage-hardening")
-              test "$CANDIDATE_BRANCH" = "work/p0-storage-hardening"
-              test "$CANDIDATE_SHA" = "$GITHUB_SHA" ;;
-            *) echo "::error::Untrusted workflow ref cannot invoke staging deployment."; exit 1 ;;
-          esac
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/$CONTROL_BRANCH"
+          node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$GITHUB_REPOSITORY" --branch "$CANDIDATE_BRANCH"
       - name: Checkout candidate source as build input
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
