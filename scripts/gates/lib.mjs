@@ -73,12 +73,16 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   } catch (error) {
     fail(`gate ${gate}: attestation verification failed: ${error.stderr?.toString().slice(0, 500) || error.message}`);
   }
-  if (!Array.isArray(verified) || !verified.length) fail(`gate ${gate}: no verified attestation returned`);
-  const expectedInvocation = `/actions/runs/${runId}/attempts/${run.run_attempt}`;
-  const bound = verified.some((entry) => {
-    const statement = entry.verificationResult?.statement;
+  const attestations = Array.isArray(verified) ? verified : (verified?.verificationResult ? [verified] : (Array.isArray(verified?.verificationResults) ? verified.verificationResults : []));
+  if (!attestations.length) fail(`gate ${gate}: no verified attestation returned`);
+  const expectedRunPath = `/actions/runs/${runId}`;
+  const bound = attestations.some((entry) => {
+    let statement = entry.verificationResult?.statement ?? entry.statement;
+    if (typeof statement === 'string') { try { statement = JSON.parse(statement); } catch { return false; } }
     const invocation = statement?.predicate?.runDetails?.metadata?.invocationId;
-    return typeof invocation === 'string' && invocation.endsWith(expectedInvocation);
+    if (typeof invocation !== 'string' || !invocation.includes(expectedRunPath)) return false;
+    const attempt = invocation.match(/\\/attempts\\/(\\d+)$/);
+    return !attempt || Number(attempt[1]) === Number(run.run_attempt);
   });
   if (!bound) fail(`gate ${gate}: attestation is not bound to run ${runId} attempt ${run.run_attempt}`);
   const archiveEntries = execFileSync('tar', ['-tf', bundle], { encoding: 'utf8' }).split('\n').filter(Boolean);
