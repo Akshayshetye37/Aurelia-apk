@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
-import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid } from '../scripts/gates/firebase-audit-schema.mjs';
+import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = path.join(ROOT, 'scripts', 'gates');
@@ -496,4 +496,11 @@ test('Gate 6 requires Gate 3 release signer to be in the attested production Fir
   assert.equal(isProductionAuditEvidenceValid(audit, audit.project, 'b'.repeat(64)), false);
   assert.equal(isProductionAuditEvidenceValid({ ...audit, firebaseAudit: { ...audit.firebaseAudit, projectTestPhoneNumbers: 1 } }, audit.project, signer), false);
   assert.equal(isProductionAuditEvidenceValid({ ...audit, problems: ['App Check not enforced'] }, audit.project, signer), false);
+});
+
+test('Gate 5 rejects inherited project-level public Cloud Run or Functions invocation', () => {
+  assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }), true);
+  assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/cloudfunctions.invoker', members: ['allAuthenticatedUsers'] }] }), true);
+  assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['serviceAccount:runtime@example.iam.gserviceaccount.com'] }] }), false);
+  assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/viewer', members: ['allUsers'] }] }), false);
 });
