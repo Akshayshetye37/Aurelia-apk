@@ -33,6 +33,9 @@ jobs:
       REQUIRED_SECRETS: ${{ vars.REQUIRED_SECRETS }}
       RUNTIME_SERVICE_ACCOUNTS: ${{ vars.RUNTIME_SERVICE_ACCOUNTS }}
       APPCHECK_REQUIRED_SERVICES: ${{ vars.APPCHECK_REQUIRED_SERVICES }}
+      FIREBASE_ANDROID_APP_IDS: ${{ vars.FIREBASE_ANDROID_APP_IDS }}
+      FIREBASE_ALLOWED_SHA1: ${{ vars.FIREBASE_ALLOWED_SHA1 }}
+      FIREBASE_ALLOWED_SHA256: ${{ vars.FIREBASE_ALLOWED_SHA256 }}
     steps:
       - name: Checkout trusted gate tooling
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
