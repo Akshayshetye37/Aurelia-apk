@@ -58,7 +58,7 @@ The Gate 6 approval-history API response must be checked on the first authorized
 1. Gate 1 verifies encrypted-storage, OTP instrumentation and PMS quality runs on the exact candidate SHA, including positive test-count evidence.
 2. Gate 2 verifies payment backend, recovery functions and local-first runs on the exact candidate SHA; it also runs protected-flag/App Check source tripwires and scans the redacted recovery emulator log artifact. Only the redacted scan report is included in Gate 2 evidence.
 3. Gate 3 calls the trusted staging reusable workflow, verifies staging/production separation, verifies both APK hashes and signer, and probes every configured recovery callable with missing and invalid App Check tokens.
-4. Gate 4 verifies Gate 3 provenance and APK hashes, then runs the existing physical recovery instrumentation phases on the allowlisted handset. Raw instrumentation/logcat output is scanned on the ephemeral runner and is not uploaded.
+4. Gate 4 verifies Gate 3 provenance and APK hashes, then runs the existing physical recovery instrumentation phases on the allowlisted handset. Raw instrumentation/logcat output is scanned on the dedicated self-hosted device runner, deleted from its job workspace, and never uploaded; only sanitized device metadata and the scan report are retained.
 5. Gate 5 checks protected source flags and audits deployed production recovery state, IAM exposure, service-account keys, Secret Manager access and App Check enforcement. Raw IAM policies are not uploaded.
 6. Gate 6 verifies all seven evidence records (Gates 1–5 plus SMS and device attestations), the candidate tip, matching APK hashes, evidence freshness and two independent approvals. It produces a release-review qualification record only.
 
