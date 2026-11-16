@@ -2,8 +2,10 @@ import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fail, requireSha, sha256File, verifyBundle } from './lib.mjs';
 
-const { REPO, GATE3_RUN, CONTROL_BRANCH, CANDIDATE_SHA } = process.env;
-if (!REPO || !CONTROL_BRANCH || !/^\d+$/.test(GATE3_RUN ?? '')) fail('Gate 3 run context is incomplete');
+const { REPO, GATE3_RUN, CONTROL_BRANCH } = process.env;
+const CANDIDATE_SHA = requireSha(process.env.CANDIDATE_SHA);
+if (!REPO || !CONTROL_BRANCH) fail('Gate 3 run context is incomplete');
+if (!/^[0-9]+$/.test(GATE3_RUN ?? '')) fail('bad run ID for Gate 3');
 const record = verifyBundle({
   repo: REPO, runId: GATE3_RUN, gate: '3',
   workflowFile: 'gate-3-real-sms-staging.yml',
