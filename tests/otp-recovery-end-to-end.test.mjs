@@ -338,6 +338,27 @@ test('Gate 5 production audit binds each recovery callable to only its required 
   assert.match(audit, /hasPublicRuntimeInvoker\(projectPolicy\)/);
 });
 
+test('secret-bearing recovery callables use dedicated runtime identities', () => {
+  const source = read('functions/src/index.ts');
+  assert.match(source, /RECOVERY_PHONE_SERVICE_ACCOUNT = defineString\("RECOVERY_PHONE_SERVICE_ACCOUNT"\)/);
+  assert.match(source, /RECOVERY_GRANT_SERVICE_ACCOUNT = defineString\("RECOVERY_GRANT_SERVICE_ACCOUNT"\)/);
+  for (const name of ['registerRecoveryPhone', 'registerRecoveryOwnerDevice']) {
+    const start = source.indexOf(`export const ${name} = onCall(`);
+    const next = source.indexOf('export const ', start + 1);
+    assert.ok(start >= 0 && next > start);
+    assert.match(source.slice(start, next), /serviceAccount: RECOVERY_PHONE_SERVICE_ACCOUNT/);
+  }
+  for (const name of ['issueRecoveryGrant', 'consumeRecoveryGrant']) {
+    const start = source.indexOf(`export const ${name} = onCall(`);
+    const next = source.indexOf('export const ', start + 1);
+    assert.ok(start >= 0 && next > start);
+    assert.match(source.slice(start, next), /serviceAccount: RECOVERY_GRANT_SERVICE_ACCOUNT/);
+  }
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  assert.match(staging, /RECOVERY_PHONE_SERVICE_ACCOUNT=%s/);
+  assert.match(staging, /RECOVERY_GRANT_SERVICE_ACCOUNT=%s/);
+});
+
 test('recovery runtime secret access is pinned to the complete per-callable least-privilege map', () => {
   const expected = {
     createRecoveryAttestationChallenge: [],
