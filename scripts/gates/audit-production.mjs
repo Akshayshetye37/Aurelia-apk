@@ -89,11 +89,22 @@ for (const secret of requiredSecrets) {
     problems.push(`secret ${secret}: ${issue}`);
   }
 }
+// Include every recovery callable, including those with no declared secrets.
+ // Each callable must have its own runtime identity so an unbound callable cannot
+ // inherit Secret Manager access from a sibling function.
 const runtimeSecretBindings = {
+  createRecoveryAttestationChallenge: [],
+  verifyRecoveryDeviceAttestation: [],
   registerRecoveryPhone: ['PHONE_PEPPER'],
+  exchangeOwnerEmailLink: [],
+  confirmRecoveryOwnerBinding: [],
   registerRecoveryOwnerDevice: ['PHONE_PEPPER'],
+  acknowledgeRecoveryOwnerAlert: [],
   issueRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
   consumeRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
+  cancelRecoveryRequest: [],
+  cancelRecoveryPhoneChange: [],
+  activateRecoveryPhoneChange: [],
 };
 problems.push(...validateFunctionSecretAccess(functions, runtimeSecretBindings, secretPolicies, runtimeAccounts, requiredSecrets));
 const reviewedAccounts = [...new Set([...runtimeAccounts, auditServiceAccount].filter(Boolean))];
