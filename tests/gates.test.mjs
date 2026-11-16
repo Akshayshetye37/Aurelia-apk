@@ -363,5 +363,5 @@ test('Gate 5 Firebase audit requires exact app and SHA-1/SHA-256 inventories and
  assert.deepEqual(validateFirebaseFingerprintInventory(apps,certs,['app-one'],['1'.repeat(40)],['a'.repeat(64)]),{androidApps:1,sha1Fingerprints:1,sha256Fingerprints:1});
  assert.throws(()=>validateFirebaseFingerprintInventory(apps,certs,['app-one','app-two'],['1'.repeat(40)],['a'.repeat(64)]),/exactly match/);
  assert.throws(()=>validateFirebaseFingerprintInventory(apps,certs,['app-one'],['1'.repeat(40)],['b'.repeat(64)]),/SHA-256 inventory/);
- assert.equal(countTestPhoneNumbers({signIn:{phoneNumberConfig:{testPhoneNumbers:{'+10000000000':'redacted'}}}}),1);
+ assert.equal(countTestPhoneNumbers({signIn:{phoneNumber:{testPhoneNumbers:{'+10000000000':'redacted'}}}}),1);
 });
