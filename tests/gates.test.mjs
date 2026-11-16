@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
-import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker, validateFunctionSecretAccess } from '../scripts/gates/firebase-audit-schema.mjs';
+import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker, validateFunctionSecretAccess, validateSecretPolicy } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = path.join(ROOT, 'scripts', 'gates');
@@ -539,4 +539,15 @@ test('candidate validation rejects a SHA that differs from the frozen control-br
   assert.equal(result.status, 1);
   assert.match(output(result), /frozen qualification pin/);
   assert.equal(fs.existsSync(marker), false, 'GitHub API must not be called for an unpinned candidate');
+});
+
+test('Gate 5 denies project-wide and non-accessor secret IAM grants', () => {
+  const runtime = 'serviceAccount:runtime@example.iam.gserviceaccount.com';
+  const audit = 'serviceAccount:audit@example.iam.gserviceaccount.com';
+  const allowed = new Set([runtime, audit]);
+  const valid = { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: [runtime] }, { role: 'roles/secretmanager.viewer', members: [audit] }] };
+  assert.deepEqual(validateSecretPolicy(valid, allowed, ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com'), []);
+  assert.match(validateSecretPolicy({ bindings: [{ role: 'roles/secretmanager.admin', members: [runtime] }] }, allowed, ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com').join(';'), /unexpected role/);
+  assert.match(validateSecretPolicy({ bindings: [{ role: 'roles/secretmanager.secretAccessor', members: [audit] }] }, allowed, ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com').join(';'), /audit identity/);
+  assert.match(validateSecretPolicy({ bindings: [{ role: 'roles/secretmanager.secretAccessor', members: ['user:someone@example.com'] }] }, allowed, ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com').join(';'), /non-service-account/);
 });
