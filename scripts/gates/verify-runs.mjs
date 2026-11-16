@@ -14,10 +14,10 @@ fs.mkdirSync('evidence', { recursive: true });
 
 function testCountFromLog(log) {
   const sum = (matches) => matches.reduce((total, match) => total + Number(match[1]), 0);
-  const nodeCounts = [...log.matchAll(/(?:^|\r?\n)[ \t]*(?:#|ℹ)[ \t]*tests[ \t]+(\d+)[ \t]*(?=\r?$)/gm)];
+  const nodeCounts = [...log.matchAll(/^[^\r\n]*?(?:#|ℹ)[ \t]*tests[ \t]+(\d+)[ \t]*$/gm)];
   const gradleCounts = [...log.matchAll(/OK\s+\((\d+)\s+tests?\)/g)];
   const jsonCounts = [...log.matchAll(/"tests"\s*:\s*(\d+)/g)];
-  const instrumentationCount = (log.match(/^INSTRUMENTATION_STATUS_CODE: 0\s*$/gm) ?? []).length;
+  const instrumentationCount = (log.match(/^.*INSTRUMENTATION_STATUS_CODE: 0\s*$/gm) ?? []).length;
   return Math.max(sum(nodeCounts), sum(gradleCounts), sum(jsonCounts), instrumentationCount);
 }
 function walkFiles(directory) {
