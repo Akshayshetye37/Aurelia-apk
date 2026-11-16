@@ -14,8 +14,6 @@ on:
       - 'scripts/verify-android-instrumentation-results.mjs'
       - 'functions/src/**'
       - 'functions/test/**'
-      - 'functions/test/**'
-      - 'functions/src/**'
       - 'tests/otp-recovery-*.test.mjs'
       - 'tests/native-security-template.test.mjs'
       - '.github/workflows/recovery-functions.yml'
