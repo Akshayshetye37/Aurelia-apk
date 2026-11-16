@@ -88,7 +88,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Verify all six gates, matching APK and two distinct independent approvals
+      - name: Verify Gates 1–5, both manual attestations, matching APK and two distinct independent approvals
         run: node scripts/gates/verify-qualification.mjs
       - name: Write and bundle Gate 6 release-review evidence
         run: |
