@@ -49,7 +49,9 @@ for (const f of functions) {
   inspectFunctionEnv(resource, config.environmentVariables ?? f.environmentVariables);
   inspectSecretFlag(resource, config.secretEnvironmentVariables ?? f.secretEnvironmentVariables);
   const functionName = String(f.name ?? '').split('/').pop();
-  const functionRegion = String(f.name ?? '').match(/\\/locations\\/([^/]+)\\/functions\\//)?.[1];
+  const nameParts = String(f.name ?? '').split('/');
+  const locationIndex = nameParts.indexOf('locations');
+  const functionRegion = locationIndex >= 0 ? nameParts[locationIndex + 1] : '';
   if (!functionName || !functionRegion) {
     problems.push(`${resource}: function name or region is missing from the production inventory`);
   } else {
