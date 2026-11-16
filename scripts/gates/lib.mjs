@@ -36,19 +36,40 @@ export function gh(apiPath) {
   }
 }
 
-export function requireApprovals(repo, runId, minimum, actor) {
-  if (!/^[0-9]+$/.test(String(runId)) || !Number.isInteger(minimum) || minimum < 1 || typeof actor !== 'string' || !actor) fail('approval threshold, run ID or triggering actor is invalid');
-  const history = gh(`repos/${repo}/actions/runs/${runId}/approvals`);
-  if (!Array.isArray(history)) fail('workflow approval history response was not an array');
-  if (history.some((item) => ['rejected', 'changes_requested'].includes(item.state))) fail('approval history contains a rejected review');
-  const approved = [...new Set(history
-    .filter((item) => item.state === 'approved' && typeof item.user?.login === 'string')
-    .map((item) => item.user.login))];
-  if (approved.some((login) => login.toLowerCase() === actor.toLowerCase())) fail('the person who triggered the run cannot approve it');
-  if (approved.length < minimum) fail(`need ${minimum} independent approver(s), found ${approved.length}`);
-  return approved;
+export function validateEnvironmentApprovals(history, requiredEnvironments, minimum, actor) {
+  if (!Array.isArray(history) || !Array.isArray(requiredEnvironments) ||
+      !Number.isInteger(minimum) || minimum < 1 || typeof actor !== 'string' || !actor) {
+    fail('approval history, required environments, threshold or triggering actor is invalid');
+  }
+  if (history.some((item) => ['rejected', 'changes_requested'].includes(item.state))) {
+    fail('approval history contains a rejected review');
+  }
+  const approved = history.filter((item) => item.state === 'approved' && typeof item.user?.login === 'string');
+  const scoped = requiredEnvironments.length
+    ? approved.filter((item) => (item.environments ?? []).some((environment) => requiredEnvironments.includes(environment.name)))
+    : approved;
+  const approvers = [...new Set(scoped.map((item) => item.user.login))];
+  if (approvers.some((login) => login.toLowerCase() === actor.toLowerCase())) {
+    fail('the person who triggered the run cannot approve it');
+  }
+  for (const environment of requiredEnvironments) {
+    const reviewers = new Set(approved
+      .filter((item) => (item.environments ?? []).some((entry) => entry.name === environment))
+      .map((item) => item.user.login));
+    if (!reviewers.size) fail(`protected environment ${environment} has no approved reviewer record`);
+  }
+  if (approvers.length < minimum) fail(`need ${minimum} independent approver(s), found ${approvers.length}`);
+  return approvers;
 }
 
+export function requireApprovals(repo, runId, minimum, actor, requiredEnvironments = []) {
+  if (!/^[0-9]+$/.test(String(runId)) || !Number.isInteger(minimum) || minimum < 1 ||
+      typeof actor !== 'string' || !actor || !Array.isArray(requiredEnvironments)) {
+    fail('approval threshold, run ID, required environments or triggering actor is invalid');
+  }
+  const history = gh(`repos/${repo}/actions/runs/${runId}/approvals`);
+  return validateEnvironmentApprovals(history, requiredEnvironments, minimum, actor);
+}
 /** Verify a run and its provenance-attested evidence bundle before trusting its JSON record. */
 export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, dir }) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) fail('invalid repository name');
