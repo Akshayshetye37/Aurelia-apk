@@ -14,6 +14,11 @@ on:
       - 'android/templates/**'
       - 'tests/otp-recovery-*.test.mjs'
       - 'scripts/patch-android.js'
+      - 'gates/required-runs.json'
+      - 'scripts/gates/**'
+      - '.github/workflows/otp-recovery-android-instrumentation.yml'
+      - '.github/workflows/recovery-functions.yml'
+      - '.github/workflows/payment-backend-ci.yml'
   pull_request:
     paths:
       - 'functions/**'

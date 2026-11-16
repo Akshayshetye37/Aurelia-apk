@@ -9,6 +9,11 @@ on:
     paths:
       - "payment-backend/**"
       - ".github/workflows/payment-backend-ci.yml"
+      - "gates/required-runs.json"
+      - "scripts/gates/**"
+      - ".github/workflows/otp-recovery-android-instrumentation.yml"
+      - ".github/workflows/recovery-functions.yml"
+      - ".github/workflows/payment-backend-ci.yml"
   pull_request:
     branches:
       - '**'
