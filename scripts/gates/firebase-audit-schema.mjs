@@ -93,3 +93,21 @@ export function validateFunctionSecretAccess(functions, requiredBindings, secret
   }
   return problems;
 }
+
+/** Restrict secret-level IAM to exact runtime accessor grants and no audit payload access. */
+export function validateSecretPolicy(policy, allowedPrincipals, runtimeAccounts, auditServiceAccount) {
+  const problems = [];
+  for (const binding of policy?.bindings ?? []) {
+    for (const member of binding.members ?? []) {
+      if (!member.startsWith('serviceAccount:')) problems.push('non-service-account member');
+      else if (!allowedPrincipals.has(member)) problems.push('unexpected service-account member');
+      const runtime = runtimeAccounts.some(account => member === `serviceAccount:${account}`);
+      if (runtime && binding.role !== 'roles/secretmanager.secretAccessor') problems.push(`runtime identity has unexpected role ${binding.role}`);
+      if (auditServiceAccount && member === `serviceAccount:${auditServiceAccount}` &&
+          ['roles/secretmanager.secretAccessor', 'roles/secretmanager.admin'].includes(binding.role)) {
+        problems.push('audit identity has secret payload/admin access');
+      }
+    }
+  }
+  return problems;
+}
