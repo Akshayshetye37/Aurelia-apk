@@ -75,9 +75,16 @@ export function validateFunctionSecretAccess(functions, requiredBindings, secret
     const runtimeAccount = config.serviceAccountEmail ?? fn.serviceAccountEmail;
     if (!runtimeAccount) { problems.push(`function ${functionName} has no runtime service account`); continue; }
     if (!allowedRuntimeAccounts.includes(runtimeAccount)) problems.push(`function ${functionName} runtime identity is not in RUNTIME_SERVICE_ACCOUNTS`);
-    const existingFunction = functionByRuntimeAccount.get(runtimeAccount);
-    if (existingFunction) problems.push(`functions ${existingFunction} and ${functionName} share runtime identity ${runtimeAccount}; recovery callable identities must be isolated`);
-    else functionByRuntimeAccount.set(runtimeAccount, functionName);
+    const secretSet = [...new Set(secrets)].sort().join(',');
+    const existing = functionByRuntimeAccount.get(runtimeAccount);
+    if (existing && existing.secretSet !== secretSet) {
+      problems.push(`functions ${existing.functions.join(', ')} and ${functionName} share runtime identity ${runtimeAccount} across different secret sets`);
+      existing.functions.push(functionName);
+    } else if (existing) {
+      existing.functions.push(functionName);
+    } else {
+      functionByRuntimeAccount.set(runtimeAccount, { secretSet, functions: [functionName] });
+    }
     for (const secret of secrets) {
       if (!requiredSecrets.includes(secret)) problems.push(`function ${functionName} uses undeclared REQUIRED_SECRETS entry ${secret}`);
       if (!expectedBySecret.has(secret)) expectedBySecret.set(secret, new Set());
