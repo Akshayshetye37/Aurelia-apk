@@ -43,6 +43,18 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Verify trusted physical-runner tooling
+        run: |
+          set -euo pipefail
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1)'
+          gh version
+          gh attestation verify --help > "$RUNNER_TEMP/gh-attestation-help.txt"
+          grep -q -- '--deny-self-hosted-runners' "$RUNNER_TEMP/gh-attestation-help.txt"
+          adb version
+          jq --version
+          tar --version
+          timeout --version
+          rm -f "$RUNNER_TEMP/gh-attestation-help.txt"
       - name: Candidate is the exact frozen branch head
         run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
       - name: Fetch Gate 3 APKs and verify their attested hashes

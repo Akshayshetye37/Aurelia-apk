@@ -46,7 +46,7 @@ The staging WIF identity must be scoped to the staging project only, with no pro
 Configure these environments in GitHub repository Settings → Environments:
 
 - `recovery-staging`: required reviewer approval before staging deployment; staging-only WIF identity and signing secrets.
-- `recovery-device`: restrict deployment branches to the control branch and require the dedicated physical-device runner.
+- `recovery-device`: restrict deployment branches to the control branch and require the dedicated physical-device runner. The runner must provide Node.js 22+, GitHub CLI with `gh attestation verify --deny-self-hosted-runners`, Android platform-tools (`adb`), `jq`, GNU `tar`, and GNU `timeout`.
 - `recovery-attestation`: at least one required reviewer; enable **Prevent self-review**.
 - `recovery-production-audit`: required reviewer approval; production audit identity only.
 - `recovery-release-review-1` and `recovery-release-review-2`: configure separate, preferably disjoint reviewer groups and enable **Prevent self-review** on both. Gate 6 runs these approvals sequentially and independently verifies two distinct approvers from the workflow-run approval history. SMS/device attestation `tester` fields must be GitHub logins, and neither tester may be one of the attestation reviewers or final release approvers.
