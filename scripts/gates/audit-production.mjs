@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fail } from './lib.mjs';
+import { countTestPhoneNumbers, validateFirebaseFingerprintInventory } from './firebase-audit-schema.mjs';
 
 const project = process.env.GCP_PROJECT_ID;
 const region = process.env.GCP_REGION;
@@ -109,7 +110,51 @@ for (const account of reviewedAccounts) {
     }
   }
 }
-const token = execFileSync('gcloud', ['auth', 'print-access-token'], { encoding: 'utf8' }).trim();
+
+const firebaseAppIds = list('FIREBASE_ANDROID_APP_IDS'), allowedSha1 = list('FIREBASE_ALLOWED_SHA1'), allowedSha256 = list('FIREBASE_ALLOWED_SHA256');
+if (!firebaseAppIds.length || new Set(firebaseAppIds).size !== firebaseAppIds.length) problems.push('FIREBASE_ANDROID_APP_IDS must contain unique production Android app IDs');
+if (!allowedSha1.length || !allowedSha256.length) problems.push('FIREBASE_ALLOWED_SHA1 and FIREBASE_ALLOWED_SHA256 must both be configured');
+const accessToken = execFileSync('gcloud', ['auth', 'print-access-token'], { encoding: 'utf8' }).trim();
+async function firebaseGet(url, label) {
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(15000) });
+  if (!response.ok) fail(`${label} API returned ${response.status}`);
+  return response.json();
+}
+const firebaseAudit = { androidApps:0, sha1Fingerprints:0, sha256Fingerprints:0, projectTestPhoneNumbers:0, tenantTestPhoneNumbers:0, tenants:0 };
+if (firebaseAppIds.length && allowedSha1.length && allowedSha256.length) {
+  const apps=[]; let pageToken;
+  do {
+    const url=new URL(`https://firebase.googleapis.com/v1beta1/projects/${encodeURIComponent(project)}/androidApps`);
+    url.searchParams.set('pageSize','100'); if(pageToken) url.searchParams.set('pageToken',pageToken);
+    const page=await firebaseGet(url,'Firebase Android app inventory'); apps.push(...(page.apps??[])); pageToken=page.nextPageToken;
+  } while(pageToken);
+  const fingerprintsByApp={};
+  for(const appId of firebaseAppIds) {
+    const payload=await firebaseGet(`https://firebase.googleapis.com/v1beta1/projects/-/androidApps/${encodeURIComponent(appId)}/sha`,`Firebase signing fingerprints for ${appId}`);
+    fingerprintsByApp[appId]=payload.certificates??[];
+  }
+  try { Object.assign(firebaseAudit,validateFirebaseFingerprintInventory(apps,fingerprintsByApp,firebaseAppIds,allowedSha1,allowedSha256)); }
+  catch(error) { problems.push(error.message); }
+}
+const authConfig=await firebaseGet(`https://identitytoolkit.googleapis.com/admin/v2/projects/${encodeURIComponent(project)}/config`,'Firebase Auth project configuration');
+firebaseAudit.projectTestPhoneNumbers=countTestPhoneNumbers(authConfig);
+if(firebaseAudit.projectTestPhoneNumbers) problems.push('production Firebase Auth project has test phone numbers configured');
+let tenantPageToken;
+do {
+  const url=new URL(`https://identitytoolkit.googleapis.com/admin/v2/projects/${encodeURIComponent(project)}/tenants`);
+  url.searchParams.set('pageSize','100'); if(tenantPageToken) url.searchParams.set('pageToken',tenantPageToken);
+  const page=await firebaseGet(url,'Firebase Auth tenant inventory');
+  for(const tenant of page.tenants??[]) {
+    firebaseAudit.tenants++;
+    const config=await firebaseGet(`https://identitytoolkit.googleapis.com/admin/v2/${encodeURIComponent(tenant.name)}`,'Firebase Auth tenant configuration');
+    const count=countTestPhoneNumbers(config); firebaseAudit.tenantTestPhoneNumbers+=count;
+    if(count) problems.push(`Firebase Auth tenant ${tenant.name.split('/').pop()} has test phone numbers configured`);
+  }
+  tenantPageToken=page.nextPageToken;
+} while(tenantPageToken);
+if(firebaseAudit.tenantTestPhoneNumbers) problems.push('production Firebase Auth tenants have test phone numbers configured');
+
+const token = accessToken;
 const appCheck = await fetch(`https://firebaseappcheck.googleapis.com/v1/projects/${encodeURIComponent(project)}/services`, {
   headers: { Authorization: `Bearer ${token}`, 'X-Goog-User-Project': project },
   signal: AbortSignal.timeout(15_000),
