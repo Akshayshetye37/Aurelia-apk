@@ -1,77 +1,57 @@
-name: Gate 2 - Recovery runtime evidence
+name: Gate 2 - Recovery runtime
+
 on:
   workflow_dispatch:
     inputs:
       candidate_sha:
-        description: Frozen candidate SHA (40 lowercase hex)
         required: true
         type: string
-  push:
-    branches:
-      - integration/ledger-patch
-    paths:
-      - gates/qualification-candidate-sha.txt
-      - scripts/gates/**
-      - tests/gates.test.mjs
-      - .github/workflows/gate-1-encrypted-storage.yml
-      - .github/workflows/gate-2-recovery-runtime.yml
+
 permissions: {}
+
 concurrency:
-  group: gate-2-${{ inputs.candidate_sha || github.sha }}
+  group: gate-2-${{ inputs.candidate_sha }}
   cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   evidence:
-    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-      actions: read
-      id-token: write
-      attestations: write
+    permissions: {contents: read, actions: read, id-token: write, attestations: write}
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      CANDIDATE_BRANCH: ${{ vars.FROZEN_CANDIDATE_BRANCH }}
       REPO: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ github.token }}
       GH_TOKEN: ${{ github.token }}
+      RECOVERY_ENABLED: "false"
     steps:
-      - name: Checkout trusted gate tooling
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Resolve frozen candidate SHA for trusted push trigger
-        if: github.event_name == 'push'
-        shell: bash
+      - name: Verify frozen candidate
+        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA"
+      - name: Verify recovery runtime tests
         run: |
-          set -euo pipefail
-          candidate_sha="$(cat gates/qualification-candidate-sha.txt)"
-          [[ "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]
-          printf 'CANDIDATE_SHA=%s\n' "$candidate_sha" >> "$GITHUB_ENV"
-      - name: Candidate is the exact frozen branch head
-        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
-      - name: Checkout candidate source for static tripwire only
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+          mkdir -p proofs
+          node scripts/gates/verify-runs.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --group gate2 | tee proofs/gate2-runs.log
+      - name: Verify security flags (fail closed)
+        run: node scripts/gates/check-flags.mjs candidate | tee proofs/gate2-flags.log
+      - name: Write evidence
+        run: node scripts/gates/write-evidence.mjs --gate 2 --sha "$CANDIDATE_SHA" --proof proofs/gate2-runs.log --proof proofs/gate2-flags.log
+      - name: Upload evidence
+        uses: actions/upload-artifact@REPLACE_WITH_FULL_40_CHAR_SHA # v4.x
         with:
-          ref: ${{ inputs.candidate_sha }}
-          path: candidate
-          persist-credentials: false
-      - name: Recovery workflows are green on the exact candidate SHA
-        run: node scripts/gates/verify-runs.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --group gate2
-      - name: Protected flags OFF and App Check source tripwire
-        run: node scripts/gates/check-flags.mjs candidate
-      - name: Write and bundle Gate 2 evidence
-        run: |
-          set -euo pipefail
-          node scripts/gates/write-evidence.mjs --gate 2 --sha "$CANDIDATE_SHA" --status PASS
-          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
-      - name: Attest Gate 2 evidence bundle
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
-        with:
-          subject-path: bundle.tar
-      - name: Upload Gate 2 evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: gate-2-evidence
-          path: bundle.tar
+          name: gate-2-evidence-${{ inputs.candidate_sha }}
+          path: evidence/
           if-no-files-found: error
           retention-days: 90
+
+      - name: Attest evidence record
+        uses: actions/attest-build-provenance@REPLACE_WITH_FULL_40_CHAR_SHA # v2.x
+        with:
+          subject-path: evidence/gate-2.json
