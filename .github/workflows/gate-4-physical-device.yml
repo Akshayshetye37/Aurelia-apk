@@ -134,6 +134,9 @@ jobs:
           model="$(jq -r .deviceModel evidence/device.json)"
           version="$(jq -r .androidVersion evidence/device.json)"
           jq -n --arg a "$app_hash" --arg t "$test_hash" --arg label "$DEVICE_LABEL" --arg model "$model" --arg version "$version"             '{apkSha256:$a,testApkSha256:$t,deviceLabel:$label,deviceModel:$model,androidVersion:$version,verifiedBoot:"green",bootloaderLocked:true}' > evidence/details.json
+      - name: Remove raw device logs and downloaded APKs from the self-hosted runner
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/aurelia-gate4" apks
       - name: Upload sanitized physical-device evidence for hosted attestation
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -159,6 +162,7 @@ jobs:
       GATE3_RUN: ${{ inputs.gate3_run_id }}
       CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
       CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      DEVICE_LABEL: ${{ inputs.device_label }}
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -188,7 +192,7 @@ jobs:
           const device = JSON.parse(fs.readFileSync('device-evidence/device.json', 'utf8'));
           const details = JSON.parse(fs.readFileSync('device-evidence/details.json', 'utf8'));
           const scan = JSON.parse(fs.readFileSync('device-evidence/log-scan.json', 'utf8'));
-          if (!/^[A-Z0-9-]{3,32}$/.test(device.deviceLabel ?? '') || device.deviceLabel !== details.deviceLabel) fail('device label mismatch');
+          if (!/^[A-Z0-9-]{3,32}$/.test(device.deviceLabel ?? '') || device.deviceLabel !== details.deviceLabel || device.deviceLabel !== process.env.DEVICE_LABEL) fail('device label mismatch');
           if (!device.deviceModel || device.deviceModel !== details.deviceModel || device.androidVersion !== details.androidVersion) fail('device identity mismatch');
           if (device.verifiedBoot !== 'green' || device.bootloaderLocked !== true || details.verifiedBoot !== 'green' || details.bootloaderLocked !== true) fail('device boot state is not locked and verified');
           if (!Array.isArray(scan.findings) || scan.findings.length || !Array.isArray(scan.files) || !scan.files.length) fail('device log scan is not clean');

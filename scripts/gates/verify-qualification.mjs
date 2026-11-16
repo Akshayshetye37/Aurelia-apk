@@ -5,7 +5,7 @@ const sha = requireSha(process.env.CANDIDATE_SHA);
 const controlSha = requireSha(process.env.GITHUB_SHA);
 const repo = process.env.REPO;
 const controlBranch = process.env.CONTROL_BRANCH;
-if (!repo || repo.split('/').length !== 2 || repo.split('/').some((part) => !/^[A-Za-z0-9_.-]+$/.test(part)) || !controlBranch) fail('repository or control branch is invalid');
+if (!repo || repo.split('/').length !== 2 || repo.split('/').some((part) => !/^[A-Za-z0-9_.-]+$/.test(part)) || !controlBranch || controlBranch.split('/').some((part) => !/^[A-Za-z0-9_.-]+$/.test(part) || part === '..')) fail('repository or control branch is invalid');
 let runIds;
 try { runIds = JSON.parse(process.env.RUN_IDS ?? ''); } catch { fail('RUN_IDS is not valid JSON'); }
 if (!runIds || typeof runIds !== 'object' || Array.isArray(runIds)) fail('RUN_IDS must be a JSON object');
