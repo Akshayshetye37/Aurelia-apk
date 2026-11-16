@@ -37,12 +37,13 @@ export function gh(apiPath) {
 }
 
 export function validateEnvironmentApprovals(history, requiredEnvironments, minimum, actor) {
+  const reject = (message) => { throw new Error(message); };
   if (!Array.isArray(history) || !Array.isArray(requiredEnvironments) ||
       !Number.isInteger(minimum) || minimum < 1 || typeof actor !== 'string' || !actor) {
-    fail('approval history, required environments, threshold or triggering actor is invalid');
+    reject('approval history, required environments, threshold or triggering actor is invalid');
   }
   if (history.some((item) => ['rejected', 'changes_requested'].includes(item.state))) {
-    fail('approval history contains a rejected review');
+    reject('approval history contains a rejected review');
   }
   const approved = history.filter((item) => item.state === 'approved' && typeof item.user?.login === 'string');
   const scoped = requiredEnvironments.length
@@ -50,15 +51,15 @@ export function validateEnvironmentApprovals(history, requiredEnvironments, mini
     : approved;
   const approvers = [...new Set(scoped.map((item) => item.user.login))];
   if (approvers.some((login) => login.toLowerCase() === actor.toLowerCase())) {
-    fail('the person who triggered the run cannot approve it');
+    reject('the person who triggered the run cannot approve it');
   }
   for (const environment of requiredEnvironments) {
     const reviewers = new Set(approved
       .filter((item) => (item.environments ?? []).some((entry) => entry.name === environment))
       .map((item) => item.user.login));
-    if (!reviewers.size) fail(`protected environment ${environment} has no approved reviewer record`);
+    if (!reviewers.size) reject(`protected environment ${environment} has no approved reviewer record`);
   }
-  if (approvers.length < minimum) fail(`need ${minimum} independent approver(s), found ${approvers.length}`);
+  if (approvers.length < minimum) reject(`need ${minimum} independent approver(s), found ${approvers.length}`);
   return approvers;
 }
 
@@ -68,9 +69,12 @@ export function requireApprovals(repo, runId, minimum, actor, requiredEnvironmen
     fail('approval threshold, run ID, required environments or triggering actor is invalid');
   }
   const history = gh(`repos/${repo}/actions/runs/${runId}/approvals`);
-  return validateEnvironmentApprovals(history, requiredEnvironments, minimum, actor);
-}
-/** Verify a run and its provenance-attested evidence bundle before trusting its JSON record. */
+  try {
+    return validateEnvironmentApprovals(history, requiredEnvironments, minimum, actor);
+  } catch (error) {
+    fail(error.message);
+  }
+}/** Verify a run and its provenance-attested evidence bundle before trusting its JSON record. */
 export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, dir }) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) fail('invalid repository name');
   if (!/^\d+$/.test(String(runId))) fail(`bad run ID for gate ${gate}`);
