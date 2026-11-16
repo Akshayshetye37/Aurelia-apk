@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
-import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint } from '../scripts/gates/firebase-audit-schema.mjs';
+import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = path.join(ROOT, 'scripts', 'gates');
@@ -474,4 +474,26 @@ test('Gate 5 requests signing fingerprints from the documented project-scoped Fi
   );
   assert.throws(() => firebaseAndroidShaEndpoint('aurelia-prod-12345', 'not-an-app-id'), /app ID is invalid/);
   assert.throws(() => firebaseAndroidShaEndpoint('-', '1:123456789:android:abcdef012345'), /project ID is invalid/);
+});
+
+test('Gate 6 requires Gate 3 release signer to be in the attested production Firebase SHA-256 inventory', () => {
+  const signer = 'a'.repeat(64);
+  const audit = {
+    project: 'aurelia-prod-12345',
+    problems: [],
+    auditedResources: { functions: 5 },
+    firebaseAudit: {
+      androidApps: 1,
+      sha1Fingerprints: 1,
+      sha256Fingerprints: 1,
+      sha256CertificateHashes: [signer],
+      projectTestPhoneNumbers: 0,
+      tenantTestPhoneNumbers: 0,
+      tenants: 0,
+    },
+  };
+  assert.equal(isProductionAuditEvidenceValid(audit, audit.project, signer), true);
+  assert.equal(isProductionAuditEvidenceValid(audit, audit.project, 'b'.repeat(64)), false);
+  assert.equal(isProductionAuditEvidenceValid({ ...audit, firebaseAudit: { ...audit.firebaseAudit, projectTestPhoneNumbers: 1 } }, audit.project, signer), false);
+  assert.equal(isProductionAuditEvidenceValid({ ...audit, problems: ['App Check not enforced'] }, audit.project, signer), false);
 });
