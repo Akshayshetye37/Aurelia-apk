@@ -47,7 +47,7 @@ export function requireApprovals(repo, runId, minimum, actor) {
 export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, dir }) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) fail('invalid repository name');
   if (!/^\d+$/.test(String(runId))) fail(`bad run ID for gate ${gate}`);
-  if (!/^[A-Za-z0-9_.-]+$/.test(controlBranch)) fail('invalid control branch');
+  if (!controlBranch || controlBranch.split('/').some((part) => !/^[A-Za-z0-9_.-]+$/.test(part) || part === '..')) fail('invalid control branch');
   if (!/^[A-Za-z0-9_.-]+\.ya?ml$/.test(workflowFile)) fail('invalid workflow filename');
   const run = gh(`repos/${repo}/actions/runs/${runId}`);
   if (run.status !== 'completed' || run.conclusion !== 'success') fail(`gate ${gate}: run ${runId} did not succeed`);

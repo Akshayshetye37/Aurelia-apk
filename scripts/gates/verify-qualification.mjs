@@ -13,6 +13,9 @@ if (!candidateBranch) fail('CANDIDATE_BRANCH is not configured');
 const encodedBranch = candidateBranch.split('/').map(encodeURIComponent).join('/');
 const head = gh(`repos/${repo}/git/ref/heads/${encodedBranch}`).object?.sha;
 if (head !== sha) fail('candidate is no longer the current branch head; all qualification evidence is invalidated');
+const encodedControlBranch = controlBranch.split('/').map(encodeURIComponent).join('/');
+const currentControlHead = gh(`repos/${repo}/git/ref/heads/${encodedControlBranch}`).object?.sha;
+if (currentControlHead !== controlSha) fail('control branch moved; all gate evidence must be regenerated');
 const workflows = {
   '1': 'gate-1-encrypted-storage.yml', '2': 'gate-2-recovery-runtime.yml',
   '3': 'gate-3-real-sms-staging.yml', '4': 'gate-4-physical-device.yml',
@@ -55,7 +58,7 @@ if (!/^[0-9a-f]{64}$/.test(records['3'].details.signerSha256 ?? '')) fail('Gate 
 const probes = readEvidence('3', 'probes.json');
 const probeNames = new Set(Array.isArray(probes) ? probes.map((probe) => probe.callable) : []);
 const expectedProbeCases = new Set(['no App Check token', 'invalid App Check token']);
-if (!Array.isArray(probes) || !probes.length || probes.length !== probeNames.size * 2 || probes.some((probe) => ![401, 403].includes(probe.status) || !expectedProbeCases.has(probe.case)) || [...probeNames].some((name) => expectedProbeCases.size !== probes.filter((probe) => probe.callable === name).length)) fail('Gate 3 App Check negative probes did not cover every callable twice');
+if (!Array.isArray(probes) || !probes.length || probes.length !== probeNames.size * 2 || probes.some((probe) => ![401, 403].includes(probe.status) || !expectedProbeCases.has(probe.case)) || [...probeNames].some((name) => new Set(probes.filter((probe) => probe.callable === name).map((probe) => probe.case)).size !== 2)) fail('Gate 3 App Check negative probes did not cover every callable twice');
 if (!records['3'].details.stagingProjectId || records['3'].details.stagingProjectId === records['5'].details.productionProjectId) fail('Gate 3 staging project is missing or matches production');
 if (!records['4'].details.deviceLabel || !records['4'].details.deviceModel || records['4'].details.apkSha256 !== apkHash || records['4'].details.testApkSha256 !== testApkHash) fail('Gate 4 device record or APK hash does not match Gate 3');
 if (records['4'].details.verifiedBoot !== 'green' || records['4'].details.bootloaderLocked !== true) fail('Gate 4 physical device boot state is not locked and verified');

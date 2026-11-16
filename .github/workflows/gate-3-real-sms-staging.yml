@@ -16,7 +16,6 @@ jobs:
     uses: ./.github/workflows/recovery-staging-deploy.yml
     with:
       candidate_sha: ${{ inputs.candidate_sha }}
-    secrets: inherit
     permissions:
       contents: read
       id-token: write
