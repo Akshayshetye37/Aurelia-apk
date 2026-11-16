@@ -58,8 +58,29 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   execFileSync('gh', ['run', 'download', String(runId), '-R', repo, '-n', `gate-${gate}-evidence`, '-D', dir], { stdio: 'inherit' });
   const bundle = path.join(dir, 'bundle.tar');
   if (!fs.existsSync(bundle) || fs.statSync(bundle).size === 0) fail(`gate ${gate}: evidence bundle missing or empty`);
-  execFileSync('gh', ['attestation', 'verify', bundle, '--repo', repo,
-    '--signer-workflow', `${repo}/.github/workflows/${workflowFile}`], { stdio: 'inherit' });
+  let verified;
+  try {
+    const output = execFileSync('gh', [
+      'attestation', 'verify', bundle,
+      '--repo', repo,
+      '--signer-workflow', `${repo}/.github/workflows/${workflowFile}`,
+      '--source-digest', run.head_sha,
+      '--source-ref', `refs/heads/${controlBranch}`,
+      '--deny-self-hosted-runners',
+      '--format', 'json',
+    ], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    verified = JSON.parse(output);
+  } catch (error) {
+    fail(`gate ${gate}: attestation verification failed: ${error.stderr?.toString().slice(0, 500) || error.message}`);
+  }
+  if (!Array.isArray(verified) || !verified.length) fail(`gate ${gate}: no verified attestation returned`);
+  const expectedInvocation = `/actions/runs/${runId}/attempts/${run.run_attempt}`;
+  const bound = verified.some((entry) => {
+    const statement = entry.verificationResult?.statement;
+    const invocation = statement?.predicate?.runDetails?.metadata?.invocationId;
+    return typeof invocation === 'string' && invocation.endsWith(expectedInvocation);
+  });
+  if (!bound) fail(`gate ${gate}: attestation is not bound to run ${runId} attempt ${run.run_attempt}`);
   const archiveEntries = execFileSync('tar', ['-tf', bundle], { encoding: 'utf8' }).split('\n').filter(Boolean);
   const archiveTypes = execFileSync('tar', ['-tvf', bundle], { encoding: 'utf8' }).split('\n').filter(Boolean).map((line) => line[0]);
   if (!archiveEntries.length || archiveEntries.some((entry) => entry.startsWith('/') || entry.split('/').some((part) => part === '..') || !entry.startsWith('evidence/')) || archiveTypes.some((type) => !['-', 'd'].includes(type))) fail(`gate ${gate}: unsafe or unexpected evidence archive entry`);
