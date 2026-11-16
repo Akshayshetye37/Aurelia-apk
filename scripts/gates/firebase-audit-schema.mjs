@@ -59,3 +59,36 @@ export function hasPublicRuntimeInvoker(policy) {
     (binding.members ?? []).some(member => member === 'allUsers' || member === 'allAuthenticatedUsers')
   );
 }
+
+/** Enforce exact Secret Manager access for each production recovery callable. */
+export function validateFunctionSecretAccess(functions, requiredBindings, secretPolicies, allowedRuntimeAccounts, requiredSecrets) {
+  const problems = [];
+  const byName = new Map((functions ?? []).map(fn => [String(fn.name ?? '').split('/').pop(), fn]));
+  const expectedBySecret = new Map();
+  for (const [functionName, secrets] of Object.entries(requiredBindings ?? {})) {
+    const fn = byName.get(functionName);
+    if (!fn) { problems.push(`function ${functionName} is missing from production inventory`); continue; }
+    const config = fn.serviceConfig ?? fn;
+    const runtimeAccount = config.serviceAccountEmail ?? fn.serviceAccountEmail;
+    if (!runtimeAccount) { problems.push(`function ${functionName} has no runtime service account`); continue; }
+    if (!allowedRuntimeAccounts.includes(runtimeAccount)) problems.push(`function ${functionName} runtime identity is not in RUNTIME_SERVICE_ACCOUNTS`);
+    for (const secret of secrets) {
+      if (!requiredSecrets.includes(secret)) problems.push(`function ${functionName} uses undeclared REQUIRED_SECRETS entry ${secret}`);
+      if (!expectedBySecret.has(secret)) expectedBySecret.set(secret, new Set());
+      expectedBySecret.get(secret).add(`serviceAccount:${runtimeAccount}`);
+    }
+  }
+  for (const secret of requiredSecrets ?? []) {
+    const policy = secretPolicies.get(secret);
+    if (!policy) { problems.push(`secret ${secret} has no readable IAM policy`); continue; }
+    const actual = new Set((policy.bindings ?? [])
+      .filter(binding => binding.role === 'roles/secretmanager.secretAccessor')
+      .flatMap(binding => binding.members ?? [])
+      .filter(member => allowedRuntimeAccounts.some(account => member === `serviceAccount:${account}`)));
+    const expected = expectedBySecret.get(secret) ?? new Set();
+    if (actual.size !== expected.size || [...expected].some(member => !actual.has(member))) {
+      problems.push(`secret ${secret} runtime accessor set differs from the declared function bindings`);
+    }
+  }
+  return problems;
+}
