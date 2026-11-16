@@ -538,12 +538,12 @@ test('Gates 3–6 are dispatch-only, candidate-pinned and use protected executio
   for (const workflow of [gate3, gate4, gate5, gate6]) {
     assert.match(workflow, /workflow_dispatch:/);
     assert.match(workflow, /candidate_sha:/);
-    assert.match(workflow, /integration\\/ledger-patch/);
+    assert.match(workflow, /integration\/ledger-patch/);
     assert.match(workflow, /check-candidate\\.mjs/);
   }
   assert.match(gate3, /uses: \.\/\.github\/workflows\/recovery-staging-deploy\.yml/);
   assert.match(gate3, /actions\/attest-build-provenance/);
-  assert.match(gate4, /runs-on: \\[self-hosted, linux, x64, aurelia-android-device\\]/);
+  assert.match(gate4, /runs-on: \[self-hosted, linux, x64, aurelia-android-device\]/);
   assert.match(gate4, /environment: recovery-device/);
   assert.match(gate4.slice(gate4.indexOf('  attest:')), /runs-on: ubuntu-latest/);
   assert.match(gate5, /environment: recovery-production-audit/);
