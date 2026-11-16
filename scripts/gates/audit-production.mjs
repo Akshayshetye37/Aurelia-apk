@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fail } from './lib.mjs';
-import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint } from './firebase-audit-schema.mjs';
+import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker } from './firebase-audit-schema.mjs';
 
 const project = process.env.GCP_PROJECT_ID;
 const region = process.env.GCP_REGION;
@@ -103,6 +103,7 @@ for (const account of reviewedAccounts) {
 const requiredAppCheckServices = list('APPCHECK_REQUIRED_SERVICES');
 if (!requiredAppCheckServices.length) problems.push('APPCHECK_REQUIRED_SERVICES not configured');
 const projectPolicy = run(['projects', 'get-iam-policy', project]);
+if (hasPublicRuntimeInvoker(projectPolicy)) problems.push('project-level IAM grants public Cloud Run/Functions invocation');
 for (const account of reviewedAccounts) {
   for (const binding of projectPolicy.bindings ?? []) {
     if ((['roles/owner', 'roles/editor', 'roles/secretmanager.admin'].includes(binding.role) || (account === auditServiceAccount && binding.role === 'roles/secretmanager.secretAccessor')) && (binding.members ?? []).includes(`serviceAccount:${account}`)) {
