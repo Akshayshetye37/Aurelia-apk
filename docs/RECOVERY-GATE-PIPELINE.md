@@ -7,7 +7,7 @@
 - A candidate SHA must equal the current candidate branch head when each gate runs. Moving the branch invalidates the previous qualification evidence.
 - Gate workflows are dispatched from the control branch. Candidate source is checked out only where required and is never checked out or executed on the physical-device runner.
 - Gate 3 calls the trusted reusable `recovery-staging-deploy.yml` workflow from the control revision. That workflow checks out candidate source into a separate `candidate/` directory and runs it only with the staging WIF identity.
-- Gate 4 checks out only trusted control-branch tooling, downloads Gate 3 APKs, verifies their attested hashes, and installs those APKs on the allowlisted physical handset.
+- Gate 4 checks out only trusted control-branch tooling, downloads Gate 3 APKs, verifies their attested hashes, and installs those APKs on the allowlisted physical handset. The self-hosted job has no OIDC permission; a separate hosted job independently re-verifies the APK hashes and attests only sanitized device metadata and log-scan reports.
 - Gate 5 uses a dedicated read-only production audit service account. It does not deploy or mutate production.
 - Gate 6 only produces `QUALIFIED_FOR_RELEASE_REVIEW`; it does not enable production recovery or change any feature flag.
 

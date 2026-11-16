@@ -27,6 +27,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      attestations: read
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       GATE3_RUN: ${{ inputs.gate3_run_id }}
@@ -81,11 +82,13 @@ jobs:
           app="com.aurelia.pms"
           runner="com.aurelia.pms.test/androidx.test.runner.AndroidJUnitRunner"
           temp="$RUNNER_TEMP/aurelia-gate4"
+          rm -rf "$temp"
           mkdir -p "$temp"
           adb -s "$DEVICE_SERIAL" uninstall "$app" >/dev/null 2>&1 || true
           adb -s "$DEVICE_SERIAL" uninstall "$app.test" >/dev/null 2>&1 || true
           adb -s "$DEVICE_SERIAL" install -r apks/app.apk >/dev/null
           adb -s "$DEVICE_SERIAL" install -r -t apks/test.apk >/dev/null
+          adb -s "$DEVICE_SERIAL" logcat -c
           run_test() {
             name="$1"; selector="$2"; minimum="$3"; output="$temp/$name.txt"
             set +e
@@ -107,7 +110,7 @@ jobs:
           run_test force-stop-phase-two 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoUnlocksPinAAndReadsDatabaseAfterForceStop' 1
           run_test reboot-phase-one 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseOneCommitsPinBForDeviceReboot' 1
           adb -s "$DEVICE_SERIAL" reboot
-          timeout -k 5s 90s adb -s "$DEVICE_SERIAL" wait-for-device
+          timeout -k 5s 900s adb -s "$DEVICE_SERIAL" wait-for-device
           ready=false
           for _ in $(seq 1 180); do
             if [[ "$(adb -s "$DEVICE_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)" == "1" ]]; then ready=true; break; fi
@@ -124,7 +127,7 @@ jobs:
           test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.flash.locked | tr -d '\r')" = "1"
           test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.vbmeta.device_state | tr -d '\r')" = "locked"
           run_test reboot-phase-two 'com.aurelia.pms.RecoveryProcessDeathInstrumentedTest#phaseTwoAfterDeviceRebootUnlocksPinBAndReadsDatabase' 1
-          adb -s "$DEVICE_SERIAL" logcat -b all -d -t 5000 -v threadtime > "$temp/logcat.txt"
+          adb -s "$DEVICE_SERIAL" logcat -b all -d -v threadtime > "$temp/logcat.txt"
           node scripts/gates/scan-logs.mjs "$temp"/*.txt
           app_hash="$(sha256sum apks/app.apk | awk '{print $1}')"
           test_hash="$(sha256sum apks/test.apk | awk '{print $1}')"

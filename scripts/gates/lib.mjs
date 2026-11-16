@@ -61,7 +61,8 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   execFileSync('gh', ['attestation', 'verify', bundle, '--repo', repo,
     '--signer-workflow', `${repo}/.github/workflows/${workflowFile}`], { stdio: 'inherit' });
   const archiveEntries = execFileSync('tar', ['-tf', bundle], { encoding: 'utf8' }).split('\n').filter(Boolean);
-  if (!archiveEntries.length || archiveEntries.some((entry) => entry.startsWith('/') || entry.split('/').some((part) => part === '..') || !entry.startsWith('evidence/'))) fail(`gate ${gate}: unsafe or unexpected evidence archive path`);
+  const archiveTypes = execFileSync('tar', ['-tvf', bundle], { encoding: 'utf8' }).split('\n').filter(Boolean).map((line) => line[0]);
+  if (!archiveEntries.length || archiveEntries.some((entry) => entry.startsWith('/') || entry.split('/').some((part) => part === '..') || !entry.startsWith('evidence/')) || archiveTypes.some((type) => !['-', 'd'].includes(type))) fail(`gate ${gate}: unsafe or unexpected evidence archive entry`);
   execFileSync('tar', ['-xf', bundle, '-C', dir, '--no-same-owner', '--no-same-permissions'], { stdio: 'inherit' });
   const recordPath = path.join(dir, 'evidence', 'record.json');
   if (!fs.existsSync(recordPath)) fail(`gate ${gate}: evidence record missing`);
