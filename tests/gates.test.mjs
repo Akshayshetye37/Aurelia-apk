@@ -502,6 +502,7 @@ test('Gate 6 requires Gate 3 release signer to be in the attested production Fir
 
 test('Gate 5 rejects inherited project-level public Cloud Run or Functions invocation', () => {
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }), true);
+  assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/cloudfunctions.invoker', members: ['allAuthenticatedUsers'] }] }), true);
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['serviceAccount:runtime@example.iam.gserviceaccount.com'] }] }), false);
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/viewer', members: ['allUsers'] }] }), false);
 });
@@ -524,6 +525,17 @@ test('Gate 5 enforces exact per-function Secret Manager runtime access', () => {
   extra.set('PHONE_PEPPER', { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: ['serviceAccount:phone@example.iam.gserviceaccount.com', 'serviceAccount:grant@example.iam.gserviceaccount.com', 'serviceAccount:unexpected@example.iam.gserviceaccount.com'] }] });
   assert.match(validateFunctionSecretAccess(functions, bindings, extra, ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'), /accessor set differs/);
   assert.match(validateFunctionSecretAccess(functions, bindings, policies, ['phone@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'), /not in RUNTIME_SERVICE_ACCOUNTS/);
+  const sharedAcrossSecretSets = [
+    ...functions,
+    { name: 'projects/p/locations/r/functions/acknowledgeRecoveryOwnerAlert', serviceConfig: { serviceAccountEmail: 'phone@example.iam.gserviceaccount.com' } },
+  ];
+  assert.match(
+    validateFunctionSecretAccess(sharedAcrossSecretSets,
+      { ...bindings, acknowledgeRecoveryOwnerAlert: [] }, policies,
+      ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'],
+      ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'),
+    /share runtime identity.*different secret sets/,
+  );
 });
 
 test('candidate validation rejects a SHA that differs from the frozen control-branch pin before GitHub API access', (t) => {
