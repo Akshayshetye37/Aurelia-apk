@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fail } from './lib.mjs';
-import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker, validateFunctionSecretAccess, validateSecretPolicy } from './firebase-audit-schema.mjs';
+import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from './firebase-audit-schema.mjs';
 
 const project = process.env.GCP_PROJECT_ID;
 const region = process.env.GCP_REGION;
@@ -113,10 +113,8 @@ if (!requiredAppCheckServices.length) problems.push('APPCHECK_REQUIRED_SERVICES 
 const projectPolicy = run(['projects', 'get-iam-policy', project]);
 if (hasPublicRuntimeInvoker(projectPolicy)) problems.push('project-level IAM grants public Cloud Run/Functions invocation');
 for (const account of reviewedAccounts) {
-  for (const binding of projectPolicy.bindings ?? []) {
-    if ((['roles/owner', 'roles/editor', 'roles/secretmanager.admin', 'roles/secretmanager.secretAccessor'].includes(binding.role)) && (binding.members ?? []).includes(`serviceAccount:${account}`)) {
-      problems.push(`${account}: project-level ${binding.role}`);
-    }
+  for (const role of findPrivilegedProjectRoles(projectPolicy, account)) {
+    problems.push(`${account}: project-level ${role}`);
   }
 }
 
