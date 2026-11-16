@@ -92,7 +92,6 @@ for (const secret of requiredSecrets) {
 const runtimeSecretBindings = {
   registerRecoveryPhone: ['PHONE_PEPPER'],
   registerRecoveryOwnerDevice: ['PHONE_PEPPER'],
-  acknowledgeRecoveryOwnerAlert: ['PHONE_PEPPER'],
   issueRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
   consumeRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
 };
