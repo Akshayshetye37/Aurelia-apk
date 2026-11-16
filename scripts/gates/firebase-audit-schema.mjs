@@ -111,3 +111,20 @@ export function validateSecretPolicy(policy, allowedPrincipals, runtimeAccounts,
   }
   return problems;
 }
+
+const PRIVILEGED_PROJECT_ROLES = new Set([
+  'roles/owner', 'roles/editor', 'roles/resourcemanager.projectIamAdmin',
+  'roles/iam.securityAdmin', 'roles/iam.serviceAccountAdmin',
+  'roles/iam.serviceAccountKeyAdmin', 'roles/iam.serviceAccountUser',
+  'roles/iam.serviceAccountTokenCreator', 'roles/secretmanager.admin',
+  'roles/secretmanager.secretAccessor', 'roles/run.admin', 'roles/run.invoker',
+  'roles/cloudfunctions.admin', 'roles/cloudfunctions.invoker',
+  'roles/firebase.admin', 'roles/firebaseauth.admin', 'roles/firebaseappcheck.admin',
+]);
+/** Return any project-level role that is too broad for a recovery runtime or audit identity. */
+export function findPrivilegedProjectRoles(policy, account) {
+  const principal = `serviceAccount:${account}`;
+  return [...new Set((policy?.bindings ?? [])
+    .filter(binding => PRIVILEGED_PROJECT_ROLES.has(binding.role) && (binding.members ?? []).includes(principal))
+    .map(binding => binding.role))].sort();
+}
