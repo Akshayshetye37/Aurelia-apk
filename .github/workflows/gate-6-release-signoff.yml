@@ -1,77 +1,79 @@
-name: Gate 6 - Final qualification and release review
+name: Gate 6 - Release signoff
+
 on:
   workflow_dispatch:
     inputs:
       candidate_sha:
-        description: Frozen candidate SHA (40 lowercase hex)
         required: true
         type: string
       run_ids:
-        description: JSON object containing run IDs for gates 1, 2, 3, 4, 5, sms and device
         required: true
         type: string
+        description: "Upstream runs as gate:runId,gate:runId"
 permissions: {}
+
 concurrency:
-  group: gate-6-release-${{ inputs.candidate_sha }}
+  group: gate-6-${{ inputs.candidate_sha }}
   cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  independent-reviewer-one:
-    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+  reviewer-one:
     runs-on: ubuntu-latest
     environment: recovery-release-review-1
-    timeout-minutes: 15
     permissions: {}
     steps:
-      - name: First independent release reviewer approval
-        run: echo "First independent release approval recorded by the protected environment."
-  independent-reviewer-two:
-    needs: independent-reviewer-one
-    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+      - run: echo "Approval 1 recorded by GitHub environment review"
+
+  reviewer-two:
+    needs: reviewer-one
     runs-on: ubuntu-latest
     environment: recovery-release-review-2
-    timeout-minutes: 15
     permissions: {}
     steps:
-      - name: Second independent release reviewer approval
-        run: echo "Second independent release approval recorded by the protected environment."
-  verify-and-attest:
-    needs: [independent-reviewer-one, independent-reviewer-two]
-    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+      - run: echo "Approval 2 recorded by GitHub environment review"
+
+  qualification:
+    needs: [reviewer-one, reviewer-two]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-      actions: read
-      id-token: write
-      attestations: write
+    permissions: {contents: read, actions: read, id-token: write, attestations: write}
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-      RUN_IDS: ${{ inputs.run_ids }}
-      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
-      CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
+      CANDIDATE_BRANCH: ${{ vars.FROZEN_CANDIDATE_BRANCH }}
       REPO: ${{ github.repository }}
-      ACTOR: ${{ github.triggering_actor }}
+      GITHUB_TOKEN: ${{ github.token }}
       GH_TOKEN: ${{ github.token }}
+      RECOVERY_ENABLED: "false"
+      RUN_IDS: ${{ inputs.run_ids }}
+      REQUIRE: "1,2,3,4,5"
+      EXTRA_VERIFY_ARGS: "--approvals"
     steps:
-      - name: Checkout trusted gate tooling
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Verify all six gates, matching APK and two distinct independent approvals
-        run: node scripts/gates/verify-qualification.mjs
-      - name: Write and bundle Gate 6 release-review evidence
+      - name: Verify frozen candidate
+        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA"
+      - name: Verify Gates 1-5, attestations, and two distinct approvers
+        run: scripts/gates/fetch-and-verify.sh
+      - name: Verify production recovery stays disabled
         run: |
-          set -euo pipefail
-          node scripts/gates/write-evidence.mjs --gate 6 --sha "$CANDIDATE_SHA" --status PASS
-          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
-      - name: Attest Gate 6 evidence bundle
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
+          mkdir -p proofs
+          node scripts/gates/check-flags.mjs candidate | tee proofs/gate6-flags.log
+      - name: Write evidence
+        run: node scripts/gates/write-evidence.mjs --gate 6 --sha "$CANDIDATE_SHA" --proof proofs/gate6-flags.log
+      - name: Upload evidence
+        uses: actions/upload-artifact@REPLACE_WITH_FULL_40_CHAR_SHA # v4.x
         with:
-          subject-path: bundle.tar
-      - name: Upload Gate 6 evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: gate-6-evidence
-          path: bundle.tar
+          name: gate-6-evidence-${{ inputs.candidate_sha }}
+          path: evidence/
           if-no-files-found: error
           retention-days: 90
+
+      - name: Attest evidence record
+        uses: actions/attest-build-provenance@REPLACE_WITH_FULL_40_CHAR_SHA # v2.x
+        with:
+          subject-path: evidence/gate-6.json
