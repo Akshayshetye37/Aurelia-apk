@@ -27,3 +27,10 @@ export function countTestPhoneNumbers(value) {
     if(key==='testPhoneNumbers' && child && typeof child==='object') count+=Array.isArray(child)?child.length:Object.keys(child).length; else visit(child);
   }}; visit(value); return count;
 }
+
+/** Build the documented Firebase Management API resource URL for an Android app's signing certificates. */
+export function firebaseAndroidShaEndpoint(projectId, appId) {
+  if (typeof projectId !== 'string' || !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(projectId)) fail('Firebase project ID is invalid');
+  if (typeof appId !== 'string' || !/^[0-9]+:[0-9]+:android:[0-9a-f]+$/i.test(appId)) fail('Firebase Android app ID is invalid');
+  return `https://firebase.googleapis.com/v1beta1/projects/${encodeURIComponent(projectId)}/androidApps/${encodeURIComponent(appId)}/sha`;
+}
