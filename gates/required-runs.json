@@ -1,0 +1,12 @@
+{
+  "gate1": [
+    "native-sqlite-contract.yml",
+    "otp-recovery-android-instrumentation.yml",
+    "pms-quality.yml"
+  ],
+  "gate2": [
+    "payment-backend-ci.yml",
+    "recovery-functions.yml",
+    "r1-local-first.yml"
+  ]
+}

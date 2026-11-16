@@ -1,0 +1,11 @@
+import { arg, fail, gh, requireSha } from './lib.mjs';
+const sha = requireSha(arg('sha'));
+const repo = arg('repo');
+const branch = arg('branch');
+if (!/^[A-Za-z0-9_.\/-]+$/.test(branch) || branch.includes('..') || branch.startsWith('/') || branch.endsWith('/')) fail('invalid branch name');
+if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) fail('invalid repository name');
+const encoded = branch.split('/').map(encodeURIComponent).join('/');
+const ref = gh(`repos/${repo}/git/ref/heads/${encoded}`);
+const head = ref.object?.sha;
+if (head !== sha) fail(`${sha} is not the current head of ${branch} (head is ${head ?? 'unavailable'})`);
+console.log(`candidate ${sha} is the current head of ${branch}`);
