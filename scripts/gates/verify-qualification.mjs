@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { fail, gh, requireApprovals, requireSha, verifyBundle } from './lib.mjs';
 
 const sha = requireSha(process.env.CANDIDATE_SHA);
+const controlSha = requireSha(process.env.GITHUB_SHA);
 const repo = process.env.REPO;
 const controlBranch = process.env.CONTROL_BRANCH;
 let runIds;
@@ -23,6 +24,7 @@ for (const [gate, workflowFile] of Object.entries(workflows)) {
   if (!runIds[gate]) fail(`missing run ID for gate ${gate}`);
   const record = verifyBundle({ repo, runId: runIds[gate], gate, workflowFile, controlBranch, dir: `qualification-${gate}` });
   if (record.candidateSha !== sha) fail(`gate ${gate} is for a different candidate`);
+  if (record.controlSha !== controlSha) fail(`gate ${gate} was produced by a different control-branch revision`);
   const completed = Date.parse(record.completedAt);
   if (!Number.isFinite(completed) || Date.now() - completed > 14 * 864e5 || completed > Date.now() + 3e5) fail(`gate ${gate} evidence is stale or has an invalid timestamp`);
   records[gate] = record;
@@ -35,7 +37,7 @@ for (const kind of ['sms', 'device']) if (records[kind].details.apkSha256 !== ap
 const approvers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 2, process.env.ACTOR);
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/qualification-result.json', JSON.stringify({
-  candidateSha: sha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', apkSha256: apkHash,
+  candidateSha: sha, controlSha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', apkSha256: apkHash,
   gates: Object.fromEntries(Object.entries(records).map(([gate, record]) => [gate, { runId: record.runId, completedAt: record.completedAt }])),
   approvers, productionRecoveryEnabled: false, verifiedAt: new Date().toISOString(),
 }, null, 2));

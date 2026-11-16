@@ -36,6 +36,9 @@ jobs:
       REPO: ${{ github.repository }}
       STAGING_PROJECT: ${{ needs.staging-deploy.outputs.staging_project_id }}
       PRODUCTION_PROJECT: ${{ needs.staging-deploy.outputs.production_project_id }}
+      PRODUCTION_PROJECT_ID: ${{ needs.staging-deploy.outputs.production_project_id }}
+      STAGING_PROJECT_ID: ${{ needs.staging-deploy.outputs.staging_project_id }}
+      STAGING_REGION: ${{ needs.staging-deploy.outputs.gcp_region }}
       GCP_REGION: ${{ needs.staging-deploy.outputs.gcp_region }}
       STAGING_FUNCTIONS_BASE_URL: ${{ needs.staging-deploy.outputs.functions_base_url }}
       RECOVERY_CALLABLES: ${{ needs.staging-deploy.outputs.recovery_callables }}

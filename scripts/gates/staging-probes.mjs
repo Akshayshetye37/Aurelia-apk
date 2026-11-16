@@ -2,10 +2,17 @@ import fs from 'node:fs';
 import { fail } from './lib.mjs';
 
 const rawBase = process.env.STAGING_FUNCTIONS_BASE_URL ?? '';
+const project = process.env.STAGING_PROJECT_ID ?? '';
+const region = process.env.STAGING_REGION ?? '';
+const productionProject = process.env.PRODUCTION_PROJECT_ID ?? '';
+if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(project) || !/^[a-z]+-[a-z0-9-]+[0-9]$/.test(region)) fail('staging project ID and region are required');
+if (!productionProject || project === productionProject) fail('staging project must be distinct from production');
 let baseUrl;
 try { baseUrl = new URL(rawBase); } catch { fail('STAGING_FUNCTIONS_BASE_URL must be a valid HTTPS URL'); }
-if (baseUrl.protocol !== 'https:' || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash) fail('staging base URL must be HTTPS without credentials, query or fragment');
-const base = baseUrl.toString().replace(/\/+$/, '');
+if (baseUrl.protocol !== 'https:' || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash || !['', '/'].includes(baseUrl.pathname)) fail('staging base URL must be an HTTPS origin without credentials, path, query or fragment');
+const expectedHost = `${region}-${project}.cloudfunctions.net`;
+if (baseUrl.hostname !== expectedHost) fail('callable base URL does not belong to the configured staging project and region');
+const base = baseUrl.origin;
 const names = (process.env.RECOVERY_CALLABLES ?? '').split(',').map((name) => name.trim()).filter(Boolean);
 if (!names.length) fail('RECOVERY_CALLABLES is empty');
 for (const name of names) if (!/^[A-Za-z0-9_-]+$/.test(name)) fail('RECOVERY_CALLABLES contains an invalid callable name');

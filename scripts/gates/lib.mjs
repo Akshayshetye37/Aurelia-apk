@@ -51,6 +51,7 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   if (!/^[A-Za-z0-9_.-]+\.ya?ml$/.test(workflowFile)) fail('invalid workflow filename');
   const run = gh(`repos/${repo}/actions/runs/${runId}`);
   if (run.status !== 'completed' || run.conclusion !== 'success') fail(`gate ${gate}: run ${runId} did not succeed`);
+  if (run.event !== 'workflow_dispatch') fail(`gate ${gate}: evidence run was not workflow_dispatch`);
   if (run.head_branch !== controlBranch) fail(`gate ${gate}: run was not on control branch ${controlBranch}`);
   if (run.path !== `.github/workflows/${workflowFile}`) fail(`gate ${gate}: unexpected workflow path ${run.path}`);
   fs.mkdirSync(dir, { recursive: true });
