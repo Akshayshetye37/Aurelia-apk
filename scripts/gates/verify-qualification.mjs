@@ -29,15 +29,43 @@ for (const [gate, workflowFile] of Object.entries(workflows)) {
   if (!Number.isFinite(completed) || Date.now() - completed > 14 * 864e5 || completed > Date.now() + 3e5) fail(`gate ${gate} evidence is stale or has an invalid timestamp`);
   records[gate] = record;
 }
+function readEvidence(gate, filename) {
+  const file = `qualification-${gate}/evidence/${filename}`;
+  if (!fs.existsSync(file)) fail(`gate ${gate}: ${filename} is missing from the attested bundle`);
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { fail(`gate ${gate}: ${filename} is invalid JSON`); }
+}
+const gate1Runs = readEvidence('1', 'gate1-runs.json');
+const gate2Runs = readEvidence('2', 'gate2-runs.json');
+for (const [gate, runs] of [['1', gate1Runs], ['2', gate2Runs]]) {
+  if (!Array.isArray(runs) || runs.length !== 3 || runs.some((item) => item.conclusion !== 'success' || item.headSha !== sha || !Number.isInteger(item.testCount) || item.testCount < 1)) {
+    fail(`gate ${gate}: required workflow runs lack exact-SHA positive test-count evidence`);
+  }
+}
+const flags = readEvidence('2', 'flags.json');
+if (!Number.isInteger(flags.scanned) || flags.scanned < 1 || !Array.isArray(flags.hits) || flags.hits.length) fail('Gate 2 protected flags/App Check source tripwire did not pass');
+const gate2LogScan = readEvidence('2', 'log-scan.json');
+if (!Array.isArray(gate2LogScan.findings) || gate2LogScan.findings.length) fail('Gate 2 redacted emulator log scan did not pass');
 const apkHash = records['3'].details.apkSha256;
-if (!/^[0-9a-f]{64}$/.test(apkHash ?? '')) fail('Gate 3 APK hash is invalid');
-if (!records['4'].details.deviceModel) fail('Gate 4 has no physical device record');
-if (records['5'].details.productionRecoveryEnabled !== false) fail('Gate 5 did not attest production recovery OFF');
+const testApkHash = records['3'].details.testApkSha256;
+if (!/^[0-9a-f]{64}$/.test(apkHash ?? '') || !/^[0-9a-f]{64}$/.test(testApkHash ?? '')) fail('Gate 3 APK hashes are invalid');
+if (!/^[0-9a-f]{64}$/.test(records['3'].details.signerSha256 ?? '')) fail('Gate 3 APK signer fingerprint is invalid');
+const probes = readEvidence('3', 'probes.json');
+if (!Array.isArray(probes) || !probes.length || probes.some((probe) => ![401, 403].includes(probe.status))) fail('Gate 3 App Check negative probes did not all reject');
+if (!records['3'].details.stagingProjectId || records['3'].details.stagingProjectId === records['5'].details.productionProjectId) fail('Gate 3 staging project is missing or matches production');
+if (!records['4'].details.deviceModel || records['4'].details.apkSha256 !== apkHash || records['4'].details.testApkSha256 !== testApkHash) fail('Gate 4 device record or APK hash does not match Gate 3');
+if (records['4'].details.verifiedBoot !== 'green' || records['4'].details.bootloaderLocked !== true) fail('Gate 4 physical device boot state is not locked and verified');
+const gate4LogScan = readEvidence('4', 'log-scan.json');
+if (!Array.isArray(gate4LogScan.findings) || gate4LogScan.findings.length) fail('Gate 4 device log scan did not pass');
+if (records['5'].details.productionRecoveryEnabled !== false || !records['5'].details.productionProjectId) fail('Gate 5 did not attest production recovery OFF');
+const productionAudit = readEvidence('5', 'production-audit.json');
+if (productionAudit.project !== records['5'].details.productionProjectId || !Array.isArray(productionAudit.problems) || productionAudit.problems.length || !productionAudit.auditedResources?.functions) {
+  fail('Gate 5 production audit evidence is incomplete or reports problems');
+}
 for (const kind of ['sms', 'device']) if (records[kind].details.apkSha256 !== apkHash) fail(`${kind} attestation is for a different Gate 3 APK`);
 const approvers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 2, process.env.ACTOR);
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/qualification-result.json', JSON.stringify({
-  candidateSha: sha, controlSha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', apkSha256: apkHash,
+  candidateSha: sha, controlSha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', apkSha256: apkHash, testApkSha256: testApkHash,
   gates: Object.fromEntries(Object.entries(records).map(([gate, record]) => [gate, { runId: record.runId, completedAt: record.completedAt }])),
   approvers, productionRecoveryEnabled: false, verifiedAt: new Date().toISOString(),
 }, null, 2));

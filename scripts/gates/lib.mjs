@@ -52,15 +52,16 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   const run = gh(`repos/${repo}/actions/runs/${runId}`);
   if (run.status !== 'completed' || run.conclusion !== 'success') fail(`gate ${gate}: run ${runId} did not succeed`);
   if (run.event !== 'workflow_dispatch') fail(`gate ${gate}: evidence run was not workflow_dispatch`);
+  if (run.event !== 'workflow_dispatch') fail(`gate ${gate}: evidence run was not workflow_dispatch`);
   if (run.head_branch !== controlBranch) fail(`gate ${gate}: run was not on control branch ${controlBranch}`);
-  if (run.path !== `.github/workflows/${workflowFile}`) fail(`gate ${gate}: unexpected workflow path ${run.path}`);
+  if (String(run.path ?? '').split('@')[0] !== `.github/workflows/${workflowFile}`) fail(`gate ${gate}: unexpected workflow path ${run.path}`);
   fs.mkdirSync(dir, { recursive: true });
   execFileSync('gh', ['run', 'download', String(runId), '-R', repo, '-n', `gate-${gate}-evidence`, '-D', dir], { stdio: 'inherit' });
   const bundle = path.join(dir, 'bundle.tar');
   if (!fs.existsSync(bundle) || fs.statSync(bundle).size === 0) fail(`gate ${gate}: evidence bundle missing or empty`);
   execFileSync('gh', ['attestation', 'verify', bundle, '--repo', repo,
     '--signer-workflow', `${repo}/.github/workflows/${workflowFile}`], { stdio: 'inherit' });
-  const archiveEntries = execFileSync('tar', ['-tf', bundle], { encoding: 'utf8' }).split('\\n').filter(Boolean);
+  const archiveEntries = execFileSync('tar', ['-tf', bundle], { encoding: 'utf8' }).split('\n').filter(Boolean);
   if (!archiveEntries.length || archiveEntries.some((entry) => entry.startsWith('/') || entry.split('/').some((part) => part === '..') || !entry.startsWith('evidence/'))) fail(`gate ${gate}: unsafe or unexpected evidence archive path`);
   execFileSync('tar', ['-xf', bundle, '-C', dir, '--no-same-owner', '--no-same-permissions'], { stdio: 'inherit' });
   const recordPath = path.join(dir, 'evidence', 'record.json');
@@ -68,7 +69,7 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   let record;
   try { record = JSON.parse(fs.readFileSync(recordPath, 'utf8')); } catch { fail(`gate ${gate}: evidence record is invalid JSON`); }
   if (record.gate !== String(gate) || record.status !== 'PASS' ||
-      record.runId !== Number(runId) || record.repository !== repo ||
+      record.runId !== Number(runId) || record.repository !== repo || record.controlSha !== run.head_sha ||
       !SHA_RE.test(record.candidateSha ?? '')) fail(`gate ${gate}: record does not match its run`);
   if (record.runAttempt !== Number(run.run_attempt)) fail(`gate ${gate}: run attempt mismatch`);
   return record;
