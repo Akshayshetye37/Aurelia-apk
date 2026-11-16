@@ -39,7 +39,7 @@ function inspectSecretFlag(resource, entries) {
     }
   }
 }
-const functions = run(['functions', 'list', '--project', P]);
+const functions = run(['functions', 'list', '--project', project]);
 auditedResources.functions = functions.length;
 if (!functions.length) problems.push('no production Cloud Functions found; runtime flags cannot be verified');
 for (const f of functions) {
@@ -48,7 +48,7 @@ for (const f of functions) {
   inspectFunctionEnv(resource, config.environmentVariables ?? f.environmentVariables);
   inspectSecretFlag(resource, config.secretEnvironmentVariables ?? f.secretEnvironmentVariables);
 }
-const services = run(['run', 'services', 'list', '--project', P]);
+const services = run(['run', 'services', 'list', '--project', project]);
 auditedResources.runServices = services.length;
 for (const service of services) {
   const resource = `run service ${service.metadata?.name ?? service.name}`;
@@ -78,6 +78,7 @@ for (const secret of requiredSecrets) {
   const policy = run(['secrets', 'get-iam-policy', secret, '--project', project]);
   for (const binding of policy.bindings ?? []) for (const member of binding.members ?? []) {
     if (!member.startsWith('serviceAccount:')) problems.push(`secret ${secret}: non-service-account member`);
+    if (auditServiceAccount && member === `serviceAccount:${auditServiceAccount}` && ['roles/secretmanager.secretAccessor', 'roles/secretmanager.admin'].includes(binding.role)) problems.push(`secret ${secret}: audit identity has secret payload/admin access`);
   }
 }
 const runtimeAccounts = list('RUNTIME_SERVICE_ACCOUNTS');
@@ -85,7 +86,8 @@ const auditServiceAccount = process.env.AUDIT_SERVICE_ACCOUNT ?? '';
 if (!runtimeAccounts.length) problems.push('RUNTIME_SERVICE_ACCOUNTS not configured');
 if (!auditServiceAccount) problems.push('AUDIT_SERVICE_ACCOUNT not configured');
 if (auditServiceAccount && runtimeAccounts.includes(auditServiceAccount)) problems.push('audit identity must be distinct from every production runtime identity');
-for (const account of runtimeAccounts) {
+const reviewedAccounts = [...new Set([...runtimeAccounts, auditServiceAccount].filter(Boolean))];
+for (const account of reviewedAccounts) {
   const keys = run(['iam', 'service-accounts', 'keys', 'list', '--iam-account', account, '--managed-by=user', '--project', project]);
   if (keys.length) problems.push(`${account}: user-managed keys exist`);
   const policy = run(['iam', 'service-accounts', 'get-iam-policy', account, '--project', project]);
@@ -96,7 +98,7 @@ for (const account of runtimeAccounts) {
   }
 }
 const projectPolicy = run(['projects', 'get-iam-policy', project]);
-for (const account of runtimeAccounts) {
+for (const account of reviewedAccounts) {
   for (const binding of projectPolicy.bindings ?? []) {
     if (['roles/owner', 'roles/editor'].includes(binding.role) && (binding.members ?? []).includes(`serviceAccount:${account}`)) {
       problems.push(`${account}: project-level ${binding.role}`);
@@ -115,6 +117,6 @@ else {
   for (const service of list('APPCHECK_REQUIRED_SERVICES')) if (modes[service] !== 'ENFORCED') problems.push(`App Check not ENFORCED for ${service}`);
 }
 fs.mkdirSync('evidence', { recursive: true });
-fs.writeFileSync('evidence/production-audit.json', JSON.stringify({ project, checkedAt: new Date().toISOString(), problems }, null, 2));
+fs.writeFileSync('evidence/production-audit.json', JSON.stringify({ project, checkedAt: new Date().toISOString(), auditedResources, problems }, null, 2));
 if (problems.length) fail(problems.join('; '));
 console.log('production audit clean: recovery OFF everywhere');
