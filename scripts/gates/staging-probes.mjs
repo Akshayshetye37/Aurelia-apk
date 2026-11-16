@@ -9,7 +9,7 @@ if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(project) || !/^[a-z]+-[a-z0-9-]+[0-9]
 if (!productionProject || project === productionProject) fail('staging project must be distinct from production');
 let baseUrl;
 try { baseUrl = new URL(rawBase); } catch { fail('STAGING_FUNCTIONS_BASE_URL must be a valid HTTPS URL'); }
-if (baseUrl.protocol !== 'https:' || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash || !['', '/'].includes(baseUrl.pathname)) fail('staging base URL must be an HTTPS origin without credentials, path, query or fragment');
+if (baseUrl.protocol !== 'https:' || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash || baseUrl.port || !['', '/'].includes(baseUrl.pathname)) fail('staging base URL must be an HTTPS origin without credentials, path, query or fragment');
 const expectedHost = `${region}-${project}.cloudfunctions.net`;
 if (baseUrl.hostname !== expectedHost) fail('callable base URL does not belong to the configured staging project and region');
 const base = baseUrl.origin;

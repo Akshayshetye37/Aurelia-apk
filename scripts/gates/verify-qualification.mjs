@@ -5,7 +5,7 @@ const sha = requireSha(process.env.CANDIDATE_SHA);
 const controlSha = requireSha(process.env.GITHUB_SHA);
 const repo = process.env.REPO;
 const controlBranch = process.env.CONTROL_BRANCH;
-if (!repo || !controlBranch || !/^[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+$/.test(repo)) fail('repository or control branch is invalid');
+if (!repo || repo.split('/').length !== 2 || repo.split('/').some((part) => !/^[A-Za-z0-9_.-]+$/.test(part)) || !controlBranch) fail('repository or control branch is invalid');
 let runIds;
 try { runIds = JSON.parse(process.env.RUN_IDS ?? ''); } catch { fail('RUN_IDS is not valid JSON'); }
 if (!runIds || typeof runIds !== 'object' || Array.isArray(runIds)) fail('RUN_IDS must be a JSON object');
@@ -74,6 +74,10 @@ for (const kind of ['sms', 'device']) {
   if (records[kind].details.kind !== kind || !/^[0-9a-f]{64}$/.test(records[kind].details.attestationSha256 ?? '') || records[kind].details.apkSha256 !== apkHash) fail(`${kind} attestation is invalid or for a different Gate 3 APK`);
 }
 const approvers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 2, process.env.ACTOR);
+const smsAttestation = readEvidence('sms', 'attestation.json');
+const deviceAttestation = readEvidence('device', 'attestation.json');
+const testers = [smsAttestation.tester, deviceAttestation.tester].map((login) => String(login).toLowerCase());
+if (testers.some((tester) => approvers.some((approver) => approver.toLowerCase() === tester))) fail('an attestation tester cannot approve the final release qualification');
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/qualification-result.json', JSON.stringify({
   candidateSha: sha, controlSha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', apkSha256: apkHash, testApkSha256: testApkHash,
