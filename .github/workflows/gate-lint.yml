@@ -44,6 +44,8 @@ jobs:
         run: |
           set -euo pipefail
           for file in scripts/gates/*.mjs; do node --check "$file"; done
+      - name: Run gate security regression tests
+        run: node --test tests/gates.test.mjs
       - name: Validate required workflow manifest
         run: |
           node --input-type=module -e "import fs from 'node:fs'; const c=JSON.parse(fs.readFileSync('gates/required-runs.json','utf8')); for (const k of ['gate1','gate2']) if (!Array.isArray(c[k]) || c[k].length !== 3) process.exit(1);"

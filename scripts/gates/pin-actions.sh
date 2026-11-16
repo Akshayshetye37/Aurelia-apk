@@ -13,8 +13,9 @@ for file in "${files[@]}"; do
     if [[ ! "$full" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[^[:space:]]+)?$ ]]; then
       echo "Unsupported action reference: $ref" >&2; exit 1
     fi
-    action_repo="${full%%/*}/${full#*/}"
-    action_repo="${action_repo%%/*/*}"
+    IFS='/' read -r action_owner action_name _ <<< "$full"
+    [[ -n "$action_owner" && -n "$action_name" ]] || { echo "Invalid action repository: $full" >&2; exit 1; }
+    action_repo="$action_owner/$action_name"
     sha="$(gh api "repos/$action_repo/commits/$tag" --jq .sha)"
     [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Could not resolve immutable SHA for $ref" >&2; exit 1; }
     python3 - "$file" "$ref" "$full@$sha" "$tag" <<'PY'
