@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
-import { isAttestationFresh } from '../scripts/gates/lib.mjs';
+import { isAttestationFresh, validateEnvironmentApprovals } from '../scripts/gates/lib.mjs';
 import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -422,6 +422,31 @@ if (args[0] === 'api') {
   });
   assert.equal(result.status, 1);
   assert.match(output(result), /latest run .* is in_progress\/pending/);
+});
+
+test('release approvals must come from both named protected environments and distinct reviewers', () => {
+  const history = [
+    { state: 'approved', user: { login: 'reviewer-one' }, environments: [{ name: 'recovery-release-review-1' }] },
+    { state: 'approved', user: { login: 'reviewer-two' }, environments: [{ name: 'recovery-release-review-2' }] },
+  ];
+  assert.deepEqual(
+    validateEnvironmentApprovals(history, ['recovery-release-review-1', 'recovery-release-review-2'], 2, 'release-trigger'),
+    ['reviewer-one', 'reviewer-two'],
+  );
+  assert.throws(
+    () => validateEnvironmentApprovals([history[0], { ...history[1], user: { login: 'reviewer-one' } }],
+      ['recovery-release-review-1', 'recovery-release-review-2'], 2, 'release-trigger'),
+    /need 2 independent approver/,
+  );
+  assert.throws(
+    () => validateEnvironmentApprovals([history[0]], ['recovery-release-review-1', 'recovery-release-review-2'], 1, 'release-trigger'),
+    /recovery-release-review-2 has no approved reviewer/,
+  );
+  assert.throws(
+    () => validateEnvironmentApprovals([{ ...history[0], user: { login: 'release-trigger' } }],
+      ['recovery-release-review-1'], 1, 'release-trigger'),
+    /cannot approve it/,
+  );
 });
 
 test('manual attestation rejects a tester who appears in the approval list', () => {
