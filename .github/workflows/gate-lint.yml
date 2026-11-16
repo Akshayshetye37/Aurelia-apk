@@ -31,6 +31,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/gates/pin-actions.sh
+      - name: Ensure pinning made no uncommitted workflow changes
+        run: git diff --exit-code -- .github/workflows
+      - name: Parse every gate workflow and the staging dependency as YAML
+        run: |
+          ruby -e 'require "yaml"; Dir[".github/workflows/gate-*.yml", ".github/workflows/recovery-staging-deploy.yml"].each { |file| YAML.parse_file(file); puts "valid YAML: #{file}" }'
       - name: Lint gate workflows
         run: node scripts/gates/lint-workflows.mjs
       - name: Validate shell pinning script
