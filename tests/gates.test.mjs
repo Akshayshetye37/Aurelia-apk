@@ -33,6 +33,30 @@ function output(result) {
   return `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
 }
 
+function runQualificationOfflineValidation(t, runIds) {
+  const dir = tempDir(t);
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const marker = path.join(dir, 'gh-called');
+  const fakeGh = path.join(bin, 'gh');
+  fs.writeFileSync(fakeGh, [
+    '#!/usr/bin/env node',
+    `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "called");`,
+    'process.exit(2);',
+  ].join('\n'));
+  fs.chmodSync(fakeGh, 0o755);
+  const result = run(t, 'verify-qualification.mjs', [], {
+    CANDIDATE_SHA: SHA_A,
+    GITHUB_SHA: SHA_B,
+    REPO: 'owner/repo',
+    CONTROL_BRANCH: 'integration/ledger-patch',
+    CANDIDATE_BRANCH: 'work/p0-storage-hardening',
+    RUN_IDS: JSON.stringify(runIds),
+    PATH: bin + path.delimiter + process.env.PATH,
+  }, dir);
+  return { result, marker };
+}
+
 test('instrumentation parser accepts the required passing test count', (t) => {
   const dir = tempDir(t);
   const file = path.join(dir, 'instrumentation.txt');
@@ -177,6 +201,22 @@ test('qualification rejects malformed run ID JSON before GitHub API access', (t)
   });
   assert.equal(result.status, 1);
   assert.match(output(result), /RUN_IDS is not valid JSON/);
+});
+
+test('qualification rejects missing RUN_IDS keys before any GitHub API call', (t) => {
+  const { result, marker } = runQualificationOfflineValidation(t, { '1': '101' });
+  assert.equal(result.status, 1);
+  assert.match(output(result), /RUN_IDS must contain exactly/);
+  assert.equal(fs.existsSync(marker), false, 'GitHub CLI must not be invoked for malformed RUN_IDS');
+});
+
+test('qualification rejects non-numeric RUN_IDS before any GitHub API call', (t) => {
+  const { result, marker } = runQualificationOfflineValidation(t, {
+    '1': '101', '2': '102', '3': '103', '4': '104', '5': '105', sms: '106', device: 'not-a-run-id',
+  });
+  assert.equal(result.status, 1);
+  assert.match(output(result), /invalid run ID for device/);
+  assert.equal(fs.existsSync(marker), false, 'GitHub CLI must not be invoked for non-numeric run IDs');
 });
 
 test('production audit fails closed when pointed at a non-production project', (t) => {

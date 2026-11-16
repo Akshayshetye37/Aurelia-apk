@@ -9,16 +9,6 @@ if (!repo || repo.split('/').length !== 2 || repo.split('/').some((part) => !/^[
 let runIds;
 try { runIds = JSON.parse(process.env.RUN_IDS ?? ''); } catch { fail('RUN_IDS is not valid JSON'); }
 if (!runIds || typeof runIds !== 'object' || Array.isArray(runIds)) fail('RUN_IDS must be a JSON object');
-const candidateBranch = process.env.CANDIDATE_BRANCH;
-if (!candidateBranch || candidateBranch.split('/').some((part) => !/^[A-Za-z0-9_.-]+$/.test(part) || part === '..')) fail('CANDIDATE_BRANCH is invalid');
-const encodedBranch = candidateBranch.split('/').map(encodeURIComponent).join('/');
-const head = gh(`repos/${repo}/git/ref/heads/${encodedBranch}`).object?.sha;
-if (head !== sha) fail('candidate is no longer the current branch head; all qualification evidence is invalidated');
-const encodedControlBranch = controlBranch.split('/').map(encodeURIComponent).join('/');
-const currentControlHead = gh(`repos/${repo}/git/ref/heads/${encodedControlBranch}`).object?.sha;
-if (currentControlHead !== controlSha) fail('control branch moved; all gate evidence must be regenerated');
-const pinnedCandidateSha = fs.readFileSync('gates/qualification-candidate-sha.txt', 'utf8').trim();
-if (pinnedCandidateSha !== sha) fail('candidate SHA does not match the trusted control-branch qualification pin');
 const workflows = {
   '1': 'gate-1-encrypted-storage.yml', '2': 'gate-2-recovery-runtime.yml',
   '3': 'gate-3-real-sms-staging.yml', '4': 'gate-4-physical-device.yml',
@@ -32,6 +22,17 @@ for (const key of expectedRunKeys) {
   const value = String(runIds[key]);
   if (!value.length || ![...value].every((digit) => digit >= '0' && digit <= '9')) fail(`invalid run ID for ${key}`);
 }
+const candidateBranch = process.env.CANDIDATE_BRANCH;
+if (!candidateBranch || candidateBranch.split('/').some((part) => !/^[A-Za-z0-9_.-]+$/.test(part) || part === '..')) fail('CANDIDATE_BRANCH is invalid');
+const pinnedCandidateSha = fs.readFileSync('gates/qualification-candidate-sha.txt', 'utf8').trim();
+if (pinnedCandidateSha !== sha) fail('candidate SHA does not match the trusted control-branch qualification pin');
+// ---- offline validation complete; GitHub API access begins below ----
+const encodedBranch = candidateBranch.split('/').map(encodeURIComponent).join('/');
+const head = gh(`repos/${repo}/git/ref/heads/${encodedBranch}`).object?.sha;
+if (head !== sha) fail('candidate is no longer the current branch head; all qualification evidence is invalidated');
+const encodedControlBranch = controlBranch.split('/').map(encodeURIComponent).join('/');
+const currentControlHead = gh(`repos/${repo}/git/ref/heads/${encodedControlBranch}`).object?.sha;
+if (currentControlHead !== controlSha) fail('control branch moved; all gate evidence must be regenerated');
 const records = {};
 for (const [gate, workflowFile] of Object.entries(workflows)) {
   if (!runIds[gate]) fail(`missing run ID for gate ${gate}`);
