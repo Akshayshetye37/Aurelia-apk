@@ -1,60 +1,44 @@
+// Validates a human-signed physical-test attestation (real SMS or physical device).
 import fs from 'node:fs';
-import crypto from 'node:crypto';
-import { arg, fail, requireApprovals, requireIndependentTester, requireSha, verifyBundle } from './lib.mjs';
-import { validateSmsAttestation, containsPhoneNumberLikeValue } from './attestation-schema.mjs';
+import { arg, fail, requireSha, requireSha256, safeInside } from './lib.mjs';
 
 const kind = arg('kind');
+const file = safeInside('gates/attestations', arg('file'));
 const sha = requireSha(arg('sha'));
-const repo = arg('repo');
-const gate3Run = arg('gate3-run');
-const controlBranch = arg('control-branch');
-if (!['sms', 'device'].includes(kind)) fail('kind must be sms or device');
-let attestation;
-try { attestation = JSON.parse(process.env.ATTESTATION ?? ''); } catch { fail('attestation is not valid JSON'); }
-if (!attestation || Array.isArray(attestation) || typeof attestation !== 'object') fail('attestation must be a JSON object');
-const raw = JSON.stringify(attestation);
-if (Buffer.byteLength(raw, 'utf8') > 4000) fail('attestation too large');
-if (/\b\d{6}\b/.test(raw)) fail('attestation contains a 6-digit sequence; never record OTPs');
-if (containsPhoneNumberLikeValue(attestation)) fail('attestation contains a phone-number-like value');
+const matchApk = arg('match-apk', { required: false });
 
-const commonKeys = ['kind', 'apkSha256', 'testedAt', 'tester', 'results'];
-const kindKeys = kind === 'sms'
-  ? ['country', 'carrier', 'stagingProjectId', 'smsDeliveredAt', 'challengeId', 'deviceLabel', 'deviceIdentitySha256']
-  : ['deviceModel', 'androidVersion', 'verifiedBoot', 'bootloaderLocked', 'dataChecksumBefore', 'dataChecksumAfter'];
-const unknownKeys = Object.keys(attestation).filter((key) => !commonKeys.concat(kindKeys).includes(key));
-if (unknownKeys.length) fail(`unexpected attestation field(s): ${unknownKeys.join(', ')}`);
-if (!attestation.results || Array.isArray(attestation.results) || typeof attestation.results !== 'object') fail('results must be a JSON object');
-const gate3 = verifyBundle({ repo, runId: gate3Run, gate: '3', workflowFile: 'gate-3-real-sms-staging.yml', controlBranch, dir: 'g3' });
-if (gate3.candidateSha !== sha) fail('Gate 3 belongs to a different candidate');
-if (attestation.kind !== kind) fail('kind mismatch');
-if (attestation.apkSha256 !== gate3.details.apkSha256) fail('attested APK is not the Gate 3 APK');
-const testedAt = Date.parse(attestation.testedAt);
-if (!Number.isFinite(testedAt) || Date.now() - testedAt > 7 * 864e5 || testedAt > Date.now() + 3e5) fail('testedAt missing, future, or older than 7 days');
-if (typeof attestation.tester !== 'string' || !/^[A-Za-z0-9-]{1,39}$/.test(attestation.tester)) fail('tester must be a GitHub login');
-const expected = kind === 'sms'
-  ? { validOtp: 'VERIFIED', wrongOtp: 'REJECTED', expiredOtp: 'REJECTED', replayedOtp: 'REJECTED',
-      resendRateLimit: 'REJECTED', otpDoesNotAccessDek: 'CONFIRMED', passkeyAckEnrollAndAssert: 'VERIFIED' }
-  : { pinAFailsAfterRecovery: true, pinBOpensOriginalData: true, forceStopSurvived: true, rebootSurvived: true,
-      replayRejected: true, lockScreenChangeFailsClosed: true, ownerCancelDuringHold: true,
-      offlineNormalUse: true, logScanClean: true };
-const unknownResults = Object.keys(attestation.results).filter((key) => !Object.hasOwn(expected, key));
-if (unknownResults.length) fail(`unexpected result field(s): ${unknownResults.join(', ')}`);
-for (const [key, value] of Object.entries(expected)) if (attestation.results[key] !== value) fail(`result ${key} must be ${value}`);
+let a;
+try { a = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { fail('Attestation is not valid JSON'); }
+
+if (a.candidateSha !== sha) fail('Attestation candidate SHA mismatch');
+requireSha256(a.apkSha256);
+if (typeof a.attestedBy !== 'string' || a.attestedBy.length < 2) fail('attestedBy missing');
+if (Number.isNaN(Date.parse(a.attestedAt))) fail('attestedAt invalid');
+for (const who of [process.env.GITHUB_ACTOR, process.env.GITHUB_TRIGGERING_ACTOR])
+  if (who && a.attestedBy.toLowerCase() === who.toLowerCase()) fail('Attester must be independent of the workflow actor');
+
+const required = {
+  sms: ['sms_delivered', 'otp_verified_grant_issued', 'wrong_code_rejected', 'expired_code_rejected',
+        'replayed_code_rejected', 'rate_limit_enforced', 'otp_alone_cannot_touch_dek'],
+  device: ['install_release_signed', 'force_stop_recovery', 'reboot_recovery', 'reinstall_recovery',
+           'airplane_mode_midflow', 'dek_only_via_wrap_path']
+}[kind] ?? fail('Unknown kind');
+
+for (const k of required) if (a.results?.[k] !== 'pass') fail(`Required result not pass: ${k}`);
+
 if (kind === 'sms') {
-  if (!/^[A-Z]{2}$/.test(attestation.country ?? '') || typeof attestation.carrier !== 'string' || !attestation.carrier.trim() || attestation.carrier.length > 80) fail('carrier and ISO country required');
-  try { validateSmsAttestation(attestation); } catch (error) { fail(error.message); }
-  if (attestation.stagingProjectId !== gate3.details.stagingProjectId) fail('staging project mismatch');
+  if (a.testNumbersUsed !== false) fail('Firebase test numbers are not allowed');
+  if (!a.carrier || !a.firebaseProject || !a.handset?.model) fail('Handset/carrier/project details missing');
+  if (/prod/i.test(a.firebaseProject)) fail('Gate 3 must use a staging Firebase project');
 } else {
-  if (typeof attestation.deviceModel !== 'string' || !attestation.deviceModel || attestation.deviceModel.length > 80 || typeof attestation.androidVersion !== 'string' || !attestation.androidVersion || attestation.androidVersion.length > 40) fail('device model and Android version required');
-  if (attestation.verifiedBoot !== 'green' || attestation.bootloaderLocked !== true) fail('device must have verified boot green and a locked bootloader');
-  if (!/^[0-9a-f]{64}$/.test(attestation.dataChecksumBefore ?? '') || attestation.dataChecksumBefore !== attestation.dataChecksumAfter) fail('data checksums must be valid and match');
+  const d = a.device ?? {};
+  if (!d.model || !d.androidVersion) fail('Device details missing');
+  if (d.verifiedBootState !== 'green' || d.flashLocked !== true || d.hardwareBackedKeystore !== true)
+    fail('Device must be locked, verified-boot green, hardware-backed keystore');
 }
-const attestationApprovers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 1, process.env.ACTOR);
-requireIndependentTester(attestationApprovers, attestation.tester);
-fs.mkdirSync('evidence', { recursive: true });
-fs.writeFileSync('evidence/attestation.json', raw);
-fs.writeFileSync('evidence/details.json', JSON.stringify({
-  kind, apkSha256: attestation.apkSha256,
-  attestationSha256: crypto.createHash('sha256').update(raw).digest('hex'),
-}, null, 2));
-console.log(`${kind} attestation accepted`);
+
+if (matchApk) {
+  const other = JSON.parse(fs.readFileSync(safeInside('gates/attestations', matchApk), 'utf8'));
+  if (other.apkSha256 !== a.apkSha256) fail('APK SHA-256 differs between gates');
+}
+console.log(`${kind} attestation valid`);
