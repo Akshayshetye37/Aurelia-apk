@@ -1,120 +1,72 @@
-name: Gate 3 - Staging deploy, negative probes and signed APK
+name: Gate 3 - Real SMS staging
+
 on:
   workflow_dispatch:
     inputs:
       candidate_sha:
-        description: Frozen candidate SHA (40 lowercase hex)
         required: true
         type: string
+      run_ids:
+        required: true
+        type: string
+        description: "Upstream runs as gate:runId,gate:runId"
 permissions: {}
+
 concurrency:
   group: gate-3-${{ inputs.candidate_sha }}
   cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   staging-deploy:
-    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     uses: ./.github/workflows/recovery-staging-deploy.yml
     with:
       candidate_sha: ${{ inputs.candidate_sha }}
-    permissions:
-      contents: read
-      id-token: write
+    permissions: {contents: read, id-token: write}
+
   evidence:
     needs: staging-deploy
-    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    permissions:
-      contents: read
-      actions: read
-      id-token: write
-      attestations: write
+    timeout-minutes: 30
+    environment: recovery-staging-evidence
+    permissions: {contents: read, actions: read, id-token: write, attestations: write}
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      CANDIDATE_BRANCH: ${{ vars.FROZEN_CANDIDATE_BRANCH }}
       REPO: ${{ github.repository }}
-      STAGING_PROJECT: ${{ needs.staging-deploy.outputs.staging_project_id }}
-      PRODUCTION_PROJECT: ${{ needs.staging-deploy.outputs.production_project_id }}
-      PRODUCTION_PROJECT_ID: ${{ needs.staging-deploy.outputs.production_project_id }}
-      STAGING_PROJECT_ID: ${{ needs.staging-deploy.outputs.staging_project_id }}
-      STAGING_REGION: ${{ needs.staging-deploy.outputs.gcp_region }}
-      GCP_REGION: ${{ needs.staging-deploy.outputs.gcp_region }}
-      STAGING_FUNCTIONS_BASE_URL: ${{ needs.staging-deploy.outputs.functions_base_url }}
-      RECOVERY_CALLABLES: ${{ needs.staging-deploy.outputs.recovery_callables }}
-      EXPECTED_SIGNER_SHA256: ${{ needs.staging-deploy.outputs.signer_sha256 }}
+      GITHUB_TOKEN: ${{ github.token }}
       GH_TOKEN: ${{ github.token }}
+      RECOVERY_ENABLED: "false"
+      RUN_IDS: ${{ inputs.run_ids }}
+      REQUIRE: "1,2"
     steps:
-      - name: Checkout trusted gate tooling
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Candidate remains the exact frozen branch head
-        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
-      - name: Confirm staging is isolated from production
+      - name: Verify frozen candidate
+        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA"
+      - name: Verify Gates 1-2 evidence and attestations
+        run: scripts/gates/fetch-and-verify.sh
+      - name: Probe staging App Check
         run: |
-          set -euo pipefail
-          test -n "$STAGING_PROJECT"
-          test -n "$PRODUCTION_PROJECT"
-          test "$STAGING_PROJECT" != "$PRODUCTION_PROJECT"
-          test "$CANDIDATE_BRANCH" = "work/p0-storage-hardening"
-      - name: Download APKs from the trusted reusable staging deployment
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+          mkdir -p proofs
+          node scripts/gates/staging-probes.mjs | tee proofs/gate3-probes.log
+      - name: Validate independent real-SMS attestation
+        run: node scripts/gates/validate-attestation.mjs --kind sms --file gates/attestations/gate3-sms.json --sha "$CANDIDATE_SHA"
+      - name: Write evidence
+        run: node scripts/gates/write-evidence.mjs --gate 3 --sha "$CANDIDATE_SHA" --proof proofs/gate3-probes.log --proof gates/attestations/gate3-sms.json
+      - name: Upload evidence
+        uses: actions/upload-artifact@REPLACE_WITH_FULL_40_CHAR_SHA # v4.x
         with:
-          name: aurelia-recovery-staging-apk-${{ inputs.candidate_sha }}
-          path: staging-artifacts
-      - name: Verify exact candidate APK hashes and signer
-        run: |
-          set -euo pipefail
-          mkdir -p apks evidence
-          test -s staging-artifacts/app-release.apk
-          test -s staging-artifacts/app-release-androidTest.apk
-          expected_app="$(awk '$2=="app-release.apk" {print $1}' staging-artifacts/apk-sha256.txt)"
-          expected_test="$(awk '$2=="app-release-androidTest.apk" {print $1}' staging-artifacts/apk-sha256.txt)"
-          actual_app="$(sha256sum staging-artifacts/app-release.apk | awk '{print $1}')"
-          actual_test="$(sha256sum staging-artifacts/app-release-androidTest.apk | awk '{print $1}')"
-          test -n "$expected_app" && test "$actual_app" = "$expected_app"
-          test -n "$expected_test" && test "$actual_test" = "$expected_test"
-          signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' staging-artifacts/apk-certificate.txt | tr -d ':')"
-          expected_signer="$(printf '%s' "$EXPECTED_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
-          test -n "$signer" && test -n "$expected_signer" && test "$signer" = "$expected_signer"
-          test_signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' staging-artifacts/androidTest-certificate.txt | tr -d ':')"
-          test "$test_signer" = "$signer"
-          cp staging-artifacts/app-release.apk apks/app.apk
-          cp staging-artifacts/app-release-androidTest.apk apks/test.apk
-          printf '%s\n' "$actual_app" > apks/app.sha256
-          printf '%s\n' "$actual_test" > apks/test.sha256
-      - name: Reject missing or invalid App Check tokens on every recovery callable
-        run: |
-          set -euo pipefail
-          if [[ -z "$STAGING_FUNCTIONS_BASE_URL" ]]; then
-            export STAGING_FUNCTIONS_BASE_URL="https://${GCP_REGION}-${STAGING_PROJECT}.cloudfunctions.net"
-          fi
-          node scripts/gates/staging-probes.mjs
-      - name: Write and bundle Gate 3 evidence
-        run: |
-          set -euo pipefail
-          node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
-          app_hash="$(sha256sum apks/app.apk | awk '{print $1}')"
-          test_hash="$(sha256sum apks/test.apk | awk '{print $1}')"
-          signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' staging-artifacts/apk-certificate.txt | tr -d ':')"
-          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg p "$STAGING_PROJECT" --arg s "$signer" --arg r "$GITHUB_RUN_ID"             '{apkSha256:$a,testApkSha256:$t,stagingProjectId:$p,signerSha256:$s,stagingRunId:($r|tonumber)}' > evidence/details.json
-          node scripts/gates/write-evidence.mjs --gate 3 --sha "$CANDIDATE_SHA" --status PASS
-          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
-      - name: Attest Gate 3 evidence bundle
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
-        with:
-          subject-path: bundle.tar
-      - name: Upload Gate 3 evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: gate-3-evidence
-          path: bundle.tar
+          name: gate-3-evidence-${{ inputs.candidate_sha }}
+          path: evidence/
           if-no-files-found: error
           retention-days: 90
-      - name: Upload exact Gate 3 APKs
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+
+      - name: Attest evidence record
+        uses: actions/attest-build-provenance@REPLACE_WITH_FULL_40_CHAR_SHA # v2.x
         with:
-          name: gate-3-apks
-          path: apks/
-          if-no-files-found: error
-          retention-days: 14
+          subject-path: evidence/gate-3.json
