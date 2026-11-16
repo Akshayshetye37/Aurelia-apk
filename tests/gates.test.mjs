@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { validateSmsAttestation } from '../scripts/gates/attestation-schema.mjs';
+import { validateFirebaseFingerprintInventory, countTestPhoneNumbers } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = path.join(ROOT, 'scripts', 'gates');
