@@ -34,7 +34,7 @@ for (const workflow of workflows) {
   for (let page = 1; page <= 5; page++) {
     const response = gh(`repos/${repo}/actions/workflows/${encoded}/runs?head_sha=${sha}&status=completed&per_page=100&page=${page}`);
     if (!Array.isArray(response.workflow_runs)) fail(`${workflow}: malformed workflow-runs response`);
-    runs.push(...response.workflow_runs.filter((run) => run.head_sha === sha));
+    runs.push(...response.workflow_runs.filter((run) => run.head_sha === sha && run.head_branch === candidateBranch));
     if (response.workflow_runs.length < 100) break;
   }
   runs.sort((a, b) => Date.parse(b.run_started_at ?? b.updated_at) - Date.parse(a.run_started_at ?? a.updated_at));
@@ -53,7 +53,7 @@ for (const workflow of workflows) {
   }
   const testCount = testCountFromLog(log);
   if (testCount < 1) fail(`${workflow}: successful run contains no positive test-count evidence`);
-  evidence.push({ workflow, runId: run.id, url: run.html_url, headSha: run.head_sha, conclusion: run.conclusion, testCount });
+  evidence.push({ workflow, runId: run.id, runAttempt: run.run_attempt, url: run.html_url, headSha: run.head_sha, headBranch: run.head_branch, conclusion: run.conclusion, testCount });
 
   // The Firebase Functions workflow emits a redacted emulator-log artifact.
   // Scan it on this ephemeral runner and retain only line-number/pattern metadata.

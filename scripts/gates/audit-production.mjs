@@ -76,6 +76,7 @@ if (!runtimeAccounts.length) problems.push('RUNTIME_SERVICE_ACCOUNTS not configu
 if (!auditServiceAccount) problems.push('AUDIT_SERVICE_ACCOUNT not configured');
 if (auditServiceAccount && runtimeAccounts.includes(auditServiceAccount)) problems.push('audit identity must be distinct from every production runtime identity');
 const requiredSecrets = list('REQUIRED_SECRETS');
+const allowedSecretPrincipals = new Set([...runtimeAccounts, auditServiceAccount].filter(Boolean).map((account) => `serviceAccount:${account}`));
 if (!requiredSecrets.length) problems.push('REQUIRED_SECRETS not configured');
 for (const secret of requiredSecrets) {
   const versions = run(['secrets', 'versions', 'list', secret, '--project', project, '--filter=state=ENABLED']);
@@ -83,6 +84,7 @@ for (const secret of requiredSecrets) {
   const policy = run(['secrets', 'get-iam-policy', secret, '--project', project]);
   for (const binding of policy.bindings ?? []) for (const member of binding.members ?? []) {
     if (!member.startsWith('serviceAccount:')) problems.push(`secret ${secret}: non-service-account member`);
+    else if (!allowedSecretPrincipals.has(member)) problems.push(`secret ${secret}: unexpected service-account member`);
     if (auditServiceAccount && member === `serviceAccount:${auditServiceAccount}` && ['roles/secretmanager.secretAccessor', 'roles/secretmanager.admin'].includes(binding.role)) problems.push(`secret ${secret}: audit identity has secret payload/admin access`);
   }
 }
@@ -97,10 +99,12 @@ for (const account of reviewedAccounts) {
     }
   }
 }
+const requiredAppCheckServices = list('APPCHECK_REQUIRED_SERVICES');
+if (!requiredAppCheckServices.length) problems.push('APPCHECK_REQUIRED_SERVICES not configured');
 const projectPolicy = run(['projects', 'get-iam-policy', project]);
 for (const account of reviewedAccounts) {
   for (const binding of projectPolicy.bindings ?? []) {
-    if (['roles/owner', 'roles/editor'].includes(binding.role) && (binding.members ?? []).includes(`serviceAccount:${account}`)) {
+    if (['roles/owner', 'roles/editor', 'roles/secretmanager.secretAccessor', 'roles/secretmanager.admin'].includes(binding.role) && (binding.members ?? []).includes(`serviceAccount:${account}`)) {
       problems.push(`${account}: project-level ${binding.role}`);
     }
   }
@@ -114,7 +118,7 @@ if (!appCheck.ok) problems.push(`App Check API returned ${appCheck.status}`);
 else {
   const payload = await appCheck.json();
   const modes = Object.fromEntries((payload.services ?? []).map((service) => [service.name.split('/').pop(), service.enforcementMode]));
-  for (const service of list('APPCHECK_REQUIRED_SERVICES')) if (modes[service] !== 'ENFORCED') problems.push(`App Check not ENFORCED for ${service}`);
+  for (const service of requiredAppCheckServices) if (modes[service] !== 'ENFORCED') problems.push(`App Check not ENFORCED for ${service}`);
 }
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/production-audit.json', JSON.stringify({ project, checkedAt: new Date().toISOString(), auditedResources, problems }, null, 2));
