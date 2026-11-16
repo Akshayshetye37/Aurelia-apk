@@ -567,7 +567,8 @@ test('Gate 5 rejects broad project roles on runtime and read-only audit identiti
 
 test('qualification attestations expire after seven days while allowing small clock skew', () => {
   const now = Date.parse('2026-11-16T12:00:00.000Z');
-  assert.equal(isAttestationFresh('2026-11-09T12:00:00.000Z', now), true);
+  assert.equal(isAttestationFresh('2026-11-09T12:00:00.001Z', now), true);
+  assert.equal(isAttestationFresh('2026-11-09T12:00:00.000Z', now), false);
   assert.equal(isAttestationFresh('2026-11-09T11:59:59.999Z', now), false);
   assert.equal(isAttestationFresh('2026-11-16T12:04:59.999Z', now), true);
   assert.equal(isAttestationFresh('2026-11-16T12:05:00.001Z', now), false);
