@@ -354,20 +354,20 @@ test('recovery runtime secret access is pinned to the complete per-callable leas
     activateRecoveryPhoneChange: [],
   };
   const staging = read('.github/workflows/recovery-staging-deploy.yml');
-  const stagingBlock = staging.match(/bindings=\\(\\s*([\\s\\S]*?)\\s*\\)/)?.[1];
+  const stagingBlock = staging.match(/bindings=\(\s*([\s\S]*?)\s*\)/)?.[1];
   assert.ok(stagingBlock, 'staging per-function secret map must exist');
   const stagingMap = Object.fromEntries([...stagingBlock.matchAll(/"([A-Za-z0-9]+):([A-Z0-9_,]*)"/g)]
     .map(([, fn, secrets]) => [fn, secrets ? secrets.split(',') : []]));
   assert.deepEqual(stagingMap, expected, 'staging runtime secret map must match the least-privilege contract');
 
   const production = read('scripts/gates/audit-production.mjs');
-  const productionBlock = production.match(/const runtimeSecretBindings = \\{([\\s\\S]*?)\\n\\};/)?.[1];
+  const productionBlock = production.match(/const runtimeSecretBindings = \{([\s\S]*?)\n\};/)?.[1];
   assert.ok(productionBlock, 'production per-function secret map must exist');
-  const productionMap = Object.fromEntries([...productionBlock.matchAll(/^\\s*([A-Za-z0-9]+): \\[([^\\]]*)\\],?$/gm)]
+  const productionMap = Object.fromEntries([...productionBlock.matchAll(/^\s*([A-Za-z0-9]+): \[([^\]]*)\],?$/gm)]
     .map(([, fn, secrets]) => [fn, [...secrets.matchAll(/'([A-Z0-9_]+)'/g)].map(([, secret]) => secret)]));
   assert.deepEqual(productionMap, expected, 'production runtime secret map must match the least-privilege contract');
   assert.match(stagingBlock, /acknowledgeRecoveryOwnerAlert:/);
-  assert.match(productionBlock, /acknowledgeRecoveryOwnerAlert: \\[\\]/);
+  assert.match(productionBlock, /acknowledgeRecoveryOwnerAlert: \[\]/);
 });
 
 test('Gate 4 device execution is isolated from hosted provenance attestation', () => {
