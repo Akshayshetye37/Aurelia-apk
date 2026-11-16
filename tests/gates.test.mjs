@@ -305,7 +305,7 @@ const args = process.argv.slice(2);
 if (args[0] === 'api') {
   if (args[1] === 'repos/owner/repo') console.log(JSON.stringify({ id: 999 }));
   else if (args[1] === 'repos/owner/repo/actions/runs/123') console.log(JSON.stringify({
-    status: 'completed', conclusion: 'success', head_branch: 'integration/ledger-patch',
+    status: 'completed', conclusion: 'success', completed_at: new Date().toISOString(), head_branch: 'integration/ledger-patch',
     path: '.github/workflows/' + process.env.FAKE_WORKFLOW_FILE + '@refs/heads/integration/ledger-patch',
     event: process.env.FAKE_EVENT, head_sha: process.env.FAKE_CONTROL_SHA, run_attempt: 1
   }));
