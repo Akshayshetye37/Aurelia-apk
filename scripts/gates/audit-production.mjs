@@ -22,7 +22,7 @@ const protectedFlagNames = new Set([
   'BT_PRINTING_ENABLED',
 ]);
 const off = (v) => v === undefined || v === null || ['false', '0', 'off', 'disabled', 'no', ''].includes(String(v).trim().toLowerCase());
-const auditedResources = { functions: 0, functionIamPolicies: 0, runServices: 0, runIamPolicies: 0, protectedFlagVariables: 0 };
+const auditedResources = { functions: 0, gen1Functions: 0, gen2Functions: 0, functionIamPolicies: 0, runServices: 0, runIamPolicies: 0, protectedFlagVariables: 0 };
 function inspectFlag(name, value, resource) {
   if (!protectedFlagNames.has(name)) return;
   auditedResources.protectedFlagVariables++;
@@ -52,14 +52,20 @@ for (const f of functions) {
   const nameParts = String(f.name ?? '').split('/');
   const locationIndex = nameParts.indexOf('locations');
   const functionRegion = locationIndex >= 0 ? nameParts[locationIndex + 1] : '';
+  const generation = f.environment ?? (f.serviceConfig ? 'GEN_2' : 'GEN_1');
   if (!functionName || !functionRegion) {
     problems.push(`${resource}: function name or region is missing from the production inventory`);
-  } else {
-    const policyArgs = ['functions', 'get-iam-policy', functionName, '--project', project, '--region', functionRegion];
-    if (f.environment === 'GEN_2' || f.serviceConfig) policyArgs.push('--gen2');
-    const policy = run(policyArgs);
+  } else if (generation === 'GEN_1') {
+    const policy = run(['functions', 'get-iam-policy', functionName, '--project', project, '--region', functionRegion]);
+    auditedResources.gen1Functions++;
     auditedResources.functionIamPolicies++;
-    if (hasPublicRuntimeInvoker(policy)) problems.push(`${resource}: function-level IAM grants public invocation`);
+    if (hasPublicRuntimeInvoker(policy)) problems.push(`${resource}: first-generation function IAM grants public invocation`);
+  } else if (generation === 'GEN_2') {
+    // Gen2 invocation is enforced by its underlying Cloud Run service; that
+    // service's IAM policy is checked in the complete Cloud Run inventory below.
+    auditedResources.gen2Functions++;
+  } else {
+    problems.push(`${resource}: unknown Cloud Functions generation; invocation IAM cannot be audited`);
   }
 }
 const services = run(['run', 'services', 'list', '--project', project]);
