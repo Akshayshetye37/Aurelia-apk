@@ -57,6 +57,29 @@ function runQualificationOfflineValidation(t, runIds) {
   return { result, marker };
 }
 
+function runManualAttestationOffline(t, actor, attestation) {
+  const dir = tempDir(t);
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const marker = path.join(dir, 'gh-called');
+  const fakeGh = path.join(bin, 'gh');
+  fs.writeFileSync(fakeGh, [
+    '#!/usr/bin/env node',
+    `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "called");`,
+    'process.exit(2);',
+  ].join('\n'));
+  fs.chmodSync(fakeGh, 0o755);
+  const result = run(t, 'validate-attestation.mjs', [
+    '--kind', 'sms', '--sha', SHA_A, '--repo', 'owner/repo',
+    '--gate3-run', '12345', '--control-branch', 'integration/ledger-patch',
+  ], {
+    ATTESTATION: JSON.stringify(attestation),
+    ACTOR: actor ?? '',
+    PATH: bin + path.delimiter + process.env.PATH,
+  }, dir);
+  return { result, marker };
+}
+
 test('instrumentation parser accepts the required passing test count', (t) => {
   const dir = tempDir(t);
   const file = path.join(dir, 'instrumentation.txt');
@@ -188,6 +211,34 @@ test('manual attestation rejects OTP material before any GitHub API call', (t) =
   ], { ATTESTATION: JSON.stringify({ kind: 'sms', otp: '123456' }) });
   assert.equal(result.status, 1);
   assert.match(output(result), /6-digit sequence/);
+});
+
+test('manual attestation rejects the triggering actor as tester before GitHub API access', (t) => {
+  const attestation = {
+    kind: 'sms',
+    apkSha256: 'a'.repeat(64),
+    testedAt: new Date().toISOString(),
+    tester: 'Alice-QA',
+    results: {},
+  };
+  const { result, marker } = runManualAttestationOffline(t, 'alice-qa', attestation);
+  assert.equal(result.status, 1);
+  assert.match(output(result), /cannot be the person who triggered/);
+  assert.equal(fs.existsSync(marker), false, 'GitHub CLI must not be invoked for self-attestation');
+});
+
+test('manual attestation requires a triggering actor before GitHub API access', (t) => {
+  const attestation = {
+    kind: 'sms',
+    apkSha256: 'a'.repeat(64),
+    testedAt: new Date().toISOString(),
+    tester: 'Alice-QA',
+    results: {},
+  };
+  const { result, marker } = runManualAttestationOffline(t, undefined, attestation);
+  assert.equal(result.status, 1);
+  assert.match(output(result), /triggering actor is unavailable/);
+  assert.equal(fs.existsSync(marker), false, 'GitHub CLI must not be invoked without an actor');
 });
 
 test('qualification rejects malformed run ID JSON before GitHub API access', (t) => {

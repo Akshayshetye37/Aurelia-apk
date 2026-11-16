@@ -24,6 +24,12 @@ const kindKeys = kind === 'sms'
 const unknownKeys = Object.keys(attestation).filter((key) => !commonKeys.concat(kindKeys).includes(key));
 if (unknownKeys.length) fail(`unexpected attestation field(s): ${unknownKeys.join(', ')}`);
 if (!attestation.results || Array.isArray(attestation.results) || typeof attestation.results !== 'object') fail('results must be a JSON object');
+if (typeof attestation.tester !== 'string' || !/^[A-Za-z0-9-]{1,39}$/.test(attestation.tester)) fail('tester must be a GitHub login');
+const actor = process.env.ACTOR;
+if (typeof actor !== 'string' || !actor) fail('triggering actor is unavailable');
+if (attestation.tester.toLowerCase() === actor.toLowerCase()) {
+  fail('the tester cannot be the person who triggered the attestation run');
+}
 const gate3 = verifyBundle({ repo, runId: gate3Run, gate: '3', workflowFile: 'gate-3-real-sms-staging.yml', controlBranch, dir: 'g3' });
 if (gate3.candidateSha !== sha) fail('Gate 3 belongs to a different candidate');
 if (attestation.kind !== kind) fail('kind mismatch');
