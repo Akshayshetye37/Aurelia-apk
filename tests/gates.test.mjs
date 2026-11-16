@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = path.join(ROOT, 'scripts', 'gates');
@@ -194,4 +194,91 @@ test('Gate 3 fetch rejects a malformed run ID before GitHub API access', (t) => 
   });
   assert.equal(result.status, 1);
   assert.match(output(result), /bad run ID/);
+});
+
+function runVerifyBundle(t, certificate) {
+  const dir = tempDir(t);
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const fakeGh = path.join(bin, 'gh');
+  const fakeSource = `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+const args = process.argv.slice(2);
+if (args[0] === 'api') {
+  if (args[1] === 'repos/owner/repo') console.log(JSON.stringify({ id: 999 }));
+  else if (args[1] === 'repos/owner/repo/actions/runs/123') console.log(JSON.stringify({
+    status: 'completed', conclusion: 'success', head_branch: 'integration/ledger-patch',
+    path: '.github/workflows/gate-1-encrypted-storage.yml@refs/heads/integration/ledger-patch',
+    event: 'workflow_dispatch', head_sha: process.env.FAKE_CONTROL_SHA, run_attempt: 1
+  }));
+  else process.exit(2);
+} else if (args[0] === 'run' && args[1] === 'download') {
+  const destination = args[args.indexOf('-D') + 1];
+  fs.mkdirSync(path.join(destination, 'evidence'), { recursive: true });
+  fs.writeFileSync(path.join(destination, 'evidence', 'record.json'), process.env.FAKE_RECORD);
+  execFileSync('tar', ['-cf', 'bundle.tar', 'evidence'], { cwd: destination });
+} else if (args[0] === 'attestation' && args[1] === 'verify') {
+  console.log(JSON.stringify([{ verificationResult: { signature: { certificate: JSON.parse(process.env.FAKE_CERT) } } }]));
+} else {
+  console.error('unexpected fake gh command');
+  process.exit(2);
+}
+`;
+  fs.writeFileSync(fakeGh, fakeSource);
+  fs.chmodSync(fakeGh, 0o755);
+  const controlSha = SHA_B;
+  const record = {
+    gate: '1', status: 'PASS', runId: 123, runAttempt: 1,
+    repository: 'owner/repo', candidateSha: SHA_A, controlSha,
+  };
+  const env = {
+    ...process.env,
+    PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+    FAKE_CONTROL_SHA: controlSha,
+    FAKE_RECORD: JSON.stringify(record),
+    FAKE_CERT: JSON.stringify(certificate),
+  };
+  const libUrl = pathToFileURL(path.join(GATES, 'lib.mjs')).href;
+  const code = `import { verifyBundle } from ${JSON.stringify(libUrl)}; verifyBundle({
+    repo: 'owner/repo', runId: '123', gate: '1',
+    workflowFile: 'gate-1-encrypted-storage.yml',
+    controlBranch: 'integration/ledger-patch', dir: 'bundle-out'
+  });`;
+  return spawnSync(process.execPath, ['--input-type=module', '-e', code], {
+    cwd: dir, env, encoding: 'utf8', timeout: 15_000, maxBuffer: 2 * 1024 * 1024,
+  });
+}
+function validCertificate() {
+  return {
+    issuer: 'https://token.actions.githubusercontent.com',
+    sourceRepositoryURI: 'https://github.com/owner/repo',
+    sourceRepositoryIdentifier: '999',
+    sourceRepositoryDigest: SHA_B,
+    sourceRepositoryRef: 'refs/heads/integration/ledger-patch',
+    buildSignerURI: 'https://github.com/owner/repo/.github/workflows/gate-1-encrypted-storage.yml@refs/heads/integration/ledger-patch',
+    buildSignerDigest: SHA_B,
+    runInvocationURI: 'https://github.com/owner/repo/actions/runs/123/attempts/1',
+    runnerEnvironment: 'github-hosted',
+    buildTrigger: 'workflow_dispatch',
+  };
+}
+
+test('bundle verification binds the trusted certificate to repository, workflow, commit and exact run attempt', (t) => {
+  const result = runVerifyBundle(t, validCertificate());
+  assert.equal(result.status, 0, output(result));
+});
+
+test('bundle verification rejects a certificate from a different run or self-hosted runner', (t) => {
+  const wrongRun = validCertificate();
+  wrongRun.runInvocationURI = 'https://github.com/owner/repo/actions/runs/124/attempts/1';
+  const runMismatch = runVerifyBundle(t, wrongRun);
+  assert.equal(runMismatch.status, 1);
+  assert.match(output(runMismatch), /not bound to run 123/);
+  const selfHosted = validCertificate();
+  selfHosted.runnerEnvironment = 'self-hosted';
+  const runnerMismatch = runVerifyBundle(t, selfHosted);
+  assert.equal(runnerMismatch.status, 1);
+  assert.match(output(runnerMismatch), /not bound to run 123/);
 });
