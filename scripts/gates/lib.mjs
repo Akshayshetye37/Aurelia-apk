@@ -21,7 +21,7 @@ export function requireSha(value) {
 }
 export function isAttestationFresh(completedAt, now = Date.now()) {
   const timestamp = Date.parse(completedAt ?? '');
-  return Number.isFinite(timestamp) && timestamp <= now + 5 * 60 * 1000 && now - timestamp <= 7 * 864e5;
+  return Number.isFinite(timestamp) && timestamp <= now + 5 * 60 * 1000 && now - timestamp < 7 * 864e5;
 }
 
 export const sha256File = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
