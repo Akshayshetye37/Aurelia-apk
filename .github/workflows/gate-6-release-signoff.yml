@@ -7,7 +7,7 @@ on:
         required: true
         type: string
       run_ids:
-        description: JSON object containing run IDs for gates 1, 2, 3, 4, 5, sms and device
+        description: Distinct successful run IDs for gates 1–5 and manual SMS/device attestations
         required: true
         type: string
 permissions: {}
@@ -15,7 +15,38 @@ concurrency:
   group: gate-6-release-${{ inputs.candidate_sha }}
   cancel-in-progress: false
 jobs:
+  preflight:
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      RUN_IDS: ${{ inputs.run_ids }}
+      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Checkout trusted gate tooling
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Validate candidate and all seven distinct evidence run IDs before requesting approvals
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
+          node --input-type=module <<'NODE'
+          const value = JSON.parse(process.env.RUN_IDS);
+          const expected = ['1', '2', '3', '4', '5', 'device', 'sms'].sort();
+          if (!value || Array.isArray(value) || typeof value !== 'object' ||
+              JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(expected)) throw new Error('RUN_IDS must contain exactly gates 1–5, sms and device');
+          const ids = expected.map(key => String(value[key]));
+          if (ids.some(id => !/^[1-9][0-9]{0,15}$/.test(id) || !Number.isSafeInteger(Number(id))) ||
+              new Set(ids).size !== ids.length) throw new Error('RUN_IDS must contain seven distinct positive safe integers');
+          NODE
   independent-reviewer-one:
+    needs: preflight
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
     environment: recovery-release-review-1
@@ -25,7 +56,7 @@ jobs:
       - name: First independent release reviewer approval
         run: echo "First independent release approval recorded by the protected environment."
   independent-reviewer-two:
-    needs: independent-reviewer-one
+    needs: [preflight, independent-reviewer-one]
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
     environment: recovery-release-review-2
@@ -35,7 +66,7 @@ jobs:
       - name: Second independent release reviewer approval
         run: echo "Second independent release approval recorded by the protected environment."
   verify-and-attest:
-    needs: [independent-reviewer-one, independent-reviewer-two]
+    needs: [preflight, independent-reviewer-one, independent-reviewer-two]
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
     timeout-minutes: 30
