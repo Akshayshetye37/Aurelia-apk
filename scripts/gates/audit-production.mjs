@@ -146,7 +146,7 @@ do {
   const page=await firebaseGet(url,'Firebase Auth tenant inventory');
   for(const tenant of page.tenants??[]) {
     firebaseAudit.tenants++;
-    const config=await firebaseGet(`https://identitytoolkit.googleapis.com/admin/v2/${encodeURIComponent(tenant.name)}`,'Firebase Auth tenant configuration');
+    const config=await firebaseGet(`https://identitytoolkit.googleapis.com/admin/v2/${tenant.name.split('/').map(encodeURIComponent).join('/')}`,'Firebase Auth tenant configuration');
     const count=countTestPhoneNumbers(config); firebaseAudit.tenantTestPhoneNumbers+=count;
     if(count) problems.push(`Firebase Auth tenant ${tenant.name.split('/').pop()} has test phone numbers configured`);
   }
@@ -166,6 +166,6 @@ else {
   for (const service of requiredAppCheckServices) if (modes[service] !== 'ENFORCED') problems.push(`App Check not ENFORCED for ${service}`);
 }
 fs.mkdirSync('evidence', { recursive: true });
-fs.writeFileSync('evidence/production-audit.json', JSON.stringify({ project, checkedAt: new Date().toISOString(), auditedResources, problems }, null, 2));
+fs.writeFileSync('evidence/production-audit.json', JSON.stringify({ project, checkedAt: new Date().toISOString(), auditedResources, firebaseAudit, problems }, null, 2));
 if (problems.length) fail(problems.join('; '));
 console.log('production audit clean: recovery OFF everywhere');
