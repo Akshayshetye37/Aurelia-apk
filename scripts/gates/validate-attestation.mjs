@@ -15,7 +15,7 @@ if (!attestation || Array.isArray(attestation) || typeof attestation !== 'object
 const raw = JSON.stringify(attestation);
 if (Buffer.byteLength(raw, 'utf8') > 4000) fail('attestation too large');
 if (/\b\d{6}\b/.test(raw)) fail('attestation contains a 6-digit sequence; never record OTPs');
-if (/\+?\d{10,}/.test(raw)) fail('attestation contains a phone-number-like value');
+if (containsPhoneNumberLikeValue(attestation)) fail('attestation contains a phone-number-like value');
 
 const commonKeys = ['kind', 'apkSha256', 'testedAt', 'tester', 'results'];
 const kindKeys = kind === 'sms'
