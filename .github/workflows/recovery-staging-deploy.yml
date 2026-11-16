@@ -57,7 +57,7 @@ jobs:
       PRODUCTION_PROJECT: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
       STAGING_FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
-      RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'createRecoveryAttestationChallenge,verifyRecoveryDeviceAttestation,registerRecoveryPhone,exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,issueRecoveryGrant,consumeRecoveryGrant,cancelRecoveryRequest,cancelRecoveryPhoneChange,activateRecoveryPhoneChange' }}
+      RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'createRecoveryAttestationChallenge,verifyRecoveryDeviceAttestation,registerRecoveryPhone,exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,createRecoveryPasskeyEnrollmentOptions,completeRecoveryPasskeyEnrollment,retryRecoveryPasskeyEnrollmentAlert,getRecoveryOwnerPendingAction,getRecoveryOwnerActionReadiness,createRecoveryOwnerActionOptions,completeRecoveryOwnerPasskeyAction,acknowledgeRecoveryOwnerAlert,issueRecoveryGrant,consumeRecoveryGrant,cancelRecoveryRequest,cancelRecoveryPhoneChange,activateRecoveryPhoneChange' }}
       EXPECTED_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
     steps:
       - name: Checkout trusted workflow control revision
@@ -211,6 +211,13 @@ jobs:
             "exchangeOwnerEmailLink:"
             "confirmRecoveryOwnerBinding:"
             "registerRecoveryOwnerDevice:PHONE_PEPPER"
+            "createRecoveryPasskeyEnrollmentOptions:"
+            "completeRecoveryPasskeyEnrollment:"
+            "retryRecoveryPasskeyEnrollmentAlert:"
+            "getRecoveryOwnerPendingAction:"
+            "getRecoveryOwnerActionReadiness:"
+            "createRecoveryOwnerActionOptions:"
+            "completeRecoveryOwnerPasskeyAction:"
             "acknowledgeRecoveryOwnerAlert:"
             "issueRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"
             "consumeRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"
