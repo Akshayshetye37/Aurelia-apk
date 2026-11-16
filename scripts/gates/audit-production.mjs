@@ -22,7 +22,7 @@ const protectedFlagNames = new Set([
   'BT_PRINTING_ENABLED',
 ]);
 const off = (v) => v === undefined || v === null || ['false', '0', 'off', 'disabled', 'no', ''].includes(String(v).trim().toLowerCase());
-const auditedResources = { functions: 0, runServices: 0, protectedFlagVariables: 0 };
+const auditedResources = { functions: 0, functionIamPolicies: 0, runServices: 0, runIamPolicies: 0, protectedFlagVariables: 0 };
 function inspectFlag(name, value, resource) {
   if (!protectedFlagNames.has(name)) return;
   auditedResources.protectedFlagVariables++;
@@ -48,11 +48,23 @@ for (const f of functions) {
   const config = f.serviceConfig ?? f;
   inspectFunctionEnv(resource, config.environmentVariables ?? f.environmentVariables);
   inspectSecretFlag(resource, config.secretEnvironmentVariables ?? f.secretEnvironmentVariables);
+  const functionName = String(f.name ?? '').split('/').pop();
+  const functionRegion = String(f.name ?? '').match(/\\/locations\\/([^/]+)\\/functions\\//)?.[1];
+  if (!functionName || !functionRegion) {
+    problems.push(`${resource}: function name or region is missing from the production inventory`);
+  } else {
+    const policyArgs = ['functions', 'get-iam-policy', functionName, '--project', project, '--region', functionRegion];
+    if (f.environment === 'GEN_2' || f.serviceConfig) policyArgs.push('--gen2');
+    const policy = run(policyArgs);
+    auditedResources.functionIamPolicies++;
+    if (hasPublicRuntimeInvoker(policy)) problems.push(`${resource}: function-level IAM grants public invocation`);
+  }
 }
 const services = run(['run', 'services', 'list', '--project', project]);
 auditedResources.runServices = services.length;
 for (const service of services) {
-  const resource = `run service ${service.metadata?.name ?? service.name}`;
+  const serviceName = service.metadata?.name ?? service.name;
+  const resource = `run service ${serviceName}`;
   const containers = service.spec?.template?.spec?.containers ?? service.template?.containers ?? [];
   for (const container of containers) {
     for (const entry of container.env ?? []) {
@@ -61,6 +73,14 @@ for (const service of services) {
       if (entry.valueSource || entry.valueFrom) problems.push(`${resource}: ${entry.name} is secret-sourced and cannot be proven OFF`);
       else if (!off(entry.value)) problems.push(`${resource}: ${entry.name} is not OFF`);
     }
+  }
+  const serviceRegion = service.metadata?.labels?.['cloud.googleapis.com/location'];
+  if (!serviceRegion || !serviceName) {
+    problems.push(`${resource}: Cloud Run region is missing; service IAM could not be audited`);
+  } else {
+    const policy = run(['run', 'services', 'get-iam-policy', serviceName, '--region', serviceRegion, '--project', project]);
+    auditedResources.runIamPolicies++;
+    if (hasPublicRuntimeInvoker(policy)) problems.push(`${resource}: service-level IAM grants public invocation`);
   }
 }
 const verifier = process.env.ATTESTATION_VERIFIER_SERVICE;
