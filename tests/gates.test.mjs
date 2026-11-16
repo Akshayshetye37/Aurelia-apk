@@ -533,7 +533,15 @@ test('Gate 3 and Gate 6 pin App Check probes to the full recovery callable inven
   const verifier = read('scripts/gates/verify-qualification.mjs');
   for (const name of ['createRecoveryAttestationChallenge', 'verifyRecoveryDeviceAttestation',
     'registerRecoveryPhone', 'exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
-    'registerRecoveryOwnerDevice', 'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant',
+    'registerRecoveryOwnerDevice',
+    'createRecoveryPasskeyEnrollmentOptions',
+    'completeRecoveryPasskeyEnrollment',
+    'retryRecoveryPasskeyEnrollmentAlert',
+    'getRecoveryOwnerPendingAction',
+    'getRecoveryOwnerActionReadiness',
+    'createRecoveryOwnerActionOptions',
+    'completeRecoveryOwnerPasskeyAction',
+    'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant',
     'consumeRecoveryGrant', 'cancelRecoveryRequest', 'cancelRecoveryPhoneChange',
     'activateRecoveryPhoneChange']) {
     assert.ok(probeScript.includes(name), `staging probes must include ${name}`);
