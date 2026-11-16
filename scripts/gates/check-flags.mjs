@@ -4,7 +4,7 @@ import { fail } from './lib.mjs';
 
 const root = path.resolve(process.argv[2] ?? '.');
 if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) fail('candidate root does not exist');
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'build', 'dist', 'coverage', '.gradle', '.idea', 'test', 'tests', '__tests__', 'fixtures', 'staging']);
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'build', 'dist', 'coverage', '.gradle', '.idea', 'test', 'tests', '__tests__', 'fixtures', 'staging', 'instrumentation']);
 const EXT = /\.(?:ts|tsx|js|jsx|mjs|cjs|json|ya?ml|kt|java|xml|env|properties|gradle)$/i;
 const FLAGS = [
   ['RECOVERY_ENABLED', /\bRECOVERY_ENABLED\b["']?\s*[:=]\s*["']?(?:true|1)\b/i],

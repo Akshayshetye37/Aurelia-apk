@@ -2,6 +2,36 @@ name: Recovery staging deployment and APK
 
 on:
   workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Optional exact candidate SHA for direct staging qualification
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      candidate_sha:
+        description: Exact candidate SHA to deploy and build
+        required: true
+        type: string
+    outputs:
+      staging_project_id:
+        description: Non-secret staging project identifier
+        value: ${{ jobs.deploy-and-build.outputs.staging_project_id }}
+      production_project_id:
+        description: Non-secret production project identifier
+        value: ${{ jobs.deploy-and-build.outputs.production_project_id }}
+      gcp_region:
+        description: Staging Functions region
+        value: ${{ jobs.deploy-and-build.outputs.gcp_region }}
+      functions_base_url:
+        description: HTTPS staging callable base URL
+        value: ${{ jobs.deploy-and-build.outputs.functions_base_url }}
+      recovery_callables:
+        description: Callable names covered by App Check probes
+        value: ${{ jobs.deploy-and-build.outputs.recovery_callables }}
+      signer_sha256:
+        description: Release signer certificate SHA-256 fingerprint
+        value: ${{ jobs.deploy-and-build.outputs.signer_sha256 }}
 
 permissions:
   contents: read
@@ -13,29 +43,67 @@ concurrency:
 
 jobs:
   deploy-and-build:
-    if: github.ref == 'refs/heads/work/p0-storage-hardening'
+    if: (github.workflow_ref == format('{0}/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/{1}', github.repository, vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')) || (github.workflow_ref == format('{0}/.github/workflows/recovery-staging-deploy.yml@refs/heads/work/p0-storage-hardening', github.repository))
     runs-on: ubuntu-latest
+    outputs:
+      staging_project_id: ${{ steps.staging-outputs.outputs.staging_project_id }}
+      production_project_id: ${{ steps.staging-outputs.outputs.production_project_id }}
+      gcp_region: ${{ steps.staging-outputs.outputs.gcp_region }}
+      functions_base_url: ${{ steps.staging-outputs.outputs.functions_base_url }}
+      recovery_callables: ${{ steps.staging-outputs.outputs.recovery_callables }}
+      signer_sha256: ${{ steps.staging-outputs.outputs.signer_sha256 }}
     environment: recovery-staging
     timeout-minutes: 60
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
+      GH_TOKEN: ${{ github.token }}
+      STAGING_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+      PRODUCTION_PROJECT: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
+      STAGING_FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
+      RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'createRecoveryAttestationChallenge,verifyRecoveryDeviceAttestation,registerRecoveryPhone,exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,issueRecoveryGrant,consumeRecoveryGrant,cancelRecoveryRequest,cancelRecoveryPhoneChange,activateRecoveryPhoneChange' }}
+      EXPECTED_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Checkout trusted workflow control revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify exact candidate source before staging deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$GITHUB_WORKFLOW_REF" in
+            "$GITHUB_REPOSITORY/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/$CONTROL_BRANCH")
+              node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$GITHUB_REPOSITORY" --branch "$CANDIDATE_BRANCH" ;;
+            "$GITHUB_REPOSITORY/.github/workflows/recovery-staging-deploy.yml@refs/heads/work/p0-storage-hardening")
+              test "$CANDIDATE_BRANCH" = "work/p0-storage-hardening"
+              test "$CANDIDATE_SHA" = "$GITHUB_SHA" ;;
+            *) echo "::error::Untrusted workflow ref cannot invoke staging deployment."; exit 1 ;;
+          esac
+      - name: Checkout candidate source as build input
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.candidate_sha || github.sha }}
+          path: candidate
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: npm
       - uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
 
       - name: Authenticate to staging Google Cloud with Workload Identity Federation
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
 
       - name: Validate staging configuration without printing secrets
         shell: bash
@@ -58,9 +126,12 @@ jobs:
           KEY_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_REF" != "refs/heads/work/p0-storage-hardening" ]]; then
-            echo "::error::Recovery staging deployment is allowed only from work/p0-storage-hardening."
+          if [[ "$CANDIDATE_BRANCH" != "work/p0-storage-hardening" ]]; then
+            echo "::error::Candidate deployment is restricted to the protected staging qualification branch."
             exit 1
+          fi
+          if [[ "$PROJECT_ID" == "$PRODUCTION_PROJECT_ID" ]]; then
+            echo "::error::Staging deployment is blocked because the project is production."; exit 1
           fi
           for name in PROJECT_ID PRODUCTION_PROJECT_ID REGION FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS FIREBASE_WEB_API_KEY APP_CHECK_REGISTERED APP_CHECK_SIGNER_SHA256 ATTESTATION_SIGNER_SHA256 GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [[ -z "${!name}" ]]; then echo "::error::Missing recovery-staging environment setting: $name"; exit 1; fi
@@ -98,9 +169,11 @@ jobs:
           echo "Staging project, matching active public pin/private key, app config, signing keystore and Secret Manager versions are present."
 
       - name: Install Firebase Functions dependencies
+        working-directory: candidate
         run: npm install --prefix functions --ignore-scripts
 
       - name: Deploy Firebase Functions with staging-only recovery enabled
+        working-directory: candidate
         shell: bash
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -183,6 +256,7 @@ jobs:
           done
 
       - name: Generate Android project and inject staging Firebase config
+        working-directory: candidate
         shell: bash
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
@@ -204,6 +278,7 @@ jobs:
           test -s android/app/google-services.json
 
       - name: Apply pinned recovery key ring and release signing
+        working-directory: candidate
         env:
           RECOVERY_GRANT_PUBLIC_KEYS_JSON: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
           AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-release.jks
@@ -217,7 +292,7 @@ jobs:
           npx cap sync android
 
       - name: Build staging APK
-        working-directory: android
+        working-directory: candidate/android
         env:
           AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-release.jks
           AURELIA_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.AURELIA_RELEASE_KEYSTORE_PASSWORD }}
@@ -228,6 +303,7 @@ jobs:
           ./gradlew --no-daemon --stacktrace assembleRelease assembleReleaseAndroidTest
 
       - name: Verify APK signature and staging Firebase project
+        working-directory: candidate
         shell: bash
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -261,10 +337,21 @@ jobs:
           grep -E 'SHA-1|SHA-256' "$RUNNER_TEMP/apk-certificate.txt"
           grep -E 'SHA-1|SHA-256' "$RUNNER_TEMP/androidTest-certificate.txt"
 
+      - name: Expose non-secret staging metadata to Gate 3
+        id: staging-outputs
+        run: |
+          set -euo pipefail
+          echo "staging_project_id=$STAGING_PROJECT" >> "$GITHUB_OUTPUT"
+          echo "production_project_id=$PRODUCTION_PROJECT" >> "$GITHUB_OUTPUT"
+          echo "gcp_region=$GCP_REGION" >> "$GITHUB_OUTPUT"
+          echo "functions_base_url=$STAGING_FUNCTIONS_BASE_URL" >> "$GITHUB_OUTPUT"
+          echo "recovery_callables=$RECOVERY_CALLABLES" >> "$GITHUB_OUTPUT"
+          echo "signer_sha256=$EXPECTED_SIGNER_SHA256" >> "$GITHUB_OUTPUT"
+
       - name: Upload staging APK and non-secret fingerprints
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: aurelia-recovery-staging-apk-${{ github.sha }}
+          name: aurelia-recovery-staging-apk-${{ inputs.candidate_sha || github.sha }}
           path: ${{ runner.temp }}/staging-artifacts/
           if-no-files-found: error
           retention-days: 7

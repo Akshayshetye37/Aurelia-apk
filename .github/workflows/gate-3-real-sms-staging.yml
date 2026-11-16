@@ -11,34 +11,42 @@ concurrency:
   group: gate-3-${{ inputs.candidate_sha }}
   cancel-in-progress: false
 jobs:
-  staging:
+  staging-deploy:
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
-    runs-on: ubuntu-latest
-    environment: recovery-staging
-    timeout-minutes: 90
+    uses: ./.github/workflows/recovery-staging-deploy.yml
+    with:
+      candidate_sha: ${{ inputs.candidate_sha }}
+    secrets: inherit
     permissions:
       contents: read
-      actions: write
+      id-token: write
+  evidence:
+    needs: staging-deploy
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
       id-token: write
       attestations: write
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
-      CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
       REPO: ${{ github.repository }}
-      STAGING_PROJECT: ${{ vars.GCP_PROJECT_ID }}
-      PRODUCTION_PROJECT: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
-      STAGING_FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
-      RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'createRecoveryAttestationChallenge,verifyRecoveryDeviceAttestation,registerRecoveryPhone,exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,issueRecoveryGrant,consumeRecoveryGrant,cancelRecoveryRequest,cancelRecoveryPhoneChange,activateRecoveryPhoneChange' }}
-      EXPECTED_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
+      STAGING_PROJECT: ${{ needs.staging-deploy.outputs.staging_project_id }}
+      PRODUCTION_PROJECT: ${{ needs.staging-deploy.outputs.production_project_id }}
+      GCP_REGION: ${{ needs.staging-deploy.outputs.gcp_region }}
+      STAGING_FUNCTIONS_BASE_URL: ${{ needs.staging-deploy.outputs.functions_base_url }}
+      RECOVERY_CALLABLES: ${{ needs.staging-deploy.outputs.recovery_callables }}
+      EXPECTED_SIGNER_SHA256: ${{ needs.staging-deploy.outputs.signer_sha256 }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout trusted gate tooling
-        uses: actions/checkout@${checkout}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Candidate is the exact frozen branch head
+      - name: Candidate remains the exact frozen branch head
         run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
       - name: Confirm staging is isolated from production
         run: |
@@ -47,35 +55,15 @@ jobs:
           test -n "$PRODUCTION_PROJECT"
           test "$STAGING_PROJECT" != "$PRODUCTION_PROJECT"
           test "$CANDIDATE_BRANCH" = "work/p0-storage-hardening"
-      - name: Dispatch the existing branch-restricted staging deploy
-        id: staging
-        shell: bash
+      - name: Download APKs from the trusted reusable staging deployment
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aurelia-recovery-staging-apk-${{ inputs.candidate_sha }}
+          path: staging-artifacts
+      - name: Verify exact candidate APK hashes and signer
         run: |
           set -euo pipefail
-          started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          gh workflow run recovery-staging-deploy.yml --repo "$REPO" --ref "$CANDIDATE_BRANCH"
-          run_id=""
-          for attempt in $(seq 1 60); do
-            run_id="$(gh run list --repo "$REPO" --workflow recovery-staging-deploy.yml --branch "$CANDIDATE_BRANCH" --limit 20 --json databaseId,headSha,status,event,createdAt               --jq --arg sha "$CANDIDATE_SHA" --arg since "$started" '[.[] | select(.headSha == $sha and .event == "workflow_dispatch" and .createdAt >= $since)] | first | .databaseId // empty')"
-            if [[ -n "$run_id" ]]; then break; fi
-            sleep 10
-          done
-          [[ "$run_id" =~ ^[0-9]+$ ]] || { echo "::error::Could not identify the exact staging deployment run."; exit 1; }
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          gh run watch "$run_id" --repo "$REPO" --exit-status
-          gh api "repos/$REPO/actions/runs/$run_id" > "$RUNNER_TEMP/staging-run.json"
-          jq -e --arg sha "$CANDIDATE_SHA" --arg branch "$CANDIDATE_BRANCH" '
-            .head_sha == $sha and .head_branch == $branch and
-            .status == "completed" and .conclusion == "success" and
-            (.path | split("@")[0]) == ".github/workflows/recovery-staging-deploy.yml"
-          ' "$RUNNER_TEMP/staging-run.json" >/dev/null
-      - name: Download and verify staging APK artifact
-        env:
-          STAGING_RUN_ID: ${{ steps.staging.outputs.run_id }}
-        run: |
-          set -euo pipefail
-          mkdir -p staging-artifacts apks evidence
-          gh run download "$STAGING_RUN_ID" --repo "$REPO" -n "aurelia-recovery-staging-apk-$CANDIDATE_SHA" --dir staging-artifacts
+          mkdir -p apks evidence
           test -s staging-artifacts/app-release.apk
           test -s staging-artifacts/app-release-androidTest.apk
           expected_app="$(awk '$2=="app-release.apk" {print $1}' staging-artifacts/apk-sha256.txt)"
@@ -85,14 +73,14 @@ jobs:
           test -n "$expected_app" && test "$actual_app" = "$expected_app"
           test -n "$expected_test" && test "$actual_test" = "$expected_test"
           signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' staging-artifacts/apk-certificate.txt | tr -d ':')"
-          test -n "$signer"
           expected_signer="$(printf '%s' "$EXPECTED_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
-          test -n "$expected_signer" && test "$signer" = "$expected_signer"
+          test -n "$signer" && test -n "$expected_signer" && test "$signer" = "$expected_signer"
+          test_signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' staging-artifacts/androidTest-certificate.txt | tr -d ':')"
+          test "$test_signer" = "$signer"
           cp staging-artifacts/app-release.apk apks/app.apk
           cp staging-artifacts/app-release-androidTest.apk apks/test.apk
           printf '%s\n' "$actual_app" > apks/app.sha256
           printf '%s\n' "$actual_test" > apks/test.sha256
-          echo "APK hashes and signer match the successful staging run."
       - name: Reject missing or invalid App Check tokens on every recovery callable
         run: |
           set -euo pipefail
@@ -101,29 +89,28 @@ jobs:
           fi
           node scripts/gates/staging-probes.mjs
       - name: Write and bundle Gate 3 evidence
-        env:
-          STAGING_RUN_ID: ${{ steps.staging.outputs.run_id }}
         run: |
           set -euo pipefail
+          node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
           app_hash="$(sha256sum apks/app.apk | awk '{print $1}')"
           test_hash="$(sha256sum apks/test.apk | awk '{print $1}')"
           signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' staging-artifacts/apk-certificate.txt | tr -d ':')"
-          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg p "$STAGING_PROJECT" --arg s "$signer" --arg r "$STAGING_RUN_ID"             '{apkSha256:$a,testApkSha256:$t,stagingProjectId:$p,signerSha256:$s,stagingRunId:($r|tonumber)}' > evidence/details.json
+          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg p "$STAGING_PROJECT" --arg s "$signer" --arg r "$GITHUB_RUN_ID"             '{apkSha256:$a,testApkSha256:$t,stagingProjectId:$p,signerSha256:$s,stagingRunId:($r|tonumber)}' > evidence/details.json
           node scripts/gates/write-evidence.mjs --gate 3 --sha "$CANDIDATE_SHA" --status PASS
           tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
       - name: Attest Gate 3 evidence bundle
-        uses: actions/attest-build-provenance@${attest}
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
           subject-path: bundle.tar
       - name: Upload Gate 3 evidence
-        uses: actions/upload-artifact@${upload}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: gate-3-evidence
           path: bundle.tar
           if-no-files-found: error
           retention-days: 90
       - name: Upload exact Gate 3 APKs
-        uses: actions/upload-artifact@${upload}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: gate-3-apks
           path: apks/
