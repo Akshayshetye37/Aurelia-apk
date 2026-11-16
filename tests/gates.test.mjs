@@ -282,3 +282,34 @@ test('bundle verification rejects a certificate from a different run or self-hos
   assert.equal(runnerMismatch.status, 1);
   assert.match(output(runnerMismatch), /not bound to run 123/);
 });
+
+test('required workflow verifier does not ignore a newer in-progress rerun', (t) => {
+  const dir = tempDir(t);
+  fs.mkdirSync(path.join(dir, 'gates'), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, 'gates', 'required-runs.json'), path.join(dir, 'gates', 'required-runs.json'));
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const fakeGh = path.join(bin, 'gh');
+  fs.writeFileSync(fakeGh, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === 'api') {
+  console.log(JSON.stringify({ workflow_runs: [{
+    id: 456, run_number: 12, run_attempt: 1,
+    head_sha: '${SHA_A}', head_branch: 'work/p0-storage-hardening',
+    status: 'in_progress', conclusion: null,
+    html_url: 'https://github.com/owner/repo/actions/runs/456',
+    updated_at: '2026-11-16T08:00:00Z'
+  }] }));
+} else { console.error('unexpected gh command'); process.exit(2); }
+`);
+  fs.chmodSync(fakeGh, 0o755);
+  const result = spawnSync(process.execPath, [
+    path.join(GATES, 'verify-runs.mjs'), '--sha', SHA_A, '--repo', 'owner/repo', '--group', 'gate1',
+  ], {
+    cwd: dir,
+    env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, CANDIDATE_BRANCH: 'work/p0-storage-hardening' },
+    encoding: 'utf8', timeout: 15_000, maxBuffer: 2 * 1024 * 1024,
+  });
+  assert.equal(result.status, 1);
+  assert.match(output(result), /latest run .* is in_progress\/pending/);
+});

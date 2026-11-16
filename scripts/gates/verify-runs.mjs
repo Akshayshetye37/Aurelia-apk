@@ -37,16 +37,16 @@ for (const workflow of workflows) {
   const encoded = encodeURIComponent(workflow);
   let runs = [];
   for (let page = 1; page <= 5; page++) {
-    const response = gh(`repos/${repo}/actions/workflows/${encoded}/runs?head_sha=${sha}&status=completed&per_page=100&page=${page}`);
+    const response = gh(`repos/${repo}/actions/workflows/${encoded}/runs?head_sha=${sha}&per_page=100&page=${page}`);
     if (!Array.isArray(response.workflow_runs)) fail(`${workflow}: malformed workflow-runs response`);
     runs.push(...response.workflow_runs.filter((run) => run.head_sha === sha && run.head_branch === candidateBranch));
     if (response.workflow_runs.length < 100) break;
   }
-  runs.sort((a, b) => Date.parse(b.run_started_at ?? b.updated_at) - Date.parse(a.run_started_at ?? a.updated_at));
-  if (!runs.length) fail(`${workflow}: no completed run on exact SHA ${sha}`);
+  runs.sort((a, b) => Number(b.run_number ?? 0) - Number(a.run_number ?? 0) || Number(b.run_attempt ?? 0) - Number(a.run_attempt ?? 0) || Date.parse(b.updated_at) - Date.parse(a.updated_at));
+  if (!runs.length) fail(`${workflow}: no run on exact SHA ${sha} and candidate branch ${candidateBranch}`);
   const run = runs[0];
   if (run.status !== 'completed' || run.conclusion !== 'success') {
-    fail(`${workflow}: latest completed run ${run.html_url} is ${run.conclusion}`);
+    fail(`${workflow}: latest run ${run.html_url} is ${run.status}/${run.conclusion ?? 'pending'}`);
   }
   let log;
   try {
