@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
-import { validateFirebaseFingerprintInventory, countTestPhoneNumbers } from '../scripts/gates/firebase-audit-schema.mjs';
+import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = path.join(ROOT, 'scripts', 'gates');
@@ -465,4 +465,13 @@ test('phone-number scan ignores numeric runs inside SHA-256 digests but rejects 
   assert.equal(containsPhoneNumberLikeValue({ apkSha256: digest }), false);
   assert.equal(containsPhoneNumberLikeValue({ tester: '9876543210' }), true);
   assert.equal(containsPhoneNumberLikeValue({ results: { note: 'contact 9876543210' } }), true);
+});
+
+test('Gate 5 requests signing fingerprints from the documented project-scoped Firebase API resource', () => {
+  assert.equal(
+    firebaseAndroidShaEndpoint('aurelia-prod-12345', '1:123456789:android:abcdef012345'),
+    'https://firebase.googleapis.com/v1beta1/projects/aurelia-prod-12345/androidApps/1%3A123456789%3Aandroid%3Aabcdef012345/sha',
+  );
+  assert.throws(() => firebaseAndroidShaEndpoint('aurelia-prod-12345', 'not-an-app-id'), /app ID is invalid/);
+  assert.throws(() => firebaseAndroidShaEndpoint('-', '1:123456789:android:abcdef012345'), /project ID is invalid/);
 });
