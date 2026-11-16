@@ -48,8 +48,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: functions/package.json
-      - name: Install locked dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install Functions dependencies (no lockfile is checked in)
+        run: npm install --ignore-scripts --no-audit --no-fund
         working-directory: functions
       - name: Compile TypeScript
         run: npm run build
