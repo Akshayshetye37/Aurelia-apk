@@ -481,7 +481,7 @@ test('Gate 6 requires Gate 3 release signer to be in the attested production Fir
   const audit = {
     project: 'aurelia-prod-12345',
     problems: [],
-    auditedResources: { functions: 5 },
+    auditedResources: { functions: 5, runServices: 1 },
     firebaseAudit: {
       androidApps: 1,
       sha1Fingerprints: 1,
@@ -496,6 +496,7 @@ test('Gate 6 requires Gate 3 release signer to be in the attested production Fir
   assert.equal(isProductionAuditEvidenceValid(audit, audit.project, 'b'.repeat(64)), false);
   assert.equal(isProductionAuditEvidenceValid({ ...audit, firebaseAudit: { ...audit.firebaseAudit, projectTestPhoneNumbers: 1 } }, audit.project, signer), false);
   assert.equal(isProductionAuditEvidenceValid({ ...audit, problems: ['App Check not enforced'] }, audit.project, signer), false);
+  assert.equal(isProductionAuditEvidenceValid({ ...audit, auditedResources: { functions: 5, runServices: 0 } }, audit.project, signer), false);
 });
 
 test('Gate 5 rejects inherited project-level public Cloud Run or Functions invocation', () => {
