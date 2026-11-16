@@ -264,7 +264,7 @@ test('staging and production audits verify per-function Secret Manager runtime a
   assert.match(staging, /roles\/secretmanager\.secretAccessor/);
   assert.doesNotMatch(staging, /acknowledgeRecoveryOwnerAlert:PHONE_PEPPER/);
   const production = read('scripts/gates/audit-production.mjs');
-  assert.match(production, /roles\/secretmanager\.secretAccessor/);
+  assert.match(read('scripts/gates/firebase-audit-schema.mjs'), /roles\/secretmanager\.secretAccessor/);
   assert.match(production, /runtimeSecretBindings/);
   assert.match(production, /validateFunctionSecretAccess/);
   assert.doesNotMatch(production, /acknowledgeRecoveryOwnerAlert: \['PHONE_PEPPER'\]/);
@@ -331,7 +331,7 @@ test('Gate 5 production audit binds each recovery callable to only its required 
   const audit = read('scripts/gates/audit-production.mjs');
   assert.match(audit, /registerRecoveryPhone: \['PHONE_PEPPER'\]/);
   assert.match(audit, /registerRecoveryOwnerDevice: \['PHONE_PEPPER'\]/);
-  assert.match(audit, /acknowledgeRecoveryOwnerAlert: \['PHONE_PEPPER'\]/);
+  assert.doesNotMatch(audit, /acknowledgeRecoveryOwnerAlert: \['PHONE_PEPPER'\]/);
   assert.match(audit, /issueRecoveryGrant: \['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'\]/);
   assert.match(audit, /consumeRecoveryGrant: \['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'\]/);
   assert.match(audit, /hasPublicRuntimeInvoker\(projectPolicy\)/);
