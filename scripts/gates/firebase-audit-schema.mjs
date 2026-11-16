@@ -51,3 +51,11 @@ export function isProductionAuditEvidenceValid(audit, expectedProjectId, release
     firebase.tenantTestPhoneNumbers === 0 &&
     Number.isInteger(firebase.tenants) && firebase.tenants >= 0;
 }
+
+/** Detect inherited project-level public invocation grants for Cloud Run/Functions. */
+export function hasPublicRuntimeInvoker(policy) {
+  return (policy?.bindings ?? []).some(binding =>
+    ['roles/run.invoker', 'roles/cloudfunctions.invoker'].includes(binding.role) &&
+    (binding.members ?? []).some(member => member === 'allUsers' || member === 'allAuthenticatedUsers')
+  );
+}
