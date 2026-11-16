@@ -45,3 +45,6 @@ All recovery staging and verifier deployment workflows are restricted to `work/p
 ## Required real-SMS attestation metadata
 
 The reviewer-approved `sms` attestation must include `smsDeliveredAt` (RFC 3339/ISO timestamp within 15 minutes before `testedAt`), `challengeId` (UUID v4 ID returned by `createRecoveryAttestationChallenge` for Android hardware-key attestation; it is not Firebase Phone Auth's opaque `verificationId`), `deviceLabel` (human-readable model/OS label with no serial or phone data), and `deviceIdentitySha256` (64-character lowercase SHA-256 of a redacted device identity). Record the delivery timestamp when the handset receives the SMS and correlate it to the challenge; do not record the OTP, phone number, SMS body, device serial, IMEI, or raw device identifier. The validator rejects missing, stale, future, malformed, or mismatched metadata. The Firebase SDK remains responsible for OTP verification.
+
+
+The staging deploy identity must also have Cloud Run read access (`roles/run.viewer`) in the staging project so the preflight can read the deployed verifier's service URL and IAM policy. The attestation deployment identity is separate and needs the deploy permissions described by its protected environment; do not grant those deploy permissions to the read-only Gate 5 audit identity.
