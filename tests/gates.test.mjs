@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
-import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker } from '../scripts/gates/firebase-audit-schema.mjs';
+import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker, validateFunctionSecretAccess } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = path.join(ROOT, 'scripts', 'gates');
@@ -502,4 +502,24 @@ test('Gate 5 rejects inherited project-level public Cloud Run or Functions invoc
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }), true);
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['serviceAccount:runtime@example.iam.gserviceaccount.com'] }] }), false);
   assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/viewer', members: ['allUsers'] }] }), false);
+});
+
+test('Gate 5 enforces exact per-function Secret Manager runtime access', () => {
+  const functions = [
+    { name: 'projects/p/locations/r/functions/registerRecoveryPhone', serviceConfig: { serviceAccountEmail: 'phone@example.iam.gserviceaccount.com' } },
+    { name: 'projects/p/locations/r/functions/issueRecoveryGrant', serviceConfig: { serviceAccountEmail: 'grant@example.iam.gserviceaccount.com' } },
+  ];
+  const bindings = { registerRecoveryPhone: ['PHONE_PEPPER'], issueRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'] };
+  const policies = new Map([
+    ['PHONE_PEPPER', { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: ['serviceAccount:phone@example.iam.gserviceaccount.com', 'serviceAccount:grant@example.iam.gserviceaccount.com'] }] }],
+    ['RECOVERY_SIGNING_KEY_PKCS8', { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: ['serviceAccount:grant@example.iam.gserviceaccount.com'] }] }],
+  ]);
+  assert.deepEqual(validateFunctionSecretAccess(functions, bindings, policies, ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']), []);
+  const missing = new Map(policies);
+  missing.set('RECOVERY_SIGNING_KEY_PKCS8', { bindings: [] });
+  assert.match(validateFunctionSecretAccess(functions, bindings, missing, ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'), /accessor set differs/);
+  const extra = new Map(policies);
+  extra.set('PHONE_PEPPER', { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: ['serviceAccount:phone@example.iam.gserviceaccount.com', 'serviceAccount:grant@example.iam.gserviceaccount.com', 'serviceAccount:unexpected@example.iam.gserviceaccount.com'] }] });
+  assert.deepEqual(validateFunctionSecretAccess(functions, bindings, extra, ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']), []);
+  assert.match(validateFunctionSecretAccess(functions, bindings, policies, ['phone@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'), /not in RUNTIME_SERVICE_ACCOUNTS/);
 });
