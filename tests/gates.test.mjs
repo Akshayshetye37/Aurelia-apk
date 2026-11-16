@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { validateSmsAttestation } from '../scripts/gates/attestation-schema.mjs';
+import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
 import { validateFirebaseFingerprintInventory, countTestPhoneNumbers } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -365,4 +365,13 @@ test('Gate 5 Firebase audit requires exact app and SHA-1/SHA-256 inventories and
  assert.throws(()=>validateFirebaseFingerprintInventory(apps,certs,['app-one','app-two'],['1'.repeat(40)],['a'.repeat(64)]),/exactly match/);
  assert.throws(()=>validateFirebaseFingerprintInventory(apps,certs,['app-one'],['1'.repeat(40)],['b'.repeat(64)]),/SHA-256 inventory/);
  assert.equal(countTestPhoneNumbers({signIn:{phoneNumber:{testPhoneNumbers:{'+10000000000':'redacted'}}}}),1);
+});
+
+
+test('phone-number scan ignores numeric runs inside SHA-256 digests but rejects phone-like values elsewhere', () => {
+  const digest = '1234567890' + 'a'.repeat(54);
+  assert.equal(containsPhoneNumberLikeValue({ deviceIdentitySha256: digest }), false);
+  assert.equal(containsPhoneNumberLikeValue({ apkSha256: digest }), false);
+  assert.equal(containsPhoneNumberLikeValue({ tester: '9876543210' }), true);
+  assert.equal(containsPhoneNumberLikeValue({ results: { note: 'contact 9876543210' } }), true);
 });
