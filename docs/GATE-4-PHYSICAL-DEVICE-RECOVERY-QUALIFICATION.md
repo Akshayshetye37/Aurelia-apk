@@ -93,3 +93,8 @@ The device requesting recovery must never count as its own owner-notification de
 
 
 Owner acknowledgement proof is per-device and one-time. The FCM payload contains a random 256-bit token; only the token hash is persisted server-side. The acknowledgement callable requires the matching device token and atomically consumes the pending alert state. Verify a wrong-device token, random token, replayed token and an acknowledgement arriving before the FCM send operation returns are all rejected or safely handled as designed.
+
+
+## Gate 4 runner environment configuration
+
+Create the protected GitHub Environment `recovery-device`. Set `DEVICE_SERIAL` to the USB-connected handset serial and `DEVICE_SERIAL_ALLOWLIST` to the comma-separated exact allowlist containing that serial. These values are consumed only by the physical-device runner and must not be copied into evidence or logs. The runner must also have Node.js 22, GitHub CLI with `gh attestation verify --deny-self-hosted-runners` support, Android platform-tools, `adb`, `jq`, `tar`, `timeout`, USB access and the `self-hosted`, `linux`, `x64`, `aurelia-android-device` labels. Do not register a general-purpose or shared runner for this job.
