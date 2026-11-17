@@ -158,9 +158,12 @@ jobs:
         shell: bash
         run: |
           set +e
-          adb -s "$DEVICE_SERIAL" uninstall com.aurelia.pms >/dev/null 2>&1
-          adb -s "$DEVICE_SERIAL" uninstall com.aurelia.pms.test >/dev/null 2>&1
-          adb -s "$DEVICE_SERIAL" logcat -c >/dev/null 2>&1
+          ADB_BIN="$(command -v adb 2>/dev/null || true)"
+          if [[ -n "$ADB_BIN" ]]; then
+            timeout -k 5s 15s "$ADB_BIN" -s "$DEVICE_SERIAL" uninstall com.aurelia.pms >/dev/null 2>&1
+            timeout -k 5s 15s "$ADB_BIN" -s "$DEVICE_SERIAL" uninstall com.aurelia.pms.test >/dev/null 2>&1
+            timeout -k 5s 15s "$ADB_BIN" -s "$DEVICE_SERIAL" logcat -c >/dev/null 2>&1
+          fi
           rm -rf "$RUNNER_TEMP/aurelia-gate4" apks g3
           rm -f "$RUNNER_TEMP/gh-attestation-help.txt"
       - name: Upload sanitized physical-device evidence for hosted attestation
