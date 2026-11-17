@@ -664,22 +664,276 @@ test('Gate 6 requires one owner and two distinct protected-environment reviewers
   assert.throws(() => validateEnvironmentApprovals(history, environments, 3, 'candidate-owner'), /cannot approve it/);
 });
 
+
 test('Gate 3 staging configuration preflight is valid Bash and validates WebAuthn RP identifiers', () => {
   const workflow = read('.github/workflows/recovery-staging-deploy.yml');
+  const newline = String.fromCharCode(10);
   const step = '      - name: Validate staging configuration without printing secrets';
   const stepStart = workflow.indexOf(step);
   assert.notEqual(stepStart, -1, 'staging configuration preflight must exist');
   const runStart = workflow.indexOf('        run: |', stepStart);
   assert.notEqual(runStart, -1, 'staging preflight must use a block shell script');
-  const nextStep = workflow.indexOf('\\n      - name:', runStart);
+  const nextStep = workflow.indexOf(newline + '      - name:', runStart);
   assert.notEqual(nextStep, -1, 'staging preflight must terminate before the next step');
   const script = workflow.slice(runStart + '        run: |'.length, nextStep)
-    .split('\\n')
+    .split(newline)
     .map((line) => line.startsWith('          ') ? line.slice(10) : line)
-    .join('\\n');
+    .join(newline);
   const parsed = spawnSync('bash', ['-n'], { input: script, encoding: 'utf8' });
   assert.equal(parsed.status, 0, parsed.stderr || 'Gate 3 staging preflight contains invalid Bash');
-  assert.ok(script.includes("rp_name_re='^[A-Za-z0-9._ -]{1,64}$'"));
+  assert.ok(script.includes("rp_name_re='^[A-Za-z0-9._ -]{1,64}
+  const probeScript = read('scripts/gates/staging-probes.mjs');
+  const verifier = read('scripts/gates/verify-qualification.mjs');
+  for (const name of [
+    'createRecoveryAttestationChallenge',
+    'verifyRecoveryDeviceAttestation',
+    'registerRecoveryPhone',
+    'exchangeOwnerEmailLink',
+    'confirmRecoveryOwnerBinding',
+    'registerRecoveryOwnerDevice',
+    'createRecoveryPasskeyEnrollmentOptions',
+    'completeRecoveryPasskeyEnrollment',
+    'retryRecoveryPasskeyEnrollmentAlert',
+    'getRecoveryOwnerPendingAction',
+    'getRecoveryOwnerActionReadiness',
+    'createRecoveryOwnerActionOptions',
+    'completeRecoveryOwnerPasskeyAction',
+    'acknowledgeRecoveryOwnerAlert',
+    'issueRecoveryGrant',
+    'consumeRecoveryGrant',
+    'cancelRecoveryRequest',
+    'cancelRecoveryPhoneChange',
+    'activateRecoveryPhoneChange'
+  ]) {
+    assert.ok(probeScript.includes(name), `staging probes must include ${name}`);
+    assert.ok(verifier.includes(name), `Gate 6 must require ${name}`);
+  }
+  assert.match(probeScript, /exactly match the complete recovery callable inventory/);
+});
+
+test('Gate 5 requires the exact secret inventory and unique runtime allowlist', () => {
+  const audit = read('scripts/gates/audit-production.mjs');
+  assert.ok(audit.includes("run(['functions', 'list', '--regions=-', '--project', project])"));
+  assert.match(audit, /REQUIRED_SECRETS must contain exactly PHONE_PEPPER and RECOVERY_SIGNING_KEY_PKCS8/);
+  assert.match(audit, /RUNTIME_SERVICE_ACCOUNTS contains duplicate identities/);
+  assert.match(audit, /new Set\(runtimeAccounts\)/);
+});
+
+test('Gate 5 requires the private verifier to trust exactly the configured Functions caller', () => {
+  const caller = 'functions@example.iam.gserviceaccount.com';
+  assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`] }] }, caller), true);
+  assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`], condition: { expression: 'true' } }] }, caller), false);
+  assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`, 'serviceAccount:other@example.iam.gserviceaccount.com'] }] }, caller), false);
+  assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }, caller), false);
+  assert.equal(hasExactServiceInvoker({ bindings: [] }, caller), false);
+  assert.equal(hasExactServiceInvoker({ bindings: [
+    { role: 'roles/run.invoker', members: [`serviceAccount:${caller}`] },
+    { role: 'roles/cloudfunctions.invoker', members: ['serviceAccount:other@example.iam.gserviceaccount.com'] },
+  ] }, caller), false);
+  assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`] }] }, 'bad-account'), false);
+});
+
+test('Gate 5 paginates the complete production App Check service inventory', () => {
+  const audit = read('scripts/gates/audit-production.mjs');
+  assert.match(audit, /appCheckUrl\.searchParams\.set\('pageSize', '100'\)/);
+  assert.match(audit, /appCheckPageToken = payload\.nextPageToken/);
+  assert.match(audit, /seenAppCheckPageTokens\.has\(appCheckPageToken\)/);
+});
+
+test('Gate 5 requires a matching regional Cloud Run service for every Gen2 function', () => {
+  const functions = [
+    { name: 'projects/p/locations/asia-south1/functions/phone', environment: 'GEN_2' },
+    { name: 'projects/p/locations/asia-south1/functions/legacy', environment: 'GEN_1' },
+  ];
+  const services = [
+    { metadata: { name: 'phone', labels: { 'cloud.googleapis.com/location': 'asia-south1' } } },
+  ];
+  assert.deepEqual(findMissingGen2FunctionServices(functions, services), []);
+  assert.deepEqual(findMissingGen2FunctionServices([
+    ...functions,
+    { name: 'projects/p/locations/us-central1/functions/missing', environment: 'GEN_2' },
+  ], services), ['missing']);
+});
+
+test('Gate 5 rejects project-wide invocation and Secret Manager payload/write grants', () => {
+  const risks = findProjectWideRecoveryRisks({ bindings: [
+    { role: 'roles/run.invoker', members: ['serviceAccount:unknown@example.iam.gserviceaccount.com'] },
+    { role: 'roles/secretmanager.secretAccessor', members: ['user:operator@example.com'] },
+    { role: 'roles/secretmanager.secretVersionAdder', members: ['serviceAccount:writer@example.iam.gserviceaccount.com'] },
+    { role: 'roles/secretmanager.viewer', members: ['allUsers'] },
+  ] });
+  assert.deepEqual(risks, [
+    { role: 'roles/run.invoker', memberCount: 1 },
+    { role: 'roles/secretmanager.secretAccessor', memberCount: 1 },
+    { role: 'roles/secretmanager.secretVersionAdder', memberCount: 1 },
+  ]);
+});
+
+test('Gate 5 rejects inherited project-level public Cloud Run or Functions invocation', () => {
+  assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }), true);
+  assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/cloudfunctions.invoker', members: ['allAuthenticatedUsers'] }] }), true);
+  assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['serviceAccount:runtime@example.iam.gserviceaccount.com'] }] }), false);
+  assert.equal(hasPublicRuntimeInvoker({ bindings: [{ role: 'roles/viewer', members: ['allUsers'] }] }), false);
+});
+
+test('Gate 5 enforces exact per-function Secret Manager runtime access', () => {
+  const functions = [
+    { name: 'projects/p/locations/r/functions/registerRecoveryPhone', serviceConfig: { serviceAccountEmail: 'phone@example.iam.gserviceaccount.com' } },
+    { name: 'projects/p/locations/r/functions/issueRecoveryGrant', serviceConfig: { serviceAccountEmail: 'grant@example.iam.gserviceaccount.com' } },
+  ];
+  const bindings = { registerRecoveryPhone: ['PHONE_PEPPER'], issueRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'] };
+  const policies = new Map([
+    ['PHONE_PEPPER', { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: ['serviceAccount:phone@example.iam.gserviceaccount.com', 'serviceAccount:grant@example.iam.gserviceaccount.com'] }] }],
+    ['RECOVERY_SIGNING_KEY_PKCS8', { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: ['serviceAccount:grant@example.iam.gserviceaccount.com'] }] }],
+  ]);
+  assert.deepEqual(validateFunctionSecretAccess(functions, bindings, policies, ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']), []);
+  const missing = new Map(policies);
+  missing.set('RECOVERY_SIGNING_KEY_PKCS8', { bindings: [] });
+  assert.match(validateFunctionSecretAccess(functions, bindings, missing, ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'), /accessor set differs/);
+  const extra = new Map(policies);
+  extra.set('PHONE_PEPPER', { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: ['serviceAccount:phone@example.iam.gserviceaccount.com', 'serviceAccount:grant@example.iam.gserviceaccount.com', 'serviceAccount:unexpected@example.iam.gserviceaccount.com'] }] });
+  assert.match(validateFunctionSecretAccess(functions, bindings, extra, ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'), /accessor set differs/);
+  assert.match(validateFunctionSecretAccess(functions, bindings, policies, ['phone@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'), /not in RUNTIME_SERVICE_ACCOUNTS/);
+  const unrelatedSharesPhoneSecret = [
+    ...functions,
+    { name: 'projects/p/locations/r/functions/unrelatedProductionFunction', serviceConfig: { serviceAccountEmail: 'phone@example.iam.gserviceaccount.com' } },
+  ];
+  assert.match(
+    validateFunctionSecretAccess(unrelatedSharesPhoneSecret, bindings, policies,
+      ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'],
+      ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'),
+    /unmapped function unrelatedProductionFunction shares a recovery secret-bearing runtime identity/,
+  );
+  const sharedAcrossSecretSets = [
+    ...functions,
+    { name: 'projects/p/locations/r/functions/acknowledgeRecoveryOwnerAlert', serviceConfig: { serviceAccountEmail: 'phone@example.iam.gserviceaccount.com' } },
+  ];
+  assert.match(
+    validateFunctionSecretAccess(sharedAcrossSecretSets,
+      { ...bindings, acknowledgeRecoveryOwnerAlert: [] }, policies,
+      ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'],
+      ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'),
+    /share runtime identity.*different secret sets/,
+  );
+});
+
+test('candidate validation rejects a SHA that differs from the frozen control-branch pin before GitHub API access', (t) => {
+  const dir = tempDir(t);
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const marker = path.join(dir, 'gh-called');
+  const fakeGh = path.join(bin, 'gh');
+  fs.writeFileSync(fakeGh, `#!/usr/bin/env node\nrequire("node:fs").writeFileSync(${JSON.stringify(marker)}, "called"); process.exit(2);\n`);
+  fs.chmodSync(fakeGh, 0o755);
+  const result = run(t, 'check-candidate.mjs', ['--sha', SHA_B, '--repo', 'owner/repo', '--branch', 'work/p0-storage-hardening'], {
+    PATH: bin + path.delimiter + process.env.PATH,
+  }, dir);
+  assert.equal(result.status, 1);
+  assert.match(output(result), /frozen qualification pin/);
+  assert.equal(fs.existsSync(marker), false, 'GitHub API must not be called for an unpinned candidate');
+});
+
+test('Gate 5 denies project-wide and non-accessor secret IAM grants', () => {
+  const runtime = 'serviceAccount:runtime@example.iam.gserviceaccount.com';
+  const audit = 'serviceAccount:audit@example.iam.gserviceaccount.com';
+  const allowed = new Set([runtime, audit]);
+  const valid = { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: [runtime] }, { role: 'roles/secretmanager.viewer', members: [audit] }] };
+  assert.deepEqual(validateSecretPolicy(valid, allowed, ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com'), []);
+  for (const role of ['roles/secretmanager.secretAccessor', 'roles/secretmanager.admin', 'roles/secretmanager.secretVersionAdder']) {
+    assert.match(
+      validateSecretPolicy({ bindings: [{ role, members: [audit] }] }, allowed,
+        ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com').join(';'),
+      /audit identity has non-read-only Secret Manager role/,
+    );
+  }
+  assert.match(validateSecretPolicy({ bindings: [{ role: 'roles/secretmanager.admin', members: [runtime] }] }, allowed, ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com').join(';'), /unexpected role/);
+  assert.match(validateSecretPolicy({ bindings: [{ role: 'roles/secretmanager.secretAccessor', members: [audit] }] }, allowed, ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com').join(';'), /audit identity/);
+  assert.match(validateSecretPolicy({ bindings: [{ role: 'roles/secretmanager.secretAccessor', members: ['user:someone@example.com'] }] }, allowed, ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com').join(';'), /non-service-account/);
+});
+
+test('Gate 5 rejects broad project roles on runtime and read-only audit identities', () => {
+  const account = 'runtime@example.iam.gserviceaccount.com';
+  const policy = { bindings: [
+    { role: 'roles/run.admin', members: [`serviceAccount:${account}`] },
+    { role: 'roles/secretmanager.secretAccessor', members: [`serviceAccount:${account}`] },
+    { role: 'roles/viewer', members: [`serviceAccount:${account}`] },
+  ] };
+  assert.deepEqual(findPrivilegedProjectRoles(policy, account), ['roles/run.admin', 'roles/secretmanager.secretAccessor']);
+  assert.deepEqual(findPrivilegedProjectRoles(policy, 'other@example.iam.gserviceaccount.com'), []);
+  for (const role of ['roles/secretmanager.secretVersionAdder', 'roles/secretmanager.secretVersionManager',
+    'roles/secretmanager.editor', 'roles/run.developer', 'roles/cloudfunctions.developer',
+    'roles/iam.serviceAccountOpenIdTokenCreator']) {
+    assert.ok(findPrivilegedProjectRoles({ bindings: [{ role, members: ['serviceAccount:audit@example.iam.gserviceaccount.com'] }] },
+      'audit@example.iam.gserviceaccount.com').includes(role), `${role} must be denied to the read-only audit identity`);
+  }
+  for (const role of ['roles/secretmanager.secretVersionAdder', 'roles/secretmanager.secretVersionManager',
+    'roles/secretmanager.editor', 'roles/run.developer', 'roles/cloudfunctions.developer',
+    'roles/iam.serviceAccountOpenIdTokenCreator']) {
+    assert.ok(findPrivilegedProjectRoles({ bindings: [{ role, members: ['serviceAccount:audit@example.iam.gserviceaccount.com'] }] },
+      'audit@example.iam.gserviceaccount.com').includes(role), `${role} must be denied to the read-only audit identity`);
+  }
+});
+
+
+test('qualification attestations expire after seven days while allowing small clock skew', () => {
+  const now = Date.parse('2026-11-16T12:00:00.000Z');
+  assert.equal(isAttestationFresh('2026-11-09T12:00:00.001Z', now), true);
+  assert.equal(isAttestationFresh('2026-11-09T12:00:00.000Z', now), false);
+  assert.equal(isAttestationFresh('2026-11-09T11:59:59.999Z', now), false);
+  assert.equal(isAttestationFresh('2026-11-16T12:04:59.999Z', now), true);
+  assert.equal(isAttestationFresh('2026-11-16T12:05:00.001Z', now), false);
+  assert.equal(isAttestationFresh('not-a-date', now), false);
+  assert.equal(isAttestationFresh(undefined, now), false);
+});
+
+test('documented protected environments exactly match workflow references', () => {
+  const workflowPaths = [
+    '.github/workflows/recovery-staging-deploy.yml',
+    '.github/workflows/recovery-attestation-deploy.yml',
+    '.github/workflows/gate-4-physical-device.yml',
+    '.github/workflows/gate-5-production-security.yml',
+    '.github/workflows/gate-manual-attestation.yml',
+    '.github/workflows/gate-6-release-signoff.yml',
+  ];
+  const referenced = new Set();
+  for (const workflowPath of workflowPaths) {
+    const content = read(workflowPath);
+    for (const match of content.matchAll(/^\s*environment:\s*([a-z0-9-]+)\s*$/gm)) {
+      referenced.add(match[1]);
+    }
+  }
+  const documented = new Set([
+    'recovery-staging',
+    'recovery-device',
+    'recovery-production-audit',
+    'recovery-attestation',
+    'recovery-release-owner',
+    'recovery-release-review-1',
+    'recovery-release-review-2',
+  ]);
+  assert.deepEqual([...referenced].sort(), [...documented].sort());
+  const runbook = read('docs/RECOVERY-GATE-PIPELINE.md');
+  for (const environment of documented) assert.ok(runbook.includes('`' + environment + '`'), environment);
+  assert.match(runbook, /`RELEASE_OWNER_LOGIN`/);
+});
+
+
+
+test('acknowledgeRecoveryOwnerAlert is never granted PHONE_PEPPER access', () => {
+  const deployWorkflow = read('.github/workflows/recovery-staging-deploy.yml');
+  const bindingsMatch = deployWorkflow.match(/bindings=\(\s*([\s\S]*?)\n\s*\)/);
+  assert.ok(bindingsMatch, 'staging deployment must declare an explicit callable-to-secret IAM map');
+  const alertBinding = bindingsMatch[1].match(/["']acknowledgeRecoveryOwnerAlert:([^"']*)["']/);
+  assert.ok(alertBinding, 'acknowledgeRecoveryOwnerAlert must have an explicit least-privilege mapping');
+  assert.equal(alertBinding[1].trim(), '', 'acknowledgeRecoveryOwnerAlert must not receive PHONE_PEPPER or any other recovery secret');
+
+  const passkeysSource = read('functions/src/passkeys.ts');
+  const alertCallable = passkeysSource.match(/export const acknowledgeRecoveryOwnerAlert = onCall\(([\s\S]*?)\n\);/);
+  assert.ok(alertCallable, 'acknowledgeRecoveryOwnerAlert callable declaration must remain explicit');
+  assert.doesNotMatch(alertCallable[1], /\bsecrets\s*:/, 'alert acknowledgement must not declare runtime secrets');
+  assert.doesNotMatch(passkeysSource, /PHONE_PEPPER/, 'passkeys module must not declare or reference PHONE_PEPPER');
+});
+"));
   assert.ok(script.includes('WEBAUTHN_RP_NAME') && script.includes('rp_name_re'));
   assert.ok(script.includes('WEBAUTHN_RP_ID') && script.includes('rp_id_re'));
 });
