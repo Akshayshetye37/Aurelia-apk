@@ -814,7 +814,7 @@ test('documented protected environments exactly match workflow references', () =
   const referenced = new Set();
   for (const workflowPath of workflowPaths) {
     const content = read(workflowPath);
-    for (const match of content.matchAll(/^\\s*environment:\\s*([a-z0-9-]+)\\s*$/gm)) {
+    for (const match of content.matchAll(/^\s*environment:\s*([a-z0-9-]+)\s*$/gm)) {
       referenced.add(match[1]);
     }
   }
