@@ -50,11 +50,140 @@ jobs:
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
     environment: recovery-release-owner
-    timeout-minutes: 15
-    permissions: {}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      REPO: ${{ github.repository }}
+      PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+      ACTIVE_KID: ${{ vars.PRODUCTION_RECOVERY_SIGNING_KEY_ID }}
+      PUBLIC_KEYS: ${{ vars.PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
+      GOOGLE_SERVICES_JSON: ${{ secrets.PRODUCTION_GOOGLE_SERVICES_JSON_BASE64 }}
+      KEYSTORE_B64: ${{ secrets.PRODUCTION_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.PRODUCTION_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.PRODUCTION_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.PRODUCTION_KEY_PASSWORD }}
     steps:
-      - name: Candidate owner approval
-        run: echo "Candidate owner sign-off recorded by the protected environment."
+      - name: Checkout trusted gate tooling
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify exact frozen production build input
+        run: |
+          set -euo pipefail
+          node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
+      - name: Checkout exact candidate source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+      - name: Validate production signing and Firebase configuration without printing values
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CANDIDATE_BRANCH" = "work/p0-storage-hardening"
+          for name in PRODUCTION_PROJECT_ID ACTIVE_KID PUBLIC_KEYS GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then echo "::error::Missing protected production release setting: $name"; exit 1; fi
+          done
+          node -e 'const keys=JSON.parse(process.env.PUBLIC_KEYS); if(!keys[process.env.ACTIVE_KID]) process.exit(1);'
+          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "$RUNNER_TEMP/google-services.json"
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/aurelia-production-release.jks"
+          node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); if(!p || c.project_info?.project_id!==process.env.PRODUCTION_PROJECT_ID) process.exit(1);' \
+            --require "$RUNNER_TEMP/google-services.json"
+      - name: Generate production-configured Android project from the frozen candidate
+        working-directory: candidate
+        shell: bash
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.PRODUCTION_GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+          npm run build
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          mv android/templates "$template_dir"
+          rmdir android
+          npx cap add android
+          mkdir -p android/templates android/app
+          cp -a "$template_dir/." android/templates/
+          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
+          test -s android/app/google-services.json
+      - name: Inject production grant public keys and production signing configuration
+        working-directory: candidate
+        env:
+          RECOVERY_GRANT_PUBLIC_KEYS_JSON: ${{ vars.PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
+          AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-production-release.jks
+          STAGING_KEYSTORE_PASSWORD: ${{ secrets.PRODUCTION_KEYSTORE_PASSWORD }}
+          STAGING_KEY_ALIAS: ${{ secrets.PRODUCTION_KEY_ALIAS }}
+          STAGING_KEY_PASSWORD: ${{ secrets.PRODUCTION_KEY_PASSWORD }}
+          AURELIA_ANDROID_TEST_BUILD_TYPE: release
+        run: |
+          set -euo pipefail
+          node scripts/patch-android.js
+          npx cap sync android
+      - name: Build production-signed APKs from the exact candidate
+        working-directory: candidate/android
+        env:
+          AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-production-release.jks
+          STAGING_KEYSTORE_PASSWORD: ${{ secrets.PRODUCTION_KEYSTORE_PASSWORD }}
+          STAGING_KEY_ALIAS: ${{ secrets.PRODUCTION_KEY_ALIAS }}
+          STAGING_KEY_PASSWORD: ${{ secrets.PRODUCTION_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace assembleRelease assembleReleaseAndroidTest
+      - name: Verify production APK hashes, signer and project binding
+        working-directory: candidate
+        shell: bash
+        env:
+          PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          TEST_APK="android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk"
+          test -s "$APK" && test -s "$TEST_APK"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/production-apk-certificate.txt"
+          "$APKSIGNER" verify --print-certs "$TEST_APK" > "$RUNNER_TEMP/production-test-certificate.txt"
+          signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/production-apk-certificate.txt" | tr -d ':')"
+          test_signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/production-test-certificate.txt" | tr -d ':')"
+          [[ "$signer" =~ ^[0-9a-f]{64}$ ]] && test "$test_signer" = "$signer"
+          node -e 'const c=require("./android/app/google-services.json"); if(c.project_info.project_id!==process.env.PRODUCTION_PROJECT_ID) process.exit(1);'
+          mkdir -p ../production-release
+          cp "$APK" ../production-release/app-release.apk
+          cp "$TEST_APK" ../production-release/app-release-androidTest.apk
+          cp "$RUNNER_TEMP/production-apk-certificate.txt" ../production-release/apk-certificate.txt
+          cp "$RUNNER_TEMP/production-test-certificate.txt" ../production-release/androidTest-certificate.txt
+          app_hash="$(sha256sum "$APK" | awk '{print $1}')"
+          test_hash="$(sha256sum "$TEST_APK" | awk '{print $1}')"
+          jq -n --arg sha "$CANDIDATE_SHA" --arg branch "$CANDIDATE_BRANCH" --arg project "$PRODUCTION_PROJECT_ID" \
+            --arg apk "$app_hash" --arg test "$test_hash" --arg signer "$signer" \
+            '{candidateSha:$sha,candidateBranch:$branch,productionProjectId:$project,apkSha256:$apk,testApkSha256:$test,signerSha256:$signer}' \
+            > ../production-release/production-release.json
+      - name: Upload exact production release artifacts and build record
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gate-6-production-release
+          path: candidate/production-release/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Remove production configuration and signing material
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -f "$RUNNER_TEMP/google-services.json" "$RUNNER_TEMP/aurelia-production-release.jks"
+          rm -f candidate/android/app/google-services.json
   independent-reviewer-one:
     needs: [preflight, owner-signoff]
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
@@ -99,7 +228,33 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Verify Gates 1–5, both manual attestations, matching APK and owner sign-off and two distinct independent approvals
+      - name: Download production APKs built from the frozen candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: gate-6-production-release
+          path: production-release
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+      - name: Independently verify production APK bytes and signer
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s production-release/app-release.apk
+          test -s production-release/app-release-androidTest.apk
+          test -s production-release/production-release.json
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort | tail -n 1)"
+          "$APKSIGNER" verify --print-certs production-release/app-release.apk > "$RUNNER_TEMP/final-production-certificate.txt"
+          "$APKSIGNER" verify --print-certs production-release/app-release-androidTest.apk > "$RUNNER_TEMP/final-production-test-certificate.txt"
+          actual_signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/final-production-certificate.txt" | tr -d ':')"
+          test_signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/final-production-test-certificate.txt" | tr -d ':')"
+          metadata_signer="$(jq -r .signerSha256 production-release/production-release.json)"
+          app_hash="$(sha256sum production-release/app-release.apk | awk '{print $1}')"
+          test_hash="$(sha256sum production-release/app-release-androidTest.apk | awk '{print $1}')"
+          test "$actual_signer" = "$metadata_signer"
+          test "$test_signer" = "$actual_signer"
+          test "$app_hash" = "$(jq -r .apkSha256 production-release/production-release.json)"
+          test "$test_hash" = "$(jq -r .testApkSha256 production-release/production-release.json)"
+          test "$(jq -r .candidateSha production-release/production-release.json)" = "$CANDIDATE_SHA"
+      - name: Verify Gates 1–5, both manual attestations, production signer and owner/reviewer approvals
         run: node scripts/gates/verify-qualification.mjs
       - name: Write and bundle Gate 6 release-review evidence
         run: |
