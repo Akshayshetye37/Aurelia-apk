@@ -654,6 +654,13 @@ test('Gate 5 denies project-wide and non-accessor secret IAM grants', () => {
   const allowed = new Set([runtime, audit]);
   const valid = { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: [runtime] }, { role: 'roles/secretmanager.viewer', members: [audit] }] };
   assert.deepEqual(validateSecretPolicy(valid, allowed, ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com'), []);
+  for (const role of ['roles/secretmanager.secretAccessor', 'roles/secretmanager.admin', 'roles/secretmanager.secretVersionAdder']) {
+    assert.match(
+      validateSecretPolicy({ bindings: [{ role, members: [audit] }] }, allowed,
+        ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com').join(';'),
+      /audit identity has non-read-only Secret Manager role/,
+    );
+  }
   assert.match(validateSecretPolicy({ bindings: [{ role: 'roles/secretmanager.admin', members: [runtime] }] }, allowed, ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com').join(';'), /unexpected role/);
   assert.match(validateSecretPolicy({ bindings: [{ role: 'roles/secretmanager.secretAccessor', members: [audit] }] }, allowed, ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com').join(';'), /audit identity/);
   assert.match(validateSecretPolicy({ bindings: [{ role: 'roles/secretmanager.secretAccessor', members: ['user:someone@example.com'] }] }, allowed, ['runtime@example.iam.gserviceaccount.com'], 'audit@example.iam.gserviceaccount.com').join(';'), /non-service-account/);
