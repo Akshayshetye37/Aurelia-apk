@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fail } from './lib.mjs';
-import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker, hasExactServiceInvoker, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from './firebase-audit-schema.mjs';
+import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker, hasExactServiceInvoker, findProjectWideRecoveryRisks, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from './firebase-audit-schema.mjs';
 
 const project = process.env.GCP_PROJECT_ID;
 const region = process.env.GCP_REGION;
@@ -167,6 +167,9 @@ const requiredAppCheckServices = list('APPCHECK_REQUIRED_SERVICES');
 if (!requiredAppCheckServices.length) problems.push('APPCHECK_REQUIRED_SERVICES not configured');
 const projectPolicy = run(['projects', 'get-iam-policy', project]);
 if (hasPublicRuntimeInvoker(projectPolicy)) problems.push('project-level IAM grants public Cloud Run/Functions invocation');
+for (const risk of findProjectWideRecoveryRisks(projectPolicy)) {
+  problems.push(`project-level ${risk.role} grant bypasses resource-scoped recovery IAM (${risk.memberCount} principal(s))`);
+}
 for (const account of reviewedAccounts) {
   for (const role of findPrivilegedProjectRoles(projectPolicy, account)) {
     problems.push(`${account}: project-level ${role}`);
