@@ -97,6 +97,7 @@ if (paginate) {
   fs.writeFileSync(fakeGh, fake); fs.chmodSync(fakeGh, 0o755);
   const state = fixture(faults);
   if (faults.includes('maintainer-approval')) state.reviewers = { 'recovery-staging': 'maintainer-one' };
+  if (faults.includes('remove-repo-secret')) state.repoSecrets = [];
   state.branchPolicy = faults.includes('wrong-branch-policy') ? 'main' : 'integration/ledger-patch';
   if (faults.includes('add-repo-secret:GCP_AUDIT_SERVICE_ACCOUNT')) state.repoSecrets = ['GCP_AUDIT_SERVICE_ACCOUNT'];
   const result = spawnSync(process.execPath, [script, 'owner/repo', 'integration/ledger-patch', rolesFile], {
@@ -135,6 +136,12 @@ test('preflight never prints secret values and requires the audit identity in th
   assert.equal(result.status, 0, output);
   assert.match(output, /GCP_AUDIT_SERVICE_ACCOUNT exists only as a secret in recovery-production-audit/);
   assert.doesNotMatch(output, /secret-value|private-key-material|BEGIN PRIVATE KEY/);
+});
+
+test('preflight requires the Digital Asset Links API repository secret', t => {
+  const { result, output } = execute(t, ['remove-repo-secret']);
+  assert.equal(result.status, 1, output);
+  assert.match(output, /repository secret DIGITAL_ASSET_LINKS_API_KEY exists/);
 });
 
 test('preflight requires the documented repository-level public key ring variable', t => {
