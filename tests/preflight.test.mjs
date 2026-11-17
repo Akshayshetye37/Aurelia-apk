@@ -58,7 +58,7 @@ const args = process.argv.slice(2);
 const state = JSON.parse(process.env.FAKE_STATE);
 const repoVars = ['RELEASE_OWNER_LOGIN'];
 const repoSecrets = state.repoSecrets ?? [];
-const reviewers = {
+const reviewers = state.reviewers ?? {
   'recovery-release-owner': 'owner-one',
   'recovery-release-review-1': 'reviewer-one',
   'recovery-release-review-2': 'reviewer-two',
@@ -95,6 +95,7 @@ if (paginate) {
 `;
   fs.writeFileSync(fakeGh, fake); fs.chmodSync(fakeGh, 0o755);
   const state = fixture(faults);
+  if (faults.includes('maintainer-approval')) state.reviewers = { 'recovery-staging': 'maintainer-one' };
   state.branchPolicy = faults.includes('wrong-branch-policy') ? 'main' : 'integration/ledger-patch';
   if (faults.includes('add-repo-secret:GCP_AUDIT_SERVICE_ACCOUNT')) state.repoSecrets = ['GCP_AUDIT_SERVICE_ACCOUNT'];
   const result = spawnSync(process.execPath, [script, 'owner/repo', 'integration/ledger-patch', rolesFile], {
@@ -133,4 +134,14 @@ test('preflight never prints secret values and requires the audit identity in th
   assert.equal(result.status, 0, output);
   assert.match(output, /GCP_AUDIT_SERVICE_ACCOUNT exists only as a secret in recovery-production-audit/);
   assert.doesNotMatch(output, /secret-value|private-key-material|BEGIN PRIVATE KEY/);
+});
+
+test('preflight rejects the maintainer as an operational environment approver and rejects both Secret Manager-only names in GitHub', t => {
+  const { result, output } = execute(t, [
+    'add-secret:recovery-device:RECOVERY_SIGNING_KEY_PKCS8',
+    'maintainer-approval',
+  ]);
+  assert.equal(result.status, 1, output);
+  assert.match(output, /reviewers exclude maintainer, operator and tester/);
+  assert.match(output, /Secret Manager-only credentials found in GitHub names/);
 });
