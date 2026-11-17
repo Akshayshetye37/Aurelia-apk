@@ -108,7 +108,14 @@ else {
 }
 const runtimeAccounts = list('RUNTIME_SERVICE_ACCOUNTS');
 const auditServiceAccount = process.env.AUDIT_SERVICE_ACCOUNT ?? '';
+const keyVerifierAccount = process.env.PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT ?? '';
 if (!runtimeAccounts.length) problems.push('RUNTIME_SERVICE_ACCOUNTS not configured');
+if (!/^[^@\\s]+@[^@\\s]+\\.iam\\.gserviceaccount\\.com$/.test(keyVerifierAccount)) {
+  problems.push('PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT must be a valid service-account email');
+}
+if (keyVerifierAccount && (runtimeAccounts.includes(keyVerifierAccount) || keyVerifierAccount === auditServiceAccount)) {
+  problems.push('production signing-key verifier must be distinct from audit and runtime identities');
+}
 if (new Set(runtimeAccounts).size !== runtimeAccounts.length) problems.push('RUNTIME_SERVICE_ACCOUNTS contains duplicate identities');
 if (!verifierCaller || !runtimeAccounts.includes(verifierCaller)) problems.push('ATTESTATION_VERIFIER_CALLER_SERVICE_ACCOUNT must be one of RUNTIME_SERVICE_ACCOUNTS');
 if (verifierPolicy && !hasExactServiceInvoker(verifierPolicy, verifierCaller)) {
@@ -123,7 +130,7 @@ if (requiredSecrets.length !== expectedRecoverySecrets.length ||
   problems.push('REQUIRED_SECRETS must contain exactly PHONE_PEPPER and RECOVERY_SIGNING_KEY_PKCS8');
 }
 const secretPolicies = new Map();
-const allowedSecretPrincipals = new Set([...runtimeAccounts, auditServiceAccount].filter(Boolean).map((account) => `serviceAccount:${account}`));
+const allowedSecretPrincipals = new Set([...runtimeAccounts, auditServiceAccount, keyVerifierAccount].filter(Boolean).map((account) => `serviceAccount:${account}`));
 if (!requiredSecrets.length) problems.push('REQUIRED_SECRETS not configured');
 for (const secret of requiredSecrets) {
   const versions = run(['secrets', 'versions', 'list', secret, '--project', project, '--filter=state=ENABLED']);
@@ -132,6 +139,15 @@ for (const secret of requiredSecrets) {
   secretPolicies.set(secret, policy);
   for (const issue of validateSecretPolicy(policy, allowedSecretPrincipals, runtimeAccounts, auditServiceAccount)) {
     problems.push(`secret ${secret}: ${issue}`);
+  }
+  const verifierMember = `serviceAccount:${keyVerifierAccount}`;
+  const verifierBindings = (policy.bindings ?? []).filter(binding => (binding.members ?? []).includes(verifierMember));
+  if (secret === 'PHONE_PEPPER' && verifierBindings.length) {
+    problems.push('production signing-key verifier must not access PHONE_PEPPER');
+  }
+  if (secret === 'RECOVERY_SIGNING_KEY_PKCS8' &&
+      (verifierBindings.length !== 1 || verifierBindings[0].role !== 'roles/secretmanager.secretAccessor')) {
+    problems.push('production signing-key verifier must have only secretAccessor on RECOVERY_SIGNING_KEY_PKCS8');
   }
 }
 // Include every recovery callable, including those with no declared secrets.
@@ -158,8 +174,9 @@ const runtimeSecretBindings = {
   cancelRecoveryPhoneChange: [],
   activateRecoveryPhoneChange: [],
 };
-problems.push(...validateFunctionSecretAccess(functions, runtimeSecretBindings, secretPolicies, runtimeAccounts, requiredSecrets));
-const reviewedAccounts = [...new Set([...runtimeAccounts, auditServiceAccount].filter(Boolean))];
+const additionalSecretAccessors = new Map([['RECOVERY_SIGNING_KEY_PKCS8', new Set([`serviceAccount:${keyVerifierAccount}`])]]);
+problems.push(...validateFunctionSecretAccess(functions, runtimeSecretBindings, secretPolicies, runtimeAccounts, requiredSecrets, additionalSecretAccessors));
+const reviewedAccounts = [...new Set([...runtimeAccounts, auditServiceAccount, keyVerifierAccount].filter(Boolean))];
 for (const account of reviewedAccounts) {
   const keys = run(['iam', 'service-accounts', 'keys', 'list', '--iam-account', account, '--managed-by=user', '--project', project]);
   if (keys.length) problems.push(`${account}: user-managed keys exist`);
