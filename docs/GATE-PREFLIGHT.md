@@ -34,7 +34,7 @@ Keep `roles.json` outside the repository and restrict its filesystem permissions
 | `recovery-release-review-1` | None | None |
 | `recovery-release-review-2` | None | None |
 
-Repository variables `RELEASE_OWNER_LOGIN`, `RECOVERY_GRANT_PUBLIC_KEYS_JSON`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, `WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS`, `ANDROID_APPLICATION_ID` and `PRODUCTION_KEY_VERIFY_WIF_PROVIDER` are also required. The repository secret `DIGITAL_ASSET_LINKS_API_KEY` is required for Google's Digital Asset Links API checks. `RELEASE_OWNER_LOGIN` must be configured to the designated candidate owner; the preflight checks its presence by name and Gate 6 verifies the actual approved login. `RECOVERY_GRANT_PUBLIC_KEYS_JSON` is public SPKI pin material, not a private secret; the staging environment must also contain its environment-scoped value.
+Repository variables `RELEASE_OWNER_LOGIN`, `RECOVERY_GRANT_PUBLIC_KEYS_JSON`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, `WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS`, `ANDROID_APPLICATION_ID`, `PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT`, `PRODUCTION_KEY_VERIFY_WIF_PRINCIPAL` and `PRODUCTION_KEY_VERIFY_WIF_PROVIDER` are also required. The three production key-verifier values must be repository-scoped with no environment overrides. The repository secret `DIGITAL_ASSET_LINKS_API_KEY` is required for Google's Digital Asset Links API checks. `RELEASE_OWNER_LOGIN` must be configured to the designated candidate owner; the preflight checks its presence by name and Gate 6 verifies the actual approved login. `RECOVERY_GRANT_PUBLIC_KEYS_JSON` is public SPKI pin material, not a private secret; the staging environment must also contain its environment-scoped value.
 
 ## Mandatory scope rules
 
