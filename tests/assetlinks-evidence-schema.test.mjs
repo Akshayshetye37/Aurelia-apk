@@ -7,7 +7,7 @@ const fp = '11'.repeat(32).match(/.{2}/g).join(':');
 const relations = ['delegate_permission/common.handle_all_urls', 'delegate_permission/common.get_login_creds'];
 const fixture = () => ({
   rpId: 'auth.example.com', site: 'https://auth.example.com', packageName: 'com.aurelia.pms',
-  fingerprints: [fp], relations,
+  fingerprints: [fp], relations: [...relations],
   apiChecks: relations.map(relation => ({ relation, fingerprint: fp, linked: true, maxAge: '3600s' })), minimumMaxAgeSeconds: 3600,
   origins: ['android:apk-key-hash:' + 'A'.repeat(43)], checkedAt: new Date(now - 1000).toISOString(),
 });
