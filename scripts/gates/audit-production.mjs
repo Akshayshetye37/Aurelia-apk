@@ -255,6 +255,6 @@ do {
 const modes = Object.fromEntries(appCheckServices.map((service) => [service.name.split('/').pop(), service.enforcementMode]));
 for (const service of requiredAppCheckServices) if (modes[service] !== 'ENFORCED') problems.push(`App Check not ENFORCED for ${service}`);
 fs.mkdirSync('evidence', { recursive: true });
-fs.writeFileSync('evidence/production-audit.json', JSON.stringify({ project, checkedAt: new Date().toISOString(), recoverySigningKeyId: expectedProductionKid, auditedResources, firebaseAudit, problems }, null, 2));
+fs.writeFileSync('evidence/production-audit.json', JSON.stringify({ project, checkedAt: new Date().toISOString(), productionRecoveryEnabled: problems.length === 0 ? false : null, recoverySigningKeyId: expectedProductionKid, auditedResources, firebaseAudit, problems }, null, 2));
 if (problems.length) fail(problems.join('; '));
 console.log('production audit clean: recovery OFF everywhere');
