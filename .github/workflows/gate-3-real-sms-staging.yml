@@ -48,6 +48,11 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Download Google-verified staging Asset Links evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: aurelia-recovery-assetlinks-${{ inputs.candidate_sha }}
+          path: assetlinks-artifact
       - name: Candidate remains the exact frozen branch head
         run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
       - name: Confirm staging is isolated from production
@@ -100,7 +105,10 @@ jobs:
           test_hash="$(sha256sum apks/test.apk | awk '{print $1}')"
           signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' staging-artifacts/apk-certificate.txt | tr -d ':')"
           lock_hash="$(sha256sum staging-artifacts/package-lock.json | awk '{print $1}')"
-          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg p "$STAGING_PROJECT" --arg s "$signer" --arg l "$lock_hash" --arg r "$GITHUB_RUN_ID"             '{apkSha256:$a,testApkSha256:$t,stagingProjectId:$p,signerSha256:$s,packageLockSha256:$l,stagingRunId:($r|tonumber)}' > evidence/details.json
+          test -s assetlinks-artifact/assetlinks-verification.json
+          cp assetlinks-artifact/assetlinks-verification.json evidence/assetlinks-verification.json
+          assetlinks_hash="$(sha256sum evidence/assetlinks-verification.json | awk '{print $1}')"
+          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg p "$STAGING_PROJECT" --arg s "$signer" --arg l "$lock_hash" --arg al "$assetlinks_hash" --arg r "$GITHUB_RUN_ID"             '{apkSha256:$a,testApkSha256:$t,stagingProjectId:$p,signerSha256:$s,packageLockSha256:$l,assetLinksVerificationSha256:$al,stagingRunId:($r|tonumber)}' > evidence/details.json
           node scripts/gates/write-evidence.mjs --gate 3 --sha "$CANDIDATE_SHA" --status PASS
           tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
       - name: Attest Gate 3 evidence bundle
