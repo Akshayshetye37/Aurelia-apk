@@ -32,6 +32,7 @@ export function validateAssetLinksEvidence(evidence, requiredFingerprint, now = 
       }
     }
   }
+  if (!Number.isFinite(evidence.minimumMaxAgeSeconds) || evidence.minimumMaxAgeSeconds <= 0) fail('Digital Asset Links API cache lifetime is invalid');
   const checkedAt = Date.parse(evidence.checkedAt ?? '');
   if (!Number.isFinite(checkedAt) || checkedAt > now + 300000 || now - checkedAt > 7 * 24 * 60 * 60 * 1000) {
     fail('Digital Asset Links evidence is missing, future-dated or older than seven days');
