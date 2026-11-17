@@ -121,8 +121,8 @@ export function validateSecretPolicy(policy, allowedPrincipals, runtimeAccounts,
       const runtime = runtimeAccounts.some(account => member === `serviceAccount:${account}`);
       if (runtime && binding.role !== 'roles/secretmanager.secretAccessor') problems.push(`runtime identity has unexpected role ${binding.role}`);
       if (auditServiceAccount && member === `serviceAccount:${auditServiceAccount}` &&
-          ['roles/secretmanager.secretAccessor', 'roles/secretmanager.admin'].includes(binding.role)) {
-        problems.push('audit identity has secret payload/admin access');
+          binding.role !== 'roles/secretmanager.viewer') {
+        problems.push(`audit identity has non-read-only Secret Manager role ${binding.role}`);
       }
     }
   }
