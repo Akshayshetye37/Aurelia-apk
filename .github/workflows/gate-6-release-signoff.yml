@@ -181,6 +181,7 @@ jobs:
           mkdir -p ../production-release
           cp "$APK" ../production-release/app-release.apk
           cp "$TEST_APK" ../production-release/app-release-androidTest.apk
+          cp package-lock.json ../production-release/package-lock.json
           cp "$RUNNER_TEMP/production-apk-certificate.txt" ../production-release/apk-certificate.txt
           cp "$RUNNER_TEMP/production-test-certificate.txt" ../production-release/androidTest-certificate.txt
 
