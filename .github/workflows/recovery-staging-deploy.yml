@@ -362,6 +362,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/staging-artifacts"
           cp "$APK" "$RUNNER_TEMP/staging-artifacts/app-release.apk"
           cp "$TEST_APK" "$RUNNER_TEMP/staging-artifacts/app-release-androidTest.apk"
+          test -s package-lock.json
+          cp package-lock.json "$RUNNER_TEMP/staging-artifacts/package-lock.json"
           cp "$RUNNER_TEMP/apk-sha256.txt" "$RUNNER_TEMP/staging-artifacts/"
           cp "$RUNNER_TEMP/apk-certificate.txt" "$RUNNER_TEMP/staging-artifacts/"
           cp "$RUNNER_TEMP/androidTest-certificate.txt" "$RUNNER_TEMP/staging-artifacts/"
