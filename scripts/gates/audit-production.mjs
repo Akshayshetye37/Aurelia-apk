@@ -111,11 +111,11 @@ const auditServiceAccount = process.env.AUDIT_SERVICE_ACCOUNT ?? '';
 const keyVerifierAccount = process.env.PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT ?? '';
 const keyVerifierWifPrincipal = process.env.PRODUCTION_KEY_VERIFY_WIF_PRINCIPAL ?? '';
 if (!runtimeAccounts.length) problems.push('RUNTIME_SERVICE_ACCOUNTS not configured');
-if (!/^[^@\\s]+@[^@\\s]+\\.iam\\.gserviceaccount\\.com$/.test(keyVerifierAccount)) {
+if (!/^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$/.test(keyVerifierAccount)) {
   problems.push('PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT must be a valid service-account email');
 }
 const keyVerifierWifProvider = process.env.PRODUCTION_KEY_VERIFY_WIF_PROVIDER ?? '';
-const providerMatch = /^projects\\/(\\d+)\\/locations\\/global\\/workloadIdentityPools\\/([a-z0-9-]+)\\/providers\\/([a-z0-9-]+)$/.exec(keyVerifierWifProvider);
+const providerMatch = /^projects\/(\d+)\/locations\/global\/workloadIdentityPools\/([a-z0-9-]+)\/providers\/([a-z0-9-]+)$/.exec(keyVerifierWifProvider);
 if (!providerMatch) {
   problems.push('PRODUCTION_KEY_VERIFY_WIF_PROVIDER must be a full production-project WIF provider resource name');
 } else {
