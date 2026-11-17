@@ -135,7 +135,11 @@ const repoVariables = names(`${apiRepo}/actions/variables`, '.variables[].name')
 const repoSecrets = names(`${apiRepo}/actions/secrets`, '.secrets[].name');
 check(repoVariables !== null, 'repository variable names are readable');
 check(repoSecrets !== null, 'repository secret names are readable');
-if (repoVariables !== null) check(repoVariables.includes('RELEASE_OWNER_LOGIN'), 'repository variable RELEASE_OWNER_LOGIN exists');
+if (repoVariables !== null) {
+  for (const required of ['RELEASE_OWNER_LOGIN', 'RECOVERY_GRANT_PUBLIC_KEYS_JSON']) {
+    check(repoVariables.includes(required), `repository variable ${required} exists`);
+  }
+}
 for (const [environment, requirement] of Object.entries(ENVIRONMENT_REQUIREMENTS)) {
   const variableNames = names(`${apiRepo}/environments/${encodeURIComponent(environment)}/variables`, '.variables[].name');
   const secretNames = names(`${apiRepo}/environments/${encodeURIComponent(environment)}/secrets`, '.secrets[].name');
