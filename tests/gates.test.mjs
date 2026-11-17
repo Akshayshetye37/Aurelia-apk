@@ -847,5 +847,5 @@ test('acknowledgeRecoveryOwnerAlert is never granted PHONE_PEPPER access', () =>
   const alertCallable = passkeysSource.match(/export const acknowledgeRecoveryOwnerAlert = onCall\(([\s\S]*?)\n\);/);
   assert.ok(alertCallable, 'acknowledgeRecoveryOwnerAlert callable declaration must remain explicit');
   assert.doesNotMatch(alertCallable[1], /\bsecrets\s*:/, 'alert acknowledgement must not declare runtime secrets');
-  assert.doesNotMatch(alertCallable[1], /PHONE_PEPPER/, 'alert acknowledgement must not reference PHONE_PEPPER');
+  assert.doesNotMatch(passkeysSource, /PHONE_PEPPER/, 'passkeys module must not declare or reference PHONE_PEPPER');
 });
