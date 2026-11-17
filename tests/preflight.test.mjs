@@ -85,7 +85,7 @@ if (environmentIndex >= 0) {
 } else if (endpoint.endsWith('/actions/variables')) output = repoVars;
 else if (endpoint.endsWith('/actions/secrets')) output = repoSecrets;
 else if (endpoint.endsWith('/branches/integration%2Fledger-patch/protection')) output = { required_pull_request_reviews: { required_approving_review_count: 1, dismiss_stale_reviews: true }, enforce_admins: { enabled: true }, allow_force_pushes: { enabled: false }, allow_deletions: { enabled: false }, required_status_checks: { contexts: ['ci'] } };
-else if (endpoint.endsWith('/actions/runners')) output = [{ name: 'device-runner', status: 'online', labels: [{ name: 'self-hosted' }, { name: 'aurelia-android-device' }] }];
+else if (endpoint.endsWith('/actions/runners')) output = [{ name: 'device-runner', status: 'online', labels: [{ name: 'self-hosted' }, { name: 'linux' }, { name: 'x64' }, { name: 'aurelia-android-device' }] }];
 else process.exit(3);
 if (paginate) {
   const values = Array.isArray(output) ? output : [];
