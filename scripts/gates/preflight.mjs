@@ -89,10 +89,10 @@ const environmentReviewRules = {
   'recovery-release-owner': { only: roles?.owner },
   'recovery-release-review-1': { only: roles?.reviewer1 },
   'recovery-release-review-2': { only: roles?.reviewer2 },
-  'recovery-attestation': { exclude: [roles?.tester, roles?.operator] },
-  'recovery-staging': { exclude: [roles?.tester, roles?.operator] },
-  'recovery-device': { exclude: [roles?.tester, roles?.operator] },
-  'recovery-production-audit': { exclude: [roles?.tester, roles?.operator] },
+  'recovery-attestation': { exclude: [roles?.maintainer, roles?.tester, roles?.operator] },
+  'recovery-staging': { exclude: [roles?.maintainer, roles?.tester, roles?.operator] },
+  'recovery-device': { exclude: [roles?.maintainer, roles?.tester, roles?.operator] },
+  'recovery-production-audit': { exclude: [roles?.maintainer, roles?.tester, roles?.operator] },
 };
 const environmentState = new Map();
 for (const name of envNames) {
@@ -125,7 +125,7 @@ for (const name of envNames) {
     check(reviewers.length > 0 && reviewers.every(reviewer => reviewer.type === 'User'),
       `${name}: reviewer identities are individually verifiable`);
     check(!reviewerLogins.some(login => excludedLogins.includes(login)),
-      `${name}: reviewers exclude operator and tester`);
+      `${name}: reviewers exclude maintainer, operator and tester`);
   }
   environmentState.set(name, { variables: null, secrets: null });
 }
