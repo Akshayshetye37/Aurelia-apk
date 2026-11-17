@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { fail, gh, requireApprovals, requireSha, verifyBundle } from './lib.mjs';
+import { fail, gh, requireApprovals, requireNamedEnvironmentApprover, requireSha, verifyBundle } from './lib.mjs';
 import { isProductionAuditEvidenceValid } from './firebase-audit-schema.mjs';
 
 const sha = requireSha(process.env.CANDIDATE_SHA);
@@ -130,6 +130,8 @@ for (const kind of ['sms', 'device']) {
   }
 }
 const approvers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 3, process.env.ACTOR, ['recovery-release-owner', 'recovery-release-review-1', 'recovery-release-review-2']);
+const approvalHistory = gh(`repos/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}/approvals`);
+requireNamedEnvironmentApprover(approvalHistory, 'recovery-release-owner', process.env.RELEASE_OWNER_LOGIN);
 const smsAttestation = readEvidence('sms', 'attestation.json');
 const deviceAttestation = readEvidence('device', 'attestation.json');
 const testers = [smsAttestation.tester, deviceAttestation.tester].map((login) => String(login).toLowerCase());
