@@ -570,6 +570,49 @@ test('Gate 6 requires a distinct owner sign-off plus two independent release rev
   assert.ok(gate6.includes('needs: [preflight, owner-signoff, independent-reviewer-one, independent-reviewer-two]'));
 });
 
+test('Gate 6 production build reuses Gate 3 dependencies and verifies the production signer', () => {
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  const gate3 = read('.github/workflows/gate-3-real-sms-staging.yml');
+  const gate6 = read('.github/workflows/gate-6-release-signoff.yml');
+  const verifier = read('scripts/gates/verify-qualification.mjs');
+  const audit = read('scripts/gates/audit-production.mjs');
+  assert.match(staging, /package-lock\\.json/);
+  assert.match(gate3, /packageLockSha256/);
+  assert.match(gate6, /fetch-gate3-build-lock\\.mjs/);
+  assert.match(gate6, /npm ci --no-audit --no-fund/);
+  assert.match(gate6, /PRODUCTION_GOOGLE_SERVICES_JSON_BASE64/);
+  assert.match(gate6, /PRODUCTION_KEYSTORE_BASE64/);
+  assert.match(gate6, /gate-6-production-release/);
+  assert.match(verifier, /productionRelease\\.packageLockSha256 !== records\\['3'\\]\\.details\\.packageLockSha256/);
+  assert.match(audit, /validateProductionSigningKeyId/);
+});
+
+test('post-release smoke re-audits production and verifies the published APK on the approved handset', () => {
+  const workflow = read('.github/workflows/production-release-smoke.yml');
+  const verifier = read('scripts/gates/verify-production-release-smoke-input.mjs');
+  assert.match(workflow, /environment: recovery-production-audit/);
+  assert.match(workflow, /environment: recovery-device/);
+  assert.match(workflow, /production-release-smoke-input\\.mjs/);
+  assert.match(workflow, /OtpRecoverySqlCipherInstrumentedTest/);
+  assert.match(workflow, /scan-logs\\.mjs/);
+  assert.match(verifier, /gh.*release/);
+  assert.match(verifier, /productionRecoveryEnabled/);
+});
+
+test('device attestation requires all manual recovery-denial cases and binds one handset', () => {
+  const schema = read('scripts/gates/device-attestation-schema.mjs');
+  const preflight = read('scripts/gates/preflight.mjs');
+  assert.match(schema, /notificationPermissionOffBlocksRecovery/);
+  assert.match(schema, /ownerDeviceOfflineBlocksRecovery/);
+  assert.match(schema, /noIndependentOwnerDeviceBlocksRecovery/);
+  assert.match(schema, /simSwapRejected/);
+  assert.match(schema, /hardwareBackedAttestationVerified/);
+  assert.match(schema, /passkeyAssertionVerified/);
+  assert.match(preflight, /GCP_AUDIT_SERVICE_ACCOUNT/);
+  assert.match(preflight, /PHONE_PEPPER/);
+  assert.match(preflight, /PRODUCTION_KEYSTORE_BASE64/);
+});
+
 test('Gate 6 requires the configured owner login to approve the owner environment', () => {
   const history = [
     { state: 'approved', user: { login: 'owner-one' }, environments: [{ name: 'recovery-release-owner' }] },
