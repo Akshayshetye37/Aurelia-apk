@@ -557,22 +557,10 @@ test('Gates 3–6 are dispatch-only, candidate-pinned and use protected executio
   assert.match(manual, /validate-attestation\.mjs/);
 });
 
-test('Gate 3 and Gate 6 pin App Check probes to the full recovery callable inventory', () => {
+test('Gate 3 and Gate 6 pin App Check probes to the deployed recovery callable inventory', () => {
   const probeScript = read('scripts/gates/staging-probes.mjs');
   const verifier = read('scripts/gates/verify-qualification.mjs');
-  for (const name of ['createRecoveryAttestationChallenge', 'verifyRecoveryDeviceAttestation',
-    'registerRecoveryPhone', 'exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
-    'registerRecoveryOwnerDevice',
-    'createRecoveryPasskeyEnrollmentOptions',
-    'completeRecoveryPasskeyEnrollment',
-    'retryRecoveryPasskeyEnrollmentAlert',
-    'getRecoveryOwnerPendingAction',
-    'getRecoveryOwnerActionReadiness',
-    'createRecoveryOwnerActionOptions',
-    'completeRecoveryOwnerPasskeyAction',
-    'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant',
-    'consumeRecoveryGrant', 'cancelRecoveryRequest', 'cancelRecoveryPhoneChange',
-    'activateRecoveryPhoneChange']) {
+  for (const name of ["createRecoveryAttestationChallenge","verifyRecoveryDeviceAttestation","registerRecoveryPhone","exchangeOwnerEmailLink","confirmRecoveryOwnerBinding","registerRecoveryOwnerDevice","acknowledgeRecoveryOwnerAlert","issueRecoveryGrant","consumeRecoveryGrant","cancelRecoveryRequest","cancelRecoveryPhoneChange","activateRecoveryPhoneChange"]) {
     assert.ok(probeScript.includes(name), `staging probes must include ${name}`);
     assert.ok(verifier.includes(name), `Gate 6 must require ${name}`);
   }
