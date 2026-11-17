@@ -144,9 +144,9 @@ const PRIVILEGED_PROJECT_ROLES = new Set([
   'roles/owner', 'roles/editor', 'roles/resourcemanager.projectIamAdmin',
   'roles/iam.securityAdmin', 'roles/iam.serviceAccountAdmin',
   'roles/iam.serviceAccountKeyAdmin', 'roles/iam.serviceAccountUser',
-  'roles/iam.serviceAccountTokenCreator', 'roles/secretmanager.admin',
+  'roles/iam.serviceAccountTokenCreator', 'roles/iam.serviceAccountOpenIdTokenCreator', 'roles/secretmanager.admin',
   'roles/secretmanager.secretAccessor', 'roles/run.admin', 'roles/run.invoker',
-  'roles/cloudfunctions.admin', 'roles/cloudfunctions.invoker',
+  'roles/cloudfunctions.admin', 'roles/cloudfunctions.developer', 'roles/cloudfunctions.invoker',
   'roles/firebase.admin', 'roles/firebaseauth.admin', 'roles/firebaseappcheck.admin',
 ]);
 /** Return any project-level role that is too broad for a recovery runtime or audit identity. */
