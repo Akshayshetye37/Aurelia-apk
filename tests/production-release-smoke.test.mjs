@@ -5,7 +5,7 @@ import { validateProductionSmokeBinding, validateReleaseSmokeInputs } from '../s
 const sha = 'a'.repeat(40), hash = 'b'.repeat(64), testHash = 'c'.repeat(64), signer = 'd'.repeat(64);
 const now = Date.parse('2026-11-17T10:00:00.000Z');
 const fixture = () => {
-  const release = { productionProjectId: 'aurelia-prod-12345', activeKid: 'prod-kid-1', packageLockSha256: 'e'.repeat(64), apkSha256: hash, testApkSha256: testHash, signerSha256: signer };
+  const release = { productionProjectId: 'aurelia-prod-12345', activeKid: 'prod-kid-1', packageLockSha256: 'e'.repeat(64), assetLinksVerificationSha256: 'f'.repeat(64), apkSha256: hash, testApkSha256: testHash, signerSha256: signer };
   return {
     metadata: { candidateSha: sha, candidateBranch: 'work/p0-storage-hardening', ...release },
     attestedRelease: { ...release },
