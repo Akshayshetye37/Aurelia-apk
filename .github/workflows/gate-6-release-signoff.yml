@@ -21,11 +21,14 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read
+      attestations: read
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       RUN_IDS: ${{ inputs.run_ids }}
       CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
       REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout trusted gate tooling
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -80,6 +83,12 @@ jobs:
           ref: ${{ inputs.candidate_sha }}
           path: candidate
           persist-credentials: false
+      - name: Verify Gate 3 provenance and reuse its exact dependency lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          gate3_run_id="$(node -e 'const ids=JSON.parse(process.env.RUN_IDS); process.stdout.write(String(ids["3"]))')"
+          GATE3_RUN_ID="$gate3_run_id" node scripts/gates/fetch-gate3-build-lock.mjs
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
@@ -107,7 +116,8 @@ jobs:
           GOOGLE_SERVICES_JSON: ${{ secrets.PRODUCTION_GOOGLE_SERVICES_JSON_BASE64 }}
         run: |
           set -euo pipefail
-          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+          test -s package-lock.json
+          npm ci --no-audit --no-fund
           npm run build
           template_dir="$RUNNER_TEMP/aurelia-android-templates"
           mv android/templates "$template_dir"
@@ -166,9 +176,10 @@ jobs:
           cp "$RUNNER_TEMP/production-test-certificate.txt" ../production-release/androidTest-certificate.txt
           app_hash="$(sha256sum "$APK" | awk '{print $1}')"
           test_hash="$(sha256sum "$TEST_APK" | awk '{print $1}')"
+          lock_hash="$(sha256sum package-lock.json | awk '{print $1}')"
           jq -n --arg sha "$CANDIDATE_SHA" --arg branch "$CANDIDATE_BRANCH" --arg project "$PRODUCTION_PROJECT_ID" \
-            --arg kid "$ACTIVE_KID" --arg apk "$app_hash" --arg test "$test_hash" --arg signer "$signer" \
-            '{candidateSha:$sha,candidateBranch:$branch,productionProjectId:$project,activeKid:$kid,apkSha256:$apk,testApkSha256:$test,signerSha256:$signer}' \
+            --arg kid "$ACTIVE_KID" --arg lock "$lock_hash" --arg apk "$app_hash" --arg test "$test_hash" --arg signer "$signer" \
+            '{candidateSha:$sha,candidateBranch:$branch,productionProjectId:$project,activeKid:$kid,packageLockSha256:$lock,apkSha256:$apk,testApkSha256:$test,signerSha256:$signer}' \
             > ../production-release/production-release.json
       - name: Upload exact production release artifacts and build record
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
