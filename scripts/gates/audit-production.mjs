@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fail } from './lib.mjs';
 import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker, hasExactServiceInvoker, findProjectWideRecoveryRisks, findMissingGen2FunctionServices, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from './firebase-audit-schema.mjs';
+import { validateProductionSigningKeyId } from './production-signing-schema.mjs';
 
 const project = process.env.GCP_PROJECT_ID;
 const region = process.env.GCP_REGION;
@@ -42,16 +43,8 @@ function inspectSecretFlag(resource, entries) {
 }
 const functions = run(['functions', 'list', '--regions=-', '--project', project]);
 const expectedProductionKid = process.env.PRODUCTION_RECOVERY_SIGNING_KEY_ID ?? '';
-const grantFunctionIds = functions
-  .filter(fn => ['issueRecoveryGrant', 'consumeRecoveryGrant'].includes(String(fn.name ?? '').split('/').pop()))
-  .map(fn => (fn.serviceConfig ?? fn).environmentVariables?.RECOVERY_SIGNING_KEY_ID ??
-    fn.environmentVariables?.RECOVERY_SIGNING_KEY_ID ?? '');
-const actualProductionKids = [...new Set(grantFunctionIds.filter(Boolean))];
-if (!/^[A-Za-z0-9._-]{1,64}$/.test(expectedProductionKid) ||
-    grantFunctionIds.length !== 2 || actualProductionKids.length !== 1 ||
-    actualProductionKids[0] !== expectedProductionKid) {
-  problems.push('production grant callables must expose the configured PRODUCTION_RECOVERY_SIGNING_KEY_ID');
-}
+try { validateProductionSigningKeyId(functions, expectedProductionKid); }
+catch (error) { problems.push(error.message); }
 auditedResources.functions = functions.length;
 if (!functions.length) problems.push('no production Cloud Functions found; runtime flags cannot be verified');
 for (const f of functions) {
