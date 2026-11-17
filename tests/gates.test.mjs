@@ -959,3 +959,18 @@ test('acknowledgeRecoveryOwnerAlert is never granted PHONE_PEPPER access', () =>
   assert.doesNotMatch(alertCallable[1], /\bsecrets\s*:/, 'alert acknowledgement must not declare runtime secrets');
   assert.doesNotMatch(passkeysSource, /PHONE_PEPPER/, 'passkeys module must not declare or reference PHONE_PEPPER');
 });
+
+
+test('Gate 4 bounds best-effort ADB cleanup on the persistent physical-device runner', () => {
+  const workflow = read('.github/workflows/gate-4-physical-device.yml');
+  const cleanupStart = workflow.indexOf('      - name: Remove raw device logs and downloaded APKs from the self-hosted runner');
+  assert.notEqual(cleanupStart, -1);
+  const cleanupEnd = workflow.indexOf('      - name: Upload sanitized physical-device evidence', cleanupStart);
+  assert.notEqual(cleanupEnd, -1);
+  const cleanup = workflow.slice(cleanupStart, cleanupEnd);
+  assert.match(cleanup, /set \\+e/);
+  assert.match(cleanup, /ADB_BIN=\\"\\$\\(command -v adb 2>\\/dev\\/null \\|\\| true\\)\\"/);
+  assert.equal((cleanup.match(/timeout -k 5s 15s/g) ?? []).length, 3,
+    'all ADB cleanup operations must have bounded execution time');
+  assert.match(cleanup, /rm -rf \\"\\$RUNNER_TEMP\\/aurelia-gate4\\" apks g3/);
+});
