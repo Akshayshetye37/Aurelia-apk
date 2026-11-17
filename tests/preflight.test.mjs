@@ -44,6 +44,7 @@ function fixture(faults = []) {
     if (kind === 'remove-variable') state[environment].variables = state[environment].variables.filter(item => item !== name);
     if (kind === 'remove-secret') state[environment].secrets = state[environment].secrets.filter(item => item !== name);
     if (kind === 'add-secret') state[environment].secrets.push(name);
+    if (kind === 'remove-repo-variable') state.repoVariables = ['RELEASE_OWNER_LOGIN'];
   }
   return state;
 }
@@ -56,7 +57,7 @@ function execute(t, faults = []) {
   const fake = `#!/usr/bin/env node
 const args = process.argv.slice(2);
 const state = JSON.parse(process.env.FAKE_STATE);
-const repoVars = ['RELEASE_OWNER_LOGIN'];
+const repoVars = state.repoVariables ?? ['RELEASE_OWNER_LOGIN', 'RECOVERY_GRANT_PUBLIC_KEYS_JSON'];
 const repoSecrets = state.repoSecrets ?? [];
 const reviewers = state.reviewers ?? {
   'recovery-release-owner': 'owner-one',
@@ -134,6 +135,12 @@ test('preflight never prints secret values and requires the audit identity in th
   assert.equal(result.status, 0, output);
   assert.match(output, /GCP_AUDIT_SERVICE_ACCOUNT exists only as a secret in recovery-production-audit/);
   assert.doesNotMatch(output, /secret-value|private-key-material|BEGIN PRIVATE KEY/);
+});
+
+test('preflight requires the documented repository-level public key ring variable', t => {
+  const { result, output } = execute(t, ['remove-repo-variable']);
+  assert.equal(result.status, 1, output);
+  assert.match(output, /repository variable RECOVERY_GRANT_PUBLIC_KEYS_JSON exists/);
 });
 
 test('preflight rejects the maintainer as an operational environment approver and rejects both Secret Manager-only names in GitHub', t => {
