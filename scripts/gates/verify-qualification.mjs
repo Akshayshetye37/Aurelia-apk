@@ -102,7 +102,12 @@ if (!Array.isArray(probes) || probeNames.size !== requiredProbeNames.length ||
   fail('Gate 3 App Check negative probes did not cover the exact complete recovery callable inventory twice');
 }
 if (!records['3'].details.stagingProjectId || records['3'].details.stagingProjectId === records['5'].details.productionProjectId) fail('Gate 3 staging project is missing or matches production');
-if (!records['4'].details.deviceLabel || !records['4'].details.deviceModel || records['4'].details.apkSha256 !== apkHash || records['4'].details.testApkSha256 !== testApkHash) fail('Gate 4 device record or APK hash does not match Gate 3');
+if (!records['4'].details.deviceLabel || !records['4'].details.deviceModel ||
+    !records['4'].details.manufacturer || !records['4'].details.buildFingerprint ||
+    !Number.isInteger(Number(records['4'].details.apiLevel)) || Number(records['4'].details.apiLevel) < 24 ||
+    records['4'].details.apkSha256 !== apkHash || records['4'].details.testApkSha256 !== testApkHash) {
+  fail('Gate 4 physical device identity, Android API level or APK hash does not match Gate 3');
+}
 if (records['4'].details.verifiedBoot !== 'green' || records['4'].details.bootloaderLocked !== true) fail('Gate 4 physical device boot state is not locked and verified');
 const gate4LogScan = readEvidence('4', 'log-scan.json');
 if (!Array.isArray(gate4LogScan.findings) || gate4LogScan.findings.length) fail('Gate 4 device log scan did not pass');
