@@ -69,7 +69,11 @@ const ENVIRONMENT_REQUIREMENTS = {
     secrets: ['GCP_WORKLOAD_IDENTITY_PROVIDER', 'GCP_AUDIT_SERVICE_ACCOUNT'],
   },
   'recovery-attestation': { variables: [], secrets: [] },
-  'recovery-release-owner': { variables: [], secrets: [] },
+  'recovery-release-owner': {
+    variables: ['PRODUCTION_GCP_PROJECT_ID', 'PRODUCTION_RECOVERY_SIGNING_KEY_ID', 'PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON'],
+    secrets: ['PRODUCTION_GOOGLE_SERVICES_JSON_BASE64', 'PRODUCTION_KEYSTORE_BASE64',
+      'PRODUCTION_KEYSTORE_PASSWORD', 'PRODUCTION_KEY_ALIAS', 'PRODUCTION_KEY_PASSWORD'],
+  },
   'recovery-release-review-1': { variables: [], secrets: [] },
   'recovery-release-review-2': { variables: [], secrets: [] },
 };
