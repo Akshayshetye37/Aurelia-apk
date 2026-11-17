@@ -29,6 +29,8 @@ The owner must be the named candidate owner, not merely any environment approver
 | 5 — Deployment/security | Verifier deploy run, IAM policy probe, App Check probes, Secret Manager versions, key-rotation evidence, production flag audit | Private verifier; least-privilege invoker; missing/invalid App Check and attestation fail closed; fresh revocation; no secret leakage; production flag false/unset | NOT RUN |
 | 6 — Owner sign-off | This completed section with signed owner and independent reviewer acknowledgement | Owner explicitly accepts exact frozen candidate and all preceding gates; production enablement is a separate authorized action | NOT SIGNED |
 
+The Gate 1 and Gate 2 run IDs shown above are historical records from the earlier control revision. They are not reusable after the gate-control branch changes. For the release cycle described here, rerun all three required workflows for Gate 1 and all three for Gate 2 after the reviewed control changes are merged, then freeze and bind the resulting records to the same candidate SHA and control SHA used by Gates 3–6. Until those current-cycle runs are verified, the qualification ledger remains 0/6.
+
 ## Artifact and certificate record
 
 | Field | Value |
