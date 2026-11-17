@@ -834,17 +834,18 @@ test('documented protected environments exactly match workflow references', () =
 });
 
 
+
 test('acknowledgeRecoveryOwnerAlert is never granted PHONE_PEPPER access', () => {
   const deployWorkflow = read('.github/workflows/recovery-staging-deploy.yml');
-  const bindingsMatch = deployWorkflow.match(/bindings=\\(\\s*([\\s\\S]*?)\\n\\s*\\)/);
+  const bindingsMatch = deployWorkflow.match(/bindings=\(\s*([\s\S]*?)\n\s*\)/);
   assert.ok(bindingsMatch, 'staging deployment must declare an explicit callable-to-secret IAM map');
   const alertBinding = bindingsMatch[1].match(/["']acknowledgeRecoveryOwnerAlert:([^"']*)["']/);
   assert.ok(alertBinding, 'acknowledgeRecoveryOwnerAlert must have an explicit least-privilege mapping');
   assert.equal(alertBinding[1].trim(), '', 'acknowledgeRecoveryOwnerAlert must not receive PHONE_PEPPER or any other recovery secret');
 
   const passkeysSource = read('functions/src/passkeys.ts');
-  const alertCallable = passkeysSource.match(/export const acknowledgeRecoveryOwnerAlert = onCall\\(([\\s\\S]*?)\\n\\);/);
+  const alertCallable = passkeysSource.match(/export const acknowledgeRecoveryOwnerAlert = onCall\(([\s\S]*?)\n\);/);
   assert.ok(alertCallable, 'acknowledgeRecoveryOwnerAlert callable declaration must remain explicit');
-  assert.doesNotMatch(alertCallable[1], /\\bsecrets\\s*:/, 'alert acknowledgement must not declare runtime secrets');
+  assert.doesNotMatch(alertCallable[1], /\bsecrets\s*:/, 'alert acknowledgement must not declare runtime secrets');
   assert.doesNotMatch(alertCallable[1], /PHONE_PEPPER/, 'alert acknowledgement must not reference PHONE_PEPPER');
 });
