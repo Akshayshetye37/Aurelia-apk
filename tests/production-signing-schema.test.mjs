@@ -36,6 +36,9 @@ test('production signing private key must derive the exact active APK SPKI publi
   assert.throws(() => verifyProductionSigningKeyPair(privateKeyPem, { 'prod-kid-1': Buffer.alloc(91).toString('base64') }, 'prod-kid-1'),
     /does not match/);
   assert.throws(() => verifyProductionSigningKeyPair(privateKeyPem, ring, 'wrong-kid'), /missing or invalid/);
+  const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  assert.throws(() => verifyProductionSigningKeyPair(rsa.privateKey.export({ type: 'pkcs8', format: 'pem' }),
+    { 'prod-kid-1': rsa.publicKey.export({ type: 'spki', format: 'der' }).toString('base64') }, 'prod-kid-1'), /P-256/);
 });
 
 test('production key verifier is an extra accessor only for the signing key, never PHONE_PEPPER', () => {
