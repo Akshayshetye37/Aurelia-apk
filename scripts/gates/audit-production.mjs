@@ -152,6 +152,15 @@ for (const secret of requiredSecrets) {
     problems.push('production signing-key verifier must have only secretAccessor on RECOVERY_SIGNING_KEY_PKCS8');
   }
 }
+const allSecrets = run(['secrets', 'list', '--project', project]);
+for (const secretResource of allSecrets) {
+  const secretName = String(secretResource.name ?? '').split('/').pop();
+  if (!secretName || requiredSecrets.includes(secretName)) continue;
+  const policy = run(['secrets', 'get-iam-policy', secretName, '--project', project]);
+  if ((policy.bindings ?? []).some(binding => (binding.members ?? []).includes(`serviceAccount:${keyVerifierAccount}`))) {
+    problems.push(`production signing-key verifier has access to unexpected secret ${secretName}`);
+  }
+}
 // Include every recovery callable, including those with no declared secrets.
  // Each callable must have its own runtime identity so an unbound callable cannot
  // inherit Secret Manager access from a sibling function.
