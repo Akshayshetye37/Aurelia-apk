@@ -41,7 +41,7 @@ The repository variable `RELEASE_OWNER_LOGIN` is also required and must be confi
 - `GCP_AUDIT_SERVICE_ACCOUNT` must exist exactly once, as a secret in `recovery-production-audit`. It must not exist at repository scope, in another environment, or as a variable.
 - `PHONE_PEPPER` and `RECOVERY_SIGNING_KEY_PKCS8` must not be GitHub Actions variables or secrets at repository or environment scope. They belong in Google Secret Manager.
 - All seven environments must require individual reviewers, prevent self-review, disallow administrator bypass and restrict deployments to `integration/ledger-patch`.
-- The owner/reviewer environments must each have exactly the assigned individual reviewer. The staging, device, production-audit and attestation environments must exclude the Operator and Tester.
+- The owner/reviewer environments must each have exactly the assigned individual reviewer. The staging, device, production-audit and attestation environments must exclude the Maintainer, Operator and Tester. The Maintainer controls the freeze/merge but does not approve or test.
 - Branch protection must require PR approval and status checks, dismiss stale approvals, enforce rules for administrators, and disable force-push/deletion.
 - Exactly one runner must carry the `aurelia-android-device` label. It must be online before Gate 4 dispatch.
 
