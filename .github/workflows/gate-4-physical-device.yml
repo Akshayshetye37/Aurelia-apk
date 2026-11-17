@@ -155,8 +155,16 @@ jobs:
           jq -n --arg a "$app_hash" --arg t "$test_hash" --arg label "$DEVICE_LABEL" --arg model "$model" --arg manufacturer "$manufacturer" --arg version "$version" --arg api "$api_level" --arg fingerprint "$fingerprint"             '{apkSha256:$a,testApkSha256:$t,deviceLabel:$label,deviceModel:$model,manufacturer:$manufacturer,androidVersion:$version,apiLevel:$api,buildFingerprint:$fingerprint,verifiedBoot:"green",bootloaderLocked:true}' > evidence/details.json
       - name: Remove raw device logs and downloaded APKs from the self-hosted runner
         if: always()
-        run: rm -rf "$RUNNER_TEMP/aurelia-gate4" apks
+        shell: bash
+        run: |
+          set +e
+          adb -s "$DEVICE_SERIAL" uninstall com.aurelia.pms >/dev/null 2>&1
+          adb -s "$DEVICE_SERIAL" uninstall com.aurelia.pms.test >/dev/null 2>&1
+          adb -s "$DEVICE_SERIAL" logcat -c >/dev/null 2>&1
+          rm -rf "$RUNNER_TEMP/aurelia-gate4" apks g3
+          rm -f "$RUNNER_TEMP/gh-attestation-help.txt"
       - name: Upload sanitized physical-device evidence for hosted attestation
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: gate-4-device-evidence
@@ -166,6 +174,9 @@ jobs:
             evidence/log-scan.json
           if-no-files-found: error
           retention-days: 14
+      - name: Remove sanitized workspace evidence from the persistent runner
+        if: always()
+        run: rm -rf evidence staging-artifacts
   attest:
     needs: device
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
