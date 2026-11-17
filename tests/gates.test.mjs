@@ -534,16 +534,7 @@ test('Gates 3–6 are dispatch-only, candidate-pinned and use protected executio
   const gate3 = read('.github/workflows/gate-3-real-sms-staging.yml');
   const gate4 = read('.github/workflows/gate-4-physical-device.yml');
   const gate5 = read('.github/workflows/gate-5-production-security.yml');
-test('Gate 6 requires a distinct owner sign-off plus two independent release reviewers', () => {
-  const gate6 = read('.github/workflows/gate-6-release-signoff.yml');
-  const verifier = read('scripts/gates/verify-qualification.mjs');
-  for (const environment of ['recovery-release-owner', 'recovery-release-review-1', 'recovery-release-review-2']) {
-    assert.ok(gate6.includes(`environment: ${environment}`));
-    assert.ok(verifier.includes(environment));
-  }
-  assert.match(verifier, /requireApprovals\\(repo, process\\.env\\.GITHUB_RUN_ID, 3/);
-  assert.match(gate6, /needs: \\[preflight, owner-signoff, independent-reviewer-one, independent-reviewer-two\\]/);
-});
+
 
   const gate6 = read('.github/workflows/gate-6-release-signoff.yml');
   for (const workflow of [gate3, gate4, gate5, gate6]) {
@@ -566,6 +557,17 @@ test('Gate 6 requires a distinct owner sign-off plus two independent release rev
   const manual = read('.github/workflows/gate-manual-attestation.yml');
   assert.match(manual, /environment: recovery-attestation/);
   assert.match(manual, /validate-attestation\.mjs/);
+});
+
+test('Gate 6 requires a distinct owner sign-off plus two independent release reviewers', () => {
+  const gate6 = read('.github/workflows/gate-6-release-signoff.yml');
+  const verifier = read('scripts/gates/verify-qualification.mjs');
+  for (const environment of ['recovery-release-owner', 'recovery-release-review-1', 'recovery-release-review-2']) {
+    assert.ok(gate6.includes(`environment: ${environment}`));
+    assert.ok(verifier.includes(environment));
+  }
+  assert.ok(verifier.includes('requireApprovals(repo, process.env.GITHUB_RUN_ID, 3'));
+  assert.ok(gate6.includes('needs: [preflight, owner-signoff, independent-reviewer-one, independent-reviewer-two]'));
 });
 
 test('Gate 6 requires one owner and two distinct protected-environment reviewers', () => {
