@@ -148,12 +148,12 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
 export function requireNamedEnvironmentApprover(history, environment, expectedLogin) {
   if (!Array.isArray(history) || typeof environment !== 'string' || !environment ||
       typeof expectedLogin !== 'string' || !/^[A-Za-z0-9-]{1,39}$/.test(expectedLogin)) {
-    fail('named environment approver configuration is invalid');
+    throw new Error('named environment approver configuration is invalid');
   }
   const approved = history.some(item => item.state === 'approved' &&
     item.user?.login?.toLowerCase() === expectedLogin.toLowerCase() &&
     Array.isArray(item.environments) && item.environments.some(entry => entry.name === environment));
-  if (!approved) fail(`required owner ${expectedLogin} did not approve environment ${environment}`);
+  if (!approved) throw new Error(`required owner ${expectedLogin} did not approve environment ${environment}`);
   return true;
 }
 
