@@ -19,7 +19,7 @@ export function validateProductionSmokeBinding({
       qualification.candidateSha !== candidateSha || qualification.productionRecoveryEnabled !== false) {
     fail('Gate 6 result is not qualified or does not prove production recovery OFF');
   }
-  const fields = ['productionProjectId', 'activeKid', 'packageLockSha256', 'apkSha256', 'testApkSha256', 'signerSha256'];
+  const fields = ['productionProjectId', 'activeKid', 'packageLockSha256', 'assetLinksVerificationSha256', 'apkSha256', 'testApkSha256', 'signerSha256'];
   if (!qualification.productionRelease || fields.some(field =>
       qualification.productionRelease[field] !== attestedRelease[field] || metadata[field] !== attestedRelease[field])) {
     fail('production release metadata differs from the attested Gate 6 release record');
@@ -33,6 +33,7 @@ export function validateProductionSmokeBinding({
     fail('post-release smoke handset does not match the single Gate 4 approved device');
   }
   if (!/^[0-9a-f]{64}$/.test(metadata.packageLockSha256 ?? '') ||
+      !/^[0-9a-f]{64}$/.test(metadata.assetLinksVerificationSha256 ?? '') ||
       !/^[0-9a-f]{64}$/.test(metadata.apkSha256 ?? '') ||
       !/^[0-9a-f]{64}$/.test(metadata.testApkSha256 ?? '') ||
       !/^[0-9a-f]{64}$/.test(metadata.signerSha256 ?? '') ||
