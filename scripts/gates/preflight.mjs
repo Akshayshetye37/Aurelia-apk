@@ -135,8 +135,9 @@ const repoVariables = names(`${apiRepo}/actions/variables`, '.variables[].name')
 const repoSecrets = names(`${apiRepo}/actions/secrets`, '.secrets[].name');
 check(repoVariables !== null, 'repository variable names are readable');
 check(repoSecrets !== null, 'repository secret names are readable');
+if (repoSecrets !== null) check(repoSecrets.includes('DIGITAL_ASSET_LINKS_API_KEY'), 'repository secret DIGITAL_ASSET_LINKS_API_KEY exists');
 if (repoVariables !== null) {
-  for (const required of ['RELEASE_OWNER_LOGIN', 'RECOVERY_GRANT_PUBLIC_KEYS_JSON']) {
+  for (const required of ['RELEASE_OWNER_LOGIN', 'RECOVERY_GRANT_PUBLIC_KEYS_JSON', 'WEBAUTHN_RP_ID', 'WEBAUTHN_RP_NAME', 'WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS', 'ANDROID_APPLICATION_ID']) {
     check(repoVariables.includes(required), `repository variable ${required} exists`);
   }
 }
