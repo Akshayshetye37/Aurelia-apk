@@ -12,17 +12,6 @@ const run = (args) => {
   catch (error) { fail(`gcloud ${args.slice(0, 3).join(' ')} failed: ${error.stderr?.toString().slice(0, 400) || error.message}`); }
 };
 const problems = [];
-const expectedProductionKid = process.env.PRODUCTION_RECOVERY_SIGNING_KEY_ID ?? '';
-const grantFunctionIds = functions
-  .filter(fn => ['issueRecoveryGrant', 'consumeRecoveryGrant'].includes(String(fn.name ?? '').split('/').pop()))
-  .map(fn => (fn.serviceConfig ?? fn).environmentVariables?.RECOVERY_SIGNING_KEY_ID ??
-    fn.environmentVariables?.RECOVERY_SIGNING_KEY_ID ?? '');
-const actualProductionKids = [...new Set(grantFunctionIds.filter(Boolean))];
-if (!/^[A-Za-z0-9._-]{1,64}$/.test(expectedProductionKid) ||
-    grantFunctionIds.length !== 2 || actualProductionKids.length !== 1 ||
-    actualProductionKids[0] !== expectedProductionKid) {
-  problems.push('production grant callables must expose the configured PRODUCTION_RECOVERY_SIGNING_KEY_ID');
-}
 const protectedFlagNames = new Set([
   'RECOVERY_ENABLED',
   'LIVE_COLLECTION', 'LIVE_COLLECTION_ENABLED',
@@ -52,6 +41,17 @@ function inspectSecretFlag(resource, entries) {
   }
 }
 const functions = run(['functions', 'list', '--regions=-', '--project', project]);
+const expectedProductionKid = process.env.PRODUCTION_RECOVERY_SIGNING_KEY_ID ?? '';
+const grantFunctionIds = functions
+  .filter(fn => ['issueRecoveryGrant', 'consumeRecoveryGrant'].includes(String(fn.name ?? '').split('/').pop()))
+  .map(fn => (fn.serviceConfig ?? fn).environmentVariables?.RECOVERY_SIGNING_KEY_ID ??
+    fn.environmentVariables?.RECOVERY_SIGNING_KEY_ID ?? '');
+const actualProductionKids = [...new Set(grantFunctionIds.filter(Boolean))];
+if (!/^[A-Za-z0-9._-]{1,64}$/.test(expectedProductionKid) ||
+    grantFunctionIds.length !== 2 || actualProductionKids.length !== 1 ||
+    actualProductionKids[0] !== expectedProductionKid) {
+  problems.push('production grant callables must expose the configured PRODUCTION_RECOVERY_SIGNING_KEY_ID');
+}
 auditedResources.functions = functions.length;
 if (!functions.length) problems.push('no production Cloud Functions found; runtime flags cannot be verified');
 for (const f of functions) {
