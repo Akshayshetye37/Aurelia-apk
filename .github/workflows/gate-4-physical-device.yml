@@ -50,7 +50,7 @@ jobs:
           gh version
           gh attestation verify --help > "$RUNNER_TEMP/gh-attestation-help.txt"
           grep -q -- '--deny-self-hosted-runners' "$RUNNER_TEMP/gh-attestation-help.txt"
-          adb version
+          timeout -k 5s 15s adb version
           jq --version
           tar --version
           timeout --version
@@ -63,6 +63,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          adb() { timeout -k 5s 30s command adb "$@"; }
           [[ "$DEVICE_LABEL" =~ ^[A-Z0-9-]{3,32}$ ]]
           [[ "$DEVICE_SERIAL" =~ ^[A-Za-z0-9._:-]{3,80}$ ]]
           IFS=',' read -r -a allowed_serials <<< "$DEVICE_SERIAL_ALLOWLIST"
@@ -91,6 +92,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          adb() { timeout -k 5s 60s command adb "$@"; }
           app="com.aurelia.pms"
           runner="com.aurelia.pms.test/androidx.test.runner.AndroidJUnitRunner"
           temp="$RUNNER_TEMP/aurelia-gate4"
