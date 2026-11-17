@@ -196,8 +196,9 @@ jobs:
           model="$(adb -s "$DEVICE_SERIAL" shell getprop ro.product.model | tr -d '\r')"
           version="$(adb -s "$DEVICE_SERIAL" shell getprop ro.build.version.release | tr -d '\r')"
           api="$(adb -s "$DEVICE_SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')"
-          jq --arg model "$model" --arg version "$version" --arg api "$api" --arg label "$DEVICE_LABEL" \
-            '. + {deviceLabel:$label,deviceModel:$model,androidVersion:$version,apiLevel:$api,smokeTests:"PASS"}' \
+          assetlinks_hash="$(sha256sum evidence/assetlinks-verification.json | awk '{print $1}')"
+          jq --arg model "$model" --arg version "$version" --arg api "$api" --arg label "$DEVICE_LABEL" --arg assetlinks "$assetlinks_hash" \
+            '. + {deviceLabel:$label,deviceModel:$model,androidVersion:$version,apiLevel:$api,assetLinksVerificationSha256:$assetlinks,smokeTests:"PASS"}' \
             evidence/production-smoke-input.json > evidence/production-smoke.json
           rm -f "$RUNNER_TEMP/security-primitives-summary.txt" "$RUNNER_TEMP/sqlcipher-summary.txt" "$RUNNER_TEMP/grant-preflight-summary.txt"
       - name: Upload post-release smoke evidence
