@@ -165,4 +165,15 @@ The `run_ids` input must be a JSON object with exactly these keys and successful
 }
 ```
 
+### Production-signed candidate artifact
+
+The protected `recovery-release-owner` environment also supplies the production build configuration:
+
+- Variables: `PRODUCTION_GCP_PROJECT_ID`, `PRODUCTION_RECOVERY_SIGNING_KEY_ID`, `PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON`.
+- Secrets: `PRODUCTION_GOOGLE_SERVICES_JSON_BASE64`, `PRODUCTION_KEYSTORE_BASE64`, `PRODUCTION_KEYSTORE_PASSWORD`, `PRODUCTION_KEY_ALIAS`, `PRODUCTION_KEY_PASSWORD`.
+
+After the owner approves, the Gate 6 owner job checks out the exact frozen candidate SHA, builds the app and companion instrumentation APK with the production Firebase configuration and production keystore, verifies both signatures and hashes, and uploads `gate-6-production-release`. The final verifier checks the production APK signer against the Gate 5 production Firebase fingerprint inventory and records the APK/test APK hashes, signer and project in the attested Gate 6 evidence. The staging APK signer is not substituted for the production signer. The artifact is not automatically published and does not enable production recovery.
+
+After an authorized publication, install that exact artifact on the approved handset and run the post-publication smoke test: verify package and signer, launch the app, verify local PIN unlock and existing synthetic-data integrity, and confirm recovery remains disabled. Record the release URL, artifact SHA-256, handset label, test time and result in the release audit trail. Do not enable recovery as part of this smoke test.
+
 Configure the GitHub variable `RELEASE_OWNER_LOGIN` with the candidate owner's GitHub login. Configure `recovery-release-owner`, `recovery-release-review-1` and `recovery-release-review-2` as protected GitHub Environments with required reviewers. Restrict `recovery-release-owner` to that same candidate owner; Gate 6 verifies the approved login against `RELEASE_OWNER_LOGIN`. Each environment must produce an approved deployment-review record; Gate 6 requires three distinct approvers (the owner and two independent reviewers), none of whom may be the workflow trigger actor or either manual attestation tester. The manual SMS and device workflows must separately be approved through the protected `recovery-attestation` environment. Gate 6 must build a separate production-configured APK from the same frozen candidate SHA using the production signing keystore in the protected `recovery-release-owner` environment. It verifies the production APK signer against the Gate 5 production Firebase signing inventory; the staging APK signer is not assumed to be the production signer. The production APK and companion instrumentation APK hashes, signer fingerprint, project ID and source SHA are recorded in the Gate 6 evidence. A post-publication smoke test must install that exact production APK, verify its signer and candidate record, exercise local PIN/database access, and confirm recovery remains disabled.
