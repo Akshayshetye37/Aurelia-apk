@@ -632,6 +632,10 @@ test('Gate 5 requires the private verifier to trust exactly the configured Funct
   assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`, 'serviceAccount:other@example.iam.gserviceaccount.com'] }] }, caller), false);
   assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }, caller), false);
   assert.equal(hasExactServiceInvoker({ bindings: [] }, caller), false);
+  assert.equal(hasExactServiceInvoker({ bindings: [
+    { role: 'roles/run.invoker', members: [`serviceAccount:${caller}`] },
+    { role: 'roles/cloudfunctions.invoker', members: ['serviceAccount:other@example.iam.gserviceaccount.com'] },
+  ] }, caller), false);
   assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`] }] }, 'bad-account'), false);
 });
 
