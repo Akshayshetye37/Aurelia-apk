@@ -51,7 +51,7 @@ if (sha256File('published-release/app-release.apk') !== metadata.apkSha256 ||
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/production-smoke-input.json', JSON.stringify({
   candidateSha: CANDIDATE_SHA, gate6RunId: Number(GATE6_RUN_ID), releaseTag: RELEASE_TAG,
-  productionProjectId: metadata.productionProjectId, activeKid: metadata.activeKid, packageLockSha256: metadata.packageLockSha256,
+  productionProjectId: metadata.productionProjectId, activeKid: metadata.activeKid, packageLockSha256: metadata.packageLockSha256, assetLinksVerificationSha256: metadata.assetLinksVerificationSha256,
   apkSha256: metadata.apkSha256, testApkSha256: metadata.testApkSha256,
   signerSha256: metadata.signerSha256, productionRecoveryEnabled: false, device: qualification.device,
 }, null, 2));
