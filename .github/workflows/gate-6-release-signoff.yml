@@ -167,8 +167,8 @@ jobs:
           app_hash="$(sha256sum "$APK" | awk '{print $1}')"
           test_hash="$(sha256sum "$TEST_APK" | awk '{print $1}')"
           jq -n --arg sha "$CANDIDATE_SHA" --arg branch "$CANDIDATE_BRANCH" --arg project "$PRODUCTION_PROJECT_ID" \
-            --arg apk "$app_hash" --arg test "$test_hash" --arg signer "$signer" \
-            '{candidateSha:$sha,candidateBranch:$branch,productionProjectId:$project,apkSha256:$apk,testApkSha256:$test,signerSha256:$signer}' \
+            --arg kid "$ACTIVE_KID" --arg apk "$app_hash" --arg test "$test_hash" --arg signer "$signer" \
+            '{candidateSha:$sha,candidateBranch:$branch,productionProjectId:$project,activeKid:$kid,apkSha256:$apk,testApkSha256:$test,signerSha256:$signer}' \
             > ../production-release/production-release.json
       - name: Upload exact production release artifacts and build record
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
