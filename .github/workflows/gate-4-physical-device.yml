@@ -148,8 +148,11 @@ jobs:
           app_hash="$(sha256sum apks/app.apk | awk '{print $1}')"
           test_hash="$(sha256sum apks/test.apk | awk '{print $1}')"
           model="$(jq -r .deviceModel evidence/device.json)"
+          manufacturer="$(jq -r .manufacturer evidence/device.json)"
           version="$(jq -r .androidVersion evidence/device.json)"
-          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg label "$DEVICE_LABEL" --arg model "$model" --arg version "$version"             '{apkSha256:$a,testApkSha256:$t,deviceLabel:$label,deviceModel:$model,androidVersion:$version,verifiedBoot:"green",bootloaderLocked:true}' > evidence/details.json
+          api_level="$(jq -r .apiLevel evidence/device.json)"
+          fingerprint="$(jq -r .buildFingerprint evidence/device.json)"
+          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg label "$DEVICE_LABEL" --arg model "$model" --arg manufacturer "$manufacturer" --arg version "$version" --arg api "$api_level" --arg fingerprint "$fingerprint"             '{apkSha256:$a,testApkSha256:$t,deviceLabel:$label,deviceModel:$model,manufacturer:$manufacturer,androidVersion:$version,apiLevel:$api,buildFingerprint:$fingerprint,verifiedBoot:"green",bootloaderLocked:true}' > evidence/details.json
       - name: Remove raw device logs and downloaded APKs from the self-hosted runner
         if: always()
         run: rm -rf "$RUNNER_TEMP/aurelia-gate4" apks
@@ -209,7 +212,12 @@ jobs:
           const details = JSON.parse(fs.readFileSync('device-evidence/details.json', 'utf8'));
           const scan = JSON.parse(fs.readFileSync('device-evidence/log-scan.json', 'utf8'));
           if (!/^[A-Z0-9-]{3,32}$/.test(device.deviceLabel ?? '') || device.deviceLabel !== details.deviceLabel || device.deviceLabel !== process.env.DEVICE_LABEL) fail('device label mismatch');
-          if (!device.deviceModel || device.deviceModel !== details.deviceModel || device.androidVersion !== details.androidVersion) fail('device identity mismatch');
+          if (!device.deviceModel || device.deviceModel !== details.deviceModel ||
+              !device.manufacturer || device.manufacturer !== details.manufacturer ||
+              device.androidVersion !== details.androidVersion ||
+              !/^\\d+$/.test(String(device.apiLevel ?? '')) || Number(device.apiLevel) < 24 ||
+              device.apiLevel !== details.apiLevel ||
+              !device.buildFingerprint || device.buildFingerprint !== details.buildFingerprint) fail('device identity or Android API level is incomplete/mismatched');
           if (device.verifiedBoot !== 'green' || device.bootloaderLocked !== true || details.verifiedBoot !== 'green' || details.bootloaderLocked !== true) fail('device boot state is not locked and verified');
           const expectedLogFiles = ['force-stop-phase-one.txt', 'force-stop-phase-two.txt', 'grant-preflight.txt', 'logcat.txt', 'reboot-phase-one.txt', 'reboot-phase-two.txt', 'security-primitives.txt', 'sqlcipher.txt'].sort();
           const actualLogFiles = Array.isArray(scan.files) ? [...scan.files].sort() : [];
