@@ -232,6 +232,9 @@ const requiredAppCheckServices = list('APPCHECK_REQUIRED_SERVICES');
 if (!requiredAppCheckServices.length) problems.push('APPCHECK_REQUIRED_SERVICES not configured');
 const projectPolicy = run(['projects', 'get-iam-policy', project]);
 if (hasPublicRuntimeInvoker(projectPolicy)) problems.push('project-level IAM grants public Cloud Run/Functions invocation');
+if ((projectPolicy.bindings ?? []).some(binding => (binding.members ?? []).includes(`serviceAccount:${keyVerifierAccount}`))) {
+  problems.push('production signing-key verifier must have no project-level IAM bindings');
+}
 for (const risk of findProjectWideRecoveryRisks(projectPolicy)) {
   problems.push(`project-level ${risk.role} grant bypasses resource-scoped recovery IAM (${risk.memberCount} principal(s))`);
 }
