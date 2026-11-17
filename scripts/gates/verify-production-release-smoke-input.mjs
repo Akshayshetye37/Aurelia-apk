@@ -38,7 +38,7 @@ try {
   validateProductionSmokeBinding({
     metadata, attestedRelease, qualification, currentAudit,
     candidateSha: CANDIDATE_SHA, candidateBranch: CANDIDATE_BRANCH,
-    releaseCommitSha: releaseCommit,
+    releaseCommitSha: releaseCommit, deviceLabel: process.env.DEVICE_LABEL,
   });
 } catch (error) { fail(error.message); }
 fs.rmSync('published-release', { recursive: true, force: true });
