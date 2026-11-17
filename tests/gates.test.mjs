@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
 import { isAttestationFresh, validateEnvironmentApprovals } from '../scripts/gates/lib.mjs';
-import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from '../scripts/gates/firebase-audit-schema.mjs';
+import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker, hasExactServiceInvoker, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = path.join(ROOT, 'scripts', 'gates');
@@ -622,6 +622,15 @@ test('Gate 5 requires the exact secret inventory and unique runtime allowlist', 
   assert.match(audit, /REQUIRED_SECRETS must contain exactly PHONE_PEPPER and RECOVERY_SIGNING_KEY_PKCS8/);
   assert.match(audit, /RUNTIME_SERVICE_ACCOUNTS contains duplicate identities/);
   assert.match(audit, /new Set\(runtimeAccounts\)/);
+});
+
+test('Gate 5 requires the private verifier to trust exactly the configured Functions caller', () => {
+  const caller = 'functions@example.iam.gserviceaccount.com';
+  assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`] }] }, caller), true);
+  assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`, 'serviceAccount:other@example.iam.gserviceaccount.com'] }] }, caller), false);
+  assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }, caller), false);
+  assert.equal(hasExactServiceInvoker({ bindings: [] }, caller), false);
+  assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`] }] }, 'bad-account'), false);
 });
 
 test('Gate 5 rejects inherited project-level public Cloud Run or Functions invocation', () => {
