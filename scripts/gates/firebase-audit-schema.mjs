@@ -72,7 +72,9 @@ export function hasExactServiceInvoker(policy, expectedServiceAccount) {
   if (typeof expectedServiceAccount !== 'string' ||
       !/^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$/.test(expectedServiceAccount) ||
       !expectedServiceAccount.endsWith('.iam.gserviceaccount.com')) return false;
-  const bindings = (policy?.bindings ?? []).filter(binding => binding.role === 'roles/run.invoker');
+  const allBindings = policy?.bindings ?? [];
+  if (allBindings.some(binding => binding.role === 'roles/cloudfunctions.invoker')) return false;
+  const bindings = allBindings.filter(binding => binding.role === 'roles/run.invoker');
   if (bindings.length !== 1 || bindings[0].condition) return false;
   const actual = new Set(bindings[0].members ?? []);
   return actual.size === 1 && actual.has(`serviceAccount:${expectedServiceAccount}`);
