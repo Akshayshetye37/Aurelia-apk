@@ -241,7 +241,7 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          rm -f "$RUNNER_TEMP/google-services.json" "$RUNNER_TEMP/aurelia-production-release.jks"
+          rm -f "$RUNNER_TEMP/google-services.json" "$RUNNER_TEMP/aurelia-production-release.jks" "$RUNNER_TEMP/recovery-signing-key.pem"
           rm -f candidate/android/app/google-services.json
   independent-reviewer-one:
     needs: [preflight, owner-signoff]
