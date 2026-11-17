@@ -206,6 +206,7 @@ jobs:
           if command -v adb >/dev/null 2>&1 && [[ -n "${DEVICE_SERIAL:-}" ]]; then
             adb -s "$DEVICE_SERIAL" uninstall com.aurelia.pms >/dev/null 2>&1
             adb -s "$DEVICE_SERIAL" uninstall com.aurelia.pms.test >/dev/null 2>&1
+            adb -s "$DEVICE_SERIAL" logcat -c >/dev/null 2>&1
           fi
           rm -f "$RUNNER_TEMP/security-primitives.txt" "$RUNNER_TEMP/sqlcipher.txt" "$RUNNER_TEMP/grant-preflight.txt"
           rm -f "$RUNNER_TEMP/security-primitives-summary.txt" "$RUNNER_TEMP/sqlcipher-summary.txt" "$RUNNER_TEMP/grant-preflight-summary.txt"
