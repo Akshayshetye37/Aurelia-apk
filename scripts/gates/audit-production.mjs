@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fail } from './lib.mjs';
-import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from './firebase-audit-schema.mjs';
+import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker, hasExactServiceInvoker, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from './firebase-audit-schema.mjs';
 
 const project = process.env.GCP_PROJECT_ID;
 const region = process.env.GCP_REGION;
@@ -92,17 +92,21 @@ for (const service of services) {
   }
 }
 const verifier = process.env.ATTESTATION_VERIFIER_SERVICE;
+const verifierCaller = process.env.ATTESTATION_VERIFIER_CALLER_SERVICE_ACCOUNT ?? '';
+let verifierPolicy;
 if (!verifier || !region) problems.push('ATTESTATION_VERIFIER_SERVICE and GCP_REGION must be configured');
 else {
-  const policy = run(['run', 'services', 'get-iam-policy', verifier, '--region', region, '--project', project]);
-  for (const binding of policy.bindings ?? []) for (const member of binding.members ?? []) {
-    if (member === 'allUsers' || member === 'allAuthenticatedUsers') problems.push(`attestation verifier is public (${binding.role})`);
-  }
+  verifierPolicy = run(['run', 'services', 'get-iam-policy', verifier, '--region', region, '--project', project]);
+  if (hasPublicRuntimeInvoker(verifierPolicy)) problems.push('attestation verifier is publicly invokable');
 }
 const runtimeAccounts = list('RUNTIME_SERVICE_ACCOUNTS');
 const auditServiceAccount = process.env.AUDIT_SERVICE_ACCOUNT ?? '';
 if (!runtimeAccounts.length) problems.push('RUNTIME_SERVICE_ACCOUNTS not configured');
 if (new Set(runtimeAccounts).size !== runtimeAccounts.length) problems.push('RUNTIME_SERVICE_ACCOUNTS contains duplicate identities');
+if (!verifierCaller || !runtimeAccounts.includes(verifierCaller)) problems.push('ATTESTATION_VERIFIER_CALLER_SERVICE_ACCOUNT must be one of RUNTIME_SERVICE_ACCOUNTS');
+if (verifierPolicy && !hasExactServiceInvoker(verifierPolicy, verifierCaller)) {
+  problems.push('attestation verifier roles/run.invoker must be bound to exactly the configured Functions caller service account');
+}
 if (!auditServiceAccount) problems.push('AUDIT_SERVICE_ACCOUNT not configured');
 if (auditServiceAccount && runtimeAccounts.includes(auditServiceAccount)) problems.push('audit identity must be distinct from every production runtime identity');
 const requiredSecrets = list('REQUIRED_SECRETS');
