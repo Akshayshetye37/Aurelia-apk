@@ -62,6 +62,8 @@ jobs:
         with:
           name: aurelia-recovery-staging-apk-${{ inputs.candidate_sha }}
           path: staging-artifacts
+      - name: Require the exact resolved dependency lock from the staging build
+        run: test -s staging-artifacts/package-lock.json
       - name: Verify exact candidate APK hashes and signer
         run: |
           set -euo pipefail
@@ -97,7 +99,8 @@ jobs:
           app_hash="$(sha256sum apks/app.apk | awk '{print $1}')"
           test_hash="$(sha256sum apks/test.apk | awk '{print $1}')"
           signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' staging-artifacts/apk-certificate.txt | tr -d ':')"
-          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg p "$STAGING_PROJECT" --arg s "$signer" --arg r "$GITHUB_RUN_ID"             '{apkSha256:$a,testApkSha256:$t,stagingProjectId:$p,signerSha256:$s,stagingRunId:($r|tonumber)}' > evidence/details.json
+          lock_hash="$(sha256sum staging-artifacts/package-lock.json | awk '{print $1}')"
+          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg p "$STAGING_PROJECT" --arg s "$signer" --arg l "$lock_hash" --arg r "$GITHUB_RUN_ID"             '{apkSha256:$a,testApkSha256:$t,stagingProjectId:$p,signerSha256:$s,packageLockSha256:$l,stagingRunId:($r|tonumber)}' > evidence/details.json
           node scripts/gates/write-evidence.mjs --gate 3 --sha "$CANDIDATE_SHA" --status PASS
           tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
       - name: Attest Gate 3 evidence bundle
