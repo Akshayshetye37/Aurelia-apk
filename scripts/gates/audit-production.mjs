@@ -223,16 +223,26 @@ do {
 if(firebaseAudit.tenantTestPhoneNumbers) problems.push('production Firebase Auth tenants have test phone numbers configured');
 
 const token = accessToken;
-const appCheck = await fetch(`https://firebaseappcheck.googleapis.com/v1/projects/${encodeURIComponent(project)}/services`, {
-  headers: { Authorization: `Bearer ${token}`, 'X-Goog-User-Project': project },
-  signal: AbortSignal.timeout(15_000),
-});
-if (!appCheck.ok) problems.push(`App Check API returned ${appCheck.status}`);
-else {
+const appCheckServices = [];
+let appCheckPageToken;
+const seenAppCheckPageTokens = new Set();
+do {
+  const appCheckUrl = new URL(`https://firebaseappcheck.googleapis.com/v1/projects/${encodeURIComponent(project)}/services`);
+  appCheckUrl.searchParams.set('pageSize', '100');
+  if (appCheckPageToken) appCheckUrl.searchParams.set('pageToken', appCheckPageToken);
+  const appCheck = await fetch(appCheckUrl, {
+    headers: { Authorization: `Bearer ${token}`, 'X-Goog-User-Project': project },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!appCheck.ok) fail(`App Check API returned ${appCheck.status}`);
   const payload = await appCheck.json();
-  const modes = Object.fromEntries((payload.services ?? []).map((service) => [service.name.split('/').pop(), service.enforcementMode]));
-  for (const service of requiredAppCheckServices) if (modes[service] !== 'ENFORCED') problems.push(`App Check not ENFORCED for ${service}`);
-}
+  appCheckServices.push(...(payload.services ?? []));
+  appCheckPageToken = payload.nextPageToken;
+  if (appCheckPageToken && seenAppCheckPageTokens.has(appCheckPageToken)) fail('App Check API repeated a pagination token');
+  if (appCheckPageToken) seenAppCheckPageTokens.add(appCheckPageToken);
+} while (appCheckPageToken);
+const modes = Object.fromEntries(appCheckServices.map((service) => [service.name.split('/').pop(), service.enforcementMode]));
+for (const service of requiredAppCheckServices) if (modes[service] !== 'ENFORCED') problems.push(`App Check not ENFORCED for ${service}`);
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/production-audit.json', JSON.stringify({ project, checkedAt: new Date().toISOString(), auditedResources, firebaseAudit, problems }, null, 2));
 if (problems.length) fail(problems.join('; '));
