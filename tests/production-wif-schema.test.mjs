@@ -22,7 +22,7 @@ test('production key-verifier WIF is restricted to the Gate 6 control-branch own
 
 test('production key-verifier WIF rejects broad repository, branch, workflow or environment trust', () => {
   const bad = fixture(); bad.provider.attributeCondition = "assertion.repository == 'other/repo'";
-  assert.throws(() => validateProductionKeyVerifierWif(bad), /condition must restrict/);
+  assert.throws(() => validateProductionKeyVerifierWif(bad), /condition must exactly restrict/);
   const wrongPrincipal = fixture(); wrongPrincipal.principal = 'principalSet://wrong';
   assert.throws(() => validateProductionKeyVerifierWif(wrongPrincipal), /does not match/);
   const wrongIssuer = fixture(); wrongIssuer.provider.oidc.issuerUri = 'https://attacker.example';
