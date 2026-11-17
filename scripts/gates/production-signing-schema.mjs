@@ -36,6 +36,9 @@ export function verifyProductionSigningKeyPair(privateKeyPem, publicKeyRingInput
   let actual;
   try {
     const privateKey = createPrivateKey(privateKeyPem);
+    if (privateKey.asymmetricKeyType !== 'ec' || privateKey.asymmetricKeyDetails?.namedCurve !== 'prime256v1') {
+      throw new Error('unsupported production signing key type');
+    }
     actual = createPublicKey(privateKey).export({ type: 'spki', format: 'der' }).toString('base64');
   } catch {
     throw new Error('production signing private key is not a valid PKCS#8 key');
