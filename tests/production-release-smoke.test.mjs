@@ -9,7 +9,7 @@ const fixture = () => {
   return {
     metadata: { candidateSha: sha, candidateBranch: 'work/p0-storage-hardening', ...release },
     attestedRelease: { ...release },
-    qualification: { candidateSha: sha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', productionRecoveryEnabled: false, productionRelease: { ...release }, device: { deviceLabel: 'AURELIA-PIXEL8' } },
+    qualification: { candidateSha: sha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', productionRecoveryEnabled: false, productionRelease: { ...release }, device: { deviceLabel: 'AURELIA-PIXEL8', deviceModel: 'Pixel 8', androidVersion: '15', hardwareSecurityLevel: 'TEE' } },
     currentAudit: { project: release.productionProjectId, productionRecoveryEnabled: false, recoverySigningKeyId: release.activeKid, problems: [], checkedAt: new Date(now - 1000).toISOString() },
     candidateSha: sha, candidateBranch: 'work/p0-storage-hardening', releaseCommitSha: sha, deviceLabel: 'AURELIA-PIXEL8', now,
   };
