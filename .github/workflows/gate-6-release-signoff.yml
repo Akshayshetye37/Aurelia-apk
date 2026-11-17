@@ -92,6 +92,7 @@ jobs:
       CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
       REPO: ${{ github.repository }}
       ACTOR: ${{ github.triggering_actor }}
+      RELEASE_OWNER_LOGIN: ${{ vars.RELEASE_OWNER_LOGIN }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout trusted gate tooling
