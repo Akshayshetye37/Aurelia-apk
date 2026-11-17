@@ -649,6 +649,16 @@ test('Gate 5 enforces exact per-function Secret Manager runtime access', () => {
   extra.set('PHONE_PEPPER', { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: ['serviceAccount:phone@example.iam.gserviceaccount.com', 'serviceAccount:grant@example.iam.gserviceaccount.com', 'serviceAccount:unexpected@example.iam.gserviceaccount.com'] }] });
   assert.match(validateFunctionSecretAccess(functions, bindings, extra, ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'), /accessor set differs/);
   assert.match(validateFunctionSecretAccess(functions, bindings, policies, ['phone@example.iam.gserviceaccount.com'], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'), /not in RUNTIME_SERVICE_ACCOUNTS/);
+  const unrelatedSharesPhoneSecret = [
+    ...functions,
+    { name: 'projects/p/locations/r/functions/unrelatedProductionFunction', serviceConfig: { serviceAccountEmail: 'phone@example.iam.gserviceaccount.com' } },
+  ];
+  assert.match(
+    validateFunctionSecretAccess(unrelatedSharesPhoneSecret, bindings, policies,
+      ['phone@example.iam.gserviceaccount.com', 'grant@example.iam.gserviceaccount.com'],
+      ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8']).join(';'),
+    /unmapped function unrelatedProductionFunction shares a recovery secret-bearing runtime identity/,
+  );
   const sharedAcrossSecretSets = [
     ...functions,
     { name: 'projects/p/locations/r/functions/acknowledgeRecoveryOwnerAlert', serviceConfig: { serviceAccountEmail: 'phone@example.iam.gserviceaccount.com' } },
