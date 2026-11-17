@@ -25,7 +25,7 @@ A changed source SHA, rebuilt APK, Firebase configuration change, signing-key ch
 
 ## Required physical-device matrix
 
-At minimum, qualify one supported current Android handset and one supported lower-end handset. Include a StrongBox-capable handset where supported by the approved device matrix. Each device/API combination gets a separate immutable result record.
+For this release, qualify exactly one approved physical handset/API combination. This matches the current Gate 4 workflow input (`device_label`) and the Gate 6 contract (one Gate 4 run plus one `device` attestation among exactly seven run IDs). Record the exact model, API level, verified boot and hardware security level for that handset. Any additional current, lower-end or StrongBox-capable models are explicitly NOT APPROVED / NOT QUALIFIED for this release; do not imply coverage from the single-device result. A future multi-device release requires a reviewed workflow, attestation-schema and Gate 6 verifier change before its candidate is frozen.
 
 | Field | Required value |
 |---|---|
@@ -34,7 +34,7 @@ At minimum, qualify one supported current Android handset and one supported lowe
 | Android version/API | Exact version and API level |
 | Build fingerprint | Exact OS build fingerprint |
 | SoC / security level | Hardware-backed Keystore details |
-| StrongBox | Available / unavailable / not supported |
+| Hardware security level | StrongBox or TEE, as reported by the hardware-backed key attestation |
 | App candidate SHA | Exact source commit |
 | APK SHA-256 | Exact installed artifact |
 | APK signer SHA-1/SHA-256 | Exact values from Gate 3 |
@@ -63,6 +63,8 @@ All cases below must be run on the physical handset. Capture timestamped, redact
 | G4-11 | Enroll the PIN/biometric Keystore wrappers, then change/remove the secure lock-screen credential through Android Settings and attempt unlock/recovery. | Invalidated Keystore wrappers are detected; app fails closed, never silently regenerates the DEK or wrapper; the separately provisioned offline recovery key can still unwrap the same DEK where its own wrapper remains valid. |
 | G4-12 | Register two independently attested owner devices, then simulate a recovery attempt from the registered recovery handset while the second owner device is online; repeat with the second device offline and with notification permission disabled. | Every enrolled owner device receives the alert; at least one device must post and acknowledge it before the 24-hour hold starts. No acknowledgement means no cooldown eligibility and no grant. Owner cancellation revokes an unconsumed grant. |
 | G4-13 | Simulate SIM swap/port-out by moving the staging test number to a second SIM/handset while retaining the original attested owner devices. Attempt recovery from the unregistered handset and from the registered recovery device. | Phone possession alone on the unregistered handset cannot satisfy device binding. Owner devices receive and acknowledge the alert; the 24-hour hold begins only after acknowledgement; a fresh SMS after the hold is still bound to the enrolled device and grant. Any missing owner alert/ack blocks grant issue. |
+| G4-14 | Inspect the Android Key Attestation security level for the recovery device key. | Hardware-backed security level is StrongBox or TEE; software-only attestation is rejected. Record the actual level in the manual device attestation. |
+| G4-15 | Complete a fresh owner passkey assertion through Credential Manager on the independent attested owner device. | RP ID/origin, user verification, challenge binding and monotonic authenticator counter validate; replay and wrong-device assertions fail. |
 
 ## Execution notes
 
@@ -79,11 +81,11 @@ All cases below must be run on the physical handset. Capture timestamped, redact
 
 | Case | Device label | Run ID | Result | Evidence reference | Tester/date | Reviewer/date |
 |---|---|---|---|---|---|---|
-| G4-01 to G4-13 | — | NOT RUN | NOT QUALIFIED | — | — | — |
+| G4-01 to G4-15 | one approved handset | NOT RUN | NOT QUALIFIED | — | — | — |
 
 ## Exit criteria
 
-Gate 4 is PASS only when all required cases pass on every approved device/API combination, evidence is attached to the access-controlled evidence store, exact source/APK/Firebase staging identities are recorded, and an independent reviewer signs the results.
+Gate 4 is PASS only when all required cases pass on the single handset approved for this release, evidence is attached to the access-controlled evidence store, exact source/APK/Firebase staging identities are recorded, the hardware security level is StrongBox or TEE, and an independent reviewer signs the results. Other handset/API combinations remain NOT QUALIFIED.
 
 **Current state:** Gate 4 execution has not started. Gate 3 staging APK and signing evidence are prerequisites. Production account recovery remains DISABLED until all release gates and owner sign-off pass.
 
