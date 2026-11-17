@@ -715,6 +715,12 @@ test('Gate 5 rejects broad project roles on runtime and read-only audit identiti
   ] };
   assert.deepEqual(findPrivilegedProjectRoles(policy, account), ['roles/run.admin', 'roles/secretmanager.secretAccessor']);
   assert.deepEqual(findPrivilegedProjectRoles(policy, 'other@example.iam.gserviceaccount.com'), []);
+  for (const role of ['roles/secretmanager.secretVersionAdder', 'roles/secretmanager.secretVersionManager',
+    'roles/secretmanager.editor', 'roles/run.developer', 'roles/cloudfunctions.developer',
+    'roles/iam.serviceAccountOpenIdTokenCreator']) {
+    assert.ok(findPrivilegedProjectRoles({ bindings: [{ role, members: ['serviceAccount:audit@example.iam.gserviceaccount.com'] }] },
+      'audit@example.iam.gserviceaccount.com').includes(role), `${role} must be denied to the read-only audit identity`);
+  }
 });
 
 
