@@ -19,4 +19,6 @@ test('production signing key ID rejects missing, divergent or incomplete grant c
   assert.throws(() => validateProductionSigningKeyId(divergent, 'prod-kid-1'), /grant callables/);
   const missing = functions(); delete missing[0].serviceConfig.environmentVariables.RECOVERY_SIGNING_KEY_ID;
   assert.throws(() => validateProductionSigningKeyId(missing, 'prod-kid-1'), /grant callables/);
+  const duplicate = functions(); duplicate[1].name = duplicate[0].name;
+  assert.throws(() => validateProductionSigningKeyId(duplicate, 'prod-kid-1'), /grant callables/);
 });
