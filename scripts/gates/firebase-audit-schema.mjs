@@ -161,6 +161,26 @@ const PRIVILEGED_PROJECT_ROLES = new Set([
   'roles/cloudfunctions.admin', 'roles/cloudfunctions.developer', 'roles/cloudfunctions.invoker',
   'roles/firebase.admin', 'roles/firebaseauth.admin', 'roles/firebaseappcheck.admin',
 ]);
+/** Ensure each Gen2 Cloud Function has a matching Cloud Run service in the same region. */
+export function findMissingGen2FunctionServices(functions, services) {
+  const serviceKeys = new Set((services ?? []).map(service => {
+    const name = service.metadata?.name ?? String(service.name ?? '').split('/').pop();
+    const region = service.metadata?.labels?.['cloud.googleapis.com/location'] ??
+      String(service.name ?? '').split('/').at(-3);
+    return name && region ? `${region}/${name}` : '';
+  }).filter(Boolean));
+  return (functions ?? []).filter(fn => (fn.environment ?? (fn.serviceConfig ? 'GEN_2' : 'GEN_1')) === 'GEN_2')
+    .filter(fn => {
+      const parts = String(fn.name ?? '').split('/');
+      const locationIndex = parts.indexOf('locations');
+      const region = locationIndex >= 0 ? parts[locationIndex + 1] : '';
+      const name = parts.at(-1);
+      return !region || !name || !serviceKeys.has(`${region}/${name}`);
+    })
+    .map(fn => String(fn.name ?? '').split('/').pop())
+    .sort();
+}
+
 const PROJECT_WIDE_RECOVERY_RISK_ROLES = new Set([
   'roles/run.invoker', 'roles/cloudfunctions.invoker',
   'roles/secretmanager.secretAccessor', 'roles/secretmanager.admin',
