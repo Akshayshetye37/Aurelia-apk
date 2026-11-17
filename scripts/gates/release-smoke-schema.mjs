@@ -26,7 +26,12 @@ export function validateProductionSmokeBinding({
   }
   if (metadata.candidateSha !== candidateSha || metadata.candidateBranch !== candidateBranch ||
       releaseCommitSha !== candidateSha) fail('published release tag or artifact is not bound to the exact candidate SHA');
-  if (!deviceLabel || qualification.device?.deviceLabel !== deviceLabel) fail('post-release smoke handset does not match the single Gate 4 approved device');
+  if (!deviceLabel || qualification.device?.deviceLabel !== deviceLabel ||
+      typeof qualification.device.deviceModel !== 'string' || !qualification.device.deviceModel ||
+      typeof qualification.device.androidVersion !== 'string' || !qualification.device.androidVersion ||
+      !['StrongBox', 'TEE'].includes(qualification.device.hardwareSecurityLevel)) {
+    fail('post-release smoke handset does not match the single Gate 4 approved device');
+  }
   if (!/^[0-9a-f]{64}$/.test(metadata.packageLockSha256 ?? '') ||
       !/^[0-9a-f]{64}$/.test(metadata.apkSha256 ?? '') ||
       !/^[0-9a-f]{64}$/.test(metadata.testApkSha256 ?? '') ||
