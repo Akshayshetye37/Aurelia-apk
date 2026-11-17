@@ -67,6 +67,16 @@ export function hasPublicRuntimeInvoker(policy) {
   );
 }
 
+/** Require the private verifier to accept invocations from exactly one Functions caller identity. */
+export function hasExactServiceInvoker(policy, expectedServiceAccount) {
+  if (typeof expectedServiceAccount !== 'string' ||
+      !/^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\\.iam\\.gserviceaccount\\.com$/.test(expectedServiceAccount)) return false;
+  const actual = new Set((policy?.bindings ?? [])
+    .filter(binding => binding.role === 'roles/run.invoker')
+    .flatMap(binding => binding.members ?? []));
+  return actual.size === 1 && actual.has(`serviceAccount:${expectedServiceAccount}`);
+}
+
 /** Enforce exact Secret Manager access for each production recovery callable. */
 export function validateFunctionSecretAccess(functions, requiredBindings, secretPolicies, allowedRuntimeAccounts, requiredSecrets) {
   const problems = [];
