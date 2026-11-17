@@ -585,6 +585,9 @@ test('Gate 6 production build reuses Gate 3 dependencies and verifies the produc
   assert.match(gate6, /gate-6-production-release/);
   assert.match(verifier, /productionRelease\\.packageLockSha256 !== records\\['3'\\]\\.details\\.packageLockSha256/);
   assert.match(audit, /validateProductionSigningKeyId/);
+  assert.match(gate6, /verify-production-signing-key\\.mjs/);
+  assert.match(audit, /validateProductionKeyVerifierWif/);
+  assert.match(audit, /production signing-key verifier must not access PHONE_PEPPER/);
 });
 
 test('staging and production only enable passkey readiness after Google Digital Asset Links verification', () => {
