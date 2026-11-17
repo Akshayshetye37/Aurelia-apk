@@ -13,7 +13,7 @@ export function validateProductionKeyVerifierWif({ projectNumber, providerResour
   if (mapping['google.subject'] !== 'assertion.sub' || mapping['attribute.repository'] !== 'assertion.repository') {
     fail('production key-verifier WIF provider must map the GitHub repository claim exactly');
   }
-  const condition = String(provider.attributeCondition ?? '').replace(/\\s+/g, ' ').trim();
+  const condition = String(provider.attributeCondition ?? '').replace(/\s+/g, ' ').trim();
   const expectedCondition = "assertion.repository == 'Akshayshetye37/Aurelia-apk' && assertion.ref == 'refs/heads/integration/ledger-patch' && assertion.workflow_ref == 'Akshayshetye37/Aurelia-apk/.github/workflows/gate-6-release-signoff.yml@refs/heads/integration/ledger-patch' && assertion.environment == 'recovery-release-owner'";
   if (condition !== expectedCondition) {
     fail('production key-verifier WIF provider condition must exactly restrict repository, control branch, Gate 6 workflow and owner environment');
