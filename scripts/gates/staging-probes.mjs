@@ -14,19 +14,18 @@ const expectedHost = `${region}-${project}.cloudfunctions.net`;
 if (baseUrl.hostname !== expectedHost) fail('callable base URL does not belong to the configured staging project and region');
 const base = baseUrl.origin;
 const requiredNames = [
-  'createRecoveryAttestationChallenge', 'verifyRecoveryDeviceAttestation',
-  'registerRecoveryPhone', 'exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
+  'createRecoveryAttestationChallenge',
+  'verifyRecoveryDeviceAttestation',
+  'registerRecoveryPhone',
+  'exchangeOwnerEmailLink',
+  'confirmRecoveryOwnerBinding',
   'registerRecoveryOwnerDevice',
-  'createRecoveryPasskeyEnrollmentOptions',
-  'completeRecoveryPasskeyEnrollment',
-  'retryRecoveryPasskeyEnrollmentAlert',
-  'getRecoveryOwnerPendingAction',
-  'getRecoveryOwnerActionReadiness',
-  'createRecoveryOwnerActionOptions',
-  'completeRecoveryOwnerPasskeyAction',
-  'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant',
-  'consumeRecoveryGrant', 'cancelRecoveryRequest', 'cancelRecoveryPhoneChange',
-  'activateRecoveryPhoneChange',
+  'acknowledgeRecoveryOwnerAlert',
+  'issueRecoveryGrant',
+  'consumeRecoveryGrant',
+  'cancelRecoveryRequest',
+  'cancelRecoveryPhoneChange',
+  'activateRecoveryPhoneChange'
 ];
 const names = [...new Set((process.env.RECOVERY_CALLABLES ?? '').split(',').map((name) => name.trim()).filter(Boolean))];
 if (names.some((name) => !/^[A-Za-z0-9_-]+$/.test(name))) fail('RECOVERY_CALLABLES contains an invalid callable name');
