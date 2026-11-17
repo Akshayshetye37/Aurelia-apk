@@ -63,7 +63,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          adb() { timeout -k 5s 30s command adb "$@"; }
+          ADB_BIN="$(command -v adb)"
+          adb() { timeout -k 5s 30s "$ADB_BIN" "$@"; }
           [[ "$DEVICE_LABEL" =~ ^[A-Z0-9-]{3,32}$ ]]
           [[ "$DEVICE_SERIAL" =~ ^[A-Za-z0-9._:-]{3,80}$ ]]
           IFS=',' read -r -a allowed_serials <<< "$DEVICE_SERIAL_ALLOWLIST"
@@ -92,7 +93,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          adb() { timeout -k 5s 60s command adb "$@"; }
+          ADB_BIN="$(command -v adb)"
+          adb() { timeout -k 5s 60s "$ADB_BIN" "$@"; }
           app="com.aurelia.pms"
           runner="com.aurelia.pms.test/androidx.test.runner.AndroidJUnitRunner"
           temp="$RUNNER_TEMP/aurelia-gate4"
