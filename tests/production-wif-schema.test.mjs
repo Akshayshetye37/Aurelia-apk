@@ -11,7 +11,7 @@ const fixture = () => {
       name: providerResource, state: 'ACTIVE',
       oidc: { issuerUri: 'https://token.actions.githubusercontent.com' },
       attributeMapping: { 'google.subject': 'assertion.sub', 'attribute.repository': 'assertion.repository' },
-      attributeCondition: "assertion.repository == 'Akshayshetye37/Aurelia-apk' && assertion.ref == 'refs/heads/integration/ledger-patch' && assertion.workflow_ref.endsWith('.github/workflows/gate-6-release-signoff.yml@refs/heads/integration/ledger-patch') && assertion.environment == 'recovery-release-owner'",
+      attributeCondition: "assertion.repository == 'Akshayshetye37/Aurelia-apk' && assertion.ref == 'refs/heads/integration/ledger-patch' && assertion.workflow_ref == 'Akshayshetye37/Aurelia-apk/.github/workflows/gate-6-release-signoff.yml@refs/heads/integration/ledger-patch' && assertion.environment == 'recovery-release-owner'",
     },
   };
 };
