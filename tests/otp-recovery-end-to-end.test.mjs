@@ -394,6 +394,9 @@ test('recovery runtime secret access is pinned to the complete per-callable leas
   const stagingMap = Object.fromEntries([...stagingBlock.matchAll(/"([A-Za-z0-9]+):([A-Z0-9_,]*)"/g)]
     .map(([, fn, secrets]) => [fn, secrets ? secrets.split(',') : []]));
   assert.deepEqual(stagingMap, expected, 'staging runtime secret map must match the least-privilege contract');
+  const configuredCallables = staging.match(/RECOVERY_CALLABLES: '([^']+)'/)?.[1]?.split(',') ?? [];
+  assert.deepEqual(configuredCallables.sort(), Object.keys(expected).sort(),
+    'staging App Check probes must target every exported recovery callable exactly once');
 
   const production = read('scripts/gates/audit-production.mjs');
   const productionBlock = production.match(/const runtimeSecretBindings = \{([\s\S]*?)\n\};/)?.[1];
