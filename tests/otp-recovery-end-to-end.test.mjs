@@ -367,6 +367,13 @@ test('recovery runtime secret access is pinned to the complete per-callable leas
     exchangeOwnerEmailLink: [],
     confirmRecoveryOwnerBinding: [],
     registerRecoveryOwnerDevice: ['PHONE_PEPPER'],
+    createRecoveryPasskeyEnrollmentOptions: [],
+    completeRecoveryPasskeyEnrollment: [],
+    retryRecoveryPasskeyEnrollmentAlert: [],
+    getRecoveryOwnerPendingAction: [],
+    getRecoveryOwnerActionReadiness: [],
+    createRecoveryOwnerActionOptions: [],
+    completeRecoveryOwnerPasskeyAction: [],
     acknowledgeRecoveryOwnerAlert: [],
     issueRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
     consumeRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
@@ -378,6 +385,13 @@ test('recovery runtime secret access is pinned to the complete per-callable leas
   const exportedCallables = [...source.matchAll(/export const ([A-Za-z0-9_]+)\\s*=/g)].map(([, name]) => name).sort();
   assert.deepEqual(exportedCallables, Object.keys(expected).sort(),
     'the secret maps and App Check inventory must cover every exported recovery callable exactly once');
+
+  const source = read('functions/src/index.ts');
+  const direct = [...source.matchAll(/export const ([A-Za-z0-9_]+)\\s*=/g)].map(([, name]) => name);
+  const passkeyExports = source.match(/export \\{([\\s\\S]*?)\\} from ["']\\.\\/passkeys\\.js["']/)?.[1] ?? '';
+  const reexported = [...passkeyExports.matchAll(/([A-Za-z0-9_]+)/g)].map(([, name]) => name);
+  assert.deepEqual([...direct, ...reexported].sort(), Object.keys(expected).sort(),
+    'gate inventories must cover every directly exported and re-exported recovery callable exactly once');
 
   const staging = read('.github/workflows/recovery-staging-deploy.yml');
   const stagingBlock = staging.match(/bindings=\(\s*([\s\S]*?)\s*\)/)?.[1];
