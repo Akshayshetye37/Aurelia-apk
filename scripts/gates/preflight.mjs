@@ -116,13 +116,15 @@ for (const name of envNames) {
   `${name}: deployment restricted to ${control}`);
   const rule = environmentReviewRules[name];
   const reviewerLogins = lower(reviewers.map(reviewer => reviewer.login));
-  if (rule.only) {
-    check(reviewers.length === 1 && reviewers[0].type === 'User' && reviewerLogins[0] === String(rule.only).toLowerCase(),
+  if (Object.hasOwn(rule, 'only')) {
+    const expectedLogin = String(rule.only ?? '').toLowerCase();
+    check(reviewers.length === 1 && reviewers[0].type === 'User' && reviewerLogins[0] === expectedLogin,
       `${name}: sole reviewer is the assigned person`);
   } else {
+    const excludedLogins = lower((rule.exclude ?? []).filter(Boolean));
     check(reviewers.length > 0 && reviewers.every(reviewer => reviewer.type === 'User'),
       `${name}: reviewer identities are individually verifiable`);
-    check(!reviewerLogins.some(login => lower(rule.exclude.filter(Boolean)).includes(login)),
+    check(!reviewerLogins.some(login => excludedLogins.includes(login)),
       `${name}: reviewers exclude operator and tester`);
   }
   environmentState.set(name, { variables: null, secrets: null });
