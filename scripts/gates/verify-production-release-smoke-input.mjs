@@ -36,6 +36,7 @@ execFileSync('gh', ['run', 'download', GATE6_RUN_ID, '-R', REPO, '-n', 'gate-6-p
 const metadata = JSON.parse(fs.readFileSync('gate6-production-release/production-release.json', 'utf8'));
 const currentAudit = JSON.parse(fs.readFileSync('production-audit/production-audit.json', 'utf8'));
 if (currentAudit.project !== metadata.productionProjectId ||
+    currentAudit.productionRecoveryEnabled !== false ||
     currentAudit.recoverySigningKeyId !== metadata.activeKid ||
     !Array.isArray(currentAudit.problems) || currentAudit.problems.length !== 0 ||
     !currentAudit.checkedAt || Date.now() - Date.parse(currentAudit.checkedAt) > 60 * 60 * 1000) {
