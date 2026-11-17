@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { fail, gh, requireApprovals, requireNamedEnvironmentApprover, requireSha, verifyBundle } from './lib.mjs';
 import { isProductionAuditEvidenceValid } from './firebase-audit-schema.mjs';
+import { validateDeviceAttestation } from './device-attestation-schema.mjs';
 
 const sha = requireSha(process.env.CANDIDATE_SHA);
 const controlSha = requireSha(process.env.GITHUB_SHA);
@@ -127,6 +128,10 @@ for (const kind of ['sms', 'device']) {
       attestation.kind !== kind || attestation.apkSha256 !== apkHash ||
       typeof attestation.tester !== 'string' || !attestation.tester) {
     fail(`${kind} attestation is invalid, digest-mismatched or for a different Gate 3 APK`);
+  }
+  if (kind === 'device') {
+    try { validateDeviceAttestation(attestation, records['4'].details); }
+    catch (error) { fail(error.message); }
   }
 }
 const approvers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 3, process.env.ACTOR, ['recovery-release-owner', 'recovery-release-review-1', 'recovery-release-review-2']);
