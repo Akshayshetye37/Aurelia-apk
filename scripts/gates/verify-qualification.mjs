@@ -130,6 +130,7 @@ if (productionRelease.candidateSha !== sha || productionRelease.candidateBranch 
     productionRelease.productionProjectId !== records['5'].details.productionProjectId ||
     productionRelease.productionProjectId === records['3'].details.stagingProjectId ||
     !/^[0-9a-f]{64}$/.test(productionRelease.packageLockSha256 ?? '') ||
+    sha256File('production-release/package-lock.json') !== productionRelease.packageLockSha256 ||
     productionRelease.packageLockSha256 !== records['3'].details.packageLockSha256 ||
     !/^[0-9a-f]{64}$/.test(productionRelease.apkSha256 ?? '') ||
     !/^[0-9a-f]{64}$/.test(productionRelease.testApkSha256 ?? '') ||
