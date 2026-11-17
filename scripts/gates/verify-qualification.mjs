@@ -124,7 +124,7 @@ for (const kind of ['sms', 'device']) {
     fail(`${kind} attestation is invalid, digest-mismatched or for a different Gate 3 APK`);
   }
 }
-const approvers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 2, process.env.ACTOR, ['recovery-release-review-1', 'recovery-release-review-2']);
+const approvers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 3, process.env.ACTOR, ['recovery-release-owner', 'recovery-release-review-1', 'recovery-release-review-2']);
 const smsAttestation = readEvidence('sms', 'attestation.json');
 const deviceAttestation = readEvidence('device', 'attestation.json');
 const testers = [smsAttestation.tester, deviceAttestation.tester].map((login) => String(login).toLowerCase());
