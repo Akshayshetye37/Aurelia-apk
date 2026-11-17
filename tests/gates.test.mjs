@@ -583,7 +583,7 @@ test('Gate 6 production build reuses Gate 3 dependencies and verifies the produc
   assert.match(gate6, /PRODUCTION_GOOGLE_SERVICES_JSON_BASE64/);
   assert.match(gate6, /PRODUCTION_KEYSTORE_BASE64/);
   assert.match(gate6, /gate-6-production-release/);
-  assert.match(verifier, /productionRelease\.packageLockSha256 !== records\\['3'\\]\.details\.packageLockSha256/);
+  assert.match(verifier, /productionRelease\.packageLockSha256 !== records\['3'\]\.details\.packageLockSha256/);
   assert.match(audit, /validateProductionSigningKeyId/);
   assert.match(gate6, /verify-production-signing-key\.mjs/);
   assert.match(audit, /validateProductionKeyVerifierWif/);
