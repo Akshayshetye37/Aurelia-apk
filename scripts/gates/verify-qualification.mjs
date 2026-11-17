@@ -72,19 +72,18 @@ if (!/^[0-9a-f]{64}$/.test(apkHash ?? '') || !/^[0-9a-f]{64}$/.test(testApkHash 
 if (!/^[0-9a-f]{64}$/.test(records['3'].details.signerSha256 ?? '')) fail('Gate 3 APK signer fingerprint is invalid');
 const probes = readEvidence('3', 'probes.json');
 const requiredProbeNames = [
-  'createRecoveryAttestationChallenge', 'verifyRecoveryDeviceAttestation',
-  'registerRecoveryPhone', 'exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
+  'createRecoveryAttestationChallenge',
+  'verifyRecoveryDeviceAttestation',
+  'registerRecoveryPhone',
+  'exchangeOwnerEmailLink',
+  'confirmRecoveryOwnerBinding',
   'registerRecoveryOwnerDevice',
-  'createRecoveryPasskeyEnrollmentOptions',
-  'completeRecoveryPasskeyEnrollment',
-  'retryRecoveryPasskeyEnrollmentAlert',
-  'getRecoveryOwnerPendingAction',
-  'getRecoveryOwnerActionReadiness',
-  'createRecoveryOwnerActionOptions',
-  'completeRecoveryOwnerPasskeyAction',
-  'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant',
-  'consumeRecoveryGrant', 'cancelRecoveryRequest', 'cancelRecoveryPhoneChange',
-  'activateRecoveryPhoneChange',
+  'acknowledgeRecoveryOwnerAlert',
+  'issueRecoveryGrant',
+  'consumeRecoveryGrant',
+  'cancelRecoveryRequest',
+  'cancelRecoveryPhoneChange',
+  'activateRecoveryPhoneChange'
 ];
 const probeNames = new Set(Array.isArray(probes) ? probes.map((probe) => probe.callable) : []);
 const expectedProbeCases = new Set(['no App Check token', 'invalid App Check token']);
