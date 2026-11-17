@@ -587,6 +587,25 @@ test('Gate 6 production build reuses Gate 3 dependencies and verifies the produc
   assert.match(audit, /validateProductionSigningKeyId/);
 });
 
+test('staging and production only enable passkey readiness after Google Digital Asset Links verification', () => {
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  const gate3 = read('.github/workflows/gate-3-real-sms-staging.yml');
+  const gate6 = read('.github/workflows/gate-6-release-signoff.yml');
+  const smoke = read('.github/workflows/production-release-smoke.yml');
+  const verifier = read('scripts/gates/verify-assetlinks.mjs');
+  const schema = read('scripts/gates/assetlinks-evidence-schema.mjs');
+  assert.match(staging, /verify-assetlinks\\.mjs/);
+  assert.match(staging, /WEBAUTHN_ASSETLINKS_VERIFIED=true/);
+  assert.match(staging, /WEBAUTHN_ANDROID_ORIGINS/);
+  assert.match(gate3, /assetLinksVerificationSha256/);
+  assert.match(gate3, /aurelia-recovery-assetlinks-/);
+  assert.match(gate6, /REQUIRED_CERT_SHA256/);
+  assert.match(gate6, /assetLinksVerificationSha256/);
+  assert.match(smoke, /verify-assetlinks\\.mjs/);
+  assert.match(verifier, /digitalassetlinks.googleapis.com/);
+  assert.match(schema, /validateAssetLinksEvidence/);
+});
+
 test('post-release smoke re-audits production and verifies the published APK on the approved handset', () => {
   const workflow = read('.github/workflows/production-release-smoke.yml');
   const verifier = read('scripts/gates/verify-production-release-smoke-input.mjs');
