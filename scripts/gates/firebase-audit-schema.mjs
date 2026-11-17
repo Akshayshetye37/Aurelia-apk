@@ -80,7 +80,7 @@ export function hasExactServiceInvoker(policy, expectedServiceAccount) {
   return actual.size === 1 && actual.has(`serviceAccount:${expectedServiceAccount}`);
 }
 /** Enforce exact Secret Manager access for each production recovery callable. */
-export function validateFunctionSecretAccess(functions, requiredBindings, secretPolicies, allowedRuntimeAccounts, requiredSecrets) {
+export function validateFunctionSecretAccess(functions, requiredBindings, secretPolicies, allowedRuntimeAccounts, requiredSecrets, additionalSecretAccessors = new Map()) {
   const problems = [];
   const byName = new Map((functions ?? []).map(fn => [String(fn.name ?? '').split('/').pop(), fn]));
   const expectedBySecret = new Map();
@@ -126,7 +126,8 @@ export function validateFunctionSecretAccess(functions, requiredBindings, secret
       .filter(binding => binding.role === 'roles/secretmanager.secretAccessor')
       .flatMap(binding => binding.members ?? [])
       .filter(member => member.startsWith('serviceAccount:')));
-    const expected = expectedBySecret.get(secret) ?? new Set();
+    const expected = new Set(expectedBySecret.get(secret) ?? []);
+    for (const principal of additionalSecretAccessors.get(secret) ?? []) expected.add(principal);
     if (actual.size !== expected.size || [...expected].some(member => !actual.has(member))) {
       problems.push(`secret ${secret} runtime accessor set differs from the declared function bindings`);
     }
