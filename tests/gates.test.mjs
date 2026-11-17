@@ -619,6 +619,7 @@ test('Gate 3 and Gate 6 pin App Check probes to the deployed recovery callable i
 
 test('Gate 5 requires the exact secret inventory and unique runtime allowlist', () => {
   const audit = read('scripts/gates/audit-production.mjs');
+  assert.ok(audit.includes("run(['functions', 'list', '--regions=-', '--project', project])"));
   assert.match(audit, /REQUIRED_SECRETS must contain exactly PHONE_PEPPER and RECOVERY_SIGNING_KEY_PKCS8/);
   assert.match(audit, /RUNTIME_SERVICE_ACCOUNTS contains duplicate identities/);
   assert.match(audit, /new Set\(runtimeAccounts\)/);
