@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
 import { isAttestationFresh, validateEnvironmentApprovals } from '../scripts/gates/lib.mjs';
-import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker, hasExactServiceInvoker, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from '../scripts/gates/firebase-audit-schema.mjs';
+import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker, hasExactServiceInvoker, findProjectWideRecoveryRisks, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = path.join(ROOT, 'scripts', 'gates');
@@ -632,6 +632,20 @@ test('Gate 5 requires the private verifier to trust exactly the configured Funct
   assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }, caller), false);
   assert.equal(hasExactServiceInvoker({ bindings: [] }, caller), false);
   assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`] }] }, 'bad-account'), false);
+});
+
+test('Gate 5 rejects project-wide invocation and Secret Manager payload/write grants', () => {
+  const risks = findProjectWideRecoveryRisks({ bindings: [
+    { role: 'roles/run.invoker', members: ['serviceAccount:unknown@example.iam.gserviceaccount.com'] },
+    { role: 'roles/secretmanager.secretAccessor', members: ['user:operator@example.com'] },
+    { role: 'roles/secretmanager.secretVersionAdder', members: ['serviceAccount:writer@example.iam.gserviceaccount.com'] },
+    { role: 'roles/secretmanager.viewer', members: ['allUsers'] },
+  ] });
+  assert.deepEqual(risks, [
+    { role: 'roles/run.invoker', memberCount: 1 },
+    { role: 'roles/secretmanager.secretAccessor', memberCount: 1 },
+    { role: 'roles/secretmanager.secretVersionAdder', memberCount: 1 },
+  ]);
 });
 
 test('Gate 5 rejects inherited project-level public Cloud Run or Functions invocation', () => {
