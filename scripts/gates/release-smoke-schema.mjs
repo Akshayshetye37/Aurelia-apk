@@ -12,7 +12,7 @@ export function validateReleaseSmokeInputs({ repo, controlBranch, candidateBranc
 
 export function validateProductionSmokeBinding({
   metadata, attestedRelease, qualification, currentAudit, candidateSha,
-  candidateBranch, releaseCommitSha, now = Date.now(),
+  candidateBranch, releaseCommitSha, deviceLabel, now = Date.now(),
 }) {
   if (!metadata || !attestedRelease || !qualification || !currentAudit) fail('release evidence is incomplete');
   if (qualification.status !== 'QUALIFIED_FOR_RELEASE_REVIEW' ||
@@ -26,6 +26,7 @@ export function validateProductionSmokeBinding({
   }
   if (metadata.candidateSha !== candidateSha || metadata.candidateBranch !== candidateBranch ||
       releaseCommitSha !== candidateSha) fail('published release tag or artifact is not bound to the exact candidate SHA');
+  if (!deviceLabel || qualification.device?.deviceLabel !== deviceLabel) fail('post-release smoke handset does not match the single Gate 4 approved device');
   if (!/^[0-9a-f]{64}$/.test(metadata.apkSha256 ?? '') ||
       !/^[0-9a-f]{64}$/.test(metadata.testApkSha256 ?? '') ||
       !/^[0-9a-f]{64}$/.test(metadata.signerSha256 ?? '') ||
