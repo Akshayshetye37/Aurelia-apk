@@ -215,7 +215,7 @@ jobs:
           if (!device.deviceModel || device.deviceModel !== details.deviceModel ||
               !device.manufacturer || device.manufacturer !== details.manufacturer ||
               device.androidVersion !== details.androidVersion ||
-              !/^\\d+$/.test(String(device.apiLevel ?? '')) || Number(device.apiLevel) < 24 ||
+              !/^\d+$/.test(String(device.apiLevel ?? '')) || Number(device.apiLevel) < 24 ||
               device.apiLevel !== details.apiLevel ||
               !device.buildFingerprint || device.buildFingerprint !== details.buildFingerprint) fail('device identity or Android API level is incomplete/mismatched');
           if (device.verifiedBoot !== 'green' || device.bootloaderLocked !== true || details.verifiedBoot !== 'green' || details.bootloaderLocked !== true) fail('device boot state is not locked and verified');
