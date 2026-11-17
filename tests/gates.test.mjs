@@ -627,6 +627,7 @@ test('Gate 5 requires the exact secret inventory and unique runtime allowlist', 
 test('Gate 5 requires the private verifier to trust exactly the configured Functions caller', () => {
   const caller = 'functions@example.iam.gserviceaccount.com';
   assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`] }] }, caller), true);
+  assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`], condition: { expression: 'true' } }] }, caller), false);
   assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`, 'serviceAccount:other@example.iam.gserviceaccount.com'] }] }, caller), false);
   assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }, caller), false);
   assert.equal(hasExactServiceInvoker({ bindings: [] }, caller), false);
