@@ -87,6 +87,10 @@ jobs:
       DEVICE_SERIAL: ${{ vars.DEVICE_SERIAL }}
       DEVICE_SERIAL_ALLOWLIST: ${{ vars.DEVICE_SERIAL_ALLOWLIST }}
       GH_TOKEN: ${{ github.token }}
+      WEBAUTHN_RP_ID: ${{ vars.WEBAUTHN_RP_ID }}
+      WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS }}
+      ANDROID_APPLICATION_ID: ${{ vars.ANDROID_APPLICATION_ID }}
+      DIGITAL_ASSET_LINKS_API_KEY: ${{ secrets.DIGITAL_ASSET_LINKS_API_KEY }}
     steps:
       - name: Checkout trusted release-smoke tooling
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -111,6 +115,12 @@ jobs:
           timeout --version
           rm -f "$RUNNER_TEMP/gh-attestation-help.txt"
           node scripts/gates/verify-production-release-smoke-input.mjs
+      - name: Reverify hosted Asset Links with Google for the production APK signer
+        shell: bash
+        run: |
+          set -euo pipefail
+          signer="$(jq -r .signerSha256 evidence/production-smoke-input.json)"
+          REQUIRED_CERT_SHA256="$signer" node scripts/gates/verify-assetlinks.mjs
       - name: Require the approved physical handset
         shell: bash
         run: |
