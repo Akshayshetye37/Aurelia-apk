@@ -59,6 +59,7 @@ jobs:
       contents: read
       actions: read
       attestations: read
+      id-token: write
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       RUN_IDS: ${{ inputs.run_ids }}
