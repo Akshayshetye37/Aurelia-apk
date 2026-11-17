@@ -129,7 +129,7 @@ The manual-attestation workflow requires a distinct tester, a separate workflow 
 
 ### Gate 3 and Gate 5 runtime identity requirements
 
-Gate 3 probes all 11 exported recovery callables with both missing and invalid App Check tokens. The staging deployment requires distinct `RECOVERY_PHONE_SERVICE_ACCOUNT` and `RECOVERY_GRANT_SERVICE_ACCOUNT` values; the former is bound only to the phone-registration callables and `PHONE_PEPPER`, while the latter is bound to grant issuance/consumption and both `PHONE_PEPPER` and `RECOVERY_SIGNING_KEY_PKCS8`. No-secret callables must not share either secret-bearing identity. Gate 5 requires `RUNTIME_SERVICE_ACCOUNTS` to list every deployed runtime identity and checks exact secret access, project/function/service invocation policies, and production recovery OFF.
+Gate 3 probes all 19 exported recovery callables with both missing and invalid App Check tokens. The staging deployment requires distinct `RECOVERY_PHONE_SERVICE_ACCOUNT` and `RECOVERY_GRANT_SERVICE_ACCOUNT` values; the former is bound only to the phone-registration callables and `PHONE_PEPPER`, while the latter is bound to grant issuance/consumption and both `PHONE_PEPPER` and `RECOVERY_SIGNING_KEY_PKCS8`. No-secret callables must not share either secret-bearing identity. Gate 5 requires `RUNTIME_SERVICE_ACCOUNTS` to list every deployed runtime identity and checks exact secret access, project/function/service invocation policies, and production recovery OFF.
 
 ### Gate 6 run ID input
 
