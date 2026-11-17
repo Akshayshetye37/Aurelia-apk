@@ -63,14 +63,14 @@ const ENVIRONMENT_REQUIREMENTS = {
       'PRODUCTION_GCP_PROJECT_ID', 'PRODUCTION_RECOVERY_SIGNING_KEY_ID', 'ATTESTATION_VERIFIER_SERVICE',
       'ATTESTATION_VERIFIER_CALLER_SERVICE_ACCOUNT', 'REQUIRED_SECRETS',
       'RUNTIME_SERVICE_ACCOUNTS', 'APPCHECK_REQUIRED_SERVICES',
-      'FIREBASE_ANDROID_APP_IDS', 'FIREBASE_ALLOWED_SHA1', 'FIREBASE_ALLOWED_SHA256', 'PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT', 'PRODUCTION_KEY_VERIFY_WIF_PRINCIPAL',
+      'FIREBASE_ANDROID_APP_IDS', 'FIREBASE_ALLOWED_SHA1', 'FIREBASE_ALLOWED_SHA256',
     ],
     oneOfVariables: [['PRODUCTION_GCP_REGION', 'GCP_REGION']],
     secrets: ['GCP_WORKLOAD_IDENTITY_PROVIDER', 'GCP_AUDIT_SERVICE_ACCOUNT'],
   },
   'recovery-attestation': { variables: [], secrets: [] },
   'recovery-release-owner': {
-    variables: ['PRODUCTION_GCP_PROJECT_ID', 'PRODUCTION_RECOVERY_SIGNING_KEY_ID', 'PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON', 'PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT'],
+    variables: ['PRODUCTION_GCP_PROJECT_ID', 'PRODUCTION_RECOVERY_SIGNING_KEY_ID', 'PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON'],
     secrets: ['PRODUCTION_GOOGLE_SERVICES_JSON_BASE64', 'PRODUCTION_KEYSTORE_BASE64',
       'PRODUCTION_KEYSTORE_PASSWORD', 'PRODUCTION_KEY_ALIAS', 'PRODUCTION_KEY_PASSWORD'],
   },
@@ -137,10 +137,11 @@ check(repoVariables !== null, 'repository variable names are readable');
 check(repoSecrets !== null, 'repository secret names are readable');
 if (repoSecrets !== null) check(repoSecrets.includes('DIGITAL_ASSET_LINKS_API_KEY'), 'repository secret DIGITAL_ASSET_LINKS_API_KEY exists');
 if (repoVariables !== null) {
-  for (const required of ['RELEASE_OWNER_LOGIN', 'RECOVERY_GRANT_PUBLIC_KEYS_JSON', 'WEBAUTHN_RP_ID', 'WEBAUTHN_RP_NAME', 'WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS', 'ANDROID_APPLICATION_ID', 'PRODUCTION_KEY_VERIFY_WIF_PROVIDER']) {
+  for (const required of ['RELEASE_OWNER_LOGIN', 'RECOVERY_GRANT_PUBLIC_KEYS_JSON', 'WEBAUTHN_RP_ID', 'WEBAUTHN_RP_NAME', 'WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS', 'ANDROID_APPLICATION_ID', 'PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT', 'PRODUCTION_KEY_VERIFY_WIF_PRINCIPAL', 'PRODUCTION_KEY_VERIFY_WIF_PROVIDER']) {
     check(repoVariables.includes(required), `repository variable ${required} exists`);
   }
 }
+const keyVerifierRepoVariables = ['PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT', 'PRODUCTION_KEY_VERIFY_WIF_PRINCIPAL', 'PRODUCTION_KEY_VERIFY_WIF_PROVIDER'];
 for (const [environment, requirement] of Object.entries(ENVIRONMENT_REQUIREMENTS)) {
   const variableNames = names(`${apiRepo}/environments/${encodeURIComponent(environment)}/variables`, '.variables[].name');
   const secretNames = names(`${apiRepo}/environments/${encodeURIComponent(environment)}/secrets`, '.secrets[].name');
@@ -153,6 +154,11 @@ for (const [environment, requirement] of Object.entries(ENVIRONMENT_REQUIREMENTS
     check(alternatives.some(name => variableNames.includes(name)), `${environment}: one of ${alternatives.join(' or ')} exists`);
   }
   for (const required of requirement.secrets) check(secretNames.includes(required), `${environment}: required secret ${required} exists`);
+}
+for (const required of keyVerifierRepoVariables) {
+  const environmentOccurrences = envNames.filter(environment => environmentState.get(environment)?.variables?.includes(required));
+  check(repoVariables?.includes(required) && environmentOccurrences.length === 0,
+    `${required} is defined only as a repository variable (no environment overrides)`);
 }
 
 // 4. Audit identity must exist only as a secret in the production audit environment.
