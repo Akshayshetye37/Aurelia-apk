@@ -158,7 +158,7 @@ if (testers.some((tester) => approvers.some((approver) => approver.toLowerCase()
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/qualification-result.json', JSON.stringify({
   candidateSha: sha, controlSha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', apkSha256: apkHash, testApkSha256: testApkHash,
-  productionRelease: { productionProjectId: productionRelease.productionProjectId, apkSha256: productionRelease.apkSha256, testApkSha256: productionRelease.testApkSha256, signerSha256: productionRelease.signerSha256 },
+  productionRelease: { productionProjectId: productionRelease.productionProjectId, activeKid: productionRelease.activeKid, apkSha256: productionRelease.apkSha256, testApkSha256: productionRelease.testApkSha256, signerSha256: productionRelease.signerSha256 },
   gates: Object.fromEntries(Object.entries(records).map(([gate, record]) => [gate, { runId: record.runId, completedAt: record.completedAt }])),
   releaseOwner: process.env.RELEASE_OWNER_LOGIN, approvers, productionRecoveryEnabled: false, verifiedAt: new Date().toISOString(),
 }, null, 2));
