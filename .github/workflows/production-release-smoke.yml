@@ -1,0 +1,144 @@
+name: Post-release production APK smoke test
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Candidate SHA qualified by Gate 6
+        required: true
+        type: string
+      gate6_run_id:
+        description: Successful Gate 6 workflow run ID
+        required: true
+        type: string
+      release_tag:
+        description: Published GitHub release tag pointing to the candidate SHA
+        required: true
+        type: string
+      device_label:
+        description: Redacted label matching the approved Gate 4 handset
+        required: true
+        type: string
+permissions: {}
+concurrency:
+  group: production-smoke-${{ inputs.candidate_sha }}
+  cancel-in-progress: false
+jobs:
+  smoke:
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    runs-on: [self-hosted, linux, x64, aurelia-android-device]
+    environment: recovery-device
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+    env:
+      REPO: ${{ github.repository }}
+      CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
+      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      GATE6_RUN_ID: ${{ inputs.gate6_run_id }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      DEVICE_LABEL: ${{ inputs.device_label }}
+      DEVICE_SERIAL: ${{ vars.DEVICE_SERIAL }}
+      DEVICE_SERIAL_ALLOWLIST: ${{ vars.DEVICE_SERIAL_ALLOWLIST }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout trusted release-smoke tooling
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify runner tools and exact published release binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1)'
+          gh version
+          gh attestation verify --help > "$RUNNER_TEMP/gh-attestation-help.txt"
+          grep -q -- '--deny-self-hosted-runners' "$RUNNER_TEMP/gh-attestation-help.txt"
+          timeout -k 5s 15s adb version
+          jq --version
+          tar --version
+          timeout --version
+          rm -f "$RUNNER_TEMP/gh-attestation-help.txt"
+          node scripts/gates/verify-production-release-smoke-input.mjs
+      - name: Require the approved physical handset
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEVICE_LABEL" =~ ^[A-Z0-9-]{3,32}$ ]]
+          [[ "$DEVICE_SERIAL" =~ ^[A-Za-z0-9._:-]{3,80}$ ]]
+          IFS=',' read -r -a allowed_serials <<< "$DEVICE_SERIAL_ALLOWLIST"
+          allowed=false
+          for allowed_serial in "${allowed_serials[@]}"; do
+            allowed_serial="${allowed_serial//[[:space:]]/}"
+            [[ "$allowed_serial" =~ ^[A-Za-z0-9._:-]{3,80}$ ]] || exit 1
+            [[ "$allowed_serial" == "$DEVICE_SERIAL" ]] && allowed=true
+          done
+          [[ "$allowed" == "true" ]]
+          ADB_BIN="$(command -v adb)"
+          adb() { timeout -k 5s 60s "$ADB_BIN" "$@"; }
+          timeout -k 5s 90s adb -s "$DEVICE_SERIAL" wait-for-device
+          test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.verifiedbootstate | tr -d '\r')" = "green"
+          test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.flash.locked | tr -d '\r')" = "1"
+          test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.vbmeta.device_state | tr -d '\r')" = "locked"
+          test "$(adb -s "$DEVICE_SERIAL" shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.kernel.qemu | tr -d '\r')" != "1"
+          actual_label="$DEVICE_LABEL"
+          test -n "$actual_label"
+      - name: Verify published production APK signer and install exact release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs published-release/app-release.apk > "$RUNNER_TEMP/published-app-cert.txt"
+          "$APKSIGNER" verify --print-certs published-release/app-release-androidTest.apk > "$RUNNER_TEMP/published-test-cert.txt"
+          signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/published-app-cert.txt" | tr -d ':')"
+          test_signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/published-test-cert.txt" | tr -d ':')"
+          expected="$(jq -r .signerSha256 evidence/production-smoke-input.json)"
+          test "$signer" = "$expected" && test "$test_signer" = "$signer"
+          ADB_BIN="$(command -v adb)"
+          adb() { timeout -k 5s 60s "$ADB_BIN" "$@"; }
+          app="com.aurelia.pms"
+          runner="com.aurelia.pms.test/androidx.test.runner.AndroidJUnitRunner"
+          adb -s "$DEVICE_SERIAL" uninstall "$app" >/dev/null 2>&1 || true
+          adb -s "$DEVICE_SERIAL" uninstall "$app.test" >/dev/null 2>&1 || true
+          adb -s "$DEVICE_SERIAL" install -r published-release/app-release.apk >/dev/null
+          adb -s "$DEVICE_SERIAL" install -r -t published-release/app-release-androidTest.apk >/dev/null
+          adb -s "$DEVICE_SERIAL" logcat -c
+          run_test() {
+            name="$1"; selector="$2"; minimum="$3"; output="$RUNNER_TEMP/$name.txt"
+            set +e
+            timeout -k 5s 1800s adb -s "$DEVICE_SERIAL" shell am instrument -w -r -e class "$selector" "$runner" > "$output" 2>&1
+            status=$?
+            set -e
+            if [[ "$status" -ne 0 ]]; then echo "::error::Production smoke instrumentation failed: $name"; exit 1; fi
+            node scripts/gates/parse-instrument.mjs "$output" "$minimum"
+            cp "$output" "$RUNNER_TEMP/$name-summary.txt"
+          }
+          run_test security-primitives com.aurelia.pms.security.AureliaSecurityInstrumentedTest 6
+          run_test sqlcipher com.aurelia.pms.OtpRecoverySqlCipherInstrumentedTest 1
+          run_test grant-preflight com.aurelia.pms.security.RecoveryGrantVerifierInstrumentedTest 4
+          adb -s "$DEVICE_SERIAL" shell monkey -p "$app" 1 >/dev/null
+          sleep 3
+          test -n "$(adb -s "$DEVICE_SERIAL" shell pidof -s "$app" | tr -d '\r')"
+          adb -s "$DEVICE_SERIAL" logcat -d > "$RUNNER_TEMP/production-logcat.txt"
+          node scripts/gates/scan-logs.mjs "$RUNNER_TEMP/production-logcat.txt"
+          rm -f "$RUNNER_TEMP/production-logcat.txt"
+          mkdir -p evidence
+          model="$(adb -s "$DEVICE_SERIAL" shell getprop ro.product.model | tr -d '\r')"
+          version="$(adb -s "$DEVICE_SERIAL" shell getprop ro.build.version.release | tr -d '\r')"
+          api="$(adb -s "$DEVICE_SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')"
+          jq --arg model "$model" --arg version "$version" --arg api "$api" --arg label "$DEVICE_LABEL" \
+            '. + {deviceLabel:$label,deviceModel:$model,androidVersion:$version,apiLevel:$api,smokeTests:"PASS"}' \
+            evidence/production-smoke-input.json > evidence/production-smoke.json
+          rm -f "$RUNNER_TEMP/security-primitives-summary.txt" "$RUNNER_TEMP/sqlcipher-summary.txt" "$RUNNER_TEMP/grant-preflight-summary.txt"
+      - name: Upload post-release smoke evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-release-smoke-evidence
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 90
