@@ -9,9 +9,9 @@ const fixture = () => {
   return {
     metadata: { candidateSha: sha, candidateBranch: 'work/p0-storage-hardening', ...release },
     attestedRelease: { ...release },
-    qualification: { candidateSha: sha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', productionRecoveryEnabled: false, productionRelease: { ...release } },
+    qualification: { candidateSha: sha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', productionRecoveryEnabled: false, productionRelease: { ...release }, device: { deviceLabel: 'AURELIA-PIXEL8' } },
     currentAudit: { project: release.productionProjectId, productionRecoveryEnabled: false, recoverySigningKeyId: release.activeKid, problems: [], checkedAt: new Date(now - 1000).toISOString() },
-    candidateSha: sha, candidateBranch: 'work/p0-storage-hardening', releaseCommitSha: sha, now,
+    candidateSha: sha, candidateBranch: 'work/p0-storage-hardening', releaseCommitSha: sha, deviceLabel: 'AURELIA-PIXEL8', now,
   };
 };
 
