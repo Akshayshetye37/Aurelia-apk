@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { fail, gh, requireApprovals, requireNamedEnvironmentApprover, requireSha, verifyBundle } from './lib.mjs';
 import { isProductionAuditEvidenceValid } from './firebase-audit-schema.mjs';
 import { validateDeviceAttestation } from './device-attestation-schema.mjs';
+import { validateAssetLinksEvidence } from './assetlinks-evidence-schema.mjs';
 
 const sha = requireSha(process.env.CANDIDATE_SHA);
 const controlSha = requireSha(process.env.GITHUB_SHA);
@@ -113,6 +114,14 @@ if (records['4'].details.verifiedBoot !== 'green' || records['4'].details.bootlo
 const gate4LogScan = readEvidence('4', 'log-scan.json');
 if (!Array.isArray(gate4LogScan.findings) || gate4LogScan.findings.length) fail('Gate 4 device log scan did not pass');
 if (records['5'].details.productionRecoveryEnabled !== false || !records['5'].details.productionProjectId) fail('Gate 5 did not attest production recovery OFF');
+const stagingAssetLinks = readEvidence('3', 'assetlinks-verification.json');
+if (!/^[0-9a-f]{64}$/.test(records['3'].details.assetLinksVerificationSha256 ?? '') ||
+    sha256File('qualification-3/evidence/assetlinks-verification.json') !== records['3'].details.assetLinksVerificationSha256) {
+  fail('Gate 3 Google Digital Asset Links evidence digest is invalid');
+}
+try { validateAssetLinksEvidence(stagingAssetLinks, records['3'].details.signerSha256); }
+catch (error) { fail(error.message); }
+
 const productionAudit = readEvidence('5', 'production-audit.json');
 let productionRelease;
 try { productionRelease = JSON.parse(fs.readFileSync('production-release/production-release.json', 'utf8')); }
@@ -129,11 +138,21 @@ if (productionRelease.candidateSha !== sha || productionRelease.candidateBranch 
 }
 if (productionAudit.productionRecoveryEnabled !== false) fail('Gate 5 production audit does not explicitly confirm recovery OFF');
 if (productionRelease.activeKid !== productionAudit.recoverySigningKeyId) fail('production APK public-key ring active kid does not match the production grant signer configuration');
+if (!/^[0-9a-f]{64}$/.test(productionRelease.assetLinksVerificationSha256 ?? '') ||
+    sha256File('production-release/assetlinks-verification.json') !== productionRelease.assetLinksVerificationSha256) {
+  fail('Gate 6 production Digital Asset Links evidence digest is invalid');
+}
+let productionAssetLinks;
+try { productionAssetLinks = JSON.parse(fs.readFileSync('production-release/assetlinks-verification.json', 'utf8')); }
+catch { fail('Gate 6 production Digital Asset Links evidence is missing or invalid'); }
+try { validateAssetLinksEvidence(productionAssetLinks, productionRelease.signerSha256); }
+catch (error) { fail(error.message); }
 if (!isProductionAuditEvidenceValid(productionAudit, records['5'].details.productionProjectId, productionRelease.signerSha256)) {
   fail('Gate 5 production audit evidence is incomplete, lacks the production APK signer in Firebase inventory, or reports test phone numbers/problems');
 }
 fs.mkdirSync('evidence', { recursive: true });
 fs.copyFileSync('production-release/production-release.json', 'evidence/production-release.json');
+fs.copyFileSync('production-release/assetlinks-verification.json', 'evidence/production-assetlinks-verification.json');
 for (const kind of ['sms', 'device']) {
   const attestation = readEvidence(kind, 'attestation.json');
   const attestationBytes = fs.readFileSync(`qualification-${kind}/evidence/attestation.json`);
@@ -161,7 +180,7 @@ if (testers.some((tester) => approvers.some((approver) => approver.toLowerCase()
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/qualification-result.json', JSON.stringify({
   candidateSha: sha, controlSha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', apkSha256: apkHash, testApkSha256: testApkHash,
-  productionRelease: { productionProjectId: productionRelease.productionProjectId, activeKid: productionRelease.activeKid, packageLockSha256: productionRelease.packageLockSha256, apkSha256: productionRelease.apkSha256, testApkSha256: productionRelease.testApkSha256, signerSha256: productionRelease.signerSha256 },
+  productionRelease: { productionProjectId: productionRelease.productionProjectId, activeKid: productionRelease.activeKid, packageLockSha256: productionRelease.packageLockSha256, assetLinksVerificationSha256: productionRelease.assetLinksVerificationSha256, apkSha256: productionRelease.apkSha256, testApkSha256: productionRelease.testApkSha256, signerSha256: productionRelease.signerSha256 },
   gates: Object.fromEntries(Object.entries(records).map(([gate, record]) => [gate, { runId: record.runId, completedAt: record.completedAt }])),
   device: { deviceLabel: deviceAttestation.deviceLabel, deviceModel: deviceAttestation.deviceModel,
     androidVersion: deviceAttestation.androidVersion, hardwareSecurityLevel: deviceAttestation.hardwareSecurityLevel },
