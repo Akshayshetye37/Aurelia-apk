@@ -161,6 +161,20 @@ const PRIVILEGED_PROJECT_ROLES = new Set([
   'roles/cloudfunctions.admin', 'roles/cloudfunctions.developer', 'roles/cloudfunctions.invoker',
   'roles/firebase.admin', 'roles/firebaseauth.admin', 'roles/firebaseappcheck.admin',
 ]);
+const PROJECT_WIDE_RECOVERY_RISK_ROLES = new Set([
+  'roles/run.invoker', 'roles/cloudfunctions.invoker',
+  'roles/secretmanager.secretAccessor', 'roles/secretmanager.admin',
+  'roles/secretmanager.editor', 'roles/secretmanager.secretVersionAdder',
+  'roles/secretmanager.secretVersionManager',
+]);
+/** Find project-wide grants that bypass per-service invoker or per-secret IAM boundaries. */
+export function findProjectWideRecoveryRisks(policy) {
+  return (policy?.bindings ?? [])
+    .filter(binding => PROJECT_WIDE_RECOVERY_RISK_ROLES.has(binding.role) && (binding.members ?? []).length > 0)
+    .map(binding => ({ role: binding.role, memberCount: binding.members.length }))
+    .sort((a, b) => a.role.localeCompare(b.role));
+}
+
 /** Return any project-level role that is too broad for a recovery runtime or audit identity. */
 export function findPrivilegedProjectRoles(policy, account) {
   const principal = `serviceAccount:${account}`;
