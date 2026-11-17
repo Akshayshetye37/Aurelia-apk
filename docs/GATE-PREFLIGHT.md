@@ -34,7 +34,7 @@ Keep `roles.json` outside the repository and restrict its filesystem permissions
 | `recovery-release-review-1` | None | None |
 | `recovery-release-review-2` | None | None |
 
-The repository variable `RELEASE_OWNER_LOGIN` is also required and must be configured to the designated candidate owner. The preflight checks its presence by name; Gate 6 verifies the actual approved login against this configured value.
+Repository variables `RELEASE_OWNER_LOGIN` and `RECOVERY_GRANT_PUBLIC_KEYS_JSON` are also required. `RELEASE_OWNER_LOGIN` must be configured to the designated candidate owner; the preflight checks its presence by name and Gate 6 verifies the actual approved login. `RECOVERY_GRANT_PUBLIC_KEYS_JSON` is public SPKI pin material, not a private secret; the staging environment must also contain its environment-scoped value.
 
 ## Mandatory scope rules
 
