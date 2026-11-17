@@ -57,7 +57,7 @@ function execute(t, faults = []) {
   const fake = `#!/usr/bin/env node
 const args = process.argv.slice(2);
 const state = JSON.parse(process.env.FAKE_STATE);
-const repoVars = state.repoVariables ?? ['RELEASE_OWNER_LOGIN', 'RECOVERY_GRANT_PUBLIC_KEYS_JSON', 'WEBAUTHN_RP_ID', 'WEBAUTHN_RP_NAME', 'WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS', 'ANDROID_APPLICATION_ID'];
+const repoVars = state.repoVariables ?? ['RELEASE_OWNER_LOGIN', 'RECOVERY_GRANT_PUBLIC_KEYS_JSON', 'WEBAUTHN_RP_ID', 'WEBAUTHN_RP_NAME', 'WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS', 'ANDROID_APPLICATION_ID', 'PRODUCTION_KEY_VERIFY_WIF_PROVIDER'];
 const repoSecrets = state.repoSecrets ?? ['DIGITAL_ASSET_LINKS_API_KEY'];
 const reviewers = state.reviewers ?? {
   'recovery-release-owner': 'owner-one',
