@@ -40,7 +40,7 @@ function inspectSecretFlag(resource, entries) {
     }
   }
 }
-const functions = run(['functions', 'list', '--project', project]);
+const functions = run(['functions', 'list', '--regions=-', '--project', project]);
 auditedResources.functions = functions.length;
 if (!functions.length) problems.push('no production Cloud Functions found; runtime flags cannot be verified');
 for (const f of functions) {
