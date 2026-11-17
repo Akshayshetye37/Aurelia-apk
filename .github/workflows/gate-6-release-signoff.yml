@@ -183,14 +183,7 @@ jobs:
           cp "$TEST_APK" ../production-release/app-release-androidTest.apk
           cp "$RUNNER_TEMP/production-apk-certificate.txt" ../production-release/apk-certificate.txt
           cp "$RUNNER_TEMP/production-test-certificate.txt" ../production-release/androidTest-certificate.txt
-          app_hash="$(sha256sum "$APK" | awk '{print $1}')"
-          test_hash="$(sha256sum "$TEST_APK" | awk '{print $1}')"
-          lock_hash="$(sha256sum package-lock.json | awk '{print $1}')"
-          assetlinks_hash="$(sha256sum ../production-release/assetlinks-verification.json | awk '{print $1}')"
-          jq -n --arg sha "$CANDIDATE_SHA" --arg branch "$CANDIDATE_BRANCH" --arg project "$PRODUCTION_PROJECT_ID" \
-            --arg kid "$ACTIVE_KID" --arg lock "$lock_hash" --arg assetlinks "$assetlinks_hash" --arg apk "$app_hash" --arg test "$test_hash" --arg signer "$signer" \
-            '{candidateSha:$sha,candidateBranch:$branch,productionProjectId:$project,activeKid:$kid,packageLockSha256:$lock,assetLinksVerificationSha256:$assetlinks,apkSha256:$apk,testApkSha256:$test,signerSha256:$signer}' \
-            > ../production-release/production-release.json
+
       - name: Verify hosted Digital Asset Links against the actual production APK signer
         working-directory: candidate
         shell: bash
@@ -199,6 +192,20 @@ jobs:
           signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/production-apk-certificate.txt" | tr -d ':')"
           REQUIRED_CERT_SHA256="$signer" node ../scripts/gates/verify-assetlinks.mjs
           cp evidence/assetlinks-verification.json ../production-release/assetlinks-verification.json
+      - name: Write production release metadata after all verification
+        working-directory: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_hash="$(sha256sum ../production-release/app-release.apk | awk '{print $1}')"
+          test_hash="$(sha256sum ../production-release/app-release-androidTest.apk | awk '{print $1}')"
+          signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' ../production-release/apk-certificate.txt | tr -d ':')"
+          lock_hash="$(sha256sum package-lock.json | awk '{print $1}')"
+          assetlinks_hash="$(sha256sum ../production-release/assetlinks-verification.json | awk '{print $1}')"
+          jq -n --arg sha "$CANDIDATE_SHA" --arg branch "$CANDIDATE_BRANCH" --arg project "$PRODUCTION_PROJECT_ID" \
+            --arg kid "$ACTIVE_KID" --arg lock "$lock_hash" --arg assetlinks "$assetlinks_hash" --arg apk "$app_hash" --arg test "$test_hash" --arg signer "$signer" \
+            '{candidateSha:$sha,candidateBranch:$branch,productionProjectId:$project,activeKid:$kid,packageLockSha256:$lock,assetLinksVerificationSha256:$assetlinks,apkSha256:$apk,testApkSha256:$test,signerSha256:$signer}' \
+            > ../production-release/production-release.json
       - name: Upload exact production release artifacts and build record
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
