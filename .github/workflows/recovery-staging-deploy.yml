@@ -229,6 +229,13 @@ jobs:
             .serviceConfig.environmentVariables.RECOVERY_ENABLED == "true"
           ' >/dev/null
           echo "Staging recovery functions deployed with the configured service account and RECOVERY_ENABLED=true."
+          PASSKEY_FUNCTION_JSON="$(gcloud functions describe getRecoveryOwnerActionReadiness --gen2 --project "$PROJECT_ID" --region "$GCP_REGION" --format=json)"
+          echo "$PASSKEY_FUNCTION_JSON" | jq -e --arg rp "$WEBAUTHN_RP_ID" --arg origins "$WEBAUTHN_ANDROID_ORIGINS" '
+            .serviceConfig.environmentVariables.WEBAUTHN_ASSETLINKS_VERIFIED == "true" and
+            .serviceConfig.environmentVariables.WEBAUTHN_RP_ID == $rp and
+            .serviceConfig.environmentVariables.WEBAUTHN_ANDROID_ORIGINS == $origins
+          ' >/dev/null
+          echo "Staging passkey readiness is configured only after successful Google Digital Asset Links verification."
 
       - name: Verify deployed recovery runtime service accounts can access their secrets
         shell: bash
