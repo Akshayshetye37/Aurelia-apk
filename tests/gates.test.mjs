@@ -568,8 +568,13 @@ test('Gate 6 requires a distinct owner sign-off plus two independent release rev
   }
   assert.ok(verifier.includes('requireApprovals(repo, process.env.GITHUB_RUN_ID, 3'));
   assert.ok(gate6.includes('needs: [preflight, owner-signoff, independent-reviewer-one, independent-reviewer-two]'));
-  const ownerJob = gate6.split('  owner-signoff:\\n')[1]?.split('  independent-reviewer-one:\\n')[0] ?? '';
-  assert.match(ownerJob, /permissions:[\\s\\S]*?id-token: write/,
+  const ownerStart = gate6.indexOf('  owner-signoff:');
+  const reviewerStart = gate6.indexOf('  independent-reviewer-one:', ownerStart);
+  const ownerJob = gate6.slice(ownerStart, reviewerStart);
+  const permissionsStart = ownerJob.indexOf('    permissions:');
+  const envStart = ownerJob.indexOf('    env:', permissionsStart);
+  const ownerPermissions = ownerJob.slice(permissionsStart, envStart).split('\n').map(line => line.trim());
+  assert.ok(ownerPermissions.includes('id-token: write'),
     'Gate 6 owner job must request the GitHub OIDC token used by production WIF authentication');
 });
 
