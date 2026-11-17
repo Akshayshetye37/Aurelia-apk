@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fail, sha256File, verifyBundle } from './lib.mjs';
 import { validateProductionSmokeBinding, validateReleaseSmokeInputs } from './release-smoke-schema.mjs';
+import { validateAssetLinksEvidence } from './assetlinks-evidence-schema.mjs';
 
 const { REPO, CONTROL_BRANCH, CANDIDATE_BRANCH, CANDIDATE_SHA, GATE6_RUN_ID, RELEASE_TAG } = process.env;
 try {
@@ -20,11 +21,23 @@ const attestedReleasePath = 'gate6-evidence/evidence/production-release.json';
 if (!fs.existsSync(qualificationPath) || !fs.existsSync(attestedReleasePath)) fail('Gate 6 qualification or production release evidence is missing');
 const qualification = JSON.parse(fs.readFileSync(qualificationPath, 'utf8'));
 const attestedRelease = JSON.parse(fs.readFileSync(attestedReleasePath, 'utf8'));
+const gate6AssetLinksPath = 'gate6-evidence/evidence/production-assetlinks-verification.json';
+if (!fs.existsSync(gate6AssetLinksPath) || sha256File(gate6AssetLinksPath) !== attestedRelease.assetLinksVerificationSha256) {
+  fail('Gate 6 Asset Links evidence digest is invalid');
+}
+let gate6AssetLinks;
+try { gate6AssetLinks = JSON.parse(fs.readFileSync(gate6AssetLinksPath, 'utf8')); }
+catch { fail('Gate 6 Asset Links evidence is missing or invalid'); }
+try { validateAssetLinksEvidence(gate6AssetLinks, attestedRelease.signerSha256); }
+catch (error) { fail(error.message); }
 
 
 fs.rmSync('gate6-production-release', { recursive: true, force: true });
 execFileSync('gh', ['run', 'download', GATE6_RUN_ID, '-R', REPO, '-n', 'gate-6-production-release', '-D', 'gate6-production-release'], { stdio: 'inherit' });
 const metadata = JSON.parse(fs.readFileSync('gate6-production-release/production-release.json', 'utf8'));
+if (sha256File('gate6-production-release/assetlinks-verification.json') !== metadata.assetLinksVerificationSha256) {
+  fail('downloaded Gate 6 production Asset Links evidence digest mismatch');
+}
 const currentAudit = JSON.parse(fs.readFileSync('production-audit/production-audit.json', 'utf8'));
 if (currentAudit.project !== metadata.productionProjectId ||
     currentAudit.productionRecoveryEnabled !== false ||
