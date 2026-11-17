@@ -34,6 +34,13 @@ if (!qualification.productionRelease || qualification.productionRelease.apkSha25
 fs.rmSync('gate6-production-release', { recursive: true, force: true });
 execFileSync('gh', ['run', 'download', GATE6_RUN_ID, '-R', REPO, '-n', 'gate-6-production-release', '-D', 'gate6-production-release'], { stdio: 'inherit' });
 const metadata = JSON.parse(fs.readFileSync('gate6-production-release/production-release.json', 'utf8'));
+const currentAudit = JSON.parse(fs.readFileSync('production-audit/production-audit.json', 'utf8'));
+if (currentAudit.project !== metadata.productionProjectId ||
+    currentAudit.recoverySigningKeyId !== metadata.activeKid ||
+    !Array.isArray(currentAudit.problems) || currentAudit.problems.length !== 0 ||
+    !currentAudit.checkedAt || Date.now() - Date.parse(currentAudit.checkedAt) > 60 * 60 * 1000) {
+  fail('fresh production audit does not confirm recovery OFF and the matching signing key ID');
+}
 if (metadata.candidateSha !== CANDIDATE_SHA || metadata.candidateBranch !== CANDIDATE_BRANCH ||
     metadata.productionProjectId !== attestedRelease.productionProjectId ||
     metadata.activeKid !== attestedRelease.activeKid ||
