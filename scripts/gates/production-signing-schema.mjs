@@ -41,7 +41,7 @@ export function verifyProductionSigningKeyPair(privateKeyPem, publicKeyRingInput
     }
     actual = createPublicKey(privateKey).export({ type: 'spki', format: 'der' }).toString('base64');
   } catch {
-    throw new Error('production signing private key is not a valid PKCS#8 key');
+    throw new Error('production signing private key is not a valid P-256 PKCS#8 key');
   }
   if (actual !== expected) throw new Error('production APK public pin does not match the Secret Manager signing key');
   return {
