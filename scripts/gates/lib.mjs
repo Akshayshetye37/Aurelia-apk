@@ -145,6 +145,18 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   return record;
 }
 
+export function requireNamedEnvironmentApprover(history, environment, expectedLogin) {
+  if (!Array.isArray(history) || typeof environment !== 'string' || !environment ||
+      typeof expectedLogin !== 'string' || !/^[A-Za-z0-9-]{1,39}$/.test(expectedLogin)) {
+    fail('named environment approver configuration is invalid');
+  }
+  const approved = history.some(item => item.state === 'approved' &&
+    item.user?.login?.toLowerCase() === expectedLogin.toLowerCase() &&
+    Array.isArray(item.environments) && item.environments.some(entry => entry.name === environment));
+  if (!approved) fail(`required owner ${expectedLogin} did not approve environment ${environment}`);
+  return true;
+}
+
 export function requireIndependentTester(approvers, tester) {
   if (!Array.isArray(approvers) || typeof tester !== 'string' || !tester) fail('tester or approver list is invalid');
   if (approvers.some((login) => typeof login === 'string' && login.toLowerCase() === tester.toLowerCase())) {
