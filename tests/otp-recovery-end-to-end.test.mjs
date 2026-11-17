@@ -239,6 +239,8 @@ test('physical-device workflow consumes same-SHA release artifact and enforces r
   assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseOne/);
   assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseTwo/);
   assert.match(workflow, /apks\/test\.apk/);
+  assert.match(workflow, /adb\\(\\) \\{ timeout -k 5s 60s command adb/);
+  assert.match(workflow, /timeout -k 5s 15s adb version/);
 });
 
 
