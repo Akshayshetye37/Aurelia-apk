@@ -45,8 +45,18 @@ jobs:
           if (ids.some(id => !/^[1-9][0-9]{0,15}$/.test(id) || !Number.isSafeInteger(Number(id))) ||
               new Set(ids).size !== ids.length) throw new Error('RUN_IDS must contain seven distinct positive safe integers');
           NODE
-  independent-reviewer-one:
+  owner-signoff:
     needs: preflight
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    runs-on: ubuntu-latest
+    environment: recovery-release-owner
+    timeout-minutes: 15
+    permissions: {}
+    steps:
+      - name: Candidate owner approval
+        run: echo "Candidate owner sign-off recorded by the protected environment."
+  independent-reviewer-one:
+    needs: [preflight, owner-signoff]
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
     environment: recovery-release-review-1
@@ -56,7 +66,7 @@ jobs:
       - name: First independent release reviewer approval
         run: echo "First independent release approval recorded by the protected environment."
   independent-reviewer-two:
-    needs: [preflight, independent-reviewer-one]
+    needs: [preflight, owner-signoff, independent-reviewer-one]
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
     environment: recovery-release-review-2
@@ -66,7 +76,7 @@ jobs:
       - name: Second independent release reviewer approval
         run: echo "Second independent release approval recorded by the protected environment."
   verify-and-attest:
-    needs: [preflight, independent-reviewer-one, independent-reviewer-two]
+    needs: [preflight, owner-signoff, independent-reviewer-one, independent-reviewer-two]
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -88,7 +98,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Verify Gates 1–5, both manual attestations, matching APK and two distinct independent approvals
+      - name: Verify Gates 1–5, both manual attestations, matching APK and owner sign-off and two distinct independent approvals
         run: node scripts/gates/verify-qualification.mjs
       - name: Write and bundle Gate 6 release-review evidence
         run: |
