@@ -35,6 +35,9 @@ catch (error) { fail(error.message); }
 fs.rmSync('gate6-production-release', { recursive: true, force: true });
 execFileSync('gh', ['run', 'download', GATE6_RUN_ID, '-R', REPO, '-n', 'gate-6-production-release', '-D', 'gate6-production-release'], { stdio: 'inherit' });
 const metadata = JSON.parse(fs.readFileSync('gate6-production-release/production-release.json', 'utf8'));
+if (sha256File('gate6-production-release/package-lock.json') !== metadata.packageLockSha256) {
+  fail('downloaded Gate 6 production dependency lock digest mismatch');
+}
 if (sha256File('gate6-production-release/assetlinks-verification.json') !== metadata.assetLinksVerificationSha256) {
   fail('downloaded Gate 6 production Asset Links evidence digest mismatch');
 }
