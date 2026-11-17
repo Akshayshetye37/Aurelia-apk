@@ -121,11 +121,12 @@ if (!keyVerifierWifProvider) {
 } else {
   const projectInfo = run(['projects', 'describe', project]);
   const projectNumber = String(projectInfo.projectNumber ?? '');
-  const providerMatch = /^projects\\/(\\d+)\\/locations\\/global\\/workloadIdentityPools\\/([a-z0-9-]+)\\/providers\\/([a-z0-9-]+)$/.exec(keyVerifierWifProvider);
-  if (!providerMatch) {
+  const providerParts = keyVerifierWifProvider.split('/');
+  if (providerParts.length !== 8 || providerParts[0] !== 'projects' || providerParts[2] !== 'locations' ||
+      providerParts[3] !== 'global' || providerParts[4] !== 'workloadIdentityPools' || providerParts[6] !== 'providers') {
     problems.push('PRODUCTION_KEY_VERIFY_WIF_PROVIDER must be a full production-project WIF provider resource name');
   } else {
-    const [, , poolId, providerId] = providerMatch;
+    const poolId = providerParts[5], providerId = providerParts[7];
     const provider = run(['iam', 'workload-identity-pools', 'providers', 'describe', providerId,
       '--workload-identity-pool', poolId, '--location', 'global', '--project', project]);
     try {
