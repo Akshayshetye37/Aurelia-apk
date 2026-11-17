@@ -596,6 +596,7 @@ test('staging and production only enable passkey readiness after Google Digital 
   const gate6 = read('.github/workflows/gate-6-release-signoff.yml');
   const smoke = read('.github/workflows/production-release-smoke.yml');
   const verifier = read('scripts/gates/verify-assetlinks.mjs');
+  const apiVerifier = read('scripts/gates/assetlinks-verification.mjs');
   const schema = read('scripts/gates/assetlinks-evidence-schema.mjs');
   assert.match(staging, /verify-assetlinks\.mjs/);
   assert.match(staging, /WEBAUTHN_ASSETLINKS_VERIFIED=true/);
@@ -605,7 +606,8 @@ test('staging and production only enable passkey readiness after Google Digital 
   assert.match(gate6, /REQUIRED_CERT_SHA256/);
   assert.match(gate6, /assetLinksVerificationSha256/);
   assert.match(smoke, /verify-assetlinks\.mjs/);
-  assert.match(verifier, /digitalassetlinks.googleapis.com/);
+  assert.match(verifier, /verifyAssetLinks/);
+  assert.match(apiVerifier, /digitalassetlinks\.googleapis\.com/);
   assert.match(schema, /validateAssetLinksEvidence/);
 });
 
