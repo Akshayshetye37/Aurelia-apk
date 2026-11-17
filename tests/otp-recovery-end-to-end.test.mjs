@@ -374,6 +374,11 @@ test('recovery runtime secret access is pinned to the complete per-callable leas
     cancelRecoveryPhoneChange: [],
     activateRecoveryPhoneChange: [],
   };
+  const source = read('functions/src/index.ts');
+  const exportedCallables = [...source.matchAll(/export const ([A-Za-z0-9_]+)\\s*=/g)].map(([, name]) => name).sort();
+  assert.deepEqual(exportedCallables, Object.keys(expected).sort(),
+    'the secret maps and App Check inventory must cover every exported recovery callable exactly once');
+
   const staging = read('.github/workflows/recovery-staging-deploy.yml');
   const stagingBlock = staging.match(/bindings=\(\s*([\s\S]*?)\s*\)/)?.[1];
   assert.ok(stagingBlock, 'staging per-function secret map must exist');
