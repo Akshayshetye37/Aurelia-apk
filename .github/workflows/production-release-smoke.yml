@@ -198,3 +198,16 @@ jobs:
           path: evidence/
           if-no-files-found: warn
           retention-days: 90
+      - name: Clean persistent device runner and release artifacts
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if command -v adb >/dev/null 2>&1 && [[ -n "${DEVICE_SERIAL:-}" ]]; then
+            adb -s "$DEVICE_SERIAL" uninstall com.aurelia.pms >/dev/null 2>&1
+            adb -s "$DEVICE_SERIAL" uninstall com.aurelia.pms.test >/dev/null 2>&1
+          fi
+          rm -f "$RUNNER_TEMP/security-primitives.txt" "$RUNNER_TEMP/sqlcipher.txt" "$RUNNER_TEMP/grant-preflight.txt"
+          rm -f "$RUNNER_TEMP/security-primitives-summary.txt" "$RUNNER_TEMP/sqlcipher-summary.txt" "$RUNNER_TEMP/grant-preflight-summary.txt"
+          rm -f "$RUNNER_TEMP/production-logcat.txt" "$RUNNER_TEMP/published-app-cert.txt" "$RUNNER_TEMP/published-test-cert.txt"
+          rm -rf gate6-evidence gate6-production-release published-release production-audit evidence
