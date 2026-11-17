@@ -578,6 +578,19 @@ test('Gate 6 requires a distinct owner sign-off plus two independent release rev
     'Gate 6 owner job must request the GitHub OIDC token used by production WIF authentication');
 });
 
+test('Gate 6 validates release owner and production WIF configuration before requesting approval', () => {
+  const gate6 = read('.github/workflows/gate-6-release-signoff.yml');
+  const preflightStart = gate6.indexOf('  preflight:');
+  const ownerStart = gate6.indexOf('  owner-signoff:', preflightStart);
+  const preflightJob = gate6.slice(preflightStart, ownerStart);
+  assert.ok(!preflightJob.includes('id-token: write'), 'preflight must not receive an unused OIDC permission');
+  for (const setting of ['RELEASE_OWNER_LOGIN', 'PRODUCTION_GCP_PROJECT_ID', 'PRODUCTION_RECOVERY_SIGNING_KEY_ID', 'PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON', 'PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT', 'PRODUCTION_KEY_VERIFY_WIF_PROVIDER']) {
+    assert.ok(preflightJob.includes(setting), 'preflight must validate ' + setting + ' before owner approval');
+  }
+  assert.ok(preflightJob.includes('PRODUCTION_KEY_VERIFY_WIF_PROVIDER is missing or invalid'));
+  assert.ok(preflightJob.includes('RELEASE_OWNER_LOGIN must identify the designated GitHub owner'));
+});
+
 test('Gate 6 production build reuses Gate 3 dependencies and verifies the production signer', () => {
   const staging = read('.github/workflows/recovery-staging-deploy.yml');
   const gate3 = read('.github/workflows/gate-3-real-sms-staging.yml');

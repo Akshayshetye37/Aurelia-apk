@@ -23,13 +23,18 @@ jobs:
       contents: read
       actions: read
       attestations: read
-      id-token: write
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       RUN_IDS: ${{ inputs.run_ids }}
       CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
+      RELEASE_OWNER_LOGIN: ${{ vars.RELEASE_OWNER_LOGIN }}
+      PRODUCTION_GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+      PRODUCTION_RECOVERY_SIGNING_KEY_ID: ${{ vars.PRODUCTION_RECOVERY_SIGNING_KEY_ID }}
+      PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON: ${{ vars.PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
+      PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT: ${{ vars.PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT }}
+      PRODUCTION_KEY_VERIFY_WIF_PROVIDER: ${{ vars.PRODUCTION_KEY_VERIFY_WIF_PROVIDER }}
     steps:
       - name: Checkout trusted gate tooling
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -48,6 +53,14 @@ jobs:
           const ids = expected.map(key => String(value[key]));
           if (ids.some(id => !/^[1-9][0-9]{0,15}$/.test(id) || !Number.isSafeInteger(Number(id))) ||
               new Set(ids).size !== ids.length) throw new Error('RUN_IDS must contain seven distinct positive safe integers');
+          if (!/^[A-Za-z0-9-]{1,39}$/.test(process.env.RELEASE_OWNER_LOGIN ?? '')) throw new Error('RELEASE_OWNER_LOGIN must identify the designated GitHub owner before approvals are requested');
+          if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(process.env.PRODUCTION_GCP_PROJECT_ID ?? '')) throw new Error('PRODUCTION_GCP_PROJECT_ID is missing or invalid');
+          if (!/^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$/.test(process.env.PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT ?? '')) throw new Error('PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT is missing or invalid');
+          const provider = process.env.PRODUCTION_KEY_VERIFY_WIF_PROVIDER ?? '';
+          if (!provider.startsWith('projects/') || !provider.includes('/locations/global/workloadIdentityPools/') || !provider.includes('/providers/')) throw new Error('PRODUCTION_KEY_VERIFY_WIF_PROVIDER is missing or invalid');
+          const kid = process.env.PRODUCTION_RECOVERY_SIGNING_KEY_ID ?? '';
+          const publicKeys = JSON.parse(process.env.PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON ?? 'null');
+          if (!kid || !publicKeys || typeof publicKeys !== 'object' || Array.isArray(publicKeys) || !publicKeys[kid]) throw new Error('Production active signing-key ID is not present in the public key ring');
           NODE
   owner-signoff:
     needs: preflight
