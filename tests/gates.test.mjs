@@ -634,6 +634,13 @@ test('Gate 5 requires the private verifier to trust exactly the configured Funct
   assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`] }] }, 'bad-account'), false);
 });
 
+test('Gate 5 paginates the complete production App Check service inventory', () => {
+  const audit = read('scripts/gates/audit-production.mjs');
+  assert.match(audit, /appCheckUrl\.searchParams\.set\('pageSize', '100'\)/);
+  assert.match(audit, /appCheckPageToken = payload\.nextPageToken/);
+  assert.match(audit, /seenAppCheckPageTokens\.has\(appCheckPageToken\)/);
+});
+
 test('Gate 5 requires a matching regional Cloud Run service for every Gen2 function', () => {
   const functions = [
     { name: 'projects/p/locations/asia-south1/functions/phone', environment: 'GEN_2' },
