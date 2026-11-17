@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
 import { validateProductionSigningKeyId, verifyProductionSigningKeyPair } from '../scripts/gates/production-signing-schema.mjs';
+import { validateFunctionSecretAccess } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const functions = () => [
   { name: 'projects/prod/locations/us-central1/functions/issueRecoveryGrant', serviceConfig: { environmentVariables: { RECOVERY_SIGNING_KEY_ID: 'prod-kid-1' } } },
@@ -35,4 +36,29 @@ test('production signing private key must derive the exact active APK SPKI publi
   assert.throws(() => verifyProductionSigningKeyPair(privateKeyPem, { 'prod-kid-1': Buffer.alloc(91).toString('base64') }, 'prod-kid-1'),
     /does not match/);
   assert.throws(() => verifyProductionSigningKeyPair(privateKeyPem, ring, 'wrong-kid'), /missing or invalid/);
+});
+
+test('production key verifier is an extra accessor only for the signing key, never PHONE_PEPPER', () => {
+  const keyVerifier = 'key-verify@prod.iam.gserviceaccount.com';
+  const phone = 'phone@prod.iam.gserviceaccount.com';
+  const grant = 'grant@prod.iam.gserviceaccount.com';
+  const bindings = {
+    registerRecoveryPhone: ['PHONE_PEPPER'],
+    issueRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
+    consumeRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
+  };
+  const functions = Object.entries(bindings).map(([name, secrets]) => ({
+    name, serviceConfig: {
+      serviceAccountEmail: name === 'registerRecoveryPhone' ? phone : grant,
+      secretEnvironmentVariables: secrets.map(key => ({ key })),
+    },
+  }));
+  const policies = new Map([
+    ['PHONE_PEPPER', { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: [`serviceAccount:${phone}`, `serviceAccount:${grant}`] }] }],
+    ['RECOVERY_SIGNING_KEY_PKCS8', { bindings: [{ role: 'roles/secretmanager.secretAccessor', members: [`serviceAccount:${grant}`, `serviceAccount:${keyVerifier}`] }] }],
+  ]);
+  const additional = new Map([['RECOVERY_SIGNING_KEY_PKCS8', new Set([`serviceAccount:${keyVerifier}`])]]);
+  assert.deepEqual(validateFunctionSecretAccess(functions, bindings, policies, [phone, grant], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'], additional), []);
+  policies.get('PHONE_PEPPER').bindings[0].members.push(`serviceAccount:${keyVerifier}`);
+  assert.match(validateFunctionSecretAccess(functions, bindings, policies, [phone, grant], ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'], additional).join(' '), /PHONE_PEPPER runtime accessor set/);
 });
