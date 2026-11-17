@@ -8,6 +8,16 @@ This gate is a release-control record, not an implementation test. No CI result,
 
 The release candidate must be one immutable 40-character Git commit SHA on `work/p0-storage-hardening`. Record the branch, commit URL, source-tree SHA, build timestamp and exact Firebase staging project. No cherry-picks, rebases, amendments or configuration changes after the candidate is frozen. Any relevant change creates a new candidate and invalidates affected gate evidence.
 
+## Protected approval environments
+
+Gate 6 requires all three approval environments, configured in GitHub Settings → Environments:
+
+- `recovery-release-owner`: require the designated candidate owner to approve; configure repository variable `RELEASE_OWNER_LOGIN` to that exact GitHub login and enable Prevent self-review.
+- `recovery-release-review-1`: first independent reviewer group; enable Prevent self-review.
+- `recovery-release-review-2`: second independent reviewer group, separate from reviewer 1; enable Prevent self-review.
+
+The owner must be the named candidate owner, not merely any environment approver. The workflow independently checks the approval history and fails closed if the configured owner did not approve, if approvals are not distinct, or if the triggering actor/manual testers are used as release approvers. These three environments are in addition to `recovery-staging`, `recovery-device`, `recovery-production-audit`, and `recovery-attestation` used by the preceding qualification steps.
+
 ## Required gate evidence
 
 | Gate | Required immutable evidence | Pass criteria | Current result |
