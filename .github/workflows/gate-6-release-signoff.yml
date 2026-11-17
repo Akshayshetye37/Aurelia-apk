@@ -67,7 +67,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
       PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT: ${{ vars.PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT }}
-      PRODUCTION_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.PRODUCTION_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      PRODUCTION_KEY_VERIFY_WIF_PROVIDER: ${{ vars.PRODUCTION_KEY_VERIFY_WIF_PROVIDER }}
       ACTIVE_KID: ${{ vars.PRODUCTION_RECOVERY_SIGNING_KEY_ID }}
       PUBLIC_KEYS: ${{ vars.PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
       GOOGLE_SERVICES_JSON: ${{ secrets.PRODUCTION_GOOGLE_SERVICES_JSON_BASE64 }}
@@ -101,7 +101,7 @@ jobs:
       - name: Authenticate as the dedicated production signing-key verifier
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
         with:
-          workload_identity_provider: ${{ secrets.PRODUCTION_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          workload_identity_provider: ${{ vars.PRODUCTION_KEY_VERIFY_WIF_PROVIDER }}
           service_account: ${{ vars.PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
         with:
@@ -134,7 +134,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$CANDIDATE_BRANCH" = "work/p0-storage-hardening"
-          for name in PRODUCTION_PROJECT_ID ACTIVE_KID PUBLIC_KEYS PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT PRODUCTION_GCP_WORKLOAD_IDENTITY_PROVIDER GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+          for name in PRODUCTION_PROJECT_ID ACTIVE_KID PUBLIC_KEYS PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT PRODUCTION_KEY_VERIFY_WIF_PROVIDER GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [[ -z "${!name}" ]]; then echo "::error::Missing protected production release setting: $name"; exit 1; fi
           done
           node -e 'const keys=JSON.parse(process.env.PUBLIC_KEYS); if(!keys[process.env.ACTIVE_KID]) process.exit(1);'
