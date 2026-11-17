@@ -6,9 +6,8 @@ export function validateProductionSigningKeyId(functions, expectedKid) {
     ['issueRecoveryGrant', 'consumeRecoveryGrant'].includes(String(fn.name ?? '').split('/').pop()));
   const ids = grantFunctions.map(fn => (fn.serviceConfig ?? fn).environmentVariables?.RECOVERY_SIGNING_KEY_ID ??
     fn.environmentVariables?.RECOVERY_SIGNING_KEY_ID ?? '');
-  const uniqueIds = [...new Set(ids.filter(Boolean))];
-  if (grantFunctions.length !== 2 || uniqueIds.length !== 1 || uniqueIds[0] !== expectedKid) {
+  if (grantFunctions.length !== 2 || ids.length !== 2 || ids.some(id => id !== expectedKid)) {
     throw new Error('production grant callables must expose the configured PRODUCTION_RECOVERY_SIGNING_KEY_ID');
   }
-  return uniqueIds[0];
+  return expectedKid;
 }
