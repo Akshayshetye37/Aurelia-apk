@@ -125,6 +125,7 @@ if (productionRelease.candidateSha !== sha || productionRelease.candidateBranch 
     !/^[0-9a-f]{64}$/.test(productionRelease.signerSha256 ?? '')) {
   fail('Gate 6 production APK is not bound to the frozen candidate, production project, APK hashes and signer');
 }
+if (productionRelease.activeKid !== productionAudit.recoverySigningKeyId) fail('production APK public-key ring active kid does not match the production grant signer configuration');
 if (!isProductionAuditEvidenceValid(productionAudit, records['5'].details.productionProjectId, productionRelease.signerSha256)) {
   fail('Gate 5 production audit evidence is incomplete, lacks the production APK signer in Firebase inventory, or reports test phone numbers/problems');
 }
