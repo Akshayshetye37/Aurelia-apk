@@ -56,10 +56,14 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+      actions: read
+      attestations: read
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      RUN_IDS: ${{ inputs.run_ids }}
       CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
       REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
       PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
       ACTIVE_KID: ${{ vars.PRODUCTION_RECOVERY_SIGNING_KEY_ID }}
       PUBLIC_KEYS: ${{ vars.PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
@@ -83,15 +87,15 @@ jobs:
           ref: ${{ inputs.candidate_sha }}
           path: candidate
           persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
       - name: Verify Gate 3 provenance and reuse its exact dependency lock
         shell: bash
         run: |
           set -euo pipefail
           gate3_run_id="$(node -e 'const ids=JSON.parse(process.env.RUN_IDS); process.stdout.write(String(ids["3"]))')"
           GATE3_RUN_ID="$gate3_run_id" node scripts/gates/fetch-gate3-build-lock.mjs
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22
       - uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
         with:
           distribution: temurin
