@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateProductionSigningKeyId } from '../scripts/gates/production-signing-schema.mjs';
+import { generateKeyPairSync } from 'node:crypto';
+import { validateProductionSigningKeyId, verifyProductionSigningKeyPair } from '../scripts/gates/production-signing-schema.mjs';
 
 const functions = () => [
   { name: 'projects/prod/locations/us-central1/functions/issueRecoveryGrant', serviceConfig: { environmentVariables: { RECOVERY_SIGNING_KEY_ID: 'prod-kid-1' } } },
@@ -21,4 +22,17 @@ test('production signing key ID rejects missing, divergent or incomplete grant c
   assert.throws(() => validateProductionSigningKeyId(missing, 'prod-kid-1'), /grant callables/);
   const duplicate = functions(); duplicate[1].name = duplicate[0].name;
   assert.throws(() => validateProductionSigningKeyId(duplicate, 'prod-kid-1'), /grant callables/);
+});
+
+test('production signing private key must derive the exact active APK SPKI public pin', () => {
+  const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const privateKeyPem = pair.privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const publicDer = pair.publicKey.export({ type: 'spki', format: 'der' });
+  const ring = { 'prod-kid-1': publicDer.toString('base64') };
+  const verified = verifyProductionSigningKeyPair(privateKeyPem, ring, 'prod-kid-1');
+  assert.equal(verified.activeKid, 'prod-kid-1');
+  assert.match(verified.publicKeySha256, /^[0-9a-f]{64}$/);
+  assert.throws(() => verifyProductionSigningKeyPair(privateKeyPem, { 'prod-kid-1': Buffer.alloc(91).toString('base64') }, 'prod-kid-1'),
+    /does not match/);
+  assert.throws(() => verifyProductionSigningKeyPair(privateKeyPem, ring, 'wrong-kid'), /missing or invalid/);
 });
