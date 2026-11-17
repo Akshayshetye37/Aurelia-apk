@@ -96,6 +96,17 @@ export function validateFunctionSecretAccess(functions, requiredBindings, secret
       expectedBySecret.get(secret).add(`serviceAccount:${runtimeAccount}`);
     }
   }
+  const secretBearingAccounts = new Set([...expectedBySecret.values()].flatMap(accounts => [...accounts]));
+  const declaredFunctions = new Set(Object.keys(requiredBindings ?? {}));
+  for (const fn of functions ?? []) {
+    const functionName = String(fn.name ?? '').split('/').pop();
+    if (declaredFunctions.has(functionName)) continue;
+    const config = fn.serviceConfig ?? fn;
+    const runtimeAccount = config.serviceAccountEmail ?? fn.serviceAccountEmail;
+    if (runtimeAccount && secretBearingAccounts.has(`serviceAccount:${runtimeAccount}`)) {
+      problems.push(`unmapped function ${functionName} shares a recovery secret-bearing runtime identity`);
+    }
+  }
   for (const secret of requiredSecrets ?? []) {
     const policy = secretPolicies.get(secret);
     if (!policy) { problems.push(`secret ${secret} has no readable IAM policy`); continue; }
