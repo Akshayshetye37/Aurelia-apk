@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
 import { isAttestationFresh, validateEnvironmentApprovals } from '../scripts/gates/lib.mjs';
-import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker, hasExactServiceInvoker, findProjectWideRecoveryRisks, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from '../scripts/gates/firebase-audit-schema.mjs';
+import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker, hasExactServiceInvoker, findProjectWideRecoveryRisks, findMissingGen2FunctionServices, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = path.join(ROOT, 'scripts', 'gates');
@@ -632,6 +632,21 @@ test('Gate 5 requires the private verifier to trust exactly the configured Funct
   assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: ['allUsers'] }] }, caller), false);
   assert.equal(hasExactServiceInvoker({ bindings: [] }, caller), false);
   assert.equal(hasExactServiceInvoker({ bindings: [{ role: 'roles/run.invoker', members: [`serviceAccount:${caller}`] }] }, 'bad-account'), false);
+});
+
+test('Gate 5 requires a matching regional Cloud Run service for every Gen2 function', () => {
+  const functions = [
+    { name: 'projects/p/locations/asia-south1/functions/phone', environment: 'GEN_2' },
+    { name: 'projects/p/locations/asia-south1/functions/legacy', environment: 'GEN_1' },
+  ];
+  const services = [
+    { metadata: { name: 'phone', labels: { 'cloud.googleapis.com/location': 'asia-south1' } } },
+  ];
+  assert.deepEqual(findMissingGen2FunctionServices(functions, services), []);
+  assert.deepEqual(findMissingGen2FunctionServices([
+    ...functions,
+    { name: 'projects/p/locations/us-central1/functions/missing', environment: 'GEN_2' },
+  ], services), ['missing']);
 });
 
 test('Gate 5 rejects project-wide invocation and Secret Manager payload/write grants', () => {
