@@ -26,7 +26,7 @@ const envs = {
   'recovery-production-audit': {
     variables: ['PRODUCTION_GCP_PROJECT_ID','PRODUCTION_RECOVERY_SIGNING_KEY_ID','PRODUCTION_GCP_REGION','ATTESTATION_VERIFIER_SERVICE',
       'ATTESTATION_VERIFIER_CALLER_SERVICE_ACCOUNT','REQUIRED_SECRETS','RUNTIME_SERVICE_ACCOUNTS',
-      'APPCHECK_REQUIRED_SERVICES','FIREBASE_ANDROID_APP_IDS','FIREBASE_ALLOWED_SHA1','FIREBASE_ALLOWED_SHA256','PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT','PRODUCTION_KEY_VERIFY_WIF_PRINCIPAL'],
+      'APPCHECK_REQUIRED_SERVICES','FIREBASE_ANDROID_APP_IDS','FIREBASE_ALLOWED_SHA1','FIREBASE_ALLOWED_SHA256'],
     secrets: ['GCP_WORKLOAD_IDENTITY_PROVIDER','GCP_AUDIT_SERVICE_ACCOUNT'],
   },
   'recovery-attestation': { variables: [], secrets: [] },
@@ -43,6 +43,7 @@ function fixture(faults = []) {
     const [kind, environment, name] = fault.split(':');
     if (kind === 'remove-variable') state[environment].variables = state[environment].variables.filter(item => item !== name);
     if (kind === 'remove-secret') state[environment].secrets = state[environment].secrets.filter(item => item !== name);
+    if (kind === 'shadow-variable') state[environment].variables.push(name);
     if (kind === 'add-secret') state[environment].secrets.push(name);
     if (kind === 'remove-repo-variable') state.repoVariables = ['RELEASE_OWNER_LOGIN'];
   }
@@ -57,7 +58,7 @@ function execute(t, faults = []) {
   const fake = `#!/usr/bin/env node
 const args = process.argv.slice(2);
 const state = JSON.parse(process.env.FAKE_STATE);
-const repoVars = state.repoVariables ?? ['RELEASE_OWNER_LOGIN', 'RECOVERY_GRANT_PUBLIC_KEYS_JSON', 'WEBAUTHN_RP_ID', 'WEBAUTHN_RP_NAME', 'WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS', 'ANDROID_APPLICATION_ID', 'PRODUCTION_KEY_VERIFY_WIF_PROVIDER'];
+const repoVars = state.repoVariables ?? ['RELEASE_OWNER_LOGIN', 'RECOVERY_GRANT_PUBLIC_KEYS_JSON', 'WEBAUTHN_RP_ID', 'WEBAUTHN_RP_NAME', 'WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS', 'ANDROID_APPLICATION_ID', 'PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT', 'PRODUCTION_KEY_VERIFY_WIF_PRINCIPAL', 'PRODUCTION_KEY_VERIFY_WIF_PROVIDER'];
 const repoSecrets = state.repoSecrets ?? ['DIGITAL_ASSET_LINKS_API_KEY'];
 const reviewers = state.reviewers ?? {
   'recovery-release-owner': 'owner-one',
@@ -136,6 +137,12 @@ test('preflight never prints secret values and requires the audit identity in th
   assert.equal(result.status, 0, output);
   assert.match(output, /GCP_AUDIT_SERVICE_ACCOUNT exists only as a secret in recovery-production-audit/);
   assert.doesNotMatch(output, /secret-value|private-key-material|BEGIN PRIVATE KEY/);
+});
+
+test('preflight rejects environment overrides for production key-verifier repository variables', t => {
+  const { result, output } = execute(t, ['shadow-variable:recovery-release-owner:PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT']);
+  assert.equal(result.status, 1, output);
+  assert.match(output, /PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT is defined only as a repository variable/);
 });
 
 test('preflight requires the Digital Asset Links API repository secret', t => {
