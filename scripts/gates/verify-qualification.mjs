@@ -114,9 +114,22 @@ const gate4LogScan = readEvidence('4', 'log-scan.json');
 if (!Array.isArray(gate4LogScan.findings) || gate4LogScan.findings.length) fail('Gate 4 device log scan did not pass');
 if (records['5'].details.productionRecoveryEnabled !== false || !records['5'].details.productionProjectId) fail('Gate 5 did not attest production recovery OFF');
 const productionAudit = readEvidence('5', 'production-audit.json');
-if (!isProductionAuditEvidenceValid(productionAudit, records['5'].details.productionProjectId, records['3'].details.signerSha256)) {
-  fail('Gate 5 production audit evidence is incomplete, lacks Firebase signing inventory, or reports test phone numbers/problems');
+let productionRelease;
+try { productionRelease = JSON.parse(fs.readFileSync('production-release/production-release.json', 'utf8')); }
+catch { fail('Gate 6 production release build record is missing or invalid'); }
+if (productionRelease.candidateSha !== sha || productionRelease.candidateBranch !== candidateBranch ||
+    productionRelease.productionProjectId !== records['5'].details.productionProjectId ||
+    productionRelease.productionProjectId === records['3'].details.stagingProjectId ||
+    !/^[0-9a-f]{64}$/.test(productionRelease.apkSha256 ?? '') ||
+    !/^[0-9a-f]{64}$/.test(productionRelease.testApkSha256 ?? '') ||
+    !/^[0-9a-f]{64}$/.test(productionRelease.signerSha256 ?? '')) {
+  fail('Gate 6 production APK is not bound to the frozen candidate, production project, APK hashes and signer');
 }
+if (!isProductionAuditEvidenceValid(productionAudit, records['5'].details.productionProjectId, productionRelease.signerSha256)) {
+  fail('Gate 5 production audit evidence is incomplete, lacks the production APK signer in Firebase inventory, or reports test phone numbers/problems');
+}
+fs.mkdirSync('evidence', { recursive: true });
+fs.copyFileSync('production-release/production-release.json', 'evidence/production-release.json');
 for (const kind of ['sms', 'device']) {
   const attestation = readEvidence(kind, 'attestation.json');
   const attestationBytes = fs.readFileSync(`qualification-${kind}/evidence/attestation.json`);
@@ -144,6 +157,7 @@ if (testers.some((tester) => approvers.some((approver) => approver.toLowerCase()
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/qualification-result.json', JSON.stringify({
   candidateSha: sha, controlSha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', apkSha256: apkHash, testApkSha256: testApkHash,
+  productionRelease: { productionProjectId: productionRelease.productionProjectId, apkSha256: productionRelease.apkSha256, testApkSha256: productionRelease.testApkSha256, signerSha256: productionRelease.signerSha256 },
   gates: Object.fromEntries(Object.entries(records).map(([gate, record]) => [gate, { runId: record.runId, completedAt: record.completedAt }])),
   releaseOwner: process.env.RELEASE_OWNER_LOGIN, approvers, productionRecoveryEnabled: false, verifiedAt: new Date().toISOString(),
 }, null, 2));
