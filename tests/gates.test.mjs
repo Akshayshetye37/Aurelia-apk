@@ -801,3 +801,34 @@ test('qualification attestations expire after seven days while allowing small cl
   assert.equal(isAttestationFresh('not-a-date', now), false);
   assert.equal(isAttestationFresh(undefined, now), false);
 });
+
+test('documented protected environments exactly match workflow references', () => {
+  const workflowPaths = [
+    '.github/workflows/recovery-staging-deploy.yml',
+    '.github/workflows/recovery-attestation-deploy.yml',
+    '.github/workflows/gate-4-physical-device.yml',
+    '.github/workflows/gate-5-production-security.yml',
+    '.github/workflows/gate-manual-attestation.yml',
+    '.github/workflows/gate-6-release-signoff.yml',
+  ];
+  const referenced = new Set();
+  for (const workflowPath of workflowPaths) {
+    const content = read(workflowPath);
+    for (const match of content.matchAll(/^\\s*environment:\\s*([a-z0-9-]+)\\s*$/gm)) {
+      referenced.add(match[1]);
+    }
+  }
+  const documented = new Set([
+    'recovery-staging',
+    'recovery-device',
+    'recovery-production-audit',
+    'recovery-attestation',
+    'recovery-release-owner',
+    'recovery-release-review-1',
+    'recovery-release-review-2',
+  ]);
+  assert.deepEqual([...referenced].sort(), [...documented].sort());
+  const runbook = read('docs/RECOVERY-GATE-PIPELINE.md');
+  for (const environment of documented) assert.ok(runbook.includes('`' + environment + '`'), environment);
+  assert.match(runbook, /`RELEASE_OWNER_LOGIN`/);
+});
