@@ -133,8 +133,15 @@ jobs:
           test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.vbmeta.device_state | tr -d '\r')" = "locked"
           test "$(adb -s "$DEVICE_SERIAL" shell getprop sys.boot_completed | tr -d '\r')" = "1"
           test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.kernel.qemu | tr -d '\r')" != "1"
-          actual_label="$DEVICE_LABEL"
-          test -n "$actual_label"
+          case "$(adb -s "$DEVICE_SERIAL" shell getprop ro.hardware | tr -d '\r')" in goldfish|ranchu) exit 1;; esac
+          connected="$(adb -s "$DEVICE_SERIAL" devices -l | awk -v serial="$DEVICE_SERIAL" '$1==serial && $2=="device" {n++} END {print n+0}')"
+          test "$connected" -eq 1
+          model="$(adb -s "$DEVICE_SERIAL" shell getprop ro.product.model | tr -d '\r')"
+          version="$(adb -s "$DEVICE_SERIAL" shell getprop ro.build.version.release | tr -d '\r')"
+          test "$model" = "$(jq -r .device.deviceModel evidence/production-smoke-input.json)"
+          test "$version" = "$(jq -r .device.androidVersion evidence/production-smoke-input.json)"
+          hardware_level="$(jq -r .device.hardwareSecurityLevel evidence/production-smoke-input.json)"
+          [[ "$hardware_level" == "StrongBox" || "$hardware_level" == "TEE" ]]
       - name: Verify published production APK signer and install exact release assets
         shell: bash
         run: |
