@@ -140,6 +140,6 @@ fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/qualification-result.json', JSON.stringify({
   candidateSha: sha, controlSha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', apkSha256: apkHash, testApkSha256: testApkHash,
   gates: Object.fromEntries(Object.entries(records).map(([gate, record]) => [gate, { runId: record.runId, completedAt: record.completedAt }])),
-  approvers, productionRecoveryEnabled: false, verifiedAt: new Date().toISOString(),
+  releaseOwner: process.env.RELEASE_OWNER_LOGIN, approvers, productionRecoveryEnabled: false, verifiedAt: new Date().toISOString(),
 }, null, 2));
 console.log('QUALIFIED FOR RELEASE REVIEW. Production recovery remains OFF.');
