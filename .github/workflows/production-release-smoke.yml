@@ -23,7 +23,51 @@ concurrency:
   group: production-smoke-${{ inputs.candidate_sha }}
   cancel-in-progress: false
 jobs:
+  audit-production:
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    runs-on: ubuntu-latest
+    environment: recovery-production-audit
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+      PRODUCTION_GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+      PRODUCTION_RECOVERY_SIGNING_KEY_ID: ${{ vars.PRODUCTION_RECOVERY_SIGNING_KEY_ID }}
+      GCP_REGION: ${{ vars.PRODUCTION_GCP_REGION || vars.GCP_REGION }}
+      AUDIT_SERVICE_ACCOUNT: ${{ secrets.GCP_AUDIT_SERVICE_ACCOUNT }}
+      ATTESTATION_VERIFIER_SERVICE: ${{ vars.ATTESTATION_VERIFIER_SERVICE }}
+      ATTESTATION_VERIFIER_CALLER_SERVICE_ACCOUNT: ${{ vars.ATTESTATION_VERIFIER_CALLER_SERVICE_ACCOUNT }}
+      REQUIRED_SECRETS: ${{ vars.REQUIRED_SECRETS }}
+      RUNTIME_SERVICE_ACCOUNTS: ${{ vars.RUNTIME_SERVICE_ACCOUNTS }}
+      APPCHECK_REQUIRED_SERVICES: ${{ vars.APPCHECK_REQUIRED_SERVICES }}
+      FIREBASE_ANDROID_APP_IDS: ${{ vars.FIREBASE_ANDROID_APP_IDS }}
+      FIREBASE_ALLOWED_SHA1: ${{ vars.FIREBASE_ALLOWED_SHA1 }}
+      FIREBASE_ALLOWED_SHA256: ${{ vars.FIREBASE_ALLOWED_SHA256 }}
+    steps:
+      - name: Checkout trusted production audit tooling
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Authenticate with read-only production audit identity
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_AUDIT_SERVICE_ACCOUNT }}
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
+      - name: Re-audit production recovery OFF and release signer inventory
+        run: node scripts/gates/audit-production.mjs
+      - name: Upload current production audit evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-postrelease-audit-evidence
+          path: evidence/production-audit.json
+          if-no-files-found: error
+          retention-days: 90
   smoke:
+    needs: audit-production
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: [self-hosted, linux, x64, aurelia-android-device]
     environment: recovery-device
@@ -48,6 +92,11 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Download the current production audit result
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: production-postrelease-audit-evidence
+          path: production-audit
       - name: Verify runner tools and exact published release binding
         shell: bash
         run: |
