@@ -235,6 +235,8 @@ test('physical-device workflow consumes same-SHA release artifact and enforces r
   assert.match(workflow, /fetch-gate3\.mjs/);
   assert.match(workflow, /ro\.boot\.verifiedbootstate/);
   assert.match(workflow, /ro\.boot\.flash\.locked/);
+  assert.match(workflow, /device\.apiLevel/);
+  assert.match(workflow, /device\.buildFingerprint/);
   assert.match(workflow, /shell am force-stop "\$app"/);
   assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseOne/);
   assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseTwo/);
