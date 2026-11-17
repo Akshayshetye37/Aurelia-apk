@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fail } from './lib.mjs';
-import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker, hasExactServiceInvoker, findProjectWideRecoveryRisks, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from './firebase-audit-schema.mjs';
+import { countTestPhoneNumbers, validateFirebaseFingerprintInventory, firebaseAndroidShaEndpoint, hasPublicRuntimeInvoker, hasExactServiceInvoker, findProjectWideRecoveryRisks, findMissingGen2FunctionServices, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from './firebase-audit-schema.mjs';
 
 const project = process.env.GCP_PROJECT_ID;
 const region = process.env.GCP_REGION;
@@ -70,6 +70,9 @@ for (const f of functions) {
 }
 const services = run(['run', 'services', 'list', '--project', project]);
 auditedResources.runServices = services.length;
+for (const functionName of findMissingGen2FunctionServices(functions, services)) {
+  problems.push(`Gen2 function ${functionName} has no matching Cloud Run service in the same region`);
+}
 for (const service of services) {
   const serviceName = service.metadata?.name ?? service.name;
   const resource = `run service ${serviceName}`;
