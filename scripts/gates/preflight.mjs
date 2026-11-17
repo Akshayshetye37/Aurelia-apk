@@ -200,8 +200,12 @@ else {
 
 // 7. Physical-device runner presence. Offline is reported, not treated as ready for dispatch.
 const runners = names(`${apiRepo}/actions/runners`, '.runners[] | [.name, .status, (.labels | map(.name) | join(","))] | @tsv');
-const deviceRunners = (runners ?? []).filter(line => line.split('\t')[2]?.split(',').includes('aurelia-android-device'));
-check(runners !== null && deviceRunners.length === 1, `exactly one runner labelled aurelia-android-device (${deviceRunners.length} found)`);
+const deviceRunners = (runners ?? []).filter(line => {
+  const labels = new Set(line.split('\t')[2]?.split(',') ?? []);
+  return labels.has('aurelia-android-device') && labels.has('linux') && labels.has('x64');
+});
+check(runners !== null && deviceRunners.length === 1,
+  `exactly one Linux x64 runner labelled aurelia-android-device (${deviceRunners.length} found)`);
 if (deviceRunners[0]) console.log(`INFO  physical runner status: ${deviceRunners[0].split('\t')[1]} (must be online before Gate 4 dispatch)`);
 
 console.log(failures.length ? `\n${failures.length} check(s) FAILED - do not freeze or dispatch` :
