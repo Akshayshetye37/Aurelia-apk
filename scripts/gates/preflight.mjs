@@ -72,7 +72,7 @@ const ENVIRONMENT_REQUIREMENTS = {
   'recovery-release-owner': {
     variables: ['PRODUCTION_GCP_PROJECT_ID', 'PRODUCTION_RECOVERY_SIGNING_KEY_ID', 'PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON', 'PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT'],
     secrets: ['PRODUCTION_GOOGLE_SERVICES_JSON_BASE64', 'PRODUCTION_KEYSTORE_BASE64',
-      'PRODUCTION_KEYSTORE_PASSWORD', 'PRODUCTION_KEY_ALIAS', 'PRODUCTION_KEY_PASSWORD', 'PRODUCTION_GCP_WORKLOAD_IDENTITY_PROVIDER'],
+      'PRODUCTION_KEYSTORE_PASSWORD', 'PRODUCTION_KEY_ALIAS', 'PRODUCTION_KEY_PASSWORD'],
   },
   'recovery-release-review-1': { variables: [], secrets: [] },
   'recovery-release-review-2': { variables: [], secrets: [] },
@@ -137,7 +137,7 @@ check(repoVariables !== null, 'repository variable names are readable');
 check(repoSecrets !== null, 'repository secret names are readable');
 if (repoSecrets !== null) check(repoSecrets.includes('DIGITAL_ASSET_LINKS_API_KEY'), 'repository secret DIGITAL_ASSET_LINKS_API_KEY exists');
 if (repoVariables !== null) {
-  for (const required of ['RELEASE_OWNER_LOGIN', 'RECOVERY_GRANT_PUBLIC_KEYS_JSON', 'WEBAUTHN_RP_ID', 'WEBAUTHN_RP_NAME', 'WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS', 'ANDROID_APPLICATION_ID']) {
+  for (const required of ['RELEASE_OWNER_LOGIN', 'RECOVERY_GRANT_PUBLIC_KEYS_JSON', 'WEBAUTHN_RP_ID', 'WEBAUTHN_RP_NAME', 'WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS', 'ANDROID_APPLICATION_ID', 'PRODUCTION_KEY_VERIFY_WIF_PROVIDER']) {
     check(repoVariables.includes(required), `repository variable ${required} exists`);
   }
 }
