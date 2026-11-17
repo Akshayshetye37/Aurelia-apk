@@ -109,10 +109,12 @@ else {
 const runtimeAccounts = list('RUNTIME_SERVICE_ACCOUNTS');
 const auditServiceAccount = process.env.AUDIT_SERVICE_ACCOUNT ?? '';
 const keyVerifierAccount = process.env.PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT ?? '';
+const keyVerifierWifPrincipal = process.env.PRODUCTION_KEY_VERIFY_WIF_PRINCIPAL ?? '';
 if (!runtimeAccounts.length) problems.push('RUNTIME_SERVICE_ACCOUNTS not configured');
 if (!/^[^@\\s]+@[^@\\s]+\\.iam\\.gserviceaccount\\.com$/.test(keyVerifierAccount)) {
   problems.push('PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT must be a valid service-account email');
 }
+if (!keyVerifierWifPrincipal.startsWith('principalSet://iam.googleapis.com/')) problems.push('PRODUCTION_KEY_VERIFY_WIF_PRINCIPAL must be a GitHub Workload Identity principalSet');
 if (keyVerifierAccount && (runtimeAccounts.includes(keyVerifierAccount) || keyVerifierAccount === auditServiceAccount)) {
   problems.push('production signing-key verifier must be distinct from audit and runtime identities');
 }
@@ -181,6 +183,14 @@ for (const account of reviewedAccounts) {
   const keys = run(['iam', 'service-accounts', 'keys', 'list', '--iam-account', account, '--managed-by=user', '--project', project]);
   if (keys.length) problems.push(`${account}: user-managed keys exist`);
   const policy = run(['iam', 'service-accounts', 'get-iam-policy', account, '--project', project]);
+  if (account === keyVerifierAccount) {
+    const wifBindings = (policy.bindings ?? []).filter(binding => binding.role === 'roles/iam.workloadIdentityUser');
+    const wifMembers = wifBindings.flatMap(binding => binding.members ?? []);
+    if (wifBindings.length !== 1 || wifMembers.length !== 1 || wifMembers[0] !== keyVerifierWifPrincipal ||
+        (policy.bindings ?? []).length !== 1) {
+      problems.push(`${account}: Workload Identity access must be limited to the configured GitHub principalSet`);
+    }
+  }
   for (const binding of policy.bindings ?? []) {
     if (['roles/owner', 'roles/editor'].includes(binding.role) && (binding.members ?? []).includes(`serviceAccount:${account}`)) {
       problems.push(`${account}: holds ${binding.role}`);
