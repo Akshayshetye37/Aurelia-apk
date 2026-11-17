@@ -154,8 +154,10 @@ const PRIVILEGED_PROJECT_ROLES = new Set([
   'roles/owner', 'roles/editor', 'roles/resourcemanager.projectIamAdmin',
   'roles/iam.securityAdmin', 'roles/iam.serviceAccountAdmin',
   'roles/iam.serviceAccountKeyAdmin', 'roles/iam.serviceAccountUser',
-  'roles/iam.serviceAccountTokenCreator', 'roles/iam.serviceAccountOpenIdTokenCreator', 'roles/secretmanager.admin',
-  'roles/secretmanager.secretAccessor', 'roles/run.admin', 'roles/run.invoker',
+  'roles/iam.serviceAccountTokenCreator', 'roles/iam.serviceAccountOpenIdTokenCreator',
+  'roles/secretmanager.admin', 'roles/secretmanager.editor',
+  'roles/secretmanager.secretVersionAdder', 'roles/secretmanager.secretVersionManager',
+  'roles/secretmanager.secretAccessor', 'roles/run.admin', 'roles/run.developer', 'roles/run.invoker',
   'roles/cloudfunctions.admin', 'roles/cloudfunctions.developer', 'roles/cloudfunctions.invoker',
   'roles/firebase.admin', 'roles/firebaseauth.admin', 'roles/firebaseappcheck.admin',
 ]);
