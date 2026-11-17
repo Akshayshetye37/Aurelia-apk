@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSmsAttestation, containsPhoneNumberLikeValue } from '../scripts/gates/attestation-schema.mjs';
-import { isAttestationFresh, validateEnvironmentApprovals } from '../scripts/gates/lib.mjs';
+import { isAttestationFresh, validateEnvironmentApprovals, requireNamedEnvironmentApprover } from '../scripts/gates/lib.mjs';
 import { validateFirebaseFingerprintInventory, countTestPhoneNumbers, firebaseAndroidShaEndpoint, isProductionAuditEvidenceValid, hasPublicRuntimeInvoker, hasExactServiceInvoker, findProjectWideRecoveryRisks, findMissingGen2FunctionServices, validateFunctionSecretAccess, validateSecretPolicy, findPrivilegedProjectRoles } from '../scripts/gates/firebase-audit-schema.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -568,6 +568,16 @@ test('Gate 6 requires a distinct owner sign-off plus two independent release rev
   }
   assert.ok(verifier.includes('requireApprovals(repo, process.env.GITHUB_RUN_ID, 3'));
   assert.ok(gate6.includes('needs: [preflight, owner-signoff, independent-reviewer-one, independent-reviewer-two]'));
+});
+
+test('Gate 6 requires the configured owner login to approve the owner environment', () => {
+  const history = [
+    { state: 'approved', user: { login: 'owner-one' }, environments: [{ name: 'recovery-release-owner' }] },
+    { state: 'approved', user: { login: 'reviewer-one' }, environments: [{ name: 'recovery-release-review-1' }] },
+  ];
+  assert.equal(requireNamedEnvironmentApprover(history, 'recovery-release-owner', 'Owner-One'), true);
+  assert.throws(() => requireNamedEnvironmentApprover(history, 'recovery-release-owner', 'different-owner'), /did not approve environment/);
+  assert.throws(() => requireNamedEnvironmentApprover(history, 'recovery-release-review-1', 'owner-one'), /did not approve environment/);
 });
 
 test('Gate 6 requires one owner and two distinct protected-environment reviewers', () => {
