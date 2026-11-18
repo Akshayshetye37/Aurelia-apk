@@ -97,6 +97,26 @@ jobs:
           java-version: '21'
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
 
+      - name: Build candidate Functions before granting deployment credentials
+        working-directory: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix functions --ignore-scripts --no-audit --no-fund
+          npm --prefix functions run build
+          npm install --global firebase-tools@13.31.2 --ignore-scripts --no-audit --no-fund
+          node --input-type=commonjs -e '
+            const fs = require("node:fs");
+            const config = JSON.parse(fs.readFileSync("firebase.json", "utf8"));
+            if (!config.functions || config.functions.source !== "functions" || config.functions.runtime !== "nodejs22") {
+              throw new Error("Unexpected Firebase Functions deployment configuration");
+            }
+            delete config.functions.predeploy;
+            fs.writeFileSync("firebase.deploy.json", JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
+          '
+          test -s functions/lib/index.js
+          test -s firebase.deploy.json
+
       - name: Authenticate to staging Google Cloud with Workload Identity Federation
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
         with:
@@ -172,26 +192,6 @@ jobs:
           rm -f "$RUNNER_TEMP/recovery-signing-key.pem"
           echo "Staging project, matching active public pin/private key, app config, signing keystore and Secret Manager versions are present."
 
-      - name: Revoke staging deployment credentials before candidate build
-        shell: bash
-        run: |
-          set -euo pipefail
-          gcloud auth revoke --all --quiet || true
-          for credential_path in "${GOOGLE_APPLICATION_CREDENTIALS:-}" "${GOOGLE_GHA_CREDS_PATH:-}" "${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE:-}"; do
-            if [[ -n "$credential_path" ]]; then rm -f "$credential_path"; fi
-          done
-          {
-            echo 'GOOGLE_APPLICATION_CREDENTIALS='
-            echo 'GOOGLE_GHA_CREDS_PATH='
-            echo 'CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='
-          } >> "$GITHUB_ENV"
-          rm -rf "$HOME/.config/gcloud"
-          echo "Staging deployment credentials revoked before candidate-controlled build steps."
-
-      - name: Install Firebase Functions dependencies
-        working-directory: candidate
-        run: npm install --prefix functions --ignore-scripts
-
       - name: Deploy Firebase Functions with staging-only recovery enabled
         working-directory: candidate
         shell: bash
@@ -203,11 +203,10 @@ jobs:
           FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
         run: |
           set -euo pipefail
-          npm install --global firebase-tools@13.31.2
           printf 'RECOVERY_ENABLED=true\nRECOVERY_SIGNING_KEY_ID=%s\nRECOVERY_ATTESTATION_VERIFIER_URL=%s\nRECOVERY_FUNCTIONS_SERVICE_ACCOUNT=%s\nFIREBASE_WEB_API_KEY=%s\n' \
             "$ACTIVE_KID" "$VERIFIER_URL" "$FUNCTION_SA" "$FIREBASE_WEB_API_KEY" > "functions/.env.$PROJECT_ID"
-          firebase deploy --only functions --project "$PROJECT_ID" --non-interactive
-          rm -f "functions/.env.$PROJECT_ID"
+          firebase deploy --only functions --project "$PROJECT_ID" --non-interactive --config firebase.deploy.json
+          rm -f "functions/.env.$PROJECT_ID" firebase.deploy.json
           FUNCTION_JSON="$(gcloud functions describe verifyRecoveryDeviceAttestation --gen2 --project "$PROJECT_ID" --region "$GCP_REGION" --format=json)"
           echo "$FUNCTION_JSON" | jq -e --arg sa "$FUNCTION_SA" '
             .serviceConfig.serviceAccountEmail == $sa and
@@ -274,6 +273,22 @@ jobs:
             fi
             echo "PASS: ${function_name} rejects missing and invalid App Check tokens."
           done
+
+      - name: Revoke staging deployment credentials after staging qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud auth revoke --all --quiet || true
+          for credential_path in "${GOOGLE_APPLICATION_CREDENTIALS:-}" "${GOOGLE_GHA_CREDS_PATH:-}" "${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE:-}"; do
+            if [[ -n "$credential_path" ]]; then rm -f "$credential_path"; fi
+          done
+          {
+            echo 'GOOGLE_APPLICATION_CREDENTIALS='
+            echo 'GOOGLE_GHA_CREDS_PATH='
+            echo 'CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='
+          } >> "$GITHUB_ENV"
+          rm -rf "$HOME/.config/gcloud"
+          echo "Staging deployment credentials revoked before candidate-controlled build steps."
 
       - name: Generate Android project and inject staging Firebase config
         working-directory: candidate
