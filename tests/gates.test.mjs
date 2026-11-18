@@ -1026,3 +1026,21 @@ test('Gate 3 Phone Auth checks billing, region allowlist and budget declaration'
   assert.match(workflow, /SMS_ALLOWED_REGION_CODES/);
   assert.doesNotMatch(workflow, /\\n\s+SMS_ALLOWED_REGION_CODES:/);
 });
+
+
+test('Gate 3 App Check negative probes cover all 19 recovery callables', () => {
+  const workflow = read('.github/workflows/recovery-staging-deploy.yml');
+  const block = workflow.match(/functions=\(([^\n]+)\)/);
+  assert.ok(block, 'probe inventory must be explicit');
+  const actual = block[1].trim().split(/\s+/);
+  const expected = [
+    'createRecoveryAttestationChallenge','verifyRecoveryDeviceAttestation','registerRecoveryPhone',
+    'exchangeOwnerEmailLink','confirmRecoveryOwnerBinding','registerRecoveryOwnerDevice',
+    'createRecoveryPasskeyEnrollmentOptions','completeRecoveryPasskeyEnrollment','retryRecoveryPasskeyEnrollmentAlert',
+    'getRecoveryOwnerPendingAction','getRecoveryOwnerActionReadiness','createRecoveryOwnerActionOptions',
+    'completeRecoveryOwnerPasskeyAction','acknowledgeRecoveryOwnerAlert','issueRecoveryGrant','consumeRecoveryGrant',
+    'cancelRecoveryRequest','cancelRecoveryPhoneChange','activateRecoveryPhoneChange',
+  ];
+  assert.deepEqual(actual, expected);
+  assert.match(workflow, /for function_name in "\$\{functions\[@\]\}"/);
+});
