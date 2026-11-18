@@ -19,10 +19,10 @@ const envs = {
       'RECOVERY_ATTESTATION_VERIFIER_URL','RECOVERY_SIGNING_KEY_ID','RECOVERY_GRANT_PUBLIC_KEYS_JSON',
       'FIREBASE_WEB_API_KEY','ATTESTATION_APP_PACKAGE','ATTESTATION_APP_MIN_VERSION','ATTESTATION_APP_SIGNER_SHA256',
       'APP_CHECK_PLAY_INTEGRITY_REGISTERED','APP_CHECK_SIGNER_SHA256'],
-    secrets: ['GCP_WORKLOAD_IDENTITY_PROVIDER','GCP_DEPLOY_SERVICE_ACCOUNT','STAGING_DEPLOY_SERVICE_ACCOUNT',
+    secrets: ['GCP_WORKLOAD_IDENTITY_PROVIDER','STAGING_DEPLOY_SERVICE_ACCOUNT',
       'GOOGLE_SERVICES_JSON_BASE64','STAGING_KEYSTORE_BASE64','STAGING_KEYSTORE_PASSWORD','STAGING_KEY_ALIAS','STAGING_KEY_PASSWORD'],
   },
-  'recovery-device': { variables: ['DEVICE_SERIAL','DEVICE_SERIAL_ALLOWLIST'], secrets: [] },
+  'recovery-verifier-deploy': { variables: ['GCP_PROJECT_ID','PRODUCTION_GCP_PROJECT_ID','GCP_REGION','RECOVERY_ATTESTATION_SERVICE_ACCOUNT','RECOVERY_FUNCTIONS_SERVICE_ACCOUNT','ATTESTATION_APP_PACKAGE','ATTESTATION_APP_MIN_VERSION','ATTESTATION_APP_SIGNER_SHA256'], secrets: ['GCP_WORKLOAD_IDENTITY_PROVIDER','VERIFIER_DEPLOY_SERVICE_ACCOUNT'] },\n  'recovery-device': { variables: ['DEVICE_SERIAL','DEVICE_SERIAL_ALLOWLIST'], secrets: [] },
   'recovery-production-audit': {
     variables: ['PRODUCTION_GCP_PROJECT_ID','PRODUCTION_RECOVERY_SIGNING_KEY_ID','PRODUCTION_GCP_REGION','ATTESTATION_VERIFIER_SERVICE',
       'ATTESTATION_VERIFIER_CALLER_SERVICE_ACCOUNT','REQUIRED_SECRETS','RUNTIME_SERVICE_ACCOUNTS',
@@ -64,7 +64,7 @@ const reviewers = state.reviewers ?? {
   'recovery-release-owner': 'owner-one',
   'recovery-release-review-1': 'reviewer-one',
   'recovery-release-review-2': 'reviewer-two',
-  'recovery-attestation': 'reviewer-one',
+  'recovery-attestation': 'reviewer-one',\n  'recovery-verifier-deploy': 'reviewer-one',
   'recovery-staging': 'reviewer-one',
   'recovery-device': 'reviewer-one',
   'recovery-production-audit': 'reviewer-two'
