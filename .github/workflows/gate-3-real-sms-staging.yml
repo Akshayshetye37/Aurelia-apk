@@ -42,12 +42,16 @@ jobs:
       STAGING_FUNCTIONS_BASE_URL: ${{ needs.staging-deploy.outputs.functions_base_url }}
       RECOVERY_CALLABLES: ${{ needs.staging-deploy.outputs.recovery_callables }}
       EXPECTED_SIGNER_SHA256: ${{ needs.staging-deploy.outputs.signer_sha256 }}
+      EXPECTED_APP_SHA256: ${{ needs.staging-deploy.outputs.app_sha256 }}
+      EXPECTED_TEST_SHA256: ${{ needs.staging-deploy.outputs.test_sha256 }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout trusted gate tooling
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Enforce whole-app HTTPS boundary
+        run: node scripts/check-https-boundary.mjs
       - name: Candidate remains the exact frozen branch head
         run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
       - name: Confirm staging is isolated from production
@@ -79,6 +83,17 @@ jobs:
           test -n "$signer" && test -n "$expected_signer" && test "$signer" = "$expected_signer"
           test_signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' staging-artifacts/androidTest-certificate.txt | tr -d ':')"
           test "$test_signer" = "$signer"
+          test -n "$EXPECTED_APP_SHA256" && test "$actual_app" = "$EXPECTED_APP_SHA256"
+          test -n "$EXPECTED_TEST_SHA256" && test "$actual_test" = "$EXPECTED_TEST_SHA256"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs staging-artifacts/app-release.apk > apks/app.cert.txt
+          "$APKSIGNER" verify --verbose --print-certs staging-artifacts/app-release-androidTest.apk > apks/test.cert.txt
+          for cert in apks/app.cert.txt apks/test.cert.txt; do
+            grep -Eq 'Verified using v[23] scheme.*: true' "$cert"
+            got="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$cert" | tr -d ':')"
+            test -n "$got" && test "$got" = "$expected_signer"
+          done
           cp staging-artifacts/app-release.apk apks/app.apk
           cp staging-artifacts/app-release-androidTest.apk apks/test.apk
           printf '%s\n' "$actual_app" > apks/app.sha256
@@ -86,9 +101,7 @@ jobs:
       - name: Reject missing or invalid App Check tokens on every recovery callable
         run: |
           set -euo pipefail
-          if [[ -z "$STAGING_FUNCTIONS_BASE_URL" ]]; then
-            export STAGING_FUNCTIONS_BASE_URL="https://${GCP_REGION}-${STAGING_PROJECT}.cloudfunctions.net"
-          fi
+          test -n "$STAGING_FUNCTIONS_BASE_URL"
           node scripts/gates/staging-probes.mjs
       - name: Write and bundle Gate 3 evidence
         run: |

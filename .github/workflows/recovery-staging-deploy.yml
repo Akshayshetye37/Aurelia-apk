@@ -32,6 +32,12 @@ on:
       signer_sha256:
         description: Release signer certificate SHA-256 fingerprint
         value: ${{ jobs.deploy-and-build.outputs.signer_sha256 }}
+      app_sha256:
+        description: Independently exported release APK SHA-256
+        value: ${{ jobs.deploy-and-build.outputs.app_sha256 }}
+      test_sha256:
+        description: Independently exported Android test APK SHA-256
+        value: ${{ jobs.deploy-and-build.outputs.test_sha256 }}
 
 permissions:
   contents: read
@@ -52,6 +58,8 @@ jobs:
       functions_base_url: ${{ steps.staging-outputs.outputs.functions_base_url }}
       recovery_callables: ${{ steps.staging-outputs.outputs.recovery_callables }}
       signer_sha256: ${{ steps.staging-outputs.outputs.signer_sha256 }}
+      app_sha256: ${{ steps.staging-outputs.outputs.app_sha256 }}
+      test_sha256: ${{ steps.staging-outputs.outputs.test_sha256 }}
     environment: recovery-staging
     timeout-minutes: 60
     env:
@@ -355,6 +363,8 @@ jobs:
           echo "functions_base_url=$STAGING_FUNCTIONS_BASE_URL" >> "$GITHUB_OUTPUT"
           echo "recovery_callables=$RECOVERY_CALLABLES" >> "$GITHUB_OUTPUT"
           echo "signer_sha256=$EXPECTED_SIGNER_SHA256" >> "$GITHUB_OUTPUT"
+          echo "app_sha256=$(awk '$2=="app-release.apk" {print $1}' "$RUNNER_TEMP/apk-sha256.txt")" >> "$GITHUB_OUTPUT"
+          echo "test_sha256=$(awk '$2=="app-release-androidTest.apk" {print $1}' "$RUNNER_TEMP/apk-sha256.txt")" >> "$GITHUB_OUTPUT"
 
       - name: Upload staging APK and non-secret fingerprints
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

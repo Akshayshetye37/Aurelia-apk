@@ -40,6 +40,8 @@ jobs:
         with:
           ref: ${{ inputs.candidate_sha }}
           persist-credentials: false
+      - name: Enforce whole-app HTTPS boundary
+        run: node scripts/check-https-boundary.mjs
 
       - name: Verify immutable candidate and staging workflow run
         shell: bash
