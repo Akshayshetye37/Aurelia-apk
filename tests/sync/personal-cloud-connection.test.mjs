@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PersonalCloudConnection } from "../../src/sync/personal-cloud-connection.mjs";
+import { createPersonalCloudStorage } from "../../src/storage/personal-cloud-storage.mjs";
+
 
 function harness({search="",projectStatus=200}={}) {
  const local=new Map(),sessionMap=new Map(),calls=[],assigned=[];
@@ -10,7 +12,7 @@ function harness({search="",projectStatus=200}={}) {
  let query=search; const location={origin:"https://aurelia.example",pathname:"/app",get search(){return query;},hash:"",assign:u=>assigned.push(u)};
  const history={replaceState(){query="";}};
  const fetchImpl=async(url,options={})=>{calls.push({url,options});if(url.includes("/token"))return{ok:true,json:async()=>({access_token:"memory-token",expires_in:3600})};if(url.includes("cloudresourcemanager"))return{ok:projectStatus===200,json:async()=>({projectId:"aurelia-test-12345",projectNumber:"123",state:"ACTIVE"})};return{ok:true,json:async()=>({})};};
- return{connection:new PersonalCloudConnection({storage,session,cryptoImpl,location,history,fetchImpl,now:()=>1000}),storage,session,calls,assigned};
+ return{connection:new PersonalCloudConnection({persistence:createPersonalCloudStorage({storage,session}),cryptoImpl,location,history,fetchImpl,now:()=>1000}),storage,session,calls,assigned};
 }
 const clientId="1234567890-abcdef.apps.googleusercontent.com",projectId="aurelia-test-12345";
 test("defaults to local-only with no data upload",()=>{const h=harness();assert.equal(h.connection.status.mode,"LOCAL_ONLY");assert.equal(h.connection.status.dataUploadEnabled,false);});
