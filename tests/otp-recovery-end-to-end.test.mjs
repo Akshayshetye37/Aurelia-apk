@@ -185,7 +185,7 @@ test('Android writes an owner UID binding only after the server confirms the imm
 
 test('attestation deployment requires separate deploy and Functions identities', () => {
   const workflow = read('.github/workflows/recovery-attestation-deploy.yml');
-  assert.match(workflow, /DEPLOY_SERVICE_ACCOUNT: \$\{\{ secrets\.GCP_DEPLOY_SERVICE_ACCOUNT \}\}/);
+  assert.match(workflow, /DEPLOY_SERVICE_ACCOUNT: \$\{\{ secrets\.VERIFIER_DEPLOY_SERVICE_ACCOUNT \}\}/);\n  assert.match(workflow, /^\\s*environment: recovery-verifier-deploy\\s*$/m);\n  assert.doesNotMatch(workflow, /secrets\\.GCP_DEPLOY_SERVICE_ACCOUNT/);
   assert.ok(workflow.includes('if [[ "$DEPLOY_SERVICE_ACCOUNT" == "$FUNCTIONS_SERVICE_ACCOUNT" ||'));
   assert.ok(workflow.includes('"$RUNTIME_SERVICE_ACCOUNT" == "$FUNCTIONS_SERVICE_ACCOUNT"'));
   assert.ok(workflow.includes('"$RUNTIME_SERVICE_ACCOUNT" == "$DEPLOY_SERVICE_ACCOUNT"'));
