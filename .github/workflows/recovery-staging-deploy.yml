@@ -222,7 +222,7 @@ jobs:
           PHONE_FUNCTION_SA: ${{ vars.RECOVERY_PHONE_SERVICE_ACCOUNT }}
           GRANT_FUNCTION_SA: ${{ vars.RECOVERY_GRANT_SERVICE_ACCOUNT }}
           FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
-          WEBAUTHN_RP_ID: ${{ vars.WEBAUTHN_RP_ID }}
+          WEBAUTHN_RP_ID: ${{ vars.STAGING_WEBAUTHN_RP_ID }}
           WEBAUTHN_RP_NAME: ${{ vars.STAGING_WEBAUTHN_RP_NAME }}
         run: |
           set -euo pipefail
