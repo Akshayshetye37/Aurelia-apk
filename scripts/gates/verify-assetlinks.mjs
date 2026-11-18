@@ -4,12 +4,12 @@ import { verifyAssetLinks, validateStagingFingerprintInventory } from './assetli
 try {
   const fingerprints = String(process.env.STAGING_WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS ?? '')
     .split(/[;,\s]+/).filter(Boolean);
-  const stagingFingerprints = validateStagingFingerprintInventory(fingerprints);\n  const evidence = await verifyAssetLinks({
+  const stagingFingerprints = validateStagingFingerprintInventory(fingerprints);
+  const evidence = await verifyAssetLinks({
     rpId: process.env.STAGING_WEBAUTHN_RP_ID,
     packageName: process.env.ANDROID_APPLICATION_ID || 'com.aurelia.pms',
     fingerprints: stagingFingerprints,
     apiKey: process.env.DIGITAL_ASSET_LINKS_API_KEY,
-
   });
   fs.mkdirSync('evidence', { recursive: true });
   fs.writeFileSync('evidence/assetlinks-verification.json', JSON.stringify(evidence, null, 2) + '\n');
