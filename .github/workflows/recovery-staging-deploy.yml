@@ -193,8 +193,8 @@ jobs:
 
       - name: Verify hosted Digital Asset Links with Google API before enabling passkeys
         env:
-          WEBAUTHN_RP_ID: ${{ vars.WEBAUTHN_RP_ID }}
-          WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS }}
+          WEBAUTHN_RP_ID: ${{ vars.STAGING_WEBAUTHN_RP_ID }}
+          WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.STAGING_WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS }}
           ANDROID_APPLICATION_ID: ${{ vars.ANDROID_APPLICATION_ID }}
           DIGITAL_ASSET_LINKS_API_KEY: ${{ secrets.DIGITAL_ASSET_LINKS_API_KEY }}
         run: node scripts/gates/verify-assetlinks.mjs
@@ -223,7 +223,7 @@ jobs:
           GRANT_FUNCTION_SA: ${{ vars.RECOVERY_GRANT_SERVICE_ACCOUNT }}
           FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
           WEBAUTHN_RP_ID: ${{ vars.WEBAUTHN_RP_ID }}
-          WEBAUTHN_RP_NAME: ${{ vars.WEBAUTHN_RP_NAME }}
+          WEBAUTHN_RP_NAME: ${{ vars.STAGING_WEBAUTHN_RP_NAME }}
         run: |
           set -euo pipefail
           npm install --global firebase-tools@13.31.2
