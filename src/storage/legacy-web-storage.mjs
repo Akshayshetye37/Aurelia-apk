@@ -158,3 +158,79 @@ export function createPreferenceStorage({ storage, mode = "strict" } = {}) {
     }
   });
 }
+
+const PERSONAL_CLOUD_CONFIG_KEY = "aurelia.personal-cloud.config.v1";
+const PERSONAL_CLOUD_STATE_KEY = "aurelia.personal-cloud.oauth-state.v1";
+const PERSONAL_CLOUD_VERIFIER_KEY = "aurelia.personal-cloud.oauth-verifier.v1";
+const PERSONAL_CLOUD_KEYS = new Set([
+  PERSONAL_CLOUD_CONFIG_KEY,
+  PERSONAL_CLOUD_STATE_KEY,
+  PERSONAL_CLOUD_VERIFIER_KEY
+]);
+
+/** Personal-cloud OAuth storage remains inside the sole Web Storage boundary. */
+export function createPersonalCloudStorage({ storage, session } = {}) {
+  const durable = resolveStorage(storage);
+  let transient;
+  try { transient = session !== undefined ? session : globalThis.sessionStorage; } catch { transient = null; }
+  const requireKey = key => {
+    if (!PERSONAL_CLOUD_KEYS.has(key)) {
+      throw Object.assign(new Error("Personal cloud storage key is not allowed."), {
+        code: "PERSONAL_CLOUD_STORAGE_KEY_NOT_ALLOWED"
+      });
+    }
+  };
+  const requireStore = (target, key, operation) => {
+    requireKey(key);
+    if (!target || typeof target[operation] !== "function") {
+      throw Object.assign(new Error("Personal cloud browser storage is unavailable."), {
+        code: "PERSONAL_CLOUD_STORAGE_UNAVAILABLE"
+      });
+    }
+    return target;
+  };
+  return Object.freeze({
+    readConfig() {
+      return requireStore(durable, PERSONAL_CLOUD_CONFIG_KEY, "getItem").getItem(PERSONAL_CLOUD_CONFIG_KEY);
+    },
+    writeConfig(value) {
+      const target = requireStore(durable, PERSONAL_CLOUD_CONFIG_KEY, "setItem");
+      target.setItem(PERSONAL_CLOUD_CONFIG_KEY, String(value));
+      if (target.getItem(PERSONAL_CLOUD_CONFIG_KEY) !== String(value)) {
+        throw Object.assign(new Error("Personal cloud configuration failed read-back verification."), {
+          code: "PERSONAL_CLOUD_STORAGE_READBACK_FAILED"
+        });
+      }
+    },
+    clearConfig() {
+      const target = requireStore(durable, PERSONAL_CLOUD_CONFIG_KEY, "removeItem");
+      target.removeItem(PERSONAL_CLOUD_CONFIG_KEY);
+      if (target.getItem(PERSONAL_CLOUD_CONFIG_KEY) !== null) {
+        throw Object.assign(new Error("Personal cloud configuration removal failed verification."), {
+          code: "PERSONAL_CLOUD_STORAGE_DELETE_FAILED"
+        });
+      }
+    },
+    readTransient(key) {
+      return requireStore(transient, key, "getItem").getItem(key);
+    },
+    writeTransient(key, value) {
+      const target = requireStore(transient, key, "setItem");
+      target.setItem(key, String(value));
+      if (target.getItem(key) !== String(value)) {
+        throw Object.assign(new Error("Personal cloud OAuth state failed read-back verification."), {
+          code: "PERSONAL_CLOUD_STORAGE_READBACK_FAILED"
+        });
+      }
+    },
+    clearTransient(key) {
+      const target = requireStore(transient, key, "removeItem");
+      target.removeItem(key);
+      if (target.getItem(key) !== null) {
+        throw Object.assign(new Error("Personal cloud OAuth state removal failed verification."), {
+          code: "PERSONAL_CLOUD_STORAGE_DELETE_FAILED"
+        });
+      }
+    }
+  });
+}
