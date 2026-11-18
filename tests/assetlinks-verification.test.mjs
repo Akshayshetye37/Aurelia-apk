@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { verifyAssetLinks, REQUIRED_ASSETLINKS_RELATIONS } from '../scripts/gates/assetlinks-verification.mjs';
+import { verifyAssetLinks, validateStagingFingerprintInventory, REQUIRED_ASSETLINKS_RELATIONS } from '../scripts/gates/assetlinks-verification.mjs';
 
 const fp1 = '11'.repeat(32).match(/.{2}/g).join(':');
 const fp2 = '22'.repeat(32).match(/.{2}/g).join(':');
@@ -46,4 +46,12 @@ test('Digital Asset Links verifier rejects unlinked Google API results and missi
   await assert.rejects(() => verifyAssetLinks({ ...fixture(), fetchImpl: unlinked.fetchImpl }), /did not confirm/);
   const { fetchImpl } = mockFetch();
   await assert.rejects(() => verifyAssetLinks({ ...fixture(), fingerprints: [fp1], requiredFingerprint: fp2, fetchImpl }), /production APK signer is absent/);
+});
+
+
+test('staging RP fingerprint inventory accepts only one valid staging signer', () => {
+  assert.deepEqual(validateStagingFingerprintInventory([fp1]), [fp1]);
+  assert.throws(() => validateStagingFingerprintInventory([]), /exactly one staging/);
+  assert.throws(() => validateStagingFingerprintInventory([fp1, fp2]), /exactly one staging/);
+  assert.throws(() => validateStagingFingerprintInventory(['invalid']), /Invalid SHA-256/);
 });
