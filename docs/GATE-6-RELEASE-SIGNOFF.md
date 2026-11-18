@@ -8,6 +8,12 @@ This gate is a release-control record, not an implementation test. No CI result,
 
 The release candidate must be one immutable 40-character Git commit SHA on `work/p0-storage-hardening`. Record the branch, commit URL, source-tree SHA, build timestamp and exact Firebase staging project. No cherry-picks, rebases, amendments or configuration changes after the candidate is frozen. Any relevant change creates a new candidate and invalidates affected gate evidence.
 
+## Required gate order and transport security
+
+Execute and review gates strictly in this order: **Gate 1 → Gate 2 → Gate 3 → Gate 4 → Gate 5 → Gate 6**. A later gate cannot substitute for, waive, or retroactively qualify an earlier gate. Every evidence record must reference the same frozen candidate SHA and trusted control revision.
+
+The application transport baseline is HTTPS-only: Capacitor Android scheme is `https`; Android `usesCleartextTraffic` and the generated network-security base config deny cleartext; runtime application and Firebase Functions source may use HTTP only for explicit loopback/emulator endpoints. The automated HTTPS boundary check is required in Gates 1–5. A passing static boundary check does not replace endpoint/TLS, certificate, or live-device verification.
+
 ## Required gate evidence
 
 | Gate | Required immutable evidence | Pass criteria | Current result |
