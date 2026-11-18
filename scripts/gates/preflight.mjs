@@ -96,6 +96,7 @@ const environmentReviewRules = {
   'recovery-release-review-2': { only: roles?.reviewer2 },
   'recovery-attestation': { exclude: [roles?.maintainer, roles?.tester, roles?.operator] },
   'recovery-staging': { exclude: [roles?.maintainer, roles?.tester, roles?.operator] },
+  'recovery-verifier-deploy': { exclude: [roles?.maintainer, roles?.tester, roles?.operator] },
   'recovery-device': { exclude: [roles?.maintainer, roles?.tester, roles?.operator] },
   'recovery-production-audit': { exclude: [roles?.maintainer, roles?.tester, roles?.operator] },
 };
