@@ -5542,6 +5542,7 @@ import { PmsLocalFirstWriteCoordinator } from "./src/storage/pms-local-first-wri
 import { settlePaymentToRepository } from "./src/payments/repository-settlement-service.mjs";
 import { commitOperationalStateMutation, commitRoomStateMutation, commitRoomCatalogMutation, commitGuestStateMutation, commitExpenseMutation, commitRestaurantFolioCharge, commitRestaurantTableSettlement } from "./src/storage/repository-operational-mutation-service.mjs";
 import { commitReservationToRepository } from "./src/storage/repository-reservation-service.mjs";
+import { PersonalCloudConnection, mountPersonalCloudPanel } from "./src/sync/personal-cloud-connection.mjs";
 
 if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "MODULE_STARTED";
 const legacyStorage = createLegacyMigrationStorage();
@@ -5669,6 +5670,10 @@ try {
   setStatus("Canonical storage verified. Loading the existing PMS interface in compatibility mode…");
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "APPLICATION_MODULES";
   await replayApplicationScripts();
+  // Optional personal cloud is disconnected by default; local PMS startup never depends on it.
+  const personalCloud = new PersonalCloudConnection();
+  window.AureliaPersonalCloud = personalCloud;
+  mountPersonalCloudPanel({ connection: personalCloud });
   if (window.__AURELIA_BOOTSTRAP_DIAGNOSTICS) window.__AURELIA_BOOTSTRAP_DIAGNOSTICS.phase = "READY";
   if (shield) shield.remove();
   console.info("[Aurelia Lifecycle] Canonical storage bootstrap verified; legacy UI compatibility mode remains active. UI cutover is not claimed.");
