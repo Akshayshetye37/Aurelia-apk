@@ -1,4 +1,5 @@
 name: Gate 3 - Staging deploy, negative probes and signed APK
+
 on:
   workflow_dispatch:
     inputs:
@@ -6,22 +7,76 @@ on:
         description: Frozen candidate SHA (40 lowercase hex)
         required: true
         type: string
+
 permissions: {}
+
 concurrency:
   group: gate-3-${{ inputs.candidate_sha }}
   cancel-in-progress: false
+
 jobs:
+  preflight:
+    name: Gate 3 - Validate frozen candidate before deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      candidate_sha: ${{ steps.candidate.outputs.sha }}
+    steps:
+      - name: Enforce the Gate 3 control branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_ref="refs/heads/${GATE_CONTROL_BRANCH:-integration/ledger-patch}"
+          if [[ "$GITHUB_REF" != "$expected_ref" ]]; then
+            echo "::error::Gate 3 must be dispatched from $expected_ref (received $GITHUB_REF)."
+            exit 1
+          fi
+        env:
+          GATE_CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
+
+      - name: Checkout trusted control-branch tooling
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify candidate is the exact frozen branch HEAD
+        id: candidate
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "$REPO" != "Akshayshetye37/Aurelia-apk" ]]; then
+            echo "::error::Unexpected repository: $REPO"
+            exit 1
+          fi
+          node scripts/gates/check-candidate.mjs \
+            --sha "$CANDIDATE_SHA" \
+            --repo "$REPO" \
+            --branch "work/p0-storage-hardening"
+          echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
+
   staging-deploy:
-    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    name: Gate 3 - Deploy frozen candidate to staging
+    needs: preflight
     uses: ./.github/workflows/recovery-staging-deploy.yml
     with:
-      candidate_sha: ${{ inputs.candidate_sha }}
+      candidate_sha: ${{ needs.preflight.outputs.candidate_sha }}
     permissions:
       contents: read
       id-token: write
+
   evidence:
-    needs: staging-deploy
-    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    name: Gate 3 - Verify deployment and produce qualification evidence
+    needs:
+      - preflight
+      - staging-deploy
+    if: ${{ needs.preflight.result == 'success' && needs.staging-deploy.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -30,80 +85,170 @@ jobs:
       id-token: write
       attestations: write
     env:
-      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
+      CANDIDATE_BRANCH: work/p0-storage-hardening
       REPO: ${{ github.repository }}
       STAGING_PROJECT: ${{ needs.staging-deploy.outputs.staging_project_id }}
       PRODUCTION_PROJECT: ${{ needs.staging-deploy.outputs.production_project_id }}
-      PRODUCTION_PROJECT_ID: ${{ needs.staging-deploy.outputs.production_project_id }}
       STAGING_PROJECT_ID: ${{ needs.staging-deploy.outputs.staging_project_id }}
+      PRODUCTION_PROJECT_ID: ${{ needs.staging-deploy.outputs.production_project_id }}
       STAGING_REGION: ${{ needs.staging-deploy.outputs.gcp_region }}
-      GCP_REGION: ${{ needs.staging-deploy.outputs.gcp_region }}
       STAGING_FUNCTIONS_BASE_URL: ${{ needs.staging-deploy.outputs.functions_base_url }}
       RECOVERY_CALLABLES: ${{ needs.staging-deploy.outputs.recovery_callables }}
       EXPECTED_SIGNER_SHA256: ${{ needs.staging-deploy.outputs.signer_sha256 }}
       GH_TOKEN: ${{ github.token }}
+
     steps:
-      - name: Checkout trusted gate tooling
+      - name: Checkout the exact trusted control revision
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Candidate remains the exact frozen branch head
-        run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
-      - name: Confirm staging is isolated from production
+
+      - name: Independently revalidate frozen candidate
+        shell: bash
         run: |
           set -euo pipefail
-          test -n "$STAGING_PROJECT"
-          test -n "$PRODUCTION_PROJECT"
-          test "$STAGING_PROJECT" != "$PRODUCTION_PROJECT"
-          test "$CANDIDATE_BRANCH" = "work/p0-storage-hardening"
-      - name: Download APKs from the trusted reusable staging deployment
+          node scripts/gates/check-candidate.mjs \
+            --sha "$CANDIDATE_SHA" \
+            --repo "$REPO" \
+            --branch "$CANDIDATE_BRANCH"
+
+      - name: Validate staging isolation and all deployment outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in STAGING_PROJECT PRODUCTION_PROJECT STAGING_PROJECT_ID \
+                      PRODUCTION_PROJECT_ID STAGING_REGION STAGING_FUNCTIONS_BASE_URL \
+                      RECOVERY_CALLABLES EXPECTED_SIGNER_SHA256; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing required staging deployment output: $name"
+              exit 1
+            fi
+          done
+
+          test "$STAGING_PROJECT" = "$STAGING_PROJECT_ID"
+          test "$PRODUCTION_PROJECT" = "$PRODUCTION_PROJECT_ID"
+          if [[ "$STAGING_PROJECT" == "$PRODUCTION_PROJECT" ]]; then
+            echo "::error::Staging and production project IDs must differ."
+            exit 1
+          fi
+
+          normalized_signer="$(printf '%s' "$EXPECTED_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          if [[ ! "$normalized_signer" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Expected signer fingerprint must be a SHA-256 digest."
+            exit 1
+          fi
+
+          if [[ "$CANDIDATE_BRANCH" != "work/p0-storage-hardening" ]]; then
+            echo "::error::Unexpected candidate branch."
+            exit 1
+          fi
+
+      - name: Download APKs from the successful staging deployment
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: aurelia-recovery-staging-apk-${{ inputs.candidate_sha }}
+          name: aurelia-recovery-staging-apk-${{ needs.preflight.outputs.candidate_sha }}
           path: staging-artifacts
-      - name: Verify exact candidate APK hashes and signer
+
+      - name: Verify exact APK hashes and release signer
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p apks evidence
-          test -s staging-artifacts/app-release.apk
-          test -s staging-artifacts/app-release-androidTest.apk
+
+          for file in app-release.apk app-release-androidTest.apk \
+                      apk-sha256.txt apk-certificate.txt androidTest-certificate.txt; do
+            test -s "staging-artifacts/$file" || {
+              echo "::error::Missing staging artifact: $file"
+              exit 1
+            }
+          done
+
           expected_app="$(awk '$2=="app-release.apk" {print $1}' staging-artifacts/apk-sha256.txt)"
           expected_test="$(awk '$2=="app-release-androidTest.apk" {print $1}' staging-artifacts/apk-sha256.txt)"
           actual_app="$(sha256sum staging-artifacts/app-release.apk | awk '{print $1}')"
           actual_test="$(sha256sum staging-artifacts/app-release-androidTest.apk | awk '{print $1}')"
-          test -n "$expected_app" && test "$actual_app" = "$expected_app"
-          test -n "$expected_test" && test "$actual_test" = "$expected_test"
+
+          [[ "$expected_app" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$expected_test" =~ ^[0-9a-f]{64}$ ]]
+          test "$actual_app" = "$expected_app"
+          test "$actual_test" = "$expected_test"
+
           signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' staging-artifacts/apk-certificate.txt | tr -d ':')"
-          expected_signer="$(printf '%s' "$EXPECTED_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
-          test -n "$signer" && test -n "$expected_signer" && test "$signer" = "$expected_signer"
           test_signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' staging-artifacts/androidTest-certificate.txt | tr -d ':')"
+          expected_signer="$(printf '%s' "$EXPECTED_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+
+          [[ "$signer" =~ ^[0-9a-f]{64}$ ]]
+          test "$signer" = "$expected_signer"
           test "$test_signer" = "$signer"
+
           cp staging-artifacts/app-release.apk apks/app.apk
           cp staging-artifacts/app-release-androidTest.apk apks/test.apk
           printf '%s\n' "$actual_app" > apks/app.sha256
           printf '%s\n' "$actual_test" > apks/test.sha256
-      - name: Reject missing or invalid App Check tokens on every recovery callable
+
+      - name: Reject missing and invalid App Check tokens on every recovery callable
+        shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "$STAGING_FUNCTIONS_BASE_URL" ]]; then
-            export STAGING_FUNCTIONS_BASE_URL="https://${GCP_REGION}-${STAGING_PROJECT}.cloudfunctions.net"
-          fi
+          # staging-probes.mjs validates the HTTPS origin against the exact
+          # staging project and region, requires a non-empty callable list,
+          # tests missing and invalid tokens, and writes evidence/probes.json.
           node scripts/gates/staging-probes.mjs
-      - name: Write and bundle Gate 3 evidence
+
+      - name: Revalidate candidate before writing PASS evidence
+        shell: bash
         run: |
           set -euo pipefail
-          node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
+          node scripts/gates/check-candidate.mjs \
+            --sha "$CANDIDATE_SHA" \
+            --repo "$REPO" \
+            --branch "$CANDIDATE_BRANCH"
+
+      - name: Write and bundle Gate 3 qualification evidence
+        shell: bash
+        run: |
+          set -euo pipefail
           app_hash="$(sha256sum apks/app.apk | awk '{print $1}')"
           test_hash="$(sha256sum apks/test.apk | awk '{print $1}')"
           signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' staging-artifacts/apk-certificate.txt | tr -d ':')"
-          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg p "$STAGING_PROJECT" --arg s "$signer" --arg r "$GITHUB_RUN_ID"             '{apkSha256:$a,testApkSha256:$t,stagingProjectId:$p,signerSha256:$s,stagingRunId:($r|tonumber)}' > evidence/details.json
-          node scripts/gates/write-evidence.mjs --gate 3 --sha "$CANDIDATE_SHA" --status PASS
-          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf bundle.tar evidence
+
+          jq -n \
+            --arg app "$app_hash" \
+            --arg test "$test_hash" \
+            --arg project "$STAGING_PROJECT_ID" \
+            --arg signer "$signer" \
+            --arg candidate "$CANDIDATE_SHA" \
+            --arg candidateBranch "$CANDIDATE_BRANCH" \
+            --arg controlBranch "$GITHUB_REF_NAME" \
+            --arg deploymentRun "$GITHUB_RUN_ID" \
+            '{
+              apkSha256: $app,
+              testApkSha256: $test,
+              stagingProjectId: $project,
+              signerSha256: $signer,
+              candidateSha: $candidate,
+              candidateBranch: $candidateBranch,
+              controlBranch: $controlBranch,
+              stagingRunId: ($deploymentRun | tonumber)
+            }' > evidence/details.json
+
+          test -s evidence/probes.json
+          node scripts/gates/write-evidence.mjs \
+            --gate 3 \
+            --sha "$CANDIDATE_SHA" \
+            --status PASS
+
+          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+            -cf bundle.tar evidence
+          test -s bundle.tar
+
       - name: Attest Gate 3 evidence bundle
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
           subject-path: bundle.tar
+
       - name: Upload Gate 3 evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -111,7 +256,8 @@ jobs:
           path: bundle.tar
           if-no-files-found: error
           retention-days: 90
-      - name: Upload exact Gate 3 APKs
+
+      - name: Upload exact Gate 3 APKs and checksums
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: gate-3-apks
