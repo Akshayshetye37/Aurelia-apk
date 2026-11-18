@@ -13,8 +13,17 @@ if (baseUrl.protocol !== 'https:' || baseUrl.username || baseUrl.password || bas
 const expectedHost = `${region}-${project}.cloudfunctions.net`;
 if (baseUrl.hostname !== expectedHost) fail('callable base URL does not belong to the configured staging project and region');
 const base = baseUrl.origin;
-const names = [...new Set((process.env.RECOVERY_CALLABLES ?? '').split(',').map((name) => name.trim()).filter(Boolean))];
-if (!names.length) fail('RECOVERY_CALLABLES is empty');
+const pinnedNames = [
+  'createRecoveryAttestationChallenge', 'verifyRecoveryDeviceAttestation',
+  'registerRecoveryPhone', 'exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
+  'registerRecoveryOwnerDevice', 'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant',
+  'consumeRecoveryGrant', 'cancelRecoveryRequest', 'cancelRecoveryPhoneChange',
+  'activateRecoveryPhoneChange',
+];
+const names = (process.env.RECOVERY_CALLABLES ?? '').split(',').map((name) => name.trim()).filter(Boolean);
+if (names.length !== pinnedNames.length || new Set(names).size !== pinnedNames.length || pinnedNames.some((name) => !names.includes(name))) {
+  fail('RECOVERY_CALLABLES must exactly match the pinned 12-callable recovery surface');
+}
 for (const name of names) if (!/^[A-Za-z0-9_-]+$/.test(name)) fail('RECOVERY_CALLABLES contains an invalid callable name');
 const cases = [
   { label: 'no App Check token', headers: {} },
@@ -30,10 +39,16 @@ for (const name of names) for (const testCase of cases) {
       body: JSON.stringify({ data: {} }), signal: AbortSignal.timeout(10_000),
     });
     status = response.status;
-    await response.body?.cancel();
-  } catch (error) { fail(`${name} (${testCase.label}): request failed: ${error.name}`); }
-  results.push({ callable: name, case: testCase.label, status });
-  if (![401, 403].includes(status)) fail(`${name} answered ${status} for ${testCase.label}; expected 401 or 403`);
+    const bodyText = await response.text();
+    let body;
+    try { body = JSON.parse(bodyText); } catch { fail(`${name} (${testCase.label}): response was not JSON`); }
+    const errorStatus = body?.error?.status;
+    const errorMessage = String(body?.error?.message ?? '');
+    if (![401, 403].includes(status) || errorStatus !== 'UNAUTHENTICATED' || !/app.?check|attestation/i.test(errorMessage)) {
+      fail(`${name} (${testCase.label}): expected explicit App Check UNAUTHENTICATED rejection, got HTTP ${status} / ${errorStatus ?? 'no error status'}`);
+    }
+  } catch (error) { if (String(error.message).startsWith('GATE FAILED:')) throw error; fail(`${name} (${testCase.label}): request failed: ${error.name}`); }
+  results.push({ callable: name, case: testCase.label, status, errorStatus: 'UNAUTHENTICATED' });
 }
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/probes.json', JSON.stringify(results, null, 2));
