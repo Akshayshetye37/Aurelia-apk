@@ -50,6 +50,8 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Enforce whole-app HTTPS boundary
+        run: node scripts/check-https-boundary.mjs
       - name: Candidate remains the exact frozen branch head
         run: node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$REPO" --branch "$CANDIDATE_BRANCH"
       - name: Confirm staging is isolated from production
