@@ -1016,3 +1016,13 @@ test('Gate 3 verifier deploy uses the dedicated environment and deploy identity'
   assert.match(workflow, /secrets\.VERIFIER_DEPLOY_SERVICE_ACCOUNT/);
   assert.doesNotMatch(workflow, /secrets\.GCP_DEPLOY_SERVICE_ACCOUNT/);
 });
+
+
+test('Gate 3 Phone Auth checks billing, region allowlist and budget declaration', () => {
+  const workflow = read('.github/workflows/recovery-staging-deploy.yml');
+  assert.match(workflow, /gcloud billing projects describe/);
+  assert.match(workflow, /check-phone-auth-config\.mjs/);
+  assert.match(workflow, /SMS_BUDGET_ALERTS_CONFIGURED/);
+  assert.match(workflow, /SMS_ALLOWED_REGION_CODES/);
+  assert.doesNotMatch(workflow, /\\n\s+SMS_ALLOWED_REGION_CODES:/);
+});
