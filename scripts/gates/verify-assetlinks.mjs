@@ -2,10 +2,10 @@ import fs from 'node:fs';
 import { verifyAssetLinks } from './assetlinks-verification.mjs';
 
 try {
-  const fingerprints = String(process.env.WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS ?? '')
+  const fingerprints = String(process.env.STAGING_WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS ?? '')
     .split(/[;,\\s]+/).filter(Boolean);
   const evidence = await verifyAssetLinks({
-    rpId: process.env.WEBAUTHN_RP_ID,
+    rpId: process.env.STAGING_WEBAUTHN_RP_ID,
     packageName: process.env.ANDROID_APPLICATION_ID || 'com.aurelia.pms',
     fingerprints,
     apiKey: process.env.DIGITAL_ASSET_LINKS_API_KEY,
