@@ -326,7 +326,7 @@ jobs:
           REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
         run: |
           set -euo pipefail
-          functions=(createRecoveryAttestationChallenge verifyRecoveryDeviceAttestation registerRecoveryPhone exchangeOwnerEmailLink confirmRecoveryOwnerBinding registerRecoveryOwnerDevice acknowledgeRecoveryOwnerAlert issueRecoveryGrant consumeRecoveryGrant cancelRecoveryRequest cancelRecoveryPhoneChange activateRecoveryPhoneChange)
+          functions=(createRecoveryAttestationChallenge verifyRecoveryDeviceAttestation registerRecoveryPhone exchangeOwnerEmailLink confirmRecoveryOwnerBinding registerRecoveryOwnerDevice createRecoveryPasskeyEnrollmentOptions completeRecoveryPasskeyEnrollment retryRecoveryPasskeyEnrollmentAlert getRecoveryOwnerPendingAction getRecoveryOwnerActionReadiness createRecoveryOwnerActionOptions completeRecoveryOwnerPasskeyAction acknowledgeRecoveryOwnerAlert issueRecoveryGrant consumeRecoveryGrant cancelRecoveryRequest cancelRecoveryPhoneChange activateRecoveryPhoneChange)
           for function_name in "${functions[@]}"; do
             url="https://${REGION}-${PROJECT_ID}.cloudfunctions.net/${function_name}"
             missing_code="$(curl --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 10 -sS -o "$RUNNER_TEMP/appcheck-missing.json" -w '%{http_code}' -X POST "$url" -H 'Content-Type: application/json' --data '{"data":{}}')"
