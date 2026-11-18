@@ -32,14 +32,33 @@ export class PersonalCloudConnection {
   }
   cleanUrl() { if(this.history?.replaceState) this.history.replaceState({},"",this.location.origin+this.location.pathname+(this.location.hash||"")); }
   async completeRedirect() {
-    const p=new URLSearchParams(this.location.search||""), code=p.get("code"); if(!code) return this.status;
+    const p=new URLSearchParams(this.location.search||"");
+    const code=p.get("code"), oauthError=p.get("error");
+    if(!code&&!oauthError) return this.status;
     const state=p.get("state"), expected=this.session.getItem(STATE_KEY), verifier=this.session.getItem(VERIFIER_KEY);
     this.session.removeItem(STATE_KEY); this.session.removeItem(VERIFIER_KEY);
-    if(!state||state!==expected||!verifier||!this.config) { this.cleanUrl(); throw fail("CLOUD_OAUTH_STATE_INVALID","Google authorization could not be verified. Start again."); }
-    if(p.has("error")) { this.cleanUrl(); throw fail("CLOUD_OAUTH_DENIED","Google authorization was cancelled or denied."); }
+    if(!state||state!==expected||!verifier||!this.config) {
+      this.cleanUrl();
+      throw fail("CLOUD_OAUTH_STATE_INVALID","Google authorization could not be verified. Start again.");
+    }
+    if(oauthError) {
+      this.cleanUrl();
+      throw fail("CLOUD_OAUTH_DENIED","Google authorization was cancelled or denied.");
+    }
+    if(!code) {
+      this.cleanUrl();
+      throw fail("CLOUD_OAUTH_RESPONSE_INVALID","Google returned an incomplete authorization response. Start again.");
+    }
     const redirectUri=this.location.origin+this.location.pathname;
-    const response=await this.fetch(TOKEN_URL,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:this.config.clientId,code,code_verifier:verifier,grant_type:"authorization_code",redirect_uri:redirectUri})});
-    const token=await response.json(); this.cleanUrl();
+    // Remove the one-time authorization code from browser history before network I/O.
+    this.cleanUrl();
+    let response, token;
+    try {
+      response=await this.fetch(TOKEN_URL,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:this.config.clientId,code,code_verifier:verifier,grant_type:"authorization_code",redirect_uri:redirectUri})});
+      token=await response.json();
+    } catch {
+      throw fail("CLOUD_TOKEN_EXCHANGE_FAILED","Google token exchange could not be completed. Check network access and try again.");
+    }
     if(!response.ok||typeof token.access_token!=="string"||!Number.isFinite(token.expires_in)) throw fail("CLOUD_TOKEN_EXCHANGE_FAILED","Google token exchange failed. Check OAuth client and redirect URI.");
     this.accessToken=token.access_token; this.expiresAt=this.now()+token.expires_in*1000;
     try { await this.verifyProjectAccess(); } catch(e) { this.accessToken=null; this.expiresAt=0; throw e; }
