@@ -930,6 +930,7 @@ test('documented protected environments exactly match workflow references', () =
   }
   const documented = new Set([
     'recovery-staging',
+    'recovery-verifier-deploy',
     'recovery-device',
     'recovery-production-audit',
     'recovery-attestation',
