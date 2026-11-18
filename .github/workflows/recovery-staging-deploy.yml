@@ -104,6 +104,7 @@ jobs:
           set -euo pipefail
           npm install --prefix functions --ignore-scripts --no-audit --no-fund
           npm --prefix functions run build
+          npm --prefix functions test
           npm install --global firebase-tools@13.31.2 --ignore-scripts --no-audit --no-fund
           node --input-type=commonjs -e '
             const fs = require("node:fs");
@@ -278,7 +279,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gcloud auth revoke --all --quiet || true
+          gcloud auth revoke --all --quiet
+          active_accounts="$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+          if [[ -n "$active_accounts" ]]; then
+            echo "::error::Active Google Cloud credentials remain after revocation."
+            exit 1
+          fi
           for credential_path in "${GOOGLE_APPLICATION_CREDENTIALS:-}" "${GOOGLE_GHA_CREDS_PATH:-}" "${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE:-}"; do
             if [[ -n "$credential_path" ]]; then rm -f "$credential_path"; fi
           done
@@ -288,7 +294,7 @@ jobs:
             echo 'CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='
           } >> "$GITHUB_ENV"
           rm -rf "$HOME/.config/gcloud"
-          echo "Staging deployment credentials revoked before candidate-controlled build steps."
+          echo "Staging deployment credentials revoked and verified inactive before Android build."
 
       - name: Generate Android project and inject staging Firebase config
         working-directory: candidate
