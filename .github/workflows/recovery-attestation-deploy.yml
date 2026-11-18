@@ -20,7 +20,7 @@ jobs:
   deploy:
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
-    environment: recovery-staging
+    environment: recovery-verifier-deploy
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
@@ -47,7 +47,7 @@ jobs:
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          service_account: ${{ secrets.VERIFIER_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
@@ -60,7 +60,7 @@ jobs:
           REGION: ${{ vars.GCP_REGION }}
           RUNTIME_SERVICE_ACCOUNT: ${{ vars.RECOVERY_ATTESTATION_SERVICE_ACCOUNT }}
           FUNCTIONS_SERVICE_ACCOUNT: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
-          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.VERIFIER_DEPLOY_SERVICE_ACCOUNT }}
           APP_PACKAGE: ${{ vars.ATTESTATION_APP_PACKAGE }}
           APP_MIN_VERSION: ${{ vars.ATTESTATION_APP_MIN_VERSION }}
           APP_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
