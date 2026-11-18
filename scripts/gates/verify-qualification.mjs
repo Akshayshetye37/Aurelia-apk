@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { isManualAttestationFresh } from './manual-attestation-freshness.mjs';
 import crypto from 'node:crypto';
 import { fail, gh, requireApprovals, requireNamedEnvironmentApprover, requireSha, verifyBundle } from './lib.mjs';
 import { isProductionAuditEvidenceValid } from './firebase-audit-schema.mjs';
@@ -158,6 +159,7 @@ for (const kind of ['sms', 'device']) {
   const attestation = readEvidence(kind, 'attestation.json');
   const attestationBytes = fs.readFileSync(`qualification-${kind}/evidence/attestation.json`);
   const attestationHash = crypto.createHash('sha256').update(attestationBytes).digest('hex');
+  if (!isManualAttestationFresh(attestation)) fail(`${kind} manual test attestation is stale or has an invalid testedAt timestamp (maximum age 7 days)`);
   if (records[kind].details.kind !== kind ||
       !/^[0-9a-f]{64}$/.test(records[kind].details.attestationSha256 ?? '') ||
       records[kind].details.attestationSha256 !== attestationHash ||

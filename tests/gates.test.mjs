@@ -974,3 +974,27 @@ test('Gate 4 bounds best-effort ADB cleanup on the persistent physical-device ru
     'all ADB cleanup operations must have bounded execution time');
   assert.ok(cleanup.includes('rm -rf "$RUNNER_TEMP/aurelia-gate4" apks g3'));
 });
+
+import { isManualAttestationFresh } from '../scripts/gates/manual-attestation-freshness.mjs';
+
+test('manual SMS/device attestations require a testedAt timestamp within seven days', () => {
+  const now = Date.parse('2026-11-18T12:00:00Z');
+  assert.equal(isManualAttestationFresh({ testedAt: '2026-11-12T12:00:00Z' }, now), true);
+  assert.equal(isManualAttestationFresh({ testedAt: '2026-11-11T11:59:59Z' }, now), false);
+  assert.equal(isManualAttestationFresh({ testedAt: '2026-11-18T12:05:00Z' }, now), true);
+  assert.equal(isManualAttestationFresh({ testedAt: '2026-11-18T12:05:01Z' }, now), false);
+  assert.equal(isManualAttestationFresh({}, now), false);
+  assert.equal(isManualAttestationFresh(null, now), false);
+});
+
+test('Gate 3 runtime mapping keeps acknowledgeRecoveryOwnerAlert free of PHONE_PEPPER', () => {
+  const workflow = read('.github/workflows/recovery-staging-deploy.yml');
+  const mapStart = workflow.indexOf('"acknowledgeRecoveryOwnerAlert:"');
+  assert.notEqual(mapStart, -1, 'no-secret callable must be explicitly mapped');
+  const mapEnd = workflow.indexOf('"issueRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"', mapStart);
+  assert.notEqual(mapEnd, -1);
+  assert.equal(workflow.slice(mapStart, mapEnd).includes('PHONE_PEPPER'), false);
+  const runtimeMap = workflow.slice(workflow.indexOf('bindings=('), workflow.indexOf('declare -A runtime_secret_sets='));
+  assert.ok(runtimeMap.includes('acknowledgeRecoveryOwnerAlert:'));
+  assert.ok(!/acknowledgeRecoveryOwnerAlert:.*PHONE_PEPPER/.test(runtimeMap));
+});
