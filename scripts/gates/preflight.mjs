@@ -35,7 +35,7 @@ const names = (endpoint, jq) => {
 const lower = values => values.map(value => String(value).toLowerCase());
 const apiRepo = `repos/${repo}`;
 const envNames = [
-  'recovery-staging', 'recovery-device', 'recovery-production-audit', 'recovery-attestation',
+  'recovery-staging', 'recovery-verifier-deploy', 'recovery-device', 'recovery-production-audit', 'recovery-attestation',
   'recovery-release-owner', 'recovery-release-review-1', 'recovery-release-review-2',
 ];
 const ENVIRONMENT_REQUIREMENTS = {
@@ -68,7 +68,7 @@ const ENVIRONMENT_REQUIREMENTS = {
     oneOfVariables: [['PRODUCTION_GCP_REGION', 'GCP_REGION']],
     secrets: ['GCP_WORKLOAD_IDENTITY_PROVIDER', 'GCP_AUDIT_SERVICE_ACCOUNT'],
   },
-  'recovery-attestation': { variables: [], secrets: [] },
+  'recovery-verifier-deploy': {\n    variables: ['GCP_PROJECT_ID', 'PRODUCTION_GCP_PROJECT_ID', 'GCP_REGION', 'RECOVERY_ATTESTATION_SERVICE_ACCOUNT', 'RECOVERY_FUNCTIONS_SERVICE_ACCOUNT', 'ATTESTATION_APP_PACKAGE', 'ATTESTATION_APP_MIN_VERSION', 'ATTESTATION_APP_SIGNER_SHA256'],\n    secrets: ['GCP_WORKLOAD_IDENTITY_PROVIDER', 'VERIFIER_DEPLOY_SERVICE_ACCOUNT'],\n  },\n  'recovery-attestation': { variables: [], secrets: [] },
   'recovery-release-owner': {
     variables: ['PRODUCTION_GCP_PROJECT_ID', 'PRODUCTION_RECOVERY_SIGNING_KEY_ID', 'PRODUCTION_RECOVERY_GRANT_PUBLIC_KEYS_JSON'],
     secrets: ['PRODUCTION_GOOGLE_SERVICES_JSON_BASE64', 'PRODUCTION_KEYSTORE_BASE64',
