@@ -4,7 +4,7 @@ export async function verifyPhoneAuthConfig({
   projectId, accessToken, allowedRegions, fetchImpl = globalThis.fetch,
 }) {
   if (!projectId || !accessToken || typeof fetchImpl !== 'function') fail('project, token and fetch implementation are required');
-  const regions = String(allowedRegions ?? '').split(/[;,\\s]+/).filter(Boolean).map(value => value.toUpperCase()).sort();
+  const regions = String(allowedRegions ?? '').split(/[;,\s]+/).filter(Boolean).map(value => value.toUpperCase()).sort();
   if (!regions.length || regions.some(value => !/^[A-Z]{2}$/.test(value)) || new Set(regions).size !== regions.length) {
     fail('SMS_ALLOWED_REGION_CODES must be a non-empty, duplicate-free list of ISO region codes');
   }
