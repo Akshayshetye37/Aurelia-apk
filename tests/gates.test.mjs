@@ -999,3 +999,20 @@ test('Gate 3 runtime mapping keeps acknowledgeRecoveryOwnerAlert free of PHONE_P
   assert.ok(runtimeMap.includes('acknowledgeRecoveryOwnerAlert:'));
   assert.ok(!/acknowledgeRecoveryOwnerAlert:.*PHONE_PEPPER/.test(runtimeMap));
 });
+
+
+test('Gate 3 staging deploy never consumes production WebAuthn RP repository variables', () => {
+  const workflow = read('.github/workflows/recovery-staging-deploy.yml');
+  assert.match(workflow, /vars\.STAGING_WEBAUTHN_RP_ID/);
+  assert.match(workflow, /vars\.STAGING_WEBAUTHN_RP_NAME/);
+  assert.match(workflow, /vars\.STAGING_WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS/);
+  assert.doesNotMatch(workflow, /vars\.WEBAUTHN_RP_ID/);
+  assert.doesNotMatch(workflow, /vars\.WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS/);
+});
+
+test('Gate 3 verifier deploy uses the dedicated environment and deploy identity', () => {
+  const workflow = read('.github/workflows/recovery-attestation-deploy.yml');
+  assert.match(workflow, /^\s*environment: recovery-verifier-deploy\s*$/m);
+  assert.match(workflow, /secrets\.VERIFIER_DEPLOY_SERVICE_ACCOUNT/);
+  assert.doesNotMatch(workflow, /secrets\.GCP_DEPLOY_SERVICE_ACCOUNT/);
+});
