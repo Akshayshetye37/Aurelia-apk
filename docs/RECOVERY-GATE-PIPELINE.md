@@ -6,7 +6,7 @@
 - Frozen candidate branch: `work/p0-storage-hardening` (`CANDIDATE_BRANCH`). This preserves the existing staging deployment branch restriction.
 - A candidate SHA must equal the current candidate branch head when each gate runs. Moving the branch invalidates the previous qualification evidence.
 - Gate workflows are dispatched from the control branch. Candidate source is checked out only where required and is never checked out or executed on the physical-device runner.
-- Gate 3 calls the trusted reusable `recovery-staging-deploy.yml` workflow from the control revision. That workflow checks out candidate source into a separate `candidate/` directory and runs it only with the staging WIF identity.
+- `recovery-verifier-deploy` is isolated from `recovery-attestation`; it holds only the verifier deploy WIF identity and is restricted to the control branch. Human attestation jobs receive no cloud deploy credentials.\n- Gate 3 calls the trusted reusable `recovery-staging-deploy.yml` workflow from the control revision. That workflow checks out candidate source into a separate `candidate/` directory and runs it only with the staging WIF identity.
 - Gate 4 checks out only trusted control-branch tooling, downloads Gate 3 APKs, verifies their attested hashes, and installs those APKs on the allowlisted physical handset. The self-hosted job has no OIDC permission; a separate hosted job independently re-verifies the APK hashes and attests only sanitized device metadata and log-scan reports.
 - Gate 5 uses a dedicated read-only production audit service account. It does not deploy or mutate production.
 - Gate 6 only produces `QUALIFIED_FOR_RELEASE_REVIEW`; it does not enable production recovery or change any feature flag.
@@ -30,6 +30,7 @@ Set these at repository or environment scope as indicated:
 | `REQUIRED_SECRETS` | `recovery-production-audit` environment | Comma-separated Secret Manager secret names |
 | `RUNTIME_SERVICE_ACCOUNTS` | `recovery-production-audit` environment | Comma-separated production runtime service-account emails |
 | `APPCHECK_REQUIRED_SERVICES` | `recovery-production-audit` environment | Comma-separated Firebase App Check service IDs |
+| `RELEASE_OWNER_LOGIN` | Repository | Exact GitHub login of the designated release candidate owner; Gate 6 verifies this identity approved `recovery-release-owner` |
 | `DEVICE_SERIAL` | `recovery-device` environment | Dedicated physical handset serial; never written to evidence |
 | `DEVICE_SERIAL_ALLOWLIST` | `recovery-device` environment | Comma-separated exact allowlist of permitted handset serials |
 
@@ -43,12 +44,13 @@ The staging WIF identity must be scoped to the staging project only, with no pro
 
 ## Required environment protections
 
-Configure these environments in GitHub repository Settings → Environments:
+The workflow files reference exactly seven protected environments. Create all seven in GitHub repository Settings → Environments; do not treat the four attestation/release-approval environments as the complete inventory:
 
 - `recovery-staging`: required reviewer approval before staging deployment; staging-only WIF identity and signing secrets.
 - `recovery-device`: restrict deployment branches to the control branch and require the dedicated physical-device runner. The runner must provide Node.js 22+, GitHub CLI with `gh attestation verify --deny-self-hosted-runners`, Android platform-tools (`adb`), `jq`, GNU `tar`, and GNU `timeout`.
 - `recovery-attestation`: at least one required reviewer; enable **Prevent self-review**.
 - `recovery-production-audit`: required reviewer approval; production audit identity only.
+- `recovery-release-owner`: require approval by the designated candidate owner configured in repository variable `RELEASE_OWNER_LOGIN`; enable **Prevent self-review**. The owner login must be distinct from the workflow actor and manual SMS/device testers.
 - `recovery-release-review-1` and `recovery-release-review-2`: configure separate, preferably disjoint reviewer groups and enable **Prevent self-review** on both. Gate 6 runs these approvals sequentially and independently verifies two distinct approvers from the workflow-run approval history. SMS/device attestation `tester` fields must be GitHub logins, and neither tester may be one of the attestation reviewers or final release approvers.
 
 The Gate 6 approval-history API response must be checked on the first authorized Gate 6 run. Gate 6 fails closed if it does not return two distinct approved reviewers or if the triggering actor is among them.

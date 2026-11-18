@@ -3,7 +3,7 @@ set -euo pipefail
 command -v gh >/dev/null || { echo "gh CLI is required" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 1; }
 shopt -s nullglob
-files=(.github/workflows/gate-*.yml .github/workflows/gate-*.yaml .github/workflows/recovery-staging-deploy.yml)
+files=(.github/workflows/gate-*.yml .github/workflows/gate-*.yaml .github/workflows/recovery-staging-deploy.yml .github/workflows/recovery-attestation-deploy.yml)
 (("${#files[@]}" > 0)) || { echo "No gate workflows found" >&2; exit 1; }
 for file in "${files[@]}"; do
   mapfile -t refs < <(grep -Eo 'uses: [^[:space:]#]+' "$file" | awk '{print $2}' | grep -E '@v[0-9]' | sort -u || true)

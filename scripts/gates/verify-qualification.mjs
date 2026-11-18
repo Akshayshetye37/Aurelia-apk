@@ -1,5 +1,10 @@
 import fs from 'node:fs';
-import { fail, gh, requireApprovals, requireSha, verifyBundle } from './lib.mjs';
+import { isManualAttestationFresh } from './manual-attestation-freshness.mjs';
+import crypto from 'node:crypto';
+import { fail, gh, requireApprovals, requireNamedEnvironmentApprover, requireSha, verifyBundle } from './lib.mjs';
+import { isProductionAuditEvidenceValid } from './firebase-audit-schema.mjs';
+import { validateDeviceAttestation } from './device-attestation-schema.mjs';
+import { validateAssetLinksEvidence } from './assetlinks-evidence-schema.mjs';
 
 const sha = requireSha(process.env.CANDIDATE_SHA);
 const controlSha = requireSha(process.env.GITHUB_SHA);
@@ -9,16 +14,6 @@ if (!repo || repo.split('/').length !== 2 || repo.split('/').some((part) => !/^[
 let runIds;
 try { runIds = JSON.parse(process.env.RUN_IDS ?? ''); } catch { fail('RUN_IDS is not valid JSON'); }
 if (!runIds || typeof runIds !== 'object' || Array.isArray(runIds)) fail('RUN_IDS must be a JSON object');
-const candidateBranch = process.env.CANDIDATE_BRANCH;
-if (!candidateBranch || candidateBranch.split('/').some((part) => !/^[A-Za-z0-9_.-]+$/.test(part) || part === '..')) fail('CANDIDATE_BRANCH is invalid');
-const encodedBranch = candidateBranch.split('/').map(encodeURIComponent).join('/');
-const head = gh(`repos/${repo}/git/ref/heads/${encodedBranch}`).object?.sha;
-if (head !== sha) fail('candidate is no longer the current branch head; all qualification evidence is invalidated');
-const encodedControlBranch = controlBranch.split('/').map(encodeURIComponent).join('/');
-const currentControlHead = gh(`repos/${repo}/git/ref/heads/${encodedControlBranch}`).object?.sha;
-if (currentControlHead !== controlSha) fail('control branch moved; all gate evidence must be regenerated');
-const pinnedCandidateSha = fs.readFileSync('gates/qualification-candidate-sha.txt', 'utf8').trim();
-if (pinnedCandidateSha !== sha) fail('candidate SHA does not match the trusted control-branch qualification pin');
 const workflows = {
   '1': 'gate-1-encrypted-storage.yml', '2': 'gate-2-recovery-runtime.yml',
   '3': 'gate-3-real-sms-staging.yml', '4': 'gate-4-physical-device.yml',
@@ -28,10 +23,23 @@ const workflows = {
 if ((process.env.RUN_IDS ?? '').length > 2000) fail('RUN_IDS exceeds 2000 characters');
 const expectedRunKeys = Object.keys(workflows).sort();
 if (JSON.stringify(Object.keys(runIds).sort()) !== JSON.stringify(expectedRunKeys)) fail('RUN_IDS must contain exactly 1, 2, 3, 4, 5, sms and device');
-for (const key of expectedRunKeys) {
+const normalizedRunIds = expectedRunKeys.map((key) => {
   const value = String(runIds[key]);
-  if (!value.length || ![...value].every((digit) => digit >= '0' && digit <= '9')) fail(`invalid run ID for ${key}`);
-}
+  if (!/^[1-9][0-9]{0,19}$/.test(value) || !Number.isSafeInteger(Number(value))) fail(`invalid run ID for ${key}`);
+  return value;
+});
+if (new Set(normalizedRunIds).size !== normalizedRunIds.length) fail('each gate must use a distinct workflow run ID');
+const candidateBranch = process.env.CANDIDATE_BRANCH;
+if (!candidateBranch || candidateBranch.split('/').some((part) => !/^[A-Za-z0-9_.-]+$/.test(part) || part === '..')) fail('CANDIDATE_BRANCH is invalid');
+const pinnedCandidateSha = fs.readFileSync('gates/qualification-candidate-sha.txt', 'utf8').trim();
+if (pinnedCandidateSha !== sha) fail('candidate SHA does not match the trusted control-branch qualification pin');
+// ---- offline validation complete; GitHub API access begins below ----
+const encodedBranch = candidateBranch.split('/').map(encodeURIComponent).join('/');
+const head = gh(`repos/${repo}/git/ref/heads/${encodedBranch}`).object?.sha;
+if (head !== sha) fail('candidate is no longer the current branch head; all qualification evidence is invalidated');
+const encodedControlBranch = controlBranch.split('/').map(encodeURIComponent).join('/');
+const currentControlHead = gh(`repos/${repo}/git/ref/heads/${encodedControlBranch}`).object?.sha;
+if (currentControlHead !== controlSha) fail('control branch moved; all gate evidence must be regenerated');
 const records = {};
 for (const [gate, workflowFile] of Object.entries(workflows)) {
   if (!runIds[gate]) fail(`missing run ID for gate ${gate}`);
@@ -66,23 +74,108 @@ const testApkHash = records['3'].details.testApkSha256;
 if (!/^[0-9a-f]{64}$/.test(apkHash ?? '') || !/^[0-9a-f]{64}$/.test(testApkHash ?? '')) fail('Gate 3 APK hashes are invalid');
 if (!/^[0-9a-f]{64}$/.test(records['3'].details.signerSha256 ?? '')) fail('Gate 3 APK signer fingerprint is invalid');
 const probes = readEvidence('3', 'probes.json');
+const requiredProbeNames = [
+  'createRecoveryAttestationChallenge',
+  'verifyRecoveryDeviceAttestation',
+  'registerRecoveryPhone',
+  'exchangeOwnerEmailLink',
+  'confirmRecoveryOwnerBinding',
+  'registerRecoveryOwnerDevice',
+  'createRecoveryPasskeyEnrollmentOptions',
+  'completeRecoveryPasskeyEnrollment',
+  'retryRecoveryPasskeyEnrollmentAlert',
+  'getRecoveryOwnerPendingAction',
+  'getRecoveryOwnerActionReadiness',
+  'createRecoveryOwnerActionOptions',
+  'completeRecoveryOwnerPasskeyAction',
+  'acknowledgeRecoveryOwnerAlert',
+  'issueRecoveryGrant',
+  'consumeRecoveryGrant',
+  'cancelRecoveryRequest',
+  'cancelRecoveryPhoneChange',
+  'activateRecoveryPhoneChange'
+];
 const probeNames = new Set(Array.isArray(probes) ? probes.map((probe) => probe.callable) : []);
 const expectedProbeCases = new Set(['no App Check token', 'invalid App Check token']);
-if (!Array.isArray(probes) || !probes.length || probes.length !== probeNames.size * 2 || probes.some((probe) => ![401, 403].includes(probe.status) || !expectedProbeCases.has(probe.case)) || [...probeNames].some((name) => new Set(probes.filter((probe) => probe.callable === name).map((probe) => probe.case)).size !== 2)) fail('Gate 3 App Check negative probes did not cover every callable twice');
+if (!Array.isArray(probes) || probeNames.size !== requiredProbeNames.length ||
+    requiredProbeNames.some((name) => !probeNames.has(name)) ||
+    probes.length !== requiredProbeNames.length * 2 ||
+    probes.some((probe) => ![401, 403].includes(probe.status) || !expectedProbeCases.has(probe.case)) ||
+    [...probeNames].some((name) => new Set(probes.filter((probe) => probe.callable === name).map((probe) => probe.case)).size !== 2)) {
+  fail('Gate 3 App Check negative probes did not cover the exact complete recovery callable inventory twice');
+}
 if (!records['3'].details.stagingProjectId || records['3'].details.stagingProjectId === records['5'].details.productionProjectId) fail('Gate 3 staging project is missing or matches production');
-if (!records['4'].details.deviceLabel || !records['4'].details.deviceModel || records['4'].details.apkSha256 !== apkHash || records['4'].details.testApkSha256 !== testApkHash) fail('Gate 4 device record or APK hash does not match Gate 3');
+if (!records['4'].details.deviceLabel || !records['4'].details.deviceModel ||
+    !records['4'].details.manufacturer || !records['4'].details.buildFingerprint ||
+    !Number.isInteger(Number(records['4'].details.apiLevel)) || Number(records['4'].details.apiLevel) < 24 ||
+    records['4'].details.apkSha256 !== apkHash || records['4'].details.testApkSha256 !== testApkHash) {
+  fail('Gate 4 physical device identity, Android API level or APK hash does not match Gate 3');
+}
 if (records['4'].details.verifiedBoot !== 'green' || records['4'].details.bootloaderLocked !== true) fail('Gate 4 physical device boot state is not locked and verified');
 const gate4LogScan = readEvidence('4', 'log-scan.json');
 if (!Array.isArray(gate4LogScan.findings) || gate4LogScan.findings.length) fail('Gate 4 device log scan did not pass');
 if (records['5'].details.productionRecoveryEnabled !== false || !records['5'].details.productionProjectId) fail('Gate 5 did not attest production recovery OFF');
+const stagingAssetLinks = readEvidence('3', 'assetlinks-verification.json');
+if (!/^[0-9a-f]{64}$/.test(records['3'].details.assetLinksVerificationSha256 ?? '') ||
+    sha256File('qualification-3/evidence/assetlinks-verification.json') !== records['3'].details.assetLinksVerificationSha256) {
+  fail('Gate 3 Google Digital Asset Links evidence digest is invalid');
+}
+try { validateAssetLinksEvidence(stagingAssetLinks, records['3'].details.signerSha256); }
+catch (error) { fail(error.message); }
+
 const productionAudit = readEvidence('5', 'production-audit.json');
-if (productionAudit.project !== records['5'].details.productionProjectId || !Array.isArray(productionAudit.problems) || productionAudit.problems.length || !productionAudit.auditedResources?.functions) {
-  fail('Gate 5 production audit evidence is incomplete or reports problems');
+let productionRelease;
+try { productionRelease = JSON.parse(fs.readFileSync('production-release/production-release.json', 'utf8')); }
+catch { fail('Gate 6 production release build record is missing or invalid'); }
+if (productionRelease.candidateSha !== sha || productionRelease.candidateBranch !== candidateBranch ||
+    productionRelease.productionProjectId !== records['5'].details.productionProjectId ||
+    productionRelease.productionProjectId === records['3'].details.stagingProjectId ||
+    !/^[0-9a-f]{64}$/.test(productionRelease.packageLockSha256 ?? '') ||
+    sha256File('production-release/package-lock.json') !== productionRelease.packageLockSha256 ||
+    productionRelease.packageLockSha256 !== records['3'].details.packageLockSha256 ||
+    !/^[0-9a-f]{64}$/.test(productionRelease.apkSha256 ?? '') ||
+    !/^[0-9a-f]{64}$/.test(productionRelease.testApkSha256 ?? '') ||
+    !/^[0-9a-f]{64}$/.test(productionRelease.signerSha256 ?? '')) {
+  fail('Gate 6 production APK is not bound to the frozen candidate, production project, APK hashes and signer');
 }
+if (productionAudit.productionRecoveryEnabled !== false) fail('Gate 5 production audit does not explicitly confirm recovery OFF');
+if (productionRelease.activeKid !== productionAudit.recoverySigningKeyId) fail('production APK public-key ring active kid does not match the production grant signer configuration');
+if (!/^[0-9a-f]{64}$/.test(productionRelease.assetLinksVerificationSha256 ?? '') ||
+    sha256File('production-release/assetlinks-verification.json') !== productionRelease.assetLinksVerificationSha256) {
+  fail('Gate 6 production Digital Asset Links evidence digest is invalid');
+}
+let productionAssetLinks;
+try { productionAssetLinks = JSON.parse(fs.readFileSync('production-release/assetlinks-verification.json', 'utf8')); }
+catch { fail('Gate 6 production Digital Asset Links evidence is missing or invalid'); }
+try { validateAssetLinksEvidence(productionAssetLinks, productionRelease.signerSha256); }
+catch (error) { fail(error.message); }
+if (!isProductionAuditEvidenceValid(productionAudit, records['5'].details.productionProjectId, productionRelease.signerSha256)) {
+  fail('Gate 5 production audit evidence is incomplete, lacks the production APK signer in Firebase inventory, or reports test phone numbers/problems');
+}
+fs.mkdirSync('evidence', { recursive: true });
+fs.copyFileSync('production-release/production-release.json', 'evidence/production-release.json');
+fs.copyFileSync('production-release/assetlinks-verification.json', 'evidence/production-assetlinks-verification.json');
 for (const kind of ['sms', 'device']) {
-  if (records[kind].details.kind !== kind || !/^[0-9a-f]{64}$/.test(records[kind].details.attestationSha256 ?? '') || records[kind].details.apkSha256 !== apkHash) fail(`${kind} attestation is invalid or for a different Gate 3 APK`);
+  const attestation = readEvidence(kind, 'attestation.json');
+  const attestationBytes = fs.readFileSync(`qualification-${kind}/evidence/attestation.json`);
+  const attestationHash = crypto.createHash('sha256').update(attestationBytes).digest('hex');
+  if (!isManualAttestationFresh(attestation)) fail(`${kind} manual test attestation is stale or has an invalid testedAt timestamp (maximum age 7 days)`);
+  if (records[kind].details.kind !== kind ||
+      !/^[0-9a-f]{64}$/.test(records[kind].details.attestationSha256 ?? '') ||
+      records[kind].details.attestationSha256 !== attestationHash ||
+      records[kind].details.apkSha256 !== apkHash ||
+      attestation.kind !== kind || attestation.apkSha256 !== apkHash ||
+      typeof attestation.tester !== 'string' || !attestation.tester) {
+    fail(`${kind} attestation is invalid, digest-mismatched or for a different Gate 3 APK`);
+  }
+  if (kind === 'device') {
+    try { validateDeviceAttestation(attestation, records['4'].details); }
+    catch (error) { fail(error.message); }
+  }
 }
-const approvers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 2, process.env.ACTOR);
+const approvers = requireApprovals(repo, process.env.GITHUB_RUN_ID, 3, process.env.ACTOR, ['recovery-release-owner', 'recovery-release-review-1', 'recovery-release-review-2']);
+const approvalHistory = gh(`repos/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}/approvals`);
+requireNamedEnvironmentApprover(approvalHistory, 'recovery-release-owner', process.env.RELEASE_OWNER_LOGIN);
 const smsAttestation = readEvidence('sms', 'attestation.json');
 const deviceAttestation = readEvidence('device', 'attestation.json');
 const testers = [smsAttestation.tester, deviceAttestation.tester].map((login) => String(login).toLowerCase());
@@ -90,7 +183,10 @@ if (testers.some((tester) => approvers.some((approver) => approver.toLowerCase()
 fs.mkdirSync('evidence', { recursive: true });
 fs.writeFileSync('evidence/qualification-result.json', JSON.stringify({
   candidateSha: sha, controlSha, status: 'QUALIFIED_FOR_RELEASE_REVIEW', apkSha256: apkHash, testApkSha256: testApkHash,
+  productionRelease: { productionProjectId: productionRelease.productionProjectId, activeKid: productionRelease.activeKid, packageLockSha256: productionRelease.packageLockSha256, assetLinksVerificationSha256: productionRelease.assetLinksVerificationSha256, apkSha256: productionRelease.apkSha256, testApkSha256: productionRelease.testApkSha256, signerSha256: productionRelease.signerSha256 },
   gates: Object.fromEntries(Object.entries(records).map(([gate, record]) => [gate, { runId: record.runId, completedAt: record.completedAt }])),
-  approvers, productionRecoveryEnabled: false, verifiedAt: new Date().toISOString(),
+  device: { deviceLabel: deviceAttestation.deviceLabel, deviceModel: deviceAttestation.deviceModel,
+    androidVersion: deviceAttestation.androidVersion, hardwareSecurityLevel: deviceAttestation.hardwareSecurityLevel },
+  releaseOwner: process.env.RELEASE_OWNER_LOGIN, approvers, productionRecoveryEnabled: false, verifiedAt: new Date().toISOString(),
 }, null, 2));
 console.log('QUALIFIED FOR RELEASE REVIEW. Production recovery remains OFF.');

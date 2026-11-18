@@ -1,12 +1,6 @@
 name: Recovery staging deployment and APK
 
 on:
-  workflow_dispatch:
-    inputs:
-      candidate_sha:
-        description: Optional exact candidate SHA for direct staging qualification
-        required: false
-        type: string
   workflow_call:
     inputs:
       candidate_sha:
@@ -43,7 +37,7 @@ concurrency:
 
 jobs:
   deploy-and-build:
-    if: (github.workflow_ref == format('{0}/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/{1}', github.repository, vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')) || (github.workflow_ref == format('{0}/.github/workflows/recovery-staging-deploy.yml@refs/heads/work/p0-storage-hardening', github.repository))
+    if: github.workflow_ref == format('{0}/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/{1}', github.repository, vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
     runs-on: ubuntu-latest
     outputs:
       staging_project_id: ${{ steps.staging-outputs.outputs.staging_project_id }}
@@ -55,7 +49,7 @@ jobs:
     environment: recovery-staging
     timeout-minutes: 60
     env:
-      CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
       CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
       GH_TOKEN: ${{ github.token }}
@@ -63,7 +57,7 @@ jobs:
       PRODUCTION_PROJECT: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
       STAGING_FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
-      RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'createRecoveryAttestationChallenge,verifyRecoveryDeviceAttestation,registerRecoveryPhone,exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,issueRecoveryGrant,consumeRecoveryGrant,cancelRecoveryRequest,cancelRecoveryPhoneChange,activateRecoveryPhoneChange' }}
+      RECOVERY_CALLABLES: 'createRecoveryAttestationChallenge,verifyRecoveryDeviceAttestation,registerRecoveryPhone,exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,createRecoveryPasskeyEnrollmentOptions,completeRecoveryPasskeyEnrollment,retryRecoveryPasskeyEnrollmentAlert,getRecoveryOwnerPendingAction,getRecoveryOwnerActionReadiness,createRecoveryOwnerActionOptions,completeRecoveryOwnerPasskeyAction,acknowledgeRecoveryOwnerAlert,issueRecoveryGrant,consumeRecoveryGrant,cancelRecoveryRequest,cancelRecoveryPhoneChange,activateRecoveryPhoneChange'
       EXPECTED_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
     steps:
       - name: Checkout trusted workflow control revision
@@ -74,14 +68,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          case "$GITHUB_WORKFLOW_REF" in
-            "$GITHUB_REPOSITORY/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/$CONTROL_BRANCH")
-              node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$GITHUB_REPOSITORY" --branch "$CANDIDATE_BRANCH" ;;
-            "$GITHUB_REPOSITORY/.github/workflows/recovery-staging-deploy.yml@refs/heads/work/p0-storage-hardening")
-              test "$CANDIDATE_BRANCH" = "work/p0-storage-hardening"
-              test "$CANDIDATE_SHA" = "$GITHUB_SHA" ;;
-            *) echo "::error::Untrusted workflow ref cannot invoke staging deployment."; exit 1 ;;
-          esac
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/$CONTROL_BRANCH"
+          node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$GITHUB_REPOSITORY" --branch "$CANDIDATE_BRANCH"
       - name: Checkout candidate source as build input
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -112,6 +100,8 @@ jobs:
           PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
           REGION: ${{ vars.GCP_REGION }}
           FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
+          PHONE_FUNCTION_SA: ${{ vars.RECOVERY_PHONE_SERVICE_ACCOUNT }}
+          GRANT_FUNCTION_SA: ${{ vars.RECOVERY_GRANT_SERVICE_ACCOUNT }}
           VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
           ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
           PUBLIC_KEYS: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
@@ -119,6 +109,13 @@ jobs:
           APP_CHECK_REGISTERED: ${{ vars.APP_CHECK_PLAY_INTEGRITY_REGISTERED }}
           APP_CHECK_SIGNER_SHA256: ${{ vars.APP_CHECK_SIGNER_SHA256 }}
           ATTESTATION_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
+          WEBAUTHN_RP_ID: ${{ vars.STAGING_WEBAUTHN_RP_ID }}
+          WEBAUTHN_RP_NAME: ${{ vars.STAGING_WEBAUTHN_RP_NAME }}
+          WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.STAGING_WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS }}
+          ANDROID_APPLICATION_ID: ${{ vars.ANDROID_APPLICATION_ID }}
+          DIGITAL_ASSET_LINKS_API_KEY: ${{ secrets.DIGITAL_ASSET_LINKS_API_KEY }}
+          SMS_ALLOWED_REGION_CODES: ${{ vars.SMS_ALLOWED_REGION_CODES }}
+          SMS_BUDGET_ALERTS_CONFIGURED: ${{ vars.SMS_BUDGET_ALERTS_CONFIGURED }}
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
           KEYSTORE_B64: ${{ secrets.STAGING_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.STAGING_KEYSTORE_PASSWORD }}
@@ -133,11 +130,25 @@ jobs:
           if [[ "$PROJECT_ID" == "$PRODUCTION_PROJECT_ID" ]]; then
             echo "::error::Staging deployment is blocked because the project is production."; exit 1
           fi
-          for name in PROJECT_ID PRODUCTION_PROJECT_ID REGION FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS FIREBASE_WEB_API_KEY APP_CHECK_REGISTERED APP_CHECK_SIGNER_SHA256 ATTESTATION_SIGNER_SHA256 GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+          for name in PROJECT_ID PRODUCTION_PROJECT_ID REGION FUNCTION_SA PHONE_FUNCTION_SA GRANT_FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS FIREBASE_WEB_API_KEY APP_CHECK_REGISTERED APP_CHECK_SIGNER_SHA256 ATTESTATION_SIGNER_SHA256 WEBAUTHN_RP_ID WEBAUTHN_RP_NAME WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS ANDROID_APPLICATION_ID DIGITAL_ASSET_LINKS_API_KEY SMS_ALLOWED_REGION_CODES SMS_BUDGET_ALERTS_CONFIGURED GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [[ -z "${!name}" ]]; then echo "::error::Missing recovery-staging environment setting: $name"; exit 1; fi
           done
+          rp_name_re='^[A-Za-z0-9._ -]{1,64}$'
+          rp_id_re='^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*$'
+          if [[ ! "$WEBAUTHN_RP_NAME" =~ $rp_name_re ]]; then
+            echo "::error::WEBAUTHN_RP_NAME must be 1–64 safe display-name characters."
+            exit 1
+          fi
+          if [[ ! "$WEBAUTHN_RP_ID" =~ $rp_id_re ]]; then
+            echo "::error::WEBAUTHN_RP_ID must be a valid DNS relying-party identifier."
+            exit 1
+          fi
           if [[ "$PROJECT_ID" == "$PRODUCTION_PROJECT_ID" ]]; then
             echo "::error::Staging deployment is blocked because GCP_PROJECT_ID equals the configured production project."
+            exit 1
+          fi
+          if [[ "$FUNCTION_SA" == "$PHONE_FUNCTION_SA" || "$FUNCTION_SA" == "$GRANT_FUNCTION_SA" || "$PHONE_FUNCTION_SA" == "$GRANT_FUNCTION_SA" ]]; then
+            echo "::error::Verifier, phone-secret and grant-secret runtime service accounts must be distinct."
             exit 1
           fi
           if [[ "$APP_CHECK_REGISTERED" != "true" ]]; then
@@ -156,6 +167,30 @@ jobs:
           export GOOGLE_SERVICES_PATH="$RUNNER_TEMP/google-services.json"
           node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); const key=p?.api_key?.[0]?.current_key; if(!p || c.project_info?.project_id!==process.env.PROJECT_ID || key!==process.env.FIREBASE_WEB_API_KEY) process.exit(1);'
           gcloud config set project "$PROJECT_ID"
+          billing_enabled="$(gcloud billing projects describe "$PROJECT_ID" --format='value(billingEnabled)')"
+          if [[ "$billing_enabled" != "True" ]]; then
+            echo "::error::Billing must be enabled on the staging project for Firebase Phone Auth."
+            exit 1
+          fi
+          if [[ "$SMS_BUDGET_ALERTS_CONFIGURED" != "true" ]]; then
+            echo "::error::Confirm SMS budget alerts and anti-pumping controls before staging qualification."
+            exit 1
+          fi
+          GCP_ACCESS_TOKEN="$(gcloud auth print-access-token)" PROJECT_ID="$PROJECT_ID" SMS_ALLOWED_REGION_CODES="$SMS_ALLOWED_REGION_CODES" node scripts/gates/check-phone-auth-config.mjs
+          actual_verifier_url="$(gcloud run services describe aurelia-recovery-attestation --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+          if [[ -z "$actual_verifier_url" || "$actual_verifier_url" != "$VERIFIER_URL" ]]; then
+            echo "::error::RECOVERY_ATTESTATION_VERIFIER_URL does not match the deployed staging verifier service URL."
+            exit 1
+          fi
+          verifier_policy="$(gcloud run services get-iam-policy aurelia-recovery-attestation --project "$PROJECT_ID" --region "$REGION" --format=json)"
+          if echo "$verifier_policy" | jq -e '[.bindings[]? | select(.role=="roles/run.invoker") | .members[]? | select(.=="allUsers" or .=="allAuthenticatedUsers")] | length > 0' >/dev/null; then
+            echo "::error::Staging attestation verifier has a public invoker binding."
+            exit 1
+          fi
+          if ! echo "$verifier_policy" | jq -e --arg member "serviceAccount:$FUNCTION_SA" '[.bindings[]? | select(.role=="roles/run.invoker") | .members[]? | select(.==$member)] | length == 1' >/dev/null; then
+            echo "::error::Configured Functions caller identity lacks the verifier invoker binding."
+            exit 1
+          fi
           for secret in PHONE_PEPPER RECOVERY_SIGNING_KEY_PKCS8; do
             gcloud secrets describe "$secret" --project "$PROJECT_ID" >/dev/null
             version="$(gcloud secrets versions list "$secret" --project "$PROJECT_ID" --filter='state=ENABLED' --format='value(name)' | head -n 1)"
@@ -167,6 +202,22 @@ jobs:
           node -e 'const fs=require("fs"), crypto=require("crypto"); const pins=JSON.parse(process.env.PUBLIC_KEYS); const key=crypto.createPrivateKey(fs.readFileSync(process.env.RECOVERY_PRIVATE_KEY_PATH)); const publicKey=crypto.createPublicKey(key).export({type:"spki",format:"der"}).toString("base64"); if(pins[process.env.ACTIVE_KID]!==publicKey) { console.error("Active APK public pin does not match the Secret Manager signing key."); process.exit(1); }'
           rm -f "$RUNNER_TEMP/recovery-signing-key.pem"
           echo "Staging project, matching active public pin/private key, app config, signing keystore and Secret Manager versions are present."
+
+      - name: Verify hosted Digital Asset Links with Google API before enabling passkeys
+        env:
+          WEBAUTHN_RP_ID: ${{ vars.STAGING_WEBAUTHN_RP_ID }}
+          WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.STAGING_WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS }}
+          ANDROID_APPLICATION_ID: ${{ vars.ANDROID_APPLICATION_ID }}
+          DIGITAL_ASSET_LINKS_API_KEY: ${{ secrets.DIGITAL_ASSET_LINKS_API_KEY }}
+        run: node scripts/gates/verify-assetlinks.mjs
+
+      - name: Upload verified staging Digital Asset Links evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aurelia-recovery-assetlinks-${{ inputs.candidate_sha }}
+          path: evidence/assetlinks-verification.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Install Firebase Functions dependencies
         working-directory: candidate
@@ -180,12 +231,18 @@ jobs:
           ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
           VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
           FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
+          PHONE_FUNCTION_SA: ${{ vars.RECOVERY_PHONE_SERVICE_ACCOUNT }}
+          GRANT_FUNCTION_SA: ${{ vars.RECOVERY_GRANT_SERVICE_ACCOUNT }}
           FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
+          WEBAUTHN_RP_ID: ${{ vars.STAGING_WEBAUTHN_RP_ID }}
+          WEBAUTHN_RP_NAME: ${{ vars.STAGING_WEBAUTHN_RP_NAME }}
         run: |
           set -euo pipefail
           npm install --global firebase-tools@13.31.2
-          printf 'RECOVERY_ENABLED=true\nRECOVERY_SIGNING_KEY_ID=%s\nRECOVERY_ATTESTATION_VERIFIER_URL=%s\nRECOVERY_FUNCTIONS_SERVICE_ACCOUNT=%s\nFIREBASE_WEB_API_KEY=%s\n' \
-            "$ACTIVE_KID" "$VERIFIER_URL" "$FUNCTION_SA" "$FIREBASE_WEB_API_KEY" > "functions/.env.$PROJECT_ID"
+          test "$WEBAUTHN_ASSETLINKS_VERIFIED" = "true"
+          test -n "$WEBAUTHN_ANDROID_ORIGINS"
+          printf 'RECOVERY_ENABLED=true\nRECOVERY_SIGNING_KEY_ID=%s\nRECOVERY_ATTESTATION_VERIFIER_URL=%s\nRECOVERY_FUNCTIONS_SERVICE_ACCOUNT=%s\nRECOVERY_PHONE_SERVICE_ACCOUNT=%s\nRECOVERY_GRANT_SERVICE_ACCOUNT=%s\nFIREBASE_WEB_API_KEY=%s\nWEBAUTHN_RP_ID=%s\nWEBAUTHN_RP_NAME=%s\nWEBAUTHN_ANDROID_ORIGINS=%s\nWEBAUTHN_ASSETLINKS_VERIFIED=true\n' \
+            "$ACTIVE_KID" "$VERIFIER_URL" "$FUNCTION_SA" "$PHONE_FUNCTION_SA" "$GRANT_FUNCTION_SA" "$FIREBASE_WEB_API_KEY" "$WEBAUTHN_RP_ID" "$WEBAUTHN_RP_NAME" "$WEBAUTHN_ANDROID_ORIGINS" > "functions/.env.$PROJECT_ID"
           firebase deploy --only functions --project "$PROJECT_ID" --non-interactive
           rm -f "functions/.env.$PROJECT_ID"
           FUNCTION_JSON="$(gcloud functions describe verifyRecoveryDeviceAttestation --gen2 --project "$PROJECT_ID" --region "$GCP_REGION" --format=json)"
@@ -194,6 +251,13 @@ jobs:
             .serviceConfig.environmentVariables.RECOVERY_ENABLED == "true"
           ' >/dev/null
           echo "Staging recovery functions deployed with the configured service account and RECOVERY_ENABLED=true."
+          PASSKEY_FUNCTION_JSON="$(gcloud functions describe getRecoveryOwnerActionReadiness --gen2 --project "$PROJECT_ID" --region "$GCP_REGION" --format=json)"
+          echo "$PASSKEY_FUNCTION_JSON" | jq -e --arg rp "$WEBAUTHN_RP_ID" --arg origins "$WEBAUTHN_ANDROID_ORIGINS" '
+            .serviceConfig.environmentVariables.WEBAUTHN_ASSETLINKS_VERIFIED == "true" and
+            .serviceConfig.environmentVariables.WEBAUTHN_RP_ID == $rp and
+            .serviceConfig.environmentVariables.WEBAUTHN_ANDROID_ORIGINS == $origins
+          ' >/dev/null
+          echo "Staging passkey readiness is configured only after successful Google Digital Asset Links verification."
 
       - name: Verify deployed recovery runtime service accounts can access their secrets
         shell: bash
@@ -203,12 +267,27 @@ jobs:
         run: |
           set -euo pipefail
           bindings=(
+            "createRecoveryAttestationChallenge:"
+            "verifyRecoveryDeviceAttestation:"
             "registerRecoveryPhone:PHONE_PEPPER"
+            "exchangeOwnerEmailLink:"
+            "confirmRecoveryOwnerBinding:"
             "registerRecoveryOwnerDevice:PHONE_PEPPER"
-            "acknowledgeRecoveryOwnerAlert:PHONE_PEPPER"
+            "createRecoveryPasskeyEnrollmentOptions:"
+            "completeRecoveryPasskeyEnrollment:"
+            "retryRecoveryPasskeyEnrollmentAlert:"
+            "getRecoveryOwnerPendingAction:"
+            "getRecoveryOwnerActionReadiness:"
+            "createRecoveryOwnerActionOptions:"
+            "completeRecoveryOwnerPasskeyAction:"
+            "acknowledgeRecoveryOwnerAlert:"
             "issueRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"
             "consumeRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"
+            "cancelRecoveryRequest:"
+            "cancelRecoveryPhoneChange:"
+            "activateRecoveryPhoneChange:"
           )
+          declare -A runtime_secret_sets=()
           for binding in "${bindings[@]}"; do
             function_name="${binding%%:*}"
             secret_list="${binding#*:}"
@@ -218,18 +297,26 @@ jobs:
               echo "::error::Could not determine runtime service account for $function_name."
               exit 1
             fi
-            IFS=',' read -r -a secrets <<< "$secret_list"
-            for secret in "${secrets[@]}"; do
-              policy="$(gcloud secrets get-iam-policy "$secret" --project "$PROJECT_ID" --format=json)"
-              if ! echo "$policy" | jq -e --arg member "serviceAccount:$runtime_sa" '
-                [.bindings[]? | select(.role=="roles/secretmanager.secretAccessor") |
-                  .members[]? | select(. == $member)] | length > 0
-              ' >/dev/null; then
-                echo "::error::Runtime service account for $function_name lacks secretAccessor on $secret."
-                exit 1
-              fi
-            done
-            echo "PASS: $function_name runtime identity has access to its declared secrets."
+            secret_signature="$(printf '%s' "$secret_list" | tr ',' '\n' | sort | paste -sd, -)"
+            if [[ -n "${runtime_secret_sets[$runtime_sa]+present}" && "${runtime_secret_sets[$runtime_sa]}" != "$secret_signature" ]]; then
+              echo "::error::Functions sharing $runtime_sa have different secret requirements; assign isolated runtime identities."
+              exit 1
+            fi
+            runtime_secret_sets[$runtime_sa]="$secret_signature"
+            if [[ -n "$secret_list" ]]; then
+              IFS=',' read -r -a secrets <<< "$secret_list"
+              for secret in "${secrets[@]}"; do
+                policy="$(gcloud secrets get-iam-policy "$secret" --project "$PROJECT_ID" --format=json)"
+                if ! echo "$policy" | jq -e --arg member "serviceAccount:$runtime_sa" '
+                  [.bindings[]? | select(.role=="roles/secretmanager.secretAccessor") |
+                    .members[]? | select(. == $member)] | length > 0
+                ' >/dev/null; then
+                  echo "::error::Runtime service account for $function_name lacks secretAccessor on $secret."
+                  exit 1
+                fi
+              done
+            fi
+            echo "PASS: $function_name runtime identity matches its exact secret set."
           done
 
       - name: Probe missing and invalid App Check tokens on every recovery callable
@@ -239,7 +326,7 @@ jobs:
           REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
         run: |
           set -euo pipefail
-          functions=(createRecoveryAttestationChallenge verifyRecoveryDeviceAttestation registerRecoveryPhone exchangeOwnerEmailLink confirmRecoveryOwnerBinding registerRecoveryOwnerDevice acknowledgeRecoveryOwnerAlert issueRecoveryGrant consumeRecoveryGrant cancelRecoveryRequest cancelRecoveryPhoneChange activateRecoveryPhoneChange)
+          functions=(createRecoveryAttestationChallenge verifyRecoveryDeviceAttestation registerRecoveryPhone exchangeOwnerEmailLink confirmRecoveryOwnerBinding registerRecoveryOwnerDevice createRecoveryPasskeyEnrollmentOptions completeRecoveryPasskeyEnrollment retryRecoveryPasskeyEnrollmentAlert getRecoveryOwnerPendingAction getRecoveryOwnerActionReadiness createRecoveryOwnerActionOptions completeRecoveryOwnerPasskeyAction acknowledgeRecoveryOwnerAlert issueRecoveryGrant consumeRecoveryGrant cancelRecoveryRequest cancelRecoveryPhoneChange activateRecoveryPhoneChange)
           for function_name in "${functions[@]}"; do
             url="https://${REGION}-${PROJECT_ID}.cloudfunctions.net/${function_name}"
             missing_code="$(curl --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 10 -sS -o "$RUNNER_TEMP/appcheck-missing.json" -w '%{http_code}' -X POST "$url" -H 'Content-Type: application/json' --data '{"data":{}}')"
@@ -329,6 +416,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/staging-artifacts"
           cp "$APK" "$RUNNER_TEMP/staging-artifacts/app-release.apk"
           cp "$TEST_APK" "$RUNNER_TEMP/staging-artifacts/app-release-androidTest.apk"
+          test -s package-lock.json
+          cp package-lock.json "$RUNNER_TEMP/staging-artifacts/package-lock.json"
           cp "$RUNNER_TEMP/apk-sha256.txt" "$RUNNER_TEMP/staging-artifacts/"
           cp "$RUNNER_TEMP/apk-certificate.txt" "$RUNNER_TEMP/staging-artifacts/"
           cp "$RUNNER_TEMP/androidTest-certificate.txt" "$RUNNER_TEMP/staging-artifacts/"

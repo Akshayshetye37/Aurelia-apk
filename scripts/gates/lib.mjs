@@ -19,6 +19,11 @@ export function requireSha(value) {
   if (!SHA_RE.test(value ?? '')) fail('candidate SHA must be 40 lowercase hex');
   return value;
 }
+export function isAttestationFresh(completedAt, now = Date.now()) {
+  const timestamp = Date.parse(completedAt ?? '');
+  return Number.isFinite(timestamp) && timestamp <= now + 5 * 60 * 1000 && now - timestamp < 7 * 864e5;
+}
+
 export const sha256File = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 export function gh(apiPath) {
   if (typeof apiPath !== 'string' || apiPath.startsWith('/') || apiPath.includes('..') || /[\r\n]/.test(apiPath)) fail('invalid GitHub API path');
@@ -31,20 +36,45 @@ export function gh(apiPath) {
   }
 }
 
-export function requireApprovals(repo, runId, minimum, actor) {
-  if (!/^[0-9]+$/.test(String(runId)) || !Number.isInteger(minimum) || minimum < 1 || typeof actor !== 'string' || !actor) fail('approval threshold, run ID or triggering actor is invalid');
-  const history = gh(`repos/${repo}/actions/runs/${runId}/approvals`);
-  if (!Array.isArray(history)) fail('workflow approval history response was not an array');
-  if (history.some((item) => ['rejected', 'changes_requested'].includes(item.state))) fail('approval history contains a rejected review');
-  const approved = [...new Set(history
-    .filter((item) => item.state === 'approved' && typeof item.user?.login === 'string')
-    .map((item) => item.user.login))];
-  if (approved.some((login) => login.toLowerCase() === actor.toLowerCase())) fail('the person who triggered the run cannot approve it');
-  if (approved.length < minimum) fail(`need ${minimum} independent approver(s), found ${approved.length}`);
-  return approved;
+export function validateEnvironmentApprovals(history, requiredEnvironments, minimum, actor) {
+  const reject = (message) => { throw new Error(message); };
+  if (!Array.isArray(history) || !Array.isArray(requiredEnvironments) ||
+      !Number.isInteger(minimum) || minimum < 1 || typeof actor !== 'string' || !actor) {
+    reject('approval history, required environments, threshold or triggering actor is invalid');
+  }
+  if (history.some((item) => ['rejected', 'changes_requested'].includes(item.state))) {
+    reject('approval history contains a rejected review');
+  }
+  const approved = history.filter((item) => item.state === 'approved' && typeof item.user?.login === 'string');
+  const scoped = requiredEnvironments.length
+    ? approved.filter((item) => (item.environments ?? []).some((environment) => requiredEnvironments.includes(environment.name)))
+    : approved;
+  const approvers = [...new Set(scoped.map((item) => item.user.login))];
+  if (approvers.some((login) => login.toLowerCase() === actor.toLowerCase())) {
+    reject('the person who triggered the run cannot approve it');
+  }
+  for (const environment of requiredEnvironments) {
+    const reviewers = new Set(approved
+      .filter((item) => (item.environments ?? []).some((entry) => entry.name === environment))
+      .map((item) => item.user.login));
+    if (!reviewers.size) reject(`protected environment ${environment} has no approved reviewer record`);
+  }
+  if (approvers.length < minimum) reject(`need ${minimum} independent approver(s), found ${approvers.length}`);
+  return approvers;
 }
 
-/** Verify a run and its provenance-attested evidence bundle before trusting its JSON record. */
+export function requireApprovals(repo, runId, minimum, actor, requiredEnvironments = []) {
+  if (!/^[0-9]+$/.test(String(runId)) || !Number.isInteger(minimum) || minimum < 1 ||
+      typeof actor !== 'string' || !actor || !Array.isArray(requiredEnvironments)) {
+    fail('approval threshold, run ID, required environments or triggering actor is invalid');
+  }
+  const history = gh(`repos/${repo}/actions/runs/${runId}/approvals`);
+  try {
+    return validateEnvironmentApprovals(history, requiredEnvironments, minimum, actor);
+  } catch (error) {
+    fail(error.message);
+  }
+}/** Verify a run and its provenance-attested evidence bundle before trusting its JSON record. */
 export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, dir }) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) fail('invalid repository name');
   if (!/^\d+$/.test(String(runId))) fail(`bad run ID for gate ${gate}`);
@@ -52,6 +82,7 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   if (!/^[A-Za-z0-9_.-]+\.ya?ml$/.test(workflowFile)) fail('invalid workflow filename');
   const run = gh(`repos/${repo}/actions/runs/${runId}`);
   if (run.status !== 'completed' || run.conclusion !== 'success') fail(`gate ${gate}: run ${runId} did not succeed`);
+  if (!isAttestationFresh(run.completed_at)) fail(`gate ${gate}: attestation run is older than the 7-day freshness window or has an invalid completion time`);
   const triggerAllowed = run.event === 'workflow_dispatch' || (['1', '2'].includes(String(gate)) && run.event === 'push');
   if (!triggerAllowed) fail(`gate ${gate}: evidence run used an unsupported trigger ${run.event}`);
   if (run.head_branch !== controlBranch) fail(`gate ${gate}: run was not on control branch ${controlBranch}`);
@@ -112,6 +143,18 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
       !SHA_RE.test(record.candidateSha ?? '')) fail(`gate ${gate}: record does not match its run`);
   if (record.runAttempt !== Number(run.run_attempt)) fail(`gate ${gate}: run attempt mismatch`);
   return record;
+}
+
+export function requireNamedEnvironmentApprover(history, environment, expectedLogin) {
+  if (!Array.isArray(history) || typeof environment !== 'string' || !environment ||
+      typeof expectedLogin !== 'string' || !/^[A-Za-z0-9-]{1,39}$/.test(expectedLogin)) {
+    throw new Error('named environment approver configuration is invalid');
+  }
+  const approved = history.some(item => item.state === 'approved' &&
+    item.user?.login?.toLowerCase() === expectedLogin.toLowerCase() &&
+    Array.isArray(item.environments) && item.environments.some(entry => entry.name === environment));
+  if (!approved) throw new Error(`required owner ${expectedLogin} did not approve environment ${environment}`);
+  return true;
 }
 
 export function requireIndependentTester(approvers, tester) {

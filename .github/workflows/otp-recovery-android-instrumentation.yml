@@ -14,8 +14,6 @@ on:
       - 'scripts/verify-android-instrumentation-results.mjs'
       - 'functions/src/**'
       - 'functions/test/**'
-      - 'functions/test/**'
-      - 'functions/src/**'
       - 'tests/otp-recovery-*.test.mjs'
       - 'tests/native-security-template.test.mjs'
       - '.github/workflows/recovery-functions.yml'
@@ -27,7 +25,12 @@ on:
       - 'android/templates/**'
       - 'scripts/patch-android.js'
       - 'scripts/verify-android-instrumentation-results.mjs'
+      - 'functions/src/**'
+      - 'functions/test/**'
+      - 'tests/otp-recovery-*.test.mjs'
       - 'tests/native-security-template.test.mjs'
+      - '.github/workflows/recovery-functions.yml'
+      - '.github/workflows/recovery-attestation-ci.yml'
       - '.github/workflows/otp-recovery-android-instrumentation.yml'
 
 permissions:

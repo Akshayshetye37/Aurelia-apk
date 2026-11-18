@@ -50,7 +50,7 @@ jobs:
           gh version
           gh attestation verify --help > "$RUNNER_TEMP/gh-attestation-help.txt"
           grep -q -- '--deny-self-hosted-runners' "$RUNNER_TEMP/gh-attestation-help.txt"
-          adb version
+          timeout -k 5s 15s adb version
           jq --version
           tar --version
           timeout --version
@@ -63,6 +63,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ADB_BIN="$(command -v adb)"
+          adb() { timeout -k 5s 30s "$ADB_BIN" "$@"; }
           [[ "$DEVICE_LABEL" =~ ^[A-Z0-9-]{3,32}$ ]]
           [[ "$DEVICE_SERIAL" =~ ^[A-Za-z0-9._:-]{3,80}$ ]]
           IFS=',' read -r -a allowed_serials <<< "$DEVICE_SERIAL_ALLOWLIST"
@@ -74,7 +76,7 @@ jobs:
           done
           [[ "$allowed" == "true" ]] || { echo "::error::Device serial is not allowlisted."; exit 1; }
           timeout -k 5s 90s adb -s "$DEVICE_SERIAL" wait-for-device
-          connected="$(adb devices | awk -v serial="$DEVICE_SERIAL" '$1==serial && $2=="device" {count++} END {print count+0}')"
+          connected="$(timeout -k 5s 15s adb devices -l | awk -v serial="$DEVICE_SERIAL" '$1==serial && $2=="device" {count++} END {print count+0}')"
           test "$connected" -eq 1
           prop() { adb -s "$DEVICE_SERIAL" shell getprop "$1" | tr -d '\r'; }
           test "$(prop ro.kernel.qemu)" != "1"
@@ -91,6 +93,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ADB_BIN="$(command -v adb)"
+          adb() { timeout -k 5s 60s "$ADB_BIN" "$@"; }
           app="com.aurelia.pms"
           runner="com.aurelia.pms.test/androidx.test.runner.AndroidJUnitRunner"
           temp="$RUNNER_TEMP/aurelia-gate4"
@@ -144,12 +148,26 @@ jobs:
           app_hash="$(sha256sum apks/app.apk | awk '{print $1}')"
           test_hash="$(sha256sum apks/test.apk | awk '{print $1}')"
           model="$(jq -r .deviceModel evidence/device.json)"
+          manufacturer="$(jq -r .manufacturer evidence/device.json)"
           version="$(jq -r .androidVersion evidence/device.json)"
-          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg label "$DEVICE_LABEL" --arg model "$model" --arg version "$version"             '{apkSha256:$a,testApkSha256:$t,deviceLabel:$label,deviceModel:$model,androidVersion:$version,verifiedBoot:"green",bootloaderLocked:true}' > evidence/details.json
+          api_level="$(jq -r .apiLevel evidence/device.json)"
+          fingerprint="$(jq -r .buildFingerprint evidence/device.json)"
+          jq -n --arg a "$app_hash" --arg t "$test_hash" --arg label "$DEVICE_LABEL" --arg model "$model" --arg manufacturer "$manufacturer" --arg version "$version" --arg api "$api_level" --arg fingerprint "$fingerprint"             '{apkSha256:$a,testApkSha256:$t,deviceLabel:$label,deviceModel:$model,manufacturer:$manufacturer,androidVersion:$version,apiLevel:$api,buildFingerprint:$fingerprint,verifiedBoot:"green",bootloaderLocked:true}' > evidence/details.json
       - name: Remove raw device logs and downloaded APKs from the self-hosted runner
         if: always()
-        run: rm -rf "$RUNNER_TEMP/aurelia-gate4" apks
+        shell: bash
+        run: |
+          set +e
+          ADB_BIN="$(command -v adb 2>/dev/null || true)"
+          if [[ -n "$ADB_BIN" ]]; then
+            timeout -k 5s 15s "$ADB_BIN" -s "$DEVICE_SERIAL" uninstall com.aurelia.pms >/dev/null 2>&1
+            timeout -k 5s 15s "$ADB_BIN" -s "$DEVICE_SERIAL" uninstall com.aurelia.pms.test >/dev/null 2>&1
+            timeout -k 5s 15s "$ADB_BIN" -s "$DEVICE_SERIAL" logcat -c >/dev/null 2>&1
+          fi
+          rm -rf "$RUNNER_TEMP/aurelia-gate4" apks g3
+          rm -f "$RUNNER_TEMP/gh-attestation-help.txt"
       - name: Upload sanitized physical-device evidence for hosted attestation
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: gate-4-device-evidence
@@ -159,6 +177,9 @@ jobs:
             evidence/log-scan.json
           if-no-files-found: error
           retention-days: 14
+      - name: Remove sanitized workspace evidence from the persistent runner
+        if: always()
+        run: rm -rf evidence staging-artifacts
   attest:
     needs: device
     if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
@@ -205,7 +226,12 @@ jobs:
           const details = JSON.parse(fs.readFileSync('device-evidence/details.json', 'utf8'));
           const scan = JSON.parse(fs.readFileSync('device-evidence/log-scan.json', 'utf8'));
           if (!/^[A-Z0-9-]{3,32}$/.test(device.deviceLabel ?? '') || device.deviceLabel !== details.deviceLabel || device.deviceLabel !== process.env.DEVICE_LABEL) fail('device label mismatch');
-          if (!device.deviceModel || device.deviceModel !== details.deviceModel || device.androidVersion !== details.androidVersion) fail('device identity mismatch');
+          if (!device.deviceModel || device.deviceModel !== details.deviceModel ||
+              !device.manufacturer || device.manufacturer !== details.manufacturer ||
+              device.androidVersion !== details.androidVersion ||
+              !/^\d+$/.test(String(device.apiLevel ?? '')) || Number(device.apiLevel) < 24 ||
+              device.apiLevel !== details.apiLevel ||
+              !device.buildFingerprint || device.buildFingerprint !== details.buildFingerprint) fail('device identity or Android API level is incomplete/mismatched');
           if (device.verifiedBoot !== 'green' || device.bootloaderLocked !== true || details.verifiedBoot !== 'green' || details.bootloaderLocked !== true) fail('device boot state is not locked and verified');
           const expectedLogFiles = ['force-stop-phase-one.txt', 'force-stop-phase-two.txt', 'grant-preflight.txt', 'logcat.txt', 'reboot-phase-one.txt', 'reboot-phase-two.txt', 'security-primitives.txt', 'sqlcipher.txt'].sort();
           const actualLogFiles = Array.isArray(scan.files) ? [...scan.files].sort() : [];

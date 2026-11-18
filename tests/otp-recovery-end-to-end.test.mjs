@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { isAttestationFresh } from '../scripts/gates/lib.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
@@ -184,7 +185,9 @@ test('Android writes an owner UID binding only after the server confirms the imm
 
 test('attestation deployment requires separate deploy and Functions identities', () => {
   const workflow = read('.github/workflows/recovery-attestation-deploy.yml');
-  assert.match(workflow, /DEPLOY_SERVICE_ACCOUNT: \$\{\{ secrets\.GCP_DEPLOY_SERVICE_ACCOUNT \}\}/);
+  assert.match(workflow, /DEPLOY_SERVICE_ACCOUNT: \$\{\{ secrets\.VERIFIER_DEPLOY_SERVICE_ACCOUNT \}\}/);
+  assert.match(workflow, /^\s*environment: recovery-verifier-deploy\s*$/m);
+  assert.doesNotMatch(workflow, /secrets\.GCP_DEPLOY_SERVICE_ACCOUNT/);
   assert.ok(workflow.includes('if [[ "$DEPLOY_SERVICE_ACCOUNT" == "$FUNCTIONS_SERVICE_ACCOUNT" ||'));
   assert.ok(workflow.includes('"$RUNTIME_SERVICE_ACCOUNT" == "$FUNCTIONS_SERVICE_ACCOUNT"'));
   assert.ok(workflow.includes('"$RUNTIME_SERVICE_ACCOUNT" == "$DEPLOY_SERVICE_ACCOUNT"'));
@@ -228,15 +231,20 @@ test('staging APK includes release-signed instrumentation companion for physical
 
 
 test('physical-device workflow consumes same-SHA release artifact and enforces real locked handset', () => {
-  const workflow = read('.github/workflows/recovery-physical-device-qualification.yml');
+  const workflow = read('.github/workflows/gate-4-physical-device.yml');
   assert.match(workflow, /runs-on: \[self-hosted, linux, x64, aurelia-android-device\]/);
-  assert.match(workflow, /\.head_sha == \$sha/);
+  assert.match(workflow, /check-candidate\.mjs/);
+  assert.match(workflow, /fetch-gate3\.mjs/);
   assert.match(workflow, /ro\.boot\.verifiedbootstate/);
   assert.match(workflow, /ro\.boot\.flash\.locked/);
-  assert.match(workflow, /am force-stop com\.aurelia\.pms/);
+  assert.match(workflow, /device\.apiLevel/);
+  assert.match(workflow, /device\.buildFingerprint/);
+  assert.match(workflow, /shell am force-stop "\$app"/);
   assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseOne/);
   assert.match(workflow, /RecoveryProcessDeathInstrumentedTest#phaseTwo/);
-  assert.match(workflow, /app-release-androidTest\.apk/);
+  assert.match(workflow, /apks\/test\.apk/);
+  assert.ok(workflow.includes('adb() { timeout -k 5s 60s "$ADB_BIN"'));
+  assert.ok(workflow.includes('timeout -k 5s 15s adb version'));
 });
 
 
@@ -251,28 +259,29 @@ test('staging deployment workflows refuse to target the production Firebase proj
 
 
 test('production flag audit proves it targets the configured production project', () => {
-  const workflow = read('.github/workflows/recovery-production-flag-audit.yml');
-  assert.match(workflow, /PRODUCTION_PROJECT_ID: \$\{\{ vars\.PRODUCTION_GCP_PROJECT_ID \}\}/);
-  assert.match(workflow, /PROJECT_ID" != "\$PRODUCTION_PROJECT_ID/);
+  const workflow = read('.github/workflows/gate-5-production-security.yml');
+  assert.match(workflow, /GCP_PROJECT_ID: \$\{\{ vars\.PRODUCTION_GCP_PROJECT_ID \}\}/);
+  assert.match(workflow, /PRODUCTION_GCP_PROJECT_ID: \$\{\{ vars\.PRODUCTION_GCP_PROJECT_ID \}\}/);
+  assert.match(read('scripts/gates/audit-production.mjs'), /project !== process\.env\.PRODUCTION_GCP_PROJECT_ID/);
 });
 
 
 test('staging and production audits verify per-function Secret Manager runtime access', () => {
-  for (const path of [
-    '.github/workflows/recovery-staging-deploy.yml',
-    '.github/workflows/recovery-production-flag-audit.yml'
-  ]) {
-    const workflow = read(path);
-    assert.match(workflow, /Verify deployed recovery runtime service accounts can access their secrets|Read-only verification of the actual deployed runtime identities/);
-    assert.match(workflow, /gcloud functions describe "\$function_name"/);
-    assert.match(workflow, /roles\/secretmanager\.secretAccessor/);
-    assert.match(workflow, /acknowledgeRecoveryOwnerAlert:PHONE_PEPPER/);
-  }
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  assert.match(staging, /roles\/secretmanager\.secretAccessor/);
+  assert.doesNotMatch(staging, /acknowledgeRecoveryOwnerAlert:PHONE_PEPPER/);
+  const production = read('scripts/gates/audit-production.mjs');
+  assert.match(read('scripts/gates/firebase-audit-schema.mjs'), /roles\/secretmanager\.secretAccessor/);
+  assert.match(production, /runtimeSecretBindings/);
+  assert.match(production, /validateFunctionSecretAccess/);
+  assert.doesNotMatch(production, /acknowledgeRecoveryOwnerAlert: \['PHONE_PEPPER'\]/);
+  assert.match(production, /REQUIRED_SECRETS/);
+  assert.match(production, /RUNTIME_SERVICE_ACCOUNTS/);
 });
 
 
 test('physical-device Gate 4 workflow reboots between committed PIN B and post-reboot unlock', () => {
-  const workflow = read('.github/workflows/recovery-physical-device-qualification.yml');
+  const workflow = read('.github/workflows/gate-4-physical-device.yml');
   assert.match(workflow, /adb -s.*reboot/);
   assert.match(workflow, /phaseOneCommitsPinBForDeviceReboot/);
   assert.match(workflow, /phaseTwoAfterDeviceRebootUnlocksPinBAndReadsDatabase/);
@@ -280,12 +289,19 @@ test('physical-device Gate 4 workflow reboots between committed PIN B and post-r
 });
 
 
-test('recovery deployment and physical qualification are pinned to the working branch', () => {
-  for (const path of [
-    '.github/workflows/recovery-staging-deploy.yml',
-    '.github/workflows/recovery-attestation-deploy.yml'
-  ]) assert.match(read(path), /refs\/heads\/work\/p0-storage-hardening/);
-  assert.match(read('.github/workflows/recovery-physical-device-qualification.yml'), /\.head_branch == "work\/p0-storage-hardening"/);
+test('recovery deployment and physical qualification are pinned to the frozen candidate branch', () => {
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  assert.match(staging, /workflow_call:/);
+  assert.doesNotMatch(staging, /workflow_dispatch:/);
+  assert.match(staging, /GATE_CONTROL_BRANCH \|\| 'integration\/ledger-patch'/);
+  assert.match(staging, /check-candidate\.mjs/);
+  const verifier = read('.github/workflows/recovery-attestation-deploy.yml');
+  assert.match(verifier, /GATE_CONTROL_BRANCH \|\| 'integration\/ledger-patch'/);
+  assert.match(verifier, /CANDIDATE_BRANCH \|\| 'work\/p0-storage-hardening'/);
+  assert.match(verifier, /check-candidate\.mjs/);
+  const physical = read('.github/workflows/gate-4-physical-device.yml');
+  assert.match(physical, /CANDIDATE_BRANCH \|\| 'work\/p0-storage-hardening'/);
+  assert.match(physical, /check-candidate\.mjs/);
 });
 
 
@@ -301,7 +317,7 @@ test('physical-device workflow verifies secure lock screen and biometric vault r
   const source = read('android/templates/instrumentation/AureliaSecurityInstrumentedTest.java');
   assert.match(source, /keyguard\.isDeviceSecure\(\)/);
   assert.match(source, /biometricVaultCanBeReenrolledAfterRecoveryInvalidationOnSecureLockScreen/);
-  const workflow = read('.github/workflows/recovery-physical-device-qualification.yml');
+  const workflow = read('.github/workflows/gate-4-physical-device.yml');
   assert.match(workflow, /run_test security-primitives com\.aurelia\.pms\.security\.AureliaSecurityInstrumentedTest/);
 });
 
@@ -315,4 +331,102 @@ test('recovery Android diagnostic collection is bounded and stale SHA runs canno
   assert.ok(workflow.includes('run_suite recovery-phone-store com.aurelia.pms.security.AureliaSecurityInstrumentedTest#recoveryEnvelopeAndPhoneStoresRetainAuthenticatedKeystoreState'));
   assert.ok(workflow.includes('timeout-minutes: 2'));
   assert.ok(workflow.includes('otp-recovery-android-instrumentation-${{ github.ref }}-${{ github.sha }}'));
+});
+
+
+test('Gate 5 production audit binds each recovery callable to only its required runtime secrets', () => {
+  const audit = read('scripts/gates/audit-production.mjs');
+  assert.match(audit, /registerRecoveryPhone: \['PHONE_PEPPER'\]/);
+  assert.match(audit, /registerRecoveryOwnerDevice: \['PHONE_PEPPER'\]/);
+  assert.doesNotMatch(audit, /acknowledgeRecoveryOwnerAlert: \['PHONE_PEPPER'\]/);
+  assert.match(audit, /issueRecoveryGrant: \['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'\]/);
+  assert.match(audit, /consumeRecoveryGrant: \['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'\]/);
+  assert.match(audit, /hasPublicRuntimeInvoker\(projectPolicy\)/);
+});
+
+test('secret-bearing recovery callables use dedicated runtime identities', () => {
+  const source = read('functions/src/index.ts');
+  assert.match(source, /RECOVERY_PHONE_SERVICE_ACCOUNT = defineString\("RECOVERY_PHONE_SERVICE_ACCOUNT"\)/);
+  assert.match(source, /RECOVERY_GRANT_SERVICE_ACCOUNT = defineString\("RECOVERY_GRANT_SERVICE_ACCOUNT"\)/);
+  for (const name of ['registerRecoveryPhone', 'registerRecoveryOwnerDevice']) {
+    const start = source.indexOf(`export const ${name} = onCall(`);
+    const next = source.indexOf('export const ', start + 1);
+    assert.ok(start >= 0 && next > start);
+    assert.match(source.slice(start, next), /serviceAccount: RECOVERY_PHONE_SERVICE_ACCOUNT/);
+  }
+  for (const name of ['issueRecoveryGrant', 'consumeRecoveryGrant']) {
+    const start = source.indexOf(`export const ${name} = onCall(`);
+    const next = source.indexOf('export const ', start + 1);
+    assert.ok(start >= 0 && next > start);
+    assert.match(source.slice(start, next), /serviceAccount: RECOVERY_GRANT_SERVICE_ACCOUNT/);
+  }
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  assert.match(staging, /RECOVERY_PHONE_SERVICE_ACCOUNT=%s/);
+  assert.match(staging, /RECOVERY_GRANT_SERVICE_ACCOUNT=%s/);
+});
+
+test('recovery runtime secret access is pinned to the complete per-callable least-privilege map', () => {
+  const expected = {
+    createRecoveryAttestationChallenge: [],
+    verifyRecoveryDeviceAttestation: [],
+    registerRecoveryPhone: ['PHONE_PEPPER'],
+    exchangeOwnerEmailLink: [],
+    confirmRecoveryOwnerBinding: [],
+    registerRecoveryOwnerDevice: ['PHONE_PEPPER'],
+    createRecoveryPasskeyEnrollmentOptions: [],
+    completeRecoveryPasskeyEnrollment: [],
+    retryRecoveryPasskeyEnrollmentAlert: [],
+    getRecoveryOwnerPendingAction: [],
+    getRecoveryOwnerActionReadiness: [],
+    createRecoveryOwnerActionOptions: [],
+    completeRecoveryOwnerPasskeyAction: [],
+    acknowledgeRecoveryOwnerAlert: [],
+    issueRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
+    consumeRecoveryGrant: ['PHONE_PEPPER', 'RECOVERY_SIGNING_KEY_PKCS8'],
+    cancelRecoveryRequest: [],
+    cancelRecoveryPhoneChange: [],
+    activateRecoveryPhoneChange: [],
+  };
+  const source = read('functions/src/index.ts');
+  const direct = [...source.matchAll(/export const ([A-Za-z0-9_]+)\s*=/g)].map(([, name]) => name);
+  const passkeyExports = source.match(/export \{([\s\S]*?)\} from ["']\.\/passkeys\.js["']/)?.[1] ?? '';
+  const reexported = [...passkeyExports.matchAll(/([A-Za-z0-9_]+)/g)].map(([, name]) => name);
+  assert.deepEqual([...direct, ...reexported].sort(), Object.keys(expected).sort(),
+    'gate inventories must cover every directly exported and re-exported recovery callable exactly once');
+
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  const stagingBlock = staging.match(/bindings=\(\s*([\s\S]*?)\s*\)/)?.[1];
+  assert.ok(stagingBlock, 'staging per-function secret map must exist');
+  const stagingMap = Object.fromEntries([...stagingBlock.matchAll(/"([A-Za-z0-9]+):([A-Z0-9_,]*)"/g)]
+    .map(([, fn, secrets]) => [fn, secrets ? secrets.split(',') : []]));
+  assert.deepEqual(stagingMap, expected, 'staging runtime secret map must match the least-privilege contract');
+  const configuredCallables = staging.match(/RECOVERY_CALLABLES: '([^']+)'/)?.[1]?.split(',') ?? [];
+  assert.deepEqual(configuredCallables.sort(), Object.keys(expected).sort(),
+    'staging App Check probes must target every exported recovery callable exactly once');
+
+  const production = read('scripts/gates/audit-production.mjs');
+  const productionBlock = production.match(/const runtimeSecretBindings = \{([\s\S]*?)\n\};/)?.[1];
+  assert.ok(productionBlock, 'production per-function secret map must exist');
+  const productionMap = Object.fromEntries([...productionBlock.matchAll(/^\s*([A-Za-z0-9]+): \[([^\]]*)\],?$/gm)]
+    .map(([, fn, secrets]) => [fn, [...secrets.matchAll(/'([A-Z0-9_]+)'/g)].map(([, secret]) => secret)]));
+  assert.deepEqual(productionMap, expected, 'production runtime secret map must match the least-privilege contract');
+  assert.match(stagingBlock, /acknowledgeRecoveryOwnerAlert:/);
+  assert.match(productionBlock, /acknowledgeRecoveryOwnerAlert: \[\]/);
+});
+
+test('Gate 4 device execution is isolated from hosted provenance attestation', () => {
+  const workflow = read('.github/workflows/gate-4-physical-device.yml');
+  const attestJob = workflow.slice(workflow.indexOf('  attest:'));
+  assert.match(workflow, /runs-on: \[self-hosted, linux, x64, aurelia-android-device\]/);
+  assert.match(attestJob, /runs-on: ubuntu-latest/);
+  assert.match(attestJob, /actions\/attest-build-provenance/);
+  assert.match(attestJob, /Upload Gate 4 evidence/);
+});
+
+
+test('Gate 6 qualification freshness enforces the seven-day attestation boundary', () => {
+  const now = Date.parse('2026-11-16T12:00:00.000Z');
+  assert.equal(isAttestationFresh('2026-11-09T12:00:00.001Z', now), true);
+  assert.equal(isAttestationFresh('2026-11-09T12:00:00.000Z', now), false);
+  assert.equal(isAttestationFresh('invalid', now), false);
 });

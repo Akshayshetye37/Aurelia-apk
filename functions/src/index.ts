@@ -23,6 +23,8 @@ const RECOVERY_COOLDOWN_MS = 24 * 60 * 60_000;
 
 const RECOVERY_ATTESTATION_VERIFIER_URL = defineString("RECOVERY_ATTESTATION_VERIFIER_URL", { default: "" });
 const RECOVERY_FUNCTIONS_SERVICE_ACCOUNT = defineString("RECOVERY_FUNCTIONS_SERVICE_ACCOUNT", { default: "default" });
+const RECOVERY_PHONE_SERVICE_ACCOUNT = defineString("RECOVERY_PHONE_SERVICE_ACCOUNT");
+const RECOVERY_GRANT_SERVICE_ACCOUNT = defineString("RECOVERY_GRANT_SERVICE_ACCOUNT");
 const FIREBASE_WEB_API_KEY = defineString("FIREBASE_WEB_API_KEY", { default: "" });
 
 function requireRecoveryEnabled(): void {
@@ -282,7 +284,7 @@ async function signGrant(uid: string, tenantId: string, deviceIdHash: string, no
  * auth context. No raw phone number is persisted.
  */
 export const registerRecoveryPhone = onCall(
-  { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER] },
+  { region: REGION, enforceAppCheck: true, serviceAccount: RECOVERY_PHONE_SERVICE_ACCOUNT, secrets: [PHONE_PEPPER] },
   async request => {
     requireRecoveryEnabled();
     // Phone possession is not owner authorization. Bind registration to a
@@ -443,7 +445,7 @@ export const confirmRecoveryOwnerBinding = onCall(
 
 /** Register the owner's authenticated device as the mandatory recovery-alert destination. */
 export const registerRecoveryOwnerDevice = onCall(
-  { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER] },
+  { region: REGION, enforceAppCheck: true, serviceAccount: RECOVERY_PHONE_SERVICE_ACCOUNT, secrets: [PHONE_PEPPER] },
   async request => {
     requireRecoveryEnabled();
     const auth = request.auth;
@@ -473,7 +475,7 @@ export const registerRecoveryOwnerDevice = onCall(
 /** The owner app acknowledges that the recovery alert was posted on the attested device. */
 /** OTP proof may issue one grant per Firebase phone-auth event (uid + auth_time). */
 export const issueRecoveryGrant = onCall(
-  { region: REGION, enforceAppCheck: true, secrets: [PHONE_PEPPER, RECOVERY_SIGNING_KEY_PKCS8] },
+  { region: REGION, enforceAppCheck: true, serviceAccount: RECOVERY_GRANT_SERVICE_ACCOUNT, secrets: [PHONE_PEPPER, RECOVERY_SIGNING_KEY_PKCS8] },
   async request => {
     requireRecoveryEnabled();
     const tenantId = validateTenantId(request.data?.tenantId);
@@ -657,7 +659,7 @@ export const issueRecoveryGrant = onCall(
 
 /** Consume jti atomically before the Android app arms its in-memory recovery gate. */
 export const consumeRecoveryGrant = onCall(
-  { region: REGION, enforceAppCheck: true, secrets: [RECOVERY_SIGNING_KEY_PKCS8, PHONE_PEPPER] },
+  { region: REGION, enforceAppCheck: true, serviceAccount: RECOVERY_GRANT_SERVICE_ACCOUNT, secrets: [RECOVERY_SIGNING_KEY_PKCS8, PHONE_PEPPER] },
   async request => {
     requireRecoveryEnabled();
     const grant = requiredString(request.data?.grant, 4096);

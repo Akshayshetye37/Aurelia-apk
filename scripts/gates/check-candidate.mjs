@@ -1,7 +1,10 @@
+import fs from 'node:fs';
 import { arg, fail, gh, requireSha } from './lib.mjs';
 const sha = requireSha(arg('sha'));
 const repo = arg('repo');
 const branch = arg('branch');
+const pinnedSha = fs.readFileSync(new URL('../../gates/qualification-candidate-sha.txt', import.meta.url), 'utf8').trim();
+if (pinnedSha !== sha) fail('candidate SHA does not match the frozen qualification pin on the trusted control branch');
 if (!/^[A-Za-z0-9_.\/-]+$/.test(branch) || branch.includes('..') || branch.startsWith('/') || branch.endsWith('/')) fail('invalid branch name');
 if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) fail('invalid repository name');
 const encoded = branch.split('/').map(encodeURIComponent).join('/');

@@ -1,0 +1,228 @@
+name: Post-release production APK smoke test
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Candidate SHA qualified by Gate 6
+        required: true
+        type: string
+      gate6_run_id:
+        description: Successful Gate 6 workflow run ID
+        required: true
+        type: string
+      release_tag:
+        description: Published GitHub release tag pointing to the candidate SHA
+        required: true
+        type: string
+      device_label:
+        description: Redacted label matching the approved Gate 4 handset
+        required: true
+        type: string
+permissions: {}
+concurrency:
+  group: production-smoke-${{ inputs.candidate_sha }}
+  cancel-in-progress: false
+jobs:
+  audit-production:
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    runs-on: ubuntu-latest
+    environment: recovery-production-audit
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+      PRODUCTION_GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+      PRODUCTION_RECOVERY_SIGNING_KEY_ID: ${{ vars.PRODUCTION_RECOVERY_SIGNING_KEY_ID }}
+      PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT: ${{ vars.PRODUCTION_KEY_VERIFY_SERVICE_ACCOUNT }}
+      PRODUCTION_KEY_VERIFY_WIF_PRINCIPAL: ${{ vars.PRODUCTION_KEY_VERIFY_WIF_PRINCIPAL }}
+      PRODUCTION_KEY_VERIFY_WIF_PROVIDER: ${{ vars.PRODUCTION_KEY_VERIFY_WIF_PROVIDER }}
+      GCP_REGION: ${{ vars.PRODUCTION_GCP_REGION || vars.GCP_REGION }}
+      AUDIT_SERVICE_ACCOUNT: ${{ secrets.GCP_AUDIT_SERVICE_ACCOUNT }}
+      ATTESTATION_VERIFIER_SERVICE: ${{ vars.ATTESTATION_VERIFIER_SERVICE }}
+      ATTESTATION_VERIFIER_CALLER_SERVICE_ACCOUNT: ${{ vars.ATTESTATION_VERIFIER_CALLER_SERVICE_ACCOUNT }}
+      REQUIRED_SECRETS: ${{ vars.REQUIRED_SECRETS }}
+      RUNTIME_SERVICE_ACCOUNTS: ${{ vars.RUNTIME_SERVICE_ACCOUNTS }}
+      APPCHECK_REQUIRED_SERVICES: ${{ vars.APPCHECK_REQUIRED_SERVICES }}
+      FIREBASE_ANDROID_APP_IDS: ${{ vars.FIREBASE_ANDROID_APP_IDS }}
+      FIREBASE_ALLOWED_SHA1: ${{ vars.FIREBASE_ALLOWED_SHA1 }}
+      FIREBASE_ALLOWED_SHA256: ${{ vars.FIREBASE_ALLOWED_SHA256 }}
+    steps:
+      - name: Checkout trusted production audit tooling
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Authenticate with read-only production audit identity
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_AUDIT_SERVICE_ACCOUNT }}
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
+      - name: Re-audit production recovery OFF and release signer inventory
+        run: node scripts/gates/audit-production.mjs
+      - name: Upload current production audit evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-postrelease-audit-evidence
+          path: evidence/production-audit.json
+          if-no-files-found: error
+          retention-days: 90
+  smoke:
+    needs: audit-production
+    if: github.ref == format('refs/heads/{0}', vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')
+    runs-on: [self-hosted, linux, x64, aurelia-android-device]
+    environment: recovery-device
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+    env:
+      REPO: ${{ github.repository }}
+      CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
+      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      GATE6_RUN_ID: ${{ inputs.gate6_run_id }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      DEVICE_LABEL: ${{ inputs.device_label }}
+      DEVICE_SERIAL: ${{ vars.DEVICE_SERIAL }}
+      DEVICE_SERIAL_ALLOWLIST: ${{ vars.DEVICE_SERIAL_ALLOWLIST }}
+      GH_TOKEN: ${{ github.token }}
+      WEBAUTHN_RP_ID: ${{ vars.WEBAUTHN_RP_ID }}
+      WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.WEBAUTHN_ANDROID_SHA256_CERT_FINGERPRINTS }}
+      ANDROID_APPLICATION_ID: ${{ vars.ANDROID_APPLICATION_ID }}
+      DIGITAL_ASSET_LINKS_API_KEY: ${{ secrets.DIGITAL_ASSET_LINKS_API_KEY }}
+    steps:
+      - name: Checkout trusted release-smoke tooling
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Download the current production audit result
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: production-postrelease-audit-evidence
+          path: production-audit
+      - name: Verify runner tools and exact published release binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1)'
+          gh version
+          gh attestation verify --help > "$RUNNER_TEMP/gh-attestation-help.txt"
+          grep -q -- '--deny-self-hosted-runners' "$RUNNER_TEMP/gh-attestation-help.txt"
+          timeout -k 5s 15s adb version
+          jq --version
+          tar --version
+          timeout --version
+          rm -f "$RUNNER_TEMP/gh-attestation-help.txt"
+          node scripts/gates/verify-production-release-smoke-input.mjs
+      - name: Reverify hosted Asset Links with Google for the production APK signer
+        shell: bash
+        run: |
+          set -euo pipefail
+          signer="$(jq -r .signerSha256 evidence/production-smoke-input.json)"
+          REQUIRED_CERT_SHA256="$signer" node scripts/gates/verify-assetlinks.mjs
+      - name: Require the approved physical handset
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEVICE_LABEL" =~ ^[A-Z0-9-]{3,32}$ ]]
+          [[ "$DEVICE_SERIAL" =~ ^[A-Za-z0-9._:-]{3,80}$ ]]
+          IFS=',' read -r -a allowed_serials <<< "$DEVICE_SERIAL_ALLOWLIST"
+          allowed=false
+          for allowed_serial in "${allowed_serials[@]}"; do
+            allowed_serial="${allowed_serial//[[:space:]]/}"
+            [[ "$allowed_serial" =~ ^[A-Za-z0-9._:-]{3,80}$ ]] || exit 1
+            [[ "$allowed_serial" == "$DEVICE_SERIAL" ]] && allowed=true
+          done
+          [[ "$allowed" == "true" ]]
+          ADB_BIN="$(command -v adb)"
+          adb() { timeout -k 5s 60s "$ADB_BIN" "$@"; }
+          timeout -k 5s 90s adb -s "$DEVICE_SERIAL" wait-for-device
+          test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.verifiedbootstate | tr -d '\r')" = "green"
+          test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.flash.locked | tr -d '\r')" = "1"
+          test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.boot.vbmeta.device_state | tr -d '\r')" = "locked"
+          test "$(adb -s "$DEVICE_SERIAL" shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          test "$(adb -s "$DEVICE_SERIAL" shell getprop ro.kernel.qemu | tr -d '\r')" != "1"
+          case "$(adb -s "$DEVICE_SERIAL" shell getprop ro.hardware | tr -d '\r')" in goldfish|ranchu) exit 1;; esac
+          connected="$(adb -s "$DEVICE_SERIAL" devices -l | awk -v serial="$DEVICE_SERIAL" '$1==serial && $2=="device" {n++} END {print n+0}')"
+          test "$connected" -eq 1
+          model="$(adb -s "$DEVICE_SERIAL" shell getprop ro.product.model | tr -d '\r')"
+          version="$(adb -s "$DEVICE_SERIAL" shell getprop ro.build.version.release | tr -d '\r')"
+          test "$model" = "$(jq -r .device.deviceModel evidence/production-smoke-input.json)"
+          test "$version" = "$(jq -r .device.androidVersion evidence/production-smoke-input.json)"
+          hardware_level="$(jq -r .device.hardwareSecurityLevel evidence/production-smoke-input.json)"
+          [[ "$hardware_level" == "StrongBox" || "$hardware_level" == "TEE" ]]
+      - name: Verify published production APK signer and install exact release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs published-release/app-release.apk > "$RUNNER_TEMP/published-app-cert.txt"
+          "$APKSIGNER" verify --print-certs published-release/app-release-androidTest.apk > "$RUNNER_TEMP/published-test-cert.txt"
+          signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/published-app-cert.txt" | tr -d ':')"
+          test_signer="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}' "$RUNNER_TEMP/published-test-cert.txt" | tr -d ':')"
+          expected="$(jq -r .signerSha256 evidence/production-smoke-input.json)"
+          test "$signer" = "$expected" && test "$test_signer" = "$signer"
+          ADB_BIN="$(command -v adb)"
+          adb() { timeout -k 5s 60s "$ADB_BIN" "$@"; }
+          app="com.aurelia.pms"
+          runner="com.aurelia.pms.test/androidx.test.runner.AndroidJUnitRunner"
+          adb -s "$DEVICE_SERIAL" uninstall "$app" >/dev/null 2>&1 || true
+          adb -s "$DEVICE_SERIAL" uninstall "$app.test" >/dev/null 2>&1 || true
+          adb -s "$DEVICE_SERIAL" install -r published-release/app-release.apk >/dev/null
+          adb -s "$DEVICE_SERIAL" install -r -t published-release/app-release-androidTest.apk >/dev/null
+          adb -s "$DEVICE_SERIAL" logcat -c
+          run_test() {
+            name="$1"; selector="$2"; minimum="$3"; output="$RUNNER_TEMP/$name.txt"
+            set +e
+            timeout -k 5s 1800s adb -s "$DEVICE_SERIAL" shell am instrument -w -r -e class "$selector" "$runner" > "$output" 2>&1
+            status=$?
+            set -e
+            if [[ "$status" -ne 0 ]]; then echo "::error::Production smoke instrumentation failed: $name"; exit 1; fi
+            node scripts/gates/parse-instrument.mjs "$output" "$minimum"
+            cp "$output" "$RUNNER_TEMP/$name-summary.txt"
+          }
+          run_test security-primitives com.aurelia.pms.security.AureliaSecurityInstrumentedTest 6
+          run_test sqlcipher com.aurelia.pms.OtpRecoverySqlCipherInstrumentedTest 1
+          run_test grant-preflight com.aurelia.pms.security.RecoveryGrantVerifierInstrumentedTest 4
+          adb -s "$DEVICE_SERIAL" shell monkey -p "$app" 1 >/dev/null
+          sleep 3
+          test -n "$(adb -s "$DEVICE_SERIAL" shell pidof -s "$app" | tr -d '\r')"
+          adb -s "$DEVICE_SERIAL" logcat -d > "$RUNNER_TEMP/production-logcat.txt"
+          node scripts/gates/scan-logs.mjs "$RUNNER_TEMP/production-logcat.txt"
+          rm -f "$RUNNER_TEMP/production-logcat.txt"
+          mkdir -p evidence
+          model="$(adb -s "$DEVICE_SERIAL" shell getprop ro.product.model | tr -d '\r')"
+          version="$(adb -s "$DEVICE_SERIAL" shell getprop ro.build.version.release | tr -d '\r')"
+          api="$(adb -s "$DEVICE_SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')"
+          assetlinks_hash="$(sha256sum evidence/assetlinks-verification.json | awk '{print $1}')"
+          jq --arg model "$model" --arg version "$version" --arg api "$api" --arg label "$DEVICE_LABEL" --arg assetlinks "$assetlinks_hash" \
+            '. + {deviceLabel:$label,deviceModel:$model,androidVersion:$version,apiLevel:$api,assetLinksVerificationSha256:$assetlinks,smokeTests:"PASS"}' \
+            evidence/production-smoke-input.json > evidence/production-smoke.json
+          rm -f "$RUNNER_TEMP/security-primitives-summary.txt" "$RUNNER_TEMP/sqlcipher-summary.txt" "$RUNNER_TEMP/grant-preflight-summary.txt"
+      - name: Upload post-release smoke evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-release-smoke-evidence
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Clean persistent device runner and release artifacts
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if command -v adb >/dev/null 2>&1 && [[ -n "${DEVICE_SERIAL:-}" ]]; then
+            adb -s "$DEVICE_SERIAL" uninstall com.aurelia.pms >/dev/null 2>&1
+            adb -s "$DEVICE_SERIAL" uninstall com.aurelia.pms.test >/dev/null 2>&1
+            adb -s "$DEVICE_SERIAL" logcat -c >/dev/null 2>&1
+          fi
+          rm -f "$RUNNER_TEMP/security-primitives.txt" "$RUNNER_TEMP/sqlcipher.txt" "$RUNNER_TEMP/grant-preflight.txt"
+          rm -f "$RUNNER_TEMP/security-primitives-summary.txt" "$RUNNER_TEMP/sqlcipher-summary.txt" "$RUNNER_TEMP/grant-preflight-summary.txt"
+          rm -f "$RUNNER_TEMP/production-logcat.txt" "$RUNNER_TEMP/published-app-cert.txt" "$RUNNER_TEMP/published-test-cert.txt"
+          rm -rf gate6-evidence gate6-production-release published-release production-audit evidence

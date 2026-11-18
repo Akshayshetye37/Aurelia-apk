@@ -25,7 +25,7 @@ A changed source SHA, rebuilt APK, Firebase configuration change, signing-key ch
 
 ## Required physical-device matrix
 
-At minimum, qualify one supported current Android handset and one supported lower-end handset. Include a StrongBox-capable handset where supported by the approved device matrix. Each device/API combination gets a separate immutable result record.
+For this release, qualify exactly one approved physical handset/API combination. This matches the current Gate 4 workflow input (`device_label`) and the Gate 6 contract (one Gate 4 run plus one `device` attestation among exactly seven run IDs). Record the exact model, API level, verified boot and hardware security level for that handset. Any additional current, lower-end or StrongBox-capable models are explicitly NOT APPROVED / NOT QUALIFIED for this release; do not imply coverage from the single-device result. A future multi-device release requires a reviewed workflow, attestation-schema and Gate 6 verifier change before its candidate is frozen.
 
 | Field | Required value |
 |---|---|
@@ -34,7 +34,7 @@ At minimum, qualify one supported current Android handset and one supported lowe
 | Android version/API | Exact version and API level |
 | Build fingerprint | Exact OS build fingerprint |
 | SoC / security level | Hardware-backed Keystore details |
-| StrongBox | Available / unavailable / not supported |
+| Hardware security level | StrongBox or TEE, as reported by the hardware-backed key attestation |
 | App candidate SHA | Exact source commit |
 | APK SHA-256 | Exact installed artifact |
 | APK signer SHA-1/SHA-256 | Exact values from Gate 3 |
@@ -63,12 +63,14 @@ All cases below must be run on the physical handset. Capture timestamped, redact
 | G4-11 | Enroll the PIN/biometric Keystore wrappers, then change/remove the secure lock-screen credential through Android Settings and attempt unlock/recovery. | Invalidated Keystore wrappers are detected; app fails closed, never silently regenerates the DEK or wrapper; the separately provisioned offline recovery key can still unwrap the same DEK where its own wrapper remains valid. |
 | G4-12 | Register two independently attested owner devices, then simulate a recovery attempt from the registered recovery handset while the second owner device is online; repeat with the second device offline and with notification permission disabled. | Every enrolled owner device receives the alert; at least one device must post and acknowledge it before the 24-hour hold starts. No acknowledgement means no cooldown eligibility and no grant. Owner cancellation revokes an unconsumed grant. |
 | G4-13 | Simulate SIM swap/port-out by moving the staging test number to a second SIM/handset while retaining the original attested owner devices. Attempt recovery from the unregistered handset and from the registered recovery device. | Phone possession alone on the unregistered handset cannot satisfy device binding. Owner devices receive and acknowledge the alert; the 24-hour hold begins only after acknowledgement; a fresh SMS after the hold is still bound to the enrolled device and grant. Any missing owner alert/ack blocks grant issue. |
+| G4-14 | Inspect the Android Key Attestation security level for the recovery device key. | Hardware-backed security level is StrongBox or TEE; software-only attestation is rejected. Record the actual level in the manual device attestation. |
+| G4-15 | Complete a fresh owner passkey assertion through Credential Manager on the independent attested owner device. | RP ID/origin, user verification, challenge binding and monotonic authenticator counter validate; replay and wrong-device assertions fail. |
 
 ## Execution notes
 
 - Use the exact approved release APK and companion release-signed androidTest APK from the same Gate 3 artifact. The artifact must contain `app-release.apk`, `app-release-androidTest.apk`, their SHA-256 values and both certificate reports. The app and instrumentation APK signer SHA-256 values must match. Do not build or install a different candidate during the run.
 - Dispatch the physical workflow with the candidate SHA, successful staging run ID and a redacted device label. It rejects emulators, API levels below 24, unlocked bootloaders and non-green verified boot.
-- Run the automated physical-device subset using `.github/workflows/recovery-physical-device-qualification.yml` on the dedicated self-hosted Android device runner. The workflow verifies the staging artifact's originating SHA, physical/locked boot state, signer match and runs the local SQLCipher, grant-preflight and force-stop recovery instrumentation suites. Real SMS, independent owner-device alert/cancellation and lock-screen changes remain separate Gate 4 cases. The physical workflow also performs a full device reboot after PIN B is committed, waits for the handset to be unlocked, and verifies PIN B plus SQLCipher data after reboot.
+- Run the automated physical-device subset using `.github/workflows/gate-4-physical-device.yml` on the dedicated self-hosted Android device runner. The workflow verifies the staging artifact's originating SHA, physical/locked boot state, signer match and runs the local SQLCipher, grant-preflight and force-stop recovery instrumentation suites. Real SMS, independent owner-device alert/cancellation and lock-screen changes remain separate Gate 4 cases. The physical workflow also performs a full device reboot after PIN B is committed, waits for the handset to be unlocked, and verifies PIN B plus SQLCipher data after reboot.
 - Capture device build fingerprint, Android API, model and package version before testing. Store serial privately; record only redacted device label here.
 - For force-stop cases, record command and timestamp. Force-stop/relaunch is not a substitute for the separate reboot case.
 - Run database integrity and foreign-key checks using the approved diagnostic build path; do not add a production-accessible debug endpoint.
@@ -79,11 +81,11 @@ All cases below must be run on the physical handset. Capture timestamped, redact
 
 | Case | Device label | Run ID | Result | Evidence reference | Tester/date | Reviewer/date |
 |---|---|---|---|---|---|---|
-| G4-01 to G4-13 | — | NOT RUN | NOT QUALIFIED | — | — | — |
+| G4-01 to G4-15 | one approved handset | NOT RUN | NOT QUALIFIED | — | — | — |
 
 ## Exit criteria
 
-Gate 4 is PASS only when all required cases pass on every approved device/API combination, evidence is attached to the access-controlled evidence store, exact source/APK/Firebase staging identities are recorded, and an independent reviewer signs the results.
+Gate 4 is PASS only when all required cases pass on the single handset approved for this release, evidence is attached to the access-controlled evidence store, exact source/APK/Firebase staging identities are recorded, the hardware security level is StrongBox or TEE, and an independent reviewer signs the results. Other handset/API combinations remain NOT QUALIFIED.
 
 **Current state:** Gate 4 execution has not started. Gate 3 staging APK and signing evidence are prerequisites. Production account recovery remains DISABLED until all release gates and owner sign-off pass.
 
@@ -93,3 +95,8 @@ The device requesting recovery must never count as its own owner-notification de
 
 
 Owner acknowledgement proof is per-device and one-time. The FCM payload contains a random 256-bit token; only the token hash is persisted server-side. The acknowledgement callable requires the matching device token and atomically consumes the pending alert state. Verify a wrong-device token, random token, replayed token and an acknowledgement arriving before the FCM send operation returns are all rejected or safely handled as designed.
+
+
+## Gate 4 runner environment configuration
+
+Create the protected GitHub Environment `recovery-device`. Set `DEVICE_SERIAL` to the USB-connected handset serial and `DEVICE_SERIAL_ALLOWLIST` to the comma-separated exact allowlist containing that serial. These values are consumed only by the physical-device runner and must not be copied into evidence or logs. The runner must also have Node.js 22, GitHub CLI with `gh attestation verify --deny-self-hosted-runners` support, Android platform-tools, `adb`, `jq`, `tar`, `timeout`, USB access and the `self-hosted`, `linux`, `x64`, `aurelia-android-device` labels. Do not register a general-purpose or shared runner for this job.
