@@ -70,6 +70,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    secrets: inherit
 
   evidence:
     name: Gate 3 - Verify deployment and produce qualification evidence
