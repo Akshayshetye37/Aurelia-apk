@@ -7,6 +7,12 @@ export const REQUIRED_ASSETLINKS_RELATIONS = Object.freeze([
 const API_URL = 'https://digitalassetlinks.googleapis.com/v1/assetlinks:check';
 const fail = message => { throw new Error(message); };
 
+export function validateStagingFingerprintInventory(values) {
+  const normalized = (values ?? []).map(normalizeFingerprint);
+  if (normalized.length !== 1) fail('staging RP must publish exactly one staging signing-certificate fingerprint');
+  return normalized;
+}
+
 async function readJson(response, message) {
   try { return await response.json(); } catch { fail(message); }
 }
