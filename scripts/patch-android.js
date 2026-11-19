@@ -423,7 +423,7 @@ if (fs.existsSync(appGradleGroovy)) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
   }
   if (!gradle.includes('com.google.android.gms:play-services-auth:')) {
-    gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.android.gms:play-services-auth:22.0.0'");
+    gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.android.gms:play-services-auth:21.3.0'");
   }
   gradle = ensureJavaResourcePackaging(gradle, false);
   fs.writeFileSync(appGradleGroovy, gradle);
@@ -433,7 +433,7 @@ if (fs.existsSync(appGradleGroovy)) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + '\n    implementation("com.google.mlkit:text-recognition:16.0.1")');
   }
   if (!gradle.includes('com.google.android.gms:play-services-auth:')) {
-    gradle = gradle.replace(/dependencies\s*\{/, match => match + '\n    implementation("com.google.android.gms:play-services-auth:22.0.0")');
+    gradle = gradle.replace(/dependencies\s*\{/, match => match + '\n    implementation("com.google.android.gms:play-services-auth:21.3.0")');
   }
   gradle = ensureJavaResourcePackaging(gradle, true);
   fs.writeFileSync(appGradleKts, gradle);
