@@ -1205,7 +1205,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
             && backup.optString("wrapIv", "").matches("^[A-Za-z0-9+/]{16}$")
             && backup.optString("wrappedKey", "").matches("^[A-Za-z0-9+/]{64}$")
             && backup.optString("ciphertext", "").matches("^[A-Za-z0-9+/=]+$")
-            && backup.optString("ciphertext", "").length() <= 35000000;
+            && backup.optString("ciphertext", "").length() <= 35000000\n            && backup.optString("ciphertext", "").length() % 4 == 0;
         if (!common) return false;
         if (version == 1) return true;
         JSONObject manifest = backup.optJSONObject("manifest");
