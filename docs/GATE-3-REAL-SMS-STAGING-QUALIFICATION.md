@@ -1,42 +1,57 @@
-# Gate 3 — Real SMS staging qualification
+# Gate 3 — Google Sign-In and Passwordless Email-Link staging qualification
 
-**Status: NOT EXECUTED.** This gate requires a dedicated Firebase staging project, a real test SIM/handset and the staging APK artifact. Emulator OTP codes do not qualify as real SMS evidence.
+**Scope: Google Sign-In + Firebase Passwordless Email-Link owner verification.** Gate 3 no longer qualifies real SMS delivery and does not require a physical SMS test device, real test SIM, Blaze SMS quota, or SMS receipt. Phone OTP remains in the application and Gate 2 OTP/recovery instrumentation; it is not removed or disabled by this migration.
+
+## Authentication boundary
+
+- **Google Sign-In:** primary account identity. It identifies the owner/account and is separate from local SQLite encryption.
+- **Firebase Passwordless Email-Link:** sensitive owner verification. The owner requests a link, Firebase verifies it, and the backend validates immutable owner UID, tenant, verified email, and authentication freshness before issuing a trusted owner session.
+- **Phone SMS OTP:** out of Gate 3 qualification scope. Gate 2 continues to cover OTP/recovery instrumentation.
+- Neither Google Sign-In nor Email-Link session can unwrap, regenerate, or replace the local DEK. The offline Recovery Key remains the cryptographic recovery authority.
 
 ## Staging-only configuration
 
-Create the GitHub Environment `recovery-staging` and configure:
+Create GitHub Environment `recovery-staging` and configure:
 
-- GitHub Environment `recovery-staging` variables consumed by `.github/workflows/recovery-staging-deploy.yml`: `GCP_PROJECT_ID`, `PRODUCTION_GCP_PROJECT_ID`, `GCP_REGION`, `STAGING_FUNCTIONS_BASE_URL` (required HTTPS origin for the exact `${GCP_REGION}-${GCP_PROJECT_ID}.cloudfunctions.net` host), `RECOVERY_FUNCTIONS_SERVICE_ACCOUNT`, `RECOVERY_ATTESTATION_VERIFIER_URL`, `RECOVERY_SIGNING_KEY_ID`, `RECOVERY_GRANT_PUBLIC_KEYS_JSON`, `FIREBASE_WEB_API_KEY`, `APP_CHECK_PLAY_INTEGRITY_REGISTERED=true`, `APP_CHECK_SIGNER_SHA256`, and `ATTESTATION_APP_SIGNER_SHA256` (the two signer fingerprints must match). `RECOVERY_CALLABLES` is optional and defaults to the 12 recovery callables listed in the workflow.
-- GitHub Environment `recovery-staging` configuration: `GCP_WORKLOAD_IDENTITY_PROVIDER` and `STAGING_DEPLOY_SERVICE_ACCOUNT` are non-secret identifiers and should be configured as environment **variables** (the workflow supports a secret fallback for both). The WIF provider must be the full `projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>` resource name; the deploy identity must be a service-account email. The workflow now validates these before calling Google authentication. Required environment secrets: `GOOGLE_SERVICES_JSON_BASE64`, `STAGING_KEYSTORE_BASE64`, `STAGING_KEYSTORE_PASSWORD`, `STAGING_KEY_ALIAS`, and `STAGING_KEY_PASSWORD`.
-- The separate attestation-verifier deployment may additionally require `RECOVERY_ATTESTATION_SERVICE_ACCOUNT`, `ATTESTATION_APP_PACKAGE`, and `ATTESTATION_APP_MIN_VERSION`; those are not consumed by this staging deploy workflow itself. Do not substitute the older `GCP_DEPLOY_SERVICE_ACCOUNT` or `AURELIA_RELEASE_*` names for the exact Gate 3 names above.
-- Secret Manager versions in the staging project: `PHONE_PEPPER`, `RECOVERY_SIGNING_KEY_PKCS8`.
-- The signing public key ring must contain the active `RECOVERY_SIGNING_KEY_ID`. The private key is never stored in GitHub variables or this repository.
+- Variables consumed by `.github/workflows/recovery-staging-deploy.yml`: `GCP_PROJECT_ID`, `PRODUCTION_GCP_PROJECT_ID`, `GCP_REGION`, `STAGING_FUNCTIONS_BASE_URL` (HTTPS origin must be exactly `${GCP_REGION}-${GCP_PROJECT_ID}.cloudfunctions.net`), `RECOVERY_FUNCTIONS_SERVICE_ACCOUNT`, `RECOVERY_ATTESTATION_VERIFIER_URL`, `RECOVERY_SIGNING_KEY_ID`, `RECOVERY_GRANT_PUBLIC_KEYS_JSON`, `FIREBASE_WEB_API_KEY`, `APP_CHECK_PLAY_INTEGRITY_REGISTERED=true`, `APP_CHECK_SIGNER_SHA256`, and `ATTESTATION_APP_SIGNER_SHA256` (fingerprints must match).
+- `RECOVERY_CALLABLES` defaults to owner-verification callables: `exchangeOwnerEmailLink`, `confirmRecoveryOwnerBinding`, `registerRecoveryOwnerDevice`, `acknowledgeRecoveryOwnerAlert`, `getRecoveryOwnerPendingAction`, `getRecoveryOwnerActionReadiness`, `createRecoveryOwnerActionOptions`, and `completeRecoveryOwnerPasskeyAction`. It is an explicit override; do not add phone OTP/grant callables to Gate 3.
+- WIF configuration: `GCP_WORKLOAD_IDENTITY_PROVIDER` and `STAGING_DEPLOY_SERVICE_ACCOUNT` should be environment variables (secret fallback is supported). The provider must be a full WIF resource name and the deploy identity a service-account email. The workflow validates both before Google authentication.
+- Environment secrets: `GOOGLE_SERVICES_JSON_BASE64`, `STAGING_KEYSTORE_BASE64`, `STAGING_KEYSTORE_PASSWORD`, `STAGING_KEY_ALIAS`, and `STAGING_KEY_PASSWORD`.
+- The attestation-verifier deployment may additionally require `RECOVERY_ATTESTATION_SERVICE_ACCOUNT`, `ATTESTATION_APP_PACKAGE`, and `ATTESTATION_APP_MIN_VERSION`.
+- Staging Secret Manager still contains `PHONE_PEPPER` and `RECOVERY_SIGNING_KEY_PKCS8` because the candidate Functions package includes recovery infrastructure. Their presence is deployment configuration, not Gate 3 SMS qualification.
+- The active public key ring must contain `RECOVERY_SIGNING_KEY_ID`. Private signing keys must never be stored in GitHub variables or the repository.
 
-Run `Recovery staging deployment and APK` only after the private attestation verifier is deployed. The workflow sets `RECOVERY_ENABLED=true` only in this staging project, deploys Functions, probes missing/invalid App Check tokens on every recovery callable, then builds a release-signed app APK and matching release-signed androidTest APK with the staging Firebase configuration. It verifies that both APKs use the configured app signer and uploads both artifacts plus their SHA-256/certificate fingerprints (7-day retention). Production remains disabled.
+## Automated Gate 3 checks
 
-## Real-device test matrix
+The workflow deploys the frozen candidate only to staging, validates staging/production project separation, checks WIF configuration, validates `STAGING_FUNCTIONS_BASE_URL`, verifies the configured release signer SHA-256, builds the release APK and matching androidTest APK, verifies their hashes and signer, then probes the configured owner-verification callables with missing and invalid App Check tokens.
+
+These negative probes establish endpoint routing and App Check enforcement; they **do not constitute a successful authenticated Google Sign-In or Email-Link exchange**. Positive end-to-end owner-session qualification requires a staging Firebase owner account and a controlled email-link test delivery/exchange, and must be reported separately rather than inferred from negative probes. The workflow must fail closed if authenticated test credentials or link-delivery setup are unavailable.
+
+Production recovery remains disabled.
+
+## Qualification matrix
 
 | ID | Test | Required result |
 |---|---|---|
-| G3-01 | Install the staging APK; register the owner recovery phone; verify the phone is stored encrypted locally. | Only the registered phone can be used by Forgot PIN; no phone input or cloud escrow of DEK. |
-| G3-02 | Request OTP and submit an incorrect code. | Rejected; no grant, no local recovery gate, no DEK operation. |
-| G3-03 | Allow an OTP to expire, then submit it. | Rejected; no grant and no gate arm. |
-| G3-04 | Submit the same OTP proof twice. | Second use rejected; no second grant. |
-| G3-05 | Verify the independent owner alert; open it and explicitly acknowledge from a fresh primary-auth owner session. | Merely receiving/displaying FCM never starts the hold; acknowledgement is single-use, expires after 15 minutes and is accepted only from an attested device with a fresh email-link/passkey owner session. No SMS/alert is sent to the recovery number. |
-| G3-06 | Wait the full 24-hour hold; request a fresh OTP and grant. | Old OTP cannot be reused; new grant is UID/tenant/device/nonce-bound and expires within five minutes. |
-| G3-07 | Submit wrong tenant, UID, device, nonce, signature, key ID, expired and replayed grants. | Every invalid grant rejected before the recovery gate arms. |
-| G3-08 | Complete recovery using the offline recovery key. | SMS and grant authorize the workflow only; neither receives or derives the DEK. The offline key unwraps the original DEK and PIN B wraps that same DEK. |
-| G3-09 | Inspect app files, shared preferences and logcat. | No plaintext PIN, OTP, recovery key, DEK, JWT or raw phone number. |
-| G3-10 | Verify staging release APK and companion instrumentation APK. | Both artifacts originate from the same SHA, have matching approved signer SHA-256, and their separate APK SHA-256 values are recorded. |
+| G3-01 | Staging deployment and isolation | WIF deploys only to staging; staging project differs from production. |
+| G3-02 | Callable origin and signer | Functions origin matches configured staging project/region; APK and androidTest signer match expected SHA-256. |
+| G3-03 | Missing App Check | Owner-verification callables reject missing App Check. |
+| G3-04 | Invalid App Check | Owner-verification callables reject invalid App Check. |
+| G3-05 | Google Sign-In owner identity | Staging Google Sign-In establishes the expected immutable Firebase UID; no client-supplied owner claims are trusted. |
+| G3-06 | Passwordless Email-Link exchange | Firebase validates the single-use link; backend validates UID, tenant, verified email and fresh auth, and issues trusted owner session. |
+| G3-07 | Wrong owner / tenant / stale session / replay | Rejected fail-closed; no owner session or sensitive action. |
+| G3-08 | Session authorization | Sensitive owner actions independently validate trusted session claims, UID, tenant, freshness and attested device. |
+| G3-09 | Encryption boundary | Google/email owner verification cannot unwrap or replace DEK; offline Recovery Key remains required. |
+| G3-10 | APK evidence | Candidate SHA, APK hashes and signer fingerprints are recorded and match the staging build. |
+
+Gate 3 automated workflow evidence currently covers deployment, project boundary, APK integrity/signer and negative App Check probes. G3-05 through G3-09 require a separately provisioned authenticated staging qualification and must not be marked PASS without evidence from that test.
 
 ## Evidence record
 
-For each case record the candidate SHA, staging project ID, APK SHA-256, signing certificate SHA-1/SHA-256, redacted device label, Android API, test-run ID, result and reviewer. Never record OTP values, raw phone numbers, credentials or device serials in this repository.
+Record candidate SHA, staging project ID, APK SHA-256, signer SHA-256, test-run ID, result and reviewer. Never record email addresses, passwordless links, OOB codes, custom tokens, ID tokens, credentials, phone numbers or device serials.
 
-**Exit condition:** all G3 cases pass on the same candidate SHA used by Gates 1 and 2. Gate 3 remains NOT QUALIFIED until real SMS is exercised on a physical staging device. Production recovery remains OFF.
+**Exit condition:** automated staging checks pass, and authenticated Google Sign-In + Email-Link owner verification is independently demonstrated for the same candidate SHA before Gate 3 is declared fully qualified. SMS delivery and a physical SMS device are not Gate 3 exit criteria. Gate 2 OTP instrumentation remains required and unchanged.
 
+**Android API floor:** local-first support remains API 23. Hardware-attested recovery enrollment requires API 24 or later. On API 23 recovery enrollment fails closed before modifying existing Keystore aliases.
 
-**Android API floor:** The app retains its API 23 local-first support. Hardware-attested recovery enrollment requires API 24 or later because Android added `KeyGenParameterSpec.Builder.setAttestationChallenge` in API 24. On API 23, the app fails recovery enrollment closed before modifying any existing Keystore alias. Local PIN unlock remains available; biometric-vault enrollment and hardware-attested recovery require API 24 or later.
-
-
-All recovery staging and verifier deployment workflows are restricted to `work/p0-storage-hardening`. The physical-device workflow also verifies that the successful staging artifact originated from that branch and the exact candidate SHA.
+Staging and verifier deployment workflows remain restricted to `work/p0-storage-hardening`. Gate 4 remains a separate physical-device qualification and is not a Gate 3 SMS test requirement.
