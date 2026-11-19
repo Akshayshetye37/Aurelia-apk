@@ -1427,6 +1427,13 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   }
 
   private class AureliaBridge {
+    @JavascriptInterface public void signOutPmsAccount() {
+      runOnUiThread(() -> {
+        try { FirebaseAuth.getInstance().signOut(); }
+        catch (Exception ignored) { }
+        js("window.aureliaNativeAccountSignOutEvent && window.aureliaNativeAccountSignOutEvent()");
+      });
+    }
     @JavascriptInterface public String getPmsAuthState() {
       try {
         com.google.firebase.auth.FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
