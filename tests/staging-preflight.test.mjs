@@ -39,6 +39,11 @@ test('rejects production project reuse and wrong callable host', () => {
   assert(errors.some((message) => message.includes('must differ')));
   assert(errors.some((message) => message.includes('configured project and region')));
 });
+test('rejects shared deploy/runtime service account', () => {
+  const env = validConfig(); env.DEPLOY_SERVICE_ACCOUNT = env.FUNCTION_SA;
+  const errors = validateStagingConfig(env);
+  assert(errors.some((message) => message.includes('must differ')));
+});
 test('rejects signer mismatch and unregistered App Check', () => {
   const env = validConfig(); env.APP_CHECK_REGISTERED = 'false'; env.ATTESTATION_SIGNER_SHA256 = 'b'.repeat(64);
   const errors = validateStagingConfig(env);
