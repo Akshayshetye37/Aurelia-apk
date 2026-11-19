@@ -1,6 +1,4 @@
-const CONFIG_KEY = "aurelia.personal-cloud.config.v1";
-const STATE_KEY = "aurelia.personal-cloud.oauth-state.v1";
-const VERIFIER_KEY = "aurelia.personal-cloud.oauth-verifier.v1";
+import { createPersonalCloudStorage } from "../storage/personal-cloud-storage.mjs";
 const SCOPE = "https://www.googleapis.com/auth/cloudplatformprojects.readonly";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const PROJECT_URL = "https://cloudresourcemanager.googleapis.com/v3/projects/";
@@ -12,19 +10,19 @@ function random(crypto, n) { const a=new Uint8Array(n); crypto.getRandomValues(a
 
 /** Optional user-owned Google Cloud project connection. Tokens are memory-only. */
 export class PersonalCloudConnection {
-  constructor({storage=globalThis.localStorage,session=globalThis.sessionStorage,cryptoImpl=globalThis.crypto,location=globalThis.location,history=globalThis.history,fetchImpl=globalThis.fetch,now=()=>Date.now()}={}) {
-    if(!storage||!session||!cryptoImpl?.subtle||!cryptoImpl?.getRandomValues||!location||!fetchImpl) throw new TypeError("Browser storage, Web Crypto, location and fetch are required");
-    Object.assign(this,{storage,session,crypto:cryptoImpl,location,history,fetch:fetchImpl,now});
+  constructor({persistence=createPersonalCloudStorage(),cryptoImpl=globalThis.crypto,location=globalThis.location,history=globalThis.history,fetchImpl=globalThis.fetch,now=()=>Date.now()}={}) {
+    if(!persistence||!cryptoImpl?.subtle||!cryptoImpl?.getRandomValues||!location||!fetchImpl) throw new TypeError("Personal cloud persistence, Web Crypto, location and fetch are required");
+    Object.assign(this,{persistence,crypto:cryptoImpl,location,history,fetch:fetchImpl,now});
     this.accessToken=null; this.expiresAt=0; this.config=this.readConfig();
   }
-  readConfig() { try { const v=this.storage.getItem(CONFIG_KEY); return v?this.validate(JSON.parse(v)):null; } catch { return null; } }
+  readConfig() { try { const v=this.persistence.readConfig(); return v?this.validate(JSON.parse(v)):null; } catch { return null; } }
   validate(v) { if(!v||!clientOk(v.clientId)||!projectOk(v.projectId)) throw fail("CLOUD_CONFIG_INVALID","Enter a valid Google OAuth client ID and Google Cloud project ID."); return Object.freeze({clientId:v.clientId.trim(),projectId:v.projectId.trim()}); }
   get status() { return Object.freeze({mode:this.config?"PERSONAL_CLOUD_CONFIGURED":"LOCAL_ONLY",connected:!!(this.accessToken&&this.expiresAt>this.now()),tokenPersistence:"MEMORY_ONLY",dataUploadEnabled:false,projectId:this.config?.projectId||null}); }
   async connect(input) {
-    this.config=this.validate(input); this.storage.setItem(CONFIG_KEY,JSON.stringify(this.config));
+    this.config=this.validate(input); this.persistence.writeConfig(JSON.stringify(this.config));
     const verifier=random(this.crypto,48), state=random(this.crypto,32);
     const digest=await this.crypto.subtle.digest("SHA-256",new TextEncoder().encode(verifier));
-    this.session.setItem(VERIFIER_KEY,verifier); this.session.setItem(STATE_KEY,state);
+    this.persistence.writeTransient("aurelia.personal-cloud.oauth-verifier.v1",verifier); this.persistence.writeTransient("aurelia.personal-cloud.oauth-state.v1",state);
     const redirectUri=this.location.origin+this.location.pathname;
     const url=new URL("https://accounts.google.com/o/oauth2/v2/auth");
     url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:redirectUri,response_type:"code",scope:SCOPE,state,code_challenge:b64url(new Uint8Array(digest)),code_challenge_method:"S256",access_type:"online",include_granted_scopes:"true",prompt:"consent"}).toString();
@@ -32,14 +30,33 @@ export class PersonalCloudConnection {
   }
   cleanUrl() { if(this.history?.replaceState) this.history.replaceState({},"",this.location.origin+this.location.pathname+(this.location.hash||"")); }
   async completeRedirect() {
-    const p=new URLSearchParams(this.location.search||""), code=p.get("code"); if(!code) return this.status;
-    const state=p.get("state"), expected=this.session.getItem(STATE_KEY), verifier=this.session.getItem(VERIFIER_KEY);
-    this.session.removeItem(STATE_KEY); this.session.removeItem(VERIFIER_KEY);
-    if(!state||state!==expected||!verifier||!this.config) { this.cleanUrl(); throw fail("CLOUD_OAUTH_STATE_INVALID","Google authorization could not be verified. Start again."); }
-    if(p.has("error")) { this.cleanUrl(); throw fail("CLOUD_OAUTH_DENIED","Google authorization was cancelled or denied."); }
+    const p=new URLSearchParams(this.location.search||"");
+    const code=p.get("code"), oauthError=p.get("error");
+    if(!code&&!oauthError) return this.status;
+    const state=p.get("state"), expected=this.persistence.readTransient("aurelia.personal-cloud.oauth-state.v1"), verifier=this.persistence.readTransient("aurelia.personal-cloud.oauth-verifier.v1");
+    this.persistence.clearTransient("aurelia.personal-cloud.oauth-state.v1");
+    this.persistence.clearTransient("aurelia.personal-cloud.oauth-verifier.v1");
+    if(!state||state!==expected||!verifier||!this.config) {
+      this.cleanUrl();
+      throw fail("CLOUD_OAUTH_STATE_INVALID","Google authorization could not be verified. Start again.");
+    }
+    if(oauthError) {
+      this.cleanUrl();
+      throw fail("CLOUD_OAUTH_DENIED","Google authorization was cancelled or denied.");
+    }
+    if(!code) {
+      this.cleanUrl();
+      throw fail("CLOUD_OAUTH_RESPONSE_INVALID","Google returned an incomplete authorization response. Start again.");
+    }
     const redirectUri=this.location.origin+this.location.pathname;
-    const response=await this.fetch(TOKEN_URL,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:this.config.clientId,code,code_verifier:verifier,grant_type:"authorization_code",redirect_uri:redirectUri})});
-    const token=await response.json(); this.cleanUrl();
+    this.cleanUrl();
+    let response, token;
+    try {
+      response=await this.fetch(TOKEN_URL,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:this.config.clientId,code,code_verifier:verifier,grant_type:"authorization_code",redirect_uri:redirectUri})});
+      token=await response.json();
+    } catch {
+      throw fail("CLOUD_TOKEN_EXCHANGE_FAILED","Google token exchange could not be completed. Check network access and try again.");
+    }
     if(!response.ok||typeof token.access_token!=="string"||!Number.isFinite(token.expires_in)) throw fail("CLOUD_TOKEN_EXCHANGE_FAILED","Google token exchange failed. Check OAuth client and redirect URI.");
     this.accessToken=token.access_token; this.expiresAt=this.now()+token.expires_in*1000;
     try { await this.verifyProjectAccess(); } catch(e) { this.accessToken=null; this.expiresAt=0; throw e; }
@@ -53,7 +70,7 @@ export class PersonalCloudConnection {
     return Object.freeze({projectId:p.projectId,projectNumber:p.projectNumber||null,lifecycleState:p.state||null});
   }
   disconnect() {
-    const token=this.accessToken; this.accessToken=null; this.expiresAt=0; this.session.removeItem(STATE_KEY); this.session.removeItem(VERIFIER_KEY); this.storage.removeItem(CONFIG_KEY); this.config=null;
+    const token=this.accessToken; this.accessToken=null; this.expiresAt=0; this.persistence.clearTransient("aurelia.personal-cloud.oauth-state.v1"); this.persistence.clearTransient("aurelia.personal-cloud.oauth-verifier.v1"); this.persistence.clearConfig(); this.config=null;
     if(token) void this.fetch("https://oauth2.googleapis.com/revoke?token="+encodeURIComponent(token),{method:"POST",mode:"no-cors"}).catch(()=>{});
     return this.status;
   }
