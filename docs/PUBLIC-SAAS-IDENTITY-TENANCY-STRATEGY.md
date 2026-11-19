@@ -46,7 +46,7 @@ Account lifecycle requirements: sign-in, sign-out, session revocation, phone-cha
 - Authentication UI must not simulate successful login, registration, OTP delivery, or recovery.
 - Every sign-in screen includes **Forgot Password?**.
 - Password recovery requires the account's verified registered mobile number, OTP expiry, resend cooldown, attempt limits, and abuse controls.
-- After trusted account lookup, display a backend-provided masked destination hint (example: +91 ••••••••10). Never generate a “registered number” hint from untrusted user input or reveal the full number.
+- OTP screen displays the destination masked (example: +91 ••••••••10). The current phone-OTP design masks the submitted destination, not an account lookup result; it does not disclose whether a UID existed before verification.
 - OTP/password account recovery does not automatically recover the PMS DEK or vault credentials.
 - Local encryption is mandatory in both guest and authenticated modes. Current UI must not claim encryption until the platform storage and key lifecycle are verified; cloud sync remains disabled.
 - Guest-to-account linking requires explicit consent, verified identity, preview/backup, and rollback-safe migration. Existing local data must never be overwritten by cloud bootstrap.
@@ -55,8 +55,8 @@ Acceptance criteria:
 1. Skip enters PMS without auth and preserves existing local data.
 2. Guest reminder appears on the dashboard, does not block operations, and respects reduced-motion settings.
 3. Guest mode is stored in canonical settings; no local/session Web Storage.
-4. Login/create-account/Forgot Password screens are present, but unavailable backend operations fail transparently.
-5. Forgot Password shows only a backend-derived masked registered-number hint after account lookup is implemented.
+4. Login/create-account/Forgot Password screens use native Firebase phone OTP; web preview clearly reports native authentication unavailable.
+5. OTP screen displays the verified request destination in masked form; account existence is not disclosed, and Firebase phone auth may create a UID on first successful verification.
 6. Password reset and account recovery cannot regenerate/replace the local DEK.
 
 ### 2B. Primary phone authentication implementation
