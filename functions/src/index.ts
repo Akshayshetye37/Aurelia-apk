@@ -681,6 +681,7 @@ export const consumeRecoveryGrant = onCall(
     if (typeof sub !== "string" || typeof tenant !== "string" || tenant !== sub ||
         typeof uid !== "string" || uid.length === 0 || uid.length > 128 ||
         typeof request.auth?.uid !== "string" || uid !== request.auth.uid ||
+        request.auth.token.role !== "owner" || request.auth.token.tenantId !== tenant ||
         typeof jti !== "string" || typeof did !== "string" ||
         typeof nonce !== "string" || scope !== "recovery:continue") throw GENERIC;
     const tenantId = validateTenantId(tenant);
