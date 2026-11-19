@@ -427,3 +427,65 @@ Cloud onboarding is not complete until the following are verified:
 - [ ] Tests cover account switching, token revocation, provider failure, wrong destination and cross-owner isolation.
 
 **Never use a shared cloud credential, service account, or developer account as the default destination for customer PMS data.** Backend service credentials, if needed for a separately authorized service, must not replace the owner's personal-cloud ownership model or grant broad access to owner files.
+
+
+---
+
+# Current integration branch status — 2026-11-20
+
+> This status is specific to `integration/ledger-patch` and its exact commit. Do not confuse it with the default branch or separate frozen candidate/work branches described earlier in this README.
+
+- **Repository:** https://github.com/Akshayshetye37/Aurelia-apk
+- **Active branch:** `integration/ledger-patch`
+- **Verified branch HEAD before this README update:** `d2b932eb4a2ba41af2580f90c71482c57855df73`
+- **Latest code change:** `Assert Gate 3 probe list excludes legacy OTP callables`
+- **Branch:** https://github.com/Akshayshetye37/Aurelia-apk/tree/integration/ledger-patch
+
+## Gate 3 scope
+
+Gate 3 is a **Google Sign-In + Firebase Passwordless Email-Link owner-verification staging qualification**. Phone OTP and recovery remain in the application and Gate 2 instrumentation; they are excluded from Gate 3 staging qualification criteria.
+
+The staging workflow App Check probe list is scoped to these owner-verification/trusted-owner-session endpoints:
+
+- `exchangeOwnerEmailLink`
+- `confirmRecoveryOwnerBinding`
+- `registerRecoveryOwnerDevice`
+- `acknowledgeRecoveryOwnerAlert`
+- `getRecoveryOwnerPendingAction`
+- `getRecoveryOwnerActionReadiness`
+
+Legacy OTP/recovery grant callables are excluded from this Gate 3 App Check probe list. Their infrastructure is not deleted.
+
+## CI evidence for `d2b932eb4a2ba41af2580f90c71482c57855df73`
+
+| Workflow | Run | Status at last check |
+|---|---:|---|
+| Gate pipeline lint | [44624543774](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44624543774) | **Passed** |
+| PMS source tests / web packaging | [44624544196](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44624544196) | **Passed** |
+| R1 local-first required checks | [44624543875](https://github.com/Akshaysheye37/Aurelia-apk/actions/runs/44624543875) | **Passed** |
+| Native SQLite contract | [44624543773](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44624543773) | Android instrumentation was **in progress** at last check; other subjobs passed |
+| OTP Recovery Android Instrumentation | [44624544144](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44624544144) | Android instrumentation was **in progress** at last check |
+
+These are snapshots, not live statuses. Check the linked Actions runs for final results. Evidence from a different SHA does not qualify this commit.
+
+## Gate 3 operational status
+
+**Live staging deployment and authenticated owner-flow qualification are NOT proven.** Final operational evidence must include successful staging deployment, correct staging configuration and identity, and positive owner-verification probes against the deployed environment. Source tests, lint and preflight alone do not make Gate 3 operational.
+
+## Safety boundaries
+
+- Phone OTP and recovery infrastructure remain in the app and Gate 2.
+- Gate 3 scope migration is not infrastructure deletion.
+- Production recovery remains `RECOVERY_ENABLED=false`.
+- Do not enable production recovery or release based on incomplete staging evidence.
+- Gate 1/2 baselines must remain intact.
+- Branch protection/required checks remain a governance concern; the branch was reported unprotected.
+
+## Handoff — next work
+
+1. Recheck the two Android instrumentation runs and fix any failures from their actual logs.
+2. Verify CI against the latest branch HEAD after this README update.
+3. Resolve Gate 3 staging Workload Identity Federation and required staging configuration through the authorized repository/cloud owner; do not invent credentials or weaken authentication.
+4. Dispatch Gate 3 staging only after preflight configuration is complete.
+5. Inspect retained staging evidence and prove the Google Sign-In + Firebase Email-Link owner-verification flow.
+6. Keep production recovery disabled and Gate 4–6 qualification separate.
