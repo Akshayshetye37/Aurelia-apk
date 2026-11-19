@@ -17,11 +17,22 @@ The web UI creates a PMS snapshot when data changes and on app launch/periodic f
 
 Private app data is removed when the app is uninstalled or its data is cleared. Owners must configure an optional off-device destination or export backups if they need protection from device loss/uninstall.
 
-### 2. Google Drive — optional
+### 2. Google Drive OAuth — optional, owner-controlled (candidate implementation)
 
-The owner selects a Drive folder using Android Storage Access Framework (SAF). If Google Drive is available as a document provider, its own UI handles account sign-in and authorization. Aurelia does not request Google account, contacts, broad storage or all-files permissions and does not embed a Google OAuth client.
+The draft direct-Drive candidate uses Google Identity Services AuthorizationClient on Android and the narrow `drive.appdata` scope. Backup files live in the hidden `appDataFolder`; the owner does not choose a folder. OpenID/email identity is used only to show the authorized account. This is separate from Google Sign-In and the legacy SAF export/import flow.
 
-The selected Drive URI is persisted with Android's persistable URI grant. The PMS writes the same authenticated encrypted envelope there after the private local copy. Plaintext PMS records and guest photos never leave the app through a backup destination. Drive/provider failures do not invalidate a successful private local backup; they are reported as a secondary-destination warning.
+- Connect is explicit and independent from login.
+- The owner chooses Daily, Weekly, Monthly or Never after connecting. Never keeps manual Back Up Now and restore history available.
+- Only already-encrypted Aurelia backup envelopes are uploaded; the adapter validates format, cipher, ciphertext and size.
+- Seven remote recovery points are retained. Cleanup failure is reported separately from upload success.
+- Tokens are transient and are not stored in PMS state, Web Storage, logs or backup payloads.
+- Account mismatch is rejected. Account switching requires an explicit reconnect/account-selection path.
+- Disconnect disables Aurelia Drive operations and clears local account/schedule state without deleting local PMS data. Google permission revocation is a separate explicit action.
+- OAuth expiry, permission denial and rate limits are surfaced as distinct retryable states.
+
+**Integration status:** this adapter is in draft PR #49, with overlapping hardening PR #50 and PR #51. It is not merged into `integration/ledger-patch`. Mocked adapter tests do not prove real OAuth, upload, restore, account switching or second-device recovery.
+
+**Scheduling limitation:** snapshots and recovery-key wrapping are WebView-owned. Scheduled work is foreground/catch-up when Aurelia is active; it is not guaranteed after force-stop or when Android cannot run the WebView. A guaranteed unattended backup requires moving snapshot/export, key wrapping and owner authorization into a native background-capable architecture.
 
 ### 3. Owner-configured server/cloud — optional
 
@@ -43,7 +54,7 @@ A future Pay Bridge backup must use a distinct application identifier and its ow
 
 - INTERNET is retained for HTTPS server/cloud backup.
 - SAF uses explicit owner selection and persistable URI grants; it requires no broad storage permission.
-- Google Drive account authentication is handled by the Drive document provider.
+- Direct Google Drive backup candidate uses Google Identity Services AuthorizationClient with `drive.appdata` and OpenID/email identity. Legacy SAF export/import is separate.
 - No SMS, contacts, location, camera, microphone, notification listener, accessibility, overlay, broad storage or package inventory permissions are required for this backup architecture.
 
 
@@ -55,3 +66,9 @@ A future Pay Bridge backup must use a distinct application identifier and its ow
 - A replacement installation imports the encrypted file and prompts for the recovery password. Successful decryption imports the non-extractable key into its local vault.
 - Existing plaintext v4 backups remain readable for migration; all newly generated backups are encrypted. Do not treat legacy files as meeting the new encryption policy.
 - Password rotation is deliberately not exposed until a rewrapping/re-encryption migration can update every retained recovery point safely.
+
+## Direct Google Drive candidate — integration and qualification status
+
+The owner-authorized Drive adapter described above is currently draft PR #49 and is not integrated on `integration/ledger-patch`. PR #50 and #51 contain overlapping hardening/implementation work; consolidate them into one reviewed branch before merge.
+
+The latest observed PR #49 candidate SHA is `a189a36f8541f7cbd095980869ef548985339385`. Its PMS/web packaging, R1, Gate lint, settlement and Recovery Functions checks passed; OTP Recovery Android Instrumentation failed. Real Google OAuth, live Drive operations, account switching, permission revocation and second-device restore remain unqualified. The schedule is best-effort foreground catch-up, not guaranteed unattended backup.
