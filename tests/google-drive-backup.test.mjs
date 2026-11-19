@@ -116,8 +116,9 @@ test("retention validates limits and deletes oldest files after upload", async (
   const adapter = createGoogleDriveBackupAdapter({ fetchImpl });
   await assert.rejects(adapter.uploadSnapshot(testToken, "ignored", envelope, { retention: 0 }), { code: "DRIVE_RETENTION_INVALID" });
   const result = await adapter.uploadSnapshot(testToken, "ignored", envelope, { retention: 2 });
-  assert.equal(deleted.length, 1);
-  assert.match(deleted[0], /a{16}/);
+  assert.equal(deleted.length, 2);
+  assert.ok(deleted.some(url => url.includes("a".repeat(16)), "oldest recovery point is deleted"));
+  assert.ok(deleted.some(url => url.includes("b".repeat(16)), "second-oldest recovery point is deleted"));
   assert.deepEqual(result.cleanupFailures, []);
 });
 
