@@ -78,3 +78,18 @@ test('legacy plaintext backup restore requires an explicit security warning conf
   assert.match(restore, /This legacy backup is not encrypted/);
   assert.match(restore, /Legacy plaintext backup import cancelled\. No records were changed\./);
 });
+
+
+test('native backup validator accepts authenticated v2 envelopes and validates their manifest', () => {
+  assert.match(androidPatch, /int version = backup\.optInt\("v", -1\);/);
+  assert.match(androidPatch, /version == 1 \|\| version == 2/);
+  assert.match(androidPatch, /manifest\.optInt\("formatVersion", -1\) != 2/);
+  assert.match(androidPatch, /recordCounts/);
+  assert.match(androidPatch, /payloadSha256/);
+  assert.match(androidPatch, /counts\.length\(\) != fields\.length/);
+});
+
+test('native backup validator retains v1 compatibility while accepting v2', () => {
+  assert.match(androidPatch, /if \(version == 1\) return true;/);
+  assert.match(androidPatch, /AURELIA-PMS-ENCRYPTED-BACKUP/);
+});
