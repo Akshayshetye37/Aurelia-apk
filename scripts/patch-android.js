@@ -996,12 +996,13 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       }
     });
   }
-  private void authorizeGoogleDriveBackup(String requestId) {
+  private void authorizeGoogleDriveBackup(String requestId, boolean forceAccountPicker) {
     runOnUiThread(() -> {
       try {
-        AuthorizationRequest request = AuthorizationRequest.builder()
-          .setRequestedScopes(java.util.Arrays.asList(new Scope("https://www.googleapis.com/auth/drive.appdata"), new Scope("https://www.googleapis.com/auth/userinfo.email")))
-          .build();
+        AuthorizationRequest.Builder requestBuilder = AuthorizationRequest.builder()
+          .setRequestedScopes(java.util.Arrays.asList(new Scope("https://www.googleapis.com/auth/drive.appdata"), new Scope("https://www.googleapis.com/auth/userinfo.email")));
+        if (forceAccountPicker) requestBuilder.setPrompt(AuthorizationRequest.Prompt.SELECT_ACCOUNT);
+        AuthorizationRequest request = requestBuilder.build();
         Identity.getAuthorizationClient(MainActivity.this).authorize(request)
           .addOnSuccessListener(result -> {
             if (result.hasResolution()) {
@@ -1466,7 +1467,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         final String requestId = obj.optString("requestId", "");
         operationType = type; operationRequestId = requestId;
         if ("authorizeGoogleDriveBackup".equals(type)) {
-          authorizeGoogleDriveBackup(requestId);
+          authorizeGoogleDriveBackup(requestId, obj.optBoolean("forceAccountPicker", false));
         } else if ("revokeGoogleDriveBackup".equals(type)) {
           revokeGoogleDriveBackup(requestId, obj.optString("accountEmail", ""));
         } else if ("openRecoveryPhoneSettings".equals(type)) {
