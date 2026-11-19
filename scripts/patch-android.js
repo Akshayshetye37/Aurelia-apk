@@ -1442,7 +1442,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         if (generation != pmsPhoneAuthGeneration || pmsPhoneAuthInFlight) return;
         pmsPhoneAuthInFlight = true;
         if (!task.isSuccessful() || task.getResult() == null || task.getResult().getUser() == null) {
-          pmsPhoneAuthInFlight = false; pmsPhoneAuthEvent(requestId, "code_invalid", "The code is invalid or expired. Enter another code or request a new one.", pmsMaskPhone(phone)); return;
+          pmsPhoneAuthInFlight = false; pmsPhoneAuthInFlight = false; pmsPhoneAuthEvent(requestId, "code_invalid", "The code is invalid or expired. Enter another code or request a new one.", pmsMaskPhone(phone)); return;
         }
         com.google.firebase.auth.FirebaseUser user = task.getResult().getUser();
         if (user.getPhoneNumber() == null || !phone.equals(user.getPhoneNumber())) {
