@@ -16,7 +16,7 @@ const normalizeFingerprint = (value) => String(value ?? '').toLowerCase().replac
 
 export function validateStagingConfig(env) {
   const errors = [];
-  for (const name of required) if (!String(env[name] ?? '').trim()) errors.push(\`missing \${name}\`);
+  for (const name of required) if (!String(env[name] ?? '').trim()) errors.push('missing ' + name);
   if (env.PROJECT_ID && !projectIdRe.test(env.PROJECT_ID)) errors.push('PROJECT_ID format invalid');
   if (env.PRODUCTION_PROJECT_ID && !projectIdRe.test(env.PRODUCTION_PROJECT_ID)) errors.push('PRODUCTION_PROJECT_ID format invalid');
   if (env.PROJECT_ID && env.PRODUCTION_PROJECT_ID && env.PROJECT_ID === env.PRODUCTION_PROJECT_ID) errors.push('staging and production project IDs must differ');
@@ -34,7 +34,7 @@ export function validateStagingConfig(env) {
   if (env.PROJECT_ID && env.GCP_REGION && env.FUNCTIONS_BASE_URL) {
     try {
       const url = new URL(env.FUNCTIONS_BASE_URL);
-      const expectedHost = \`\${env.GCP_REGION}-\${env.PROJECT_ID}.cloudfunctions.net\`;
+      const expectedHost = env.GCP_REGION + '-' + env.PROJECT_ID + '.cloudfunctions.net';
       if (url.protocol !== 'https:' || url.hostname !== expectedHost || url.username || url.password || url.port || url.pathname !== '/' || url.search || url.hash) errors.push('FUNCTIONS_BASE_URL must be the HTTPS origin for the configured project and region');
     } catch (error) {
       if (error instanceof TypeError) errors.push('FUNCTIONS_BASE_URL is invalid');
@@ -98,7 +98,7 @@ export function validateStagingConfig(env) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const errors = validateStagingConfig(process.env);
   if (errors.length) {
-    console.error(\`Gate 3 staging preflight failed: \${errors.join('; ')}\`);
+    console.error('Gate 3 staging preflight failed: ' + errors.join('; '));
     process.exit(1);
   }
   console.log('Gate 3 staging preflight passed; secret values were not printed.');
