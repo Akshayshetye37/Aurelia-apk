@@ -33,7 +33,7 @@ test("manual Drive backup and restore remain available when schedule is Never", 
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /runBackup\(false\)/);
   assert.match(html, /restoreLatestGoogleDriveBackup/);
-  assert.match(html, /Manual backups only/);
+  assert.match(html, /Manual backups only/);\n  assert.match(html, /driveSchedule!==\x27never\x27/);
 });
 
 test("native patch uses narrow app-data scope and does not add broad Drive scope", async () => {
