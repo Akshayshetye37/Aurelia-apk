@@ -913,6 +913,45 @@ test('phone, tenant and device rate limits lock out repeated OTP grant attempts'
   'sixth hourly attempt is rate-limited and locked out');
 });
 
+test('device rate-limit buckets are isolated between tenants sharing a device hash', async () => {
+  const sharedDeviceHash = deviceHashFor('synthetic-shared-device');
+  const tenantA = 'tenant-emulator-rate-isolation-a';
+  const tenantB = 'tenant-emulator-rate-isolation-b';
+  const ownerA = 'owner-emulator-rate-isolation-a';
+  const ownerB = 'owner-emulator-rate-isolation-b';
+  const phoneA = '+15555550121';
+  const phoneB = '+15555550122';
+  await seedTenant({ tenantId: tenantA, phone: phoneA, ownerUid: ownerA,
+    recoveryDeviceHash: sharedDeviceHash,
+    ownerDeviceHashes: [sharedDeviceHash, deviceHashFor(tenantA + ':owner')] });
+  await seedTenant({ tenantId: tenantB, phone: phoneB, ownerUid: ownerB,
+    recoveryDeviceHash: sharedDeviceHash,
+    ownerDeviceHashes: [sharedDeviceHash, deviceHashFor(tenantB + ':owner')] });
+
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const result = await callable(functions.issueRecoveryGrant, {
+      tenantId: tenantA, deviceIdHash: sharedDeviceHash, nonce: 'a'.repeat(43),
+      phoneIdToken: await phoneAuthToken(phoneA)
+    }, null, '203.0.113.121');
+    assert.equal(result.status, 'COOLDOWN');
+    if (attempt < 5) await sleep(1100);
+  }
+  await sleep(1100);
+  await assert.rejects(callable(functions.issueRecoveryGrant, {
+    tenantId: tenantA, deviceIdHash: sharedDeviceHash, nonce: 'a'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phoneA)
+  }, null, '203.0.113.121'), error => error.code === 'resource-exhausted',
+  'Tenant A device bucket is exhausted');
+
+  const tenantBResult = await callable(functions.issueRecoveryGrant, {
+    tenantId: tenantB, deviceIdHash: sharedDeviceHash, nonce: 'b'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phoneB)
+  }, null, '203.0.113.122');
+  assert.equal(tenantBResult.status, 'COOLDOWN',
+    'Tenant A device attempts must not exhaust Tenant B rate-limit bucket');
+  assert.equal((await db.doc(`recoveryCooldowns/${tenantB}`).get()).data().state, 'ALERT_PENDING');
+});
+
 test('owner acknowledgement token expires after fifteen minutes', async () => {
   const tenantId = 'tenant-emulator-ack-expiry';
   const ownerUid = 'owner-emulator-ack-expiry';
