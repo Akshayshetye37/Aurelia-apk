@@ -53,6 +53,7 @@ export function createBackupVaultStore({ indexedDBImpl = globalThis.indexedDB } 
       }
       return record;
     } catch (error) {
+      if (error?.code === "BACKUP_VAULT_INVALID") throw error;
       throw new Error("Durable IndexedDB backup-key storage is unavailable; Web Storage fallback is prohibited. " + (error?.message || ""));
     } finally { db?.close(); }
   }
