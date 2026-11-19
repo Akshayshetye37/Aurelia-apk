@@ -2,6 +2,8 @@
 
 Gate 3 uses GitHub Actions Workload Identity Federation (WIF), not a service-account JSON key. The workflow validates the configuration before authentication and never prints credential values.
 
+Authoritative references: [Google GitHub Actions auth](https://github.com/google-github-actions/auth) and [Google Cloud Workload Identity Federation](https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines). Use WIF instead of long-lived service-account JSON keys.
+
 ## GitHub Environment
 
 Configure the repository Environment named `recovery-staging`.
