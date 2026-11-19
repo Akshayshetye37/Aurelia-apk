@@ -9,9 +9,14 @@ Aurelia is local-first. Local encrypted storage is the default and remains avail
 The provider catalog is intentionally a roadmap, not a claim that every adapter is implemented:
 
 - Available boundary: local device adapter (requires a durable adapter supplied by the platform).
-- Planned: Dropbox, Google Drive, OneDrive, iCloud, WebDAV, Nextcloud, S3, Azure Blob, and custom storage endpoints.
+- Existing backup workflow: Android Storage Access Framework (SAF) cloud-folder selection. The system picker can expose installed document providers, including Google Drive, Dropbox, OneDrive, Box, Nextcloud, and others when those apps/providers are installed and expose folders. Provider capabilities vary; Aurelia does not embed their OAuth SDKs or collect their passwords in this folder flow.
+- Planned direct adapters: Dropbox, Google Drive, OneDrive, iCloud, WebDAV, Nextcloud, S3, Azure Blob, and custom storage endpoints. These direct adapters are not implemented by this abstraction.
 
-Provider availability must be marked accurately in the UI. A listed provider cannot be connected until its adapter is implemented, tested, and registered.
+Provider availability must be marked accurately in the UI. SAF is an existing backup-folder path but is not wired to this generic manager. A listed direct provider cannot be connected until its adapter is implemented, tested, and registered.
+
+## Existing backup integration
+
+The current Backup & Restore screen already supports a user-selected SAF cloud folder, private local backup, and an owner-configured HTTPS server/cloud destination. The SAF picker is provider-neutral: users can choose an installed document provider if it is exposed by Android. The UI should not label the destination as Google Drive only. Local backup remains primary and cloud folders are secondary destinations.
 
 ## Boundary and data handling
 
