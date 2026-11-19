@@ -1,0 +1,14 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "paymentIntents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "providerVerifiedStatus", "order": "ASCENDING" },
+        { "fieldPath": "accountingStatus", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

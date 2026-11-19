@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TEMPLATE ONLY: copy into the future Aurelia Pay Bridge AndroidManifest.xml.
+     Do not add this service declaration to the PMS manifest. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <permission
+        android:name="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE"
+        android:protectionLevel="signature" />
+
+    <application>
+        <service
+            android:name="com.aurelia.paybridge.ipc.PayBridgeService"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="com.aurelia.paybridge.permission.BIND_PAY_BRIDGE" />
+    </application>
+</manifest>

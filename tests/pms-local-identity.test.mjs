@@ -1,0 +1,6 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { indexedDB } from "fake-indexeddb";
+import { getOrCreateBrowserLocalIdentity } from "../src/storage/pms-local-identity.mjs";
+test("browser identity is stable and scoped locally across bootstrap restarts",async()=>{const cryptoImpl={randomUUID:(()=>{let n=0;return()=>"00000000-0000-4000-8000-"+String(++n).padStart(12,"0")})()};const a=await getOrCreateBrowserLocalIdentity({indexedDBImpl:indexedDB,cryptoImpl,storage:null});const b=await getOrCreateBrowserLocalIdentity({indexedDBImpl:indexedDB,cryptoImpl,storage:null});assert.deepEqual(a,b);assert.equal(a.scope,"LOCAL_ONLY");assert.equal(a.tenantId,"local_"+a.installationId);});
+test("fallback identity refuses corruption rather than silently creating a new installation",async()=>{const values=new Map(),storage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,String(v))},cryptoImpl={randomUUID:()=>"00000000-0000-4000-8000-000000000001"};await getOrCreateBrowserLocalIdentity({indexedDBImpl:null,storage,cryptoImpl});storage.setItem("aurelia_local_identity_v1","{broken");await assert.rejects(getOrCreateBrowserLocalIdentity({indexedDBImpl:null,storage,cryptoImpl}),/corrupt/i);});
