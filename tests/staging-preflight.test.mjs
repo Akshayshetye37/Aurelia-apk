@@ -45,6 +45,12 @@ test('rejects production project reuse and wrong callable host', () => {
   assert(errors.some((message) => message.includes('must differ')));
   assert(errors.some((message) => message.includes('configured project and region')));
 });
+test('rejects deployment and runtime service accounts outside the staging project', () => {
+  const env = validConfig(); env.DEPLOY_SERVICE_ACCOUNT = 'deploy@aurelia-prod.iam.gserviceaccount.com'; env.FUNCTION_SA = 'functions@aurelia-prod.iam.gserviceaccount.com';
+  const errors = validateStagingConfig(env);
+  assert(errors.some((message) => message.includes('DEPLOY_SERVICE_ACCOUNT must belong to the staging project')));
+  assert(errors.some((message) => message.includes('FUNCTION_SA must belong to the staging project')));
+});
 test('rejects shared deploy/runtime service account', () => {
   const env = validConfig(); env.DEPLOY_SERVICE_ACCOUNT = env.FUNCTION_SA;
   const errors = validateStagingConfig(env);

@@ -152,6 +152,36 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
 
+      - name: Verify Workload Identity Federation and deployment identity are staging-owned
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+          WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.STAGING_DEPLOY_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          provider_project_number="${WIF_PROVIDER#projects/}"
+          provider_project_number="${provider_project_number%%/*}"
+          staging_project_number="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+          test -n "$staging_project_number"
+          if [[ "$provider_project_number" != "$staging_project_number" ]]; then
+            echo "::error::Workload Identity Federation provider is not owned by the staging project."
+            exit 1
+          fi
+          gcloud iam service-accounts describe "$DEPLOY_SERVICE_ACCOUNT" --project "$PROJECT_ID" >/dev/null
+          active_account="$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+          if [[ "$active_account" != "$DEPLOY_SERVICE_ACCOUNT" ]]; then
+            echo "::error::Authenticated identity does not match the configured staging deploy service account."
+            exit 1
+          fi
+          production_policy="$(gcloud projects get-iam-policy "$PRODUCTION_PROJECT_ID" --format=json)"
+          if echo "$production_policy" | jq -e --arg member "serviceAccount:$DEPLOY_SERVICE_ACCOUNT" '[.bindings[]? | select(.members[]? == $member)] | length > 0' >/dev/null; then
+            echo "::error::Staging deploy service account has a direct IAM binding in production."
+            exit 1
+          fi
+          echo "Staging WIF provider and deployment identity ownership verified; direct production project bindings absent."
+
       - name: Validate staging configuration without printing secrets
         shell: bash
         env:

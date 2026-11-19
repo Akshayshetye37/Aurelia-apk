@@ -23,6 +23,8 @@ export function validateStagingConfig(env) {
   if (env.GCP_REGION && !/^[a-z]+-[a-z]+[0-9]+$/.test(env.GCP_REGION)) errors.push('GCP_REGION format invalid');
   if (env.FUNCTION_SA && !serviceAccountRe.test(env.FUNCTION_SA)) errors.push('FUNCTION_SA format invalid');
   if (env.DEPLOY_SERVICE_ACCOUNT && !serviceAccountRe.test(env.DEPLOY_SERVICE_ACCOUNT)) errors.push('DEPLOY_SERVICE_ACCOUNT format invalid');
+  if (env.PROJECT_ID && env.FUNCTION_SA && !env.FUNCTION_SA.endsWith('@' + env.PROJECT_ID + '.iam.gserviceaccount.com')) errors.push('FUNCTION_SA must belong to the staging project');
+  if (env.PROJECT_ID && env.DEPLOY_SERVICE_ACCOUNT && !env.DEPLOY_SERVICE_ACCOUNT.endsWith('@' + env.PROJECT_ID + '.iam.gserviceaccount.com')) errors.push('DEPLOY_SERVICE_ACCOUNT must belong to the staging project');
   if (env.FUNCTION_SA && env.DEPLOY_SERVICE_ACCOUNT && env.FUNCTION_SA === env.DEPLOY_SERVICE_ACCOUNT) errors.push('deployment and Functions runtime service accounts must differ');
   if (env.WIF_PROVIDER && !wifRe.test(env.WIF_PROVIDER)) errors.push('WIF_PROVIDER format invalid');
   if (env.APP_CHECK_REGISTERED !== 'true') errors.push('APP_CHECK_REGISTERED must be true');
