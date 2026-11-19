@@ -238,6 +238,196 @@ Latest observed native workflow: [Aurelia native SQLite contract run #170](https
 All required code paths, automated tests, real Android instrumentation, physical-device qualification, owner-authorized migration/accounting parity, second-device backup/restore, security review, repository governance and release authorization must be complete on the **same exact release-candidate SHA**. No older SHA, mock-only test, compile-only result or synthetic dataset substitutes for that evidence.
 
 
+---
+
+# Aurelia architecture, repository map, and active work (integration snapshot)
+
+This section documents the current repository structure and the architectural direction across the active workstreams. **A documented design or draft PR is not the same as an integrated, qualified feature.** Use the status labels below and the exact-head CI/device evidence before making release claims.
+
+## Product architecture
+
+Aurelia is a local-first hotel, homestay, and restaurant PMS. The app is being separated into domain repositories, command/services, storage adapters, synchronization/backup providers, payment orchestration, and Android-native security/storage boundaries.
+
+### Local-first data authority
+
+- The device is the primary operational data store while the local-first cutover remains in progress.
+- Browser persistence is implemented through IndexedDB-backed modules; Android persistence is implemented through the native Capacitor/SQLite/SQLCipher storage boundary.
+- Domain repository and bridge layers validate entities, versions, and mutations. Transactional multi-entity operations and outbox/journal foundations are present.
+- Legacy compatibility and migration code remains during cutover. The canonical PMS UI read/write cutover is **not complete**; authority/cutover flags remain fail-closed.
+- Cloud synchronization is optional and must not be required for core local operation.
+
+## Owner-controlled cloud account requirement
+
+**Every hotel, homestay, or restaurant owner must connect and authorize their own cloud account from inside Aurelia. Business data must be written only to the cloud account/folder that that owner explicitly authorized.** Aurelia must not use a shared developer-owned cloud account as a storage destination for customer business data.
+
+### Required product behavior
+
+1. Cloud connection is per owner/business and is initiated from the app's Home/Backup entry point or Settings.
+2. The owner authorizes the selected provider using its supported authorization flow (for example OAuth). The app must not ask owners to paste provider passwords into Aurelia.
+3. Authorization is retained securely and reused. Do not repeatedly prompt the owner for credentials during normal backup/sync; reauthorization is required only when access is revoked, expires, or the provider requires it.
+4. The connected account identity and destination must be shown so the owner can verify where their data is going.
+5. Backup/sync destinations are scoped to that owner's authorized account or selected folder. Tokens, account identifiers, backup metadata, and data must not be shared across owners.
+6. Cloud backup is opt-in. Until a cloud account is connected and backup is enabled, data remains local and backup operations must not silently target a developer/shared account.
+7. If cloud is unavailable or disconnected, Aurelia must continue in local mode, clearly report cloud backup/sync status, and preserve local data. It must not silently switch to a different cloud account.
+8. Disconnect must revoke/remove the app's local authorization state and stop cloud operations. Disconnecting cloud must not delete local PMS data.
+9. Backup scheduling (Daily, Weekly, Monthly, or Never where supported) is owner-controlled. A backup must be encrypted, integrity-checked, versioned, and restored through a validated restore flow.
+10. OAuth tokens and secrets must never be logged, committed, placed in public documentation, or exposed to the UI beyond safe account/status metadata.
+
+### Cloud destination model
+
+```text
+Owner / Business
+  └── Aurelia on owner's device
+       ├── Local encrypted PMS database (works offline)
+       ├── Owner-authorized cloud connection (optional)
+       │    └── Owner's account / app-owned folder / owner-selected folder
+       └── Backup and sync orchestration
+            ├── Validate and encrypt data
+            ├── Upload only to the connected owner's destination
+            ├── Verify integrity and metadata
+            └── Restore on an authorized device
+```
+
+The cloud provider adapter must be replaceable; the backup orchestrator must not depend directly on provider-specific API details. Provider connection state and backup state are separate: connecting a provider does not itself imply that automatic backup is enabled.
+
+### Current cloud implementation status
+
+- Personal-cloud connection and local sync coordinator foundations exist in `src/sync/`.
+- A generic provider abstraction and cloud-provider work exist on separate/draft development workstreams; integration and qualification are still pending.
+- The Google Drive OAuth/app-data backup work is currently a draft workstream and is **not represented as a completed, integrated feature on this branch**.
+- The `src/storage/personal-cloud-storage.mjs` file on this branch is currently a placeholder; do not treat it as a production cloud adapter.
+- Owner-specific authorization, token isolation, account display, disconnect behavior, backup scheduling, encryption, restore qualification, and cross-owner isolation tests are acceptance requirements for the implementation.
+
+## Repository structure
+
+The following is a high-level map of the current integration branch. It is intentionally organized by responsibility rather than listing every individual file.
+
+```text
+.
+├── index.html                         # PMS web UI and app entry
+├── package.json                       # Build and test scripts/dependencies
+├── android/                           # Capacitor Android project
+│   ├── templates/                     # Native storage, payment bridge, identity,
+│   │                                  # recovery, security and migration templates
+│   └── ...                            # Generated/Android project resources
+├── src/
+│   ├── bookings/                      # Booking policies/domain helpers
+│   ├── features/
+│   │   └── payments/                  # Payment UI/feature modules
+│   ├── payments/                      # Payment engine, intents, evidence,
+│   │                                  # settlement, reconciliation and safety
+│   ├── services/                      # App-facing service/API boundaries
+│   ├── storage/                       # Persistence adapters, PMS repositories,
+│   │                                  # schemas, bootstrap/cutover, authority,
+│   │                                  # backup vault, photo archive and storage
+│   └── sync/                           # Local sync coordination and cloud connection
+├── payment-backend/                   # Backend payment services (where present)
+├── scripts/
+│   ├── gates/                         # Gate/evidence utilities
+│   ├── prepare-web.js                 # Web asset/build preparation
+│   ├── check-*                       # Boundary, release and secret checks
+│   └── run-* / verify-*               # Android qualification helpers
+├── tests/
+│   ├── storage/                       # Storage and repository contracts
+│   ├── sync/                          # Sync tests
+│   ├── services/                      # Service tests
+│   └── *.test.mjs                     # Unit, integration, workflow and security tests
+├── docs/                               # Architecture, qualification, security,
+│                                       # payment, backup, recovery and release docs
+└── .github/workflows/                  # CI, Android build and qualification gates
+```
+
+### Key storage modules
+
+- `pms-repository-contract.mjs`, `pms-repository-bridge.mjs`: repository contract and validated bridge.
+- `indexeddb-pms-repository.mjs`: browser persistence implementation.
+- `capacitor-pms-storage.mjs` and Android `LocalPmsRepository`: native persistence boundary.
+- `pms-domain-schemas.mjs`: domain validation.
+- `pms-bootstrap-coordinator.mjs`, `pms-authority-state.mjs`, `pms-domain-cutover.mjs`: bootstrap, authority and cutover controls.
+- Domain repositories: expenses, inventory, restaurant sales/tables, settings and operational mutations/reservations.
+- `backup-vault-store.mjs`, `photo-archive.mjs`: backup/attachment storage foundations.
+- Legacy web-storage modules remain for migration/compatibility and must not become the canonical authority after cutover.
+
+### Key payment modules
+
+- `payment-engine.mjs`, `payment-safety-gate.mjs`, `backend-router.mjs`: payment orchestration and guarded backend routing.
+- Payment intent/evidence stores and local ledger receipt/outbox modules: durable intent/evidence foundations.
+- Settlement and reconciliation services/journal/projector: canonical financial processing and verification foundations.
+- Device payment bridge and Pay Bridge orchestrator: Android/native payment-device boundary.
+- Provider platform/onboarding modules: provider integration abstractions and onboarding status.
+- Live collection, automatic settlement, and automatic refund posting remain disabled unless separately qualified and authorized.
+
+## Active development workstreams
+
+| Workstream | Current state | Notes |
+|---|---|---|
+| Local-first PMS persistence | In progress | Repository/adapter foundations exist; full UI cutover and parity qualification remain outstanding. |
+| Encrypted Android storage | In progress / qualification required | Native implementation and workflows exist; exact-head instrumentation and physical-device evidence are required. |
+| Backup vault and restore | Foundation present | End-to-end encrypted second-device restore and integrity qualification remain outstanding. |
+| Owner-controlled cloud backup | Design requirement; implementation integration pending | Each owner must authorize their own provider account. Draft provider work is not integrated here. |
+| Cloud-provider abstraction | Draft workstream | Contract and provider integration need convergence with backup orchestration. |
+| Multi-tenant recovery isolation | Draft workstream | Tenant isolation and cross-tenant tests are qualification work, not production approval. |
+| Public SaaS identity/tenancy | Architecture/documentation workstream | Account, tenant, property, membership and authorization foundations are not a complete SaaS implementation. |
+| Payment backend and settlement | In progress | Canonical intent/evidence/ledger/settlement boundaries exist; live providers require merchant acceptance and security qualification. |
+| Gate 3 real SMS staging | Blocked pending staging configuration/credentials | Preserve Gates 1/2; resolve Gate 3 staging WIF/environment configuration and qualify the frozen candidate SHA. |
+| Gates 4–6 | Not release-qualified | Physical-device qualification, production security audit and release sign-off depend on preceding evidence. |
+
+Draft PRs and parallel branches are not merged functionality. Before integration, review their diffs, run tests, and reconcile overlapping architecture—especially backup orchestration versus cloud-provider abstraction and local-first repositories versus legacy UI paths.
+
+## Recovery and release qualification
+
+The repository contains a six-gate qualification pipeline. Gates are evidence-driven and SHA-specific:
+
+1. **Gate 1 — Encrypted storage:** candidate/source and encrypted-storage evidence.
+2. **Gate 2 — Recovery runtime:** recovery instrumentation, runtime/flag checks and evidence.
+3. **Gate 3 — Real SMS staging:** frozen candidate, staging preflight, cloud identity, staging deployment, real endpoint probes and retained evidence.
+4. **Gate 4 — Physical device:** approved physical-device recovery/lifecycle qualification.
+5. **Gate 5 — Production security:** read-only production configuration, IAM, secrets, App Check and recovery-flag audit.
+6. **Gate 6 — Release sign-off:** exact-candidate evidence, approvals and release authorization.
+
+Gate 3 is currently an infrastructure/configuration qualification focus. Missing staging environment configuration or Workload Identity Federation setup is not evidence of an application-source defect. Production recovery remains disabled until its explicit authorization and release gates are satisfied.
+
+## Security and operational defaults
+
+- Local-first operation; cloud is optional and owner-authorized.
+- No shared developer cloud destination for owner business data.
+- Cloud provider authorization must be scoped and securely stored; secrets are not logged.
+- Cloud disconnected/unavailable: local operation continues; no silent account substitution.
+- Recovery and production flags remain fail-closed.
+- Live payment collection, automatic settlement, automatic refund posting and provider activation remain OFF until qualified and explicitly authorized.
+- Do not treat draft PRs, compile-only jobs, mock tests, older SHA evidence, or synthetic data as release qualification.
+
+## Documentation index
+
+- `docs/BACKUP-ARCHITECTURE.md` — backup architecture.
+- `docs/PERSONAL-CLOUD-CONNECTION.md` — personal cloud connection design.
+- `docs/LOCAL-FIRST-SYNC-ARCHITECTURE.md` — local-first sync architecture.
+- `docs/LOCAL-FIRST-CUTOVER-EXECUTION.md` — cutover execution.
+- `docs/RECOVERY-GATE-PIPELINE.md` and `docs/GATE-3-REAL-SMS-STAGING-QUALIFICATION.md` — recovery gates and Gate 3.
+- `docs/ANDROID_DEVICE_QUALIFICATION.md` and `docs/ANDROID-PMS-ENCRYPTION-KEY-LIFECYCLE.md` — native-device/storage qualification and key lifecycle.
+- `docs/PMS_ACCOUNTING_SCHEMA.md`, `docs/PMS-PAYMENT-ORCHESTRATION.md`, and `docs/PAYMENT_PROVIDER_ONBOARDING.md` — accounting and payment architecture.
+- `docs/SECURITY.md` — security guidance.
+
+## Owner cloud onboarding acceptance criteria
+
+Cloud onboarding is not complete until the following are verified:
+
+- [ ] Owner can connect a supported cloud provider from Home or Settings.
+- [ ] The authorization flow identifies the account being connected.
+- [ ] The owner can confirm the destination before backup is enabled.
+- [ ] The connection belongs to exactly one owner/business context.
+- [ ] Tokens are stored securely and are not shared with another business.
+- [ ] Reopening the app reuses valid authorization without repeatedly asking for credentials.
+- [ ] Revoked/expired authorization produces a clear reauthorization state without data loss.
+- [ ] Backup is opt-in and the schedule is owner-controlled.
+- [ ] Encrypted backup is uploaded only to that owner's selected account/destination.
+- [ ] A second owner/device cannot access or overwrite the first owner's backup.
+- [ ] Disconnect stops cloud operations but preserves local data.
+- [ ] Restore validates the backup and requires appropriate owner/key authorization.
+- [ ] Tests cover account switching, token revocation, provider failure, wrong destination and cross-owner isolation.
+
+**Never use a shared cloud credential, service account, or developer account as the default destination for customer PMS data.** Backend service credentials, if needed for a separately authorized service, must not replace the owner's personal-cloud ownership model or grant broad access to owner files.
+
 ## Google Drive automatic backup (optional)
 
 Aurelia PMS supports owner-authorized encrypted Google Drive backup using the private `appDataFolder`. Each hotel/restaurant owner connects their own Google account. The app requests the narrow `drive.appdata` scope and `userinfo.email` only to display/verify the connected account. OAuth tokens are transient and never persisted in PMS data.
