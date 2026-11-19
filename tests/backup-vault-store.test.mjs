@@ -14,7 +14,7 @@ test("backup vault persists and reads the wrapped recovery key through IndexedDB
   const read = await store.read();
   assert.equal(read.wrappedKey, "wrapped-key");
   assert.equal(read.salt, "salt");
-  assert.equal(read.iterations, 600000);
+  assert.equal(read.iterations, 600000);\n  assert.deepEqual(read.key, record.key);\n  assert.equal(read.ignoredPlaintext, undefined);
 });
 
 test("backup vault rejects malformed records and fails closed when IndexedDB is unavailable", async () => {
@@ -26,3 +26,4 @@ test("backup vault rejects malformed records and fails closed when IndexedDB is 
     id: "primary", format: 1, wrappedKey: "wrapped", salt: "salt", wrapIv: "iv", iterations: 100
   }), /no Web Storage fallback was written/);
 });
+\n\ntest("backup vault rejects weak KDF settings and malformed cryptographic fields", async () => {\n  const store = createBackupVaultStore({ indexedDBImpl: indexedDB });\n  const valid = { id: "primary", format: 1, wrappedKey: "A".repeat(64), salt: "A".repeat(24), wrapIv: "A".repeat(16), iterations: 600000 };\n  await assert.rejects(store.write({ ...valid, iterations: 1000 }), error => error.code === "BACKUP_VAULT_INVALID");\n  await assert.rejects(store.write({ ...valid, salt: "short" }), error => error.code === "BACKUP_VAULT_INVALID");\n  await assert.rejects(store.write({ ...valid, wrappedKey: "not-base64" }), error => error.code === "BACKUP_VAULT_INVALID");\n  await assert.rejects(store.write({ ...valid, key: { type: "secret", algorithm: { name: "AES-CBC", length: 256 }, extractable: true, usages: ["encrypt"] } }), error => error.code === "BACKUP_VAULT_INVALID");\n});\n
