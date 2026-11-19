@@ -87,7 +87,7 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
   async function uploadSnapshot(token, _name, envelope, { retention = 7 } = {}) {
     if (!Number.isInteger(retention) || retention < 1 || retention > 50) throw fail("DRIVE_RETENTION_INVALID", "Backup retention must be between 1 and 50.");
     const remoteName = "aurelia-backup-" + Date.now() + "-" + randomHex(12) + ".json";
-    const created = await upload(token, remoteName, envelope);
+    const created = await upload(token, remoteName, envelope);\n    if (!created.modifiedTime) created.modifiedTime = new Date().toISOString();
     let files, cleanupFailures = [];
     try {
       files = await list(token);
