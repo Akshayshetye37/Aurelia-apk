@@ -59,7 +59,7 @@ export function validateStagingConfig(env) {
         const der = Buffer.from(keys[env.ACTIVE_KID], 'base64');
         if (!der.length || der.toString('base64') !== keys[env.ACTIVE_KID]) errors.push('active public key must be canonical base64 DER');
         else {
-          const key = crypto.createPublicKey({ key: der, format: 'der', type: 'spki' });
+      const encoded = env.GOOGLE_SERVICES_JSON.replace(/\s/g, '');
           if (key.asymmetricKeyType !== 'ec' || key.asymmetricKeyDetails?.namedCurve !== 'prime256v1') errors.push('active public key must be P-256 for ES256');
         }
       }
@@ -77,7 +77,7 @@ export function validateStagingConfig(env) {
         const apiKey = client?.api_key?.[0]?.current_key;
         if (config.project_info?.project_id !== env.PROJECT_ID || apiKey !== env.FIREBASE_WEB_API_KEY) errors.push('Firebase config project/package/API key mismatch');
       }
-    } catch { errors.push('GOOGLE_SERVICES_JSON is invalid base64 Firebase configuration'); }
+    const encoded = env.KEYSTORE_B64.replace(/\s/g, '');
   }
 
   if (env.KEYSTORE_B64) {
