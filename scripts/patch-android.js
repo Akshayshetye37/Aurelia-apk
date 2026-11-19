@@ -1454,14 +1454,16 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         }
         com.google.firebase.auth.FirebaseUser user = task.getResult().getUser();
         if (user.getPhoneNumber() == null || !phone.equals(user.getPhoneNumber())) {
-          auth.signOut(); pmsPhoneAuthInFlight = false; pmsPhoneAuthEvent(requestId, "failed", "Verified phone identity did not match.", pmsMaskPhone(phone)); return;
+          auth.signOut(); pmsPhoneAuthInFlight = false; pmsPhoneAuthGeneration++; pmsPhoneAuthEvent(requestId, "failed", "Verified phone identity did not match.", pmsMaskPhone(phone)); return;
         }
         FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1").getHttpsCallable("ensurePmsAccount")
           .call(java.util.Collections.singletonMap("displayName", pmsPhoneDisplayName))
           .addOnCompleteListener(MainActivity.this, profileTask -> {
             if (generation != pmsPhoneAuthGeneration) return;
-            if (profileTask.isSuccessful()) pmsPhoneAuthEvent(requestId, "authenticated", "Phone verified.", pmsMaskPhone(phone));
-            else pmsPhoneAuthEvent(requestId, "authenticated_profile_pending", "Phone verified. Account profile setup is pending; retry when connected.", pmsMaskPhone(phone));
+            String masked = pmsMaskPhone(phone);
+            pmsPhoneVerificationId = ""; pmsPhoneResendToken = null; pmsPhoneCurrent = ""; pmsPhoneDisplayName = "";
+            if (profileTask.isSuccessful()) pmsPhoneAuthEvent(requestId, "authenticated", "Phone verified.", masked);
+            else pmsPhoneAuthEvent(requestId, "authenticated_profile_pending", "Phone verified. Account profile setup is pending; retry when connected.", masked);
           });
       });
     }
@@ -1482,7 +1484,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
           if (generation == pmsPhoneAuthGeneration && !pmsPhoneAuthInFlight) pmsPhoneAuthSignIn(credential, requestId, phone, generation);
         }
         @Override public void onVerificationFailed(FirebaseException error) {
-          if (generation == pmsPhoneAuthGeneration) pmsPhoneAuthEvent(requestId, "failed", "Phone verification could not start. Check the number or try later.", pmsMaskPhone(phone));
+          if (generation == pmsPhoneAuthGeneration) { pmsPhoneAuthInFlight = false; pmsPhoneAuthGeneration++; pmsPhoneAuthEvent(requestId, "failed", "Phone verification could not start. Check the number or try later.", pmsMaskPhone(phone)); }
         }
         @Override public void onCodeSent(String verificationId, PhoneAuthProvider.ForceResendingToken token) {
           if (generation != pmsPhoneAuthGeneration || pmsPhoneAuthInFlight) return;
@@ -1498,7 +1500,8 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       PhoneAuthOptions.Builder options = PhoneAuthOptions.newBuilder(FirebaseAuth.getInstance())
         .setPhoneNumber(phone).setTimeout(60L, TimeUnit.SECONDS).setActivity(MainActivity.this).setCallbacks(callbacks);
       if (resend) options.setForceResendingToken(pmsPhoneResendToken);
-      PhoneAuthProvider.verifyPhoneNumber(options.build());
+      try { PhoneAuthProvider.verifyPhoneNumber(options.build()); }
+      catch (Exception error) { pmsPhoneAuthInFlight = false; pmsPhoneAuthEvent(requestId, "failed", "Phone verification is unavailable. Check Firebase configuration and try again.", pmsMaskPhone(phone)); }
     }
     @JavascriptInterface public void sendPmsPhoneOtp(String requestId, String phone, String displayName) {
       runOnUiThread(() -> pmsPhoneAuthSend(requestId, phone, displayName, false));
@@ -1515,7 +1518,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       });
     }
     @JavascriptInterface public void cancelPmsPhoneOtp() {
-      runOnUiThread(() -> { pmsPhoneAuthGeneration++; pmsPhoneVerificationId = ""; pmsPhoneResendToken = null; });
+      runOnUiThread(() -> { pmsPhoneAuthGeneration++; pmsPhoneVerificationId = ""; pmsPhoneResendToken = null; pmsPhoneCurrent = ""; pmsPhoneDisplayName = ""; pmsPhoneAuthInFlight = false; });
     }
     @JavascriptInterface public String getPayBridgeStatus() {
       return payBridgeClient == null ? "{\"authenticated\":false,\"state\":\"initializing\"}" : payBridgeClient.statusJson();
