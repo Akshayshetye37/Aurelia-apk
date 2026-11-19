@@ -284,9 +284,10 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   const nonce = 'n'.repeat(43);
   const otherTenantId = 'tenant-emulator-cross-ack';
   const otherTenantOwnerUid = 'owner-emulator-cross-ack';
+  const otherTenantOwnerDeviceHash = deviceHashFor(otherTenantId + ':owner');
   await seedTenant({ tenantId: otherTenantId, phone: '+15555550109', ownerUid: otherTenantOwnerUid,
     recoveryDeviceHash: deviceHashFor(otherTenantId + ':recovery'),
-    ownerDeviceHashes: [deviceHashFor(otherTenantId + ':recovery'), deviceHashFor(otherTenantId + ':owner')] });
+    ownerDeviceHashes: [deviceHashFor(otherTenantId + ':recovery'), otherTenantOwnerDeviceHash] });
   const firstPhoneToken = await phoneAuthToken(phone);
   const first = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce, phoneIdToken: firstPhoneToken
@@ -340,7 +341,7 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, passkeyOwnerAuth('different-owner-uid', tenantId)), 'wrong owner UID cannot acknowledge');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
-    tenantId: otherTenantId, deviceIdHash: secondOwnerDeviceHash, eventId,
+    tenantId: otherTenantId, deviceIdHash: otherTenantOwnerDeviceHash, eventId,
     ackToken: secondOwnerAlert.data.ackToken
   }, passkeyOwnerAuth(otherTenantOwnerUid, otherTenantId)),
   'another tenant owner cannot acknowledge the original tenant alert');
