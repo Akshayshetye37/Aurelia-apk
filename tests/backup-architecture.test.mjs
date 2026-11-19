@@ -71,3 +71,10 @@ test('cached backup keys cannot bypass manifest hash, size and record-count veri
   assert.match(html, /finally\{cachedPlain\.fill\(0\)\}/);
   assert.match(html, /finally\{plain\.fill\(0\)\}/);
 });
+
+test('legacy plaintext backup restore requires an explicit security warning confirmation', () => {
+  const restore = html.slice(html.indexOf('function restoreF(el){'), html.indexOf('function normaliseImportedBooking', html.indexOf('function restoreF(el){')));
+  assert.match(restore, /raw&&raw\.v===4&&raw\.data/);
+  assert.match(restore, /This legacy backup is not encrypted/);
+  assert.match(restore, /Legacy plaintext backup import cancelled\. No records were changed\./);
+});
