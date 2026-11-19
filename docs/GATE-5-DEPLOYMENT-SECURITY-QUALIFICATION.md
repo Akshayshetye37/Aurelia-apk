@@ -55,3 +55,10 @@ The staging deploy and read-only production audit workflows resolve the deployed
 
 
 The Cloud Run verifier runtime service account (`RECOVERY_ATTESTATION_SERVICE_ACCOUNT`), the Firebase Functions caller service account (`RECOVERY_FUNCTIONS_SERVICE_ACCOUNT`) and the WIF deployment service account (`GCP_DEPLOY_SERVICE_ACCOUNT`) must be three distinct identities. Only the Functions caller receives `roles/run.invoker`; the deploy identity receives `roles/iam.serviceAccountOpenIdTokenCreator` on the caller identity for the authenticated deployment probe.
+
+
+## Multi-owner operational readiness
+
+Before production launch, infrastructure ownership must be organizational and recoverable rather than dependent on one personal account. Verify a Google Cloud organization/project ownership model, group-based administration, at least two independently controlled administrators, and a documented break-glass process. GitHub repository/environment protection must be verified against the actual repository visibility and plan; do not assume required reviewers are available for private repositories.
+
+Shared recovery infrastructure must preserve tenant isolation. Gate 3's two-synthetic-tenant negative probes are required evidence for grant, owner-alert acknowledgement, device, and rate-limit isolation. Production readiness also requires a documented signing-key rotation rehearsal and a PHONE_PEPPER rotation strategy; the current phone HMAC format is not versioned, so pepper rotation must not be performed until a migration design and dual-read/rollback test are approved. SMS region restrictions, quotas, budget alerts, privacy retention, erasure, and redacted logging must be verified before real-user onboarding.

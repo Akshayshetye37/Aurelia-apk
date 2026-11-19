@@ -105,6 +105,15 @@ test('recovery grants are bound to the device key registered by the authenticate
   assert.match(issuance, /digest\(tenantId, proof\.phone\)\.toString\("hex"\)/);
 });
 
+test('recovery rate-limit device bucket is tenant-scoped to prevent cross-tenant interference', () => {
+  const issuance = functions.slice(functions.indexOf('export const issueRecoveryGrant'), functions.indexOf('export const consumeRecoveryGrant'));
+  assert.match(issuance, /rec:d:\$\{tenantId\}:\$\{deviceIdHash\}/);
+  assert.match(issuance, /rec:t:\$\{tenantId\}/);
+  assert.match(issuance, /rec:p:\$\{phoneRateKey\}/);
+  assert.match(issuance, /rec:ip:\$\{ipKey\}/);
+  assert.doesNotMatch(issuance, /rec:d:\$\{deviceIdHash\}/);
+});
+
 test('recovery requires a 24-hour cooldown and a fresh phone-auth event before grant issue', () => {
   const issuance = functions.slice(functions.indexOf('export const issueRecoveryGrant'), functions.indexOf('export const consumeRecoveryGrant'));
   const consumption = functions.slice(functions.indexOf('export const consumeRecoveryGrant'), functions.indexOf('export const cancelRecoveryPhoneChange'));

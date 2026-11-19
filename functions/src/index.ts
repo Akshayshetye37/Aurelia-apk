@@ -483,7 +483,7 @@ export const issueRecoveryGrant = onCall(
     const phoneRateKey = digest(tenantId, proof.phone).toString("hex");
     await spendRateLimit(`rec:p:${phoneRateKey}`, 5, 60 * 60_000);
     await spendRateLimit(`rec:t:${tenantId}`, 5, 60 * 60_000);
-    await spendRateLimit(`rec:d:${deviceIdHash}`, 5, 60 * 60_000);
+    await spendRateLimit(`rec:d:${tenantId}:${deviceIdHash}`, 5, 60 * 60_000);
     const ip = String(request.rawRequest.ip ?? "unknown").slice(0, 64);
     const ipKey = createHmac("sha256", PHONE_PEPPER.value()).update(ip).digest("hex");
     await spendRateLimit(`rec:ip:${ipKey}`, 20, 60 * 60_000);
