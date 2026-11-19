@@ -87,7 +87,7 @@ A future Pay Bridge backup must use a distinct application identifier and its ow
 - The UI shows account, last successful backup, size, next scheduled date and last error/warning.
 - Drive history is paginated and newest-first. Restore lets the owner select a recovery point; download/validation precedes the existing explicit restore confirmation and transactional restore path.
 - Retention defaults to seven recovery points. Cleanup runs only after upload succeeds, protects the new file, and reports cleanup failures separately from upload success.
-- Disconnect disables scheduling and clears the account identity in Aurelia. It preserves local PMS data; Google permission revocation remains available in the owner's Google Account.
+- Disconnect disables scheduling and clears the account identity in Aurelia. It preserves local PMS data; Google permission revocation remains available in the owner's Google Account. If Google's authorization prompt does not offer an account chooser, revoke Aurelia's Drive access in that account and reconnect to select a different account.
 - Authorization expiry, permission denial and rate limiting are surfaced as distinct retryable states.
 
 ### Scheduling limitation (important)
