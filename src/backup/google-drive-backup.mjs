@@ -30,6 +30,15 @@ function validateEnvelope(payload) {
   if (size < 100 || size > MAX_DRIVE_BACKUP_BYTES) throw fail("DRIVE_BACKUP_INVALID", "Encrypted backup envelope is incomplete or exceeds the 50 MiB limit.");
   return parsed;
 }
+export function assertGoogleDriveAccountMatches(account, expectedEmail) {
+  if (!account || typeof account.email !== "string" || !account.email.includes("@") || typeof expectedEmail !== "string" || !expectedEmail.includes("@")) {
+    throw fail("DRIVE_ACCOUNT_IDENTITY_UNAVAILABLE", "The connected Google Drive owner identity could not be verified.");
+  }
+  if (account.email.toLowerCase() !== expectedEmail.toLowerCase()) {
+    throw fail("DRIVE_ACCOUNT_MISMATCH", "The authorized Google account does not match the connected backup owner. Reconnect Google Drive to switch accounts.");
+  }
+  return account;
+}
 function parseFile(file) {
   if (!file || typeof file.id !== "string" || !/^[A-Za-z0-9_-]{10,200}$/.test(file.id) || !safeName(file.name)) return null;
   const size = Number(file.size);
