@@ -432,7 +432,7 @@ Cloud onboarding is not complete until the following are verified:
 
 Aurelia PMS supports owner-authorized encrypted Google Drive backup using the private `appDataFolder`. Each hotel/restaurant owner connects their own Google account. The app requests the narrow `drive.appdata` scope and `userinfo.email` only to display/verify the connected account. OAuth tokens are transient and never persisted in PMS data.
 
-- Schedule consent: Daily, Weekly, Monthly or Never (manual-only).
+- Schedule consent: Daily, Weekly, Monthly or Never (manual-only); boundaries use the device's local calendar (Monday-start weeks and calendar months).
 - Backup status: connected account, last attempt, last successful backup, next due state and sanitized failure status.
 - Recovery: paginated backup history and selectable restore points; downloaded envelopes are validated before the existing restore confirmation flow.
 - Retention: seven remote recovery points; retention cleanup is separate from upload success.
