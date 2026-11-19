@@ -105,7 +105,7 @@ test("Drive history paginates, filters files, and sorts newest first", async () 
 test("retention validates limits and deletes oldest files after upload", async () => {
   const deleted = [];
   const fetchImpl = async (url, options = {}) => {
-    if (options.method === "POST") return { ok: true, json: async () => ({ id: "c".repeat(16), name: "aurelia-backup-new.json" }) };
+    if (options.method === "POST") return { ok: true, json: async () => ({ id: "d".repeat(16), name: "aurelia-backup-new.json" }) };
     if (options.method === "DELETE") { deleted.push(String(url)); return { ok: true }; }
     return { ok: true, json: async () => ({ files: [
       { id: "a".repeat(16), name: "aurelia-backup-1.json", modifiedTime: "2024-01-01" },
