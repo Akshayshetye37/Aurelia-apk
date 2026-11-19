@@ -11,7 +11,8 @@ export const BACKUP_SCHEDULES = Object.freeze(["daily", "weekly", "monthly", "ne
 export const DEFAULT_BACKUP_RETENTION = 7;
 
 function authHeaders(token) {
-  if (typeof token !== "string" || token.length < 20 || /[\r\n]/.test(token)) throw fail("DRIVE_TOKEN_INVALID", "Google Drive authorization is missing or invalid.");
+  if (typeof token !== "string" || token.length < 20 || /[\r
+]/.test(token)) throw fail("DRIVE_TOKEN_INVALID", "Google Drive authorization is missing or invalid.");
   return { Authorization: "Bearer " + token };
 }
 function secureHex(bytes) {
@@ -72,7 +73,15 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
     validateEnvelope(encryptedEnvelope);
     const boundary = "aurelia-" + secureHex(16);
     const metadata = JSON.stringify({ name, parents: ["appDataFolder"], mimeType: "application/json" });
-    const body = "--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + metadata + "\r\n--" + boundary + "\r\nContent-Type: application/json\r\n\r\n" + encryptedEnvelope + "\r\n--" + boundary + "--";
+    const body = "--" + boundary + "\r
+Content-Type: application/json; charset=UTF-8\r
+\r
+" + metadata + "\r
+--" + boundary + "\r
+Content-Type: application/json\r
+\r
+" + encryptedEnvelope + "\r
+--" + boundary + "--";
     const response = await request("/files?uploadType=multipart&fields=id,name,size,modifiedTime", token, { method: "POST", headers: { "Content-Type": "multipart/related; boundary=" + boundary }, body });
     const file = parseFile(await response.json());
     if (!file) throw fail("DRIVE_RESPONSE_INVALID", "Google Drive did not confirm the uploaded backup.");
@@ -104,7 +113,10 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
     const cleanup = files.filter(file => file.id !== created.id).slice(Math.max(0, retention - 1));
     const failures = [];
     for (const file of cleanup) try { await remove(token, file.id); } catch { failures.push(file.id); }
-    const listedCreated = files.some(file => file.id === created.id);\n    const successfulDeletes = cleanup.length - failures.length;\n    const retained = Math.max(1, files.length + (listedCreated ? 0 : 1) - successfulDeletes);\n    return Object.freeze({ file: created, retained: Math.min(retained, retention + failures.length), cleanupFailures: failures, cleanupWarning: failures.length ? "Some old backups could not be removed." : "" });
+    const listedCreated = files.some(file => file.id === created.id);
+    const successfulDeletes = cleanup.length - failures.length;
+    const retained = Math.max(1, files.length + (listedCreated ? 0 : 1) - successfulDeletes);
+    return Object.freeze({ file: created, retained: Math.min(retained, retention + failures.length), cleanupFailures: failures, cleanupWarning: failures.length ? "Some old backups could not be removed." : "" });
   }
   return Object.freeze({ list, getAccount, upload, download, remove, uploadSnapshot });
 }
