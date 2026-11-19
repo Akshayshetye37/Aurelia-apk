@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 test("Android web package includes the direct Drive backup adapter", async () => {
   const build = await readFile(new URL("../scripts/prepare-web.js", import.meta.url), "utf8");
-  assert.match(build, /src\/backup\/google-drive-backup\.mjs/);
+  assert.match(build, /path\.join\(root,'src','backup','google-drive-backup\.mjs'\)/);
   assert.match(build, /backupDest/);
 });
 
