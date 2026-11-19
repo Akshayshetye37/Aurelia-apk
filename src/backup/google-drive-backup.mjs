@@ -35,7 +35,13 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch, r
     const headers = { ...authHeaders(token), ...(options.headers || {}) };
     let response;
     for (let attempt = 0; ; attempt++) {
-      response = await fetchImpl(DRIVE_API + path, { ...options, headers });
+      try {
+        response = await fetchImpl(DRIVE_API + path, { ...options, headers });
+      } catch (networkError) {
+        if (!(retry && attempt < 2)) throw fail("DRIVE_NETWORK_ERROR", "Google Drive could not be reached. Retry when network connectivity is available.");
+        await retryDelay(Math.min(500 * (2 ** attempt), 4000));
+        continue;
+      }
       if (!(retry && attempt < 2 && (response.status === 429 || response.status >= 500))) break;
       const retryAfter = Number(response.headers?.get?.("retry-after") || 0);
       await retryDelay(Math.min(retryAfter > 0 ? retryAfter * 1000 : 500 * (2 ** attempt), 4000));
@@ -48,8 +54,11 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch, r
   }
   async function getAccount(token) {\n    const response = await fetchImpl("https://www.googleapis.com/oauth2/v2/userinfo", { headers: authHeaders(token) });\n    if (!response.ok) throw fail(response.status === 401 ? "DRIVE_AUTH_EXPIRED" : "DRIVE_ACCOUNT_IDENTITY_UNAVAILABLE", "Could not verify the connected Google account.");\n    const user = await response.json();\n    if (typeof user?.email !== "string" || !user.email || user.verified_email === false) throw fail("DRIVE_ACCOUNT_IDENTITY_UNAVAILABLE", "Google did not return a verified account email.");\n    return Object.freeze({ email: user.email, verified: user.verified_email !== false });\n  }\n  async function list(token) {
     const files = [];
-    let pageToken;
+    let pageToken, pageCount = 0;
+    const seenPageTokens = new Set();
     do {
+      if (++pageCount > 100 || (pageToken && seenPageTokens.has(pageToken))) throw fail("DRIVE_PAGINATION_INVALID", "Google Drive returned an invalid or excessively long backup listing.");
+      if (pageToken) seenPageTokens.add(pageToken);
       const query = new URLSearchParams({ spaces: "appDataFolder", q: "'appDataFolder' in parents and trashed=false", fields: "nextPageToken,files(id,name,size,modifiedTime,md5Checksum)", pageSize: "1000" });
       if (pageToken) query.set("pageToken", pageToken);
       const response = await request("/files?" + query, token);
