@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BACKUP_SCHEDULES, GOOGLE_DRIVE_BACKUP_SCOPE, createBackupScheduleStore, createGoogleDriveBackupAdapter } from "../src/backup/google-drive-backup.mjs";
+import { BACKUP_SCHEDULES, GOOGLE_DRIVE_BACKUP_SCOPE, MAX_DRIVE_BACKUP_BYTES, createBackupScheduleStore, createGoogleDriveBackupAdapter } from "../src/backup/google-drive-backup.mjs";
 
 const envelope = JSON.stringify({ format: "AURELIA-PMS-ENCRYPTED-BACKUP", v: 2, cipher: "AES-256-GCM", ciphertext: "x".repeat(100) });
 const testToken = "t".repeat(40);
@@ -60,6 +60,18 @@ test("Drive adapter uses appDataFolder and rejects plaintext backups", async () 
   assert.match(calls[0].options.body, /appDataFolder/);
   assert.match(calls[0].options.body, /aurelia-backup-\d+-[a-f0-9]{24}\.json/);
   assert.match(calls[0].options.body, /AURELIA-PMS-ENCRYPTED-BACKUP/);
+});
+
+test("Drive backup payload limit matches the restore import safety boundary", async () => {
+  assert.equal(MAX_DRIVE_BACKUP_BYTES, 50 * 1024 * 1024);
+  let bodyRead = false;
+  const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async () => ({
+    ok: true,
+    headers: { get: () => String(MAX_DRIVE_BACKUP_BYTES + 1) },
+    text: async () => { bodyRead = true; return envelope; }
+  }) });
+  await assert.rejects(adapter.download(testToken, fakeDriveId), { code: "DRIVE_BACKUP_TOO_LARGE" });
+  assert.equal(bodyRead, false, "oversized Drive response should be rejected before body allocation");
 });
 
 test("Drive adapter lists only appDataFolder and validates downloaded envelope", async () => {
