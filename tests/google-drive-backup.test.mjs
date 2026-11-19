@@ -134,3 +134,11 @@ test("401, 403 and 429 are surfaced as distinct actionable error codes", async (
     await assert.rejects(adapter.list(testToken), { code });
   }
 });
+
+test("connected Drive owner identity must match the token account", async () => {
+  const { assertGoogleDriveAccountMatches } = await import("../src/backup/google-drive-backup.mjs");
+  const account = { email: "Owner@Example.com", name: "Owner" };
+  assert.equal(assertGoogleDriveAccountMatches(account, "owner@example.com"), account);
+  assert.throws(() => assertGoogleDriveAccountMatches(account, "other@example.com"), { code: "DRIVE_ACCOUNT_MISMATCH" });
+  assert.throws(() => assertGoogleDriveAccountMatches(account, ""), { code: "DRIVE_ACCOUNT_IDENTITY_UNAVAILABLE" });
+});
