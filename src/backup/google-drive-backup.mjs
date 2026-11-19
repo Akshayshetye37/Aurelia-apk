@@ -35,8 +35,10 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
     let parsed;
     try { parsed = JSON.parse(encryptedEnvelope); } catch { throw fail("DRIVE_BACKUP_INVALID", "Backup envelope is not valid JSON."); }
     if (parsed?.format !== "AURELIA-PMS-ENCRYPTED-BACKUP" || ![1,2].includes(parsed.v) || parsed.cipher !== "AES-256-GCM" || typeof parsed.ciphertext !== "string") throw fail("DRIVE_BACKUP_NOT_ENCRYPTED", "Google Drive accepts only Aurelia encrypted backup envelopes.");
-    if (encryptedEnvelope.length < 100) throw fail("DRIVE_BACKUP_INVALID", "Encrypted backup envelope is incomplete.");
-    const boundary = "aurelia-" + crypto.randomUUID();
+    if (encryptedEnvelope.length < 100 || encryptedEnvelope.length > 26 * 1024 * 1024) throw fail("DRIVE_BACKUP_INVALID", "Encrypted backup envelope is incomplete or exceeds the upload limit.");
+    const randomBytes = globalThis.crypto?.getRandomValues ? globalThis.crypto.getRandomValues(new Uint8Array(16)) : null;
+    if (!randomBytes) throw fail("DRIVE_CRYPTO_UNAVAILABLE", "Secure randomness is unavailable for the Drive upload boundary.");
+    const boundary = "aurelia-" + Array.from(randomBytes, byte => byte.toString(16).padStart(2, "0")).join("");
     const metadata = JSON.stringify({ name, parents: ["appDataFolder"], mimeType: "application/json" });
     const body = "--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + metadata + "\r\n--" + boundary + "\r\nContent-Type: application/json\r\n\r\n" + encryptedEnvelope + "\r\n--" + boundary + "--";
     const response = await request("/files?uploadType=multipart&fields=id,name,size,modifiedTime", token, { method: "POST", headers: { "Content-Type": "multipart/related; boundary=" + boundary }, body });
