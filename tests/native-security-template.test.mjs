@@ -341,3 +341,14 @@ test('recovery never authorizes a PMS session before the new PIN is used', () =>
   assert.doesNotMatch(recovery, /authenticated\s*=\s*true|dataKey\s*=|recoveryLockout\.registerSuccess\(\)/);
   assert.match(recovery, /MessageDigest\.isEqual/);
 });
+
+
+test('generated encrypted-backup validation contains real Java line breaks, not escaped separators', () => {
+  const patcher = read('scripts/patch-android.js');
+  const validationStart = patcher.indexOf('private boolean isStructurallyValidBackup');
+  const validationEnd = patcher.indexOf('private boolean isManagedBackupName', validationStart);
+  assert.ok(validationStart >= 0 && validationEnd > validationStart, 'backup validation template must exist');
+  const validation = patcher.slice(validationStart, validationEnd);
+  assert.match(validation, /length\(\) <= 35000000\n\s*&& backup\.optString\("ciphertext", ""\)\.length\(\) % 4 == 0/);
+  assert.doesNotMatch(validation, /35000000\\\\n\s*&&/);
+});
