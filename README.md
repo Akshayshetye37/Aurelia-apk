@@ -427,3 +427,17 @@ Cloud onboarding is not complete until the following are verified:
 - [ ] Tests cover account switching, token revocation, provider failure, wrong destination and cross-owner isolation.
 
 **Never use a shared cloud credential, service account, or developer account as the default destination for customer PMS data.** Backend service credentials, if needed for a separately authorized service, must not replace the owner's personal-cloud ownership model or grant broad access to owner files.
+
+## Google Drive automatic backup (optional)
+
+Aurelia PMS supports owner-authorized encrypted Google Drive backup using the private `appDataFolder`. Each hotel/restaurant owner connects their own Google account. The app requests the narrow `drive.appdata` scope and `userinfo.email` only to display/verify the connected account. OAuth tokens are transient and never persisted in PMS data.
+
+- Schedule consent: Daily, Weekly, Monthly or Never (manual-only); boundaries use the device's local calendar (Monday-start weeks and calendar months).
+- Backup status: connected account, last attempt, last successful backup, next due state and sanitized failure status.
+- Recovery: paginated backup history and selectable restore points; downloaded envelopes are validated before the existing restore confirmation flow.
+- Retention: seven remote recovery points; retention cleanup is separate from upload success.
+- Security: encrypted backup envelopes only, AES-256-GCM format validation, 50 MiB size bound, account mismatch detection, bounded retries for transient read/list failures and no automatic multipart-upload retries.
+- Reconnect: explicitly opens the Google account selector so owners can switch accounts; upload and restore reject account mismatches.
+- Disconnect: disables Drive operations and clears local account/schedule metadata without deleting local PMS records or local backups. A separate explicit revoke action revokes Google authorization (and may revoke other Aurelia scopes, so it warns first).
+
+Android background snapshots are currently best-effort. Because the authoritative PMS snapshot and key boundary remain in the WebView, scheduled uploads catch up when the app is active; the app does not claim guaranteed unattended backup after force-stop. See [Backup Architecture](docs/BACKUP-ARCHITECTURE.md) for the owner, OAuth, storage and restore boundaries.
