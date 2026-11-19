@@ -85,7 +85,7 @@ test('native backup validator accepts authenticated v2 envelopes and validates t
   assert.match(androidPatch, /version == 1 \|\| version == 2/);
   assert.match(androidPatch, /manifest\.optInt\("formatVersion", -1\) != 2/);
   assert.match(androidPatch, /recordCounts/);
-  assert.match(androidPatch, /payloadSha256/);
+  assert.match(androidPatch, /payloadSha256/);\n  assert.match(androidPatch, /payloadBytes.*25L \* 1024L \* 1024L/);\n  assert.match(androidPatch, /totalRecords <= 200000/);\n  assert.match(androidPatch, /ciphertext.*length\(\) % 4 == 0/);
   assert.match(androidPatch, /counts\.length\(\) != fields\.length/);
 });
 
