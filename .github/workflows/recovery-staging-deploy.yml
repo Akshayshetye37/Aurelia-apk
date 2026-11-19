@@ -118,6 +118,26 @@ jobs:
           test -s functions/lib/index.js
           test -s firebase.deploy.json
 
+      - name: Preflight staging configuration before cloud authentication
+        shell: bash
+        env:
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER || secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          STAGING_DEPLOY_SERVICE_ACCOUNT: ${{ vars.STAGING_DEPLOY_SERVICE_ACCOUNT || secrets.STAGING_DEPLOY_SERVICE_ACCOUNT }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PRODUCTION_GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
+          STAGING_FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
+          RECOVERY_FUNCTIONS_SERVICE_ACCOUNT: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
+          RECOVERY_ATTESTATION_VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
+          RECOVERY_SIGNING_KEY_ID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
+          RECOVERY_GRANT_PUBLIC_KEYS_JSON: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
+          FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
+          APP_CHECK_PLAY_INTEGRITY_REGISTERED: ${{ vars.APP_CHECK_PLAY_INTEGRITY_REGISTERED }}
+          APP_CHECK_SIGNER_SHA256: ${{ vars.APP_CHECK_SIGNER_SHA256 }}
+          ATTESTATION_APP_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
+          RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,getRecoveryOwnerPendingAction,getRecoveryOwnerActionReadiness' }}
+        run: node scripts/gates/staging-config-preflight.mjs
+
       - name: Validate Workload Identity Federation configuration
         shell: bash
         env:
