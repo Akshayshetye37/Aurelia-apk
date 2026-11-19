@@ -1,4 +1,4 @@
-name: Gate 3 - Staging deploy, negative probes and signed APK
+name: Gate 3 - Google Sign-In and Email-Link owner verification
 
 on:
   workflow_dispatch:
@@ -73,7 +73,7 @@ jobs:
     secrets: inherit
 
   evidence:
-    name: Gate 3 - Verify deployment and produce qualification evidence
+    name: Gate 3 - Verify owner-auth callable security and produce evidence
     needs:
       - preflight
       - staging-deploy
@@ -189,7 +189,7 @@ jobs:
           printf '%s\n' "$actual_app" > apks/app.sha256
           printf '%s\n' "$actual_test" > apks/test.sha256
 
-      - name: Reject missing and invalid App Check tokens on every recovery callable
+      - name: Reject missing and invalid App Check tokens on owner-verification callables
         shell: bash
         run: |
           set -euo pipefail
