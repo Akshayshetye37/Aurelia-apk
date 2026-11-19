@@ -398,3 +398,16 @@ test('owner alert acknowledgement uses server-verified WebAuthn and a one-time F
   assert.doesNotMatch(passkeys, /AuthenticatorTransportFuture/);
   assert.match(passkeys, /deviceIdHash: deviceHash, createdAt/);
 });
+
+test('primary PMS phone OTP callable contract and profile authorization', () => {
+  const source = fs.readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+  const rules = fs.readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8');
+  assert.ok(source.includes('ensurePmsAccount = onCall'));
+  assert.ok(source.includes('enforceAppCheck: true'));
+  assert.ok(source.includes('request.auth?.uid'));
+  assert.ok(source.includes('request.auth?.token.phone_number'));
+  assert.ok(source.includes('pmsAccounts'));
+  assert.ok(source.includes('phoneMasked'));
+  assert.ok(rules.includes('match /pmsAccounts/{uid}'));
+  assert.ok(rules.includes('allow create, update, delete: if false'));
+});
