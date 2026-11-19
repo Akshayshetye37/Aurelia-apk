@@ -30,6 +30,14 @@ The new direct Drive adapter authorizes the owner's Google account separately fr
 - Disconnect disables scheduled/manual Drive operations in Aurelia and leaves local business data unchanged. Google authorization may remain granted in the Google Account until revoked there.
 - Drive OAuth tokens are passed transiently to the adapter and are not stored in PMS state, Web Storage, logs or backup payloads.
 
+Production configuration:
+
+1. Enable Google Drive API in the Google Cloud project used by Aurelia's Android OAuth identity.
+2. Configure the OAuth consent screen with the Aurelia app name, support contact and privacy policy.
+3. Register Android OAuth credentials for package `com.aurelia.pms` with the debug/release signing certificate SHA-1 fingerprints used by the corresponding APK.
+4. Verify the Android identity configuration on a physical device with Google Play Services before release.
+5. Do not ship OAuth client secrets or service-account private keys in the APK.
+
 The Drive `appDataFolder` is hidden and accessible only to Aurelia. It is not a user-selected folder, is separate from visible Drive backup folders, and can be deleted by the user or when the app is removed from their Drive. Owners should retain independent recovery/export options.
 
 Android background scheduling is best-effort. WorkManager/OS scheduling cannot safely snapshot the current PMS state because the authoritative snapshot and recovery-key wrapper are owned by the running WebView. A due scheduled backup is therefore caught up when Aurelia is running/foregrounded and the local snapshot is available. A guaranteed unattended snapshot requires moving snapshot creation and encryption/key access into a native background-capable storage architecture.
