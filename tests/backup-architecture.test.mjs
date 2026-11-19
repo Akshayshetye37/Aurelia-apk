@@ -13,12 +13,15 @@ test("PMS backup uses app-private storage as the primary destination", () => {
   assert.match(androidPatch, /for \(int i=7;i<files\.length;i\+\+\)/);
 });
 
-test("Google Drive and shared SAF folders have independent persisted grants", () => {
+test("cloud-folder and shared SAF destinations have independent persisted grants", () => {
   assert.match(androidPatch, /backup_tree_uri/);
   assert.match(androidPatch, /shared_tree_uri/);
   assert.match(androidPatch, /readLatestBackupFromFolder\(prefs\.getString\("shared_tree_uri"/);
   assert.match(html, /pickDir\('shared'\)/);
-  assert.match(html, /Google Drive · Optional/);
+  assert.match(html, /Cloud Folder · Optional/);
+  assert.match(html, /Storage Access Framework \\(SAF\\)/);
+  assert.match(html, /Dropbox/);
+  assert.match(html, /OneDrive/);
   assert.match(html, /Shared Folder \/ SAF Policy/);
 });
 
