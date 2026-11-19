@@ -110,25 +110,25 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
 }
 function monthKey(value) { const date = new Date(value); return date.getFullYear() + "-" + date.getMonth(); }
 export function createBackupScheduleStore({ storage = null, key = "aurelia.backup.schedule.v1", now = () => Date.now() } = {}) {
-  let memoryRecord = { schedule: "never", lastSuccessAt: 0, lastAttemptAt: 0, connected: false, accountEmail: "", lastError: "", lastBackupSize: 0 };
+  let memoryRecord = { schedule: "never", lastSuccessAt: 0, lastAttemptAt: 0, connected: false, accountEmail: "", lastError: "", lastBackupSize: 0, retryAt: 0, failureCount: 0 };
   function read() {
     try {
       const raw = storage ? storage.getItem(key) : JSON.stringify(memoryRecord);
       const parsed = JSON.parse(raw || "{}");
-      return { schedule: schedules.has(parsed.schedule) ? parsed.schedule : "never", lastSuccessAt: Number.isFinite(parsed.lastSuccessAt) && parsed.lastSuccessAt >= 0 ? parsed.lastSuccessAt : 0, lastAttemptAt: Number.isFinite(parsed.lastAttemptAt) && parsed.lastAttemptAt >= 0 ? parsed.lastAttemptAt : 0, connected: parsed.connected === true, accountEmail: typeof parsed.accountEmail === "string" ? parsed.accountEmail : "", lastError: typeof parsed.lastError === "string" ? parsed.lastError.slice(0, 300) : "", lastBackupSize: Number.isFinite(parsed.lastBackupSize) && parsed.lastBackupSize >= 0 ? parsed.lastBackupSize : 0 };
+      return { schedule: schedules.has(parsed.schedule) ? parsed.schedule : "never", lastSuccessAt: Number.isFinite(parsed.lastSuccessAt) && parsed.lastSuccessAt >= 0 ? parsed.lastSuccessAt : 0, lastAttemptAt: Number.isFinite(parsed.lastAttemptAt) && parsed.lastAttemptAt >= 0 ? parsed.lastAttemptAt : 0, connected: parsed.connected === true, accountEmail: typeof parsed.accountEmail === "string" ? parsed.accountEmail : "", lastError: typeof parsed.lastError === "string" ? parsed.lastError.slice(0, 300) : "", lastBackupSize: Number.isFinite(parsed.lastBackupSize) && parsed.lastBackupSize >= 0 ? parsed.lastBackupSize : 0, retryAt: Number.isFinite(parsed.retryAt) && parsed.retryAt >= 0 ? parsed.retryAt : 0, failureCount: Number.isInteger(parsed.failureCount) && parsed.failureCount >= 0 ? Math.min(parsed.failureCount, 20) : 0 };
     } catch { return { schedule: "never", lastSuccessAt: 0, lastAttemptAt: 0, connected: false, accountEmail: "", lastError: "", lastBackupSize: 0 }; }
   }
   function write(value) {
     if (!schedules.has(value?.schedule)) throw fail("BACKUP_SCHEDULE_INVALID", "Backup schedule is invalid.");
-    const next = { ...read(), schedule: value.schedule, lastSuccessAt: value.lastSuccessAt ?? read().lastSuccessAt, lastAttemptAt: value.lastAttemptAt ?? read().lastAttemptAt, connected: value.connected === true, accountEmail: typeof value.accountEmail === "string" ? value.accountEmail.slice(0, 254) : "", lastError: typeof value.lastError === "string" ? value.lastError.slice(0, 300) : "", lastBackupSize: Number.isFinite(value.lastBackupSize) ? value.lastBackupSize : 0 };
+    const next = { ...read(), schedule: value.schedule, lastSuccessAt: value.lastSuccessAt ?? read().lastSuccessAt, lastAttemptAt: value.lastAttemptAt ?? read().lastAttemptAt, connected: value.connected === true, accountEmail: typeof value.accountEmail === "string" ? value.accountEmail.slice(0, 254) : "", lastError: typeof value.lastError === "string" ? value.lastError.slice(0, 300) : "", lastBackupSize: Number.isFinite(value.lastBackupSize) ? value.lastBackupSize : 0, retryAt: Number.isFinite(value.retryAt) ? Math.max(0, value.retryAt) : 0, failureCount: Number.isInteger(value.failureCount) ? Math.max(0, Math.min(value.failureCount, 20)) : 0 };
     if (storage) storage.setItem(key, JSON.stringify(next)); else memoryRecord = next;
     return Object.freeze(next);
   }
   function setSchedule(schedule) { if (!schedules.has(schedule)) throw fail("BACKUP_SCHEDULE_INVALID", "Backup schedule is invalid."); return write({ ...read(), schedule }); }
   function setConnected(connected, accountEmail = "") { return write({ ...read(), connected: connected === true, accountEmail: connected ? accountEmail : "", lastError: connected ? "" : read().lastError }); }
   function markAttempt(at = now()) { return write({ ...read(), lastAttemptAt: at }); }
-  function markSuccess(at = now(), size = 0) { return write({ ...read(), lastSuccessAt: at, lastAttemptAt: at, lastError: "", lastBackupSize: size }); }
-  function markFailure(error, at = now()) { return write({ ...read(), lastAttemptAt: at, lastError: error?.code || "BACKUP_FAILED" }); }
+  function markSuccess(at = now(), size = 0) { return write({ ...read(), lastSuccessAt: at, lastAttemptAt: at, lastError: "", lastBackupSize: size, retryAt: 0, failureCount: 0 }); }
+  function markFailure(error, at = now()) { const state = read(), failureCount = Math.min(state.failureCount + 1, 20), retryAt = at + Math.min(24 * 60 * 60 * 1000, 5 * 60 * 1000 * (2 ** (failureCount - 1))); return write({ ...state, lastAttemptAt: at, lastError: error?.code || "BACKUP_FAILED", retryAt, failureCount }); }
   function due(at = now()) {
     const state = read();
     if (!state.connected || state.schedule === "never") return false;
