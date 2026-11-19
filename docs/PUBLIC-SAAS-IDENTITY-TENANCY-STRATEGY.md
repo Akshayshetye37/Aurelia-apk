@@ -37,6 +37,28 @@ Phone OTP is an authentication mechanism only; it must not be treated as a vault
 
 Account lifecycle requirements: sign-in, sign-out, session revocation, phone-change re-verification, account deletion, and recovery of the account itself must be designed and tested. SMS abuse controls, cost limits, rate limits, App Check, and provider configuration are launch requirements.
 
+### 2A. Guest-first onboarding and account recovery UX
+
+- Fresh install shows **Create account**, **Sign in**, and **Skip / Continue without login**.
+- Guest mode is not a reduced demo: existing local PMS workflows remain available.
+- Guest dashboard keeps a non-blocking, motion-reduced reminder to sign in for cloud backup/multi-device access. It must not claim cloud backup is available before qualification.
+- Guest-mode state is persisted through the canonical local settings repository, not Web Storage.
+- Authentication UI must not simulate successful login, registration, OTP delivery, or recovery.
+- Every sign-in screen includes **Forgot Password?**.
+- Password recovery requires the account's verified registered mobile number, OTP expiry, resend cooldown, attempt limits, and abuse controls.
+- After trusted account lookup, display a backend-provided masked destination hint (example: +91 ••••••••10). Never generate a “registered number” hint from untrusted user input or reveal the full number.
+- OTP/password account recovery does not automatically recover the PMS DEK or vault credentials.
+- Local encryption is mandatory in both guest and authenticated modes. Current UI must not claim encryption until the platform storage and key lifecycle are verified; cloud sync remains disabled.
+- Guest-to-account linking requires explicit consent, verified identity, preview/backup, and rollback-safe migration. Existing local data must never be overwritten by cloud bootstrap.
+
+Acceptance criteria:
+1. Skip enters PMS without auth and preserves existing local data.
+2. Guest reminder appears on the dashboard, does not block operations, and respects reduced-motion settings.
+3. Guest mode is stored in canonical settings; no local/session Web Storage.
+4. Login/create-account/Forgot Password screens are present, but unavailable backend operations fail transparently.
+5. Forgot Password shows only a backend-derived masked registered-number hint after account lookup is implemented.
+6. Password reset and account recovery cannot regenerate/replace the local DEK.
+
 ### 3. Tenant is a property/business, not a user or device
 
 Canonical cloud tenant scope is `propertyId`. A property can represent a hotel, homestay, restaurant, or combined operation. Business type is a validated property attribute, not a security boundary.
