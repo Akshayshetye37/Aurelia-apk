@@ -51,3 +51,6 @@ For each case record the candidate SHA, staging project ID, APK SHA-256, signing
 
 
 All recovery staging and verifier deployment workflows are restricted to `work/p0-storage-hardening`. The physical-device workflow also verifies that the successful staging artifact originated from that branch and the exact candidate SHA.
+
+
+Identity and credential separation requirements are defined in [`IDENTITY-CREDENTIAL-BOUNDARIES.md`](IDENTITY-CREDENTIAL-BOUNDARIES.md) and apply to every staging qualification case.
