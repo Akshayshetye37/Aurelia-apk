@@ -39,6 +39,25 @@ Latest observed integration-branch SHA: `749561011664707629d0f37288363a39c14bb4c
 
 These checks are evidence for the exact integration-branch SHA above. They do not qualify draft Drive-backup code on another SHA or the physical-device/Gate 3 release requirements.
 
+## Owner-controlled Google Drive backup — integration status (2026-11-20)
+
+The owner-account Google Drive backup, audit documentation, Android authorization compatibility fix, and Gate 3 candidate-validation remediation are consolidated in [PR #55](https://github.com/Akshayshetye37/Aurelia-apk/pull/55). It is open and unmerged; therefore the implementation is not yet on `integration/ledger-patch`.
+
+- Exact PR head: `c289bda31a1bdcc85d15c023457ccbee1adb0204`.
+- The backup is opt-in. Each hotel/restaurant owner connects their own Google account; Aurelia uses the hidden Drive `appDataFolder` and the narrow `drive.appdata` scope. Backup data is not written to a shared Aurelia cloud account.
+- Only already-encrypted Aurelia backup envelopes are uploaded. OAuth tokens are transient and are not stored in PMS state.
+- Connected-account identity is checked before upload and restore. A token for a different Google account is rejected; account switching requires explicit reconnection.
+- Daily, Weekly, Monthly and Never are owner-selected. Manual backup and restore history remain available with Never.
+- Seven recovery points are retained, with cleanup failures reported separately.
+- SAF is a separate user-selected file destination/payment-related flow; it is not Google Drive OAuth.
+- Scheduling is foreground/catch-up best effort. Android force-stop or process restrictions can delay a snapshot until the app runs again; this is not WhatsApp-equivalent guaranteed background backup.
+
+**PR #55 CI evidence (exact head):** PMS source/web packaging, Gate pipeline lint, R1 local-first, settlement foundation, Recovery Functions and OTP Recovery Android Instrumentation passed on the earlier PR head. A connected-account verification regression test was added afterward and its exact-head checks are pending. Do not reuse earlier check results for the new SHA.
+
+**Gate 3 remains externally blocked:** the historical staging WIF authentication run failed because the workflow received neither a usable `workload_identity_provider` nor `credentials_json`. The consolidated workflow now validates the provider resource and service-account email before attempting auth, but repository/environment configuration and Google Cloud IAM/provider trust must be supplied by the owner. No secrets were created or modified.
+
+Draft PRs #49–#52 and the separate Android/Gate 3 fix PR #54 are superseded by PR #55 and should not be merged independently.
+
 ## Implemented code foundations (not production approval)
 
 - Browser durable persistence uses IndexedDB; Android persistence uses the native SQLCipher-backed SQLite plugin. Required durable storage fails closed rather than silently presenting RAM-only persistence as durable.
