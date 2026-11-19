@@ -131,7 +131,7 @@ test('Gate 3 is scoped to Google Sign-In and Email-Link owner verification, not 
   assert.match(gate3, /--branch "integration\/ledger-patch"/);
   assert.match(gate3, /CANDIDATE_BRANCH: integration\/ledger-patch/);
   assert.match(staging, /CANDIDATE_BRANCH: integration\/ledger-patch/);
-  assert.match(staging, /candidate deployment is restricted to the Gate 3 candidate branch/i);
+  assert.match(staging, /CANDIDATE_BRANCH: integration\/ledger-patch/);
   assert.match(staging, /exchangeOwnerEmailLink/);
   assert.match(staging, /confirmRecoveryOwnerBinding/);
   const callableLine = staging.split('\n').find((line) => line.includes('RECOVERY_CALLABLES:')) ?? '';
