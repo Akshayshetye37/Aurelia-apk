@@ -21,7 +21,7 @@ export function requireSha(value) {
 }
 export const sha256File = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 export function gh(apiPath) {
-  if (typeof apiPath !== 'string' || apiPath.startsWith('/') || apiPath.includes('\\') || /[\r\n?#]/.test(apiPath) ||
+  if (typeof apiPath !== 'string' || apiPath.startsWith('/') || apiPath.includes('\\') || /[\r\n#]/.test(apiPath) ||
       apiPath.split('/').some((segment) => {
         try { const decoded = decodeURIComponent(segment); return decoded === '.' || decoded === '..'; }
         catch { return true; }
