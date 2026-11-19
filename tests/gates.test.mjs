@@ -136,6 +136,25 @@ test('Gate 3 is scoped to Google Sign-In and Email-Link owner verification, not 
   assert.match(pipeline, /Gate 3 does not require real SMS, Blaze SMS quota, a SIM, or a physical SMS test device/);
 });
 
+test('Gate 3 probe configuration requires Email-Link and excludes SMS/OTP/grant callables', (t) => {
+  const base = {
+    STAGING_PROJECT_ID: 'aurelia-stage-12345',
+    PRODUCTION_PROJECT_ID: 'aurelia-prod-12345',
+    STAGING_REGION: 'asia-south1',
+    STAGING_FUNCTIONS_BASE_URL: 'https://asia-south1-aurelia-stage-12345.cloudfunctions.net',
+  };
+  const missingEmail = run(t, 'staging-probes.mjs', [], {
+    ...base, RECOVERY_CALLABLES: 'confirmRecoveryOwnerBinding',
+  });
+  assert.equal(missingEmail.status, 1);
+  assert.match(output(missingEmail), /must probe exchangeOwnerEmailLink/);
+  const smsScope = run(t, 'staging-probes.mjs', [], {
+    ...base, RECOVERY_CALLABLES: 'exchangeOwnerEmailLink,registerRecoveryPhone',
+  });
+  assert.equal(smsScope.status, 1);
+  assert.match(output(smsScope), /must not include phone OTP\/SMS/);
+});
+
 test('candidate SHA validation fails before any GitHub API call', (t) => {
   const result = run(t, 'check-candidate.mjs', ['--sha', 'not-a-sha', '--repo', 'owner/repo', '--branch', 'work/candidate']);
   assert.equal(result.status, 1);
