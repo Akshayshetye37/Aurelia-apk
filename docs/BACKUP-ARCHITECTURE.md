@@ -76,3 +76,19 @@ A future Pay Bridge backup must use a distinct application identifier and its ow
 - A replacement installation imports the encrypted file and prompts for the recovery password. Successful decryption imports the non-extractable key into its local vault.
 - Existing plaintext v4 backups remain readable for migration; all newly generated backups are encrypted. Do not treat legacy files as meeting the new encryption policy.
 - Password rotation is deliberately not exposed until a rewrapping/re-encryption migration can update every retained recovery point safely.
+
+## Google Drive backup hardening — WhatsApp-inspired behavior
+
+The Drive experience follows familiar WhatsApp backup concepts while preserving Aurelia's local-first and encrypted-backup boundaries:
+
+- Owner opt-in and explicit frequency selection (Daily, Weekly, Monthly, Never); Never keeps manual backup/restore available.
+- A visible last-success timestamp and manual **Back up now** action.
+- Recovery-point history, newest first, with restore-by-selection rather than latest-only.
+- Seven remote recovery points by default; retention is bounded and cleanup failures are surfaced without treating a successful upload as failed.
+- Pagination is used when listing Drive App Data so history is not truncated at the first 100 files.
+- A 50 MiB safety bound and strict encrypted-envelope validation apply to upload and restore.
+- Expired authorization receives one fresh authorization attempt for backup upload; subsequent failure is reported and backup retry remains pending.
+- Drive authorization uses only `drive.appdata`. It does not request Google profile/email identity; the UI explains that account identity is not exposed and reconnect is the account-switch path.
+- Schedule execution remains foreground/catch-up. Android does not guarantee an unattended backup while the app's WebView-owned snapshot and key wrapper are unavailable. This limitation is shown rather than marketed as WhatsApp-equivalent background reliability.
+
+The direct Drive adapter is tested with mocked API responses. Real OAuth, live upload/restore, account switching and second-device recovery still require physical-device qualification with owner-controlled Google accounts.
