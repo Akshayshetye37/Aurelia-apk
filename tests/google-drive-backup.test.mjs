@@ -85,3 +85,47 @@ test("Drive adapter lists only appDataFolder and validates downloaded envelope",
   assert.equal(await adapter.download(testToken, fakeDriveId), envelope);
   await assert.rejects(adapter.download(testToken, "bad id"), { code: "DRIVE_FILE_ID_INVALID" });
 });
+
+test("Drive history paginates, filters files, and sorts newest first", async () => {
+  const calls = [];
+  const fetchImpl = async url => {
+    calls.push(String(url));
+    const parsed = new URL(String(url));
+    if (parsed.searchParams.get("pageToken") === "next") return { ok: true, json: async () => ({ files: [{ id: "b".repeat(16), name: "aurelia-backup-old.json", modifiedTime: "2025-01-01" }, { id: "ignored", name: "notes.txt" }] }) };
+    return { ok: true, json: async () => ({ nextPageToken: "next", files: [{ id: "a".repeat(16), name: "aurelia-backup-new.json", modifiedTime: "2026-01-01" }] }) };
+  };
+  const files = await createGoogleDriveBackupAdapter({ fetchImpl }).list(testToken);
+  assert.equal(files.length, 2);
+  assert.equal(files[0].id, "a".repeat(16));
+  assert.equal(calls.length, 2);
+  assert.match(calls[1], /pageToken=next/);
+  assert.match(calls[0], /orderBy=modifiedTime/);
+});
+
+test("retention validates limits and deletes oldest files after upload", async () => {
+  const deleted = [];
+  const fetchImpl = async (url, options = {}) => {
+    if (options.method === "POST") return { ok: true, json: async () => ({ id: "c".repeat(16), name: "aurelia-backup-new.json" }) };
+    if (options.method === "DELETE") { deleted.push(String(url)); return { ok: true }; }
+    return { ok: true, json: async () => ({ files: [
+      { id: "a".repeat(16), name: "aurelia-backup-1.json", modifiedTime: "2024-01-01" },
+      { id: "b".repeat(16), name: "aurelia-backup-2.json", modifiedTime: "2025-01-01" },
+      { id: "c".repeat(16), name: "aurelia-backup-3.json", modifiedTime: "2026-01-01" }
+    ] }) };
+  };
+  const adapter = createGoogleDriveBackupAdapter({ fetchImpl });
+  await assert.rejects(adapter.uploadSnapshot(testToken, "ignored", envelope, { retention: 0 }), { code: "DRIVE_RETENTION_INVALID" });
+  const result = await adapter.uploadSnapshot(testToken, "ignored", envelope, { retention: 2 });
+  assert.equal(deleted.length, 1);
+  assert.match(deleted[0], /a{16}/);
+  assert.deepEqual(result.cleanupFailures, []);
+});
+
+test("Drive adapter fails closed on repeated pagination tokens and invalid encrypted envelopes", async () => {
+  const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async url => {
+    if (String(url).includes("/files?")) return { ok: true, json: async () => ({ nextPageToken: "repeat", files: [] }) };
+    return { ok: true, text: async () => JSON.stringify({ format: "AURELIA-PMS-ENCRYPTED-BACKUP", v: 2, cipher: "AES-256-GCM", ciphertext: "" }) };
+  } });
+  await assert.rejects(adapter.list(testToken), { code: "DRIVE_PAGINATION_INVALID" });
+  await assert.rejects(adapter.download(testToken, fakeDriveId), { code: "DRIVE_BACKUP_NOT_ENCRYPTED" });
+});
