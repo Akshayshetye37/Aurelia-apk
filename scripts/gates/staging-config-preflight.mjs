@@ -17,25 +17,25 @@ const required = [
   'ATTESTATION_APP_SIGNER_SHA256',
 ];
 for (const name of required) {
-  if (!process.env[name]?.trim()) fail(`missing recovery-staging configuration: ${name}`);
+  if (!process.env[name]?.trim()) fail(\`missing recovery-staging configuration: \${name}\`);
 }
 
 const provider = process.env.GCP_WORKLOAD_IDENTITY_PROVIDER;
-if (!/^projects\\/\\d+\\/locations\\/global\\/workloadIdentityPools\\/[A-Za-z0-9_-]+\\/providers\\/[A-Za-z0-9_-]+$/.test(provider)) {
+if (!/^projects\/\d+\/locations\/global\/workloadIdentityPools\/[A-Za-z0-9_-]+\/providers\/[A-Za-z0-9_-]+$/.test(provider)) {
   fail('GCP_WORKLOAD_IDENTITY_PROVIDER must be a full Google WIF provider resource name');
 }
 const serviceAccount = process.env.STAGING_DEPLOY_SERVICE_ACCOUNT;
-if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.iam\\.gserviceaccount\\.com$/.test(serviceAccount)) {
+if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$/.test(serviceAccount)) {
   fail('STAGING_DEPLOY_SERVICE_ACCOUNT must be a service-account email');
 }
 const project = process.env.GCP_PROJECT_ID;
 const production = process.env.PRODUCTION_GCP_PROJECT_ID;
 if (project === production) fail('staging and production project IDs must differ');
 if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(project)) fail('GCP_PROJECT_ID is not a valid project ID');
-if (!/^[a-z]+-[a-z]+\\d+$/.test(process.env.GCP_REGION)) fail('GCP_REGION must be a valid region identifier');
+if (!/^[a-z]+-[a-z]+\d+$/.test(process.env.GCP_REGION)) fail('GCP_REGION must be a valid region identifier');
 
 const baseUrl = new URL(process.env.STAGING_FUNCTIONS_BASE_URL);
-const expectedHost = `${process.env.GCP_REGION}-${project}.cloudfunctions.net`;
+const expectedHost = \`\${process.env.GCP_REGION}-\${project}.cloudfunctions.net\`;
 if (baseUrl.protocol !== 'https:' || baseUrl.hostname !== expectedHost || baseUrl.username || baseUrl.password || baseUrl.port || baseUrl.pathname !== '/' || baseUrl.search || baseUrl.hash) {
   fail('STAGING_FUNCTIONS_BASE_URL must be the HTTPS origin for the configured staging region/project');
 }
@@ -62,8 +62,8 @@ const legacyExcluded = [
 ];
 const configured = (process.env.RECOVERY_CALLABLES || requiredCallables.join(',')).split(',').map(value => value.trim()).filter(Boolean);
 if (new Set(configured).size !== configured.length) fail('RECOVERY_CALLABLES contains duplicate entries');
-for (const name of requiredCallables) if (!configured.includes(name)) fail(`RECOVERY_CALLABLES missing Gate 3 callable: ${name}`);
-for (const name of legacyExcluded) if (configured.includes(name)) fail(`legacy OTP/recovery callable is excluded from Gate 3: ${name}`);
+for (const name of requiredCallables) if (!configured.includes(name)) fail(\`RECOVERY_CALLABLES missing Gate 3 callable: \${name}\`);
+for (const name of legacyExcluded) if (configured.includes(name)) fail(\`legacy OTP/recovery callable is excluded from Gate 3: \${name}\`);
 if (configured.some(name => !/^[A-Za-z0-9_-]+$/.test(name))) fail('RECOVERY_CALLABLES contains an invalid callable name');
 
 let keys;
