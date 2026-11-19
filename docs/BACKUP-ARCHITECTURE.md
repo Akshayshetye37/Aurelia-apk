@@ -17,22 +17,32 @@ The web UI creates a PMS snapshot when data changes and on app launch/periodic f
 
 Private app data is removed when the app is uninstalled or its data is cleared. Owners must configure an optional off-device destination or export backups if they need protection from device loss/uninstall.
 
-### 2. Google Drive OAuth — optional, owner-controlled (candidate implementation)
+## 2. Google Drive OAuth — optional, owner-controlled
 
-The draft direct-Drive candidate uses Google Identity Services AuthorizationClient on Android and the narrow `drive.appdata` scope. Backup files live in the hidden `appDataFolder`; the owner does not choose a folder. OpenID/email identity is used only to show the authorized account. This is separate from Google Sign-In and the legacy SAF export/import flow.
+The implementation is consolidated in open, unmerged PR #55: https://github.com/Akshayshetye37/Aurelia-apk/pull/55. It is not yet part of `integration/ledger-patch`.
 
-- Connect is explicit and independent from login.
+- Each business owner connects their own Google account. Aurelia does not upload PMS data to a shared vendor-owned Drive account.
+- Android Google Identity Services AuthorizationClient requests the narrow `drive.appdata` scope plus OpenID/email for account identity.
+- Backup files are stored in the hidden `appDataFolder`; the owner does not choose a Drive folder.
+- Connect is explicit and independent from Google Sign-In. Google Sign-In for app authentication does not itself grant Drive backup permission.
 - The owner chooses Daily, Weekly, Monthly or Never after connecting. Never keeps manual Back Up Now and restore history available.
-- Only already-encrypted Aurelia backup envelopes are uploaded; the adapter validates format, cipher, ciphertext and size.
+- Only already-encrypted Aurelia backup envelopes are uploaded. The adapter validates envelope format, cipher, ciphertext and size.
 - Seven remote recovery points are retained. Cleanup failure is reported separately from upload success.
-- Tokens are transient and are not stored in PMS state, Web Storage, logs or backup payloads.
-- Account mismatch is rejected. Account switching requires an explicit reconnect/account-selection path.
-- Disconnect disables Aurelia Drive operations and clears local account/schedule state without deleting local PMS data. Google permission revocation is a separate explicit action.
-- OAuth expiry, permission denial and rate limits are surfaced as distinct retryable states.
+- OAuth access tokens are transient and are not persisted in PMS state, Web Storage, logs or backup payloads.
+- The authorized account email is verified before upload and restore. Account mismatch is rejected; switching accounts requires explicit reconnection and confirmation.
+- Disconnect disables Aurelia Drive operations and clears local account/schedule state without deleting local PMS data. Google permission revocation remains a separate action in Google Account settings.
+- OAuth expiry, permission denial and rate limits are surfaced as actionable failures.
 
-**Integration status:** this adapter is in draft PR #49, with overlapping hardening PR #50 and PR #51. It is not merged into `integration/ledger-patch`. Mocked adapter tests do not prove real OAuth, upload, restore, account switching or second-device recovery.
+### Qualification status
 
-**Scheduling limitation:** snapshots and recovery-key wrapping are WebView-owned. Scheduled work is foreground/catch-up when Aurelia is active; it is not guaranteed after force-stop or when Android cannot run the WebView. A guaranteed unattended backup requires moving snapshot/export, key wrapping and owner authorization into a native background-capable architecture.
+Mocked adapter and UI tests are included. CI on the consolidated PR head previously passed the PMS/web packaging, Gate lint, R1, settlement foundation, Recovery Functions and Android instrumentation workflows; the account-isolation regression test was added after those results and requires exact-head CI.
+
+Real OAuth, live upload/download, account switching, Google permission revocation and second-device restore have not been qualified. No production-ready claim is made.
+
+### Scheduling limitation
+
+Snapshots and recovery-key wrapping are WebView-owned. Scheduled work is foreground/catch-up when Aurelia is active; it is not guaranteed after force-stop or when Android cannot run the WebView. Guaranteed unattended backup requires moving snapshot/export, key wrapping and owner authorization into a native background-capable architecture.
+
 
 ### 3. Owner-configured server/cloud — optional
 
