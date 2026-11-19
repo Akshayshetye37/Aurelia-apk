@@ -51,7 +51,7 @@ test('rejects signer mismatch and unregistered App Check', () => {
   assert(errors.some((message) => message.includes('matching SHA-256')));
 });
 test('rejects malformed WIF, service accounts, Firebase config and active key', () => {
-  const env = validConfig(); env.WIF_PROVIDER = 'not-a-resource'; env.DEPLOY_SERVICE_ACCOUNT = 'wrong'; env.GOOGLE_SERVICES_JSON = Buffer.from('{}').toString('base64'); env.PUBLIC_KEYS = JSON.stringify({ 'wrong-kid': 'bad' });
+  const env = validConfig(); env.WIF_PROVIDER = 'projects/123/locations/global/workloadIdentityPools/pool name/providers/provider'; env.DEPLOY_SERVICE_ACCOUNT = 'wrong'; env.GOOGLE_SERVICES_JSON = Buffer.from('{}').toString('base64'); env.PUBLIC_KEYS = JSON.stringify({ 'wrong-kid': 'bad' });
   const errors = validateStagingConfig(env);
   assert(errors.some((message) => message.includes('WIF_PROVIDER')));
   assert(errors.some((message) => message.includes('DEPLOY_SERVICE_ACCOUNT')));

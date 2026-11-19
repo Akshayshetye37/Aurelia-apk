@@ -10,7 +10,7 @@ const required = [
 ];
 const projectIdRe = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 const serviceAccountRe = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$/;
-const wifRe = /^projects\/\d+\/locations\/global\/workloadIdentityPools\/[^/]+\/providers\/[^/]+$/;
+const wifRe = /^projects\/\d+\/locations\/global\/workloadIdentityPools\/[A-Za-z0-9_-]+\/providers\/[A-Za-z0-9_-]+$/;
 const sha256Re = /^[0-9a-f]{64}$/;
 const normalizeFingerprint = (value) => String(value ?? '').toLowerCase().replaceAll(':', '');
 
