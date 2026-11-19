@@ -5,7 +5,8 @@ const safeName = name => typeof name === "string" && /^aurelia-backup-[A-Za-z0-9
 const schedules = new Set(["daily", "weekly", "monthly", "never"]);
 export const MAX_DRIVE_BACKUP_BYTES = 50 * 1024 * 1024;
 export const GOOGLE_DRIVE_BACKUP_SCOPE = APP_DATA_SCOPE;
-export const BACKUP_SCHEDULES = Object.freeze(["daily", "weekly", "monthly", "never"]);\nexport const GOOGLE_ACCOUNT_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
+export const BACKUP_SCHEDULES = Object.freeze(["daily", "weekly", "monthly", "never"]);
+export const GOOGLE_ACCOUNT_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 
 function authHeaders(token) {
   if (typeof token !== "string" || token.length < 20 || /[\r\n]/.test(token)) throw fail("DRIVE_TOKEN_INVALID", "Google Drive authorization is missing or invalid.");
