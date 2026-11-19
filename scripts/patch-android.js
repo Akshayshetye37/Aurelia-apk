@@ -713,6 +713,7 @@ const java = String.raw`
 package com.aurelia.pms;
 
 import android.content.Intent;
+import android.accounts.Account;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
@@ -740,6 +741,7 @@ import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.auth.api.identity.Identity;
 import com.google.android.gms.auth.api.identity.AuthorizationRequest;
 import com.google.android.gms.auth.api.identity.AuthorizationResult;
+import com.google.android.gms.auth.api.identity.RevokeAccessRequest;
 import com.google.android.gms.common.api.Scope;
 import com.google.android.gms.common.api.ApiException;
 import com.razorpay.Checkout;
@@ -971,6 +973,28 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   private static String q(String value) { return JSONObject.quote(value == null ? "" : value); }
   private void driveAuthorizationResult(String requestId, boolean ok, String token, String message) {
     js("window.aureliaNativeDriveAuthResult && window.aureliaNativeDriveAuthResult(" + q(requestId) + "," + ok + "," + q(token) + "," + q(message) + ")");
+  }
+  private void driveRevokeResult(String requestId, boolean ok, String message) {
+    js("window.aureliaNativeDriveRevokeResult && window.aureliaNativeDriveRevokeResult(" + q(requestId) + "," + ok + "," + q(message) + ")");
+  }
+  private void revokeGoogleDriveBackup(String requestId, String accountEmail) {
+    runOnUiThread(() -> {
+      try {
+        if (accountEmail == null || !accountEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+          driveRevokeResult(requestId, false, "Connected Google account is invalid.");
+          return;
+        }
+        RevokeAccessRequest request = RevokeAccessRequest.builder()
+          .setAccount(new Account(accountEmail, "com.google"))
+          .setScopes(java.util.Arrays.asList(new Scope("https://www.googleapis.com/auth/drive.appdata"), new Scope("https://www.googleapis.com/auth/userinfo.email")))
+          .build();
+        Identity.getAuthorizationClient(MainActivity.this).revokeAccess(request)
+          .addOnSuccessListener(unused -> driveRevokeResult(requestId, true, "Google permissions revoked."))
+          .addOnFailureListener(error -> driveRevokeResult(requestId, false, "Google could not revoke the authorization. Check Google Account settings."));
+      } catch (Exception e) {
+        driveRevokeResult(requestId, false, "Google authorization revocation is unavailable.");
+      }
+    });
   }
   private void authorizeGoogleDriveBackup(String requestId) {
     runOnUiThread(() -> {
@@ -1443,6 +1467,8 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         operationType = type; operationRequestId = requestId;
         if ("authorizeGoogleDriveBackup".equals(type)) {
           authorizeGoogleDriveBackup(requestId);
+        } else if ("revokeGoogleDriveBackup".equals(type)) {
+          revokeGoogleDriveBackup(requestId, obj.optString("accountEmail", ""));
         } else if ("openRecoveryPhoneSettings".equals(type)) {
           runOnUiThread(() -> startActivity(new Intent(MainActivity.this,
               com.aurelia.pms.identity.RecoveryPhoneSettingsActivity.class)));
