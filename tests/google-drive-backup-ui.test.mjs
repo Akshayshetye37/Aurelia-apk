@@ -58,3 +58,8 @@ test("Drive upload and restore verify the token account matches the connected ow
   assert.match(html, /restoreGoogleDriveBackup[\s\S]*requestVerifiedGoogleDriveToken/);
   assert.match(html, /restoreLatestGoogleDriveBackup[\s\S]*requestVerifiedGoogleDriveToken/);
 });
+
+test("Drive upload retries once after an expired authorization token", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /DRIVE_AUTH_EXPIRED[\s\S]*requestVerifiedGoogleDriveToken\(true\)[\s\S]*uploadSnapshot/);
+});
