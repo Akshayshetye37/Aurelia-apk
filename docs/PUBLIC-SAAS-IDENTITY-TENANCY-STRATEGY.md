@@ -31,9 +31,9 @@ The shared Firebase project is platform infrastructure. It is not a personal clo
 
 ### 2. Primary PMS authentication
 
-Initial public onboarding should use Firebase Authentication with verified phone-number sign-in, matching the mobile-first registration requirement. Phone OTP is an authentication mechanism only; it must not be treated as a vault recovery credential or DEK derivation input.
+Initial public onboarding should support Firebase Authentication with verified phone-number sign-in, matching the mobile-first registration requirement. Phone-only authentication is weaker than stronger sign-in methods because phone numbers can be transferred; plan an additional credential/passkey option and account-protection path rather than treating SMS possession as high assurance. Firebase also processes phone numbers for anti-abuse purposes, so onboarding must obtain appropriate consent and explain SMS delivery/standard charges. Configure SMS region policy and abuse controls before launch.
 
-The primary PMS Auth instance/session must be distinct from the dedicated recovery Auth instance. Authenticated UID is derived from the verified Firebase token, never from a client-supplied UID.
+Phone OTP is an authentication mechanism only; it must not be treated as a vault recovery credential or DEK derivation input. The primary PMS Auth instance/session must be distinct from the dedicated recovery Auth instance. Authenticated UID is derived from the verified Firebase token, never from a client-supplied UID.
 
 Account lifecycle requirements: sign-in, sign-out, session revocation, phone-change re-verification, account deletion, and recovery of the account itself must be designed and tested. SMS abuse controls, cost limits, rate limits, App Check, and provider configuration are launch requirements.
 
@@ -254,3 +254,12 @@ Acceptance: release checklist and exact-SHA evidence; no launch claims based on 
 - Existing local-only data remains local until explicit reviewed migration and consent.
 - PMS authentication cannot unlock or recover the encrypted vault.
 - Sync, production recovery, and live payments remain disabled until their separate qualification gates pass.
+
+## Authoritative implementation references
+
+- Firebase Android phone authentication: https://firebase.google.com/docs/auth/android/phone-auth
+- Firestore security rules overview: https://firebase.google.com/docs/firestore/security/get-started
+- Firestore rules conditions and server-library bypass: https://firebase.google.com/docs/firestore/security/rules-conditions
+- Firebase App Check / Play Integrity: https://firebase.google.com/docs/app-check/android/play-integrity-provider
+
+App Check is defense-in-depth for app/device authenticity and abuse resistance; it is not a substitute for Firebase Authentication, membership authorization, or Firestore rules. Server/Admin SDK operations bypass Firestore Security Rules and must enforce authorization explicitly.
