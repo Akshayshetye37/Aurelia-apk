@@ -16,19 +16,20 @@ test("schedule defaults to never and only becomes due after explicit connection 
   assert.equal(store.due(1000), false);
   store.setSchedule("daily");
   assert.equal(store.due(1000), true);
-  store.markSuccess(1000);
-  assert.equal(store.due(1000 + 23 * 60 * 60 * 1000), false);
-  assert.equal(store.due(1000 + 24 * 60 * 60 * 1000), true);
+  const start = new Date(2026, 0, 1, 12).getTime();
+  store.markSuccess(start);
+  assert.equal(store.due(new Date(2026, 0, 1, 23).getTime()), false);
+  assert.equal(store.due(new Date(2026, 0, 2, 12).getTime()), true);
   assert.equal(store.read().account, "owner@example.com");
 });
 
 test("weekly and monthly schedules use calendar boundaries", () => {
   const store = createBackupScheduleStore({ storage: fakeStorage() });
-  store.setConnected(true); store.setSchedule("weekly"); store.markSuccess(Date.UTC(2026, 0, 1));
-  assert.equal(store.due(Date.UTC(2026, 0, 7, 23, 59)), false);
-  assert.equal(store.due(Date.UTC(2026, 0, 8)), true);
-  store.setSchedule("monthly"); store.markSuccess(Date.UTC(2026, 0, 31));
-  assert.equal(store.due(Date.UTC(2026, 1, 1)), true);
+  store.setConnected(true); store.setSchedule("weekly"); store.markSuccess(new Date(2026, 0, 1).getTime());
+  assert.equal(store.due(new Date(2026, 0, 7, 23, 59).getTime()), false);
+  assert.equal(store.due(new Date(2026, 0, 8).getTime()), true);
+  store.setSchedule("monthly"); store.markSuccess(new Date(2026, 0, 31).getTime());
+  assert.equal(store.due(new Date(2026, 1, 1).getTime()), true);
 });
 
 test("never and disconnected states suppress due backups", () => {
