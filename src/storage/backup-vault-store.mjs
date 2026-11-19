@@ -48,9 +48,7 @@ export function createBackupVaultStore({ indexedDBImpl = globalThis.indexedDB } 
         request.onsuccess = () => resolve(request.result || null);
         request.onerror = () => reject(request.error || new Error("Could not read encrypted backup key."));
       });
-      if (record && (record.id !== BACKUP_VAULT_ID || record.format !== 1 ||
-          typeof record.wrappedKey !== "string" || typeof record.salt !== "string" ||
-          typeof record.wrapIv !== "string" || !Number.isSafeInteger(record.iterations))) {
+      if (record && !validRecord(record)) {
         throw Object.assign(new Error("Encrypted backup vault record is malformed."), { code: "BACKUP_VAULT_INVALID" });
       }
       return record;
@@ -60,10 +58,7 @@ export function createBackupVaultStore({ indexedDBImpl = globalThis.indexedDB } 
   }
 
   async function write(record) {
-    if (!record || typeof record !== "object" || record.id !== BACKUP_VAULT_ID ||
-        record.format !== 1 || typeof record.wrappedKey !== "string" ||
-        typeof record.salt !== "string" || typeof record.wrapIv !== "string" ||
-        !Number.isSafeInteger(record.iterations) || record.iterations < 1) {
+    if (!validRecord(record)) {
       throw Object.assign(new TypeError("Invalid encrypted backup vault record."), { code: "BACKUP_VAULT_INVALID" });
     }
     let db;
