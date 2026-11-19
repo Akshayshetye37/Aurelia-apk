@@ -180,3 +180,69 @@ test("index contains no direct Web Storage access and uses the whitelisted migra
   assert.match(html, /deleteLegacyPhotoFallbackEntries/);
   assert.match(html, /PmsBootstrapCoordinator\(\{ storage: legacyStorage \}\)/);
 });
+
+test('guest-first onboarding exposes skip, account entry, and non-blocking local reminder', () => {
+  assert.match(html, /function aureliaContinueGuest\(\)/);
+  assert.match(html, /S\.set\.guestMode=true/);
+  assert.match(html, /S\.set\.guestWelcomeSeen=true/);
+  assert.match(html, /Skip · Continue without login/);
+  assert.match(html, /aurelia-guest-banner/);
+  assert.match(html, /Guest mode · Sign in to create your account/);
+  assert.match(html, /aureliaStartPhoneAuth/);
+  assert.match(html, /window\.AureliaNative/);
+});
+
+test('login UX includes forgot-password and masked destination requirements', () => {
+  assert.match(html, /Forgot Password\?/);
+  assert.match(html, /aureliaForgotPassword\(\)/);
+  assert.match(html, /phone OTP sign-in instead of a password/);
+  assert.match(html, /AURELIA_PHONE_AUTH\.masked/);
+  assert.match(html, /aureliaMaskPhone/);
+});
+
+test('guest reminder animation respects reduced motion', () => {
+  assert.match(html, /aurelia-guest-pulse/);
+  assert.match(html, /prefers-reduced-motion:reduce/);
+});
+
+test('public account entry uses Firebase phone OTP for sign-in, registration, and recovery', () => {
+  assert.match(html, /aureliaStartPhoneAuth/);
+  assert.match(html, /aureliaVerifyPhoneOtp/);
+  assert.match(html, /aureliaResendPhoneOtp/);
+  assert.match(html, /Forgot Password\?/);
+  assert.match(html, /phone OTP sign-in instead of a password/);
+  assert.match(html, /autocomplete="one-time-code"/);
+  assert.match(html, /aureliaMaskPhone/);
+  assert.match(html, /window\.AureliaNative/);
+});
+test('native primary Firebase phone auth signs in and provisions account without exposing ID tokens', () => {
+  const patch = readFileSync(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
+  assert.match(patch, /sendPmsPhoneOtp/);
+  assert.match(patch, /verifyPmsPhoneOtp/);
+  assert.match(patch, /PhoneAuthProvider\.verifyPhoneNumber/);
+  assert.match(patch, /signInWithCredential/);
+  assert.match(patch, /ensurePmsAccount/);
+  assert.match(patch, /pmsPhoneAuthGeneration/);
+  assert.doesNotMatch(patch, /window\.aureliaPhoneAuthEvent[^\n]*idToken/);
+});
+test('PMS account profile callable trusts only verified auth claims and client writes are denied', () => {
+  const functions = readFileSync(new URL('../functions/src/index.ts', import.meta.url), 'utf8');
+  const rules = readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8');
+  assert.match(functions, /export const ensurePmsAccount = onCall/);
+  assert.match(functions, /request\.auth\?\.uid/);
+  assert.match(functions, /request\.auth\?\.token\.phone_number/);
+  assert.match(functions, /pmsAccounts/);
+  assert.match(functions, /phoneMasked/);
+  assert.match(rules, /match \/pmsAccounts\/\{uid\}/);
+  assert.match(rules, /allow create, update, delete: if false/);
+});
+
+test('authenticated session state is restored and sign-out keeps local PMS in guest mode', () => {
+  assert.match(html, /getPmsAuthState/);
+  assert.match(html, /accountSignedIn/);
+  assert.match(html, /aureliaSignOut/);
+  assert.match(html, /aureliaNativeAccountSignOutEvent/);
+  assert.match(html, /Signed out\. Your local PMS data remains on this device/);
+  const patch = readFileSync(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
+  assert.match(patch, /signOutPmsAccount/);
+});

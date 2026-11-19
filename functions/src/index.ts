@@ -21,6 +21,41 @@ const AUDIENCE = "aurelia-recovery-client";
 const REGION = "asia-south1";
 const RECOVERY_COOLDOWN_MS = 24 * 60 * 60_000;
 
+
+/** Creates/updates the authenticated user's PMS account profile. UID and phone are token-derived. */
+export const ensurePmsAccount = onCall(
+  { region: REGION, enforceAppCheck: true },
+  async request => {
+    const uid = request.auth?.uid;
+    const phone = request.auth?.token.phone_number;
+    if (typeof uid !== "string" || !uid || typeof phone !== "string" ||
+        !/^\\+[1-9][0-9]{7,14}$/.test(phone)) {
+      throw new HttpsError("unauthenticated", "Verified phone authentication is required.");
+    }
+    const displayName = typeof request.data?.displayName === "string"
+      ? request.data.displayName.trim().slice(0, 80) : "";
+    if (/[\\u0000-\\u001f\\u007f]/.test(displayName)) {
+      throw new HttpsError("invalid-argument", "Display name is invalid.");
+    }
+    const digits = phone.replace(/[^0-9]/g, "");
+    const country = phone.startsWith("+91") ? "+91" : phone.startsWith("+1") ? "+1" : "+••";
+    const maskedPhone = country + " ••••••••" + digits.slice(-2);
+    const ref = db.doc(`pmsAccounts/${uid}`);
+    await db.runTransaction(async tx => {
+      const snapshot = await tx.get(ref);
+      const current = snapshot.data();
+      if (current && current.uid !== uid) throw new HttpsError("permission-denied", "Account binding failed.");
+      tx.set(ref, {
+        uid, phoneMasked: maskedPhone, phoneVerified: true,
+        ...(displayName ? { displayName } : {}),
+        createdAt: current?.createdAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+    });
+    return { uid, phoneMasked: maskedPhone, phoneVerified: true, profileReady: true };
+  }
+);
+
 const RECOVERY_ATTESTATION_VERIFIER_URL = defineString("RECOVERY_ATTESTATION_VERIFIER_URL", { default: "" });
 const RECOVERY_FUNCTIONS_SERVICE_ACCOUNT = defineString("RECOVERY_FUNCTIONS_SERVICE_ACCOUNT", { default: "default" });
 const FIREBASE_WEB_API_KEY = defineString("FIREBASE_WEB_API_KEY", { default: "" });

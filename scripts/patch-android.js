@@ -710,6 +710,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
@@ -729,7 +730,14 @@ import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
 import com.aurelia.pms.security.PaymentDeviceKeyStore;
 import com.aurelia.pms.security.PaymentDeviceClient;
+import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.PhoneAuthCredential;
+import com.google.firebase.auth.PhoneAuthProvider;
+import com.google.firebase.auth.PhoneAuthOptions;
+import com.google.firebase.FirebaseException;
+import com.google.firebase.functions.FirebaseFunctions;
+import java.util.concurrent.TimeUnit;
 import com.google.android.gms.tasks.Tasks;
 import com.razorpay.Checkout;
 import com.razorpay.PaymentData;
@@ -770,6 +778,13 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   private String pendingCheckoutTransactionId = "";
   private String pendingCheckoutProvider = "";
   private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor();
+  private String pmsPhoneVerificationId = "";
+  private PhoneAuthProvider.ForceResendingToken pmsPhoneResendToken;
+  private String pmsPhoneCurrent = "";
+  private String pmsPhoneDisplayName = "";
+  private long pmsPhoneAuthGeneration = 0;
+  private long pmsPhoneLastRequestAt = 0;
+  private boolean pmsPhoneAuthInFlight = false;
 
   @Override public void onCreate(Bundle savedInstanceState) {
     // Explicit registration is required: the custom plugin is not discovered by package scanning.
@@ -1205,7 +1220,8 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
             && backup.optString("wrapIv", "").matches("^[A-Za-z0-9+/]{16}$")
             && backup.optString("wrappedKey", "").matches("^[A-Za-z0-9+/]{64}$")
             && backup.optString("ciphertext", "").matches("^[A-Za-z0-9+/=]+$")
-            && backup.optString("ciphertext", "").length() <= 35000000\n            && backup.optString("ciphertext", "").length() % 4 == 0;
+            && backup.optString("ciphertext", "").length() <= 35000000
+            && backup.optString("ciphertext", "").length() % 4 == 0;
         if (!common) return false;
         if (version == 1) return true;
         JSONObject manifest = backup.optJSONObject("manifest");
@@ -1412,6 +1428,106 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   }
 
   private class AureliaBridge {
+    @JavascriptInterface public void signOutPmsAccount() {
+      runOnUiThread(() -> {
+        try { FirebaseAuth.getInstance().signOut(); }
+        catch (Exception ignored) { }
+        js("window.aureliaNativeAccountSignOutEvent && window.aureliaNativeAccountSignOutEvent()");
+      });
+    }
+    @JavascriptInterface public String getPmsAuthState() {
+      try {
+        com.google.firebase.auth.FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        JSONObject result = new JSONObject().put("signedIn", user != null);
+        if (user != null && user.getPhoneNumber() != null) result.put("phoneMasked", pmsMaskPhone(user.getPhoneNumber()));
+        return result.toString();
+      } catch (Exception ignored) { return "{\"signedIn\":false}"; }
+    }
+
+    private String pmsMaskPhone(String phone) {
+      if (phone == null || phone.length() < 8) return "••••";
+      String country = phone.startsWith("+91") ? "+91" : phone.startsWith("+1") ? "+1" : "+••";
+      return country + " ••••••••" + phone.substring(phone.length() - 2);
+    }
+    private void pmsPhoneAuthEvent(String requestId, String status, String message, String maskedPhone) {
+      js("window.aureliaPhoneAuthEvent && window.aureliaPhoneAuthEvent(" + q(requestId) + "," + q(status) + "," + q(message) + "," + q(maskedPhone) + ")");
+    }
+    private void pmsPhoneAuthSignIn(PhoneAuthCredential credential, String requestId, String phone, long generation) {
+      FirebaseAuth auth = FirebaseAuth.getInstance();
+      auth.signInWithCredential(credential).addOnCompleteListener(MainActivity.this, task -> {
+        if (generation != pmsPhoneAuthGeneration || pmsPhoneAuthInFlight) return;
+        pmsPhoneAuthInFlight = true;
+        if (!task.isSuccessful() || task.getResult() == null || task.getResult().getUser() == null) {
+          pmsPhoneAuthInFlight = false; pmsPhoneAuthInFlight = false; pmsPhoneAuthEvent(requestId, "code_invalid", "The code is invalid or expired. Enter another code or request a new one.", pmsMaskPhone(phone)); return;
+        }
+        com.google.firebase.auth.FirebaseUser user = task.getResult().getUser();
+        if (user.getPhoneNumber() == null || !phone.equals(user.getPhoneNumber())) {
+          auth.signOut(); pmsPhoneAuthInFlight = false; pmsPhoneAuthGeneration++; pmsPhoneAuthEvent(requestId, "failed", "Verified phone identity did not match.", pmsMaskPhone(phone)); return;
+        }
+        FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1").getHttpsCallable("ensurePmsAccount")
+          .call(java.util.Collections.singletonMap("displayName", pmsPhoneDisplayName))
+          .addOnCompleteListener(MainActivity.this, profileTask -> {
+            if (generation != pmsPhoneAuthGeneration) return;
+            String masked = pmsMaskPhone(phone);
+            pmsPhoneVerificationId = ""; pmsPhoneResendToken = null; pmsPhoneCurrent = ""; pmsPhoneDisplayName = "";
+            if (profileTask.isSuccessful()) pmsPhoneAuthEvent(requestId, "authenticated", "Phone verified.", masked);
+            else pmsPhoneAuthEvent(requestId, "authenticated_profile_pending", "Phone verified. Account profile setup is pending; retry when connected.", masked);
+          });
+      });
+    }
+    private void pmsPhoneAuthSend(String requestId, String phone, String displayName, boolean resend) {
+      if (requestId == null || requestId.length() > 100 || phone == null || !phone.matches("\\+[1-9][0-9]{7,14}")) {
+        pmsPhoneAuthEvent(requestId == null ? "" : requestId, "failed", "Enter a valid international mobile number.", ""); return;
+      }
+      long now = SystemClock.elapsedRealtime();
+      if (pmsPhoneLastRequestAt != 0 && now - pmsPhoneLastRequestAt < 30000L) {
+        pmsPhoneAuthEvent(requestId, "cooldown", "Please wait before requesting another SMS code.", pmsMaskPhone(phone)); return;
+      }
+      pmsPhoneLastRequestAt = now;
+      final long generation = ++pmsPhoneAuthGeneration;
+      if (!resend) { pmsPhoneCurrent = phone; pmsPhoneDisplayName = displayName == null ? "" : displayName.trim(); pmsPhoneAuthInFlight = false; }
+      if (resend && pmsPhoneResendToken == null) { pmsPhoneAuthEvent(requestId, "failed", "Resend is not available yet.", pmsMaskPhone(phone)); return; }
+      PhoneAuthProvider.OnVerificationStateChangedCallbacks callbacks = new PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+        @Override public void onVerificationCompleted(PhoneAuthCredential credential) {
+          if (generation == pmsPhoneAuthGeneration && !pmsPhoneAuthInFlight) pmsPhoneAuthSignIn(credential, requestId, phone, generation);
+        }
+        @Override public void onVerificationFailed(FirebaseException error) {
+          if (generation == pmsPhoneAuthGeneration) { pmsPhoneAuthInFlight = false; pmsPhoneAuthGeneration++; pmsPhoneAuthEvent(requestId, "failed", "Phone verification could not start. Check the number or try later.", pmsMaskPhone(phone)); }
+        }
+        @Override public void onCodeSent(String verificationId, PhoneAuthProvider.ForceResendingToken token) {
+          if (generation != pmsPhoneAuthGeneration || pmsPhoneAuthInFlight) return;
+          pmsPhoneVerificationId = verificationId; pmsPhoneResendToken = token;
+          pmsPhoneAuthEvent(requestId, "code_sent", "Verification code sent.", pmsMaskPhone(phone));
+        }
+        @Override public void onCodeAutoRetrievalTimeOut(String verificationId) {
+          if (generation != pmsPhoneAuthGeneration) return;
+          if (pmsPhoneVerificationId.isEmpty()) pmsPhoneVerificationId = verificationId;
+          pmsPhoneAuthEvent(requestId, "timeout", "Enter the SMS code manually.", pmsMaskPhone(phone));
+        }
+      };
+      PhoneAuthOptions.Builder options = PhoneAuthOptions.newBuilder(FirebaseAuth.getInstance())
+        .setPhoneNumber(phone).setTimeout(60L, TimeUnit.SECONDS).setActivity(MainActivity.this).setCallbacks(callbacks);
+      if (resend) options.setForceResendingToken(pmsPhoneResendToken);
+      try { PhoneAuthProvider.verifyPhoneNumber(options.build()); }
+      catch (Exception error) { pmsPhoneAuthInFlight = false; pmsPhoneAuthEvent(requestId, "failed", "Phone verification is unavailable. Check Firebase configuration and try again.", pmsMaskPhone(phone)); }
+    }
+    @JavascriptInterface public void sendPmsPhoneOtp(String requestId, String phone, String displayName) {
+      runOnUiThread(() -> pmsPhoneAuthSend(requestId, phone, displayName, false));
+    }
+    @JavascriptInterface public void resendPmsPhoneOtp(String requestId, String phone) {
+      runOnUiThread(() -> pmsPhoneAuthSend(requestId, phone, pmsPhoneDisplayName, true));
+    }
+    @JavascriptInterface public void verifyPmsPhoneOtp(String requestId, String phone, String code) {
+      runOnUiThread(() -> {
+        if (requestId == null || requestId.length() > 100 || phone == null || !phone.equals(pmsPhoneCurrent) || !phone.matches("\\\\+[1-9][0-9]{7,14}") || code == null || !code.matches("[0-9]{6}") || pmsPhoneVerificationId.isEmpty()) {
+          pmsPhoneAuthEvent(requestId == null ? "" : requestId, "failed", "Enter the six-digit verification code.", pmsMaskPhone(phone)); return;
+        }
+        pmsPhoneAuthSignIn(PhoneAuthProvider.getCredential(pmsPhoneVerificationId, code), requestId, phone, pmsPhoneAuthGeneration);
+      });
+    }
+    @JavascriptInterface public void cancelPmsPhoneOtp() {
+      runOnUiThread(() -> { pmsPhoneAuthGeneration++; pmsPhoneVerificationId = ""; pmsPhoneResendToken = null; pmsPhoneCurrent = ""; pmsPhoneDisplayName = ""; pmsPhoneAuthInFlight = false; });
+    }
     @JavascriptInterface public String getPayBridgeStatus() {
       return payBridgeClient == null ? "{\"authenticated\":false,\"state\":\"initializing\"}" : payBridgeClient.statusJson();
     }
