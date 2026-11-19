@@ -54,4 +54,4 @@ Record candidate SHA, staging project ID, APK SHA-256, signer SHA-256, test-run 
 
 **Android API floor:** local-first support remains API 23. Hardware-attested recovery enrollment requires API 24 or later. On API 23 recovery enrollment fails closed before modifying existing Keystore aliases.
 
-Staging and verifier deployment workflows remain restricted to `work/p0-storage-hardening`. Gate 4 remains a separate physical-device qualification and is not a Gate 3 SMS test requirement.
+Gate 3 now freezes the exact current HEAD of `integration/ledger-patch` as its candidate and verifies that SHA again before staging deployment and PASS evidence. Gate 4 remains a separate physical-device qualification and is not a Gate 3 SMS test requirement.
