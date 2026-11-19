@@ -422,12 +422,18 @@ if (fs.existsSync(appGradleGroovy)) {
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
   }
+  if (!gradle.includes('com.google.android.gms:play-services-auth:')) {
+    gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.android.gms:play-services-auth:21.3.0'");
+  }
   gradle = ensureJavaResourcePackaging(gradle, false);
   fs.writeFileSync(appGradleGroovy, gradle);
 } else if (fs.existsSync(appGradleKts)) {
   let gradle = ensureKotlinAndroidPlugin(fs.readFileSync(appGradleKts, 'utf8'), true);
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + '\n    implementation("com.google.mlkit:text-recognition:16.0.1")');
+  }
+  if (!gradle.includes('com.google.android.gms:play-services-auth:')) {
+    gradle = gradle.replace(/dependencies\s*\{/, match => match + '\n    implementation("com.google.android.gms:play-services-auth:21.3.0")');
   }
   gradle = ensureJavaResourcePackaging(gradle, true);
   fs.writeFileSync(appGradleKts, gradle);
@@ -731,6 +737,11 @@ import com.aurelia.pms.security.PaymentDeviceKeyStore;
 import com.aurelia.pms.security.PaymentDeviceClient;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.android.gms.tasks.Tasks;
+import com.google.android.gms.auth.api.identity.Identity;
+import com.google.android.gms.auth.api.identity.AuthorizationRequest;
+import com.google.android.gms.auth.api.identity.AuthorizationResult;
+import com.google.android.gms.common.api.Scope;
+import com.google.android.gms.common.api.ApiException;
 import com.razorpay.Checkout;
 import com.razorpay.PaymentData;
 import com.razorpay.PaymentResultWithDataListener;
@@ -752,6 +763,8 @@ import java.util.concurrent.Executors;
 public class MainActivity extends BridgeActivity implements PaymentResultWithDataListener, CFCheckoutResponseCallback {
   private static final int PICK_BACKUP_FOLDER = 7101;
   private static final int CREATE_BACKUP_FILE = 7102;
+  private static final int PICK_DRIVE_AUTH = 7104;
+  private String driveAuthorizationRequestId = "";
   private static final int PICK_IMAGE_FILE = 7103;
   private String folderRequestId = "";
   private String folderPurpose = "drive";
@@ -956,6 +969,35 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     });
   }
   private static String q(String value) { return JSONObject.quote(value == null ? "" : value); }
+  private void driveAuthorizationResult(String requestId, boolean ok, String token, String message) {
+    js("window.aureliaNativeDriveAuthResult && window.aureliaNativeDriveAuthResult(" + q(requestId) + "," + ok + "," + q(token) + "," + q(message) + ")");
+  }
+  private void authorizeGoogleDriveBackup(String requestId) {
+    runOnUiThread(() -> {
+      try {
+        AuthorizationRequest request = AuthorizationRequest.builder()
+          .setRequestedScopes(java.util.Arrays.asList(new Scope("https://www.googleapis.com/auth/drive.appdata"), new Scope("openid"), new Scope("email")))
+          .build();
+        Identity.getAuthorizationClient(MainActivity.this).authorize(request)
+          .addOnSuccessListener(result -> {
+            if (result.hasResolution()) {
+              driveAuthorizationRequestId = requestId;
+              try {
+                startIntentSenderForResult(result.getPendingIntent().getIntentSender(), PICK_DRIVE_AUTH, null, 0, 0, 0);
+              } catch (Exception e) {
+                driveAuthorizationRequestId = "";
+                driveAuthorizationResult(requestId, false, "", "Google Drive authorization could not be opened.");
+              }
+            } else {
+              driveAuthorizationResult(requestId, true, result.getAccessToken(), "");
+            }
+          })
+          .addOnFailureListener(error -> driveAuthorizationResult(requestId, false, "", "Google Drive authorization failed. Try again."));
+      } catch (Exception e) {
+        driveAuthorizationResult(requestId, false, "", "Google Drive authorization is unavailable on this device.");
+      }
+    });
+  }
   private void folderResult(String id, boolean ok, String message) {
     js("window.aureliaNativeBackupFolderResult && window.aureliaNativeBackupFolderResult(" + q(id) + "," + ok + "," + q(message) + "," + q(folderPurpose) + ")");
   }
@@ -1399,7 +1441,9 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         final String type = obj.optString("type", "");
         final String requestId = obj.optString("requestId", "");
         operationType = type; operationRequestId = requestId;
-        if ("openRecoveryPhoneSettings".equals(type)) {
+        if ("authorizeGoogleDriveBackup".equals(type)) {
+          authorizeGoogleDriveBackup(requestId);
+        } else if ("openRecoveryPhoneSettings".equals(type)) {
           runOnUiThread(() -> startActivity(new Intent(MainActivity.this,
               com.aurelia.pms.identity.RecoveryPhoneSettingsActivity.class)));
         } else if ("payBridgeConnect".equals(type)) {
@@ -1828,6 +1872,22 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         try { imageResult(completedId, true, readPickedImage(data.getData()).toString()); }
         catch (Exception e) { imageResult(completedId, false, e.getMessage() == null ? "Could not read the selected image." : e.getMessage()); }
       } else imageResult(completedId, false, "Image selection cancelled.");
+    } else if (requestCode == PICK_DRIVE_AUTH) {
+      String requestId = driveAuthorizationRequestId;
+      driveAuthorizationRequestId = "";
+      if (requestId.isEmpty()) return;
+      if (resultCode != RESULT_OK || data == null) {
+        driveAuthorizationResult(requestId, false, "", "Google Drive authorization was cancelled.");
+      } else {
+        try {
+          AuthorizationResult result = Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(data);
+          String token = result == null ? "" : result.getAccessToken();
+          if (token != null && token.length() > 20) driveAuthorizationResult(requestId, true, token, "");
+          else driveAuthorizationResult(requestId, false, "", "Google Drive authorization returned no access token.");
+        } catch (Exception e) {
+          driveAuthorizationResult(requestId, false, "", "Google Drive authorization failed. Try again.");
+        }
+      }
     } else if (requestCode == CREATE_BACKUP_FILE) {
       final String completedId = pendingFileRequestId;
       final boolean isBackup = pendingIsBackup;
