@@ -26,8 +26,8 @@ test("schedule defaults to never and only becomes due after explicit connection 
 test("weekly and monthly schedules use calendar boundaries", () => {
   const store = createBackupScheduleStore({ storage: fakeStorage() });
   store.setConnected(true); store.setSchedule("weekly"); store.markSuccess(new Date(2026, 0, 1).getTime());
-  assert.equal(store.due(new Date(2026, 0, 7, 23, 59).getTime()), false);
-  assert.equal(store.due(new Date(2026, 0, 8).getTime()), true);
+  assert.equal(store.due(new Date(2026, 0, 4, 23, 59).getTime()), false);
+  assert.equal(store.due(new Date(2026, 0, 5).getTime()), true);
   store.setSchedule("monthly"); store.markSuccess(new Date(2026, 0, 31).getTime());
   assert.equal(store.due(new Date(2026, 1, 1).getTime()), true);
 });
