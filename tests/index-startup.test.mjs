@@ -236,3 +236,13 @@ test('PMS account profile callable trusts only verified auth claims and client w
   assert.match(rules, /match \/pmsAccounts\/\{uid\}/);
   assert.match(rules, /allow create, update, delete: if false/);
 });
+
+test('authenticated session state is restored and sign-out keeps local PMS in guest mode', () => {
+  assert.match(html, /getPmsAuthState/);
+  assert.match(html, /accountSignedIn/);
+  assert.match(html, /aureliaSignOut/);
+  assert.match(html, /aureliaNativeAccountSignOutEvent/);
+  assert.match(html, /Signed out\. Your local PMS data remains on this device/);
+  const patch = readFileSync(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
+  assert.match(patch, /signOutPmsAccount/);
+});
