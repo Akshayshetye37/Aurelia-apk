@@ -76,3 +76,19 @@ A future Pay Bridge backup must use a distinct application identifier and its ow
 - A replacement installation imports the encrypted file and prompts for the recovery password. Successful decryption imports the non-extractable key into its local vault.
 - Existing plaintext v4 backups remain readable for migration; all newly generated backups are encrypted. Do not treat legacy files as meeting the new encryption policy.
 - Password rotation is deliberately not exposed until a rewrapping/re-encryption migration can update every retained recovery point safely.
+
+
+## Google Drive automatic-backup lifecycle (WhatsApp-inspired)
+
+- Connection is explicit and owner-controlled. The app verifies the authorized account and displays its email before recurring backup is enabled.
+- OAuth requests only Drive app-data access plus OpenID/email identity. Access tokens are transient and are never persisted in PMS state, Web Storage, logs or backup envelopes.
+- Backup files are written to the hidden Drive `appDataFolder`; the owner does not need to select a folder. Each file contains only an already-encrypted Aurelia backup envelope.
+- The owner chooses Daily, Weekly, Monthly or Never. Connecting alone does not enable a schedule. Manual Back Up Now and restore history remain available for Never.
+- The UI shows account, last successful backup, size, next scheduled date and last error/warning.
+- Drive history is paginated and newest-first. Restore lets the owner select a recovery point; download/validation precedes the existing explicit restore confirmation and transactional restore path.
+- Retention defaults to seven recovery points. Cleanup runs only after upload succeeds, protects the new file, and reports cleanup failures separately from upload success.
+- Disconnect disables scheduling and clears the account identity in Aurelia. It preserves local PMS data; Google permission revocation remains available in the owner's Google Account.
+- Authorization expiry, permission denial and rate limiting are surfaced as distinct retryable states.
+
+### Scheduling limitation (important)
+The PMS snapshot and encryption/key wrapper are currently owned by the running WebView. Android WorkManager cannot independently produce an authoritative encrypted PMS snapshot, and a Drive access token is not stored for background use. Therefore scheduled backups are **best-effort catch-up when Aurelia is running/foregrounded**, not guaranteed unattended backups. A true WhatsApp-style background guarantee requires migrating snapshot/export, key wrapping, and refreshable owner authorization into a native background-capable architecture. Do not advertise guaranteed background execution until that architecture and device qualification are complete.
