@@ -88,7 +88,7 @@ The Drive experience follows familiar WhatsApp backup concepts while preserving 
 - Pagination is used when listing Drive App Data so history is not truncated at the first 100 files.
 - A 50 MiB safety bound and strict encrypted-envelope validation apply to upload and restore.
 - Expired authorization receives one fresh authorization attempt for backup upload; subsequent failure is reported and backup retry remains pending.
-- Drive authorization uses only `drive.appdata`. It does not request Google profile/email identity; the UI explains that account identity is not exposed and reconnect is the account-switch path.
+- Drive authorization uses only `drive.appdata`. It does not request Google profile/email identity; the UI explains that account identity is not exposed. To switch accounts, revoke Aurelia's Drive access in Google Account security, then reconnect and select the intended account.
 - Schedule execution remains foreground/catch-up. Android does not guarantee an unattended backup while the app's WebView-owned snapshot and key wrapper are unavailable. This limitation is shown rather than marketed as WhatsApp-equivalent background reliability.
 
 The direct Drive adapter is tested with mocked API responses. Real OAuth, live upload/restore, account switching and second-device recovery still require physical-device qualification with owner-controlled Google accounts.
