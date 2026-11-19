@@ -128,6 +128,10 @@ test('Gate 3 is scoped to Google Sign-In and Email-Link owner verification, not 
   const qualification = fs.readFileSync(path.join(ROOT, 'docs/GATE-3-REAL-SMS-STAGING-QUALIFICATION.md'), 'utf8');
   const pipeline = fs.readFileSync(path.join(ROOT, 'docs/RECOVERY-GATE-PIPELINE.md'), 'utf8');
   assert.match(gate3, /Google Sign-In and Email-Link owner verification/);
+  assert.match(gate3, /--branch "integration\/ledger-patch"/);
+  assert.match(gate3, /CANDIDATE_BRANCH: integration\/ledger-patch/);
+  assert.match(staging, /CANDIDATE_BRANCH: integration\/ledger-patch/);
+  assert.match(staging, /candidate deployment is restricted to the Gate 3 candidate branch/i);
   assert.match(staging, /exchangeOwnerEmailLink/);
   assert.match(staging, /confirmRecoveryOwnerBinding/);
   const callableLine = staging.split('\n').find((line) => line.includes('RECOVERY_CALLABLES:')) ?? '';
