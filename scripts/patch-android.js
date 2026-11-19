@@ -729,6 +729,7 @@ import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
 import com.aurelia.pms.security.PaymentDeviceKeyStore;
 import com.aurelia.pms.security.PaymentDeviceClient;
+import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.PhoneAuthCredential;
 import com.google.firebase.auth.PhoneAuthProvider;
@@ -1445,7 +1446,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         if (user.getPhoneNumber() == null || !phone.equals(user.getPhoneNumber())) {
           auth.signOut(); pmsPhoneAuthInFlight = false; pmsPhoneAuthEvent(requestId, "failed", "Verified phone identity did not match.", pmsMaskPhone(phone)); return;
         }
-        FirebaseFunctions.getInstance().getHttpsCallable("ensurePmsAccount")
+        FirebaseFunctions.getInstance(FirebaseApp.getInstance(), "asia-south1").getHttpsCallable("ensurePmsAccount")
           .call(java.util.Collections.singletonMap("displayName", pmsPhoneDisplayName))
           .addOnCompleteListener(MainActivity.this, profileTask -> {
             if (generation != pmsPhoneAuthGeneration) return;
