@@ -45,7 +45,8 @@ test("schedule records attempts, success and sanitized failure without storing t
   store.markAttempt(100);
   store.markFailure(Object.assign(new Error("token=secret"), { code: "DRIVE_AUTH_EXPIRED" }), 200);
   assert.equal(store.read().lastErrorCode, "DRIVE_AUTH_EXPIRED");
-  assert.equal(store.read().lastErrorMessage, "Backup failed. Retry from Backup settings.");\n  assert.equal(JSON.stringify(storage.values).includes("secret"), false);
+  assert.equal(store.read().lastErrorMessage, "Backup failed. Retry from Backup settings.");
+  assert.equal(JSON.stringify(storage.values).includes("secret"), false);
   assert.equal(JSON.stringify(storage.values).includes(testToken), false);
   store.markSuccess(300);
   assert.equal(store.read().lastErrorCode, null);
@@ -76,7 +77,13 @@ test("Drive adapter uses appDataFolder and rejects plaintext backups", async () 
   assert.match(calls[0].options.body, /AURELIA-PMS-ENCRYPTED-BACKUP/);
 });
 
-test("Drive account identity is verified with a narrow email scope", async () => {\n  assert.equal(GOOGLE_ACCOUNT_EMAIL_SCOPE, "https://www.googleapis.com/auth/userinfo.email");\n  const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async url => { assert.match(String(url), /oauth2\\/v2\\/userinfo/); return jsonResponse({ email: "owner@example.com", verified_email: true }); } });\n  assert.deepEqual(await adapter.getAccount(testToken), { email: "owner@example.com", verified: true });\n});\n\ntest("Drive list follows pagination and returns only owned backup files", async () => {
+test("Drive account identity is verified with a narrow email scope", async () => {
+  assert.equal(GOOGLE_ACCOUNT_EMAIL_SCOPE, "https://www.googleapis.com/auth/userinfo.email");
+  const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async url => { assert.match(String(url), /oauth2\\/v2\\/userinfo/); return jsonResponse({ email: "owner@example.com", verified_email: true }); } });
+  assert.deepEqual(await adapter.getAccount(testToken), { email: "owner@example.com", verified: true });
+});
+
+test("Drive list follows pagination and returns only owned backup files", async () => {
   let page = 0;
   const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async url => {
     const query = new URL(String(url)).searchParams;
