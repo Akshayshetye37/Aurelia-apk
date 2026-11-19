@@ -142,5 +142,5 @@ test("backup UI offers selectable Google Drive history and restore-by-id", async
 test("Drive UI transparently avoids requesting Google profile identity", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /Account email is not requested/);
-  assert.match(html, /does not read your Google profile\/email/);
+  assert.match(html, /revoke Aurelia’s Drive access/);
 });
