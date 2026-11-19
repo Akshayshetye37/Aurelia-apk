@@ -59,7 +59,6 @@ export function validateStagingConfig(env) {
         const der = Buffer.from(keys[env.ACTIVE_KID], 'base64');
         if (!der.length || der.toString('base64') !== keys[env.ACTIVE_KID]) errors.push('active public key must be canonical base64 DER');
         else {
-      const encoded = env.GOOGLE_SERVICES_JSON.replace(/\s/g, '');
           if (key.asymmetricKeyType !== 'ec' || key.asymmetricKeyDetails?.namedCurve !== 'prime256v1') errors.push('active public key must be P-256 for ES256');
         }
       }
@@ -68,7 +67,6 @@ export function validateStagingConfig(env) {
 
   if (env.GOOGLE_SERVICES_JSON) {
     try {
-      const encoded = env.GOOGLE_SERVICES_JSON.replace(/\\s/g, '');
       const decoded = Buffer.from(encoded, 'base64');
       if (!decoded.length || decoded.toString('base64').replace(/=+$/, '') !== encoded.replace(/=+$/, '')) errors.push('GOOGLE_SERVICES_JSON must be base64 encoded');
       else {
@@ -77,11 +75,9 @@ export function validateStagingConfig(env) {
         const apiKey = client?.api_key?.[0]?.current_key;
         if (config.project_info?.project_id !== env.PROJECT_ID || apiKey !== env.FIREBASE_WEB_API_KEY) errors.push('Firebase config project/package/API key mismatch');
       }
-    const encoded = env.KEYSTORE_B64.replace(/\s/g, '');
   }
 
   if (env.KEYSTORE_B64) {
-    const encoded = env.KEYSTORE_B64.replace(/\\s/g, '');
     const decoded = Buffer.from(encoded, 'base64');
     if (!decoded.length || decoded.toString('base64').replace(/=+$/, '') !== encoded.replace(/=+$/, '')) errors.push('KEYSTORE_B64 must be valid non-empty base64');
   }
