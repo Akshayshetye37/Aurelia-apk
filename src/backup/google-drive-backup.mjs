@@ -53,7 +53,14 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch, r
     }
     return response;
   }
-  async function getAccount(token) {\n    const response = await fetchImpl("https://www.googleapis.com/oauth2/v2/userinfo", { headers: authHeaders(token) });\n    if (!response.ok) throw fail(response.status === 401 ? "DRIVE_AUTH_EXPIRED" : "DRIVE_ACCOUNT_IDENTITY_UNAVAILABLE", "Could not verify the connected Google account.");\n    const user = await response.json();\n    if (typeof user?.email !== "string" || !user.email || user.verified_email === false) throw fail("DRIVE_ACCOUNT_IDENTITY_UNAVAILABLE", "Google did not return a verified account email.");\n    return Object.freeze({ email: user.email, verified: user.verified_email !== false });\n  }\n  async function list(token) {
+  async function getAccount(token) {
+    const response = await fetchImpl("https://www.googleapis.com/oauth2/v2/userinfo", { headers: authHeaders(token) });
+    if (!response.ok) throw fail(response.status === 401 ? "DRIVE_AUTH_EXPIRED" : "DRIVE_ACCOUNT_IDENTITY_UNAVAILABLE", "Could not verify the connected Google account.");
+    const user = await response.json();
+    if (typeof user?.email !== "string" || !user.email || user.verified_email === false) throw fail("DRIVE_ACCOUNT_IDENTITY_UNAVAILABLE", "Google did not return a verified account email.");
+    return Object.freeze({ email: user.email, verified: user.verified_email !== false });
+  }
+  async function list(token) {
     const files = [];
     let pageToken, pageCount = 0;
     const seenPageTokens = new Set();
