@@ -18,7 +18,8 @@ test("Drive backup UI separates Google sign-in from Drive authorization", async 
   assert.match(html, /Connected account:/);
   assert.match(html, /showGoogleDriveBackupHistory/);
   assert.match(html, /driveLastErrorMessage/);
-  assert.match(html, /restoreGoogleDriveBackup/);\n  assert.match(html, /revokeGoogleDriveAuthorization/);
+  assert.match(html, /restoreGoogleDriveBackup/);
+  assert.match(html, /revokeGoogleDriveAuthorization/);
 });
 
 test("backup schedule popup offers daily, weekly, monthly and never after connection", async () => {
@@ -42,7 +43,9 @@ test("native patch uses narrow app-data scope and does not add broad Drive scope
   assert.match(patch, /play-services-auth:21\.3\.0/);
   assert.match(patch, /drive\.appdata/);
   assert.match(patch, /authorizeGoogleDriveBackup/);
-  assert.match(patch, /aureliaNativeDriveAuthResult/);\n  assert.match(patch, /revokeGoogleDriveBackup/);\n  assert.match(patch, /RevokeAccessRequest/);
+  assert.match(patch, /aureliaNativeDriveAuthResult/);
+  assert.match(patch, /revokeGoogleDriveBackup/);
+  assert.match(patch, /RevokeAccessRequest/);
   assert.equal((patch.match(/private void driveAuthorizationResult\(/g) || []).length, 1, "generated MainActivity must contain exactly one Drive authorization callback");
   assert.doesNotMatch(patch, /auth\/drive(?!\.appdata)/);
 });
