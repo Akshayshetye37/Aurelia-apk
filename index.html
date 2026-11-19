@@ -1286,8 +1286,9 @@ let GoogleDriveBackupApi=null,googleDriveScheduleStore=null,pendingDriveAuth=nul
 import('./src/backup/google-drive-backup.mjs').then(m=>{
  GoogleDriveBackupApi=m;googleDriveScheduleStore=m.createBackupScheduleStore({storage:localStorage});
  const stored=googleDriveScheduleStore.read();
- if(S.bk.driveSchedule&&S.bk.driveSchedule!==stored.schedule)googleDriveScheduleStore.setSchedule(S.bk.driveSchedule);
- if(!!S.bk.driveConnected!==stored.connected)googleDriveScheduleStore.setConnected(!!S.bk.driveConnected);
+ S.bk.driveSchedule=stored.schedule;S.bk.driveConnected=stored.connected;
+ if(stored.lastSuccessAt)S.bk.driveLastSuccessAt=new Date(stored.lastSuccessAt).toISOString();
+ if(typeof render==='function')render();
 }).catch(error=>console.error('Google Drive backup module unavailable',error));
 function driveScheduleLabel(){return ({daily:'Daily',weekly:'Weekly',monthly:'Monthly',never:'Never'})[S.bk.driveSchedule||'never']||'Never'}
 function driveScheduleDue(){try{return !!googleDriveScheduleStore&&googleDriveScheduleStore.due()}catch(_){return false}}
