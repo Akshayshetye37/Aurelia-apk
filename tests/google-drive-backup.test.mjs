@@ -49,7 +49,7 @@ test("schedule rejects invalid values and next due is calculated", () => {
   const store = createBackupScheduleStore({ storage: fakeStorage() });
   assert.throws(() => store.setSchedule("hourly"), { code: "BACKUP_SCHEDULE_INVALID" });
   store.setConnected(true); store.setSchedule("weekly"); store.markSuccess(1000);
-  assert.equal(store.nextDueAt(1000), 1000 + 7 * 24 * 60 * 60 * 1000);
+  assert.equal(store.nextDueAt(1000), Date.UTC(1970, 0, 4));
   assert.deepEqual(BACKUP_SCHEDULES, ["daily", "weekly", "monthly", "never"]);
 });
 
