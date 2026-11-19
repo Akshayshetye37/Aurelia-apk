@@ -1427,6 +1427,14 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   }
 
   private class AureliaBridge {
+    @JavascriptInterface public String getPmsAuthState() {
+      try {
+        com.google.firebase.auth.FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        JSONObject result = new JSONObject().put("signedIn", user != null);
+        if (user != null && user.getPhoneNumber() != null) result.put("phoneMasked", pmsMaskPhone(user.getPhoneNumber()));
+        return result.toString();
+      } catch (Exception ignored) { return "{\"signedIn\":false}"; }
+    }
 
     private String pmsMaskPhone(String phone) {
       if (phone == null || phone.length() < 8) return "••••";
