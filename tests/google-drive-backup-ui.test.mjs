@@ -15,7 +15,8 @@ test("Drive backup UI separates Google sign-in from Drive authorization", async 
   assert.match(html, /Google Sign-In and Drive authorization are separate/);
   assert.match(html, /Google Drive · Aurelia App Data/);
   assert.match(html, /driveBackupHomeCard/);
-  assert.match(html, /Connected account:/);\n  assert.match(html, /forceAccountPicker/);
+  assert.match(html, /Connected account:/);
+  assert.match(html, /forceAccountPicker/);
   assert.match(html, /showGoogleDriveBackupHistory/);
   assert.match(html, /driveLastErrorMessage/);
   assert.match(html, /restoreGoogleDriveBackup/);
@@ -44,7 +45,8 @@ test("native patch uses narrow app-data scope and does not add broad Drive scope
   assert.match(patch, /drive\.appdata/);
   assert.match(patch, /authorizeGoogleDriveBackup/);
   assert.match(patch, /aureliaNativeDriveAuthResult/);
-  assert.match(patch, /revokeGoogleDriveBackup/);\n  assert.match(patch, /SELECT_ACCOUNT/);
+  assert.match(patch, /revokeGoogleDriveBackup/);
+  assert.match(patch, /SELECT_ACCOUNT/);
   assert.match(patch, /RevokeAccessRequest/);
   assert.equal((patch.match(/private void driveAuthorizationResult\(/g) || []).length, 1, "generated MainActivity must contain exactly one Drive authorization callback");
   assert.doesNotMatch(patch, /auth\/drive(?!\.appdata)/);
