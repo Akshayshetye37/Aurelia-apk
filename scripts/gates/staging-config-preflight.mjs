@@ -31,7 +31,7 @@ if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.iam\\.gserviceaccount\\.com$/.test(ser
 const project = process.env.GCP_PROJECT_ID;
 const production = process.env.PRODUCTION_GCP_PROJECT_ID;
 if (project === production) fail('staging and production project IDs must differ');
-if (!/[^a-z0-9-]/.test(project) || !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(project)) fail('GCP_PROJECT_ID is not a valid project ID');
+if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(project)) fail('GCP_PROJECT_ID is not a valid project ID');
 if (!/^[a-z]+-[a-z]+\\d+$/.test(process.env.GCP_REGION)) fail('GCP_REGION must be a valid region identifier');
 
 const baseUrl = new URL(process.env.STAGING_FUNCTIONS_BASE_URL);
