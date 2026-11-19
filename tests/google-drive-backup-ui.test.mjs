@@ -36,7 +36,7 @@ test("manual Drive backup and restore remain available when schedule is Never", 
   assert.match(html, /Google Drive backup history/);
   assert.match(html, /async function restoreGoogleDriveBackup/);
   assert.doesNotMatch(html, /async async function restoreGoogleDriveBackup/);
-  assert.doesNotMatch(html, /<\\/details>><details/);
+  assert.equal(html.includes('</details>><details'), false);
   assert.match(html, /Manual backups only/);
 });
 
