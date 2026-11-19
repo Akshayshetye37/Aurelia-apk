@@ -19,7 +19,7 @@ const baseEnv = {
   APP_CHECK_PLAY_INTEGRITY_REGISTERED: 'true',
   APP_CHECK_SIGNER_SHA256: 'a'.repeat(64),
   ATTESTATION_APP_SIGNER_SHA256: 'a'.repeat(64),
-});
+};
 
 function run(overrides = {}) {
   try {
