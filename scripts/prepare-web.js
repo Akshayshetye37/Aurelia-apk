@@ -10,6 +10,11 @@ for(const name of ['pms-repository-contract.mjs','pms-local-identity.mjs','index
  if(!fs.existsSync(source))throw new Error('PMS storage module not found: '+source);
  fs.copyFileSync(source,path.join(storageDest,name));
 }
+const backupDest=path.join(dest,'src','backup');
+fs.mkdirSync(backupDest,{recursive:true});
+const driveBackupSource=path.join(root,'src','backup','google-drive-backup.mjs');
+if(!fs.existsSync(driveBackupSource))throw new Error('Google Drive backup adapter not found: '+driveBackupSource);
+fs.copyFileSync(driveBackupSource,path.join(backupDest,'google-drive-backup.mjs'));
 const settlementSrc=path.join(root,'src','payments','settlement-service.mjs');
 if(!fs.existsSync(settlementSrc))throw new Error('Settlement service not found: '+settlementSrc);
 const settlementDest=path.join(dest,'src','payments');
