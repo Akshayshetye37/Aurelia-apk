@@ -82,7 +82,7 @@ export function createBackupVaultStore({ indexedDBImpl = globalThis.indexedDB } 
       });
       if (!stored || stored.id !== record.id || stored.format !== record.format ||
           stored.wrappedKey !== record.wrappedKey || stored.salt !== record.salt ||
-          stored.wrapIv !== record.wrapIv || stored.iterations !== record.iterations) {
+          stored.wrapIv !== record.wrapIv || stored.iterations !== record.iterations ||\n          (record.key !== undefined && !validCachedKey(stored.key))) {
         throw Object.assign(new Error("Encrypted backup vault failed exact read-back verification."), {
           code: "BACKUP_VAULT_READBACK_FAILED"
         });
