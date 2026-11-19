@@ -138,6 +138,7 @@ jobs:
           RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,getRecoveryOwnerPendingAction,getRecoveryOwnerActionReadiness' }}
         run: |
           node --check scripts/gates/staging-config-preflight.mjs
+          node --test scripts/gates/staging-config-preflight.test.mjs
           node scripts/gates/staging-config-preflight.mjs
 
       - name: Validate Workload Identity Federation configuration
