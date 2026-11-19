@@ -80,7 +80,7 @@ test("Drive adapter uses appDataFolder and rejects plaintext backups", async () 
 
 test("Drive account identity is verified with a narrow email scope", async () => {
   assert.equal(GOOGLE_ACCOUNT_EMAIL_SCOPE, "https://www.googleapis.com/auth/userinfo.email");
-  const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async url => { assert.match(String(url), /oauth2\\/v2\\/userinfo/); return jsonResponse({ email: "owner@example.com", verified_email: true }); } });
+  const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async url => { assert.ok(String(url).includes("oauth2/v2/userinfo")); return jsonResponse({ email: "owner@example.com", verified_email: true }); } });
   assert.deepEqual(await adapter.getAccount(testToken), { email: "owner@example.com", verified: true });
 });
 
