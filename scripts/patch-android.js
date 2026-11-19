@@ -998,9 +998,6 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       }
     });
   }
-  private void driveAuthorizationResult(String requestId, boolean ok, String token, String message) {
-    js("window.aureliaNativeDriveAuthResult && window.aureliaNativeDriveAuthResult(" + q(requestId) + "," + ok + "," + q(token) + "," + q(message) + ")");
-  }
   private void folderResult(String id, boolean ok, String message) {
     js("window.aureliaNativeBackupFolderResult && window.aureliaNativeBackupFolderResult(" + q(id) + "," + ok + "," + q(message) + "," + q(folderPurpose) + ")");
   }
