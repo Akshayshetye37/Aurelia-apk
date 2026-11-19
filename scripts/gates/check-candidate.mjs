@@ -3,7 +3,7 @@ const sha = requireSha(arg('sha'));
 const repo = arg('repo');
 const branch = arg('branch');
 if (!/^[A-Za-z0-9_.\/-]+$/.test(branch) || branch.includes('..') || branch.startsWith('/') || branch.endsWith('/')) fail('invalid branch name');
-if (!/^[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+$/.test(repo)) fail('invalid repository name');
+if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) fail('invalid repository name');
 const encoded = branch.split('/').map(encodeURIComponent).join('/');
 const ref = gh(`repos/${repo}/git/ref/heads/${encoded}`);
 const head = ref.object?.sha;
