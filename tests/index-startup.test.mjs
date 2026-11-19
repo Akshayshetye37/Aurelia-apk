@@ -187,7 +187,7 @@ test('guest-first onboarding exposes skip, account entry, and non-blocking local
   assert.match(html, /S\.set\.guestWelcomeSeen=true/);
   assert.match(html, /Skip · Continue without login/);
   assert.match(html, /aurelia-guest-banner/);
-  assert.match(html, /Sign in to back up your work/);
+  assert.match(html, /Guest mode · Sign in to create your account/);
   assert.match(html, /aureliaStartPhoneAuth/);
   assert.match(html, /window\.AureliaNative/);
 });
