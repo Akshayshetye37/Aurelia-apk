@@ -483,7 +483,7 @@ export const issueRecoveryGrant = onCall(
     const phoneRateKey = digest(tenantId, proof.phone).toString("hex");
     await spendRateLimit(`rec:p:${phoneRateKey}`, 5, 60 * 60_000);
     await spendRateLimit(`rec:t:${tenantId}`, 5, 60 * 60_000);
-    await spendRateLimit(`rec:d:${deviceIdHash}`, 5, 60 * 60_000);
+    await spendRateLimit(`rec:d:${tenantId}:${deviceIdHash}`, 5, 60 * 60_000);
     const ip = String(request.rawRequest.ip ?? "unknown").slice(0, 64);
     const ipKey = createHmac("sha256", PHONE_PEPPER.value()).update(ip).digest("hex");
     await spendRateLimit(`rec:ip:${ipKey}`, 20, 60 * 60_000);
@@ -681,6 +681,7 @@ export const consumeRecoveryGrant = onCall(
     if (typeof sub !== "string" || typeof tenant !== "string" || tenant !== sub ||
         typeof uid !== "string" || uid.length === 0 || uid.length > 128 ||
         typeof request.auth?.uid !== "string" || uid !== request.auth.uid ||
+        request.auth.token.role !== "owner" || request.auth.token.tenantId !== tenant ||
         typeof jti !== "string" || typeof did !== "string" ||
         typeof nonce !== "string" || scope !== "recovery:continue") throw GENERIC;
     const tenantId = validateTenantId(tenant);

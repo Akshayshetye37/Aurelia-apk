@@ -71,3 +71,28 @@ test('cached backup keys cannot bypass manifest hash, size and record-count veri
   assert.match(html, /finally\{cachedPlain\.fill\(0\)\}/);
   assert.match(html, /finally\{plain\.fill\(0\)\}/);
 });
+
+test('legacy plaintext backup restore requires an explicit security warning confirmation', () => {
+  const restore = html.slice(html.indexOf('function restoreF(el){'), html.indexOf('function normaliseImportedBooking', html.indexOf('function restoreF(el){')));
+  assert.match(restore, /raw&&raw\.v===4&&raw\.data/);
+  assert.match(restore, /This legacy backup is not encrypted/);
+  assert.match(restore, /Legacy plaintext backup import cancelled\. No records were changed\./);
+});
+
+
+test('native backup validator accepts authenticated v2 envelopes and validates their manifest', () => {
+  assert.match(androidPatch, /int version = backup\.optInt\("v", -1\);/);
+  assert.match(androidPatch, /version == 1 \|\| version == 2/);
+  assert.match(androidPatch, /manifest\.optInt\("formatVersion", -1\) != 2/);
+  assert.match(androidPatch, /recordCounts/);
+  assert.match(androidPatch, /payloadSha256/);
+  assert.match(androidPatch, /manifest\.optLong\("payloadBytes", -1\) > 25L/);
+  assert.match(androidPatch, /totalRecords <= 200000/);
+  assert.match(androidPatch, /ciphertext.*length\(\) % 4 == 0/);
+  assert.match(androidPatch, /counts\.length\(\) != fields\.length/);
+});
+
+test('native backup validator retains v1 compatibility while accepting v2', () => {
+  assert.match(androidPatch, /if \(version == 1\) return true;/);
+  assert.match(androidPatch, /AURELIA-PMS-ENCRYPTED-BACKUP/);
+});

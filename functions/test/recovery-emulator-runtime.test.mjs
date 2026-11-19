@@ -282,6 +282,12 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   });
 
   const nonce = 'n'.repeat(43);
+  const otherTenantId = 'tenant-emulator-cross-ack';
+  const otherTenantOwnerUid = 'owner-emulator-cross-ack';
+  const otherTenantOwnerDeviceHash = deviceHashFor(otherTenantId + ':owner');
+  await seedTenant({ tenantId: otherTenantId, phone: '+15555550109', ownerUid: otherTenantOwnerUid,
+    recoveryDeviceHash: deviceHashFor(otherTenantId + ':recovery'),
+    ownerDeviceHashes: [deviceHashFor(otherTenantId + ':recovery'), otherTenantOwnerDeviceHash] });
   const firstPhoneToken = await phoneAuthToken(phone);
   const first = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce, phoneIdToken: firstPhoneToken
@@ -334,6 +340,13 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, passkeyOwnerAuth('different-owner-uid', tenantId)), 'wrong owner UID cannot acknowledge');
+  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId: otherTenantId, deviceIdHash: otherTenantOwnerDeviceHash, eventId,
+    ackToken: secondOwnerAlert.data.ackToken
+  }, passkeyOwnerAuth(otherTenantOwnerUid, otherTenantId)),
+  'another tenant owner cannot acknowledge the original tenant alert');
+  assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'ALERT_PENDING',
+    'cross-tenant acknowledgement attempt leaves original alert pending');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: recoveryDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, passkeyOwnerAuth(ownerUid, tenantId)),
@@ -394,6 +407,9 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
   }, ownerAuth('different-authenticated-uid', tenantId)), 'wrong authenticated UID rejected');
+  await assert.rejects(callable(functions.consumeRecoveryGrant, {
+    grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth(ownerUid, 'tenant-emulator-other-tenant')), 'grant cannot be consumed from another tenant session');
 
   const wrongTenant = await new SignJWT({
     uid: ownerUid, tenant: 'tenant-emulator-other', did: recoveryDeviceHash,
@@ -911,6 +927,45 @@ test('phone, tenant and device rate limits lock out repeated OTP grant attempts'
     phoneIdToken: await phoneAuthToken(phone)
   }, null, '203.0.113.111'), error => error.code === 'resource-exhausted',
   'sixth hourly attempt is rate-limited and locked out');
+});
+
+test('device rate-limit buckets are isolated between tenants sharing a device hash', async () => {
+  const sharedDeviceHash = deviceHashFor('synthetic-shared-device');
+  const tenantA = 'tenant-emulator-rate-isolation-a';
+  const tenantB = 'tenant-emulator-rate-isolation-b';
+  const ownerA = 'owner-emulator-rate-isolation-a';
+  const ownerB = 'owner-emulator-rate-isolation-b';
+  const phoneA = '+15555550121';
+  const phoneB = '+15555550122';
+  await seedTenant({ tenantId: tenantA, phone: phoneA, ownerUid: ownerA,
+    recoveryDeviceHash: sharedDeviceHash,
+    ownerDeviceHashes: [sharedDeviceHash, deviceHashFor(tenantA + ':owner')] });
+  await seedTenant({ tenantId: tenantB, phone: phoneB, ownerUid: ownerB,
+    recoveryDeviceHash: sharedDeviceHash,
+    ownerDeviceHashes: [sharedDeviceHash, deviceHashFor(tenantB + ':owner')] });
+
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const result = await callable(functions.issueRecoveryGrant, {
+      tenantId: tenantA, deviceIdHash: sharedDeviceHash, nonce: 'a'.repeat(43),
+      phoneIdToken: await phoneAuthToken(phoneA)
+    }, null, '203.0.113.121');
+    assert.equal(result.status, 'COOLDOWN');
+    if (attempt < 5) await sleep(1100);
+  }
+  await sleep(1100);
+  await assert.rejects(callable(functions.issueRecoveryGrant, {
+    tenantId: tenantA, deviceIdHash: sharedDeviceHash, nonce: 'a'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phoneA)
+  }, null, '203.0.113.121'), error => error.code === 'resource-exhausted',
+  'Tenant A device bucket is exhausted');
+
+  const tenantBResult = await callable(functions.issueRecoveryGrant, {
+    tenantId: tenantB, deviceIdHash: sharedDeviceHash, nonce: 'b'.repeat(43),
+    phoneIdToken: await phoneAuthToken(phoneB)
+  }, null, '203.0.113.122');
+  assert.equal(tenantBResult.status, 'COOLDOWN',
+    'Tenant A device attempts must not exhaust Tenant B rate-limit bucket');
+  assert.equal((await db.doc(`recoveryCooldowns/${tenantB}`).get()).data().state, 'ALERT_PENDING');
 });
 
 test('owner acknowledgement token expires after fifteen minutes', async () => {

@@ -29,6 +29,17 @@ Run `Recovery staging deployment and APK` only after the private attestation ver
 | G3-09 | Inspect app files, shared preferences and logcat. | No plaintext PIN, OTP, recovery key, DEK, JWT or raw phone number. |
 | G3-10 | Verify staging release APK and companion instrumentation APK. | Both artifacts originate from the same SHA, have matching approved signer SHA-256, and their separate APK SHA-256 values are recorded. |
 
+## Multi-tenant staging qualification
+
+Gate 3 must additionally use two synthetic tenants with separate owner UIDs and independent recovery records. These are staging-only fixtures; do not use real customer identities or phone numbers. Cases G3-11 through G3-14 are required evidence before multi-owner production launch. They are not satisfied by source-contract or emulator-only tests. Cross-tenant probes must be executed against the deployed staging project and recorded with redacted fixture IDs.
+
+| ID | Test | Required result |
+|---|---|---|
+| G3-11 | Create two synthetic tenants (A and B) with independent owner UIDs, phone proofs, devices and grants. Attempt to use Tenant A's grant from Tenant B. | Rejected; no recovery gate arms; no grant state changes in either tenant. Record only redacted synthetic identifiers. |
+| G3-12 | Tenant B attempts to acknowledge Tenant A's owner alert using B's owner session/device/token. | Rejected; A's alert remains pending and B's recovery state is unchanged. |
+| G3-13 | Exercise recovery issuance limits from both tenants using the same synthetic device hash, then use distinct devices. | Device rate-limit counters are tenant-scoped; activity in A does not exhaust B's device bucket. Phone, tenant and IP buckets remain independently enforced. |
+| G3-14 | Inspect synthetic-tenant logs and evidence after cross-tenant negative probes. | No raw phone numbers, OTPs, ID tokens, grant JWTs, PINs, recovery keys, DEKs or real owner identifiers. |
+
 ## Evidence record
 
 For each case record the candidate SHA, staging project ID, APK SHA-256, signing certificate SHA-1/SHA-256, redacted device label, Android API, test-run ID, result and reviewer. Never record OTP values, raw phone numbers, credentials or device serials in this repository.
@@ -40,3 +51,6 @@ For each case record the candidate SHA, staging project ID, APK SHA-256, signing
 
 
 All recovery staging and verifier deployment workflows are restricted to `work/p0-storage-hardening`. The physical-device workflow also verifies that the successful staging artifact originated from that branch and the exact candidate SHA.
+
+
+Identity and credential separation requirements are defined in [`IDENTITY-CREDENTIAL-BOUNDARIES.md`](IDENTITY-CREDENTIAL-BOUNDARIES.md) and apply to every staging qualification case.
