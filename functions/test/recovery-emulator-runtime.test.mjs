@@ -282,6 +282,11 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   });
 
   const nonce = 'n'.repeat(43);
+  const otherTenantId = 'tenant-emulator-cross-ack';
+  const otherTenantOwnerUid = 'owner-emulator-cross-ack';
+  await seedTenant({ tenantId: otherTenantId, phone: '+15555550109', ownerUid: otherTenantOwnerUid,
+    recoveryDeviceHash: deviceHashFor(otherTenantId + ':recovery'),
+    ownerDeviceHashes: [deviceHashFor(otherTenantId + ':recovery'), deviceHashFor(otherTenantId + ':owner')] });
   const firstPhoneToken = await phoneAuthToken(phone);
   const first = await callable(functions.issueRecoveryGrant, {
     tenantId, deviceIdHash: recoveryDeviceHash, nonce, phoneIdToken: firstPhoneToken
@@ -334,6 +339,13 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: secondOwnerDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, passkeyOwnerAuth('different-owner-uid', tenantId)), 'wrong owner UID cannot acknowledge');
+  await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
+    tenantId: otherTenantId, deviceIdHash: secondOwnerDeviceHash, eventId,
+    ackToken: secondOwnerAlert.data.ackToken
+  }, passkeyOwnerAuth(otherTenantOwnerUid, otherTenantId)),
+  'another tenant owner cannot acknowledge the original tenant alert');
+  assert.equal((await db.doc(`recoveryCooldowns/${tenantId}`).get()).data().state, 'ALERT_PENDING',
+    'cross-tenant acknowledgement attempt leaves original alert pending');
   await assert.rejects(callable(functions.acknowledgeRecoveryOwnerAlert, {
     tenantId, deviceIdHash: recoveryDeviceHash, eventId, ackToken: secondOwnerAlert.data.ackToken
   }, passkeyOwnerAuth(ownerUid, tenantId)),
@@ -394,6 +406,9 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
   }, ownerAuth('different-authenticated-uid', tenantId)), 'wrong authenticated UID rejected');
+  await assert.rejects(callable(functions.consumeRecoveryGrant, {
+    grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
+  }, ownerAuth(ownerUid, 'tenant-emulator-other-tenant')), 'grant cannot be consumed from another tenant session');
 
   const wrongTenant = await new SignJWT({
     uid: ownerUid, tenant: 'tenant-emulator-other', did: recoveryDeviceHash,
