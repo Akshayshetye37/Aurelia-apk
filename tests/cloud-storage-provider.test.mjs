@@ -22,7 +22,8 @@ test("provider catalog lists optional cloud choices without claiming implementat
   const catalog = getCloudProviderCatalog();
   assert.equal(catalog[0].id, "local-device");
   assert.equal(catalog[0].availability, "available");
-  for (const id of ["dropbox", "google-drive", "onedrive", "icloud", "webdav", "nextcloud", "s3", "azure-blob", "custom"]) assert.equal(catalog.find(provider => provider.id === id)?.availability, "planned");
+  assert.equal(catalog.find(provider => provider.id === "android-saf")?.availability, "available");
+  for (const id of ["dropbox", "google-drive", "onedrive", "box", "icloud", "webdav", "nextcloud", "s3", "azure-blob", "custom"]) assert.equal(catalog.find(provider => provider.id === id)?.availability, "planned");
   assert.deepEqual(catalog, CLOUD_PROVIDER_CATALOG.map(item => ({ ...item })));
 });
 
