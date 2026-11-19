@@ -1193,7 +1193,8 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     try {
       JSONObject backup = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
       if ("AURELIA-PMS-ENCRYPTED-BACKUP".equals(backup.optString("format", ""))) {
-        return backup.optInt("v", -1) == 1
+        int version = backup.optInt("v", -1);
+        boolean common = (version == 1 || version == 2)
             && "com.aurelia.pms".equals(backup.optString("application", ""))
             && "AES-256-GCM".equals(backup.optString("cipher", ""))
             && "PBKDF2-HMAC-SHA256".equals(backup.optString("kdf", ""))
@@ -1203,7 +1204,26 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
             && backup.optString("iv", "").matches("^[A-Za-z0-9+/]{16}$")
             && backup.optString("wrapIv", "").matches("^[A-Za-z0-9+/]{16}$")
             && backup.optString("wrappedKey", "").matches("^[A-Za-z0-9+/]{64}$")
-            && backup.optString("ciphertext", "").matches("^[A-Za-z0-9+/=]+$");
+            && backup.optString("ciphertext", "").matches("^[A-Za-z0-9+/=]+$")
+            && backup.optString("ciphertext", "").length() <= 35000000;
+        if (!common) return false;
+        if (version == 1) return true;
+        JSONObject manifest = backup.optJSONObject("manifest");
+        if (manifest == null || manifest.optInt("formatVersion", -1) != 2
+            || !backup.optString("name", "").equals(manifest.optString("name", ""))
+            || manifest.optLong("payloadBytes", -1) < 1
+            || !manifest.optString("payloadSha256", "").matches("^[a-f0-9]{64}$")) return false;
+        JSONObject counts = manifest.optJSONObject("recordCounts");
+        if (counts == null) return false;
+        String[] fields = {"rooms","b","g","t","sales","exp","inv","led","aud"};
+        if (counts.length() != fields.length) return false;
+        for (String field : fields) {
+          Object value = counts.opt(field);
+          if (!(value instanceof Number) || ((Number)value).longValue() < 0
+              || ((Number)value).longValue() > 200000
+              || ((Number)value).doubleValue() != ((Number)value).longValue()) return false;
+        }
+        return true;
       }
       JSONObject data = backup.optJSONObject("data");
       if (backup.optInt("v", -1) != 4 || data == null
