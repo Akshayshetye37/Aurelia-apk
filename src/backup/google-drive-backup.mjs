@@ -91,6 +91,7 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
     let files, cleanupFailures = [];
     try {
       files = await list(token);
+      if (!files.some(file => file.id === created.id)) files = sortDriveBackups([created, ...files]);
       for (const file of files.slice(retention)) {
         try { await remove(token, file.id); } catch { cleanupFailures.push(file.name); }
       }
