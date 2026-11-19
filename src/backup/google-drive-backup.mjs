@@ -50,7 +50,10 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
   async function list(token) {
     const all = [];
     let pageToken = "";
+    const seenTokens = new Set();
     do {
+      if (pageToken && (seenTokens.has(pageToken) || seenTokens.size >= 100)) throw fail("DRIVE_PAGINATION_INVALID", "Google Drive returned an invalid or repeated page token.");
+      if (pageToken) seenTokens.add(pageToken);
       const query = new URLSearchParams({ spaces: "appDataFolder", q: "'appDataFolder' in parents and trashed=false", fields: "nextPageToken,files(id,name,size,modifiedTime,md5Checksum)", pageSize: "100" });
       if (pageToken) query.set("pageToken", pageToken);
       const response = await request("/files?" + query, token);
