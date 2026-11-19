@@ -1212,18 +1212,21 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         if (manifest == null || manifest.optInt("formatVersion", -1) != 2
             || !backup.optString("name", "").equals(manifest.optString("name", ""))
             || manifest.optLong("payloadBytes", -1) < 1
+            || manifest.optLong("payloadBytes", -1) > 25L * 1024L * 1024L
             || !manifest.optString("payloadSha256", "").matches("^[a-f0-9]{64}$")) return false;
         JSONObject counts = manifest.optJSONObject("recordCounts");
         if (counts == null) return false;
         String[] fields = {"rooms","b","g","t","sales","exp","inv","led","aud"};
         if (counts.length() != fields.length) return false;
+        long totalRecords = 0;
         for (String field : fields) {
           Object value = counts.opt(field);
           if (!(value instanceof Number) || ((Number)value).longValue() < 0
               || ((Number)value).longValue() > 200000
               || ((Number)value).doubleValue() != ((Number)value).longValue()) return false;
+          totalRecords += ((Number)value).longValue();
         }
-        return true;
+        return totalRecords <= 200000;
       }
       JSONObject data = backup.optJSONObject("data");
       if (backup.optInt("v", -1) != 4 || data == null
