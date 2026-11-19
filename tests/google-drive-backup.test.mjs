@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { BACKUP_SCHEDULES, GOOGLE_DRIVE_BACKUP_SCOPE, createBackupScheduleStore, createGoogleDriveBackupAdapter } from "../src/backup/google-drive-backup.mjs";
 
 const envelope = JSON.stringify({ format: "AURELIA-PMS-ENCRYPTED-BACKUP", v: 2, cipher: "AES-256-GCM", ciphertext: "x".repeat(100) });
+const testToken = "t".repeat(40);
 function fakeStorage() { const values = new Map(); return { getItem: k => values.get(k) ?? null, setItem: (k,v) => values.set(k,v), values }; }
 
 test("schedule defaults to never and only becomes due after explicit connection and choice", () => {
@@ -51,8 +52,8 @@ test("Drive adapter uses appDataFolder and rejects plaintext backups", async () 
   };
   const adapter = createGoogleDriveBackupAdapter({ fetchImpl });
   assert.equal(GOOGLE_DRIVE_BACKUP_SCOPE, "https://www.googleapis.com/auth/drive.appdata");
-  await assert.rejects(adapter.upload("valid-token-123456789012345", "aurelia-backup-2026.json", JSON.stringify({ plaintext: "secret" })), { code: "DRIVE_BACKUP_NOT_ENCRYPTED" });
-  const result = await adapter.uploadSnapshot("valid-token-123456789", "aurelia-backup-2026.json", envelope);
+  await assert.rejects(adapter.upload(testToken, "aurelia-backup-2026.json", JSON.stringify({ plaintext: "secret" })), { code: "DRIVE_BACKUP_NOT_ENCRYPTED" });
+  const result = await adapter.uploadSnapshot(testToken, "aurelia-backup-2026.json", envelope);
   assert.equal(result.file.id, "abcdefghij123");
   assert.match(calls[0].url, /uploadType=multipart/);
   assert.match(calls[0].options.body, /appDataFolder/);
@@ -65,8 +66,8 @@ test("Drive adapter lists only appDataFolder and validates downloaded envelope",
     return { ok: true, text: async () => envelope };
   };
   const adapter = createGoogleDriveBackupAdapter({ fetchImpl });
-  const listed = await adapter.list("valid-token-123456789012345");
+  const listed = await adapter.list(testToken);
   assert.equal(listed.length, 1);
-  assert.equal(await adapter.download("valid-token-123456789", "abcdefghij123"), envelope);
-  await assert.rejects(adapter.download("valid-token-123456789", "bad id"), { code: "DRIVE_FILE_ID_INVALID" });
+  assert.equal(await adapter.download(testToken, "abcdefghij123"), envelope);
+  await assert.rejects(adapter.download(testToken, "bad id"), { code: "DRIVE_FILE_ID_INVALID" });
 });
