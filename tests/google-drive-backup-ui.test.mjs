@@ -42,7 +42,7 @@ test("manual Drive backup and restore remain available when schedule is Never", 
 
 test("native patch uses narrow app-data scope and does not add broad Drive scope", async () => {
   const patch = await readFile(new URL("../scripts/patch-android.js", import.meta.url), "utf8");
-  assert.match(patch, /play-services-auth:22\.0\.0/);
+  assert.match(patch, /play-services-auth:21\.5\.0/);
   assert.match(patch, /drive\.appdata/);
   assert.match(patch, /authorizeGoogleDriveBackup/);
   assert.match(patch, /aureliaNativeDriveAuthResult/);
