@@ -136,7 +136,9 @@ jobs:
           APP_CHECK_SIGNER_SHA256: ${{ vars.APP_CHECK_SIGNER_SHA256 }}
           ATTESTATION_APP_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
           RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,getRecoveryOwnerPendingAction,getRecoveryOwnerActionReadiness' }}
-        run: node scripts/gates/staging-config-preflight.mjs
+        run: |
+          node --check scripts/gates/staging-config-preflight.mjs
+          node scripts/gates/staging-config-preflight.mjs
 
       - name: Validate Workload Identity Federation configuration
         shell: bash
