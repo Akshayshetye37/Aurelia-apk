@@ -30,15 +30,14 @@ Do not treat cancelled runs as passing. Do not reuse older SHA evidence to quali
 
 ## Exact-head CI evidence
 
-Latest observed native workflow: [Aurelia native SQLite contract run #170](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42786247933).
+Latest observed integration-branch SHA: `749561011664707629d0f37288363a39c14bb4c1`.
 
-- Run was triggered against commit `b71b7917736ea7502851c260af7907ef8e1ffcac`; it is **not** evidence for the README update commit unless it is rerun or independently verified at that new SHA.
-- On `b71b7917736ea7502851c260af7907ef8e1ffcac`, `npm test` passed and `npm run build` passed.
-- On that same SHA, Android project generation, Capacitor sync, Android 34 SDK installation, Kotlin test-runtime alignment, native compilation, app/instrumentation APK assembly and SQLCipher x86_64 / test-runner APK-content checks passed.
-- Android 34 AVD creation and emulator process startup passed.
-- Emulator boot completion (`sys.boot_completed=1`) was still in progress at last inspection; SQLite instrumentation and the nonzero-test gate had not yet run.
-- Do not claim native SQLite instrumentation as passed until the connected AndroidJUnitRunner suite completes with a nonzero test count and retained XML/diagnostic artifacts.
-- Exact-head R1, payment-backend and other independent CI checks have not been evidenced in this inspection.
+- [PMS source tests and production web packaging](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44597294887): **success**.
+- [Gate pipeline lint](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44597292961): **success**.
+- [R1 local-first required checks](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44597292873): **success**.
+- [Native SQLite contract](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44597292884): **success**.
+
+These checks are evidence for the exact integration-branch SHA above. They do not qualify draft Drive-backup code on another SHA or the physical-device/Gate 3 release requirements.
 
 ## Implemented code foundations (not production approval)
 
@@ -327,7 +326,7 @@ The following is a high-level map of the current integration branch. It is inten
 │   │                                  # recovery, security and migration templates
 │   └── ...                            # Generated/Android project resources
 ├── src/
-│   ├── backup/                          # encrypted backup orchestration/provider adapters
+│   ├── backup/                          # candidate PR #49; not integrated on this branch
 │   ├── bookings/                      # Booking policies/domain helpers
 │   ├── features/
 │   │   └── payments/                  # Payment UI/feature modules
