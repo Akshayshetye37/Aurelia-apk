@@ -90,6 +90,19 @@ test("Drive account identity is verified with a narrow email scope", async () =>
   assert.equal(files[0].name, "aurelia-backup-one.json");
 });
 
+test("Drive list rejects repeated page tokens instead of looping forever", async () => {
+  const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async () => jsonResponse({ files: [], nextPageToken: "repeat" }), retryDelay: async () => {} });
+  await assert.rejects(adapter.list(testToken), { code: "DRIVE_PAGINATION_INVALID" });
+});
+
+test("Drive list retries network failures with bounded delay", async () => {
+  let calls = 0, delays = 0;
+  const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async () => { if (++calls < 3) throw new Error("offline"); return jsonResponse({ files: [] }); }, retryDelay: async () => { delays++; } });
+  assert.deepEqual(await adapter.list(testToken), []);
+  assert.equal(calls, 3);
+  assert.equal(delays, 2);
+});
+
 test("Drive requests retry transient rate-limit and server errors but not uploads", async () => {
   let calls = 0;
   const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async () => ++calls < 3 ? jsonResponse({}, 503) : jsonResponse({ files: [] }), retryDelay: async () => {} });
