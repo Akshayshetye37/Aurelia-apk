@@ -8,9 +8,11 @@ const PROVIDER_ID = /^[a-z][a-z0-9-]{1,63}$/;
 
 export const CLOUD_PROVIDER_CATALOG = Object.freeze([
   Object.freeze({ id: "local-device", name: "This device", kind: "local", availability: "available", auth: "none" }),
+  Object.freeze({ id: "android-saf", name: "Android document provider (SAF)", kind: "cloud", availability: "available", auth: "platform-picker" }),
   Object.freeze({ id: "dropbox", name: "Dropbox", kind: "cloud", availability: "planned", auth: "oauth" }),
   Object.freeze({ id: "google-drive", name: "Google Drive", kind: "cloud", availability: "planned", auth: "oauth" }),
   Object.freeze({ id: "onedrive", name: "Microsoft OneDrive", kind: "cloud", availability: "planned", auth: "oauth" }),
+  Object.freeze({ id: "box", name: "Box", kind: "cloud", availability: "planned", auth: "oauth" }),
   Object.freeze({ id: "icloud", name: "iCloud", kind: "cloud", availability: "planned", auth: "platform" }),
   Object.freeze({ id: "webdav", name: "WebDAV", kind: "cloud", availability: "planned", auth: "user-configured" }),
   Object.freeze({ id: "nextcloud", name: "Nextcloud", kind: "cloud", availability: "planned", auth: "user-configured" }),
