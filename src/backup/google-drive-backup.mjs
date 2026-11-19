@@ -71,17 +71,19 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
   return Object.freeze({ list, upload, download, remove, uploadSnapshot });
 }
 
-export function createBackupScheduleStore({ storage = globalThis.localStorage, key = "aurelia.backup.schedule.v1", now = () => Date.now() } = {}) {
+export function createBackupScheduleStore({ storage = null, key = "aurelia.backup.schedule.v1", now = () => Date.now() } = {}) {
+  let memoryRecord = { schedule: "never", lastSuccessAt: 0, connected: false };
   function read() {
     try {
-      const parsed = JSON.parse(storage?.getItem(key) || "{}");
+      const raw = storage ? storage.getItem(key) : JSON.stringify(memoryRecord);
+      const parsed = JSON.parse(raw || "{}");
       return { schedule: schedules.has(parsed.schedule) ? parsed.schedule : "never", lastSuccessAt: Number.isFinite(parsed.lastSuccessAt) ? parsed.lastSuccessAt : 0, connected: parsed.connected === true };
     } catch { return { schedule: "never", lastSuccessAt: 0, connected: false }; }
   }
   function write(value) {
     if (!schedules.has(value?.schedule)) throw fail("BACKUP_SCHEDULE_INVALID", "Backup schedule is invalid.");
     const next = { schedule: value.schedule, lastSuccessAt: Number.isFinite(value.lastSuccessAt) ? value.lastSuccessAt : 0, connected: value.connected === true };
-    storage?.setItem(key, JSON.stringify(next));
+    if (storage) storage.setItem(key, JSON.stringify(next)); else memoryRecord = next;
     return Object.freeze(next);
   }
   function setSchedule(schedule) { if (!schedules.has(schedule)) throw fail("BACKUP_SCHEDULE_INVALID", "Backup schedule is invalid."); return write({ ...read(), schedule }); }
