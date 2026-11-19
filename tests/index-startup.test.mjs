@@ -180,3 +180,27 @@ test("index contains no direct Web Storage access and uses the whitelisted migra
   assert.match(html, /deleteLegacyPhotoFallbackEntries/);
   assert.match(html, /PmsBootstrapCoordinator\(\{ storage: legacyStorage \}\)/);
 });
+
+test('guest-first onboarding exposes skip, account entry, and non-blocking local reminder', () => {
+  assert.match(html, /function aureliaContinueGuest\(\)/);
+  assert.match(html, /S\.set\.guestMode=true/);
+  assert.match(html, /S\.set\.guestWelcomeSeen=true/);
+  assert.match(html, /Skip · Continue without login/);
+  assert.match(html, /aurelia-guest-banner/);
+  assert.match(html, /Sign in to back up your work/);
+  assert.match(html, /Authentication is not connected yet/);
+  assert.match(html, /No account, password, or OTP request will be sent/);
+});
+
+test('login UX includes forgot-password and masked destination requirements', () => {
+  assert.match(html, /Forgot Password\?/);
+  assert.match(html, /aureliaForgotPassword\(\)/);
+  assert.match(html, /registered destination in masked form/);
+  assert.match(html, /masked number above is an example only/);
+  assert.match(html, /Authentication is not connected yet/);
+});
+
+test('guest reminder animation respects reduced motion', () => {
+  assert.match(html, /aurelia-guest-pulse/);
+  assert.match(html, /prefers-reduced-motion:reduce/);
+});
