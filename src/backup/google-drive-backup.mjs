@@ -12,6 +12,11 @@ function authHeaders(token) {
   return { Authorization: "Bearer " + token };
 }
 
+function randomHexForName() {
+  const bytes = globalThis.crypto?.getRandomValues ? globalThis.crypto.getRandomValues(new Uint8Array(12)) : null;
+  if (!bytes) throw fail("DRIVE_CRYPTO_UNAVAILABLE", "Secure randomness is unavailable for the Drive backup filename.");
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+}
 /** Direct Google Drive appDataFolder transport. Only already-encrypted backup envelopes are accepted. */
 export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetch is required");
@@ -38,7 +43,8 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
     if (encryptedEnvelope.length < 100 || encryptedEnvelope.length > 26 * 1024 * 1024) throw fail("DRIVE_BACKUP_INVALID", "Encrypted backup envelope is incomplete or exceeds the upload limit.");
     const randomBytes = globalThis.crypto?.getRandomValues ? globalThis.crypto.getRandomValues(new Uint8Array(16)) : null;
     if (!randomBytes) throw fail("DRIVE_CRYPTO_UNAVAILABLE", "Secure randomness is unavailable for the Drive upload boundary.");
-    const boundary = "aurelia-" + Array.from(randomBytes, byte => byte.toString(16).padStart(2, "0")).join("");
+    const randomHex = Array.from(randomBytes, byte => byte.toString(16).padStart(2, "0")).join("");
+    const boundary = "aurelia-" + randomHex;
     const metadata = JSON.stringify({ name, parents: ["appDataFolder"], mimeType: "application/json" });
     const body = "--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + metadata + "\r\n--" + boundary + "\r\nContent-Type: application/json\r\n\r\n" + encryptedEnvelope + "\r\n--" + boundary + "--";
     const response = await request("/files?uploadType=multipart&fields=id,name,size,modifiedTime", token, { method: "POST", headers: { "Content-Type": "multipart/related; boundary=" + boundary }, body });
@@ -60,7 +66,9 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
     return true;
   }
   async function uploadSnapshot(token, name, envelope, { retention = 7 } = {}) {
-    const created = await upload(token, name, envelope);
+    // Do not expose the local plaintext-derived data hash in Drive metadata/filename.
+    const remoteName = "aurelia-backup-" + Date.now() + "-" + randomHexForName() + ".json";
+    const created = await upload(token, remoteName, envelope);
     const files = await list(token);
     const ordered = files.sort((a,b) => Date.parse(b.modifiedTime || 0) - Date.parse(a.modifiedTime || 0));
     const cleanup = ordered.slice(Math.max(0, retention));
