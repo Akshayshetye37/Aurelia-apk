@@ -59,6 +59,25 @@ Acceptance criteria:
 5. Forgot Password shows only a backend-derived masked registered-number hint after account lookup is implemented.
 6. Password reset and account recovery cannot regenerate/replace the local DEK.
 
+### 2B. Primary phone authentication implementation
+
+- Primary account authentication is implemented in the Android native bridge using the default Firebase Auth instance. The recovery flow continues to use its isolated named FirebaseApp/Auth instance.
+- Create account and sign-in both use Firebase phone OTP. Firebase Auth creates the UID on first successful phone verification and signs in existing users on subsequent verification.
+- **Forgot Password** is an OTP account-access recovery flow. This architecture has no password to reset; verified phone OTP restores the Firebase session.
+- The bridge keeps verification IDs and resend tokens in process memory only, never exposes Firebase ID tokens to JavaScript, and checks the verified Firebase phone number against the number submitted for the challenge.
+- After sign-in, the native bridge calls ensurePmsAccount in asia-south1. The callable derives UID and phone from Firebase-authenticated claims, writes the profile with Admin SDK, and returns a masked phone. Client writes to pmsAccounts are denied.
+- A profile provisioning failure does not falsify authentication success; the UI reports profile setup pending. Cloud backup/sync and property access remain unavailable until their respective backend authorization and sync phases are qualified.
+- SMS consent, standard charges, region policy, SHA-1/SHA-256, Play Integrity/reCAPTCHA verification, provider enablement, and Firebase project configuration are deployment prerequisites.
+- Phone-only authentication is weaker than passkeys or stronger credential options; plan stronger factors before sensitive account actions.
+
+Acceptance criteria:
+1. OTP request, resend, manual verification, auto-verification, cancellation, stale callback rejection, and identity mismatch are handled.
+2. Firebase tokens never cross into JavaScript or logs.
+3. Auth session uses the primary Firebase app; recovery remains isolated.
+4. ensurePmsAccount requires App Check and Firebase Auth, and derives UID/phone only from verified claims.
+5. Firestore profile reads are owner-only and all client writes are denied.
+6. Account recovery does not unlock or regenerate local encryption keys.
+
 ### 3. Tenant is a property/business, not a user or device
 
 Canonical cloud tenant scope is `propertyId`. A property can represent a hotel, homestay, restaurant, or combined operation. Business type is a validated property attribute, not a security boundary.
