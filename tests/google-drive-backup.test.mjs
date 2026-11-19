@@ -43,6 +43,14 @@ test("never and disconnected suppress due backups; failure metadata is retained"
   store.setConnected(true); store.markFailure({ code: "DRIVE_AUTH_EXPIRED" }, 200);
   assert.equal(store.read().lastError, "DRIVE_AUTH_EXPIRED");
   assert.equal(store.read().lastAttemptAt, 200);
+  assert.equal(store.read().failureCount, 1);
+  assert.equal(store.read().retryAt, 200 + 5 * 60 * 1000);
+  store.markFailure({ code: "DRIVE_RATE_LIMITED" }, 300);
+  assert.equal(store.read().failureCount, 2);
+  assert.equal(store.read().retryAt, 300 + 10 * 60 * 1000);
+  store.markSuccess(400, 900);
+  assert.equal(store.read().failureCount, 0);
+  assert.equal(store.read().retryAt, 0);
 });
 
 test("schedule rejects invalid values and next due is calculated", () => {
