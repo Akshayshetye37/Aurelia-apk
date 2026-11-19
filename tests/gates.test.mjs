@@ -122,6 +122,20 @@ test('staging probes reject non-HTTPS and non-staging hosts before network acces
   assert.match(output(wrongHost), /staging project/);
 });
 
+test('Gate 3 is scoped to Google Sign-In and Email-Link owner verification, not SMS qualification', () => {
+  const gate3 = fs.readFileSync(path.join(ROOT, '.github/workflows/gate-3-real-sms-staging.yml'), 'utf8');
+  const staging = fs.readFileSync(path.join(ROOT, '.github/workflows/recovery-staging-deploy.yml'), 'utf8');
+  const qualification = fs.readFileSync(path.join(ROOT, 'docs/GATE-3-REAL-SMS-STAGING-QUALIFICATION.md'), 'utf8');
+  const pipeline = fs.readFileSync(path.join(ROOT, 'docs/RECOVERY-GATE-PIPELINE.md'), 'utf8');
+  assert.match(gate3, /Google Sign-In and Email-Link owner verification/);
+  assert.match(staging, /exchangeOwnerEmailLink/);
+  assert.match(staging, /confirmRecoveryOwnerBinding/);
+  assert.doesNotMatch(staging, /RECOVERY_CALLABLES[^\\n]*registerRecoveryPhone|RECOVERY_CALLABLES[^\\n]*issueRecoveryGrant/);
+  assert.match(qualification, /Phone SMS OTP.*out of Gate 3 qualification scope/);
+  assert.match(qualification, /does not constitute a successful authenticated Google Sign-In or Email-Link exchange/);
+  assert.match(pipeline, /Gate 3 does not require real SMS, Blaze SMS quota, a SIM, or a physical SMS test device/);
+});
+
 test('candidate SHA validation fails before any GitHub API call', (t) => {
   const result = run(t, 'check-candidate.mjs', ['--sha', 'not-a-sha', '--repo', 'owner/repo', '--branch', 'work/candidate']);
   assert.equal(result.status, 1);
