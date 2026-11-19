@@ -972,12 +972,13 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   private void driveAuthorizationResult(String requestId, boolean ok, String token, String message) {
     js("window.aureliaNativeDriveAuthResult && window.aureliaNativeDriveAuthResult(" + q(requestId) + "," + ok + "," + q(token) + "," + q(message) + ")");
   }
-  private void authorizeGoogleDriveBackup(String requestId) {
+  private void authorizeGoogleDriveBackup(String requestId, boolean forceAccountPicker) {
     runOnUiThread(() -> {
       try {
-        AuthorizationRequest request = AuthorizationRequest.builder()
-          .setRequestedScopes(java.util.Arrays.asList(new Scope("https://www.googleapis.com/auth/drive.appdata"), new Scope("openid"), new Scope("email")))
-          .build();
+        AuthorizationRequest.Builder requestBuilder = AuthorizationRequest.builder()
+          .setRequestedScopes(java.util.Arrays.asList(new Scope("https://www.googleapis.com/auth/drive.appdata"), new Scope("openid"), new Scope("email")));
+        if (forceAccountPicker) requestBuilder.setPrompt(AuthorizationRequest.Prompt.SELECT_ACCOUNT);
+        AuthorizationRequest request = requestBuilder.build();
         Identity.getAuthorizationClient(MainActivity.this).authorize(request)
           .addOnSuccessListener(result -> {
             if (result.hasResolution()) {
@@ -1442,7 +1443,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         final String requestId = obj.optString("requestId", "");
         operationType = type; operationRequestId = requestId;
         if ("authorizeGoogleDriveBackup".equals(type)) {
-          authorizeGoogleDriveBackup(requestId);
+          authorizeGoogleDriveBackup(requestId, obj.optBoolean("forceAccountPicker", false));
         } else if ("openRecoveryPhoneSettings".equals(type)) {
           runOnUiThread(() -> startActivity(new Intent(MainActivity.this,
               com.aurelia.pms.identity.RecoveryPhoneSettingsActivity.class)));
