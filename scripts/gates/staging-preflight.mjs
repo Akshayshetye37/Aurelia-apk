@@ -16,7 +16,7 @@ const normalizeFingerprint = (value) => String(value ?? '').toLowerCase().replac
 
 export function validateStagingConfig(env) {
   const errors = [];
-  for (const name of required) if (!String(env[name] ?? '').trim()) errors.push(`missing ${name}`);
+  for (const name of required) if (!String(env[name] ?? '').trim()) errors.push(\`missing \${name}\`);
   if (env.PROJECT_ID && !projectIdRe.test(env.PROJECT_ID)) errors.push('PROJECT_ID format invalid');
   if (env.PRODUCTION_PROJECT_ID && !projectIdRe.test(env.PRODUCTION_PROJECT_ID)) errors.push('PRODUCTION_PROJECT_ID format invalid');
   if (env.PROJECT_ID && env.PRODUCTION_PROJECT_ID && env.PROJECT_ID === env.PRODUCTION_PROJECT_ID) errors.push('staging and production project IDs must differ');
@@ -34,7 +34,7 @@ export function validateStagingConfig(env) {
   if (env.PROJECT_ID && env.GCP_REGION && env.FUNCTIONS_BASE_URL) {
     try {
       const url = new URL(env.FUNCTIONS_BASE_URL);
-      const expectedHost = `${env.GCP_REGION}-${env.PROJECT_ID}.cloudfunctions.net`;
+      const expectedHost = \`\${env.GCP_REGION}-\${env.PROJECT_ID}.cloudfunctions.net\`;
       if (url.protocol !== 'https:' || url.hostname !== expectedHost || url.username || url.password || url.port || url.pathname !== '/' || url.search || url.hash) errors.push('FUNCTIONS_BASE_URL must be the HTTPS origin for the configured project and region');
     } catch (error) {
       if (error instanceof TypeError) errors.push('FUNCTIONS_BASE_URL is invalid');
@@ -59,14 +59,18 @@ export function validateStagingConfig(env) {
         const der = Buffer.from(keys[env.ACTIVE_KID], 'base64');
         if (!der.length || der.toString('base64') !== keys[env.ACTIVE_KID]) errors.push('active public key must be canonical base64 DER');
         else {
+          const key = crypto.createPublicKey({ key: der, format: 'der', type: 'spki' });
           if (key.asymmetricKeyType !== 'ec' || key.asymmetricKeyDetails?.namedCurve !== 'prime256v1') errors.push('active public key must be P-256 for ES256');
         }
       }
-    } catch { errors.push('PUBLIC_KEYS must be valid JSON containing a valid active P-256 SPKI public key'); }
+    } catch {
+      errors.push('PUBLIC_KEYS must be valid JSON containing a valid active P-256 SPKI public key');
+    }
   }
 
   if (env.GOOGLE_SERVICES_JSON) {
     try {
+      const encoded = env.GOOGLE_SERVICES_JSON.replace(/\s/g, '');
       const decoded = Buffer.from(encoded, 'base64');
       if (!decoded.length || decoded.toString('base64').replace(/=+$/, '') !== encoded.replace(/=+$/, '')) errors.push('GOOGLE_SERVICES_JSON must be base64 encoded');
       else {
@@ -75,9 +79,13 @@ export function validateStagingConfig(env) {
         const apiKey = client?.api_key?.[0]?.current_key;
         if (config.project_info?.project_id !== env.PROJECT_ID || apiKey !== env.FIREBASE_WEB_API_KEY) errors.push('Firebase config project/package/API key mismatch');
       }
+    } catch {
+      errors.push('GOOGLE_SERVICES_JSON is invalid base64 Firebase configuration');
+    }
   }
 
   if (env.KEYSTORE_B64) {
+    const encoded = env.KEYSTORE_B64.replace(/\s/g, '');
     const decoded = Buffer.from(encoded, 'base64');
     if (!decoded.length || decoded.toString('base64').replace(/=+$/, '') !== encoded.replace(/=+$/, '')) errors.push('KEYSTORE_B64 must be valid non-empty base64');
   }
@@ -90,7 +98,7 @@ export function validateStagingConfig(env) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const errors = validateStagingConfig(process.env);
   if (errors.length) {
-    console.error(`Gate 3 staging preflight failed: ${errors.join('; ')}`);
+    console.error(\`Gate 3 staging preflight failed: \${errors.join('; ')}\`);
     process.exit(1);
   }
   console.log('Gate 3 staging preflight passed; secret values were not printed.');
