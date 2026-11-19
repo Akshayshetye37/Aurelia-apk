@@ -47,7 +47,7 @@ test("Drive adapter uses appDataFolder and rejects plaintext backups", async () 
   const calls = [];
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url, options });
-    if (options.method === "POST") return { ok: true, json: async () => ({ id: "fakeDriveId", name: "aurelia-backup-2026.json" }) };
+    if (options.method === "POST") return { ok: true, json: async () => ({ id: fakeDriveId, name: "aurelia-backup-2026.json" }) };
     if (String(url).includes("/files?")) return { ok: true, json: async () => ({ files: [] }) };
     return { ok: true, text: async () => envelope };
   };
@@ -55,21 +55,21 @@ test("Drive adapter uses appDataFolder and rejects plaintext backups", async () 
   assert.equal(GOOGLE_DRIVE_BACKUP_SCOPE, "https://www.googleapis.com/auth/drive.appdata");
   await assert.rejects(adapter.upload(testToken, "aurelia-backup-2026.json", JSON.stringify({ plaintext: "secret" })), { code: "DRIVE_BACKUP_NOT_ENCRYPTED" });
   const result = await adapter.uploadSnapshot(testToken, "aurelia-backup-2026.json", envelope);
-  assert.equal(result.file.id, "fakeDriveId");
+  assert.equal(result.file.id, fakeDriveId);
   assert.match(calls[0].url, /uploadType=multipart/);
   assert.match(calls[0].options.body, /appDataFolder/);
-  assert.match(calls[0].options.body, /aurelia-backup-\\d+-[a-f0-9]{24}\\.json/);
+  assert.match(calls[0].options.body, /aurelia-backup-\d+-[a-f0-9]{24}\.json/);
   assert.match(calls[0].options.body, /AURELIA-PMS-ENCRYPTED-BACKUP/);
 });
 
 test("Drive adapter lists only appDataFolder and validates downloaded envelope", async () => {
   const fetchImpl = async url => {
-    if (String(url).includes("/files?")) return { ok: true, json: async () => ({ files: [{ id: "fakeDriveId", name: "aurelia-backup-2026.json", modifiedTime: "2026-01-01" }, { id: "other", name: "unrelated.txt" }] }) };
+    if (String(url).includes("/files?")) return { ok: true, json: async () => ({ files: [{ id: fakeDriveId, name: "aurelia-backup-2026.json", modifiedTime: "2026-01-01" }, { id: "other", name: "unrelated.txt" }] }) };
     return { ok: true, text: async () => envelope };
   };
   const adapter = createGoogleDriveBackupAdapter({ fetchImpl });
   const listed = await adapter.list(testToken);
   assert.equal(listed.length, 1);
-  assert.equal(await adapter.download(testToken, "fakeDriveId"), envelope);
+  assert.equal(await adapter.download(testToken, fakeDriveId), envelope);
   await assert.rejects(adapter.download(testToken, "bad id"), { code: "DRIVE_FILE_ID_INVALID" });
 });
