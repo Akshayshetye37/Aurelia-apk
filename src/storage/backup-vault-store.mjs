@@ -71,7 +71,9 @@ export function createBackupVaultStore({ indexedDBImpl = globalThis.indexedDB } 
       db = await open();
       await new Promise((resolve, reject) => {
         const transaction = db.transaction("vault", "readwrite");
-        const persisted = { id: record.id, format: record.format, wrappedKey: record.wrappedKey, salt: record.salt, wrapIv: record.wrapIv, iterations: record.iterations };\n        if (record.key !== undefined) persisted.key = record.key;\n        transaction.objectStore("vault").put(persisted);
+        const persisted = { id: record.id, format: record.format, wrappedKey: record.wrappedKey, salt: record.salt, wrapIv: record.wrapIv, iterations: record.iterations };
+        if (record.key !== undefined) persisted.key = record.key;
+        transaction.objectStore("vault").put(persisted);
         transaction.oncomplete = resolve;
         transaction.onerror = () => reject(transaction.error || new Error("Could not save backup recovery key."));
         transaction.onabort = () => reject(transaction.error || new Error("Backup recovery key write was aborted."));
