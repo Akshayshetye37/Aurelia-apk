@@ -39,7 +39,8 @@ function parseFile(file) {
 export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetch is required");
   async function request(path, token, options = {}) {
-    const response = await fetchImpl(DRIVE_API + path, { ...options, headers: { ...authHeaders(token), ...(options.headers || {}) } });
+    const url = /^https:\/\//.test(path) ? path : DRIVE_API + path;
+    const response = await fetchImpl(url, { ...options, headers: { ...authHeaders(token), ...(options.headers || {}) } });
     if (!response.ok) {
       const code = response.status === 401 ? "DRIVE_AUTH_EXPIRED" : response.status === 403 ? "DRIVE_PERMISSION_DENIED" : response.status === 429 ? "DRIVE_RATE_LIMITED" : "DRIVE_REQUEST_FAILED";
       throw fail(code, "Google Drive request failed (" + response.status + ").");
@@ -61,7 +62,7 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
     return all.sort((a, b) => Date.parse(b.modifiedTime || 0) - Date.parse(a.modifiedTime || 0));
   }
   async function getAccount(token) {
-    const response = await request("/oauth2/v2/userinfo", token);
+    const response = await request("https://www.googleapis.com/oauth2/v2/userinfo", token);
     const profile = await response.json();
     if (!profile || typeof profile.email !== "string" || !profile.email.includes("@")) throw fail("DRIVE_ACCOUNT_IDENTITY_UNAVAILABLE", "Google did not return the authorized account identity.");
     return Object.freeze({ email: profile.email, name: typeof profile.name === "string" ? profile.name : "", picture: typeof profile.picture === "string" ? profile.picture : "" });
@@ -145,11 +146,11 @@ export function createBackupScheduleStore({ storage = null, key = "aurelia.backu
   function nextDueAt(at = now()) {
     const state = read();
     if (!state.connected || state.schedule === "never") return 0;
-    if (!state.lastSuccessAt) return at;
-    const next = new Date(state.lastSuccessAt);
-    if (state.schedule === "daily") next.setDate(next.getDate() + 1);
-    else if (state.schedule === "weekly") next.setDate(next.getDate() + 7);
-    else if (state.schedule === "monthly") next.setMonth(next.getMonth() + 1);
+    const reference = state.lastSuccessAt ? new Date(state.lastSuccessAt) : new Date(at);
+    const next = new Date(reference);
+    if (state.schedule === "daily") { next.setDate(next.getDate() + 1); next.setHours(0, 0, 0, 0); }
+    else if (state.schedule === "weekly") { next.setDate(next.getDate() + (7 - next.getDay())); next.setHours(0, 0, 0, 0); }
+    else if (state.schedule === "monthly") { next.setDate(1); next.setMonth(next.getMonth() + 1); next.setHours(0, 0, 0, 0); }
     return next.getTime();
   }
   return Object.freeze({ read, write, setSchedule, setConnected, markAttempt, markSuccess, markFailure, due, nextDueAt });
