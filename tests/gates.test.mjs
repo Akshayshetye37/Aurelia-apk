@@ -133,7 +133,7 @@ test('Gate 3 is scoped to Google Sign-In and Email-Link owner verification, not 
   const callableLine = staging.split('\n').find((line) => line.includes('RECOVERY_CALLABLES:')) ?? '';
   assert.doesNotMatch(callableLine, /registerRecoveryPhone|issueRecoveryGrant|consumeRecoveryGrant/);
   assert.match(qualification, /Phone SMS OTP.*out of Gate 3 qualification scope/);
-  assert.match(qualification, /does not constitute a successful authenticated Google Sign-In or Email-Link exchange/);
+  assert.match(qualification, /do not constitute a successful authenticated Google Sign-In or Email-Link exchange/);
   assert.match(pipeline, /Gate 3 does not require real SMS, Blaze SMS quota, a SIM, or a physical SMS test device/);
 });
 
