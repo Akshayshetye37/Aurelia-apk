@@ -97,6 +97,11 @@ test("backup history paginates, validates files, and sorts newest first", async 
   assert.equal(files[0].name, "aurelia-backup-new.json");
 });
 
+test("Drive pagination rejects repeated page tokens instead of looping forever", async () => {
+  const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async () => ({ ok: true, json: async () => ({ files: [], nextPageToken: "loop" }) }) });
+  await assert.rejects(adapter.list(testToken), { code: "DRIVE_PAGINATION_INVALID" });
+});
+
 test("account identity is returned and malformed identity is rejected", async () => {
   const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async url => {
     assert.match(String(url), /userinfo/);
