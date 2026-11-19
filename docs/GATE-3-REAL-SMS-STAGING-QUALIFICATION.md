@@ -33,6 +33,8 @@ Run `Recovery staging deployment and APK` only after the private attestation ver
 
 Gate 3 must additionally use two synthetic tenants with separate owner UIDs and independent recovery records. These are staging-only fixtures; do not use real customer identities or phone numbers. Cases G3-11 through G3-14 are required evidence before multi-owner production launch. They are not satisfied by source-contract or emulator-only tests. Cross-tenant probes must be executed against the deployed staging project and recorded with redacted fixture IDs.
 
+| ID | Test | Required result |
+|---|---|---|
 | G3-11 | Create two synthetic tenants (A and B) with independent owner UIDs, phone proofs, devices and grants. Attempt to use Tenant A's grant from Tenant B. | Rejected; no recovery gate arms; no grant state changes in either tenant. Record only redacted synthetic identifiers. |
 | G3-12 | Tenant B attempts to acknowledge Tenant A's owner alert using B's owner session/device/token. | Rejected; A's alert remains pending and B's recovery state is unchanged. |
 | G3-13 | Exercise recovery issuance limits from both tenants using the same synthetic device hash, then use distinct devices. | Device rate-limit counters are tenant-scoped; activity in A does not exhaust B's device bucket. Phone, tenant and IP buckets remain independently enforced. |
