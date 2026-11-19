@@ -78,9 +78,9 @@ test("backup history paginates, validates files, and sorts newest first", async 
   const adapter = createGoogleDriveBackupAdapter({ fetchImpl: async url => {
     if (!String(url).includes("/files?")) return { ok: true };
     page++;
-    return { ok: true, json: async () => page === 1
+    return { ok: true, json: async () => (page === 1
       ? { files: [{ id: "a".repeat(16), name: "aurelia-backup-old.json", modifiedTime: "2026-01-01" }, { id: "bad", name: "bad.txt" }], nextPageToken: "next" }
-      : { files: [{ id: "b".repeat(16), name: "aurelia-backup-new.json", modifiedTime: "2026-02-01" }] };
+      : { files: [{ id: "b".repeat(16), name: "aurelia-backup-new.json", modifiedTime: "2026-02-01" }] }) };
   } });
   const files = await adapter.list(testToken);
   assert.equal(page, 2);
