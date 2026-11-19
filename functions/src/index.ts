@@ -38,7 +38,8 @@ export const ensurePmsAccount = onCall(
       throw new HttpsError("invalid-argument", "Display name is invalid.");
     }
     const digits = phone.replace(/[^0-9]/g, "");
-    const maskedPhone = "+" + digits.slice(0, Math.max(1, digits.length - 10)) + " ••••••••" + digits.slice(-2);
+    const country = phone.startsWith("+91") ? "+91" : phone.startsWith("+1") ? "+1" : "+••";
+    const maskedPhone = country + " ••••••••" + digits.slice(-2);
     const ref = db.doc(`pmsAccounts/${uid}`);
     await db.runTransaction(async tx => {
       const snapshot = await tx.get(ref);
