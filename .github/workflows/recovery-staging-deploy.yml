@@ -69,6 +69,7 @@ jobs:
       - name: Checkout trusted workflow control revision
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          ref: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
           persist-credentials: false
       - name: Verify exact candidate source before staging deployment
         shell: bash
@@ -87,6 +88,7 @@ jobs:
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
           FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
           FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
           VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
@@ -96,6 +98,7 @@ jobs:
           APP_CHECK_REGISTERED: ${{ vars.APP_CHECK_PLAY_INTEGRITY_REGISTERED }}
           APP_CHECK_SIGNER_SHA256: ${{ vars.APP_CHECK_SIGNER_SHA256 }}
           ATTESTATION_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
+          RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'createRecoveryAttestationChallenge,verifyRecoveryDeviceAttestation,registerRecoveryPhone,exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,issueRecoveryGrant,consumeRecoveryGrant,cancelRecoveryRequest,cancelRecoveryPhoneChange,activateRecoveryPhoneChange' }}
           WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           DEPLOY_SERVICE_ACCOUNT: ${{ secrets.STAGING_DEPLOY_SERVICE_ACCOUNT }}
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
@@ -103,40 +106,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.STAGING_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.STAGING_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.STAGING_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          missing=()
-          for name in PROJECT_ID PRODUCTION_PROJECT_ID FUNCTIONS_BASE_URL FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS FIREBASE_WEB_API_KEY APP_CHECK_REGISTERED APP_CHECK_SIGNER_SHA256 ATTESTATION_SIGNER_SHA256 WIF_PROVIDER DEPLOY_SERVICE_ACCOUNT GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
-            if [[ -z "${!name}" ]]; then missing+=("$name"); fi
-          done
-          if (( ${#missing[@]} > 0 )); then
-            printf '::error::Missing required recovery-staging values: %s\n' "${missing[*]}"
-            exit 1
-          fi
-          if [[ "$PROJECT_ID" == "$PRODUCTION_PROJECT_ID" ]]; then
-            echo "::error::Staging and production project IDs must differ."
-            exit 1
-          fi
-          if [[ ! "$WIF_PROVIDER" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$ ]]; then
-            echo "::error::GCP_WORKLOAD_IDENTITY_PROVIDER must be a full Workload Identity Provider resource name."
-            exit 1
-          fi
-          if [[ ! "$DEPLOY_SERVICE_ACCOUNT" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$ ]]; then
-            echo "::error::STAGING_DEPLOY_SERVICE_ACCOUNT must be a valid Google service-account email."
-            exit 1
-          fi
-          if [[ "$APP_CHECK_REGISTERED" != "true" ]]; then
-            echo "::error::Play Integrity must be registered for Firebase App Check before staging deployment."
-            exit 1
-          fi
-          normalize_fingerprint() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d ':'; }
-          app_check_signer="$(normalize_fingerprint "$APP_CHECK_SIGNER_SHA256")"
-          attestation_signer="$(normalize_fingerprint "$ATTESTATION_SIGNER_SHA256")"
-          if [[ ! "$app_check_signer" =~ ^[0-9a-f]{64}$ || "$app_check_signer" != "$attestation_signer" ]]; then
-            echo "::error::App Check and attestation signer fingerprints must be matching SHA-256 digests."
-            exit 1
-          fi
-          echo "Staging configuration and WIF input checks passed; secret values were not printed."
+        run: node scripts/gates/staging-preflight.mjs
 
       - name: Checkout candidate source as build input
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
