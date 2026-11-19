@@ -1,6 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /pmsAccounts/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update, delete: if false;
+    }
     // Recovery identity, phone HMACs, one-time grants and abuse counters are
     // server-authoritative. Firebase Admin SDK functions bypass these rules.
     match /tenants/{tenantId}/security/{document=**} {
