@@ -1451,7 +1451,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       });
     }
     private void pmsPhoneAuthSend(String requestId, String phone, String displayName, boolean resend) {
-      if (requestId == null || requestId.length() > 100 || phone == null || !phone.matches("\\\\+[1-9][0-9]{7,14}")) {
+      if (requestId == null || requestId.length() > 100 || phone == null || !phone.matches("\\+[1-9][0-9]{7,14}")) {
         pmsPhoneAuthEvent(requestId == null ? "" : requestId, "failed", "Enter a valid international mobile number.", ""); return;
       }
       final long generation = ++pmsPhoneAuthGeneration;
