@@ -30,7 +30,7 @@ The new direct Drive adapter authorizes the owner's Google account separately fr
 - Backup history paginates Drive results and lets the owner select a recovery point to restore. Restore download is validated before entering the existing restore confirmation pipeline.
 - Seven remote recovery points are retained. The just-created backup is protected during cleanup; cleanup errors are reported separately and do not turn a successful upload into a failed backup.
 - Transient Drive list/download errors retry with bounded backoff; multipart upload is not automatically retried to avoid duplicate recovery points.
-- The UI records last attempt, last success and sanitized failure status. An expired grant or account mismatch requires reconnecting the intended account.
+- The UI records last attempt, last success and sanitized failure status. Reconnect explicitly opens the Google account selector; an expired grant or account mismatch requires reconnecting the intended account.
 - Disconnect disables Drive operations, clears account metadata and schedule, and leaves local business data unchanged. It is an app-side disconnect and does not revoke Google permission. The separate **Revoke Google permission** action calls Android AuthorizationClient revocation and may revoke all scopes previously granted to Aurelia, not just Drive; it is explicit and warns the owner before execution.
 - Drive OAuth tokens are passed transiently and are not stored in PMS state, Web Storage, logs or backup payloads.
 
