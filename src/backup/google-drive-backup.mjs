@@ -3,6 +3,7 @@ const APP_DATA_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const safeName = name => typeof name === "string" && /^aurelia-backup-[A-Za-z0-9._-]+\.json$/.test(name);
 const schedules = new Set(["daily", "weekly", "monthly", "never"]);
+export const MAX_DRIVE_BACKUP_BYTES = 50 * 1024 * 1024;
 
 export const GOOGLE_DRIVE_BACKUP_SCOPE = APP_DATA_SCOPE;
 export const BACKUP_SCHEDULES = Object.freeze(["daily", "weekly", "monthly", "never"]);
@@ -40,7 +41,7 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
     let parsed;
     try { parsed = JSON.parse(encryptedEnvelope); } catch { throw fail("DRIVE_BACKUP_INVALID", "Backup envelope is not valid JSON."); }
     if (parsed?.format !== "AURELIA-PMS-ENCRYPTED-BACKUP" || ![1,2].includes(parsed.v) || parsed.cipher !== "AES-256-GCM" || typeof parsed.ciphertext !== "string") throw fail("DRIVE_BACKUP_NOT_ENCRYPTED", "Google Drive accepts only Aurelia encrypted backup envelopes.");
-    if (encryptedEnvelope.length < 100 || encryptedEnvelope.length > 26 * 1024 * 1024) throw fail("DRIVE_BACKUP_INVALID", "Encrypted backup envelope is incomplete or exceeds the upload limit.");
+    if (encryptedEnvelope.length < 100 || new TextEncoder().encode(encryptedEnvelope).byteLength > MAX_DRIVE_BACKUP_BYTES) throw fail("DRIVE_BACKUP_INVALID", "Encrypted backup envelope is incomplete or exceeds the upload limit.");
     const randomBytes = globalThis.crypto?.getRandomValues ? globalThis.crypto.getRandomValues(new Uint8Array(16)) : null;
     if (!randomBytes) throw fail("DRIVE_CRYPTO_UNAVAILABLE", "Secure randomness is unavailable for the Drive upload boundary.");
     const randomHex = Array.from(randomBytes, byte => byte.toString(16).padStart(2, "0")).join("");
@@ -53,7 +54,10 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
   async function download(token, fileId) {
     if (typeof fileId !== "string" || !/^[A-Za-z0-9_-]{10,200}$/.test(fileId)) throw fail("DRIVE_FILE_ID_INVALID", "Google Drive backup identifier is invalid.");
     const response = await request("/files/" + encodeURIComponent(fileId) + "?alt=media", token);
+    const contentLength = Number(response.headers?.get?.("content-length") || 0);
+    if (contentLength > MAX_DRIVE_BACKUP_BYTES) throw fail("DRIVE_BACKUP_TOO_LARGE", "Google Drive backup exceeds the 50 MiB import safety limit.");
     const payload = await response.text();
+    if (new TextEncoder().encode(payload).byteLength > MAX_DRIVE_BACKUP_BYTES) throw fail("DRIVE_BACKUP_TOO_LARGE", "Google Drive backup exceeds the 50 MiB import safety limit.");
     let parsed;
     try { parsed = JSON.parse(payload); } catch { throw fail("DRIVE_BACKUP_INVALID", "Downloaded backup is not valid JSON."); }
     if (parsed?.format !== "AURELIA-PMS-ENCRYPTED-BACKUP") throw fail("DRIVE_BACKUP_NOT_ENCRYPTED", "Downloaded file is not an Aurelia encrypted backup.");
