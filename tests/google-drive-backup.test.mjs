@@ -74,7 +74,8 @@ test("Drive adapter uses appDataFolder, validates encryption, and uploads encryp
   assert.equal(GOOGLE_DRIVE_IDENTITY_SCOPE, "openid email");
   await assert.rejects(adapter.upload(testToken, "aurelia-backup-2026.json", JSON.stringify({ plaintext: "secret" })), { code: "DRIVE_BACKUP_NOT_ENCRYPTED" });
   const result = await adapter.uploadSnapshot(testToken, "unused.json", envelope);
-  assert.equal(result.file.id, fakeDriveId);\n  assert.equal(result.retained, 1, "the newly uploaded recovery point counts even if Drive list indexing lags");
+  assert.equal(result.file.id, fakeDriveId);
+  assert.equal(result.retained, 1, "the newly uploaded recovery point counts even if Drive list indexing lags");
   assert.match(calls[0].url, /uploadType=multipart/);
   assert.match(calls[0].options.body, /appDataFolder/);
   assert.match(calls[0].options.body, /aurelia-backup-\d+-[a-f0-9]{24}\.json/);
