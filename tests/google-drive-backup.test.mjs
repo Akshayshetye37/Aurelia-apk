@@ -46,7 +46,7 @@ test("schedule records attempts, success and sanitized failure without storing t
   store.markAttempt(100);
   store.markFailure(Object.assign(new Error("token=secret"), { code: "DRIVE_AUTH_EXPIRED" }), 200);
   assert.equal(store.read().lastErrorCode, "DRIVE_AUTH_EXPIRED");
-  assert.equal(store.read().lastErrorMessage, "Backup failed. Retry from Backup settings.");
+  assert.equal(store.read().lastErrorMessage, "Google authorization expired. Reconnect Google Drive.");
   assert.equal(JSON.stringify(storage.values).includes("secret"), false);
   assert.equal(JSON.stringify(storage.values).includes(testToken), false);
   store.markSuccess(300);
