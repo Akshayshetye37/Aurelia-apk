@@ -27,7 +27,7 @@ on:
         description: HTTPS staging callable base URL
         value: ${{ jobs.deploy-and-build.outputs.functions_base_url }}
       recovery_callables:
-        description: Callable names covered by App Check probes
+        description: Owner-verification callable names covered by App Check probes
         value: ${{ jobs.deploy-and-build.outputs.recovery_callables }}
       signer_sha256:
         description: Release signer certificate SHA-256 fingerprint
@@ -63,7 +63,7 @@ jobs:
       PRODUCTION_PROJECT: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
       STAGING_FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
-      RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'createRecoveryAttestationChallenge,verifyRecoveryDeviceAttestation,registerRecoveryPhone,exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,issueRecoveryGrant,consumeRecoveryGrant,cancelRecoveryRequest,cancelRecoveryPhoneChange,activateRecoveryPhoneChange' }}
+      RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,getRecoveryOwnerPendingAction,getRecoveryOwnerActionReadiness,createRecoveryOwnerActionOptions,completeRecoveryOwnerPasskeyAction' }}
       EXPECTED_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
     steps:
       - name: Checkout trusted workflow control revision
@@ -158,7 +158,7 @@ jobs:
           PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
           REGION: ${{ vars.GCP_REGION }}
           FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
-          RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'createRecoveryAttestationChallenge,verifyRecoveryDeviceAttestation,registerRecoveryPhone,exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,issueRecoveryGrant,consumeRecoveryGrant,cancelRecoveryRequest,cancelRecoveryPhoneChange,activateRecoveryPhoneChange' }}
+          RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,getRecoveryOwnerPendingAction,getRecoveryOwnerActionReadiness,createRecoveryOwnerActionOptions,completeRecoveryOwnerPasskeyAction' }}
           FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
           VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
           ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
@@ -277,7 +277,7 @@ jobs:
             echo "PASS: $function_name runtime identity has access to its declared secrets."
           done
 
-      - name: Probe missing and invalid App Check tokens on every recovery callable
+      - name: Probe missing and invalid App Check tokens on every owner-verification callable
         shell: bash
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
