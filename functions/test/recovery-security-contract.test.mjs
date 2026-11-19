@@ -305,7 +305,10 @@ test('every recovery callable enforces App Check and phone-change activation rej
   assert.match(passkeyAction, /requireEnabled\(\)/);
   for (const callable of callables) {
     assert.match(callable, /enforceAppCheck: true/);
-    if (/cancelRecoveryRequest/.test(callable)) {
+    if (/ensurePmsAccount/.test(callable)) {
+      assert.doesNotMatch(callable, /require(?:Recovery)?Enabled\(\)/);
+      assert.match(callable, /request\.auth\?\.token\.phone_number/);
+    } else if (/cancelRecoveryRequest/.test(callable)) {
       assert.match(callable, /requireRecoveryEnabled\(\)/);
     } else if (/cancelRecoveryPhoneChange/.test(callable)) {
       assert.doesNotMatch(callable, /require(?:Recovery)?Enabled\(\)/);
