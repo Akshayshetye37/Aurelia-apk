@@ -7,7 +7,7 @@ if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) fail('invalid repository n
 const encoded = branch.split('/').map(encodeURIComponent).join('/');
 const ref = gh(`repos/${repo}/git/ref/heads/${encoded}`);
 const head = ref.object?.sha;
-if (!requireSha(head ?? '')) fail(`candidate branch ${branch} has no valid head SHA');
+if (!requireSha(head ?? '')) fail(`candidate branch ${branch} has no valid head SHA`);
 // A candidate is frozen by its commit SHA. It may remain valid after the branch
 // advances, but must still be an ancestor of that branch (not an unrelated commit).
 const comparison = gh(`repos/${repo}/compare/${sha}...${encoded}`);
