@@ -104,7 +104,7 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
     const cleanup = files.filter(file => file.id !== created.id).slice(Math.max(0, retention - 1));
     const failures = [];
     for (const file of cleanup) try { await remove(token, file.id); } catch { failures.push(file.id); }
-    return Object.freeze({ file: created, retained: Math.min(files.length - failures.length, retention), cleanupFailures: failures, cleanupWarning: failures.length ? "Some old backups could not be removed." : "" });
+    const listedCreated = files.some(file => file.id === created.id);\n    const successfulDeletes = cleanup.length - failures.length;\n    const retained = Math.max(1, files.length + (listedCreated ? 0 : 1) - successfulDeletes);\n    return Object.freeze({ file: created, retained: Math.min(retained, retention + failures.length), cleanupFailures: failures, cleanupWarning: failures.length ? "Some old backups could not be removed." : "" });
   }
   return Object.freeze({ list, getAccount, upload, download, remove, uploadSnapshot });
 }
