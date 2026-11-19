@@ -710,6 +710,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
@@ -782,6 +783,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
   private String pmsPhoneCurrent = "";
   private String pmsPhoneDisplayName = "";
   private long pmsPhoneAuthGeneration = 0;
+  private long pmsPhoneLastRequestAt = 0;
   private boolean pmsPhoneAuthInFlight = false;
 
   @Override public void onCreate(Bundle savedInstanceState) {
@@ -1440,7 +1442,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
         if (generation != pmsPhoneAuthGeneration || pmsPhoneAuthInFlight) return;
         pmsPhoneAuthInFlight = true;
         if (!task.isSuccessful() || task.getResult() == null || task.getResult().getUser() == null) {
-          pmsPhoneAuthInFlight = false; pmsPhoneAuthEvent(requestId, "failed", "The verification code could not be verified. Try again.", pmsMaskPhone(phone)); return;
+          pmsPhoneAuthInFlight = false; pmsPhoneAuthEvent(requestId, "code_invalid", "The code is invalid or expired. Enter another code or request a new one.", pmsMaskPhone(phone)); return;
         }
         com.google.firebase.auth.FirebaseUser user = task.getResult().getUser();
         if (user.getPhoneNumber() == null || !phone.equals(user.getPhoneNumber())) {
@@ -1459,6 +1461,11 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       if (requestId == null || requestId.length() > 100 || phone == null || !phone.matches("\\+[1-9][0-9]{7,14}")) {
         pmsPhoneAuthEvent(requestId == null ? "" : requestId, "failed", "Enter a valid international mobile number.", ""); return;
       }
+      long now = SystemClock.elapsedRealtime();
+      if (pmsPhoneLastRequestAt != 0 && now - pmsPhoneLastRequestAt < 30000L) {
+        pmsPhoneAuthEvent(requestId, "failed", "Please wait before requesting another SMS code.", pmsMaskPhone(phone)); return;
+      }
+      pmsPhoneLastRequestAt = now;
       final long generation = ++pmsPhoneAuthGeneration;
       if (!resend) { pmsPhoneCurrent = phone; pmsPhoneDisplayName = displayName == null ? "" : displayName.trim(); pmsPhoneAuthInFlight = false; }
       if (resend && pmsPhoneResendToken == null) { pmsPhoneAuthEvent(requestId, "failed", "Resend is not available yet.", pmsMaskPhone(phone)); return; }
