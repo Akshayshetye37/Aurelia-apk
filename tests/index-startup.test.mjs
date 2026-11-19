@@ -188,16 +188,16 @@ test('guest-first onboarding exposes skip, account entry, and non-blocking local
   assert.match(html, /Skip · Continue without login/);
   assert.match(html, /aurelia-guest-banner/);
   assert.match(html, /Sign in to back up your work/);
-  assert.match(html, /Authentication is not connected yet/);
-  assert.match(html, /No account, password, or OTP request will be sent/);
+  assert.match(html, /aureliaStartPhoneAuth/);
+  assert.match(html, /window\.AureliaNative/);
 });
 
 test('login UX includes forgot-password and masked destination requirements', () => {
   assert.match(html, /Forgot Password\?/);
   assert.match(html, /aureliaForgotPassword\(\)/);
-  assert.match(html, /registered destination in masked form/);
-  assert.match(html, /masked number above is an example only/);
-  assert.match(html, /Authentication is not connected yet/);
+  assert.match(html, /phone OTP sign-in instead of a password/);
+  assert.match(html, /AURELIA_PHONE_AUTH\.masked/);
+  assert.match(html, /aureliaMaskPhone/);
 });
 
 test('guest reminder animation respects reduced motion', () => {
