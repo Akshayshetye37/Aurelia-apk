@@ -2110,17 +2110,43 @@ function aureliaContinueGuest(){
  const saved=persist();closeS();render();
  Promise.resolve(saved).then(ok=>toast(ok===false?'Guest mode started; settings save needs verification.':'Continuing without an account. Your PMS stays on this device.'));
 }
+
+let AURELIA_PHONE_AUTH={requestId:"",mode:"",phone:"",name:"",stage:"phone",masked:""};
+function aureliaMaskPhone(phone){const p=String(phone||"");return p.length>5?p.slice(0,3)+" ••••••••"+p.slice(-2):"••••"}
+function aureliaPhoneRequestId(){return "phone-"+Date.now()+"-"+Math.random().toString(36).slice(2,10)}
+function aureliaPhoneAuthEvent(requestId,status,message,maskedPhone){
+ if(!AURELIA_PHONE_AUTH.requestId||requestId!==AURELIA_PHONE_AUTH.requestId)return;
+ AURELIA_PHONE_AUTH.masked=maskedPhone||AURELIA_PHONE_AUTH.masked;
+ if(status==="code_sent"||status==="timeout"){AURELIA_PHONE_AUTH.stage="otp";aureliaRenderOtp(message);return}
+ if(status==="authenticated"||status==="authenticated_profile_pending"){AURELIA_PHONE_AUTH.stage="done";S.set.guestMode=false;S.set.guestWelcomeSeen=true;persist();closeS();render();toast(message||"Phone verified.");return}
+ AURELIA_PHONE_AUTH.stage="phone";toast(message||"Phone verification failed.");
+}
+window.aureliaPhoneAuthEvent=aureliaPhoneAuthEvent;
+function aureliaStartPhoneAuth(mode){
+ const phone=document.getElementById("aurelia-auth-phone")?.value?.trim()||document.getElementById("aurelia-reset-phone")?.value?.trim()||"";
+ const name=document.getElementById("aurelia-auth-name")?.value?.trim()||"";
+ if(!/^\\+[1-9][0-9]{7,14}$/.test(phone)){toast("Enter your mobile number in international format, e.g. +919876543210.");return}
+ AURELIA_PHONE_AUTH={requestId:aureliaPhoneRequestId(),mode,phone,name,stage:"sending",masked:""};
+ if(!window.AureliaNative?.sendPmsPhoneOtp){toast("Phone OTP is available in the Android app. Web preview cannot authenticate.");return}
+ window.AureliaNative.sendPmsPhoneOtp(AURELIA_PHONE_AUTH.requestId,phone,name);
+ openS('<div class="aurelia-onboarding"><h2 class="foil">Verify mobile</h2><p class="lab">Sending a verification code to '+aureliaMaskPhone(phone)+'. Standard SMS charges may apply.</p><button class="btn ghost" type="button" onclick="aureliaCancelPhoneAuth()">Cancel</button><p id="aurelia-auth-status">Requesting OTP…</p></div>');
+}
+function aureliaRenderOtp(message){
+ openS('<div class="aurelia-onboarding"><h2 class="foil">Enter OTP</h2><p class="lab">Code sent to <strong>'+AURELIA_PHONE_AUTH.masked+'</strong></p><p>'+String(message||"").replace(/</g,"&lt;")+'</p><label class="fld"><span>6-digit code</span><input id="aurelia-auth-otp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label><button class="btn" type="button" onclick="aureliaVerifyPhoneOtp()">Verify and continue</button><button class="btn ghost" type="button" onclick="aureliaResendPhoneOtp()">Resend OTP</button><button class="btn ghost" type="button" onclick="aureliaCancelPhoneAuth()">Cancel</button></div>');
+}
+function aureliaVerifyPhoneOtp(){const code=document.getElementById("aurelia-auth-otp")?.value||"";if(!/^[0-9]{6}$/.test(code)){toast("Enter the six-digit OTP.");return}if(!window.AureliaNative?.verifyPmsPhoneOtp){toast("Native OTP verification is unavailable.");return}window.AureliaNative.verifyPmsPhoneOtp(AURELIA_PHONE_AUTH.requestId,AURELIA_PHONE_AUTH.phone,code)}
+function aureliaResendPhoneOtp(){if(!window.AureliaNative?.resendPmsPhoneOtp){toast("Resend is unavailable.");return}AURELIA_PHONE_AUTH.requestId=aureliaPhoneRequestId();window.AureliaNative.resendPmsPhoneOtp(AURELIA_PHONE_AUTH.requestId,AURELIA_PHONE_AUTH.phone)}
+function aureliaCancelPhoneAuth(){window.AureliaNative?.cancelPmsPhoneOtp?.();AURELIA_PHONE_AUTH.stage="cancelled";closeS()}
 function aureliaOpenAccount(mode){
  S.set.guestWelcomeSeen=true;persist();
- const title=mode==='create'?'Create account':'Sign in';
- const fields=mode==='signin'?'<label class="fld"><span>Password</span><input id="aurelia-auth-password" type="password" autocomplete="current-password"></label>':'<label class="fld"><span>Name</span><input id="aurelia-auth-name" autocomplete="name"></label>';
- const recovery=mode==='signin'?'<button class="link-button" type="button" onclick="aureliaForgotPassword()">Forgot Password?</button>':'';
- openS('<div class="aurelia-onboarding"><h2 class="foil">'+title+'</h2><label class="fld"><span>Mobile number</span><input id="aurelia-auth-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+91 mobile number"></label>'+fields+'<div class="aurelia-auth-unavailable">Authentication is not connected yet. No account, password, or OTP request will be sent.</div><button class="btn" type="button" onclick="aureliaAuthNotReady()">'+title+'</button>'+recovery+'<button class="btn ghost" type="button" onclick="aureliaContinueGuest()">Continue without login</button></div>');
+ const title=mode==="create"?"Create account":"Sign in";
+ const recovery=mode==="signin"?'<button class="link-button" type="button" onclick="aureliaForgotPassword()">Forgot Password?</button>':"";
+ openS('<div class="aurelia-onboarding"><h2 class="foil">'+title+'</h2><label class="fld"><span>Mobile number</span><input id="aurelia-auth-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+91 mobile number"></label>'+(mode==="create"?'<label class="fld"><span>Name</span><input id="aurelia-auth-name" autocomplete="name" maxlength="80"></label>':'')+'<p class="lab">A verification OTP will be sent by SMS. Standard carrier charges may apply.</p><button class="btn" type="button" onclick="aureliaStartPhoneAuth(\''+mode+'\')">Send OTP</button>'+recovery+'<button class="btn ghost" type="button" onclick="aureliaContinueGuest()">Continue without login</button></div>');
 }
 function aureliaForgotPassword(){
- openS('<div class="aurelia-onboarding"><h2 class="foil">Forgot Password?</h2><p class="lab">After account lookup, Aurelia will show the registered destination in masked form, such as:</p><div class="card" style="text-align:center;font:500 20px var(--serif)">+91 ••••••••10</div><label class="fld"><span>Registered mobile number</span><input id="aurelia-reset-phone" type="tel" inputmode="tel" autocomplete="tel"></label><div class="aurelia-auth-unavailable">The masked number above is an example only. Account lookup and SMS delivery are not connected.</div><button class="btn" type="button" onclick="aureliaAuthNotReady()">Send OTP</button><button class="btn ghost" type="button" onclick="aureliaOpenAccount(&quot;signin&quot;)">Back to sign in</button></div>');
+ openS('<div class="aurelia-onboarding"><h2 class="foil">Forgot Password?</h2><p class="lab">Aurelia uses phone OTP sign-in instead of a password. Verify the registered mobile number to restore account access.</p><label class="fld"><span>Mobile number</span><input id="aurelia-reset-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+91 mobile number"></label><button class="btn" type="button" onclick="aureliaStartPhoneAuth(\'recover\')">Send OTP</button><button class="btn ghost" type="button" onclick="aureliaOpenAccount(&quot;signin&quot;)">Back to sign in</button></div>');
 }
-function aureliaAuthNotReady(){toast('Authentication backend is not connected. No OTP or password request was sent.')}
+function aureliaAuthNotReady(){toast("Phone authentication is unavailable in this runtime.")}
 
 /* start */
 loadAll();if(window.__AURELIA_CANONICAL_SETTINGS){S.set=window.__AURELIA_CANONICAL_SETTINGS.set;S.menu=window.__AURELIA_CANONICAL_SETTINGS.menu;useMenu(S.menu)}if(Array.isArray(window.__AURELIA_CANONICAL_TABLES))S.t=window.__AURELIA_CANONICAL_TABLES;if(Array.isArray(window.__AURELIA_CANONICAL_SALES))S.sales=window.__AURELIA_CANONICAL_SALES;if(S.set&&/hari\s*om/i.test(String(S.set.name||''))){S.set.name='Aurelia PMS';S.set.addr=String(S.set.addr||'').replace(/hari\s*om(?:\s+retreat)?/ig,'Aurelia PMS');persist()}if(S.restaurant&&/hari\s*om/i.test(String(S.restaurant.name||''))){S.restaurant.name='Aurelia PMS';S.restaurant.addr=String(S.restaurant.addr||'').replace(/hari\s*om(?:\s+retreat)?/ig,'Aurelia PMS');persist()}RECOVERY_CHECK_PENDING=!!window.AureliaNative&&LOCAL_STATE_STATUS==='invalid';if(!window.AureliaNative)S.bk.folder=false;S.restaurant=Object.assign({name:'The Dining Room',phone:'',addr:'',tax:'',upi:'',cur:S.set.cur||'K',gst:0,qr:'',logo:''},S.restaurant||{});if(!S.restaurant.cur)S.restaurant.cur=S.set.cur||'K';S.tableGuests=S.tableGuests||{};S.tableRooms=S.tableRooms||{};cleanTableOrders();useMenu(S.menu);syncT();
