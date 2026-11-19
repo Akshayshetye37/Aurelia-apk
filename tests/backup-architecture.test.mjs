@@ -19,7 +19,7 @@ test("cloud-folder and shared SAF destinations have independent persisted grants
   assert.match(androidPatch, /readLatestBackupFromFolder\(prefs\.getString\("shared_tree_uri"/);
   assert.match(html, /pickDir\('shared'\)/);
   assert.match(html, /Cloud Folder · Optional/);
-  assert.match(html, /Storage Access Framework \\(SAF\\)/);
+  assert.match(html, /Storage Access Framework \(SAF\)/);
   assert.match(html, /Dropbox/);
   assert.match(html, /OneDrive/);
   assert.match(html, /Shared Folder \/ SAF Policy/);
