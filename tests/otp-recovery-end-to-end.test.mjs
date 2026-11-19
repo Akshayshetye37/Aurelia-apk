@@ -157,15 +157,16 @@ test('staging deployment keeps API-compatible npm install and probes verifier as
 });
 
 
-test('staging deployment probes missing and invalid App Check on all recovery callables', () => {
+test('Gate 3 staging deployment probes missing and invalid App Check on owner-verification callables only', () => {
   const workflow = read('.github/workflows/recovery-staging-deploy.yml');
   assert.match(workflow, /Probe missing and invalid App Check tokens/);
   assert.match(workflow, /X-Firebase-AppCheck: invalid-staging-probe-token/);
-  for (const callable of ['registerRecoveryPhone', 'createRecoveryAttestationChallenge',
-    'verifyRecoveryDeviceAttestation', 'registerRecoveryOwnerDevice',
-    'exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
-    'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant', 'consumeRecoveryGrant',
-    'cancelRecoveryRequest', 'cancelRecoveryPhoneChange', 'activateRecoveryPhoneChange']) assert.ok(workflow.includes(callable));
+  for (const callable of ['exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
+    'registerRecoveryOwnerDevice', 'acknowledgeRecoveryOwnerAlert',
+    'getRecoveryOwnerPendingAction', 'getRecoveryOwnerActionReadiness']) assert.ok(workflow.includes(callable));
+  for (const excluded of ['registerRecoveryPhone', 'createRecoveryAttestationChallenge',
+    'verifyRecoveryDeviceAttestation', 'issueRecoveryGrant', 'consumeRecoveryGrant',
+    'cancelRecoveryRequest', 'cancelRecoveryPhoneChange', 'activateRecoveryPhoneChange']) assert.ok(!workflow.includes(excluded));
 });
 
 
@@ -280,11 +281,9 @@ test('physical-device Gate 4 workflow reboots between committed PIN B and post-r
 });
 
 
-test('recovery deployment and physical qualification are pinned to the working branch', () => {
-  for (const path of [
-    '.github/workflows/recovery-staging-deploy.yml',
-    '.github/workflows/recovery-attestation-deploy.yml'
-  ]) assert.match(read(path), /refs\/heads\/work\/p0-storage-hardening/);
+test('Gate 3 staging deployment follows the current candidate branch while Gate 4 remains separately qualified', () => {
+  assert.match(read('.github/workflows/recovery-staging-deploy.yml'), /refs\/heads\/integration\/ledger-patch/);
+  assert.match(read('.github/workflows/gate-3-real-sms-staging.yml'), /--branch "integration\/ledger-patch"/);
   assert.match(read('.github/workflows/recovery-physical-device-qualification.yml'), /\.head_branch == "work\/p0-storage-hardening"/);
 });
 
