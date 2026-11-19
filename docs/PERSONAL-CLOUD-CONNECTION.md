@@ -8,6 +8,10 @@
 - This first connection flow verifies read access to the user's selected Google Cloud project only. It does not upload, back up, replicate or synchronize PMS data.
 - Any future cloud data operation requires separate design, explicit consent and server-side authorization.
 
+## Distinction from Google Drive backup
+
+This document describes the existing optional Google Cloud project-read connection. It is not Google Drive OAuth backup and does not grant Drive access. The separate encrypted Google Drive backup uses the narrow `drive.appdata` scope, hidden `appDataFolder`, and the user-selected Daily/Weekly/Monthly/Never schedule documented in `BACKUP-ARCHITECTURE.md`. Neither connection is required for local PMS usage or Google Sign-In.
+
 ## User setup
 
 1. The user creates or selects their own Google Cloud project.

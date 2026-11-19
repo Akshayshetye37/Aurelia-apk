@@ -17,11 +17,32 @@ The web UI creates a PMS snapshot when data changes and on app launch/periodic f
 
 Private app data is removed when the app is uninstalled or its data is cleared. Owners must configure an optional off-device destination or export backups if they need protection from device loss/uninstall.
 
-### 2. Google Drive — optional
+### 2. Google Drive OAuth — optional, owner-controlled
 
-The owner selects a Drive folder using Android Storage Access Framework (SAF). If Google Drive is available as a document provider, its own UI handles account sign-in and authorization. Aurelia does not request Google account, contacts, broad storage or all-files permissions and does not embed a Google OAuth client.
+The new direct Drive adapter authorizes the owner's Google account separately from Aurelia Google Sign-In. It requests only the non-sensitive `drive.appdata` scope and stores backup files in the hidden `appDataFolder`; the user does not select a folder. The adapter is implemented in `src/backup/google-drive-backup.mjs` and packaged by `scripts/prepare-web.js`. Android authorization is exposed through the native bridge using Google Identity Services AuthorizationClient.
 
-The selected Drive URI is persisted with Android's persistable URI grant. The PMS writes the same authenticated encrypted envelope there after the private local copy. Plaintext PMS records and guest photos never leave the app through a backup destination. Drive/provider failures do not invalidate a successful private local backup; they are reported as a secondary-destination warning.
+- Connect is explicit and independent from login.
+- After the first successful connection, Aurelia immediately asks the user to choose Daily, Weekly, Monthly or Never.
+- No recurring backup begins until the schedule is saved. Never disables scheduling but preserves manual Back Up Now.
+- Daily/Weekly/Monthly selection starts the first backup after consent; subsequent backups are due according to the stored schedule.
+- New files are encrypted backup envelopes only. The adapter rejects plaintext and malformed backup payloads.
+- Seven remote recovery points are retained; cleanup failure is reported separately from upload success.
+- Disconnect disables scheduled/manual Drive operations in Aurelia and leaves local business data unchanged. Google authorization may remain granted in the Google Account until revoked there.
+- Drive OAuth tokens are passed transiently to the adapter and are not stored in PMS state, Web Storage, logs or backup payloads.
+
+Production configuration:
+
+1. Enable Google Drive API in the Google Cloud project used by Aurelia's Android OAuth identity.
+2. Configure the OAuth consent screen with the Aurelia app name, support contact and privacy policy.
+3. Register Android OAuth credentials for package `com.aurelia.pms` with the debug/release signing certificate SHA-1 fingerprints used by the corresponding APK.
+4. Verify the Android identity configuration on a physical device with Google Play Services before release.
+5. Do not ship OAuth client secrets or service-account private keys in the APK.
+
+The Drive `appDataFolder` is hidden and accessible only to Aurelia. It is not a user-selected folder, is separate from visible Drive backup folders, and can be deleted by the user or when the app is removed from their Drive. Owners should retain independent recovery/export options.
+
+Android background scheduling is best-effort. WorkManager/OS scheduling cannot safely snapshot the current PMS state because the authoritative snapshot and recovery-key wrapper are owned by the running WebView. A due scheduled backup is therefore caught up when Aurelia is running/foregrounded and the local snapshot is available. A guaranteed unattended snapshot requires moving snapshot creation and encryption/key access into a native background-capable storage architecture.
+
+The old `backup_tree_uri` SAF grant remains migration/restore compatibility only. New Drive OAuth backups do not require or replace any payment SAF/UPI/Pay Bridge integration. Shared-folder SAF remains a separate export/import capability.
 
 ### 3. Owner-configured server/cloud — optional
 
@@ -43,7 +64,7 @@ A future Pay Bridge backup must use a distinct application identifier and its ow
 
 - INTERNET is retained for HTTPS server/cloud backup.
 - SAF uses explicit owner selection and persistable URI grants; it requires no broad storage permission.
-- Google Drive account authentication is handled by the Drive document provider.
+- Direct Google Drive backup uses Android Google Identity Services AuthorizationClient with the narrow `drive.appdata` scope plus OpenID/email for connected-account identity; the owner authorizes explicitly. The legacy SAF folder export remains a separate document-provider flow.
 - No SMS, contacts, location, camera, microphone, notification listener, accessibility, overlay, broad storage or package inventory permissions are required for this backup architecture.
 
 
@@ -55,3 +76,19 @@ A future Pay Bridge backup must use a distinct application identifier and its ow
 - A replacement installation imports the encrypted file and prompts for the recovery password. Successful decryption imports the non-extractable key into its local vault.
 - Existing plaintext v4 backups remain readable for migration; all newly generated backups are encrypted. Do not treat legacy files as meeting the new encryption policy.
 - Password rotation is deliberately not exposed until a rewrapping/re-encryption migration can update every retained recovery point safely.
+
+
+## Google Drive automatic-backup lifecycle (WhatsApp-inspired)
+
+- Connection is explicit and owner-controlled. The app verifies the authorized account and displays its email before recurring backup is enabled.
+- OAuth requests only Drive app-data access plus OpenID/email identity. Access tokens are transient and are never persisted in PMS state, Web Storage, logs or backup envelopes.
+- Backup files are written to the hidden Drive `appDataFolder`; the owner does not need to select a folder. Each file contains only an already-encrypted Aurelia backup envelope.
+- The owner chooses Daily, Weekly, Monthly or Never. Connecting alone does not enable a schedule. Manual Back Up Now and restore history remain available for Never.
+- The UI shows account, last successful backup, size, next scheduled date and last error/warning.
+- Drive history is paginated and newest-first. Restore lets the owner select a recovery point; download/validation precedes the existing explicit restore confirmation and transactional restore path.
+- Retention defaults to seven recovery points. Cleanup runs only after upload succeeds, protects the new file, and reports cleanup failures separately from upload success.
+- Disconnect disables scheduling and clears the account identity in Aurelia. It preserves local PMS data; Google permission revocation remains available in the owner's Google Account. If Google's authorization prompt does not offer an account chooser, revoke Aurelia's Drive access in that account and reconnect to select a different account.
+- Authorization expiry, permission denial and rate limiting are surfaced as distinct retryable states.
+
+### Scheduling limitation (important)
+The PMS snapshot and encryption/key wrapper are currently owned by the running WebView. Android WorkManager cannot independently produce an authoritative encrypted PMS snapshot, and a Drive access token is not stored for background use. Therefore scheduled backups are **best-effort catch-up when Aurelia is running/foregrounded**, not guaranteed unattended backups. A true WhatsApp-style background guarantee requires migrating snapshot/export, key wrapping, and refreshable owner authorization into a native background-capable architecture. Do not advertise guaranteed background execution until that architecture and device qualification are complete.
