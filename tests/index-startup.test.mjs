@@ -204,3 +204,35 @@ test('guest reminder animation respects reduced motion', () => {
   assert.match(html, /aurelia-guest-pulse/);
   assert.match(html, /prefers-reduced-motion:reduce/);
 });
+
+test('public account entry uses Firebase phone OTP for sign-in, registration, and recovery', () => {
+  assert.match(html, /aureliaStartPhoneAuth/);
+  assert.match(html, /aureliaVerifyPhoneOtp/);
+  assert.match(html, /aureliaResendPhoneOtp/);
+  assert.match(html, /Forgot Password\?/);
+  assert.match(html, /phone OTP sign-in instead of a password/);
+  assert.match(html, /autocomplete="one-time-code"/);
+  assert.match(html, /aureliaMaskPhone/);
+  assert.match(html, /window\.AureliaNative/);
+});
+test('native primary Firebase phone auth signs in and provisions account without exposing ID tokens', () => {
+  const patch = readFileSync(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
+  assert.match(patch, /sendPmsPhoneOtp/);
+  assert.match(patch, /verifyPmsPhoneOtp/);
+  assert.match(patch, /PhoneAuthProvider\.verifyPhoneNumber/);
+  assert.match(patch, /signInWithCredential/);
+  assert.match(patch, /ensurePmsAccount/);
+  assert.match(patch, /pmsPhoneAuthGeneration/);
+  assert.doesNotMatch(patch, /window\.aureliaPhoneAuthEvent[^\n]*idToken/);
+});
+test('PMS account profile callable trusts only verified auth claims and client writes are denied', () => {
+  const functions = readFileSync(new URL('../functions/src/index.ts', import.meta.url), 'utf8');
+  const rules = readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8');
+  assert.match(functions, /export const ensurePmsAccount = onCall/);
+  assert.match(functions, /request\.auth\?\.uid/);
+  assert.match(functions, /request\.auth\?\.token\.phone_number/);
+  assert.match(functions, /pmsAccounts/);
+  assert.match(functions, /phoneMasked/);
+  assert.match(rules, /match \/pmsAccounts\/\{uid\}/);
+  assert.match(rules, /allow create, update, delete: if false/);
+});
