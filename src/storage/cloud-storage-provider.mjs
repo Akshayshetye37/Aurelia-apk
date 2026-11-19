@@ -1,8 +1,6 @@
 /**
  * Provider-independent encrypted backup/blob storage boundary.
- *
- * This module deliberately does not implement OAuth, provider SDKs, or business-data
- * synchronization. Cloud adapters must receive ciphertext envelopes only.
+ * This does not implement OAuth, provider SDKs, or business-data sync.
  */
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$/;
@@ -20,18 +18,20 @@ export const CLOUD_PROVIDER_CATALOG = Object.freeze([
   Object.freeze({ id: "azure-blob", name: "Azure Blob Storage", kind: "cloud", availability: "planned", auth: "provider-managed" }),
   Object.freeze({ id: "custom", name: "Custom storage endpoint", kind: "cloud", availability: "planned", auth: "user-configured" }),
 ]);
-
-export function getCloudProviderCatalog() {
-  return CLOUD_PROVIDER_CATALOG.map(item => ({ ...item }));
-}
+export function getCloudProviderCatalog() { return CLOUD_PROVIDER_CATALOG.map(item => ({ ...item })); }
 
 function validateObjectKey(key) {
-  if (typeof key !== "string" || !KEY.test(key) || key.includes("\\") || key.split("/").some(part => part === "." || part === "..")) {
+  if (typeof key !== "string" || !KEY.test(key) || key.includes("\\") || key.split("/").some(part => !part || part === "." || part === "..")) {
     throw fail("CLOUD_OBJECT_KEY_INVALID", "Object key is invalid.");
   }
   return key;
 }
-
+function validateObjectPrefix(prefix = "") {
+  if (typeof prefix !== "string" || prefix.includes("\\") || prefix.startsWith("/") || prefix.split("/").some(part => part === "." || part === "..")) {
+    throw fail("CLOUD_OBJECT_KEY_INVALID", "Object prefix is invalid.");
+  }
+  return prefix;
+}
 function validateEncryptedBlob(blob) {
   if (!blob || typeof blob !== "object" || blob.version !== 1 || blob.algorithm !== "AES-256-GCM" ||
       typeof blob.keyId !== "string" || !/^[A-Za-z0-9._:-]{1,128}$/.test(blob.keyId) ||
@@ -39,15 +39,8 @@ function validateEncryptedBlob(blob) {
       !(blob.ciphertext instanceof Uint8Array) || blob.ciphertext.byteLength < 16) {
     throw fail("CLOUD_BLOB_NOT_ENCRYPTED", "Storage accepts only a valid version-1 AES-256-GCM ciphertext envelope.");
   }
-  return Object.freeze({
-    version: 1,
-    algorithm: "AES-256-GCM",
-    keyId: blob.keyId,
-    nonce: new Uint8Array(blob.nonce),
-    ciphertext: new Uint8Array(blob.ciphertext),
-  });
+  return Object.freeze({ version: 1, algorithm: "AES-256-GCM", keyId: blob.keyId, nonce: new Uint8Array(blob.nonce), ciphertext: new Uint8Array(blob.ciphertext) });
 }
-
 function validateAdapter(adapter, providerId) {
   for (const method of ["putObject", "getObject", "deleteObject", "listObjects", "isAvailable"]) {
     if (typeof adapter?.[method] !== "function") throw new TypeError("Storage adapter " + providerId + " must implement " + method + "()");
@@ -57,10 +50,7 @@ function validateAdapter(adapter, providerId) {
 export class LocalDeviceStorageProvider {
   constructor(adapter) {
     validateAdapter(adapter, "local-device");
-    this.id = "local-device";
-    this.name = "This device";
-    this.kind = "local";
-    this.adapter = adapter;
+    this.id = "local-device"; this.name = "This device"; this.kind = "local"; this.adapter = adapter;
   }
   async putObject(key, blob) { return this.adapter.putObject(validateObjectKey(key), validateEncryptedBlob(blob)); }
   async getObject(key) {
@@ -68,10 +58,7 @@ export class LocalDeviceStorageProvider {
     return value == null ? null : validateEncryptedBlob(value);
   }
   async deleteObject(key) { return this.adapter.deleteObject(validateObjectKey(key)); }
-  async listObjects(prefix = "") {
-    if (typeof prefix !== "string" || prefix.includes("..") || prefix.includes("\\") || prefix.startsWith("/")) throw fail("CLOUD_OBJECT_KEY_INVALID", "Object prefix is invalid.");
-    return this.adapter.listObjects(prefix);
-  }
+  async listObjects(prefix = "") { return this.adapter.listObjects(validateObjectPrefix(prefix)); }
   async isAvailable() { return Boolean(await this.adapter.isAvailable()); }
 }
 
@@ -85,8 +72,7 @@ export class CloudStorageManager {
   }
   register(provider) {
     if (!provider || typeof provider.id !== "string" || !PROVIDER_ID.test(provider.id) || provider.id === "local-device") throw new TypeError("Invalid cloud provider adapter");
-    const catalog = CLOUD_PROVIDER_CATALOG.find(item => item.id === provider.id && item.kind === "cloud");
-    if (!catalog) throw fail("CLOUD_PROVIDER_UNKNOWN", "Provider is not in the supported provider catalog.");
+    if (!CLOUD_PROVIDER_CATALOG.some(item => item.id === provider.id && item.kind === "cloud")) throw fail("CLOUD_PROVIDER_UNKNOWN", "Provider is not in the supported provider catalog.");
     for (const method of ["putObject", "getObject", "deleteObject", "listObjects", "isAvailable", "connect", "disconnect"]) {
       if (typeof provider[method] !== "function") throw new TypeError("Cloud provider adapter must implement " + method + "()");
     }
@@ -95,26 +81,33 @@ export class CloudStorageManager {
     return provider.id;
   }
   get activeProvider() { return this.providers.get(this.activeProviderId); }
-  get status() {
-    return Object.freeze({ mode: this.activeProviderId === "local-device" ? "LOCAL_ONLY" : "CLOUD_CONNECTED", activeProviderId: this.activeProviderId, cloudEnabled: this.activeProviderId !== "local-device" });
-  }
+  get status() { return Object.freeze({ mode: this.activeProviderId === "local-device" ? "LOCAL_ONLY" : "CLOUD_CONNECTED", activeProviderId: this.activeProviderId, cloudEnabled: this.activeProviderId !== "local-device" }); }
   async connect(providerId, { userConsent = false, config } = {}) {
     if (providerId === "local-device") { this.activeProviderId = providerId; return this.status; }
     if (userConsent !== true) throw fail("CLOUD_CONSENT_REQUIRED", "Explicit user consent is required before connecting cloud storage.");
     const provider = this.providers.get(providerId);
     if (!provider) throw fail("CLOUD_PROVIDER_NOT_IMPLEMENTED", "This provider is listed but its adapter is not installed.");
-    await provider.connect(config);
-    if (!(await provider.isAvailable())) throw fail("CLOUD_PROVIDER_UNAVAILABLE", "Cloud provider is not available after connection.");
-    this.activeProviderId = providerId;
-    return this.status;
+    try {
+      await provider.connect(config);
+      if (!(await provider.isAvailable())) throw fail("CLOUD_PROVIDER_UNAVAILABLE", "Cloud provider is not available after connection.");
+      this.activeProviderId = providerId;
+      return this.status;
+    } catch (error) {
+      try { await provider.disconnect(); } catch {}
+      throw error;
+    }
   }
   async disconnect() {
-    if (this.activeProviderId !== "local-device") await this.providers.get(this.activeProviderId)?.disconnect();
-    this.activeProviderId = "local-device";
+    const provider = this.activeProviderId === "local-device" ? null : this.providers.get(this.activeProviderId);
+    try { if (provider) await provider.disconnect(); }
+    finally { this.activeProviderId = "local-device"; }
     return this.status;
   }
-  async putObject(key, blob) { return this.activeProvider.putObject(key, validateEncryptedBlob(blob)); }
-  async getObject(key) { return this.activeProvider.getObject(key); }
-  async deleteObject(key) { return this.activeProvider.deleteObject(key); }
-  async listObjects(prefix = "") { return this.activeProvider.listObjects(prefix); }
+  async putObject(key, blob) { return this.activeProvider.putObject(validateObjectKey(key), validateEncryptedBlob(blob)); }
+  async getObject(key) {
+    const value = await this.activeProvider.getObject(validateObjectKey(key));
+    return value == null ? null : validateEncryptedBlob(value);
+  }
+  async deleteObject(key) { return this.activeProvider.deleteObject(validateObjectKey(key)); }
+  async listObjects(prefix = "") { return this.activeProvider.listObjects(validateObjectPrefix(prefix)); }
 }
