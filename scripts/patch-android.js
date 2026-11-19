@@ -1473,7 +1473,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       }
       long now = SystemClock.elapsedRealtime();
       if (pmsPhoneLastRequestAt != 0 && now - pmsPhoneLastRequestAt < 30000L) {
-        pmsPhoneAuthEvent(requestId, "failed", "Please wait before requesting another SMS code.", pmsMaskPhone(phone)); return;
+        pmsPhoneAuthEvent(requestId, "cooldown", "Please wait before requesting another SMS code.", pmsMaskPhone(phone)); return;
       }
       pmsPhoneLastRequestAt = now;
       final long generation = ++pmsPhoneAuthGeneration;
