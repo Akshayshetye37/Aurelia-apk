@@ -1,5 +1,25 @@
 const BACKUP_VAULT_DB = "aurelia-pms-backup-vault-v1";
 const BACKUP_VAULT_ID = "primary";
+const BACKUP_KDF_ITERATIONS = 600000;
+
+function validBase64(value, expectedBytes) {
+  return typeof value === "string" && /^[A-Za-z0-9+/]+={0,2}$/.test(value) &&
+    value.length % 4 === 0 && value.length === Math.ceil(expectedBytes / 3) * 4 &&
+    (expectedBytes % 3 === 0 || value.endsWith(expectedBytes % 3 === 1 ? "==" : "="));
+}
+
+function validCachedKey(key) {
+  return key === undefined || (key && typeof key === "object" && key.type === "secret" &&
+    key.algorithm?.name === "AES-GCM" && key.algorithm?.length === 256 && key.extractable === false &&
+    Array.isArray(key.usages) && key.usages.includes("encrypt") && key.usages.includes("decrypt"));
+}
+
+function validRecord(record) {
+  return !!record && record.id === BACKUP_VAULT_ID && record.format === 1 &&
+    validBase64(record.wrappedKey, 48) && validBase64(record.salt, 16) &&
+    validBase64(record.wrapIv, 12) && record.iterations === BACKUP_KDF_ITERATIONS &&
+    validCachedKey(record.key);
+}
 
 export function createBackupVaultStore({ indexedDBImpl = globalThis.indexedDB } = {}) {
   async function open() {
@@ -51,7 +71,7 @@ export function createBackupVaultStore({ indexedDBImpl = globalThis.indexedDB } 
       db = await open();
       await new Promise((resolve, reject) => {
         const transaction = db.transaction("vault", "readwrite");
-        transaction.objectStore("vault").put(record);
+        const persisted = { id: record.id, format: record.format, wrappedKey: record.wrappedKey, salt: record.salt, wrapIv: record.wrapIv, iterations: record.iterations };\n        if (record.key !== undefined) persisted.key = record.key;\n        transaction.objectStore("vault").put(persisted);
         transaction.oncomplete = resolve;
         transaction.onerror = () => reject(transaction.error || new Error("Could not save backup recovery key."));
         transaction.onabort = () => reject(transaction.error || new Error("Backup recovery key write was aborted."));
