@@ -53,7 +53,7 @@ test("native patch uses narrow app-data scope and does not add broad Drive scope
 test("Drive upload and restore verify the token account matches the connected owner", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /async function requestVerifiedGoogleDriveToken/);
-  assert.match(html, /account\.email\.toLowerCase\(\).*driveAccountEmail\.toLowerCase\(\)/);
+  assert.match(html, /assertGoogleDriveAccountMatches\(account,S\.bk\.driveAccountEmail\)/);
   assert.match(html, /uploadCurrentBackupToDrive[\s\S]*requestVerifiedGoogleDriveToken/);
   assert.match(html, /restoreGoogleDriveBackup[\s\S]*requestVerifiedGoogleDriveToken/);
   assert.match(html, /restoreLatestGoogleDriveBackup[\s\S]*requestVerifiedGoogleDriveToken/);
