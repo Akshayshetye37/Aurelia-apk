@@ -1285,7 +1285,11 @@ window.aureliaNativeBackupServerStatusResult=(id,configured,url)=>{S.bk.serverCo
 let GoogleDriveBackupApi=null,googleDriveScheduleStore=null,pendingDriveAuth=null;
 import('./src/backup/google-drive-backup.mjs').then(m=>{
  GoogleDriveBackupApi=m;googleDriveScheduleStore=m.createBackupScheduleStore({storage:localStorage});
- const stored=googleDriveScheduleStore.read();
+ let stored=googleDriveScheduleStore.read();
+ if(typeof S.bk.driveSchedule==='string')googleDriveScheduleStore.setSchedule(S.bk.driveSchedule);
+ if(typeof S.bk.driveConnected==='boolean')googleDriveScheduleStore.setConnected(S.bk.driveConnected);
+ if(S.bk.driveLastSuccessAt&&!stored.lastSuccessAt)googleDriveScheduleStore.markSuccess(Date.parse(S.bk.driveLastSuccessAt));
+ stored=googleDriveScheduleStore.read();
  S.bk.driveSchedule=stored.schedule;S.bk.driveConnected=stored.connected;
  if(stored.lastSuccessAt)S.bk.driveLastSuccessAt=new Date(stored.lastSuccessAt).toISOString();
  if(typeof render==='function')render();
