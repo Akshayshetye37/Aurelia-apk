@@ -976,7 +976,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     runOnUiThread(() -> {
       try {
         AuthorizationRequest request = AuthorizationRequest.builder()
-          .setRequestedScopes(java.util.Collections.singletonList(new Scope("https://www.googleapis.com/auth/drive.appdata")))
+          .setRequestedScopes(java.util.Arrays.asList(new Scope("https://www.googleapis.com/auth/drive.appdata"), new Scope("https://www.googleapis.com/auth/userinfo.email")))
           .build();
         Identity.getAuthorizationClient(MainActivity.this).authorize(request)
           .addOnSuccessListener(result -> {
