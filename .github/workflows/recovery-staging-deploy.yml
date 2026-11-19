@@ -43,7 +43,7 @@ concurrency:
 
 jobs:
   deploy-and-build:
-    if: (github.workflow_ref == format('{0}/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/{1}', github.repository, vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')) || (github.workflow_ref == format('{0}/.github/workflows/recovery-staging-deploy.yml@refs/heads/work/p0-storage-hardening', github.repository))
+    if: (github.workflow_ref == format('{0}/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/{1}', github.repository, vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')) || (github.workflow_ref == format('{0}/.github/workflows/recovery-staging-deploy.yml@refs/heads/integration/ledger-patch', github.repository))
     runs-on: ubuntu-latest
     outputs:
       staging_project_id: ${{ steps.staging-outputs.outputs.staging_project_id }}
@@ -56,7 +56,7 @@ jobs:
     timeout-minutes: 60
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
-      CANDIDATE_BRANCH: work/p0-storage-hardening
+      CANDIDATE_BRANCH: integration/ledger-patch
       CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
       GH_TOKEN: ${{ github.token }}
       STAGING_PROJECT: ${{ vars.GCP_PROJECT_ID }}
@@ -77,8 +77,8 @@ jobs:
           case "$GITHUB_WORKFLOW_REF" in
             "$GITHUB_REPOSITORY/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/$CONTROL_BRANCH")
               node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$GITHUB_REPOSITORY" --branch "$CANDIDATE_BRANCH" ;;
-            "$GITHUB_REPOSITORY/.github/workflows/recovery-staging-deploy.yml@refs/heads/work/p0-storage-hardening")
-              test "$CANDIDATE_BRANCH" = "work/p0-storage-hardening"
+            "$GITHUB_REPOSITORY/.github/workflows/recovery-staging-deploy.yml@refs/heads/integration/ledger-patch")
+              test "$CANDIDATE_BRANCH" = "integration/ledger-patch"
               test "$CANDIDATE_SHA" = "$GITHUB_SHA" ;;
             *) echo "::error::Untrusted workflow ref cannot invoke staging deployment."; exit 1 ;;
           esac
@@ -174,7 +174,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.STAGING_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [[ "$CANDIDATE_BRANCH" != "work/p0-storage-hardening" ]]; then
+          if [[ "$CANDIDATE_BRANCH" != "integration/ledger-patch" ]]; then
             echo "::error::Candidate deployment is restricted to the protected staging qualification branch."
             exit 1
           fi
