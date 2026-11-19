@@ -61,3 +61,11 @@ For every recovery callable that reads or mutates tenant state:
 - Logs/evidence contain no raw OTP, phone, token, PIN, recovery key, DEK or owner identifier.
 
 Source-contract and emulator tests are development evidence only. G3-11 through G3-14 require live staging evidence; physical-device evidence is separately required by Gate 4.
+
+## Backup authorization model and migration boundary
+
+The current PMS local-first installation identity is `LOCAL_ONLY`; the application does not yet provide a multi-user authenticated vault-owner session for ordinary PMS data. Therefore backup authorization is possession-based, not account-based: creating encrypted backups requires the local backup key to be unlocked, portable encrypted restore requires the recovery password, and server backup access requires the owner-configured bearer token. These mechanisms must not be represented as proof of a PMS staff/user identity or as cross-tenant authorization.
+
+Legacy v4 plaintext backup import is retained for migration compatibility but now requires a separate explicit warning confirmation before parsing/staging records. It is not encrypted or owner-authenticated. Never import such files from an untrusted source. The normal restore/import confirmation remains a separate step before records are applied.
+
+The multi-user PMS authorization model must be designed before shared-device staff vaults, cross-user export, restore, merge, or owner transfer are introduced. Do not retrofit an assumed owner UID into portable backups until the account/tenant lifecycle and replacement-device recovery semantics are defined.
