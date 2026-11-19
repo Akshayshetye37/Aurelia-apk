@@ -58,7 +58,7 @@ jobs:
           node scripts/gates/check-candidate.mjs \
             --sha "$CANDIDATE_SHA" \
             --repo "$REPO" \
-            --branch "work/p0-storage-hardening"
+            --branch "integration/ledger-patch"
           echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
 
   staging-deploy:
@@ -87,7 +87,7 @@ jobs:
       attestations: write
     env:
       CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
-      CANDIDATE_BRANCH: work/p0-storage-hardening
+      CANDIDATE_BRANCH: integration/ledger-patch
       REPO: ${{ github.repository }}
       STAGING_PROJECT: ${{ needs.staging-deploy.outputs.staging_project_id }}
       PRODUCTION_PROJECT: ${{ needs.staging-deploy.outputs.production_project_id }}
@@ -141,7 +141,7 @@ jobs:
             exit 1
           fi
 
-          if [[ "$CANDIDATE_BRANCH" != "work/p0-storage-hardening" ]]; then
+          if [[ "$CANDIDATE_BRANCH" != "integration/ledger-patch" ]]; then
             echo "::error::Unexpected candidate branch."
             exit 1
           fi
