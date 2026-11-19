@@ -38,5 +38,6 @@ test("native patch uses narrow app-data scope and does not add broad Drive scope
   assert.match(patch, /drive\.appdata/);
   assert.match(patch, /authorizeGoogleDriveBackup/);
   assert.match(patch, /aureliaNativeDriveAuthResult/);
+  assert.equal((patch.match(/private void driveAuthorizationResult\(/g) || []).length, 1, "generated MainActivity must contain exactly one Drive authorization callback");
   assert.doesNotMatch(patch, /auth\/drive(?!\.appdata)/);
 });
