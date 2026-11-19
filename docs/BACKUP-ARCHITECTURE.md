@@ -17,9 +17,9 @@ The web UI creates a PMS snapshot when data changes and on app launch/periodic f
 
 Private app data is removed when the app is uninstalled or its data is cleared. Owners must configure an optional off-device destination or export backups if they need protection from device loss/uninstall.
 
-### 2. Google Drive — optional
+### 2. Cloud folder — optional (Android SAF)
 
-The owner selects a Drive folder using Android Storage Access Framework (SAF). If Google Drive is available as a document provider, its own UI handles account sign-in and authorization. Aurelia does not request Google account, contacts, broad storage or all-files permissions and does not embed a Google OAuth client.
+The owner selects a cloud folder using Android Storage Access Framework (SAF). The system picker can expose installed document providers such as Google Drive, Dropbox, OneDrive, Box or Nextcloud when those apps/providers support the picker and folder operations on the device. The provider's own UI handles account sign-in and authorization. Aurelia does not request provider passwords, contacts, broad storage or all-files permissions and does not embed provider OAuth clients in this folder flow. Availability and provider capabilities vary; the selected folder is a secondary backup destination.
 
 The selected Drive URI is persisted with Android's persistable URI grant. The PMS writes the same authenticated encrypted envelope there after the private local copy. Plaintext PMS records and guest photos never leave the app through a backup destination. Drive/provider failures do not invalidate a successful private local backup; they are reported as a secondary-destination warning.
 
@@ -31,7 +31,7 @@ The PMS uploads the encrypted backup envelope after a successful local snapshot 
 
 ### 4. Shared folder — separate SAF grant
 
-The shared folder has its own URI preference and its own persisted SAF grant, separate from the optional Drive backup folder. It is for owner-authorized backup import/export and permitted file exchange. When selected, PMS writes the same encrypted backup envelope there; it never shares the PMS database file or grants access to Pay Bridge private data.
+The shared folder has its own URI preference and its own persisted SAF grant, separate from the optional cloud-folder backup destination. It is for owner-authorized backup import/export and permitted file exchange. When selected, PMS writes the same encrypted backup envelope there; it never shares the PMS database file or grants access to Pay Bridge private data.
 
 ## Backup file identity and restore
 
