@@ -129,3 +129,17 @@ test("Drive adapter fails closed on repeated pagination tokens and invalid encry
   await assert.rejects(adapter.list(testToken), { code: "DRIVE_PAGINATION_INVALID" });
   await assert.rejects(adapter.download(testToken, fakeDriveId), { code: "DRIVE_BACKUP_NOT_ENCRYPTED" });
 });
+
+test("backup UI offers selectable Google Drive history and restore-by-id", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /Google Drive backup history/);
+  assert.match(html, /restoreGoogleDriveBackupById/);
+  assert.match(html, /Choose a recovery point/);
+  assert.match(html, /restoreF\(\{files:\[file\],value:''\}\)/);
+});
+
+test("Drive UI transparently avoids requesting Google profile identity", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /Account email is not requested/);
+  assert.match(html, /does not read your Google profile\/email/);
+});
