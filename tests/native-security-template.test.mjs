@@ -345,10 +345,9 @@ test('recovery never authorizes a PMS session before the new PIN is used', () =>
 
 test('generated encrypted-backup validation contains real Java line breaks, not escaped separators', () => {
   const patcher = read('scripts/patch-android.js');
-  const validationStart = patcher.indexOf('private boolean isStructurallyValidBackup');
-  const validationEnd = patcher.indexOf('private boolean isManagedBackupName', validationStart);
-  assert.ok(validationStart >= 0 && validationEnd > validationStart, 'backup validation template must exist');
-  const validation = patcher.slice(validationStart, validationEnd);
-  assert.match(validation, /length\(\) <= 35000000\n\s*&& backup\.optString\("ciphertext", ""\)\.length\(\) % 4 == 0/);
-  assert.doesNotMatch(validation, /35000000\\\\n\s*&&/);
+  const validationStart = patcher.indexOf('backup.optString("ciphertext", "").length() <= 35000000');
+  assert.ok(validationStart >= 0, 'backup ciphertext length validation must exist');
+  const validation = patcher.slice(validationStart, validationStart + 180);
+  assert.ok(validation.includes('35000000\\n            && backup.optString("ciphertext", "").length() % 4 == 0'));
+  assert.ok(!validation.includes('35000000\\\\n            &&'), 'Java template must not contain an escaped newline separator');
 });
