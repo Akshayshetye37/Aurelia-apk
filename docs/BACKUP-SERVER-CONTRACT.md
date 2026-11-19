@@ -32,7 +32,7 @@ Headers:
 - X-Aurelia-Backup-Name: aurelia-backup-<date>-<hash>.json
 - X-Aurelia-Backup-SHA256: lowercase SHA-256 of exact request body bytes
 
-Body: the complete `AURELIA-PMS-ENCRYPTED-BACKUP` JSON envelope (not multipart). The envelope contains AES-256-GCM ciphertext and password-wrapped data-key metadata; the plaintext PMS snapshot is never sent to the server.
+Body: the complete `AURELIA-PMS-ENCRYPTED-BACKUP` JSON envelope (not multipart). Version 2 includes an authenticated manifest (payload byte count, SHA-256, and record counts); version 1 remains supported for compatibility. The envelope contains AES-256-GCM ciphertext and password-wrapped data-key metadata; the plaintext PMS snapshot is never sent to the server.
 
 Return 2xx only after the server has durably stored the complete body and verified the supplied SHA-256. A 2xx response is the server's acknowledgement. The server should store immutable/content-addressed versions and enforce its own retention policy; it must not overwrite a different backup with the same name. 4xx/5xx responses are surfaced as remote-copy warnings; the private local copy remains the primary verified copy.
 
