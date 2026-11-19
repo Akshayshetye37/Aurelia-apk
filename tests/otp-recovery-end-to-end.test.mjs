@@ -161,12 +161,14 @@ test('Gate 3 staging deployment probes missing and invalid App Check on owner-ve
   const workflow = read('.github/workflows/recovery-staging-deploy.yml');
   assert.match(workflow, /Probe missing and invalid App Check tokens/);
   assert.match(workflow, /X-Firebase-AppCheck: invalid-staging-probe-token/);
+  const probeBlock = workflow.slice(workflow.indexOf('functions=('), workflow.indexOf('for function_name in "${functions[@]}"'));
+  assert.ok(probeBlock.includes('functions=(exchangeOwnerEmailLink confirmRecoveryOwnerBinding registerRecoveryOwnerDevice acknowledgeRecoveryOwnerAlert getRecoveryOwnerPendingAction getRecoveryOwnerActionReadiness'));
   for (const callable of ['exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
     'registerRecoveryOwnerDevice', 'acknowledgeRecoveryOwnerAlert',
-    'getRecoveryOwnerPendingAction', 'getRecoveryOwnerActionReadiness']) assert.ok(workflow.includes(callable));
+    'getRecoveryOwnerPendingAction', 'getRecoveryOwnerActionReadiness']) assert.ok(probeBlock.includes(callable));
   for (const excluded of ['registerRecoveryPhone', 'createRecoveryAttestationChallenge',
     'verifyRecoveryDeviceAttestation', 'issueRecoveryGrant', 'consumeRecoveryGrant',
-    'cancelRecoveryRequest', 'cancelRecoveryPhoneChange', 'activateRecoveryPhoneChange']) assert.ok(!workflow.includes(excluded));
+    'cancelRecoveryRequest', 'cancelRecoveryPhoneChange', 'activateRecoveryPhoneChange']) assert.ok(!probeBlock.includes(excluded));
 });
 
 
