@@ -68,8 +68,9 @@ export function validateStagingConfig(env) {
 
   if (env.GOOGLE_SERVICES_JSON) {
     try {
-      const decoded = Buffer.from(env.GOOGLE_SERVICES_JSON, 'base64');
-      if (!decoded.length || decoded.toString('base64').replace(/=+$/, '') !== env.GOOGLE_SERVICES_JSON.replace(/=+$/, '')) errors.push('GOOGLE_SERVICES_JSON must be base64 encoded');
+      const encoded = env.GOOGLE_SERVICES_JSON.replace(/\\s/g, '');
+      const decoded = Buffer.from(encoded, 'base64');
+      if (!decoded.length || decoded.toString('base64').replace(/=+$/, '') !== encoded.replace(/=+$/, '')) errors.push('GOOGLE_SERVICES_JSON must be base64 encoded');
       else {
         const config = JSON.parse(decoded.toString('utf8'));
         const client = config.client?.find((entry) => entry.client_info?.android_client_info?.package_name === 'com.aurelia.pms');
@@ -80,8 +81,9 @@ export function validateStagingConfig(env) {
   }
 
   if (env.KEYSTORE_B64) {
-    const decoded = Buffer.from(env.KEYSTORE_B64, 'base64');
-    if (!decoded.length || decoded.toString('base64').replace(/=+$/, '') !== env.KEYSTORE_B64.replace(/=+$/, '')) errors.push('KEYSTORE_B64 must be valid non-empty base64');
+    const encoded = env.KEYSTORE_B64.replace(/\\s/g, '');
+    const decoded = Buffer.from(encoded, 'base64');
+    if (!decoded.length || decoded.toString('base64').replace(/=+$/, '') !== encoded.replace(/=+$/, '')) errors.push('KEYSTORE_B64 must be valid non-empty base64');
   }
 
   const callables = (env.RECOVERY_CALLABLES ?? '').split(',').map((item) => item.trim()).filter(Boolean);

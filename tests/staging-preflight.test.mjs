@@ -27,6 +27,7 @@ function validConfig() {
 }
 
 test('valid staging configuration passes without exposing values', () => assert.deepEqual(validateStagingConfig(validConfig()), []));
+test('accepts line-wrapped Base64 staging artifacts', () => { const env = validConfig(); env.GOOGLE_SERVICES_JSON = env.GOOGLE_SERVICES_JSON.match(/.{1,20}/g).join('\\n'); env.KEYSTORE_B64 = env.KEYSTORE_B64.match(/.{1,4}/g).join('\\n'); assert.deepEqual(validateStagingConfig(env), []); });
 test('rejects missing WIF and staging secrets by variable name', () => {
   const env = validConfig(); env.WIF_PROVIDER = ''; env.KEYSTORE_PASSWORD = '';
   const errors = validateStagingConfig(env);
