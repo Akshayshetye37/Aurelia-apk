@@ -334,63 +334,24 @@ The cloud provider adapter must be replaceable; the backup orchestrator must not
 
 ## Repository structure
 
-The following is a high-level map of the current integration branch. It is intentionally organized by responsibility rather than listing every individual file.
+See [docs/PROJECT-STRUCTURE.md](docs/PROJECT-STRUCTURE.md) for the responsibility-based architecture map. The key paths are:
 
-```text
-.
-├── index.html                         # PMS web UI and app entry
-├── package.json                       # Build and test scripts/dependencies
-├── android/                           # Capacitor Android project
-│   ├── templates/                     # Native storage, payment bridge, identity,
-│   │                                  # recovery, security and migration templates
-│   └── ...                            # Generated/Android project resources
-├── src/
-│   ├── backup/                          # candidate PR #49; not integrated on this branch
-│   ├── bookings/                      # Booking policies/domain helpers
-│   ├── features/
-│   │   └── payments/                  # Payment UI/feature modules
-│   ├── payments/                      # Payment engine, intents, evidence,
-│   │                                  # settlement, reconciliation and safety
-│   ├── services/                      # App-facing service/API boundaries
-│   ├── storage/                       # Persistence adapters, PMS repositories,
-│   │                                  # schemas, bootstrap/cutover, authority,
-│   │                                  # backup vault, photo archive and storage
-│   └── sync/                           # Local sync coordination and cloud connection
-├── payment-backend/                   # Backend payment services (where present)
-├── scripts/
-│   ├── gates/                         # Gate/evidence utilities
-│   ├── prepare-web.js                 # Web asset/build preparation
-│   ├── check-*                       # Boundary, release and secret checks
-│   └── run-* / verify-*               # Android qualification helpers
-├── tests/
-│   ├── storage/                       # Storage and repository contracts
-│   ├── sync/                          # Sync tests
-│   ├── services/                      # Service tests
-│   └── *.test.mjs                     # Unit, integration, workflow and security tests
-├── docs/                               # Architecture, qualification, security,
-│                                       # payment, backup, recovery and release docs
-└── .github/workflows/                  # CI, Android build and qualification gates
-```
+- `index.html`: PMS WebView UI and application orchestration.
+- `src/`: modular PMS code — backup, bookings, features, payments, services, storage and sync.
+- `src/storage/`: browser/native persistence adapters, repository contracts, schemas, bootstrap, authority/cutover, backup vault and photo archive.
+- `src/backup/`: encrypted backup adapters and owner-controlled destinations. Google Drive implementation and owner-account verification are consolidated in PR #55, pending merge.
+- `android/templates/`: native Android Java/Kotlin source templates for storage, recovery, security, identity, payment bridge and instrumentation.
+- `scripts/` and `scripts/gates/`: web/Android packaging, patching, candidate validation, evidence and qualification tools.
+- `tests/`: Node unit/regression/security tests; storage, service and sync contract suites.
+- `functions/`: Firebase recovery backend source, tests and deployment tooling.
+- `payment-backend/`: payment platform, provider adapters, intents, webhooks, secrets, settlement, workers, qualification and Terraform.
+- `docs/`: architecture, security, backup, release qualification and audit records.
+- `.github/workflows/`: CI, Android instrumentation, security gates and release qualification.
 
-### Key storage modules
+### Storage boundary
 
-- `pms-repository-contract.mjs`, `pms-repository-bridge.mjs`: repository contract and validated bridge.
-- `indexeddb-pms-repository.mjs`: browser persistence implementation.
-- `capacitor-pms-storage.mjs` and Android `LocalPmsRepository`: native persistence boundary.
-- `pms-domain-schemas.mjs`: domain validation.
-- `pms-bootstrap-coordinator.mjs`, `pms-authority-state.mjs`, `pms-domain-cutover.mjs`: bootstrap, authority and cutover controls.
-- Domain repositories: expenses, inventory, restaurant sales/tables, settings and operational mutations/reservations.
-- `backup-vault-store.mjs`, `photo-archive.mjs`: backup/attachment storage foundations.
-- Legacy web-storage modules remain for migration/compatibility and must not become the canonical authority after cutover.
+The browser uses IndexedDB; Android uses the native repository/SQLCipher boundary. The generated Android project is patched from templates/scripts, so change the source template or patch—not generated build output. Cloud and backup destinations are opt-in and do not replace local PMS authority. Payment backend records and PMS backups remain separate.
 
-### Key payment modules
-
-- `payment-engine.mjs`, `payment-safety-gate.mjs`, `backend-router.mjs`: payment orchestration and guarded backend routing.
-- Payment intent/evidence stores and local ledger receipt/outbox modules: durable intent/evidence foundations.
-- Settlement and reconciliation services/journal/projector: canonical financial processing and verification foundations.
-- Device payment bridge and Pay Bridge orchestrator: Android/native payment-device boundary.
-- Provider platform/onboarding modules: provider integration abstractions and onboarding status.
-- Live collection, automatic settlement, and automatic refund posting remain disabled unless separately qualified and authorized.
 
 ## Active development workstreams
 
