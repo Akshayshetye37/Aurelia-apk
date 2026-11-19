@@ -73,15 +73,7 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch } 
     validateEnvelope(encryptedEnvelope);
     const boundary = "aurelia-" + secureHex(16);
     const metadata = JSON.stringify({ name, parents: ["appDataFolder"], mimeType: "application/json" });
-    const body = "--" + boundary + "\r
-Content-Type: application/json; charset=UTF-8\r
-\r
-" + metadata + "\r
---" + boundary + "\r
-Content-Type: application/json\r
-\r
-" + encryptedEnvelope + "\r
---" + boundary + "--";
+    const body = "--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + metadata + "\r\n--" + boundary + "\r\nContent-Type: application/json\r\n\r\n" + encryptedEnvelope + "\r\n--" + boundary + "--";
     const response = await request("/files?uploadType=multipart&fields=id,name,size,modifiedTime", token, { method: "POST", headers: { "Content-Type": "multipart/related; boundary=" + boundary }, body });
     const file = parseFile(await response.json());
     if (!file) throw fail("DRIVE_RESPONSE_INVALID", "Google Drive did not confirm the uploaded backup.");
