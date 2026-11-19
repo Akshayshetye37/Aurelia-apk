@@ -5,7 +5,7 @@ const safeName = name => typeof name === "string" && /^aurelia-backup-[A-Za-z0-9
 const schedules = new Set(["daily", "weekly", "monthly", "never"]);
 export const MAX_DRIVE_BACKUP_BYTES = 50 * 1024 * 1024;
 export const GOOGLE_DRIVE_BACKUP_SCOPE = APP_DATA_SCOPE;
-export const BACKUP_SCHEDULES = Object.freeze(["daily", "weekly", "monthly", "never"]);
+export const BACKUP_SCHEDULES = Object.freeze(["daily", "weekly", "monthly", "never"]);\nexport const GOOGLE_ACCOUNT_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 
 function authHeaders(token) {
   if (typeof token !== "string" || token.length < 20 || /[\r\n]/.test(token)) throw fail("DRIVE_TOKEN_INVALID", "Google Drive authorization is missing or invalid.");
@@ -46,7 +46,7 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch, r
     }
     return response;
   }
-  async function list(token) {
+  async function getAccount(token) {\n    const response = await fetchImpl("https://www.googleapis.com/oauth2/v2/userinfo", { headers: authHeaders(token) });\n    if (!response.ok) throw fail(response.status === 401 ? "DRIVE_AUTH_EXPIRED" : "DRIVE_ACCOUNT_IDENTITY_UNAVAILABLE", "Could not verify the connected Google account.");\n    const user = await response.json();\n    if (typeof user?.email !== "string" || !user.email || user.verified_email === false) throw fail("DRIVE_ACCOUNT_IDENTITY_UNAVAILABLE", "Google did not return a verified account email.");\n    return Object.freeze({ email: user.email, verified: user.verified_email !== false });\n  }\n  async function list(token) {
     const files = [];
     let pageToken;
     do {
@@ -106,7 +106,7 @@ export function createGoogleDriveBackupAdapter({ fetchImpl = globalThis.fetch, r
     }
     return Object.freeze({ file: created, retained, cleanupFailures });
   }
-  return Object.freeze({ list, upload, download, remove, uploadSnapshot });
+  return Object.freeze({ getAccount, list, upload, download, remove, uploadSnapshot });
 }
 
 /** Persistent schedule/status metadata; never stores OAuth tokens or backup contents. */
@@ -139,7 +139,7 @@ export function createBackupScheduleStore({ storage = null, key = "aurelia.backu
   const setConnected = (connected, account = null) => write({ ...read(), connected: connected === true, account: connected && typeof account === "string" ? account : null });
   const markAttempt = (at = now()) => write({ ...read(), lastAttemptAt: at, lastErrorCode: null, lastErrorMessage: null });
   const markSuccess = (at = now()) => write({ ...read(), lastAttemptAt: at, lastSuccessAt: at, lastErrorCode: null, lastErrorMessage: null });
-  const markFailure = (error, at = now()) => write({ ...read(), lastAttemptAt: at, lastErrorCode: String(error?.code || "BACKUP_FAILED").slice(0, 80), lastErrorMessage: String(error?.message || "Backup failed").slice(0, 240) });
+  const markFailure = (error, at = now()) => { const code = String(error?.code || "BACKUP_FAILED").slice(0, 80); const messages = { DRIVE_AUTH_EXPIRED: "Google authorization expired. Reconnect Google Drive.", DRIVE_PERMISSION_DENIED: "Google Drive permission was denied.", DRIVE_RATE_LIMITED: "Google Drive is temporarily rate-limiting requests. Retry later.", DRIVE_REQUEST_FAILED: "Google Drive request failed. Retry later.", DRIVE_BACKUP_INVALID: "The backup file failed validation.", DRIVE_BACKUP_TOO_LARGE: "The backup exceeds the supported size limit.", DRIVE_ACCOUNT_IDENTITY_UNAVAILABLE: "Could not verify the connected Google account." }; return write({ ...read(), lastAttemptAt: at, lastErrorCode: code, lastErrorMessage: messages[code] || "Backup failed. Retry from Backup settings." }); };
   function due(at = now()) {
     const state = read();
     if (!state.connected || state.schedule === "never") return false;
