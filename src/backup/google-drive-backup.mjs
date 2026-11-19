@@ -11,8 +11,7 @@ export const BACKUP_SCHEDULES = Object.freeze(["daily", "weekly", "monthly", "ne
 export const DEFAULT_BACKUP_RETENTION = 7;
 
 function authHeaders(token) {
-  if (typeof token !== "string" || token.length < 20 || /[\r
-]/.test(token)) throw fail("DRIVE_TOKEN_INVALID", "Google Drive authorization is missing or invalid.");
+  if (typeof token !== "string" || token.length < 20 || /[\r\n]/.test(token)) throw fail("DRIVE_TOKEN_INVALID", "Google Drive authorization is missing or invalid.");
   return { Authorization: "Bearer " + token };
 }
 function secureHex(bytes) {
