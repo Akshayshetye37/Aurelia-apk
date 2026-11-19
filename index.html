@@ -1373,6 +1373,7 @@ function restoreF(el){
   if(new TextEncoder().encode(t).byteLength>MAX_BACKUP_BYTES)throw new Error('Backup exceeds the 50 MiB import safety limit.');
   const decrypted=await decryptBackupPayload(t,f.name);
   const raw=JSON.parse(decrypted);
+  if(raw&&raw.v===4&&raw.data&&raw.format!=='AURELIA-PMS-ENCRYPTED-BACKUP'&&!confirm('This legacy backup is not encrypted. It may contain sensitive PMS and guest data. Only import it from a trusted source on a device you control. Continue?'))throw new Error('Legacy plaintext backup import cancelled. No records were changed.');
   if(raw&&raw.integrity){const meta=raw.integrity,copy={...raw};delete copy.integrity;if(meta.algorithm!=='SHA-256'||typeof meta.digest!=='string'||await sha256Hex(JSON.stringify(copy))!==meta.digest)throw new Error('Backup checksum does not match its contents.')}
   if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('The selected JSON file must contain an object.');
   const candidates=[raw,raw.data,raw.payload,raw.backup,raw.export,raw.records].filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
