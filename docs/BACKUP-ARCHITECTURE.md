@@ -31,7 +31,7 @@ The implementation is consolidated in open, unmerged PR #55: https://github.com/
 - OAuth access tokens are transient and are not persisted in PMS state, Web Storage, logs or backup payloads.
 - The authorized account email is verified before upload and restore. Account mismatch is rejected; switching accounts requires explicit reconnection and confirmation.
 - Disconnect disables Aurelia Drive operations and clears local account/schedule state without deleting local PMS data. Google permission revocation remains a separate action in Google Account settings.
-- OAuth expiry, permission denial and rate limits are surfaced as actionable failures.
+- An expired access token is retried once after fresh account authorization; permission denial and rate limits are surfaced as actionable failures.
 
 ### Qualification status
 
