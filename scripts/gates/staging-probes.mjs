@@ -16,6 +16,8 @@ const base = baseUrl.origin;
 const names = [...new Set((process.env.RECOVERY_CALLABLES ?? '').split(',').map((name) => name.trim()).filter(Boolean))];
 if (!names.length) fail('RECOVERY_CALLABLES is empty');
 for (const name of names) if (!/^[A-Za-z0-9_-]+$/.test(name)) fail('RECOVERY_CALLABLES contains an invalid callable name');
+if (!names.includes('exchangeOwnerEmailLink')) fail('Gate 3 must probe exchangeOwnerEmailLink');
+if (names.some((name) => /phone|otp|sms|grant/i.test(name))) fail('Gate 3 callable list must not include phone OTP/SMS or recovery-grant qualification');
 const cases = [
   { label: 'no App Check token', headers: {} },
   { label: 'invalid App Check token', headers: { 'X-Firebase-AppCheck': 'invalid' } },
