@@ -64,7 +64,7 @@ A future Pay Bridge backup must use a distinct application identifier and its ow
 
 - INTERNET is retained for HTTPS server/cloud backup.
 - SAF uses explicit owner selection and persistable URI grants; it requires no broad storage permission.
-- Google Drive account authentication is handled by the Drive document provider.
+- Direct Google Drive backup uses Android Google Identity Services AuthorizationClient with the narrow `drive.appdata` scope plus OpenID/email for connected-account identity; the owner authorizes explicitly. The legacy SAF folder export remains a separate document-provider flow.
 - No SMS, contacts, location, camera, microphone, notification listener, accessibility, overlay, broad storage or package inventory permissions are required for this backup architecture.
 
 
