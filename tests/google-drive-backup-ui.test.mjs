@@ -14,7 +14,7 @@ test("Drive backup UI separates Google sign-in from Drive authorization", async 
   assert.match(html, /authorizeGoogleDriveBackup/);
   assert.match(html, /Google Sign-In and Drive authorization are separate/);
   assert.match(html, /Google Drive · Aurelia App Data/);
-  assert.match(html, /driveBackupHomeCard/);
+  assert.match(html, /driveBackupHomeCard/);\n  assert.match(html, /Connected account:/);\n  assert.match(html, /showGoogleDriveBackupHistory/);\n  assert.match(html, /driveLastErrorMessage/);\n  assert.match(html, /restoreGoogleDriveBackup/);
 });
 
 test("backup schedule popup offers daily, weekly, monthly and never after connection", async () => {
