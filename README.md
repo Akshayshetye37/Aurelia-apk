@@ -1,28 +1,53 @@
 # Aurelia PMS
 
-A browser-based hotel/property-management interface supplied as a single HTML file.
+Aurelia PMS is a browser-based property-management interface supplied as a single HTML file and packaged as an Android debug app through Capacitor in GitHub Actions.
 
-## Contents
+## Repository contents
 
-- `index.html` — the supplied Aurelia PMS interface and its inline CSS/JavaScript.
-- `.gitignore` — ignores common local, build, Android, and secret files.
-- `docs/SECURITY.md` — security and production-readiness notes.
+- `index.html` — the PMS interface and inline CSS/JavaScript.
+- `src/payments/` — direct-UPI parsing, matching, local evidence storage, and the explicit settlement safety gate.
+- `tests/` — Node.js regression tests for parsers, matching, evidence storage, and settlement gating.
+- `scripts/` — web preparation and build-time Android bridge patches.
+- `.github/workflows/build-apk.yml` — runs tests and builds a debug APK artifact.
 
-## Run locally
+## Build and verify
 
-Open `index.html` in a modern browser for an initial inspection. Some features depend on network-loaded libraries or services. Android-specific features require a compatible Android WebView wrapper that implements the `AureliaNative` JavaScript bridge; that native Android project is not included in this repository yet.
+Requirements for a local build: Node.js 20+, Java 21, Android SDK, and Android platform/build-tools installed.
 
-## Important source limitation
+```sh
+npm install
+npm test
+npm run build
+npx cap add android
+node scripts/patch-android.js
+npx cap sync android
+cd android
+./gradlew --no-daemon assembleDebug
+```
 
-The uploaded HTML source ends immediately after a CSS `</style>` block and does not include a closing `</body>` or `</html>` tag. It appears incomplete. Complete and test the source before treating this repository as a release-ready web app or building an APK.
+The GitHub Actions workflow runs the tests before preparing the app and building the debug APK. Because the repository's Actions artifact storage quota is exhausted, successful push/manual builds publish the APK as a prerelease asset in the private repository. This is a debug APK, not a release-signed production build.
 
-## Before real-world use
+## Direct UPI reconciliation status
+
+The payment code is a reconciliation foundation, not a production payment/accounting system.
+
+- Bank SMS parsers normalize known formats and fail closed on unknown formats.
+- The evidence journal uses IndexedDB and survives restarts on the same app installation.
+- Event IDs and bank/account-scoped UTR keys are deduplicated in local storage.
+- Review decisions can be stored against evidence.
+- Automatic folio settlement is explicitly disabled.
+
+IndexedDB is local to one installation. It is not a cross-device source of truth and must not be used as the production accounting ledger. The Android notification/SMS listener, production backend, staff review UI, and atomic folio posting are not implemented or connected to the PMS interface.
+
+## Before operational use
 
 - Replace demo/default property details, sample records, room rates, and menu items.
-- Review the security notes in [docs/SECURITY.md](docs/SECURITY.md).
-- Test all workflows, browser storage, backup/restore, invoice calculations, payment flows, and Android bridge behavior.
-- Do not use real guest or payment data until security and privacy issues are addressed.
+- Review [docs/SECURITY.md](docs/SECURITY.md) and [docs/PAYMENT-MATCHING.md](docs/PAYMENT-MATCHING.md).
+- Validate the interface and native bridge on supported Android devices.
+- Add real, redacted SMS fixtures from the actual bank/device before relying on parsers.
+- Implement authenticated server-side storage, access control, durable idempotency, and atomic ledger posting before processing real payments.
+- Do not use real guest or payment data until security, privacy, backup/restore, authorization, and end-to-end behavior have been reviewed.
 
-## Project status
+## Current release boundary
 
-Source upload and repository scaffolding only. Runtime, backend, Android, and end-to-end tests have not been completed.
+Passing tests and building a debug APK do not certify the PMS as production-ready. Folio settlement must remain disabled until evidence ingestion, reconciliation, failure recovery, and ledger safeguards pass end-to-end verification.

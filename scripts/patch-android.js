@@ -624,4 +624,5 @@ public class MainActivity extends BridgeActivity {
 }
 `;
 fs.writeFileSync(javaPath, java);
-console.log('Installed SAF folder picker, persistent folder access, backup writing, individual-file save picker, and manifest permissions.');
+execFileSync(process.execPath, [path.join(__dirname, 'patch-upi-reconciliation.js')], { stdio: 'inherit' });
+console.log('Installed SAF folder picker, persistent folder access, backup writing, individual-file save picker, manifest permissions, and UPI evidence capture.');
