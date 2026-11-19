@@ -55,7 +55,7 @@ Initial roles:
 - `kitchen`: restaurant order preparation and service.
 - `accountant`: permitted billing and financial views/operations.
 
-Start with a deny-by-default permission matrix. Avoid broad `write` permissions for every member. Permission checks are enforced in Firestore rules and trusted Cloud Functions; UI visibility is only presentation.
+Use the proposed [permission matrix](PUBLIC-SAAS-PERMISSION-MATRIX.md) as the initial policy. Avoid broad `write` permissions for every member. Permission checks are enforced in Firestore rules and trusted Cloud Functions; UI visibility is only presentation.
 
 ### 5. Proposed Firestore data model
 
