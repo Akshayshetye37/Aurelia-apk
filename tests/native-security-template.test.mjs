@@ -348,6 +348,6 @@ test('generated encrypted-backup validation contains real Java line breaks, not 
   const validationStart = patcher.indexOf('backup.optString("ciphertext", "").length() <= 35000000');
   assert.ok(validationStart >= 0, 'backup ciphertext length validation must exist');
   const validation = patcher.slice(validationStart, validationStart + 180);
-  assert.ok(validation.includes('35000000\\n            && backup.optString("ciphertext", "").length() % 4 == 0'));
-  assert.ok(!validation.includes('35000000\\\\n            &&'), 'Java template must not contain an escaped newline separator');
+  assert.ok(validation.includes('35000000\n            && backup.optString("ciphertext", "").length() % 4 == 0'));
+  assert.ok(!validation.includes('35000000\\n            &&'), 'Java template must not contain an escaped newline separator');
 });
