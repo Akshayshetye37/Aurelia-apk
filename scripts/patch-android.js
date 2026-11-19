@@ -999,16 +999,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     });
   }
   private void driveAuthorizationResult(String requestId, boolean ok, String token, String message) {
-    driveAuthorizationResultCallback(requestId, ok, token, message);
-  }
-  private void driveAuthorizationResultCallback(String requestId, boolean ok, String token, String message) {
-    driveAuthorizationResultCallbackSafe(requestId, ok, token, message);
-  }
-  private void driveAuthorizationResultCallbackSafe(String requestId, boolean ok, String token, String message) {
-    driveAuthorizationResultCallbackFinal(requestId, ok, token, message);
-  }
-  private void driveAuthorizationResultCallbackFinal(String requestId, boolean ok, String token, String message) {
-    driveAuthorizationResult(requestId, ok, token, message);
+    js("window.aureliaNativeDriveAuthResult && window.aureliaNativeDriveAuthResult(" + q(requestId) + "," + ok + "," + q(token) + "," + q(message) + ")");
   }
   private void folderResult(String id, boolean ok, String message) {
     js("window.aureliaNativeBackupFolderResult && window.aureliaNativeBackupFolderResult(" + q(id) + "," + ok + "," + q(message) + "," + q(folderPurpose) + ")");
