@@ -370,6 +370,10 @@ The browser uses IndexedDB; Android uses the native repository/SQLCipher boundar
 
 Draft PRs and parallel branches are not merged functionality. Before integration, review their diffs, run tests, and reconcile overlapping architecture—especially backup orchestration versus cloud-provider abstraction and local-first repositories versus legacy UI paths.
 
+## Gate 3 identity configuration
+
+See [docs/GATE-3-WIF-SETUP.md](docs/GATE-3-WIF-SETUP.md) for the required GitHub Environment values, Google Cloud WIF trust setup, staging-only IAM boundaries and qualification steps. The repository does not contain or create the user's Google Cloud credentials.
+
 ## Recovery and release qualification
 
 The repository contains a six-gate qualification pipeline. Gates are evidence-driven and SHA-specific:
