@@ -19,7 +19,7 @@ Private app data is removed when the app is uninstalled or its data is cleared. 
 
 ### 2. Google Drive OAuth — optional, owner-controlled
 
-The new direct Drive adapter authorizes the owner's Google account separately from Aurelia Google Sign-In. It requests only the non-sensitive `drive.appdata` scope and stores backup files in the hidden `appDataFolder`; the user does not select a folder. The adapter is implemented in `src/backup/google-drive-backup.mjs` and packaged by `scripts/prepare-web.js`. Android authorization is exposed through the native bridge using Google Identity Services AuthorizationClient.
+The new direct Drive adapter authorizes the owner's Google account separately from Aurelia Google Sign-In. It requests the non-sensitive `drive.appdata` scope and the `userinfo.email` scope only to verify/display the selected account. The email is stored as local connection metadata; access tokens are transient. It stores backup files in the hidden `appDataFolder`; the user does not select a folder. The adapter is implemented in `src/backup/google-drive-backup.mjs` and packaged by `scripts/prepare-web.js`. Android authorization is exposed through the native bridge using Google Identity Services AuthorizationClient.
 
 - Connect is explicit and independent from login. The owner chooses the Google account in Google's authorization UI.
 - The app requests the narrow Drive `drive.appdata` scope plus `userinfo.email` only to verify/display which Google account is connected. The email is stored locally as connection metadata; OAuth access tokens are never stored.
@@ -42,7 +42,7 @@ Production configuration:
 4. Verify the Android identity configuration, account email verification, authorization renewal, account switching and Drive upload/restore on a physical device with Google Play Services before release.
 5. Do not ship OAuth client secrets or service-account private keys in the APK.
 
-The Drive `appDataFolder` is hidden and accessible only to Aurelia. It is not a user-selected folder, is separate from visible Drive backup folders, and can be deleted by the user or when the app is removed from their Drive. Owners should retain independent recovery/export options.
+The Drive `appDataFolder` is hidden and accessible only to Aurelia. It is not a user-selected folder, is separate from visible Drive backup folders, and can be deleted by the user or when the app is removed from their Drive. Owners should retain independent recovery/export options. Google account email is used solely to display/verify the connected account and is not used for authentication to Aurelia's PMS or shared across business owners.
 
 Android background scheduling is best-effort. WorkManager/OS scheduling cannot safely snapshot the current PMS state because the authoritative snapshot and recovery-key wrapper are owned by the running WebView. A due scheduled backup is therefore caught up when Aurelia is running/foregrounded and the local snapshot is available. A guaranteed unattended snapshot requires moving snapshot creation and encryption/key access into a native background-capable storage architecture.
 
