@@ -1879,13 +1879,17 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
       String requestId = driveAuthorizationRequestId;
       driveAuthorizationRequestId = "";
       if (requestId.isEmpty()) return;
-      try {
-        AuthorizationResult result = Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(data);
-        String token = result == null ? "" : result.getAccessToken();
-        if (resultCode == RESULT_OK && token != null && token.length() > 20) driveAuthorizationResult(requestId, true, token, "");
-        else driveAuthorizationResult(requestId, false, "", "Google Drive authorization was cancelled.");
-      } catch (ApiException e) {
-        driveAuthorizationResult(requestId, false, "", "Google Drive authorization failed. Try again.");
+      if (resultCode != RESULT_OK || data == null) {
+        driveAuthorizationResult(requestId, false, "", "Google Drive authorization was cancelled.");
+      } else {
+        try {
+          AuthorizationResult result = Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(data);
+          String token = result == null ? "" : result.getAccessToken();
+          if (token != null && token.length() > 20) driveAuthorizationResult(requestId, true, token, "");
+          else driveAuthorizationResult(requestId, false, "", "Google Drive authorization returned no access token.");
+        } catch (Exception e) {
+          driveAuthorizationResult(requestId, false, "", "Google Drive authorization failed. Try again.");
+        }
       }
     } else if (requestCode == CREATE_BACKUP_FILE) {
       final String completedId = pendingFileRequestId;
