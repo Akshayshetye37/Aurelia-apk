@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { fail, requireSha } from './lib.mjs';
 
 const REQUIRED_PROBE_CASES = ['no App Check token', 'invalid App Check token'];
+const SHA_RE = /^[0-9a-f]{40}$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const REQUIRED_PHYSICAL_CASES = ['G3-01', 'G3-02', 'G3-03', 'G3-04', 'G3-05', 'G3-06', 'G3-07', 'G3-08', 'G3-09', 'G3-10'];
 
