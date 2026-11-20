@@ -3,10 +3,8 @@
 **Status: NOT PRODUCTION READY.** This file separates code already present from release gates that still require automated or physical-device evidence, owner data, or explicit authorization. CI evidence is valid only for the SHA it tested.
 
 - Repository: https://github.com/Akshayshetye37/Aurelia-apk
-- Active branch: `work/p0-storage-hardening`
-- README update commit: `c3310362934deb3d532077a614d76c15607c88b8`
-- Current PR #18 head after this documentation update: `c3310362934deb3d532077a614d76c15607c88b8`
-- PR #18: https://github.com/Akshayshetye37/Aurelia-apk/pull/18 (draft, open, unmerged; GitHub reports `mergeable=false`).
+- Branch represented by this README snapshot: `integration/ledger-patch` (documentation updates are proposed separately; this header is not a live branch-status query).
+- Historical storage-hardening PR #18: https://github.com/Akshaysheye37/Aurelia-apk/pull/18 (draft/unmerged status was recorded in an earlier snapshot; verify current PR state before relying on it).
 - Canonical authority remains `PREPARED_COMPATIBILITY`; `uiCutover=false`.
 - Cloud sync, provider activation, live gateway collection, automatic settlement, automatic refund posting and production release remain OFF.
 - LIVE GATEWAY COLLECTION OFF.
@@ -294,9 +292,28 @@ The cloud provider adapter must be replaceable; the backup orchestrator must not
 
 - Personal-cloud connection and local sync coordinator foundations exist in `src/sync/`.
 - A generic provider abstraction and cloud-provider work exist on separate/draft development workstreams; integration and qualification are still pending.
-- The Google Drive OAuth/app-data backup work is currently a draft workstream and is **not represented as a completed, integrated feature on this branch**.
-- The `src/storage/personal-cloud-storage.mjs` file on this branch is currently a placeholder; do not treat it as a production cloud adapter.
-- Owner-specific authorization, token isolation, account display, disconnect behavior, backup scheduling, encryption, restore qualification, and cross-owner isolation tests are acceptance requirements for the implementation.
+- Google Drive OAuth/app-data backup is **not represented as a completed, integrated feature on this branch**.
+- `src/storage/personal-cloud-storage.mjs` is currently a placeholder; do not treat it as a production cloud adapter.
+- Owner-specific authorization, token isolation, account display, disconnect behavior, backup scheduling, encryption, restore qualification, and cross-owner isolation tests are acceptance requirements for implementation.
+
+### Backup encryption and Google Drive security design
+
+The following is the required design contract, not a claim that runtime code is already implemented or qualified:
+
+1. **Encrypt before upload.** Google Drive stores ciphertext only; the app must never upload plaintext PMS database rows, attachments, export files, or recovery material.
+2. **Versioned authenticated envelope.** Use a versioned backup manifest and authenticated encryption (AES-256-GCM is the target), with nonce/IV uniqueness, ciphertext, authentication tag, format/schema versions, and integrity metadata. Validate the envelope before restore.
+3. **Key separation.** Google Sign-In/OAuth tokens authorize storage and are not backup-encryption keys. The recovery key must not be used directly as an AES key. Prefer a random data-encryption key (DEK) that encrypts the backup, wrapped by a key-encryption key (KEK) derived from the existing Recovery Key using a vetted password KDF with recorded salt and parameters. Integrate with Aurelia's existing recovery/key lifecycle; do not create a parallel incompatible identity/key system.
+4. **Secret handling.** Do not log, persist in plaintext, or expose OAuth access/refresh tokens, DEKs, KEKs, Recovery Keys, or provider secrets. Use the supported Android authorization flow and minimal Drive scopes; keep credentials in platform-secure storage where persistence is unavoidable. Public client configuration is not a secret, but must be restricted by package/signing identity and API.
+5. **Minimal Drive permissions.** Prefer app-private `drive.appdata` when the product semantics fit. Use `drive.file` only where user-visible or explicitly selected files/folders are required. Avoid broad Drive access. The app must operate only within the account/destination the owner explicitly connected.
+6. **Restore fail-closed and atomic.** Download to temporary storage; validate version/size/manifest; derive/unwrap the key; authenticate/decrypt; validate schema, database integrity, attachment hashes and references; restore to a temporary database; and atomically promote only after all checks pass. Wrong key, tampering, truncation, unsupported version, or interruption must leave the existing database and identity untouched.
+7. **Isolation and lifecycle.** Store provider connection state separately from automatic-backup opt-in. Disconnect stops cloud operations and clears local authorization state without deleting local PMS data. Never silently switch accounts or destinations. Prevent cross-owner token, metadata, and backup access.
+8. **Qualification gates.** Tests must cover wrong key, tampered ciphertext/manifest, nonce/envelope validation, interrupted upload/download/restore, duplicate backup, revoked authorization, account switching, disconnected/offline behavior, and cross-owner isolation. A second physical device restore with entity/attachment/accounting parity is required before production approval.
+
+### Current implementation evidence
+
+- This documentation update does not implement OAuth, Drive uploads, backup encryption, key wrapping, or restore orchestration.
+- Runtime scope, encryption-at-rest for backup packages, token storage, and second-device restore remain to be audited and implemented against the existing recovery architecture.
+- Keep cloud backup opt-in, cloud sync OFF, and release gates fail-closed until exact-head CI and device evidence qualifies the complete path.
 
 ## Repository structure
 
