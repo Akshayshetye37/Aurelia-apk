@@ -291,7 +291,8 @@ test('Gate 3 controller is isolated and Gate 4 consumes the same frozen candidat
   const staging = read('.github/workflows/recovery-staging-deploy.yml');
   const gate3 = read('.github/workflows/gate-3-google-email-link-staging.yml');
   const gate4 = read('.github/workflows/gate-4-physical-device.yml');
-  assert.match(staging, /gate-3-google-email-link-staging\.yml@refs\/heads\/work\/gate-3-google-email-link/);
+  assert.match(staging, /gate-3-google-email-link-staging\.yml@refs\/heads\/\{1\}/);
+  assert.match(staging, /vars\.GATE_CONTROL_BRANCH \|\| 'work\/gate-3-google-email-link'/);
   assert.match(gate3, /--branch "fix\/backup-consolidated-integration"/);
   assert.match(gate4, /CANDIDATE_BRANCH: \$\{\{ vars\.CANDIDATE_BRANCH \|\| 'fix\/backup-consolidated-integration' \}\}/);
   assert.match(gate4, /GATE3_CONTROL_BRANCH: work\/gate-3-google-email-link/);
