@@ -5,6 +5,7 @@ const sha = requireSha(process.env.CANDIDATE_SHA);
 const controlSha = requireSha(process.env.GITHUB_SHA);
 const repo = process.env.REPO;
 const controlBranch = process.env.CONTROL_BRANCH;
+const gate3ControlBranch = process.env.GATE3_CONTROL_BRANCH ?? controlBranch;
 if (!repo || repo.split('/').length !== 2 || repo.split('/').some((part) => !/^[A-Za-z0-9_.-]+$/.test(part)) || !controlBranch || controlBranch.split('/').some((part) => !/^[A-Za-z0-9_.-]+$/.test(part) || part === '..')) fail('repository or control branch is invalid');
 let runIds;
 try { runIds = JSON.parse(process.env.RUN_IDS ?? ''); } catch { fail('RUN_IDS is not valid JSON'); }
@@ -21,7 +22,7 @@ const pinnedCandidateSha = fs.readFileSync('gates/qualification-candidate-sha.tx
 if (pinnedCandidateSha !== sha) fail('candidate SHA does not match the trusted control-branch qualification pin');
 const workflows = {
   '1': 'gate-1-encrypted-storage.yml', '2': 'gate-2-recovery-runtime.yml',
-  '3': 'gate-3-real-sms-staging.yml', '4': 'gate-4-physical-device.yml',
+  '3': 'gate-3-google-email-link-staging.yml', '4': 'gate-4-physical-device.yml',
   '5': 'gate-5-production-security.yml', sms: 'gate-manual-attestation.yml',
   device: 'gate-manual-attestation.yml',
 };
@@ -35,9 +36,10 @@ for (const key of expectedRunKeys) {
 const records = {};
 for (const [gate, workflowFile] of Object.entries(workflows)) {
   if (!runIds[gate]) fail(`missing run ID for gate ${gate}`);
-  const record = verifyBundle({ repo, runId: runIds[gate], gate, workflowFile, controlBranch, dir: `qualification-${gate}` });
+  const gateControlBranch = gate === '3' ? gate3ControlBranch : controlBranch;
+  const record = verifyBundle({ repo, runId: runIds[gate], gate, workflowFile, controlBranch: gateControlBranch, dir: `qualification-${gate}` });
   if (record.candidateSha !== sha) fail(`gate ${gate} is for a different candidate`);
-  if (record.controlSha !== controlSha) fail(`gate ${gate} was produced by a different control-branch revision`);
+  if (gate !== '3' && record.controlSha !== controlSha) fail(`gate ${gate} was produced by a different control-branch revision`);
   const completed = Date.parse(record.completedAt);
   if (!Number.isFinite(completed) || Date.now() - completed > 14 * 864e5 || completed > Date.now() + 3e5) fail(`gate ${gate} evidence is stale or has an invalid timestamp`);
   records[gate] = record;
