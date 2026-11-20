@@ -103,7 +103,7 @@ jobs:
                 expected.some(name => /phone|sms|otp|grant/i.test(name))) {
               throw new Error("Gate 3 candidate must reconcile callable inventory, exclude phone/SMS/recovery callables, and use Firebase Hosting /__/auth/links App Links");
             }
-            fs.appendFileSync(process.env.GITHUB_ENV, "GATE3_DEPLOY_ONLY=" + expected.map(name => "functions:" + name).join(",") + "\\n");
+            fs.appendFileSync(process.env.GITHUB_ENV, "GATE3_DEPLOY_ONLY=" + expected.map(name => "functions:" + name).join(",") + "\n");
           '
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
