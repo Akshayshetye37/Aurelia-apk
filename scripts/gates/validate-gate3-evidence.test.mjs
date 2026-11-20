@@ -27,9 +27,10 @@ test('rejects missing callable inventory', () => assert.throws(() => validateGat
 test('rejects missing APK hash', () => assert.throws(() => validateGate3Evidence({ probes, details: { ...details, apkSha256: '' }, candidateSha: sha }), /apkSha256/));
 test('rejects unexplained exclusions', () => assert.throws(() => validateGate3Evidence({ probes, details: { ...details, excluded: [{ probe: 'x' }] }, candidateSha: sha }), /exclusion must include/));
 test('rejects duplicate probes', () => assert.throws(() => validateGate3Evidence({ probes: [...probes, probes[0]], details, candidateSha: sha }), /duplicate probe/));
+test('physical matrix with incomplete cases cannot qualify', () => { const matrix = { candidateSha: sha, status: 'QUALIFIED', device: { model: 'test device', androidApi: 34, apkSha256: hash }, cases: { 'G3-01': 'PASS' }, signoff: { reviewer: 'reviewer', signedAt: '2026-11-21T00:00:00Z', commit: sha } }; const status = validateGate3Evidence({ probes, details, candidateSha: sha, controlSha: sha, physicalMatrix: matrix, deployedInventory }); assert.equal(status.GATE_3_OVERALL, 'NOT QUALIFIED'); });
 test('physical matrix requires exact SHA and signed reviewer fields', () => {
-  const matrix = { candidateSha: sha, status: 'QUALIFIED', signoff: { reviewer: 'reviewer', signedAt: '2026-11-21T00:00:00Z', commit: 'c'.repeat(40) } };
-  const status = validateGate3Evidence({ probes, details, candidateSha: sha, physicalMatrix: matrix, deployedInventory });
+  const matrix = { candidateSha: sha, status: 'QUALIFIED', device: { model: 'test device', androidApi: 34, apkSha256: hash }, cases: Object.fromEntries(['G3-01','G3-02','G3-03','G3-04','G3-05','G3-06','G3-07','G3-08','G3-09','G3-10'].map(id => [id, 'PASS'])), signoff: { reviewer: 'reviewer', signedAt: '2026-11-21T00:00:00Z', commit: sha } };
+  const status = validateGate3Evidence({ probes, details, candidateSha: sha, controlSha: sha, physicalMatrix: matrix, deployedInventory });
   assert.equal(status.PHYSICAL_SMS_RECOVERY, 'QUALIFIED');
   assert.equal(status.GATE_3_OVERALL, 'QUALIFIED');
 });
