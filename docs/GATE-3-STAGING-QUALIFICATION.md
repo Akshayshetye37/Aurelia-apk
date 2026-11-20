@@ -24,7 +24,7 @@ Create GitHub Environment `recovery-staging` and configure:
 
 The workflow deploys the frozen candidate only to staging, validates staging/production project separation, checks WIF configuration, validates `STAGING_FUNCTIONS_BASE_URL`, verifies the configured release signer SHA-256, builds the release APK and matching androidTest APK, verifies their hashes and signer, then probes only the two inventory-listed email-link owner callables with missing and invalid App Check tokens.
 
-These negative probes establish endpoint routing and App Check enforcement; they **do not constitute a successful authenticated Google Sign-In or Email-Link exchange**. Positive end-to-end owner-session qualification requires a staging Firebase owner account and a controlled email-link test delivery/exchange, and must be reported separately rather than inferred from negative probes. The workflow must fail closed if authenticated test credentials or link-delivery setup are unavailable.
+These negative probes establish endpoint routing and App Check enforcement; they **do not constitute a successful authenticated Google Sign-In or Email-Link exchange**. The current workflow has no positive authenticated test harness. A separate qualification harness must use a staging Firebase owner account and controlled email-link delivery, fail closed when setup is unavailable, and report positive results separately rather than infer them from negative probes.
 
 Production recovery remains disabled.
 
