@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { fail } from './lib.mjs';
 
 const inventoryPath = process.argv[2] ?? 'scripts/gates/callables.json';
@@ -20,6 +21,6 @@ const staleProbes = inventory.callables.filter(name => !actual.includes(name));
 if (missingProbes.length || staleProbes.length) {
   fail(`deployed callable inventory mismatch; missing probes: ${missingProbes.join(', ') || 'none'}; nonexistent probes: ${staleProbes.join(', ') || 'none'}`);
 }
-fs.mkdirSync(new URL('.', 'file://' + outputPath), { recursive: true });
+fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, JSON.stringify({ candidateSha: process.env.CANDIDATE_SHA ?? null, inventory: [...inventory.callables].sort(), deployed: [...actual].sort(), reconciled: true }, null, 2));
 console.log(`Callable inventory reconciled: ${actual.length} deployed callable(s).`);
