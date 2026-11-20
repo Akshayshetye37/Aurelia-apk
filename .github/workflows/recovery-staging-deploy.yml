@@ -72,7 +72,6 @@ jobs:
             "$GITHUB_REPOSITORY/.github/workflows/gate-3-google-email-link-staging.yml@refs/heads/$CONTROL_BRANCH")
               node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$GITHUB_REPOSITORY" --branch "$CANDIDATE_BRANCH" ;;
             *) echo "::error::Untrusted workflow ref cannot invoke staging deployment."; exit 1 ;;
-            *) echo "::error::Untrusted workflow ref cannot invoke staging deployment."; exit 1 ;;
           esac
       - name: Checkout candidate source as build input
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
