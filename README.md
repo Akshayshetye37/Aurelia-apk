@@ -3,9 +3,9 @@
 **Status: NOT PRODUCTION READY.** This file separates code already present from release gates that still require automated or physical-device evidence, owner data, or explicit authorization. CI evidence is valid only for the SHA it tested.
 
 - Repository: https://github.com/Akshayshetye37/Aurelia-apk
-- Active branch: `work/p0-storage-hardening`
-- README update commit: `c3310362934deb3d532077a614d76c15607c88b8`
-- Current PR #18 head after this documentation update: `c3310362934deb3d532077a614d76c15607c88b8`
+- Active branch for this isolated Gate 3 work: `work/gate-3-google-email-link`
+- README production-readiness snapshot originated from the earlier `work/p0-storage-hardening` branch; this Gate 3 branch updates the scope/status sections below.
+- Historical PR #18 status is unrelated to this isolated Gate 3 branch; no Gate 3 qualification or release approval is implied.
 - PR #18: https://github.com/Akshayshetye37/Aurelia-apk/pull/18 (draft, open, unmerged; GitHub reports `mergeable=false`).
 - Canonical authority remains `PREPARED_COMPATIBILITY`; `uiCutover=false`.
 - Cloud sync, provider activation, live gateway collection, automatic settlement, automatic refund posting and production release remain OFF.
