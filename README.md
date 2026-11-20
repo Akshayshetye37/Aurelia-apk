@@ -543,3 +543,19 @@ A user-owned cloud account (for example, Google Drive) is distinct from a user-o
 - [ ] Encryption, integrity, versioning and restore checks are required before a backup is treated as valid.
 
 **Security rule:** Assume the APK can be reverse-engineered. Protect secrets by keeping them out of the client; protect data through scoped authorization, encryption, server-side validation and owner-controlled cloud authorization.
+
+
+### Backup OAuth scope and token handling
+
+- Request the narrowest Google Drive scope compatible with the backup design. Prefer the app-specific `drive.appdata` scope for hidden app-owned backup files when that meets the product requirements; use `drive.file` only when user-visible files or files explicitly selected/created by the app are required. Do not request broad Drive access by default. Confirm the chosen scope against the implemented restore, file-selection and account-management behavior before release.
+- Use Google's supported Android authorization flow and short-lived access tokens. Do not hard-code tokens. Avoid persisting refresh tokens on-device when the supported Android flow can renew authorization without them; if persistent token material is unavoidable, protect it with Android Keystore-backed encryption and handle revocation/expiry explicitly. Never log tokens.
+- Restrict Firebase/Google API keys using the applicable Android application restriction (package name plus signing-certificate SHA-1) and API restrictions. Restrictions must match the release signing identity; debug and release identities should be configured separately where appropriate. Restrictions do not replace Firebase Rules, App Check or backend authorization.
+
+### Backup encryption and key authority
+
+- Encrypt backup contents **on the device before upload**. Cloud storage must receive ciphertext, not plaintext PMS database or attachment contents.
+- Use authenticated encryption and a versioned backup envelope; verify integrity and metadata before restore.
+- The backup-encryption key must be controlled by the owner through Aurelia's qualified key/recovery design. It must not be derived from Google Sign-In, OAuth tokens, Firebase credentials or the cloud account password.
+- Google Sign-In/Drive authorization grants access to the storage destination only. It is not the authority for decrypting or recovering PMS data.
+- Recovery-key/key-lifecycle requirements remain authoritative: recovery must reopen the same encrypted data key/database, and wrong-key, missing-key, tampered-backup and interrupted-restore cases must fail closed without silently creating a replacement identity or database.
+- Key generation, wrapping, rotation, recovery and second-device restore are implementation and qualification requirements—not completed capabilities merely because they are documented.
