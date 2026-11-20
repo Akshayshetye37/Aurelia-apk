@@ -172,6 +172,7 @@ jobs:
           FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
           APP_CHECK_REGISTERED: ${{ vars.APP_CHECK_PLAY_INTEGRITY_REGISTERED }}
           APP_CHECK_SIGNER_SHA256: ${{ vars.APP_CHECK_SIGNER_SHA256 }}
+          EXPECTED_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
           KEYSTORE_B64: ${{ secrets.STAGING_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.STAGING_KEYSTORE_PASSWORD }}
@@ -198,13 +199,14 @@ jobs:
             exit 1
           fi
           APP_CHECK_CERT="$(echo "$APP_CHECK_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          EXPECTED_CERT="$(echo "$EXPECTED_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          if [[ ! "$APP_CHECK_CERT" =~ ^[0-9a-f]{64}$ || ! "$EXPECTED_CERT" =~ ^[0-9a-f]{64}$ || "$APP_CHECK_CERT" != "$EXPECTED_CERT" ]]; then
+            echo "::error::Firebase App Check signer and expected staging APK signer must be the same SHA-256 fingerprint."
+            exit 1
+          fi
           node -e 'const u=new URL(process.env.FUNCTIONS_BASE_URL); const h=process.env.REGION+"-"+process.env.PROJECT_ID+".cloudfunctions.net"; if(u.protocol!=="https:" || u.hostname!==h || u.username || u.password || u.port || u.pathname!=="/" || u.search || u.hash) process.exit(1);'
           node -e 'const a=process.env.RECOVERY_CALLABLES.split(",").map(x=>x.trim()).filter(Boolean); if(!a.length || new Set(a).size!==a.length || a.some(x=>!/^[A-Za-z0-9_-]+$/.test(x))) process.exit(1);'
           echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/aurelia-staging-release.jks"
-          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "$RUNNER_TEMP/google-services.json"
-          export GOOGLE_SERVICES_PATH="$RUNNER_TEMP/google-services.json"
-          node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); const key=p?.api_key?.[0]?.current_key; if(!p || c.project_info?.project_id!==process.env.PROJECT_ID || key!==process.env.FIREBASE_WEB_API_KEY) process.exit(1);'
-          gcloud config set project "$PROJECT_ID"
           echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "$RUNNER_TEMP/google-services.json"
           export GOOGLE_SERVICES_PATH="$RUNNER_TEMP/google-services.json"
           node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); const key=p?.api_key?.[0]?.current_key; if(!p || c.project_info?.project_id!==process.env.PROJECT_ID || key!==process.env.FIREBASE_WEB_API_KEY) process.exit(1);'
@@ -216,9 +218,6 @@ jobs:
         shell: bash
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
-          VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
-          FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
           FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
         run: |
           set -euo pipefail
