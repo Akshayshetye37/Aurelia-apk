@@ -369,7 +369,7 @@ The following is a high-level map of the current integration branch. It is inten
 | Multi-tenant recovery isolation | Draft workstream | Tenant isolation and cross-tenant tests are qualification work, not production approval. |
 | Public SaaS identity/tenancy | Architecture/documentation workstream | Account, tenant, property, membership and authorization foundations are not a complete SaaS implementation. |
 | Payment backend and settlement | In progress | Canonical intent/evidence/ledger/settlement boundaries exist; live providers require merchant acceptance and security qualification. |
-| Gate 3 real SMS staging | Blocked pending staging configuration/credentials | Preserve Gates 1/2; resolve Gate 3 staging WIF/environment configuration and qualify the frozen candidate SHA. |
+| Gate 3 Google Sign-In + Email-Link staging | Not qualified | Staging WIF/configuration, allowlisted email-link deployment, authenticated owner flows, exact-SHA evidence and physical-device matrix remain required. SMS/phone is excluded. |
 | Gates 4–6 | Not release-qualified | Physical-device qualification, production security audit and release sign-off depend on preceding evidence. |
 
 Draft PRs and parallel branches are not merged functionality. Before integration, review their diffs, run tests, and reconcile overlapping architecture—especially backup orchestration versus cloud-provider abstraction and local-first repositories versus legacy UI paths.
@@ -403,7 +403,7 @@ Gate 3 is currently an infrastructure/configuration qualification focus. Missing
 - `docs/PERSONAL-CLOUD-CONNECTION.md` — personal cloud connection design.
 - `docs/LOCAL-FIRST-SYNC-ARCHITECTURE.md` — local-first sync architecture.
 - `docs/LOCAL-FIRST-CUTOVER-EXECUTION.md` — cutover execution.
-- `docs/RECOVERY-GATE-PIPELINE.md` and `docs/GATE-3-REAL-SMS-STAGING-QUALIFICATION.md` — recovery gates and Gate 3.
+- `docs/RECOVERY-GATE-PIPELINE.md`, `docs/GATE-3-SCOPE.md`, and `docs/GATE-3-STAGING-QUALIFICATION.md` — recovery gates and current Gate 3 scope.
 - `docs/ANDROID_DEVICE_QUALIFICATION.md` and `docs/ANDROID-PMS-ENCRYPTION-KEY-LIFECYCLE.md` — native-device/storage qualification and key lifecycle.
 - `docs/PMS_ACCOUNTING_SCHEMA.md`, `docs/PMS-PAYMENT-ORCHESTRATION.md`, and `docs/PAYMENT_PROVIDER_ONBOARDING.md` — accounting and payment architecture.
 - `docs/SECURITY.md` — security guidance.
@@ -441,20 +441,20 @@ Cloud onboarding is not complete until the following are verified:
 - **Latest code change:** `Assert Gate 3 probe list excludes legacy OTP callables`
 - **Branch:** https://github.com/Akshayshetye37/Aurelia-apk/tree/integration/ledger-patch
 
-## Gate 3 scope
+## Gate 3 scope and implementation status
 
-Gate 3 is a **Google Sign-In + Firebase Passwordless Email-Link owner-verification staging qualification**. Phone OTP and recovery remain in the application and Gate 2 instrumentation; they are excluded from Gate 3 staging qualification criteria.
+**Authoritative scope:** [docs/GATE-3-SCOPE.md](docs/GATE-3-SCOPE.md). Gate 3 is Google Sign-In + Firebase Passwordless Email-Link only. SMS OTP, phone authentication, phone binding, SMS recovery and phone-change callables are excluded.
 
-The staging workflow App Check probe list is scoped to these owner-verification/trusted-owner-session endpoints:
+- **Decision:** Google Sign-In is primary; Firebase Email-Link is fallback. Numeric email OTP is not part of this gate.
+- **Encryption boundary:** account authentication cannot unlock, derive, replace or recover the local DEK. PIN, biometric and offline recovery-key mechanisms remain separate.
+- **Implementation status:** Google Sign-In end-to-end and Email-Link client flow are **NOT QUALIFIED**. The backend email-link exchange callable exists, but source presence is not proof of client implementation or successful authenticated staging exchange.
+- **Staging deployment allowlist:** `scripts/gates/callables.json` includes only `exchangeOwnerEmailLink` and `confirmRecoveryOwnerBinding`. The workflow deploys named functions only; it does not deploy the full Functions package.
+- **Phone/SMS callables:** `registerRecoveryPhone`, `activateRecoveryPhoneChange`, and `cancelRecoveryPhoneChange` are explicitly excluded from Gate 3 deployment and probes. Additional recovery-device callables are also excluded.
+- **Workflow:** `.github/workflows/gate-3-google-email-link-staging.yml`, dispatched from `work/gate-3-google-email-link`.
+- **Frozen candidate:** candidate SHA must be reachable from `fix/backup-consolidated-integration`; it is validated before deployment and before PASS evidence.
+- **Gate 3 status:** **NOT QUALIFIED**. Automated deployment, App Check negative probes, authenticated Google Sign-In/Email-Link, exact-SHA evidence and physical-device matrix are not all complete.
 
-- `exchangeOwnerEmailLink`
-- `confirmRecoveryOwnerBinding`
-- `registerRecoveryOwnerDevice`
-- `acknowledgeRecoveryOwnerAlert`
-- `getRecoveryOwnerPendingAction`
-- `getRecoveryOwnerActionReadiness`
-
-Legacy OTP/recovery grant callables are excluded from this Gate 3 App Check probe list. Their infrastructure is not deleted.
+The former SMS-named Gate 3 workflow and qualification document are retired. Gate 2 OTP/recovery instrumentation remains a separate gate and is not Gate 3 evidence.
 
 ## CI evidence for `d2b932eb4a2ba41af2580f90c71482c57855df73`
 
