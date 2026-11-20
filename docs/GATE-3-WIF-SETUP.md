@@ -22,6 +22,7 @@ google.subject=assertion.sub
 attribute.repository_id=assertion.repository_id
 attribute.ref=assertion.ref
 attribute.workflow_ref=assertion.workflow_ref
+attribute.job_workflow_ref=assertion.job_workflow_ref
 ```
 
 Provider attribute condition (adjust only if the actual GitHub token claims differ; validate by a controlled token-claim inspection):
@@ -29,7 +30,8 @@ Provider attribute condition (adjust only if the actual GitHub token claims diff
 ```
 assertion.repository_id == '1438189314' &&
 assertion.ref == 'refs/heads/work/gate-3-google-email-link' &&
-assertion.workflow_ref == 'Akshayshetye37/Aurelia-apk/.github/workflows/gate-3-google-email-link-staging.yml@refs/heads/work/gate-3-google-email-link'
+assertion.workflow_ref == 'Akshayshetye37/Aurelia-apk/.github/workflows/gate-3-google-email-link-staging.yml@refs/heads/work/gate-3-google-email-link' &&
+assertion.job_workflow_ref == 'Akshayshetye37/Aurelia-apk/.github/workflows/recovery-staging-deploy.yml@refs/heads/work/gate-3-google-email-link'
 ```
 
 Do not trust the issuer alone. Use immutable repository ID and restrict the branch and workflow. The owner must confirm the exact provider condition in Google Cloud.
