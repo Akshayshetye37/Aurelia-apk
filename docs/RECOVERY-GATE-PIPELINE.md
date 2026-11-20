@@ -19,7 +19,7 @@ Set these at repository or environment scope as indicated:
 | Variable | Scope | Purpose |
 |---|---|---|
 | `GATE_CONTROL_BRANCH` | Repository | `integration/ledger-patch` (Gates 1, 2, 4, 5, 6 and manual attestations) |
-| `CANDIDATE_BRANCH` | Repository | `fix/backup-consolidated-integration` |
+| Candidate branch | Workflow constant | `fix/backup-consolidated-integration`; not overridable |
 | `GCP_PROJECT_ID` | `recovery-staging` environment | Staging Firebase/GCP project ID |
 | `PRODUCTION_GCP_PROJECT_ID` | Repository / `recovery-production-audit` | Production project ID; must differ from staging |
 | `GCP_REGION` | `recovery-staging` environment | Staging Functions region |
