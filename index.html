@@ -1146,7 +1146,7 @@ function decodeBackupField(value,expectedLength,label){
  return bytes;
 }
 async function decryptBackupEnvelope(envelope,filename){
- const validName=name=>typeof name==='string'&&/^aurelia-backup-\\d{4}-\\d{2}-\\d{2}-[a-f0-9]{64}\\.json$/i.test(name);
+ const validName=name=>typeof name==='string'&&/^aurelia-backup-\d{4}-\d{2}-\d{2}-[a-f0-9]{64}\.json$/i.test(name);
  if(envelope.format!=='AURELIA-PMS-ENCRYPTED-BACKUP'||![1,2].includes(envelope.v)||envelope.application!=='com.aurelia.pms'||envelope.cipher!=='AES-256-GCM'||envelope.kdf!=='PBKDF2-HMAC-SHA256'||envelope.iterations!==BACKUP_KDF_ITERATIONS||!validName(envelope.name)||(filename&&envelope.name!==filename))throw new Error('Encrypted backup header is invalid or unsupported.');
  const salt=decodeBackupField(envelope.salt,16,'salt'),iv=decodeBackupField(envelope.iv,12,'nonce'),wrapIv=decodeBackupField(envelope.wrapIv,12,'key-wrap nonce'),wrappedKey=decodeBackupField(envelope.wrappedKey,48,'wrapped key'),ciphertext=decodeBackupField(envelope.ciphertext,null,'ciphertext');
  if(ciphertext.length<16||ciphertext.length>25*1024*1024)throw new Error('Encrypted backup has invalid cryptographic fields or size.');
