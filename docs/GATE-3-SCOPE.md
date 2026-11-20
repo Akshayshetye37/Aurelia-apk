@@ -49,6 +49,16 @@ Authentication establishes the signed-in account identity. It does **not** autho
 - Candidate SHA, APK signer, APK hashes, workflow runs, test logs and evidence are bound to the exact qualified commit.
 - Physical-device qualification records device model, Android version/build, app version, candidate SHA and test outcomes.
 
+## Firebase Android Email-Link compatibility
+
+Firebase's current Android guide uses Firebase Hosting-based App Links; the legacy Firebase Dynamic Links email-link flow shut down on **August 25, 2025**. Current Android Authentication SDK guidance requires Firebase Auth Android SDK **23.2.0+** (or Firebase BoM **33.9.0+**) for the migrated Hosting-based flow. The candidate Android patch script pins Firebase BoM **34.12.0**, which is above that documented minimum, and adds Hosting-domain App Link filters for `PROJECT_ID.firebaseapp.com` and `PROJECT_ID.web.app`. This source-level compatibility check is not an end-to-end qualification.
+
+Gate 3 must verify the staging Firebase Hosting domain, authorized domain configuration, Android package and signing SHA-1/SHA-256, App Link handling, link completion, expiry and replay. No Firebase Dynamic Links domain or `dynamicLinkDomain` parameter may be used.
+
+References:
+- [Firebase Android Email-Link Authentication](https://firebase.google.com/docs/auth/android/email-link-auth)
+- [Firebase Email-Link Migration from Dynamic Links](https://firebase.google.com/docs/auth/android/email-link-migration)
+
 ## Qualification status
 
 Gate 3 remains **NOT QUALIFIED** until implementation, staging deployment, automated security tests, exact-SHA evidence and physical-device matrix all pass. Owner-controlled cloud configuration and physical-device testing are external prerequisites and must not be represented as completed by repository changes.
