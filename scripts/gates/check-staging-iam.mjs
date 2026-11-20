@@ -9,6 +9,15 @@ export function stagingRoles(policy, serviceAccount) {
   const member = 'serviceAccount:' + serviceAccount;
   return [...new Set((policy.bindings ?? []).filter(binding => (binding.members ?? []).includes(member)).map(binding => binding.role))].sort();
 }
+export function validateWifProvider(providerConfig, expectedCondition) {
+  if (providerConfig.attributeMapping?.['attribute.repository'] !== 'assertion.repository') throw new Error('WIF provider does not map repository identity from GitHub assertion');
+  if (normalizeCondition(providerConfig.attributeCondition) !== normalizeCondition(expectedCondition)) throw new Error('WIF provider condition is not exact repository/ref restriction');
+}
+export function validateWifBindings(policy, expectedMember) {
+  const bindings = (policy.bindings ?? []).filter(binding => binding.role === 'roles/iam.workloadIdentityUser');
+  const members = bindings.flatMap(binding => binding.members ?? []);
+  if (bindings.length !== 1 || members.length !== 1 || members[0] !== expectedMember) throw new Error('WIF service-account policy contains missing or broader workload identity principals');
+}
 export function validateStagingRoles(actual, allowed) {
   if (!Array.isArray(allowed) || !allowed.length || allowed.includes('UNCONFIGURED')) throw new Error('staging deploy role allowlist is not reviewed/configured');
   const extra = actual.filter(role => !allowed.includes(role));
@@ -33,11 +42,10 @@ function main() {
   const providerProjectNumber = match[1], poolId = match[2], providerId = match[3];
   const expectedCondition = "assertion.repository == '" + config.expectedRepository + "' && assertion.ref == '" + config.expectedRef + "'";
   const providerConfig = gcloud(['iam', 'workload-identity-pools', 'providers', 'describe', providerId, '--location=global', '--workload-identity-pool', poolId, '--project', provider.split('/')[1]]);
-  if (normalizeCondition(providerConfig.attributeCondition) !== normalizeCondition(expectedCondition)) fail('WIF provider condition does not exactly restrict repository and branch');
+  try { validateWifProvider(providerConfig, expectedCondition); } catch (error) { fail(error.message); }
   const saPolicy = gcloud(['iam', 'service-accounts', 'get-iam-policy', deployServiceAccount, '--project', stagingProject]);
   const expectedMember = 'principalSet://iam.googleapis.com/projects/' + providerProjectNumber + '/locations/global/workloadIdentityPools/' + poolId + '/attribute.repository/' + config.expectedRepository;
-  const wifBindings = (saPolicy.bindings ?? []).filter(binding => binding.role === 'roles/iam.workloadIdentityUser' && (binding.members ?? []).includes(expectedMember));
-  if (wifBindings.length !== 1) fail('staging deploy service account lacks the exact repository-bound WIF principal');
+  try { validateWifBindings(saPolicy, expectedMember); } catch (error) { fail(error.message); }
   const stagingPolicy = gcloud(['projects', 'get-iam-policy', stagingProject]);
   validateStagingRoles(stagingRoles(stagingPolicy, deployServiceAccount), config.allowedStagingDeployRoles);
   const productionPolicy = gcloud(['projects', 'get-iam-policy', productionProject]);
