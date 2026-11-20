@@ -1144,7 +1144,7 @@ async function verifyBackupManifestPayload(decoded,manifest){
 async function decryptBackupEnvelope(envelope,filename){
  const fail=()=>new Error('Backup could not be decrypted or validated. No PMS records were changed.');
  try{
-  if(!envelope||envelope.format!=='AURELIA-PMS-ENCRYPTED-BACKUP'||![1,2,3].includes(envelope.v)||envelope.application!=='com.aurelia.pms'||envelope.cipher!=='AES-256-GCM'||envelope.kdf!=='PBKDF2-HMAC-SHA256'||typeof envelope.name!=='string'||!/^aurelia-backup-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-f0-9]{64}\\.json$/i.test(envelope.name)||typeof filename!=='string'||envelope.name!==filename)throw fail();
+  if(!envelope||envelope.format!=='AURELIA-PMS-ENCRYPTED-BACKUP'||![1,2,3].includes(envelope.v)||envelope.application!=='com.aurelia.pms'||envelope.cipher!=='AES-256-GCM'||envelope.kdf!=='PBKDF2-HMAC-SHA256'||typeof envelope.name!=='string'||!/^aurelia-backup-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-f0-9]{64}\.json$/i.test(envelope.name)||typeof filename!=='string'||envelope.name!==filename)throw fail();
   const iterations=envelope.iterations;
   if(!Number.isSafeInteger(iterations)||iterations<600000||iterations>1000000||(envelope.v<3&&iterations!==BACKUP_KDF_ITERATIONS))throw fail();
   const salt=backupUnB64(envelope.salt),iv=backupUnB64(envelope.iv),wrapIv=backupUnB64(envelope.wrapIv),wrappedKey=backupUnB64(envelope.wrappedKey),ciphertext=backupUnB64(envelope.ciphertext);
