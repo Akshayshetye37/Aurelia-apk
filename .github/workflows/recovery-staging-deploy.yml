@@ -151,6 +151,17 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
 
+      - name: Verify WIF trust and staging IAM isolation
+        shell: bash
+        env:
+          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER || secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ vars.STAGING_DEPLOY_SERVICE_ACCOUNT || secrets.STAGING_DEPLOY_SERVICE_ACCOUNT }}
+          STAGING_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          node scripts/gates/check-staging-iam.mjs
+
       - name: Load authoritative recovery callable inventory
         shell: bash
         run: |
