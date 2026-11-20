@@ -451,7 +451,7 @@ Cloud onboarding is not complete until the following are verified:
 - **Staging deployment allowlist:** `scripts/gates/callables.json` includes only `exchangeOwnerEmailLink` and `confirmRecoveryOwnerBinding`. The workflow deploys named functions only; it does not deploy the full Functions package.
 - **Phone/SMS callables:** `registerRecoveryPhone`, `activateRecoveryPhoneChange`, and `cancelRecoveryPhoneChange` are explicitly excluded from Gate 3 deployment and probes. Additional recovery-device callables are also excluded.
 - **Workflow:** `.github/workflows/gate-3-google-email-link-staging.yml`, dispatched from `work/gate-3-google-email-link`.
-- **Frozen candidate:** candidate SHA must be reachable from `fix/backup-consolidated-integration`; it is validated before deployment and before PASS evidence.
+- **Frozen candidate:** candidate SHA must equal the current HEAD of `fix/backup-consolidated-integration`; it is validated before deployment and before PASS evidence.
 - **Gate 3 status:** **NOT QUALIFIED**. Automated deployment, App Check negative probes, authenticated Google Sign-In/Email-Link, exact-SHA evidence and physical-device matrix are not all complete.
 
 The former SMS-named Gate 3 workflow and qualification document are retired. Gate 2 OTP/recovery instrumentation remains a separate gate and is not Gate 3 evidence.
