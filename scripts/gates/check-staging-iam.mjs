@@ -3,21 +3,21 @@ import { execFileSync } from 'node:child_process';
 import { fail } from './lib.mjs';
 
 export function normalizeCondition(value) {
-  return String(value ?? '').replace(/\s+/g, ' ').trim();
+  return String(value ?? '').replace(/\\s+/g, ' ').trim();
 }
 export function stagingRoles(policy, serviceAccount) {
-  const member = \`serviceAccount:\${serviceAccount}\`;
+  const member = 'serviceAccount:' + serviceAccount;
   return [...new Set((policy.bindings ?? []).filter(binding => (binding.members ?? []).includes(member)).map(binding => binding.role))].sort();
 }
 export function validateStagingRoles(actual, allowed) {
   if (!Array.isArray(allowed) || !allowed.length || allowed.includes('UNCONFIGURED')) throw new Error('staging deploy role allowlist is not reviewed/configured');
   const extra = actual.filter(role => !allowed.includes(role));
   const missing = allowed.filter(role => !actual.includes(role));
-  if (extra.length || missing.length) throw new Error(\`staging deploy IAM roles differ from reviewed allowlist; extra=\${extra.join(',') || 'none'}; missing=\${missing.join(',') || 'none'}\`);
+  if (extra.length || missing.length) throw new Error('staging deploy IAM roles differ from reviewed allowlist; extra=' + (extra.join(',') || 'none') + '; missing=' + (missing.join(',') || 'none'));
 }
 function gcloud(args) {
   try { return JSON.parse(execFileSync('gcloud', [...args, '--format=json'], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })); }
-  catch (error) { fail(\`Google Cloud policy verification failed: \${error.stderr?.toString().slice(0, 400) || error.message}\`); }
+  catch (error) { fail('Google Cloud policy verification failed: ' + (error.stderr?.toString().slice(0, 400) || error.message)); }
 }
 function main() {
   const configPath = process.argv[2] ?? 'scripts/gates/staging-iam.json';
@@ -28,14 +28,14 @@ function main() {
   const stagingProject = process.env.STAGING_PROJECT_ID ?? '';
   const productionProject = process.env.PRODUCTION_PROJECT_ID ?? '';
   if (!provider || !deployServiceAccount || !stagingProject || !productionProject || stagingProject === productionProject) fail('staging IAM verification inputs are incomplete or staging equals production');
-  const match = provider.match(/^projects\/(\d+)\/locations\/global\/workloadIdentityPools\/([A-Za-z0-9_-]+)\/providers\/([A-Za-z0-9_-]+)$/);
+  const match = provider.match(/^projects\\/(\\d+)\\/locations\\/global\\/workloadIdentityPools\\/([A-Za-z0-9_-]+)\\/providers\\/([A-Za-z0-9_-]+)$/);
   if (!match) fail('WIF provider resource name is invalid');
-  const [, providerProjectNumber, poolId, providerId] = match;
-  const expectedCondition = \`assertion.repository == '\${config.expectedRepository}' && assertion.ref == '\${config.expectedRef}'\`;
+  const providerProjectNumber = match[1], poolId = match[2], providerId = match[3];
+  const expectedCondition = "assertion.repository == '" + config.expectedRepository + "' && assertion.ref == '" + config.expectedRef + "'";
   const providerConfig = gcloud(['iam', 'workload-identity-pools', 'providers', 'describe', providerId, '--location=global', '--workload-identity-pool', poolId, '--project', provider.split('/')[1]]);
   if (normalizeCondition(providerConfig.attributeCondition) !== normalizeCondition(expectedCondition)) fail('WIF provider condition does not exactly restrict repository and branch');
   const saPolicy = gcloud(['iam', 'service-accounts', 'get-iam-policy', deployServiceAccount, '--project', stagingProject]);
-  const expectedMember = \`principalSet://iam.googleapis.com/projects/\${providerProjectNumber}/locations/global/workloadIdentityPools/\${poolId}/attribute.repository/\${config.expectedRepository}\`;
+  const expectedMember = 'principalSet://iam.googleapis.com/projects/' + providerProjectNumber + '/locations/global/workloadIdentityPools/' + poolId + '/attribute.repository/' + config.expectedRepository;
   const wifBindings = (saPolicy.bindings ?? []).filter(binding => binding.role === 'roles/iam.workloadIdentityUser' && (binding.members ?? []).includes(expectedMember));
   if (wifBindings.length !== 1) fail('staging deploy service account lacks the exact repository-bound WIF principal');
   const stagingPolicy = gcloud(['projects', 'get-iam-policy', stagingProject]);
