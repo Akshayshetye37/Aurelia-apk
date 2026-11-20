@@ -82,3 +82,10 @@ A future Pay Bridge backup must use a distinct application identifier and its ow
 The owner-authorized Drive adapter described above is currently draft PR #49 and is not integrated on `integration/ledger-patch`. PR #50 and #51 contain overlapping hardening/implementation work; consolidate them into one reviewed branch before merge.
 
 The latest observed PR #49 candidate SHA is `a189a36f8541f7cbd095980869ef548985339385`. Its PMS/web packaging, R1, Gate lint, settlement and Recovery Functions checks passed; OTP Recovery Android Instrumentation failed. Real Google OAuth, live Drive operations, account switching, permission revocation and second-device restore remain unqualified. The schedule is best-effort foreground catch-up, not guaranteed unattended backup.
+
+
+## Encrypted envelope v3 hardening
+
+New encrypted exports use envelope version 3. AES-GCM authenticated additional data binds the envelope version, selected filename, and canonical manifest. Renaming a file or changing the envelope version therefore invalidates authentication. Import validates canonical Base64, exact salt/IV/wrapped-key lengths, ciphertext size, manifest shape and record counts, and a bounded integer PBKDF2 iteration count (600,000–1,000,000). Legacy v1/v2 envelopes remain readable only with their legacy iteration value and legacy AAD rules; they are not re-emitted. Validation/decryption failures use a generic error and do not apply PMS state. Retention recognizes v3 encrypted files.
+
+Restore stages and validates the decoded snapshot before replacing live state. The current restore implementation captures application state and photo archive, performs the canonical durable write, verifies exact repository read-back, and rolls back both state and photos on failure. The automated regression currently asserts this rollback/read-back contract in source; process-kill interruption and real-device restore qualification remain outstanding.
