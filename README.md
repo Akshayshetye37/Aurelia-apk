@@ -52,7 +52,7 @@ The owner-account Google Drive backup, audit documentation, Android authorizatio
 - SAF is a separate user-selected file destination/payment-related flow; it is not Google Drive OAuth.
 - Scheduling is foreground/catch-up best effort. Android force-stop or process restrictions can delay a snapshot until the app runs again; this is not WhatsApp-equivalent guaranteed background backup.
 
-**PR #55 CI evidence (exact head):** PMS source/web packaging, Gate pipeline lint, R1 local-first, settlement foundation, Recovery Functions and OTP Recovery Android Instrumentation passed on the earlier PR head. A connected-account verification regression test was added afterward and its exact-head checks are pending. Do not reuse earlier check results for the new SHA.
+**PR #55 CI evidence:** previously reported checks belong to earlier candidate SHAs. The README/auth-policy update is now on PR head `a7ef3864b5ce504a53bac1992db01248b7b3f058`; no workflow runs were returned for this exact head at the time of this update. Do not reuse older check results.
 
 **Gate 3 remains externally blocked:** the historical staging WIF authentication run failed because the workflow received neither a usable `workload_identity_provider` nor `credentials_json`. The consolidated workflow now validates the provider resource and service-account email before attempting auth, but repository/environment configuration and Google Cloud IAM/provider trust must be supplied by the owner. No secrets were created or modified.
 
@@ -472,6 +472,6 @@ Current legacy Gate 3 components include:
 - Repository: https://github.com/Akshayshetye37/Aurelia-apk
 - Main integration branch: `integration/ledger-patch`
 - Consolidated candidate branch: `fix/backup-consolidated-integration`
-- PR #55: https://github.com/Akshayshetye37/Aurelia-apk/pull/55 (open, unmerged; candidate SHA previously recorded as `5c640b39891463224b5b6643707bbff71204d0ce`).
+- PR #55: https://github.com/Akshayshetye37/Aurelia-apk/pull/55 (open, unmerged; current candidate HEAD `a7ef3864b5ce504a53bac1992db01248b7b3f058`, with README/auth-policy update checks pending).
 
 This README update is being committed to the candidate branch, not directly to the integration branch. Re-check live PR/head and CI before relying on the status above.
