@@ -4,7 +4,7 @@ import { validateGate3Evidence } from '../scripts/gates/validate-gate3-evidence.
 
 const sha = 'a'.repeat(40);
 const hash = 'b'.repeat(64);
-const details = { candidateSha: sha, apkSha256: hash, testApkSha256: hash, signerSha256: hash, stagingDeployment: 'QUALIFIED', apkBuildAndSigning: 'QUALIFIED', callables: ['alpha'] };
+const details = { candidateSha: sha, stagingProjectId: 'aurelia-stage-12345', productionProjectId: 'aurelia-prod-12345', stagingRunId: 12345, apkSha256: hash, testApkSha256: hash, signerSha256: hash, stagingDeployment: 'QUALIFIED', apkBuildAndSigning: 'QUALIFIED', callables: ['alpha'] };
 const deployedInventory = { candidateSha: sha, inventory: ['alpha'], deployed: ['alpha'], reconciled: true };
 const probes = [
   { callable: 'alpha', case: 'no App Check token', status: 401 },
@@ -16,6 +16,12 @@ test('valid staging evidence does not infer physical qualification', () => {
   assert.equal(status.APPCHECK_NEGATIVE_PROBES, 'QUALIFIED');
   assert.equal(status.PHYSICAL_SMS_RECOVERY, 'NOT QUALIFIED');
   assert.equal(status.GATE_3_OVERALL, 'NOT QUALIFIED');
+});
+test('rejects deployed inventory SHA mismatch', () => assert.throws(() => validateGate3Evidence({ probes, details, candidateSha: sha, deployedInventory: { ...deployedInventory, candidateSha: 'c'.repeat(40) } }), /not bound to candidate SHA/));
+test('rejects unreconciled deployed inventory', () => assert.throws(() => validateGate3Evidence({ probes, details, candidateSha: sha, deployedInventory: { ...deployedInventory, reconciled: false } }), /not bound to candidate SHA/));
+test('rejects missing test APK and signer hashes', () => {
+  assert.throws(() => validateGate3Evidence({ probes, details: { ...details, testApkSha256: '' }, candidateSha: sha, deployedInventory }), /testApkSha256/);
+  assert.throws(() => validateGate3Evidence({ probes, details: { ...details, signerSha256: '' }, candidateSha: sha, deployedInventory }), /signerSha256/);
 });
 test('rejects missing deployed inventory evidence', () => assert.throws(() => validateGate3Evidence({ probes, details, candidateSha: sha }), /deployed callable inventory evidence is missing/));
 test('rejects zero probes', () => assert.throws(() => validateGate3Evidence({ probes: [], details, candidateSha: sha }), /at least one probe/));
