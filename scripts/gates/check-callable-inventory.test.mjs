@@ -12,7 +12,7 @@ function run(inventory, deployed) {
     const inv = path.join(dir, 'inventory.json'), dep = path.join(dir, 'deployed.json');
     fs.writeFileSync(inv, JSON.stringify({ callables: inventory }));
     fs.writeFileSync(dep, JSON.stringify(deployed.map(name => ({ name: `projects/p/locations/r/functions/${name}` }))));
-    return execFileSync(process.execPath, [script.pathname, inv, dep], { encoding: 'utf8' });
+    return execFileSync(process.execPath, [script.pathname, inv, dep], { encoding: 'utf8', cwd: dir });
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 test('accepts exact deployed inventory', () => assert.match(run(['a', 'b'], ['a', 'b']), /reconciled/));
