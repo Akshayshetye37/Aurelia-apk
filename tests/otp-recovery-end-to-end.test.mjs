@@ -269,6 +269,7 @@ test('Gate 3 staging deployment uses an email-link allowlist and does not deploy
   assert.match(staging, /gcloud functions delete/);
   assert.match(staging, /candidate\/functions\/src\/index\.ts/);
   assert.match(staging, /JSON\.stringify\(exported\) !== JSON\.stringify\(inventoried\)/);
+  assert.match(staging, /android:pathPrefix=\"\/__\/auth\/links\"/);
   const inventory = JSON.parse(read('scripts/gates/callables.json'));
   assert.deepEqual(inventory.gate3.excluded, [
     'createRecoveryAttestationChallenge', 'verifyRecoveryDeviceAttestation', 'registerRecoveryPhone',
