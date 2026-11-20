@@ -297,9 +297,9 @@ jobs:
         env:
           RECOVERY_GRANT_PUBLIC_KEYS_JSON: '{}'
           AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-staging-release.jks
-          STAGING_KEYSTORE_PASSWORD: ${{ secrets.STAGING_KEYSTORE_PASSWORD }}
-          STAGING_KEY_ALIAS: ${{ secrets.STAGING_KEY_ALIAS }}
-          STAGING_KEY_PASSWORD: ${{ secrets.STAGING_KEY_PASSWORD }}
+          AURELIA_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.STAGING_KEYSTORE_PASSWORD }}
+          AURELIA_RELEASE_KEY_ALIAS: ${{ secrets.STAGING_KEY_ALIAS }}
+          AURELIA_RELEASE_KEY_PASSWORD: ${{ secrets.STAGING_KEY_PASSWORD }}
           AURELIA_ANDROID_TEST_BUILD_TYPE: release
         run: |
           set -euo pipefail
