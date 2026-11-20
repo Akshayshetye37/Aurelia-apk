@@ -263,7 +263,14 @@ test('Gate 3 staging deployment uses an email-link allowlist and does not deploy
   const production = read('.github/workflows/recovery-production-flag-audit.yml');
   assert.match(staging, /firebase deploy --only "\$GATE3_DEPLOY_ONLY"/);
   assert.match(staging, /functions=\(exchangeOwnerEmailLink confirmRecoveryOwnerBinding\)/);
-  assert.doesNotMatch(staging, /PHONE_PEPPER|RECOVERY_SIGNING_KEY_PKCS8|registerRecoveryPhone|verifyRecoveryDeviceAttestation|registerRecoveryOwnerDevice/);
+  assert.match(staging, /Retire excluded recovery callables from staging/);
+  assert.match(staging, /gcloud functions delete/);
+  const inventory = JSON.parse(read('scripts/gates/callables.json'));
+  assert.deepEqual(inventory.gate3.excluded, [
+    'createRecoveryAttestationChallenge', 'verifyRecoveryDeviceAttestation', 'registerRecoveryPhone',
+    'registerRecoveryOwnerDevice', 'issueRecoveryGrant', 'consumeRecoveryGrant',
+    'cancelRecoveryRequest', 'cancelRecoveryPhoneChange', 'activateRecoveryPhoneChange',
+  ]);
   assert.match(production, /Read-only verification of the actual deployed runtime identities/);
   assert.match(production, /gcloud functions describe "\$function_name"/);
   assert.match(production, /roles\/secretmanager\.secretAccessor/);
