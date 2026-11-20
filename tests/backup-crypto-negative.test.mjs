@@ -36,7 +36,7 @@ const context = vm.createContext({
   readBackupVault: async () => null,
   prompt: () => "correct horse battery staple"
 });
-vm.runInContext(source + "\\nthis.decryptBackupEnvelope=decryptBackupEnvelope;this.backupPasswordKey=backupPasswordKey;this.backupB64=backupB64;", context);
+vm.runInContext(source + "\\nthis.decryptBackupEnvelope=decryptBackupEnvelope;this.backupPasswordKey=backupPasswordKey;this.backupB64=backupB64;this.sha256Hex=sha256Hex;", context);
 
 const password = "correct horse battery staple";
 const payload = JSON.stringify({ v: 4, data: { rooms: [], b: [], g: [], t: [], sales: [], exp: [], inv: [], led: [], aud: [] } });
