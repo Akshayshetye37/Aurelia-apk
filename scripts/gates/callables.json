@@ -1,6 +1,6 @@
 {
   "gate3": {
-    "scope": "Google Sign-In + Firebase Email Link; no SMS or phone authentication",
+    "scope": "Recovery-owner Email-Link verification callables only; NOT PMS app sign-in. No SMS/phone authentication.",
     "deploy": [
       "exchangeOwnerEmailLink",
       "confirmRecoveryOwnerBinding"
