@@ -46,7 +46,7 @@ Authentication establishes the signed-in account identity. It does **not** autho
 - Staging and production Firebase/GCP project identities are distinct and explicitly verified.
 - WIF trust is restricted to the repository and intended branch/workflow; unauthorized branch/fork negative tests must fail.
 - Deployment and runtime IAM are least privilege.
-- Candidate SHA, APK signer, APK hashes, workflow runs, test logs and evidence are bound to the exact qualified commit.
+- Candidate SHA, APK signer, APK hashes, workflow runs, test logs and evidence are bound to the exact qualified commit. The candidate SHA must equal the current HEAD of `fix/backup-consolidated-integration` at qualification time; moving that branch invalidates evidence.
 - Physical-device qualification records device model, Android version/build, app version, candidate SHA and test outcomes.
 
 ## Firebase Android Email-Link compatibility
