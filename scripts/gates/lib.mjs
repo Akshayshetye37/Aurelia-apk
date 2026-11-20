@@ -111,10 +111,17 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   if (!fs.existsSync(recordPath)) fail(`gate ${gate}: evidence record missing`);
   let record;
   try { record = JSON.parse(fs.readFileSync(recordPath, 'utf8')); } catch { fail(`gate ${gate}: evidence record is invalid JSON`); }
-  if (record.gate !== String(gate) || record.status !== 'PASS' ||
+  const requiredRecordStatus = String(gate) === '3' ? 'QUALIFIED' : 'PASS';
+  if (record.gate !== String(gate) || record.status !== requiredRecordStatus ||
       record.runId !== Number(runId) || record.repository !== repo || record.controlSha !== run.head_sha ||
-      !SHA_RE.test(record.candidateSha ?? '')) fail(`gate ${gate}: record does not match its run`);
+      !SHA_RE.test(record.candidateSha ?? '')) fail(`gate ${gate}: record status/evidence does not qualify or does not match its run`);
   if (record.runAttempt !== Number(run.run_attempt)) fail(`gate ${gate}: run attempt mismatch`);
+  if (String(gate) === '3') {
+    const statuses = record.details?.statuses;
+    const requiredStatuses = ['STAGING_DEPLOYMENT', 'APPCHECK_NEGATIVE_PROBES', 'APK_BUILD_AND_SIGNING', 'PHYSICAL_SMS_RECOVERY', 'GATE_3_OVERALL'];
+    if (!statuses || requiredStatuses.some(name => !['QUALIFIED', 'NOT QUALIFIED'].includes(statuses[name])) ||
+        statuses.GATE_3_OVERALL !== record.status) fail('gate 3: qualification status fields are missing or inconsistent');
+  }
   return record;
 }
 

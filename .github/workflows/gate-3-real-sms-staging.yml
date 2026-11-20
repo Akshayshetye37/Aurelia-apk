@@ -159,7 +159,7 @@ jobs:
           mkdir -p apks evidence
 
           for file in app-release.apk app-release-androidTest.apk \
-                      apk-sha256.txt apk-certificate.txt androidTest-certificate.txt; do
+                      apk-sha256.txt apk-certificate.txt androidTest-certificate.txt callable-inventory.json; do
             test -s "staging-artifacts/$file" || {
               echo "::error::Missing staging artifact: $file"
               exit 1
@@ -186,6 +186,7 @@ jobs:
 
           cp staging-artifacts/app-release.apk apks/app.apk
           cp staging-artifacts/app-release-androidTest.apk apks/test.apk
+          cp staging-artifacts/callable-inventory.json evidence/callable-inventory.json
           printf '%s\n' "$actual_app" > apks/app.sha256
           printf '%s\n' "$actual_test" > apks/test.sha256
 
@@ -219,23 +220,31 @@ jobs:
             --arg app "$app_hash" \
             --arg test "$test_hash" \
             --arg project "$STAGING_PROJECT_ID" \
+            --arg production "$PRODUCTION_PROJECT_ID" \
             --arg signer "$signer" \
             --arg candidate "$CANDIDATE_SHA" \
             --arg candidateBranch "$CANDIDATE_BRANCH" \
             --arg controlBranch "$GITHUB_REF_NAME" \
             --arg deploymentRun "$GITHUB_RUN_ID" \
+            --slurpfile inventory scripts/gates/callables.json \
             '{
               apkSha256: $app,
               testApkSha256: $test,
               stagingProjectId: $project,
+              productionProjectId: $production,
               signerSha256: $signer,
               candidateSha: $candidate,
               candidateBranch: $candidateBranch,
               controlBranch: $controlBranch,
-              stagingRunId: ($deploymentRun | tonumber)
+              stagingRunId: ($deploymentRun | tonumber),
+              stagingDeployment: "QUALIFIED",
+              apkBuildAndSigning: "QUALIFIED",
+              callables: $inventory[0].callables,
+              excluded: []
             }' > evidence/details.json
 
           test -s evidence/probes.json
+          node scripts/gates/validate-gate3-evidence.mjs
           node scripts/gates/write-evidence.mjs \
             --gate 3 \
             --sha "$CANDIDATE_SHA" \

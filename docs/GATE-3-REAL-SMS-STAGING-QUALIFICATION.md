@@ -14,6 +14,16 @@ Create the GitHub Environment `recovery-staging` and configure:
 
 Run `Recovery staging deployment and APK` only after the private attestation verifier is deployed. The workflow sets `RECOVERY_ENABLED=true` only in this staging project, deploys Functions, probes missing/invalid App Check tokens on every recovery callable, then builds a release-signed app APK and matching release-signed androidTest APK with the staging Firebase configuration. It verifies that both APKs use the configured app signer and uploads both artifacts plus their SHA-256/certificate fingerprints (7-day retention). Production remains disabled.
 
+## Gate 3 hardening contract
+
+- The authoritative callable inventory is `scripts/gates/callables.json`; both staging deploy probes and evidence probes consume it. After deployment, the gate reconciles it with the real Gen2 Functions list and fails on missing or extra callables.
+- The production project ID must be pinned in `scripts/gates/production-project.json`. The current value is intentionally `UNCONFIGURED` because the authoritative ID was not present in this repository; staging qualification fails closed until a reviewer replaces it with the actual production ID. The GitHub Environment production ID must match and staging must differ.
+- Evidence is validated by `scripts/gates/validate-gate3-evidence.mjs` before the evidence writer. Zero probes, missing callable cases, invalid HTTP results, mismatched candidate SHA, missing APK/signer hashes, missing callable inventory and unexplained exclusions are rejected.
+- Evidence reports separate statuses for staging deployment, App Check negative probes, APK build/signing, physical SMS recovery and overall Gate 3. Successful staging evidence is not overall qualification.
+- Physical SMS recovery requires a committed matrix tied to the exact candidate SHA with reviewer, signed timestamp and matrix commit reference. See `docs/GATE-3-PHYSICAL-DEVICE-MATRIX-TEMPLATE.md`.
+- Emulator concurrency tests exercise 20 parallel rate-limit requests and 20 parallel grant-consumption attempts using emulator Firestore transactions. These are test additions; they are not considered passing until executed.
+- WIF trust restrictions and staging-vs-production IAM isolation remain live Google Cloud qualification blockers. Repository checks alone cannot prove those policies.
+
 ## Real-device test matrix
 
 | ID | Test | Required result |

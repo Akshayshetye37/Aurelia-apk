@@ -1,0 +1,27 @@
+{
+  "candidateSha": "REPLACE_WITH_EXACT_40_CHARACTER_CANDIDATE_SHA",
+  "status": "NOT QUALIFIED",
+  "device": {
+    "redactedLabel": "REPLACE",
+    "model": "REPLACE",
+    "androidApi": 0,
+    "apkSha256": "REPLACE_WITH_64_CHARACTER_APK_SHA256"
+  },
+  "cases": {
+    "G3-01": "NOT RUN",
+    "G3-02": "NOT RUN",
+    "G3-03": "NOT RUN",
+    "G3-04": "NOT RUN",
+    "G3-05": "NOT RUN",
+    "G3-06": "NOT RUN",
+    "G3-07": "NOT RUN",
+    "G3-08": "NOT RUN",
+    "G3-09": "NOT RUN",
+    "G3-10": "NOT RUN"
+  },
+  "signoff": {
+    "reviewer": "",
+    "signedAt": "",
+    "commit": "REPLACE_WITH_EXACT_CANDIDATE_SHA"
+  }
+}
