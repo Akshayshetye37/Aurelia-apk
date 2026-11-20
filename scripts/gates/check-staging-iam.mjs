@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { fail } from './lib.mjs';
 
 export function normalizeCondition(value) {
-  return String(value ?? '').replace(/\\s+/g, ' ').trim();
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 export function stagingRoles(policy, serviceAccount) {
   const member = 'serviceAccount:' + serviceAccount;
@@ -28,7 +28,7 @@ function main() {
   const stagingProject = process.env.STAGING_PROJECT_ID ?? '';
   const productionProject = process.env.PRODUCTION_PROJECT_ID ?? '';
   if (!provider || !deployServiceAccount || !stagingProject || !productionProject || stagingProject === productionProject) fail('staging IAM verification inputs are incomplete or staging equals production');
-  const match = provider.match(/^projects\\/(\\d+)\\/locations\\/global\\/workloadIdentityPools\\/([A-Za-z0-9_-]+)\\/providers\\/([A-Za-z0-9_-]+)$/);
+  const match = provider.match(/^projects\/(\d+)\/locations\/global\/workloadIdentityPools\/([A-Za-z0-9_-]+)\/providers\/([A-Za-z0-9_-]+)$/);
   if (!match) fail('WIF provider resource name is invalid');
   const providerProjectNumber = match[1], poolId = match[2], providerId = match[3];
   const expectedCondition = "assertion.repository == '" + config.expectedRepository + "' && assertion.ref == '" + config.expectedRef + "'";
