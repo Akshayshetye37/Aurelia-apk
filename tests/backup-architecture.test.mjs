@@ -51,9 +51,9 @@ test("all new backup destinations receive a portable AES-256-GCM envelope", () =
   assert.match(html, /BACKUP_KDF_ITERATIONS=600000/);
   assert.match(html, /encryptBackupPayload\(snap\.payload,snap\.name\)/);
   assert.match(html, /decryptBackupPayload\(payload,fileName\)/);
-  assert.match(html, /manifest=\{formatVersion:2,name,payloadSha256/);
-  assert.match(html, /backup-v2\|\x27\+JSON\.stringify\(envelope\.manifest\)/);
-  assert.match(html, /envelope\.v===2/);
+  assert.match(html, /manifest=\{formatVersion:3,name,payloadSha256/);
+  assert.match(html, /backup-v3\|\x27\+envelope.v\+\x27\|\x27\+filename\+\x27\|\x27\+JSON.stringify\(envelope\.manifest\)|\x27\+JSON\.stringify\(envelope\.manifest\)/);
+  assert.match(html, /envelope.v>=2/);
   assert.match(html, /Backup manifest verification failed/);
   assert.match(html, /payloadBytes/);
   assert.match(html, /recordCounts/);
@@ -67,7 +67,7 @@ test('cached backup keys cannot bypass manifest hash, size and record-count veri
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   assert.match(html, /async function verifyBackupManifestPayload/);
   assert.match(html, /constantTimeHexEqual\(await sha256Hex\(decoded\),manifest\.payloadSha256\)/);
-  assert.match(html, /if\(envelope\.v===2\)await verifyBackupManifestPayload\(decoded,envelope\.manifest\)/);
+  assert.match(html, /if\(envelope.v>=2\)await verifyBackupManifestPayload\(decoded,envelope\.manifest\)/);
   assert.match(html, /finally\{cachedPlain\.fill\(0\)\}/);
   assert.match(html, /finally\{plain\.fill\(0\)\}/);
 });
