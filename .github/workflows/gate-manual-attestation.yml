@@ -41,7 +41,7 @@ jobs:
       ATTESTATION: ${{ inputs.attestation }}
       REPO: ${{ github.repository }}
       CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
-      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'fix/backup-consolidated-integration' }}
+      CANDIDATE_BRANCH: fix/backup-consolidated-integration
       ACTOR: ${{ github.triggering_actor }}
       GH_TOKEN: ${{ github.token }}
     steps:
