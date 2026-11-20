@@ -51,7 +51,9 @@ Authentication establishes the signed-in account identity. It does **not** autho
 
 ## Firebase Android Email-Link compatibility
 
-Firebase's current Android guide uses Firebase Hosting-based App Links; the legacy Firebase Dynamic Links email-link flow shut down on **August 25, 2025**. Current Android Authentication SDK guidance requires Firebase Auth Android SDK **23.2.0+** (or Firebase BoM **33.9.0+**) for the migrated Hosting-based flow. The candidate Android patch script pins Firebase BoM **34.12.0**, which is above that documented minimum, and adds Hosting-domain App Link filters for `PROJECT_ID.firebaseapp.com` and `PROJECT_ID.web.app`. This source-level compatibility check is not an end-to-end qualification.
+Firebase's current Android guide uses Firebase Hosting-based App Links; the legacy Firebase Dynamic Links email-link flow shut down on **August 25, 2025**. Current Android Authentication SDK guidance requires Firebase Auth Android SDK **23.2.0+** (or Firebase BoM **33.9.0+**) for the migrated Hosting-based flow. The candidate Android patch script pins Firebase BoM **34.12.0**, which is above that documented minimum, and adds Hosting-domain App Link filters for `PROJECT_ID.firebaseapp.com` and `PROJECT_ID.web.app`. The recovery owner activity has email-link handling and calls the exchange callable. This source-level compatibility check is not an end-to-end qualification.
+
+The source audit did **not** verify a Google-provider sign-in flow for Firebase Authentication. Google Drive OAuth/authorization is a separate feature and must not be counted as Google Sign-In. Google Sign-In remains an implementation and qualification blocker.
 
 Gate 3 must verify the staging Firebase Hosting domain, authorized domain configuration, Android package and signing SHA-1/SHA-256, App Link handling, link completion, expiry and replay. No Firebase Dynamic Links domain or `dynamicLinkDomain` parameter may be used.
 
