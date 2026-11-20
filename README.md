@@ -380,12 +380,12 @@ The repository contains a six-gate qualification pipeline. Gates are evidence-dr
 
 1. **Gate 1 — Encrypted storage:** candidate/source and encrypted-storage evidence.
 2. **Gate 2 — Recovery runtime:** recovery instrumentation, runtime/flag checks and evidence.
-3. **Gate 3 — Real SMS staging:** frozen candidate, staging preflight, cloud identity, staging deployment, real endpoint probes and retained evidence.
+3. **Gate 3 — Google Sign-In + Email-Link staging:** frozen candidate, staging preflight, restricted cloud identity, allowlisted email-link callables, App Check probes and retained evidence. SMS/phone is excluded.
 4. **Gate 4 — Physical device:** approved physical-device recovery/lifecycle qualification.
 5. **Gate 5 — Production security:** read-only production configuration, IAM, secrets, App Check and recovery-flag audit.
 6. **Gate 6 — Release sign-off:** exact-candidate evidence, approvals and release authorization.
 
-Gate 3 is currently an infrastructure/configuration qualification focus. Missing staging environment configuration or Workload Identity Federation setup is not evidence of an application-source defect. Production recovery remains disabled until its explicit authorization and release gates are satisfied.
+Gate 3 has a separate controller branch and authoritative Google Sign-In + Firebase Email-Link scope. It remains NOT QUALIFIED: provider sign-in/client flow, live WIF, staging deployment, positive email-link exchange, exact-SHA evidence and physical-device tests are outstanding. Production recovery remains disabled until its explicit authorization and release gates are satisfied.
 
 ## Security and operational defaults
 
@@ -431,14 +431,14 @@ Cloud onboarding is not complete until the following are verified:
 
 ---
 
-# Current integration branch status — 2026-11-20
+# Historical integration branch snapshot — 2026-11-20
 
-> This status is specific to `integration/ledger-patch` and its exact commit. Do not confuse it with the default branch or separate frozen candidate/work branches described earlier in this README.
+ > This is a historical snapshot of `integration/ledger-patch`, not the current Gate 3 controller branch or candidate status.
 
 - **Repository:** https://github.com/Akshayshetye37/Aurelia-apk
-- **Active branch:** `integration/ledger-patch`
+- **Branch at snapshot:** `integration/ledger-patch`
 - **Verified branch HEAD before this README update:** `d2b932eb4a2ba41af2580f90c71482c57855df73`
-- **Latest code change:** `Assert Gate 3 probe list excludes legacy OTP callables`
+- **Latest code change at snapshot:** `Assert Gate 3 probe list excludes legacy OTP callables`
 - **Branch:** https://github.com/Akshayshetye37/Aurelia-apk/tree/integration/ledger-patch
 
 ## Gate 3 scope and implementation status
@@ -475,7 +475,7 @@ These are snapshots, not live statuses. Check the linked Actions runs for final 
 ## Safety boundaries
 
 - Phone OTP and recovery infrastructure remain in the app and Gate 2.
-- Gate 3 scope migration is not infrastructure deletion.
+- Gate 3 scope migration includes a staging callable allowlist and retirement of excluded phone/recovery callables.
 - Production recovery remains `RECOVERY_ENABLED=false`.
 - Do not enable production recovery or release based on incomplete staging evidence.
 - Gate 1/2 baselines must remain intact.
