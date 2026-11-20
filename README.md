@@ -200,7 +200,7 @@ Draft PRs #49–#52 and the separate Android/Gate 3 fix PR #54 are superseded by
 
 **Sub-problems**
 - PIN, biometric and recovery key must unwrap the same randomly generated DEK.
-- SMS/OTP alone must never derive, replace or unwrap the DEK.
+- Google Sign-In or email verification must never derive, replace or unwrap the DEK; account authentication is separate from local data-key unlock/recovery.
 - Rotation, lockout, retries, process death and concurrent unlock behavior.
 - Corrupt/missing wrapped keys must fail closed, not silently create a new identity/database.
 - Clear key bytes and secrets must never appear in logs, Web Storage, files or analytics.
@@ -326,8 +326,8 @@ The cloud provider adapter must be replaceable; the backup orchestrator must not
 
 - Personal-cloud connection and local sync coordinator foundations exist in `src/sync/`.
 - A direct Google Drive OAuth/app-data backup candidate is available in draft PR [#49](https://github.com/Akshayshetye37/Aurelia-apk/pull/49), with hardening work in draft PR [#50](https://github.com/Akshayshetye37/Aurelia-apk/pull/50) and related draft PR [#51](https://github.com/Akshayshetye37/Aurelia-apk/pull/51). These PRs overlap and are **not merged into this branch**; review and consolidate them before integration.
-- PR #49 currently reports candidate head `a189a36f8541f7cbd095980869ef548985339385`. On that exact SHA, PMS source tests/web packaging, R1, Gate lint, settlement foundation and Recovery Functions CI passed; OTP Recovery Android Instrumentation failed. See [run 44603803426](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44603803426).
-- The candidate implements direct OAuth with `drive.appdata`, encrypted-envelope-only uploads, owner-selected scheduling, history/restore-point selection, seven-point retention and transient token handling. Real-account OAuth, live upload/download, account switching, revocation and second-device restore are not qualified.
+- Earlier overlapping backup PRs #49–#51 are superseded by consolidated PR #55. Do not use their CI or implementation status as current candidate evidence.
+- PR #55 contains the consolidated direct Google Drive OAuth/app-data backup candidate: narrow `drive.appdata` scope, encrypted-envelope-only upload, owner account checks, manual/owner-selected scheduling, history and retention. Real OAuth, upload/download, account switching, revocation and second-device restore remain unqualified.
 - Scheduled backups are foreground/catch-up only because the authoritative snapshot and key boundary remain WebView-owned. Do not advertise guaranteed unattended WhatsApp-equivalent backup.
 - `src/storage/personal-cloud-storage.mjs` remains a placeholder for the separate generic cloud-provider abstraction; it is not the Drive adapter.
 - Owner-specific authorization, token isolation, account display, disconnect behavior, backup scheduling, encryption, restore qualification, and cross-owner isolation remain acceptance requirements.
@@ -360,12 +360,12 @@ The browser uses IndexedDB; Android uses the native repository/SQLCipher boundar
 | Local-first PMS persistence | In progress | Repository/adapter foundations exist; full UI cutover and parity qualification remain outstanding. |
 | Encrypted Android storage | In progress / qualification required | Native implementation and workflows exist; exact-head instrumentation and physical-device evidence are required. |
 | Backup vault and restore | Foundation present | End-to-end encrypted second-device restore and integrity qualification remain outstanding. |
-| Owner-controlled cloud backup | Draft candidate; not integrated | PR #49 is the current candidate; PR #50/#51 overlap. Candidate CI is mostly green, but Android recovery instrumentation failed and real OAuth/Drive/device restore remain unqualified. |
+| Owner-controlled cloud backup | Candidate in PR #55; not integrated | PR #55 is open/unmerged. Real OAuth/Drive/account-isolation/device restore qualification remains outstanding. |
 | Cloud-provider abstraction | Draft workstream | Contract and provider integration need convergence with backup orchestration. |
 | Multi-tenant recovery isolation | Draft workstream | Tenant isolation and cross-tenant tests are qualification work, not production approval. |
 | Public SaaS identity/tenancy | Architecture/documentation workstream | Account, tenant, property, membership and authorization foundations are not a complete SaaS implementation. |
 | Payment backend and settlement | In progress | Canonical intent/evidence/ledger/settlement boundaries exist; live providers require merchant acceptance and security qualification. |
-| Gate 3 real SMS staging | Blocked pending staging configuration/credentials | Preserve Gates 1/2; resolve Gate 3 staging WIF/environment configuration and qualify the frozen candidate SHA. |
+| Gate 3 staging/auth security | Not qualified; legacy SMS scope conflicts with the selected auth policy | Redesign the staging gate around Google Sign-In + email passwordless auth; staging WIF and project configuration remain pending. |
 | Gates 4–6 | Not release-qualified | Physical-device qualification, production security audit and release sign-off depend on preceding evidence. |
 
 Draft PRs and parallel branches are not merged functionality. Before integration, review their diffs, run tests, and reconcile overlapping architecture—especially backup orchestration versus cloud-provider abstraction and local-first repositories versus legacy UI paths.
@@ -380,12 +380,12 @@ The repository contains a six-gate qualification pipeline. Gates are evidence-dr
 
 1. **Gate 1 — Encrypted storage:** candidate/source and encrypted-storage evidence.
 2. **Gate 2 — Recovery runtime:** recovery instrumentation, runtime/flag checks and evidence.
-3. **Gate 3 — Real SMS staging:** frozen candidate, staging preflight, cloud identity, staging deployment, real endpoint probes and retained evidence.
+3. **Gate 3 — Staging auth/security:** frozen candidate, staging isolation, Google Sign-In and email passwordless flows, App Check/authorization probes and retained evidence. The existing real-SMS workflow is legacy and must be redesigned.
 4. **Gate 4 — Physical device:** approved physical-device recovery/lifecycle qualification.
 5. **Gate 5 — Production security:** read-only production configuration, IAM, secrets, App Check and recovery-flag audit.
 6. **Gate 6 — Release sign-off:** exact-candidate evidence, approvals and release authorization.
 
-Gate 3 is currently an infrastructure/configuration qualification focus. Missing staging environment configuration or Workload Identity Federation setup is not evidence of an application-source defect. Production recovery remains disabled until its explicit authorization and release gates are satisfied.
+Gate 3 is currently **not qualified**: its legacy workflow is SMS/recovery-phone-specific and conflicts with the selected authentication policy. Staging WIF/environment configuration is also pending. Production recovery remains disabled.
 
 ## Security and operational defaults
 
