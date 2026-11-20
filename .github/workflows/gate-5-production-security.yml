@@ -22,7 +22,7 @@ jobs:
       attestations: write
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'fix/backup-consolidated-integration' }}
+      CANDIDATE_BRANCH: fix/backup-consolidated-integration
       REPO: ${{ github.repository }}
       GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
       PRODUCTION_GCP_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
