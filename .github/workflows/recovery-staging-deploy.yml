@@ -268,6 +268,7 @@ jobs:
           set -euo pipefail
           gcloud functions list --gen2 --project "$PROJECT_ID" --region "$REGION" --format=json > "$RUNNER_TEMP/deployed-functions.json"
           node scripts/gates/check-callable-inventory.mjs scripts/gates/callables.json "$RUNNER_TEMP/deployed-functions.json" "$RUNNER_TEMP/callable-inventory.json"
+          mkdir -p "$RUNNER_TEMP/staging-artifacts"
           cp "$RUNNER_TEMP/callable-inventory.json" "$RUNNER_TEMP/staging-artifacts/callable-inventory.json"
 
       - name: Verify deployed recovery runtime service accounts can access their secrets
