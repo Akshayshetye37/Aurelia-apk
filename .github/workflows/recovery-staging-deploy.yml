@@ -91,7 +91,7 @@ jobs:
             const configured = process.env.RECOVERY_CALLABLES.split(",").map(x => x.trim()).filter(Boolean);
             const excluded = inventory.excluded;
             const source = fs.readFileSync("candidate/functions/src/index.ts", "utf8");
-            const exported = [...source.matchAll(/export const ([A-Za-z0-9_]+)\\s*=\\s*onCall/g)].map(match => match[1]).sort();
+            const exported = [...source.matchAll(/export const ([A-Za-z0-9_]+)\s*=\s*onCall/g)].map(match => match[1]).sort();
             const inventoried = [...expected, ...excluded].sort();
             if (!Array.isArray(expected) || expected.length === 0 ||
                 JSON.stringify(configured) !== JSON.stringify(expected) ||
