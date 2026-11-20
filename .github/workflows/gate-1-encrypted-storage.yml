@@ -31,7 +31,7 @@ jobs:
       attestations: write
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'fix/backup-consolidated-integration' }}
       CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
