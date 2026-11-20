@@ -293,49 +293,27 @@ The cloud provider adapter must be replaceable; the backup orchestrator must not
 ### Current cloud implementation status
 
 - Personal-cloud connection and local sync coordinator foundations exist in `src/sync/`.
-- A generic provider abstraction and cloud-provider work exist on separate/draft development workstreams; integration and qualification are still pending.
-- The Google Drive OAuth/app-data backup work is currently a draft workstream and is **not represented as a completed, integrated feature on this branch**.
-- The `src/storage/personal-cloud-storage.mjs` file on this branch is currently a placeholder; do not treat it as a production cloud adapter.
-- Owner-specific authorization, token isolation, account display, disconnect behavior, backup scheduling, encryption, restore qualification, and cross-owner isolation tests are acceptance requirements for the implementation.
+- The Google Cloud connection currently verifies read-only project access; it does **not** upload, backup, replicate or synchronize PMS data.
+- `src/storage/personal-cloud-storage.mjs` remains a compatibility adapter to the legacy web-storage module, not a cloud transport.
+- Google Drive backup uses Android SAF folder selection/document-provider authorization. It does not embed a Google OAuth client or request broad Google Drive API scopes.
+- The encrypted backup vault and AES-256-GCM backup envelope foundations exist in `index.html` and `src/storage/backup-vault-store.mjs`. Backup recovery passwords are not stored in plaintext; the local IndexedDB vault stores a non-extractable key and password-wrapped key material.
+- New backup files use a versioned encrypted envelope with a manifest, ciphertext integrity/authentication, wrapped key metadata and record-count validation. Backup import now validates canonical Base64 encoding, cryptographic field sizes, supported filename identity, exact manifest fields and non-negative safe record counts before decrypting/restoring.
+- Backup recovery password rotation changes the local vault wrapper for future backups; **existing backup files still require their original recovery password**. Do not discard older passwords until those backups are recreated or retired.
+- This work does not qualify end-to-end backup/restore, OAuth, owner isolation, second-device recovery, physical-device lifecycle, or production cloud reliability. Existing plaintext v4 backups remain accepted for migration and must be treated as legacy/insecure.
+- Cloud backup remains opt-in. Local PMS operation remains independent of cloud connectivity.
 
-## Repository structure
+### Backup envelope hardening — current work
 
-The following is a high-level map of the current integration branch. It is intentionally organized by responsibility rather than listing every individual file.
+Implemented on `work/backup-envelope-validation`:
 
-```text
-.
-├── index.html                         # PMS web UI and app entry
-├── package.json                       # Build and test scripts/dependencies
-├── android/                           # Capacitor Android project
-│   ├── templates/                     # Native storage, payment bridge, identity,
-│   │                                  # recovery, security and migration templates
-│   └── ...                            # Generated/Android project resources
-├── src/
-│   ├── bookings/                      # Booking policies/domain helpers
-│   ├── features/
-│   │   └── payments/                  # Payment UI/feature modules
-│   ├── payments/                      # Payment engine, intents, evidence,
-│   │                                  # settlement, reconciliation and safety
-│   ├── services/                      # App-facing service/API boundaries
-│   ├── storage/                       # Persistence adapters, PMS repositories,
-│   │                                  # schemas, bootstrap/cutover, authority,
-│   │                                  # backup vault, photo archive and storage
-│   └── sync/                           # Local sync coordination and cloud connection
-├── payment-backend/                   # Backend payment services (where present)
-├── scripts/
-│   ├── gates/                         # Gate/evidence utilities
-│   ├── prepare-web.js                 # Web asset/build preparation
-│   ├── check-*                       # Boundary, release and secret checks
-│   └── run-* / verify-*               # Android qualification helpers
-├── tests/
-│   ├── storage/                       # Storage and repository contracts
-│   ├── sync/                          # Sync tests
-│   ├── services/                      # Service tests
-│   └── *.test.mjs                     # Unit, integration, workflow and security tests
-├── docs/                               # Architecture, qualification, security,
-│                                       # payment, backup, recovery and release docs
-└── .github/workflows/                  # CI, Android build and qualification gates
-```
+1. Encrypted backup imports must use the supported Aurelia backup filename pattern and the envelope name must match the actual selected file name.
+2. Base64 fields must decode and re-encode canonically; IV, salt and wrapped-key lengths are checked.
+3. v2 manifest metadata is validated before cryptographic processing. Record-count keys must match the supported domain set, and values must be non-negative safe integers.
+4. Payload byte count, SHA-256 and domain record counts are verified after authenticated decryption.
+5. Cached-key decrypt and password decrypt paths both verify the manifest. Temporary plaintext buffers are zeroed after use.
+6. Legacy plaintext v4 import remains for migration compatibility; it is not considered secure backup evidence.
+
+**Verification status:** Source and regression assertions were updated, but tests/build/Android runtime have not yet been executed against this branch. CI must qualify the exact PR head before this work is considered verified.
 
 ### Key storage modules
 
