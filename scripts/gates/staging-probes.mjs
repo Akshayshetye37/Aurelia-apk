@@ -13,8 +13,13 @@ if (baseUrl.protocol !== 'https:' || baseUrl.username || baseUrl.password || bas
 const expectedHost = `${region}-${project}.cloudfunctions.net`;
 if (baseUrl.hostname !== expectedHost) fail('callable base URL does not belong to the configured staging project and region');
 const base = baseUrl.origin;
-const names = [...new Set((process.env.RECOVERY_CALLABLES ?? '').split(',').map((name) => name.trim()).filter(Boolean))];
-if (!names.length) fail('RECOVERY_CALLABLES is empty');
+let inventory;
+try { inventory = JSON.parse(fs.readFileSync('scripts/gates/callables.json', 'utf8')); } catch { fail('authoritative callable inventory is missing or invalid'); }
+const names = inventory.callables;
+if (!Array.isArray(names) || !names.length || new Set(names).size !== names.length) fail('authoritative callable inventory is empty or contains duplicates');
+const configured = (process.env.RECOVERY_CALLABLES ?? '').split(',').map(name => name.trim()).filter(Boolean);
+if (configured.length && JSON.stringify([...configured].sort()) !== JSON.stringify([...names].sort())) fail('RECOVERY_CALLABLES differs from authoritative inventory');
+
 for (const name of names) if (!/^[A-Za-z0-9_-]+$/.test(name)) fail('RECOVERY_CALLABLES contains an invalid callable name');
 const cases = [
   { label: 'no App Check token', headers: {} },
