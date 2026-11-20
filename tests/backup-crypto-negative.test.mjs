@@ -30,7 +30,7 @@ const functions = [
 ].map(extractFunction);
 const source = `const BACKUP_KDF_ITERATIONS=600000;\n${functions.join("\n")}\n`;
 const context = vm.createContext({
-  crypto: webcrypto, window: { crypto: webcrypto }, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, JSON, Math,
+  crypto: webcrypto, window: { crypto: webcrypto, TextEncoder }, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, JSON, Math,
   atob: value => Buffer.from(value, "base64").toString("binary"),
   btoa: value => Buffer.from(value, "binary").toString("base64"),
   readBackupVault: async () => null,
