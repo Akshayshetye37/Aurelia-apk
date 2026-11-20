@@ -11,6 +11,10 @@ export function validateGate3Evidence({ probes, details, candidateSha, controlSh
   if (!Array.isArray(probes) || probes.length === 0) throw new Error('Gate 3 evidence must contain at least one probe');
   if (!details || typeof details !== 'object' || Array.isArray(details)) throw new Error('Gate 3 details must be an object');
   if (details.candidateSha !== candidateSha) throw new Error('candidate SHA mismatch between evidence files');
+  if (typeof details.stagingProjectId !== 'string' || !details.stagingProjectId.trim() ||
+      typeof details.productionProjectId !== 'string' || !details.productionProjectId.trim() ||
+      details.stagingProjectId === details.productionProjectId) throw new Error('staging/production project identity evidence is missing or unsafe');
+  if (!Number.isInteger(details.stagingRunId) || details.stagingRunId <= 0) throw new Error('staging deployment run ID is missing or invalid');
   for (const field of ['apkSha256', 'testApkSha256', 'signerSha256']) {
     if (typeof details[field] !== 'string' || !SHA256_RE.test(details[field].toLowerCase().replaceAll(':', ''))) {
       throw new Error(`missing or invalid ${field}`);
