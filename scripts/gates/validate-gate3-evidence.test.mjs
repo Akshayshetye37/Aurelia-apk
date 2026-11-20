@@ -21,6 +21,7 @@ test('rejects zero probes', () => assert.throws(() => validateGate3Evidence({ pr
 test('rejects missing probe type', () => assert.throws(() => validateGate3Evidence({ probes: [probes[0]], details, candidateSha: sha }), /missing probe/));
 test('rejects non-401/403 status', () => assert.throws(() => validateGate3Evidence({ probes: [{ ...probes[0], status: 200 }, probes[1]], details, candidateSha: sha }), /invalid probe result/));
 test('rejects candidate SHA mismatch', () => assert.throws(() => validateGate3Evidence({ probes, details: { ...details, candidateSha: 'c'.repeat(40) }, candidateSha: sha }), /candidate SHA mismatch/));
+test('rejects missing callable inventory', () => assert.throws(() => validateGate3Evidence({ probes, details: { ...details, callables: undefined }, candidateSha: sha }), /callable inventory is missing/));
 test('rejects missing APK hash', () => assert.throws(() => validateGate3Evidence({ probes, details: { ...details, apkSha256: '' }, candidateSha: sha }), /apkSha256/));
 test('rejects unexplained exclusions', () => assert.throws(() => validateGate3Evidence({ probes, details: { ...details, excluded: [{ probe: 'x' }] }, candidateSha: sha }), /exclusion must include/));
 test('rejects duplicate probes', () => assert.throws(() => validateGate3Evidence({ probes: [...probes, probes[0]], details, candidateSha: sha }), /duplicate probe/));
