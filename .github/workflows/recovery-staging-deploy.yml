@@ -91,15 +91,17 @@ jobs:
             const configured = process.env.RECOVERY_CALLABLES.split(",").map(x => x.trim()).filter(Boolean);
             const excluded = inventory.excluded;
             const source = fs.readFileSync("candidate/functions/src/index.ts", "utf8");
+            const androidPatcher = fs.readFileSync("candidate/scripts/patch-android.js", "utf8");
             const exported = [...source.matchAll(/export const ([A-Za-z0-9_]+)\s*=\s*onCall/g)].map(match => match[1]).sort();
             const inventoried = [...expected, ...excluded].sort();
             if (!Array.isArray(expected) || expected.length === 0 ||
                 JSON.stringify(configured) !== JSON.stringify(expected) ||
                 new Set(inventoried).size !== inventoried.length ||
                 JSON.stringify(exported) !== JSON.stringify(inventoried) ||
+                !androidPatcher.includes('android:pathPrefix="/__/auth/links"') ||
                 expected.some(name => excluded.includes(name)) ||
                 expected.some(name => /phone|sms|otp|grant/i.test(name))) {
-              throw new Error("Gate 3 callable inventory must exactly reconcile candidate exports and exclude phone/SMS/recovery callables");
+              throw new Error("Gate 3 candidate must reconcile callable inventory, exclude phone/SMS/recovery callables, and use Firebase Hosting /__/auth/links App Links");
             }
             fs.appendFileSync(process.env.GITHUB_ENV, "GATE3_DEPLOY_ONLY=" + expected.map(name => "functions:" + name).join(",") + "\\n");
           '
