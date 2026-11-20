@@ -262,6 +262,8 @@ test('Gate 3 staging deployment uses an email-link allowlist and does not deploy
   const staging = read('.github/workflows/recovery-staging-deploy.yml');
   const production = read('.github/workflows/recovery-production-flag-audit.yml');
   assert.match(staging, /firebase deploy --only "\$GATE3_DEPLOY_ONLY"/);
+  assert.match(staging, /workload_identity_provider: \$\{\{ vars\.GCP_WORKLOAD_IDENTITY_PROVIDER \|\| secrets\.GCP_WORKLOAD_IDENTITY_PROVIDER \}\}/);
+  assert.match(staging, /service_account: \$\{\{ vars\.STAGING_DEPLOY_SERVICE_ACCOUNT \|\| secrets\.STAGING_DEPLOY_SERVICE_ACCOUNT \}\}/);
   assert.match(staging, /functions=\(exchangeOwnerEmailLink confirmRecoveryOwnerBinding\)/);
   assert.match(staging, /Retire excluded recovery callables from staging/);
   assert.match(staging, /gcloud functions delete/);
