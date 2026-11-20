@@ -52,7 +52,7 @@ test("all new backup destinations receive a portable AES-256-GCM envelope", () =
   assert.match(html, /encryptBackupPayload\(snap\.payload,snap\.name\)/);
   assert.match(html, /decryptBackupPayload\(payload,fileName\)/);
   assert.match(html, /manifest=\{formatVersion:3,name,payloadSha256/);
-  assert.match(html, /backup-v3\|\x27\+envelope.v\+\x27\|\x27\+filename\+\x27\|\x27\+JSON.stringify\(envelope\.manifest\)|\x27\+JSON\.stringify\(envelope\.manifest\)/);
+  assert.match(html, /backup-v3\\|\x27\\+envelope.v\\+\x27\\|\x27\\+filename\\+\x27\\|\x27\\+JSON.stringify\(manifest)/);
   assert.match(html, /envelope.v>=2/);
   assert.match(html, /Backup manifest verification failed/);
   assert.match(html, /payloadBytes/);
