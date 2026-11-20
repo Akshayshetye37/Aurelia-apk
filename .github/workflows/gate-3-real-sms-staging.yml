@@ -159,7 +159,7 @@ jobs:
           mkdir -p apks evidence
 
           for file in app-release.apk app-release-androidTest.apk \
-                      apk-sha256.txt apk-certificate.txt androidTest-certificate.txt; do
+                      apk-sha256.txt apk-certificate.txt androidTest-certificate.txt callable-inventory.json; do
             test -s "staging-artifacts/$file" || {
               echo "::error::Missing staging artifact: $file"
               exit 1
@@ -186,6 +186,7 @@ jobs:
 
           cp staging-artifacts/app-release.apk apks/app.apk
           cp staging-artifacts/app-release-androidTest.apk apks/test.apk
+          cp staging-artifacts/callable-inventory.json evidence/callable-inventory.json
           printf '%s\n' "$actual_app" > apks/app.sha256
           printf '%s\n' "$actual_test" > apks/test.sha256
 
