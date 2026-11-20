@@ -403,7 +403,7 @@ Gate 3 is currently an infrastructure/configuration qualification focus. Missing
 - `docs/PERSONAL-CLOUD-CONNECTION.md` — personal cloud connection design.
 - `docs/LOCAL-FIRST-SYNC-ARCHITECTURE.md` — local-first sync architecture.
 - `docs/LOCAL-FIRST-CUTOVER-EXECUTION.md` — cutover execution.
-- `docs/RECOVERY-GATE-PIPELINE.md`, `docs/GATE-3-SCOPE.md`, and `docs/GATE-3-STAGING-QUALIFICATION.md` — recovery gates and current Gate 3 scope.
+- `docs/RECOVERY-GATE-PIPELINE.md`, `docs/GATE-3-SCOPE.md`, `docs/GATE-3-STAGING-QUALIFICATION.md`, and `docs/GATE-3-WIF-SETUP.md` — recovery gates, Gate 3 scope and staging identity setup.
 - `docs/ANDROID_DEVICE_QUALIFICATION.md` and `docs/ANDROID-PMS-ENCRYPTION-KEY-LIFECYCLE.md` — native-device/storage qualification and key lifecycle.
 - `docs/PMS_ACCOUNTING_SCHEMA.md`, `docs/PMS-PAYMENT-ORCHESTRATION.md`, and `docs/PAYMENT_PROVIDER_ONBOARDING.md` — accounting and payment architecture.
 - `docs/SECURITY.md` — security guidance.
