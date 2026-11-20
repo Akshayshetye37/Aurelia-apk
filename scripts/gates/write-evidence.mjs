@@ -13,6 +13,10 @@ let details = {};
 if (fs.existsSync(detailsPath)) {
   try { details = JSON.parse(fs.readFileSync(detailsPath, 'utf8')); } catch { fail('details.json is invalid JSON'); }
 }
+if (gate === '3' && fs.existsSync('evidence/statuses.json')) {
+  try { details.statuses = JSON.parse(fs.readFileSync('evidence/statuses.json', 'utf8')); }
+  catch { fail('statuses.json is invalid JSON'); }
+}
 fs.writeFileSync('evidence/record.json', JSON.stringify({
   gate, status: 'PASS', candidateSha: sha, controlSha, repository: process.env.GITHUB_REPOSITORY,
   runId: Number(process.env.GITHUB_RUN_ID), runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
