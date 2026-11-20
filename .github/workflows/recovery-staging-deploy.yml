@@ -213,7 +213,23 @@ jobs:
           gcloud config set project "$PROJECT_ID"
           echo "Staging Firebase project, App Check signer, Google Services config and release signing material validated."
 
-      - name: Deploy Firebase Functions with staging-only recovery enabled
+      - name: Retire excluded recovery callables from staging
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
+        run: |
+          set -euo pipefail
+          excluded="$(node -p 'require("./scripts/gates/callables.json").gate3.excluded.join(" ")')"
+          deployed="$(gcloud functions list --gen2 --project "$PROJECT_ID" --region "$REGION" --format='value(name)')"
+          for function_name in $excluded; do
+            if grep -Eq "/functions/${function_name}$" <<< "$deployed"; then
+              echo "Retiring excluded staging callable: ${function_name}"
+              gcloud functions delete "${function_name}" --gen2 --project "$PROJECT_ID" --region "$REGION" --quiet
+            fi
+          done
+
+      - name: Deploy Gate 3 Email-Link callables to staging
         working-directory: candidate
         shell: bash
         env:
