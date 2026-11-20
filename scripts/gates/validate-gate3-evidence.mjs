@@ -51,7 +51,7 @@ export function validateGate3Evidence({ probes, details, candidateSha, controlSh
     SHA256_RE.test((physicalMatrix.device.apkSha256 ?? '').toLowerCase()) &&
     physicalMatrix.signoff && typeof physicalMatrix.signoff.reviewer === 'string' && physicalMatrix.signoff.reviewer.trim() &&
     typeof physicalMatrix.signoff.signedAt === 'string' && physicalMatrix.signoff.signedAt.trim() &&
-    SHA_RE.test(physicalMatrix.signoff.commit ?? '') && controlSha && physicalMatrix.signoff.commit === controlSha;
+    SHA_RE.test(physicalMatrix.signoff.commit ?? '') && physicalMatrix.signoff.commit === candidateSha;
   return {
     STAGING_DEPLOYMENT: details.stagingDeployment === 'QUALIFIED' ? 'QUALIFIED' : 'NOT QUALIFIED',
     APPCHECK_NEGATIVE_PROBES: 'QUALIFIED',
