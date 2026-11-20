@@ -17,11 +17,32 @@ The web UI creates a PMS snapshot when data changes and on app launch/periodic f
 
 Private app data is removed when the app is uninstalled or its data is cleared. Owners must configure an optional off-device destination or export backups if they need protection from device loss/uninstall.
 
-### 2. Google Drive — optional
+## 2. Google Drive OAuth — optional, owner-controlled
 
-The owner selects a Drive folder using Android Storage Access Framework (SAF). If Google Drive is available as a document provider, its own UI handles account sign-in and authorization. Aurelia does not request Google account, contacts, broad storage or all-files permissions and does not embed a Google OAuth client.
+The implementation is consolidated in open, unmerged PR #55: https://github.com/Akshayshetye37/Aurelia-apk/pull/55. It is not yet part of `integration/ledger-patch`.
 
-The selected Drive URI is persisted with Android's persistable URI grant. The PMS writes the same authenticated encrypted envelope there after the private local copy. Plaintext PMS records and guest photos never leave the app through a backup destination. Drive/provider failures do not invalidate a successful private local backup; they are reported as a secondary-destination warning.
+- Each business owner connects their own Google account. Aurelia does not upload PMS data to a shared vendor-owned Drive account.
+- Android Google Identity Services AuthorizationClient requests the narrow `drive.appdata` scope plus OpenID/email for account identity.
+- Backup files are stored in the hidden `appDataFolder`; the owner does not choose a Drive folder.
+- Connect is explicit and independent from Google Sign-In. Google Sign-In for app authentication does not itself grant Drive backup permission.
+- The owner chooses Daily, Weekly, Monthly or Never after connecting. Never keeps manual Back Up Now and restore history available.
+- Only already-encrypted Aurelia backup envelopes are uploaded. The adapter validates envelope format, cipher, ciphertext and size.
+- Seven remote recovery points are retained. Cleanup failure is reported separately from upload success.
+- OAuth access tokens are transient and are not persisted in PMS state, Web Storage, logs or backup payloads.
+- The authorized account email is verified before upload and restore. Account mismatch is rejected; switching accounts requires explicit reconnection and confirmation.
+- Disconnect disables Aurelia Drive operations and clears local account/schedule state without deleting local PMS data. Google permission revocation remains a separate action in Google Account settings.
+- An expired access token is retried once after fresh account authorization; permission denial and rate limits are surfaced as actionable failures.
+
+### Qualification status
+
+Mocked adapter and UI tests are included. CI on the consolidated PR head previously passed the PMS/web packaging, Gate lint, R1, settlement foundation, Recovery Functions and Android instrumentation workflows; the account-isolation regression test was added after those results and requires exact-head CI.
+
+Real OAuth, live upload/download, account switching, Google permission revocation and second-device restore have not been qualified. No production-ready claim is made.
+
+### Scheduling limitation
+
+Snapshots and recovery-key wrapping are WebView-owned. Scheduled work is foreground/catch-up when Aurelia is active; it is not guaranteed after force-stop or when Android cannot run the WebView. Guaranteed unattended backup requires moving snapshot/export, key wrapping and owner authorization into a native background-capable architecture.
+
 
 ### 3. Owner-configured server/cloud — optional
 
@@ -35,7 +56,7 @@ The shared folder has its own URI preference and its own persisted SAF grant, se
 
 ## Backup file identity and restore
 
-PMS files use aurelia-backup-<date>-<content-hash>.json. New files contain an `AURELIA-PMS-ENCRYPTED-BACKUP` v1 envelope: AES-256-GCM ciphertext, random 96-bit nonce, 128-bit authentication tag, PBKDF2-HMAC-SHA-256 key-wrapping metadata (600,000 iterations), per-vault salt and a password-wrapped random 256-bit data key. The encrypted plaintext remains the PMS schema v4 snapshot with SHA-256 integrity metadata. AES-GCM authenticates the ciphertext; SHA-256 remains useful for transport/read-back verification. The PMS restore path checks schema, integrity when present, record structure and photo archive completeness before committing. Restore remains transactional with rollback attempts for the PMS state and photo archive.
+PMS files use aurelia-backup-<date>-<content-hash>.json. New files contain an `AURELIA-PMS-ENCRYPTED-BACKUP` v3 envelope: AES-256-GCM ciphertext, random 96-bit nonce, 128-bit authentication tag, PBKDF2-HMAC-SHA-256 key-wrapping metadata (600,000 iterations by default), per-vault salt and a password-wrapped random 256-bit data key. The authenticated additional data binds envelope version, selected filename and canonical manifest. Import validates canonical Base64, cryptographic field lengths, bounded integer KDF work, manifest metadata, payload byte length/hash and domain record counts. Legacy v1/v2 encrypted envelopes remain readable with their original AAD/iteration rules; new exports are v3. The encrypted plaintext remains the PMS schema v4 snapshot with SHA-256 integrity metadata. The PMS restore path checks schema, integrity, record structure and photo archive completeness before committing. Restore stages data, performs a canonical durable write/read-back, and rolls back PMS state and photo archive on failure; physical process-interruption qualification remains outstanding.
 
 A future Pay Bridge backup must use a distinct application identifier and its own schema, retention and restore validation. PMS must reject Pay Bridge backup files as PMS snapshots and vice versa.
 
@@ -43,7 +64,7 @@ A future Pay Bridge backup must use a distinct application identifier and its ow
 
 - INTERNET is retained for HTTPS server/cloud backup.
 - SAF uses explicit owner selection and persistable URI grants; it requires no broad storage permission.
-- Google Drive account authentication is handled by the Drive document provider.
+- Direct Google Drive backup candidate uses Google Identity Services AuthorizationClient with `drive.appdata` and OpenID/email identity. Legacy SAF export/import is separate.
 - No SMS, contacts, location, camera, microphone, notification listener, accessibility, overlay, broad storage or package inventory permissions are required for this backup architecture.
 
 
@@ -54,4 +75,17 @@ A future Pay Bridge backup must use a distinct application identifier and its ow
 - The current installation caches a non-extractable Web Crypto data key in IndexedDB so automatic snapshots do not require repeated password prompts. Each backup includes a password-wrapped copy of that data key.
 - A replacement installation imports the encrypted file and prompts for the recovery password. Successful decryption imports the non-extractable key into its local vault.
 - Existing plaintext v4 backups remain readable for migration; all newly generated backups are encrypted. Do not treat legacy files as meeting the new encryption policy.
-- Password rotation is deliberately not exposed until a rewrapping/re-encryption migration can update every retained recovery point safely.
+- Recovery-password rotation changes the local vault wrapper for future backups but does not re-encrypt existing backup files. Every retained older backup still requires the password that was active when that file was created. If an old password is leaked, it continues to decrypt those older files; changing the current password does not revoke it. Re-encrypt or securely retire older recovery points before treating password rotation as revocation.
+
+## Direct Google Drive candidate — integration and qualification status
+
+The owner-authorized Drive adapter described above is currently draft PR #49 and is not integrated on `integration/ledger-patch`. PR #50 and #51 contain overlapping hardening/implementation work; consolidate them into one reviewed branch before merge.
+
+The latest observed PR #49 candidate SHA is `a189a36f8541f7cbd095980869ef548985339385`. Its PMS/web packaging, R1, Gate lint, settlement and Recovery Functions checks passed; OTP Recovery Android Instrumentation failed. Real Google OAuth, live Drive operations, account switching, permission revocation and second-device restore remain unqualified. The schedule is best-effort foreground catch-up, not guaranteed unattended backup.
+
+
+## Encrypted envelope v3 hardening
+
+New encrypted exports use envelope version 3. AES-GCM authenticated additional data binds the envelope version, selected filename, and canonical manifest. Renaming a file or changing the envelope version therefore invalidates authentication. Import validates canonical Base64, exact salt/IV/wrapped-key lengths, ciphertext size, manifest shape and record counts, and a bounded integer PBKDF2 iteration count (600,000–1,000,000). Legacy v1/v2 envelopes remain readable only with their legacy iteration value and legacy AAD rules; they are not re-emitted. Validation/decryption failures use a generic error and do not apply PMS state. Retention recognizes v3 encrypted files.
+
+Restore stages and validates the decoded snapshot before replacing live state. The current restore implementation captures application state and photo archive, performs the canonical durable write, verifies exact repository read-back, and rolls back both state and photos on failure. The automated regression currently asserts this rollback/read-back contract in source; process-kill interruption and real-device restore qualification remain outstanding.

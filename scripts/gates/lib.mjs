@@ -21,7 +21,11 @@ export function requireSha(value) {
 }
 export const sha256File = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 export function gh(apiPath) {
-  if (typeof apiPath !== 'string' || apiPath.startsWith('/') || apiPath.includes('..') || /[\r\n]/.test(apiPath)) fail('invalid GitHub API path');
+  if (typeof apiPath !== 'string' || apiPath.startsWith('/') || apiPath.includes('\\') || /[\r\n#]/.test(apiPath) ||
+      apiPath.split('/').some((segment) => {
+        try { const decoded = decodeURIComponent(segment); return decoded === '.' || decoded === '..'; }
+        catch { return true; }
+      })) fail('invalid GitHub API path');
   try {
     return JSON.parse(execFileSync('gh', ['api', apiPath], {
       encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],

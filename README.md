@@ -14,17 +14,49 @@
 - Provider integration inventory in the project: Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue. Adapter/test-checkout coverage is not merchant production acceptance.
 - The branch API reports `protected=false` for this work branch. Base-branch protection could not be read with the connected GitHub permission; its state is unverified.
 
+## Branch CI history audit (2026-11-20)
+
+The queried GitHub Actions history for `integration/ledger-patch` contains 308 workflow runs across the returned pages: 230 success, 54 failure and 24 cancelled. These are repeated runs across different SHAs, not 308 independent suites.
+
+Latest branch SHA `749561011664707629d0f37288363a39c14bb4c1` has four successful checks: PMS source tests/web packaging, Gate lint, R1 local-first checks and native SQLite contract.
+
+Historical failures still relevant:
+- Gate 3 staging deployment failed at Workload Identity Federation authentication in runs [44505319033](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44505319033) and [44397260341](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44397260341). Deployment and qualification jobs were skipped. This is staging identity/configuration, not evidence of a source-code failure.
+- Gate 3 run [44501533230](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44501533230) failed its frozen-candidate SHA check before deployment.
+- Older source-test/native-contract failures occurred on earlier SHAs, including `bed3044` and `9bee0ef`; later branch commits superseded them. They remain historical failures and are not current-head evidence.
+- The current Drive candidate's exact-head Android recovery instrumentation failure is recorded in the active PR status above; it is not a failure on the integration branch's latest SHA.
+
+Do not treat cancelled runs as passing. Do not reuse older SHA evidence to qualify a newer candidate.
+
 ## Exact-head CI evidence
 
-Latest observed native workflow: [Aurelia native SQLite contract run #170](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42786247933).
+Latest observed integration-branch SHA: `749561011664707629d0f37288363a39c14bb4c1`.
 
-- Run was triggered against commit `b71b7917736ea7502851c260af7907ef8e1ffcac`; it is **not** evidence for the README update commit unless it is rerun or independently verified at that new SHA.
-- On `b71b7917736ea7502851c260af7907ef8e1ffcac`, `npm test` passed and `npm run build` passed.
-- On that same SHA, Android project generation, Capacitor sync, Android 34 SDK installation, Kotlin test-runtime alignment, native compilation, app/instrumentation APK assembly and SQLCipher x86_64 / test-runner APK-content checks passed.
-- Android 34 AVD creation and emulator process startup passed.
-- Emulator boot completion (`sys.boot_completed=1`) was still in progress at last inspection; SQLite instrumentation and the nonzero-test gate had not yet run.
-- Do not claim native SQLite instrumentation as passed until the connected AndroidJUnitRunner suite completes with a nonzero test count and retained XML/diagnostic artifacts.
-- Exact-head R1, payment-backend and other independent CI checks have not been evidenced in this inspection.
+- [PMS source tests and production web packaging](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44597294887): **success**.
+- [Gate pipeline lint](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44597292961): **success**.
+- [R1 local-first required checks](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44597292873): **success**.
+- [Native SQLite contract](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44597292884): **success**.
+
+These checks are evidence for the exact integration-branch SHA above. They do not qualify draft Drive-backup code on another SHA or the physical-device/Gate 3 release requirements.
+
+## Owner-controlled Google Drive backup — integration status (2026-11-20)
+
+The owner-account Google Drive backup, audit documentation, Android authorization compatibility fix, and Gate 3 candidate-validation remediation are consolidated in [PR #55](https://github.com/Akshayshetye37/Aurelia-apk/pull/55). It is open and unmerged; therefore the implementation is not yet on `integration/ledger-patch`.
+
+- Exact PR head: `c289bda31a1bdcc85d15c023457ccbee1adb0204`.
+- The backup is opt-in. Each hotel/restaurant owner connects their own Google account; Aurelia uses the hidden Drive `appDataFolder` and the narrow `drive.appdata` scope. Backup data is not written to a shared Aurelia cloud account.
+- Only already-encrypted Aurelia backup envelopes are uploaded. OAuth tokens are transient and are not stored in PMS state.
+- Connected-account identity is checked before upload and restore. A token for a different Google account is rejected; account switching requires explicit reconnection.
+- Daily, Weekly, Monthly and Never are owner-selected. Manual backup and restore history remain available with Never.
+- Seven recovery points are retained, with cleanup failures reported separately.
+- SAF is a separate user-selected file destination/payment-related flow; it is not Google Drive OAuth.
+- Scheduling is foreground/catch-up best effort. Android force-stop or process restrictions can delay a snapshot until the app runs again; this is not WhatsApp-equivalent guaranteed background backup.
+
+**PR #55 CI evidence (exact head):** PMS source/web packaging, Gate pipeline lint, R1 local-first, settlement foundation, Recovery Functions and OTP Recovery Android Instrumentation passed on the earlier PR head. A connected-account verification regression test was added afterward and its exact-head checks are pending. Do not reuse earlier check results for the new SHA.
+
+**Gate 3 remains externally blocked:** the historical staging WIF authentication run failed because the workflow received neither a usable `workload_identity_provider` nor `credentials_json`. The consolidated workflow now validates the provider resource and service-account email before attempting auth, but repository/environment configuration and Google Cloud IAM/provider trust must be supplied by the owner. No secrets were created or modified.
+
+Draft PRs #49–#52 and the separate Android/Gate 3 fix PR #54 are superseded by PR #55 and should not be merged independently.
 
 ## Implemented code foundations (not production approval)
 
@@ -293,69 +325,33 @@ The cloud provider adapter must be replaceable; the backup orchestrator must not
 ### Current cloud implementation status
 
 - Personal-cloud connection and local sync coordinator foundations exist in `src/sync/`.
-- A generic provider abstraction and cloud-provider work exist on separate/draft development workstreams; integration and qualification are still pending.
-- The Google Drive OAuth/app-data backup work is currently a draft workstream and is **not represented as a completed, integrated feature on this branch**.
-- The `src/storage/personal-cloud-storage.mjs` file on this branch is currently a placeholder; do not treat it as a production cloud adapter.
-- Owner-specific authorization, token isolation, account display, disconnect behavior, backup scheduling, encryption, restore qualification, and cross-owner isolation tests are acceptance requirements for the implementation.
+- A direct Google Drive OAuth/app-data backup candidate is available in draft PR [#49](https://github.com/Akshayshetye37/Aurelia-apk/pull/49), with hardening work in draft PR [#50](https://github.com/Akshayshetye37/Aurelia-apk/pull/50) and related draft PR [#51](https://github.com/Akshayshetye37/Aurelia-apk/pull/51). These PRs overlap and are **not merged into this branch**; review and consolidate them before integration.
+- PR #49 currently reports candidate head `a189a36f8541f7cbd095980869ef548985339385`. On that exact SHA, PMS source tests/web packaging, R1, Gate lint, settlement foundation and Recovery Functions CI passed; OTP Recovery Android Instrumentation failed. See [run 44603803426](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44603803426).
+- The candidate implements direct OAuth with `drive.appdata`, encrypted-envelope-only uploads, owner-selected scheduling, history/restore-point selection, seven-point retention and transient token handling. Real-account OAuth, live upload/download, account switching, revocation and second-device restore are not qualified.
+- Scheduled backups are foreground/catch-up only because the authoritative snapshot and key boundary remain WebView-owned. Do not advertise guaranteed unattended WhatsApp-equivalent backup.
+- `src/storage/personal-cloud-storage.mjs` remains a placeholder for the separate generic cloud-provider abstraction; it is not the Drive adapter.
+- Owner-specific authorization, token isolation, account display, disconnect behavior, backup scheduling, encryption, restore qualification, and cross-owner isolation remain acceptance requirements.
 
 ## Repository structure
 
-The following is a high-level map of the current integration branch. It is intentionally organized by responsibility rather than listing every individual file.
+See [docs/PROJECT-STRUCTURE.md](docs/PROJECT-STRUCTURE.md) for the responsibility-based architecture map. The key paths are:
 
-```text
-.
-├── index.html                         # PMS web UI and app entry
-├── package.json                       # Build and test scripts/dependencies
-├── android/                           # Capacitor Android project
-│   ├── templates/                     # Native storage, payment bridge, identity,
-│   │                                  # recovery, security and migration templates
-│   └── ...                            # Generated/Android project resources
-├── src/
-│   ├── bookings/                      # Booking policies/domain helpers
-│   ├── features/
-│   │   └── payments/                  # Payment UI/feature modules
-│   ├── payments/                      # Payment engine, intents, evidence,
-│   │                                  # settlement, reconciliation and safety
-│   ├── services/                      # App-facing service/API boundaries
-│   ├── storage/                       # Persistence adapters, PMS repositories,
-│   │                                  # schemas, bootstrap/cutover, authority,
-│   │                                  # backup vault, photo archive and storage
-│   └── sync/                           # Local sync coordination and cloud connection
-├── payment-backend/                   # Backend payment services (where present)
-├── scripts/
-│   ├── gates/                         # Gate/evidence utilities
-│   ├── prepare-web.js                 # Web asset/build preparation
-│   ├── check-*                       # Boundary, release and secret checks
-│   └── run-* / verify-*               # Android qualification helpers
-├── tests/
-│   ├── storage/                       # Storage and repository contracts
-│   ├── sync/                          # Sync tests
-│   ├── services/                      # Service tests
-│   └── *.test.mjs                     # Unit, integration, workflow and security tests
-├── docs/                               # Architecture, qualification, security,
-│                                       # payment, backup, recovery and release docs
-└── .github/workflows/                  # CI, Android build and qualification gates
-```
+- `index.html`: PMS WebView UI and application orchestration.
+- `src/`: modular PMS code — backup, bookings, features, payments, services, storage and sync.
+- `src/storage/`: browser/native persistence adapters, repository contracts, schemas, bootstrap, authority/cutover, backup vault and photo archive.
+- `src/backup/`: encrypted backup adapters and owner-controlled destinations. Google Drive implementation and owner-account verification are consolidated in PR #55, pending merge.
+- `android/templates/`: native Android Java/Kotlin source templates for storage, recovery, security, identity, payment bridge and instrumentation.
+- `scripts/` and `scripts/gates/`: web/Android packaging, patching, candidate validation, evidence and qualification tools.
+- `tests/`: Node unit/regression/security tests; storage, service and sync contract suites.
+- `functions/`: Firebase recovery backend source, tests and deployment tooling.
+- `payment-backend/`: payment platform, provider adapters, intents, webhooks, secrets, settlement, workers, qualification and Terraform.
+- `docs/`: architecture, security, backup, release qualification and audit records.
+- `.github/workflows/`: CI, Android instrumentation, security gates and release qualification.
 
-### Key storage modules
+### Storage boundary
 
-- `pms-repository-contract.mjs`, `pms-repository-bridge.mjs`: repository contract and validated bridge.
-- `indexeddb-pms-repository.mjs`: browser persistence implementation.
-- `capacitor-pms-storage.mjs` and Android `LocalPmsRepository`: native persistence boundary.
-- `pms-domain-schemas.mjs`: domain validation.
-- `pms-bootstrap-coordinator.mjs`, `pms-authority-state.mjs`, `pms-domain-cutover.mjs`: bootstrap, authority and cutover controls.
-- Domain repositories: expenses, inventory, restaurant sales/tables, settings and operational mutations/reservations.
-- `backup-vault-store.mjs`, `photo-archive.mjs`: backup/attachment storage foundations.
-- Legacy web-storage modules remain for migration/compatibility and must not become the canonical authority after cutover.
+The browser uses IndexedDB; Android uses the native repository/SQLCipher boundary. The generated Android project is patched from templates/scripts, so change the source template or patch—not generated build output. Cloud and backup destinations are opt-in and do not replace local PMS authority. Payment backend records and PMS backups remain separate.
 
-### Key payment modules
-
-- `payment-engine.mjs`, `payment-safety-gate.mjs`, `backend-router.mjs`: payment orchestration and guarded backend routing.
-- Payment intent/evidence stores and local ledger receipt/outbox modules: durable intent/evidence foundations.
-- Settlement and reconciliation services/journal/projector: canonical financial processing and verification foundations.
-- Device payment bridge and Pay Bridge orchestrator: Android/native payment-device boundary.
-- Provider platform/onboarding modules: provider integration abstractions and onboarding status.
-- Live collection, automatic settlement, and automatic refund posting remain disabled unless separately qualified and authorized.
 
 ## Active development workstreams
 
@@ -364,7 +360,7 @@ The following is a high-level map of the current integration branch. It is inten
 | Local-first PMS persistence | In progress | Repository/adapter foundations exist; full UI cutover and parity qualification remain outstanding. |
 | Encrypted Android storage | In progress / qualification required | Native implementation and workflows exist; exact-head instrumentation and physical-device evidence are required. |
 | Backup vault and restore | Foundation present | End-to-end encrypted second-device restore and integrity qualification remain outstanding. |
-| Owner-controlled cloud backup | Design requirement; implementation integration pending | Each owner must authorize their own provider account. Draft provider work is not integrated here. |
+| Owner-controlled cloud backup | Draft candidate; not integrated | PR #49 is the current candidate; PR #50/#51 overlap. Candidate CI is mostly green, but Android recovery instrumentation failed and real OAuth/Drive/device restore remain unqualified. |
 | Cloud-provider abstraction | Draft workstream | Contract and provider integration need convergence with backup orchestration. |
 | Multi-tenant recovery isolation | Draft workstream | Tenant isolation and cross-tenant tests are qualification work, not production approval. |
 | Public SaaS identity/tenancy | Architecture/documentation workstream | Account, tenant, property, membership and authorization foundations are not a complete SaaS implementation. |
@@ -373,6 +369,10 @@ The following is a high-level map of the current integration branch. It is inten
 | Gates 4–6 | Not release-qualified | Physical-device qualification, production security audit and release sign-off depend on preceding evidence. |
 
 Draft PRs and parallel branches are not merged functionality. Before integration, review their diffs, run tests, and reconcile overlapping architecture—especially backup orchestration versus cloud-provider abstraction and local-first repositories versus legacy UI paths.
+
+## Gate 3 identity configuration
+
+See [docs/GATE-3-WIF-SETUP.md](docs/GATE-3-WIF-SETUP.md) for the required GitHub Environment values, Google Cloud WIF trust setup, staging-only IAM boundaries and qualification steps. The repository does not contain or create the user's Google Cloud credentials.
 
 ## Recovery and release qualification
 

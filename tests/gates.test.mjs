@@ -385,3 +385,30 @@ test('manual attestation accepts a tester distinct from every approver', () => {
   });
   assert.equal(result.status, 0, output(result));
 });
+
+test('frozen candidate SHA remains valid after candidate branch advances', (t) => {
+  const dir = tempDir(t);
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const fakeGh = path.join(bin, 'gh');
+  fs.writeFileSync(fakeGh, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] !== 'api') { process.exit(2); }
+const endpoint = args[1];
+if (endpoint.endsWith('/git/ref/heads/work/p0-storage-hardening')) {
+  console.log(JSON.stringify({ object: { sha: '${SHA_B}' } }));
+} else if (endpoint.includes('/compare/${SHA_A}...work/p0-storage-hardening')) {
+  console.log(JSON.stringify({
+    status: 'ahead', base_commit: { sha: '${SHA_A}' },
+    head_commit: { sha: '${SHA_B}' }, merge_base_commit: { sha: '${SHA_A}' },
+    ahead_by: 3, behind_by: 0
+  }));
+} else { console.error('unexpected API path: ' + endpoint); process.exit(2); }
+`);
+  fs.chmodSync(fakeGh, 0o755);
+  const result = run(t, 'check-candidate.mjs', ['--sha', SHA_A, '--repo', 'owner/repo', '--branch', 'work/p0-storage-hardening'], {
+    PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+  }, dir);
+  assert.equal(result.status, 0, output(result));
+  assert.match(output(result), /frozen and reachable/);
+});

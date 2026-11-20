@@ -97,6 +97,31 @@ jobs:
           java-version: '21'
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
 
+      - name: Validate Workload Identity Federation configuration
+        shell: bash
+        env:
+          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER || secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ vars.STAGING_DEPLOY_SERVICE_ACCOUNT || secrets.STAGING_DEPLOY_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$WIF_PROVIDER" ]]; then
+            echo "::error::Missing recovery-staging configuration: GCP_WORKLOAD_IDENTITY_PROVIDER (GitHub Environment variable recommended; secret fallback supported)."
+            exit 1
+          fi
+          if [[ -z "$DEPLOY_SERVICE_ACCOUNT" ]]; then
+            echo "::error::Missing recovery-staging configuration: STAGING_DEPLOY_SERVICE_ACCOUNT (GitHub Environment variable recommended; secret fallback supported)."
+            exit 1
+          fi
+          if [[ ! "$WIF_PROVIDER" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[A-Za-z0-9_-]+/providers/[A-Za-z0-9_-]+$ ]]; then
+            echo "::error::GCP_WORKLOAD_IDENTITY_PROVIDER must be a full Google WIF provider resource name."
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_SERVICE_ACCOUNT" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$ ]]; then
+            echo "::error::STAGING_DEPLOY_SERVICE_ACCOUNT must be a Google service-account email."
+            exit 1
+          fi
+          echo "PASS: Workload Identity Federation provider and deploy service-account identifiers are present and well-formed."
+
       - name: Build candidate Functions before granting deployment credentials
         working-directory: candidate
         shell: bash
@@ -117,31 +142,6 @@ jobs:
           '
           test -s functions/lib/index.js
           test -s firebase.deploy.json
-
-      - name: Validate Workload Identity Federation configuration
-        shell: bash
-        env:
-          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER || secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          DEPLOY_SERVICE_ACCOUNT: ${{ vars.STAGING_DEPLOY_SERVICE_ACCOUNT || secrets.STAGING_DEPLOY_SERVICE_ACCOUNT }}
-        run: |
-          set -euo pipefail
-          if [[ -z "$WIF_PROVIDER" ]]; then
-            echo "::error::Missing recovery-staging configuration: GCP_WORKLOAD_IDENTITY_PROVIDER (GitHub Environment variable recommended; secret fallback supported)."
-            exit 1
-          fi
-          if [[ -z "$DEPLOY_SERVICE_ACCOUNT" ]]; then
-            echo "::error::Missing recovery-staging configuration: STAGING_DEPLOY_SERVICE_ACCOUNT (GitHub Environment variable recommended; secret fallback supported)."
-            exit 1
-          fi
-          if [[ ! "$WIF_PROVIDER" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[A-Za-z0-9_-]+/providers/[A-Za-z0-9_-]+$ ]]; then
-            echo "::error::GCP_WORKLOAD_IDENTITY_PROVIDER must be a full Google WIF provider resource name."
-            exit 1
-          fi
-          if [[ ! "$DEPLOY_SERVICE_ACCOUNT" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.iam\\.gserviceaccount\\.com$ ]]; then
-            echo "::error::STAGING_DEPLOY_SERVICE_ACCOUNT must be a Google service-account email."
-            exit 1
-          fi
-          echo "PASS: Workload Identity Federation provider and deploy service-account identifiers are present and well-formed."
 
       - name: Authenticate to staging Google Cloud with Workload Identity Federation
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
