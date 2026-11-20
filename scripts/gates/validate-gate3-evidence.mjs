@@ -3,8 +3,9 @@ import { fail, requireSha } from './lib.mjs';
 
 const REQUIRED_PROBE_CASES = ['no App Check token', 'invalid App Check token'];
 const SHA256_RE = /^[0-9a-f]{64}$/;
+const REQUIRED_PHYSICAL_CASES = ['G3-01', 'G3-02', 'G3-03', 'G3-04', 'G3-05', 'G3-06', 'G3-07', 'G3-08', 'G3-09', 'G3-10'];
 
-export function validateGate3Evidence({ probes, details, candidateSha, physicalMatrix = null, deployedInventory = null }) {
+export function validateGate3Evidence({ probes, details, candidateSha, controlSha = null, physicalMatrix = null, deployedInventory = null }) {
   requireSha(candidateSha);
   if (!Array.isArray(probes) || probes.length === 0) throw new Error('Gate 3 evidence must contain at least one probe');
   if (!details || typeof details !== 'object' || Array.isArray(details)) throw new Error('Gate 3 details must be an object');
@@ -41,10 +42,15 @@ export function validateGate3Evidence({ probes, details, candidateSha, physicalM
   if (!deployedInventory || deployedInventory.candidateSha !== candidateSha || deployedInventory.reconciled !== true) throw new Error('deployed callable inventory evidence is missing or not bound to candidate SHA');
   if (JSON.stringify([...deployedInventory.inventory].sort()) !== JSON.stringify(expected) ||
       JSON.stringify([...deployedInventory.deployed].sort()) !== JSON.stringify(expected)) throw new Error('deployed callable inventory does not match probe inventory');
+  const physicalCasesPass = physicalMatrix && physicalMatrix.cases && REQUIRED_PHYSICAL_CASES.every(id => physicalMatrix.cases[id] === 'PASS');
   const physical = physicalMatrix && physicalMatrix.candidateSha === candidateSha &&
-    physicalMatrix.status === 'QUALIFIED' && physicalMatrix.signoff &&
-    typeof physicalMatrix.signoff.reviewer === 'string' && physicalMatrix.signoff.reviewer.trim() &&
-    typeof physicalMatrix.signoff.signedAt === 'string' && physicalMatrix.signoff.signedAt.trim() && SHA_RE.test(physicalMatrix.signoff.commit ?? '');
+    physicalMatrix.status === 'QUALIFIED' && physicalCasesPass &&
+    physicalMatrix.device && typeof physicalMatrix.device.model === 'string' && physicalMatrix.device.model.trim() &&
+    Number.isInteger(physicalMatrix.device.androidApi) && physicalMatrix.device.androidApi >= 24 &&
+    SHA256_RE.test((physicalMatrix.device.apkSha256 ?? '').toLowerCase()) &&
+    physicalMatrix.signoff && typeof physicalMatrix.signoff.reviewer === 'string' && physicalMatrix.signoff.reviewer.trim() &&
+    typeof physicalMatrix.signoff.signedAt === 'string' && physicalMatrix.signoff.signedAt.trim() &&
+    SHA_RE.test(physicalMatrix.signoff.commit ?? '') && controlSha && physicalMatrix.signoff.commit === controlSha;
   return {
     STAGING_DEPLOYMENT: details.stagingDeployment === 'QUALIFIED' ? 'QUALIFIED' : 'NOT QUALIFIED',
     APPCHECK_NEGATIVE_PROBES: 'QUALIFIED',
@@ -61,10 +67,11 @@ if (process.argv[1] && process.argv[1].endsWith('validate-gate3-evidence.mjs')) 
     probes = JSON.parse(fs.readFileSync('evidence/probes.json', 'utf8'));
     details = JSON.parse(fs.readFileSync('evidence/details.json', 'utf8'));
     deployedInventory = JSON.parse(fs.readFileSync('evidence/callable-inventory.json', 'utf8'));
-    if (fs.existsSync('evidence/physical-device-matrix.json')) physicalMatrix = JSON.parse(fs.readFileSync('evidence/physical-device-matrix.json', 'utf8'));
+    const matrixPath = process.env.GATE3_PHYSICAL_MATRIX_PATH ?? 'docs/GATE-3-PHYSICAL-DEVICE-MATRIX.json';
+    if (fs.existsSync(matrixPath)) physicalMatrix = JSON.parse(fs.readFileSync(matrixPath, 'utf8'));
   } catch { fail('Gate 3 evidence files are missing or invalid JSON'); }
   let statuses;
-  try { statuses = validateGate3Evidence({ probes, details, candidateSha, physicalMatrix, deployedInventory }); }
+  try { statuses = validateGate3Evidence({ probes, details, candidateSha, controlSha: process.env.GITHUB_SHA, physicalMatrix, deployedInventory }); }
   catch (error) { fail(error.message); }
   fs.writeFileSync('evidence/statuses.json', JSON.stringify(statuses, null, 2));
   if (statuses.GATE_3_OVERALL !== 'QUALIFIED') console.log('Gate 3 overall remains NOT QUALIFIED: physical-device matrix/signoff or required staging evidence is incomplete.');
