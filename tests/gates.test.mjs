@@ -146,6 +146,16 @@ test('Gate 3 is scoped to Google Sign-In and Email-Link owner verification, not 
   assert.match(qualification, /do not constitute a successful authenticated Google Sign-In or Email-Link exchange/);
   assert.match(pipeline, /Gate 3 controller branch/);
   assert.match(pipeline, /work\/gate-3-google-email-link/);
+  const gate4 = fs.readFileSync(path.join(ROOT, '.github/workflows/gate-4-physical-device.yml'), 'utf8');
+  const gate6 = fs.readFileSync(path.join(ROOT, '.github/workflows/gate-6-release-signoff.yml'), 'utf8');
+  const fetchGate3 = fs.readFileSync(path.join(ROOT, 'scripts/gates/fetch-gate3.mjs'), 'utf8');
+  const qualificationVerifier = fs.readFileSync(path.join(ROOT, 'scripts/gates/verify-qualification.mjs'), 'utf8');
+  assert.match(fetchGate3, /gate-3-google-email-link-staging\.yml/);
+  assert.match(fetchGate3, /GATE3_CONTROL_BRANCH/);
+  assert.match(gate4, /GATE3_CONTROL_BRANCH/);
+  assert.match(gate6, /GATE3_CONTROL_BRANCH/);
+  assert.match(qualificationVerifier, /gate === '3' \? gate3ControlBranch : controlBranch/);
+  assert.match(qualificationVerifier, /gate-3-google-email-link-staging\.yml/);
 });
 
 test('Gate 3 probe configuration requires Email-Link and excludes SMS/OTP/grant callables', (t) => {
