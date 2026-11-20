@@ -73,7 +73,8 @@ test("payload entry point binds decryption to the selected file name", async () 
   const f = await fixture();
   await assert.rejects(context.decryptBackupPayload(JSON.stringify(f.envelope), "different-backup.json"));
 });
-\ntest("malformed crypto fields fail closed", async () => {
+
+test("malformed crypto fields fail closed", async () => {
   const f = await fixture();
   for (const malformed of [
     { ...f.envelope, salt: "AA==" },
