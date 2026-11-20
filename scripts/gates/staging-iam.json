@@ -1,0 +1,7 @@
+{
+  "expectedRepository": "Akshayshetye37/Aurelia-apk",
+  "expectedRef": "refs/heads/integration/ledger-patch",
+  "allowedStagingDeployRoles": [
+    "UNCONFIGURED"
+  ]
+}
