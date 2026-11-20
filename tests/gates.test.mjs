@@ -367,7 +367,7 @@ if (args[0] === 'api') {
     path.join(GATES, 'verify-runs.mjs'), '--sha', SHA_A, '--repo', 'owner/repo', '--group', 'gate1',
   ], {
     cwd: dir,
-    env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, CANDIDATE_BRANCH: 'work/p0-storage-hardening' },
+    env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, CANDIDATE_BRANCH: 'fix/backup-consolidated-integration' },
     encoding: 'utf8', timeout: 15_000, maxBuffer: 2 * 1024 * 1024,
   });
   assert.equal(result.status, 1);
