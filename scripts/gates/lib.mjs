@@ -111,9 +111,10 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
   if (!fs.existsSync(recordPath)) fail(`gate ${gate}: evidence record missing`);
   let record;
   try { record = JSON.parse(fs.readFileSync(recordPath, 'utf8')); } catch { fail(`gate ${gate}: evidence record is invalid JSON`); }
-  if (record.gate !== String(gate) || record.status !== 'PASS' ||
+  const requiredRecordStatus = String(gate) === '3' ? 'QUALIFIED' : 'PASS';
+  if (record.gate !== String(gate) || record.status !== requiredRecordStatus ||
       record.runId !== Number(runId) || record.repository !== repo || record.controlSha !== run.head_sha ||
-      !SHA_RE.test(record.candidateSha ?? '')) fail(`gate ${gate}: record does not match its run`);
+      !SHA_RE.test(record.candidateSha ?? '')) fail(`gate ${gate}: record status/evidence does not qualify or does not match its run`);
   if (record.runAttempt !== Number(run.run_attempt)) fail(`gate ${gate}: run attempt mismatch`);
   return record;
 }
