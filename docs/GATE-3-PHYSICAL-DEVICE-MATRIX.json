@@ -22,6 +22,6 @@
   "signoff": {
     "reviewer": "",
     "signedAt": "",
-    "commit": ""
+    "commit": "REPLACE_WITH_EXACT_CANDIDATE_SHA"
   }
 }
