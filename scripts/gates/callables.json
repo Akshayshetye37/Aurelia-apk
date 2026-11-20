@@ -10,13 +10,15 @@
       "confirmRecoveryOwnerBinding"
     ],
     "excluded": [
+      "createRecoveryAttestationChallenge",
+      "verifyRecoveryDeviceAttestation",
       "registerRecoveryPhone",
-      "activateRecoveryPhoneChange",
-      "cancelRecoveryPhoneChange",
       "registerRecoveryOwnerDevice",
-      "acknowledgeRecoveryOwnerAlert",
-      "getRecoveryOwnerPendingAction",
-      "getRecoveryOwnerActionReadiness"
+      "issueRecoveryGrant",
+      "consumeRecoveryGrant",
+      "cancelRecoveryRequest",
+      "cancelRecoveryPhoneChange",
+      "activateRecoveryPhoneChange"
     ]
   }
 }
