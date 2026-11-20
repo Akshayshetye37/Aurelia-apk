@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "callables": [
+    "createRecoveryAttestationChallenge",
+    "verifyRecoveryDeviceAttestation",
+    "registerRecoveryPhone",
+    "exchangeOwnerEmailLink",
+    "confirmRecoveryOwnerBinding",
+    "registerRecoveryOwnerDevice",
+    "acknowledgeRecoveryOwnerAlert",
+    "issueRecoveryGrant",
+    "consumeRecoveryGrant",
+    "cancelRecoveryRequest",
+    "cancelRecoveryPhoneChange",
+    "activateRecoveryPhoneChange"
+  ]
+}
