@@ -26,7 +26,7 @@ function extractFunction(name) {
 const functions = [
   "function backupB64", "function backupUnB64", "async function backupPasswordKey",
   "async function sha256Hex", "function constantTimeHexEqual",
-  "async function verifyBackupManifestPayload", "async function decryptBackupEnvelope"
+  "async function verifyBackupManifestPayload", "async function decryptBackupEnvelope", "async function decryptBackupPayload"
 ].map(extractFunction);
 const source = `const BACKUP_KDF_ITERATIONS=600000;\n${functions.join("\n")}\n`;
 const context = vm.createContext({
@@ -37,11 +37,11 @@ const context = vm.createContext({
   writeBackupVault: async () => {},
   prompt: () => "correct horse battery staple"
 });
-vm.runInContext(source + "\nthis.decryptBackupEnvelope=decryptBackupEnvelope;this.backupPasswordKey=backupPasswordKey;this.backupB64=backupB64;this.sha256Hex=sha256Hex;", context);
+vm.runInContext(source + "\nthis.decryptBackupEnvelope=decryptBackupEnvelope;this.decryptBackupPayload=decryptBackupPayload;this.backupPasswordKey=backupPasswordKey;this.backupB64=backupB64;this.sha256Hex=sha256Hex;", context);
 
 const password = "correct horse battery staple";
 const payload = JSON.stringify({ v: 4, data: { rooms: [], b: [], g: [], t: [], sales: [], exp: [], inv: [], led: [], aud: [] } });
-async function fixture() {
+async function fixture(version = 3) {
   const rawKey = webcrypto.getRandomValues(new Uint8Array(32));
   const salt = webcrypto.getRandomValues(new Uint8Array(16));
   const wrapIv = webcrypto.getRandomValues(new Uint8Array(12));
@@ -51,10 +51,10 @@ async function fixture() {
   const wrappedKey = await webcrypto.subtle.encrypt({ name: "AES-GCM", iv: wrapIv, additionalData: new TextEncoder().encode("com.aurelia.pms|backup-key-wrap|v1") }, kek, rawKey);
   const key = await webcrypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["encrypt"]);
   const name = "aurelia-backup-2026-11-20-" + "a".repeat(64) + ".json";
-  const manifest = { formatVersion: 3, name, payloadSha256: await context.sha256Hex(payload), payloadBytes: new TextEncoder().encode(payload).length, recordCounts: { rooms:0,b:0,g:0,t:0,sales:0,exp:0,inv:0,led:0,aud:0 } };
-  const aad = new TextEncoder().encode("com.aurelia.pms|backup-v3|3|" + name + "|" + JSON.stringify(manifest));
+  const manifest = { formatVersion: version, name, payloadSha256: await context.sha256Hex(payload), payloadBytes: new TextEncoder().encode(payload).length, recordCounts: { rooms:0,b:0,g:0,t:0,sales:0,exp:0,inv:0,led:0,aud:0 } };
+  const aad = new TextEncoder().encode(version === 2 ? "com.aurelia.pms|backup-v2|" + JSON.stringify(manifest) : "com.aurelia.pms|backup-v3|3|" + name + "|" + JSON.stringify(manifest));
   const ciphertext = await webcrypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad }, key, new TextEncoder().encode(payload));
-  const envelope = { format: "AURELIA-PMS-ENCRYPTED-BACKUP", v:3, application:"com.aurelia.pms", name, cipher:"AES-256-GCM", kdf:"PBKDF2-HMAC-SHA256", iterations, salt:context.backupB64(salt), wrapIv:context.backupB64(wrapIv), wrappedKey:context.backupB64(wrappedKey), manifest, iv:context.backupB64(iv), ciphertext:context.backupB64(ciphertext) };
+  const envelope = { format: "AURELIA-PMS-ENCRYPTED-BACKUP", v:version, application:"com.aurelia.pms", name, cipher:"AES-256-GCM", kdf:"PBKDF2-HMAC-SHA256", iterations, salt:context.backupB64(salt), wrapIv:context.backupB64(wrapIv), wrappedKey:context.backupB64(wrappedKey), manifest, iv:context.backupB64(iv), ciphertext:context.backupB64(ciphertext) };
   return { envelope, payload };
 }
 
@@ -63,7 +63,17 @@ test("v3 encrypted backup decrypts with the correct recovery password", async ()
   assert.equal(await context.decryptBackupEnvelope(f.envelope, f.envelope.name), payload);
 });
 
-test("malformed crypto fields fail closed", async () => {
+
+test("existing v2 encrypted backups remain readable", async () => {
+  const f = await fixture(2);
+  assert.equal(await context.decryptBackupEnvelope(f.envelope, f.envelope.name), payload);
+});
+
+test("payload entry point binds decryption to the selected file name", async () => {
+  const f = await fixture();
+  await assert.rejects(context.decryptBackupPayload(JSON.stringify(f.envelope), "different-backup.json"));
+});
+\ntest("malformed crypto fields fail closed", async () => {
   const f = await fixture();
   for (const malformed of [
     { ...f.envelope, salt: "AA==" },
