@@ -37,7 +37,7 @@ concurrency:
 
 jobs:
   deploy-and-build:
-    if: (github.workflow_ref == format('{0}/.github/workflows/gate-3-google-email-link-staging.yml@refs/heads/{1}', github.repository, vars.GATE_CONTROL_BRANCH || 'work/gate-3-google-email-link')) || (github.workflow_ref == format('{0}/.github/workflows/recovery-staging-deploy.yml@refs/heads/integration/ledger-patch', github.repository))
+    if: github.workflow_ref == format('{0}/.github/workflows/gate-3-google-email-link-staging.yml@refs/heads/{1}', github.repository, vars.GATE_CONTROL_BRANCH || 'work/gate-3-google-email-link')
     runs-on: ubuntu-latest
     outputs:
       staging_project_id: ${{ steps.staging-outputs.outputs.staging_project_id }}
