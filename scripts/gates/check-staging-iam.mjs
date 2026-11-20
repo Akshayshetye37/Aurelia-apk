@@ -32,7 +32,7 @@ if (!match) fail('WIF provider resource name is invalid');
 const [, providerProjectNumber, poolId, providerId] = match;
 const expectedCondition = `assertion.repository == '${config.expectedRepository}' && assertion.ref == '${config.expectedRef}'`;
 const providerConfig = gcloud(['iam', 'workload-identity-pools', 'providers', 'describe', providerId, '--location=global', '--workload-identity-pool', poolId, '--project', provider.split('/')[1]]);
-if (normalizeCondition(providerConfig.attributeCondition?.expression) !== normalizeCondition(expectedCondition)) fail('WIF provider condition does not exactly restrict repository and branch');
+if (normalizeCondition(providerConfig.attributeCondition) !== normalizeCondition(expectedCondition)) fail('WIF provider condition does not exactly restrict repository and branch');
 const saPolicy = gcloud(['iam', 'service-accounts', 'get-iam-policy', deployServiceAccount, '--project', stagingProject]);
 const expectedMember = `principalSet://iam.googleapis.com/projects/${providerProjectNumber}/locations/global/workloadIdentityPools/${poolId}/attribute.repository/${config.expectedRepository}`;
 const wifBindings = (saPolicy.bindings ?? []).filter(binding => binding.role === 'roles/iam.workloadIdentityUser' && (binding.members ?? []).includes(expectedMember));
