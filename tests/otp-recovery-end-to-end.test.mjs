@@ -270,6 +270,11 @@ test('Gate 3 staging deployment uses an email-link allowlist and does not deploy
   assert.match(staging, /candidate\/functions\/src\/index\.ts/);
   assert.match(staging, /JSON\.stringify\(exported\) !== JSON\.stringify\(inventoried\)/);
   assert.match(staging, /android:pathPrefix=\"\/__\/auth\/links\"/);
+  assert.match(staging, /GATE3_DEPLOY_ONLY=.*join\(\"[,]\"\) \+ \\"\\n\\"/);
+  const scope = read('docs/GATE-3-SCOPE.md');
+  assert.match(scope, /PMS app sign-in.*NOT BUILT|app authentication implementation is NOT BUILT/);
+  assert.match(scope, /recovery-owner verification, not the selected PMS app sign-in fallback/);
+  assert.match(inventory.gate3.scope, /NOT PMS app sign-in/);
   const inventory = JSON.parse(read('scripts/gates/callables.json'));
   assert.deepEqual(inventory.gate3.excluded, [
     'createRecoveryAttestationChallenge', 'verifyRecoveryDeviceAttestation', 'registerRecoveryPhone',
