@@ -433,7 +433,7 @@ Cloud onboarding is not complete until the following are verified:
 
 # Historical integration branch snapshot — 2026-11-20
 
- > This is a historical snapshot of `integration/ledger-patch`, not the current Gate 3 controller branch or candidate status.
+> This is a historical snapshot of `integration/ledger-patch`, not the current Gate 3 controller branch or candidate status.
 
 - **Repository:** https://github.com/Akshayshetye37/Aurelia-apk
 - **Branch at snapshot:** `integration/ledger-patch`
