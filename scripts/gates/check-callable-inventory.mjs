@@ -3,6 +3,7 @@ import { fail } from './lib.mjs';
 
 const inventoryPath = process.argv[2] ?? 'scripts/gates/callables.json';
 const deployedPath = process.argv[3] ?? 'evidence/deployed-functions.json';
+const outputPath = process.argv[4] ?? 'evidence/callable-inventory.json';
 let inventory, deployed;
 try {
   inventory = JSON.parse(fs.readFileSync(inventoryPath, 'utf8'));
@@ -19,6 +20,6 @@ const staleProbes = inventory.callables.filter(name => !actual.includes(name));
 if (missingProbes.length || staleProbes.length) {
   fail(`deployed callable inventory mismatch; missing probes: ${missingProbes.join(', ') || 'none'}; nonexistent probes: ${staleProbes.join(', ') || 'none'}`);
 }
-fs.mkdirSync('evidence', { recursive: true });
-fs.writeFileSync('evidence/callable-inventory.json', JSON.stringify({ inventory: [...inventory.callables].sort(), deployed: [...actual].sort(), reconciled: true }, null, 2));
+fs.mkdirSync(new URL('.', 'file://' + outputPath), { recursive: true });
+fs.writeFileSync(outputPath, JSON.stringify({ candidateSha: process.env.CANDIDATE_SHA ?? null, inventory: [...inventory.callables].sort(), deployed: [...actual].sort(), reconciled: true }, null, 2));
 console.log(`Callable inventory reconciled: ${actual.length} deployed callable(s).`);
