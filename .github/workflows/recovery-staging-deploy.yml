@@ -63,7 +63,7 @@ jobs:
       PRODUCTION_PROJECT: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
       STAGING_FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
-      RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'createRecoveryAttestationChallenge,verifyRecoveryDeviceAttestation,registerRecoveryPhone,exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,issueRecoveryGrant,consumeRecoveryGrant,cancelRecoveryRequest,cancelRecoveryPhoneChange,activateRecoveryPhoneChange' }}
+      RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || '' }}
       EXPECTED_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
     steps:
       - name: Checkout trusted workflow control revision
@@ -150,6 +150,12 @@ jobs:
           service_account: ${{ vars.STAGING_DEPLOY_SERVICE_ACCOUNT || secrets.STAGING_DEPLOY_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
+
+      - name: Load authoritative recovery callable inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e 'const fs=require("fs"); const i=JSON.parse(fs.readFileSync("scripts/gates/callables.json", "utf8")); if(!Array.isArray(i.callables)||!i.callables.length||new Set(i.callables).size!==i.callables.length) process.exit(1); if(i.callables.some(n=>!/^[A-Za-z0-9_-]+$/.test(n))) process.exit(1); process.stdout.write("RECOVERY_CALLABLES="+i.callables.join(",")+"\\n")' >> "$GITHUB_ENV"
 
       - name: Validate staging configuration without printing secrets
         shell: bash
@@ -284,7 +290,8 @@ jobs:
           REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
         run: |
           set -euo pipefail
-          functions=(createRecoveryAttestationChallenge verifyRecoveryDeviceAttestation registerRecoveryPhone exchangeOwnerEmailLink confirmRecoveryOwnerBinding registerRecoveryOwnerDevice acknowledgeRecoveryOwnerAlert issueRecoveryGrant consumeRecoveryGrant cancelRecoveryRequest cancelRecoveryPhoneChange activateRecoveryPhoneChange)
+          mapfile -t functions < <(node -e 'const fs=require("fs"); const i=JSON.parse(fs.readFileSync("scripts/gates/callables.json", "utf8")); process.stdout.write(i.callables.join("\\n"))')
+          test "${#functions[@]}" -gt 0
           for function_name in "${functions[@]}"; do
             url="https://${REGION}-${PROJECT_ID}.cloudfunctions.net/${function_name}"
             missing_code="$(curl --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 10 -sS -o "$RUNNER_TEMP/appcheck-missing.json" -w '%{http_code}' -X POST "$url" -H 'Content-Type: application/json' --data '{"data":{}}')"
