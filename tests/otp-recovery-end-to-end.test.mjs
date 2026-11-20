@@ -162,10 +162,8 @@ test('Gate 3 staging deployment probes missing and invalid App Check on owner-ve
   assert.match(workflow, /Probe missing and invalid App Check tokens/);
   assert.match(workflow, /X-Firebase-AppCheck: invalid-staging-probe-token/);
   const probeBlock = workflow.slice(workflow.indexOf('functions=('), workflow.indexOf('for function_name in "${functions[@]}"'));
-  assert.ok(probeBlock.includes('functions=(exchangeOwnerEmailLink confirmRecoveryOwnerBinding registerRecoveryOwnerDevice acknowledgeRecoveryOwnerAlert getRecoveryOwnerPendingAction getRecoveryOwnerActionReadiness'));
-  for (const callable of ['exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
-    'registerRecoveryOwnerDevice', 'acknowledgeRecoveryOwnerAlert',
-    'getRecoveryOwnerPendingAction', 'getRecoveryOwnerActionReadiness']) assert.ok(probeBlock.includes(callable));
+  assert.ok(probeBlock.includes('functions=(exchangeOwnerEmailLink confirmRecoveryOwnerBinding'));
+  for (const callable of ['exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding']) assert.ok(probeBlock.includes(callable));
   for (const excluded of ['registerRecoveryPhone', 'createRecoveryAttestationChallenge',
     'verifyRecoveryDeviceAttestation', 'issueRecoveryGrant', 'consumeRecoveryGrant',
     'cancelRecoveryRequest', 'cancelRecoveryPhoneChange', 'activateRecoveryPhoneChange']) assert.ok(!probeBlock.includes(excluded));
@@ -260,17 +258,16 @@ test('production flag audit proves it targets the configured production project'
 });
 
 
-test('staging and production audits verify per-function Secret Manager runtime access', () => {
-  for (const path of [
-    '.github/workflows/recovery-staging-deploy.yml',
-    '.github/workflows/recovery-production-flag-audit.yml'
-  ]) {
-    const workflow = read(path);
-    assert.match(workflow, /Verify deployed recovery runtime service accounts can access their secrets|Read-only verification of the actual deployed runtime identities/);
-    assert.match(workflow, /gcloud functions describe "\$function_name"/);
-    assert.match(workflow, /roles\/secretmanager\.secretAccessor/);
-    assert.match(workflow, /acknowledgeRecoveryOwnerAlert:PHONE_PEPPER/);
-  }
+test('Gate 3 staging deployment uses an email-link allowlist and does not deploy recovery phone secrets or functions', () => {
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  const production = read('.github/workflows/recovery-production-flag-audit.yml');
+  assert.match(staging, /firebase deploy --only "\$GATE3_DEPLOY_ONLY"/);
+  assert.match(staging, /functions=\(exchangeOwnerEmailLink confirmRecoveryOwnerBinding\)/);
+  assert.doesNotMatch(staging, /PHONE_PEPPER|RECOVERY_SIGNING_KEY_PKCS8|registerRecoveryPhone|verifyRecoveryDeviceAttestation|registerRecoveryOwnerDevice/);
+  assert.match(production, /Read-only verification of the actual deployed runtime identities/);
+  assert.match(production, /gcloud functions describe "\$function_name"/);
+  assert.match(production, /roles\/secretmanager\.secretAccessor/);
+  assert.match(production, /acknowledgeRecoveryOwnerAlert:PHONE_PEPPER/);
 });
 
 
@@ -283,10 +280,14 @@ test('physical-device Gate 4 workflow reboots between committed PIN B and post-r
 });
 
 
-test('Gate 3 staging deployment follows the current candidate branch while Gate 4 remains separately qualified', () => {
-  assert.match(read('.github/workflows/recovery-staging-deploy.yml'), /refs\/heads\/integration\/ledger-patch/);
-  assert.match(read('.github/workflows/gate-3-real-sms-staging.yml'), /--branch "integration\/ledger-patch"/);
-  assert.match(read('.github/workflows/recovery-physical-device-qualification.yml'), /\.head_branch == "work\/p0-storage-hardening"/);
+test('Gate 3 controller is isolated and Gate 4 consumes the same frozen candidate', () => {
+  const staging = read('.github/workflows/recovery-staging-deploy.yml');
+  const gate3 = read('.github/workflows/gate-3-google-email-link-staging.yml');
+  const gate4 = read('.github/workflows/gate-4-physical-device.yml');
+  assert.match(staging, /gate-3-google-email-link-staging\.yml@refs\/heads\/work\/gate-3-google-email-link/);
+  assert.match(gate3, /--branch "fix\/backup-consolidated-integration"/);
+  assert.match(gate4, /CANDIDATE_BRANCH: \$\{\{ vars\.CANDIDATE_BRANCH \|\| 'fix\/backup-consolidated-integration' \}\}/);
+  assert.match(gate4, /GATE3_CONTROL_BRANCH: work\/gate-3-google-email-link/);
 });
 
 
