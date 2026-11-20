@@ -60,7 +60,7 @@ Before Gate 3 can qualify:
 
 ## Historical failures
 
-Runs [44505319033](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44505319033) and [44397260341](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44397260341) failed at the Workload Identity Federation authentication step. Candidate preflight and Functions build passed, and downstream deployment/evidence jobs were skipped. The exact provider/service-account error output could not be independently retrieved in this review; therefore the failure is **not yet proven to be configuration-only**.
+Runs [44505319033](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44505319033) and [44397260341](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44397260341) failed at the Workload Identity Federation authentication step. Their logs show the auth action rejected the invocation because it received neither `workload_identity_provider` nor `credentials_json`. The workflow preflight accepted GitHub Environment variables/secret fallback, but the auth action inputs were wired to secrets only. This is a **workflow input-wiring defect**, not merely cloud configuration. PR #62 fixes the auth action inputs to use the same variable-first, secret-fallback expression as preflight. The actual provider condition, service-account binding, unauthorized-branch/fork negative tests, and production IAM review remain unverified.
 
 ## References
 
