@@ -98,7 +98,7 @@ jobs:
                 JSON.stringify(configured) !== JSON.stringify(expected) ||
                 new Set(inventoried).size !== inventoried.length ||
                 JSON.stringify(exported) !== JSON.stringify(inventoried) ||
-                !androidPatcher.includes('android:pathPrefix="/__/auth/links"') ||
+                !androidPatcher.includes("android:pathPrefix=\"/__/auth/links\") ||
                 expected.some(name => excluded.includes(name)) ||
                 expected.some(name => /phone|sms|otp|grant/i.test(name))) {
               throw new Error("Gate 3 candidate must reconcile callable inventory, exclude phone/SMS/recovery callables, and use Firebase Hosting /__/auth/links App Links");
