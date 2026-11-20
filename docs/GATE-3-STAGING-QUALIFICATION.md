@@ -53,7 +53,7 @@ Record candidate SHA, staging project ID, APK SHA-256, signer SHA-256, test-run 
 
 **Android API floor:** local-first support remains API 23. Hardware-attested recovery enrollment requires API 24 or later. On API 23 recovery enrollment fails closed before modifying existing Keystore aliases.
 
-Gate 3 controller runs from `work/gate-3-google-email-link` and validates a frozen candidate SHA reachable from `fix/backup-consolidated-integration`. The candidate is checked before staging deployment and again before PASS evidence. Gate 3 does not share PR #55's backup changes. Gate 4 remains a separate physical-device qualification and is not a Gate 3 SMS test requirement.
+Gate 3 controller runs from `work/gate-3-google-email-link` and validates a frozen candidate SHA equal to the current HEAD of `fix/backup-consolidated-integration`. The candidate is checked before staging deployment and again before PASS evidence. Gate 3 does not share PR #55's backup changes. Gate 4 remains a separate physical-device qualification and is not a Gate 3 SMS test requirement.
 
 
 ## Retired SMS qualification artifacts
