@@ -246,6 +246,16 @@ jobs:
           ' >/dev/null
           echo "Staging recovery functions deployed with the configured service account and RECOVERY_ENABLED=true."
 
+      - name: Reconcile deployed callable inventory
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
+        run: |
+          set -euo pipefail
+          gcloud functions list --gen2 --project "$PROJECT_ID" --region "$REGION" --format=json > "$RUNNER_TEMP/deployed-functions.json"
+          node scripts/gates/check-callable-inventory.mjs scripts/gates/callables.json "$RUNNER_TEMP/deployed-functions.json"
+
       - name: Verify deployed recovery runtime service accounts can access their secrets
         shell: bash
         env:
