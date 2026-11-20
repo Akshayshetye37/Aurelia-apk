@@ -1,12 +1,6 @@
 name: Recovery staging deployment and APK
 
 on:
-  workflow_dispatch:
-    inputs:
-      candidate_sha:
-        description: Optional exact candidate SHA for direct staging qualification
-        required: false
-        type: string
   workflow_call:
     inputs:
       candidate_sha:
@@ -43,7 +37,7 @@ concurrency:
 
 jobs:
   deploy-and-build:
-    if: (github.workflow_ref == format('{0}/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/{1}', github.repository, vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch')) || (github.workflow_ref == format('{0}/.github/workflows/recovery-staging-deploy.yml@refs/heads/integration/ledger-patch', github.repository))
+    if: (github.workflow_ref == format('{0}/.github/workflows/gate-3-google-email-link-staging.yml@refs/heads/{1}', github.repository, vars.GATE_CONTROL_BRANCH || 'work/gate-3-google-email-link')) || (github.workflow_ref == format('{0}/.github/workflows/recovery-staging-deploy.yml@refs/heads/integration/ledger-patch', github.repository))
     runs-on: ubuntu-latest
     outputs:
       staging_project_id: ${{ steps.staging-outputs.outputs.staging_project_id }}
@@ -56,14 +50,14 @@ jobs:
     timeout-minutes: 60
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
-      CANDIDATE_BRANCH: integration/ledger-patch
-      CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
+      CANDIDATE_BRANCH: fix/backup-consolidated-integration
+      CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'work/gate-3-google-email-link' }}
       GH_TOKEN: ${{ github.token }}
       STAGING_PROJECT: ${{ vars.GCP_PROJECT_ID }}
       PRODUCTION_PROJECT: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
       STAGING_FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
-      RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,getRecoveryOwnerPendingAction,getRecoveryOwnerActionReadiness' }}
+      RECOVERY_CALLABLES: exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,getRecoveryOwnerPendingAction,getRecoveryOwnerActionReadiness
       EXPECTED_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
     steps:
       - name: Checkout trusted workflow control revision
@@ -77,9 +71,7 @@ jobs:
           case "$GITHUB_WORKFLOW_REF" in
             "$GITHUB_REPOSITORY/.github/workflows/gate-3-real-sms-staging.yml@refs/heads/$CONTROL_BRANCH")
               node scripts/gates/check-candidate.mjs --sha "$CANDIDATE_SHA" --repo "$GITHUB_REPOSITORY" --branch "$CANDIDATE_BRANCH" ;;
-            "$GITHUB_REPOSITORY/.github/workflows/recovery-staging-deploy.yml@refs/heads/integration/ledger-patch")
-              test "$CANDIDATE_BRANCH" = "integration/ledger-patch"
-              test "$CANDIDATE_SHA" = "$GITHUB_SHA" ;;
+            *) echo "::error::Untrusted workflow ref cannot invoke staging deployment."; exit 1 ;;
             *) echo "::error::Untrusted workflow ref cannot invoke staging deployment."; exit 1 ;;
           esac
       - name: Checkout candidate source as build input
@@ -88,6 +80,25 @@ jobs:
           ref: ${{ inputs.candidate_sha || github.sha }}
           path: candidate
           persist-credentials: false
+      - name: Validate Gate 3 callable inventory and deployment allowlist
+        shell: bash
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          node --input-type=commonjs -e '
+            const fs = require("node:fs");
+            const inventory = JSON.parse(fs.readFileSync("scripts/gates/callables.json", "utf8")).gate3;
+            const expected = inventory.deploy;
+            const configured = process.env.RECOVERY_CALLABLES.split(",").map(x => x.trim()).filter(Boolean);
+            const excluded = inventory.excluded;
+            if (!Array.isArray(expected) || expected.length === 0 ||
+                JSON.stringify(configured) !== JSON.stringify(expected) ||
+                expected.some(name => excluded.includes(name)) ||
+                expected.some(name => /phone|sms|otp|grant/i.test(name))) {
+              throw new Error("Gate 3 deployment callable inventory is inconsistent or contains excluded phone/SMS callables");
+            }
+            fs.appendFileSync(process.env.GITHUB_ENV, "GATE3_DEPLOY_ONLY=" + expected.map(name => "functions:" + name).join(",") + "\\n");
+          '
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
@@ -231,7 +242,7 @@ jobs:
           set -euo pipefail
           printf 'RECOVERY_ENABLED=true\nRECOVERY_SIGNING_KEY_ID=%s\nRECOVERY_ATTESTATION_VERIFIER_URL=%s\nRECOVERY_FUNCTIONS_SERVICE_ACCOUNT=%s\nFIREBASE_WEB_API_KEY=%s\n' \
             "$ACTIVE_KID" "$VERIFIER_URL" "$FUNCTION_SA" "$FIREBASE_WEB_API_KEY" > "functions/.env.$PROJECT_ID"
-          firebase deploy --only functions --project "$PROJECT_ID" --non-interactive --config firebase.deploy.json
+          firebase deploy --only "$GATE3_DEPLOY_ONLY" --project "$PROJECT_ID" --non-interactive --config firebase.deploy.json
           rm -f "functions/.env.$PROJECT_ID" firebase.deploy.json
           FUNCTION_JSON="$(gcloud functions describe verifyRecoveryDeviceAttestation --gen2 --project "$PROJECT_ID" --region "$GCP_REGION" --format=json)"
           echo "$FUNCTION_JSON" | jq -e --arg sa "$FUNCTION_SA" '
