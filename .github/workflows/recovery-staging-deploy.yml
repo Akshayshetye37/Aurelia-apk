@@ -162,6 +162,7 @@ jobs:
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+          STAGING_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           REGION: ${{ vars.GCP_REGION }}
           FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
           FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
@@ -210,6 +211,7 @@ jobs:
           echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "$RUNNER_TEMP/google-services.json"
           export GOOGLE_SERVICES_PATH="$RUNNER_TEMP/google-services.json"
           node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); const key=p?.api_key?.[0]?.current_key; if(!p || c.project_info?.project_id!==process.env.PROJECT_ID || key!==process.env.FIREBASE_WEB_API_KEY) process.exit(1);'
+          node scripts/gates/check-production-project.mjs
           gcloud config set project "$PROJECT_ID"
           for secret in PHONE_PEPPER RECOVERY_SIGNING_KEY_PKCS8; do
             gcloud secrets describe "$secret" --project "$PROJECT_ID" >/dev/null
