@@ -1,0 +1,26 @@
+{
+  "gate3": {
+    "scope": "Google Sign-In + Firebase Email Link; no SMS or phone authentication",
+    "deploy": [
+      "exchangeOwnerEmailLink",
+      "confirmRecoveryOwnerBinding",
+      "registerRecoveryOwnerDevice",
+      "acknowledgeRecoveryOwnerAlert",
+      "getRecoveryOwnerPendingAction",
+      "getRecoveryOwnerActionReadiness"
+    ],
+    "probe": [
+      "exchangeOwnerEmailLink",
+      "confirmRecoveryOwnerBinding",
+      "registerRecoveryOwnerDevice",
+      "acknowledgeRecoveryOwnerAlert",
+      "getRecoveryOwnerPendingAction",
+      "getRecoveryOwnerActionReadiness"
+    ],
+    "excluded": [
+      "registerRecoveryPhone",
+      "activateRecoveryPhoneChange",
+      "cancelRecoveryPhoneChange"
+    ]
+  }
+}
