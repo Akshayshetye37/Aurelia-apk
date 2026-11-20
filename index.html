@@ -1246,7 +1246,7 @@ async function pruneBrowserBackups(directoryHandle,protectedHandle,maximum=3){
   try{
    const file=await handle.getFile(),raw=JSON.parse(await file.text());
    const data=raw&&raw.data;
-   let valid=!!(raw&&((raw.format==='AURELIA-PMS-ENCRYPTED-BACKUP'&&[1,2].includes(raw.v)&&raw.application==='com.aurelia.pms'&&raw.cipher==='AES-256-GCM'&&raw.kdf==='PBKDF2-HMAC-SHA256'&&raw.iterations===BACKUP_KDF_ITERATIONS&&typeof raw.wrappedKey==='string'&&typeof raw.ciphertext==='string')||(raw.v===4&&data&&Array.isArray(data.rooms)&&Array.isArray(data.b)&&data.set&&typeof data.set==='object')));
+   let valid=!!(raw&&((raw.format==='AURELIA-PMS-ENCRYPTED-BACKUP'&&[1,2,3].includes(raw.v)&&raw.application==='com.aurelia.pms'&&raw.cipher==='AES-256-GCM'&&raw.kdf==='PBKDF2-HMAC-SHA256'&&Number.isSafeInteger(raw.iterations)&&raw.iterations>=600000&&raw.iterations<=1000000&&typeof raw.wrappedKey==='string'&&typeof raw.ciphertext==='string')||(raw.v===4&&data&&Array.isArray(data.rooms)&&Array.isArray(data.b)&&data.set&&typeof data.set==='object')));
    if(valid&&raw.integrity){
     valid=raw.integrity.algorithm==='SHA-256'&&/^[a-f0-9]{64}$/i.test(raw.integrity.digest||'');
     if(valid){const copy={...raw};delete copy.integrity;valid=await sha256Hex(JSON.stringify(copy))===raw.integrity.digest}
