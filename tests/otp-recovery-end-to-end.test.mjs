@@ -157,15 +157,16 @@ test('staging deployment keeps API-compatible npm install and probes verifier as
 });
 
 
-test('staging deployment probes missing and invalid App Check on all recovery callables', () => {
+test('staging deployment probes missing and invalid App Check using the authoritative inventory', () => {
   const workflow = read('.github/workflows/recovery-staging-deploy.yml');
+  const inventory = JSON.parse(read('scripts/gates/callables.json'));
+  assert.match(workflow, /Load authoritative recovery callable inventory/);
+  assert.match(workflow, /scripts\/gates\/callables\.json/);
+  assert.match(workflow, /mapfile -t functions/);
   assert.match(workflow, /Probe missing and invalid App Check tokens/);
   assert.match(workflow, /X-Firebase-AppCheck: invalid-staging-probe-token/);
-  for (const callable of ['registerRecoveryPhone', 'createRecoveryAttestationChallenge',
-    'verifyRecoveryDeviceAttestation', 'registerRecoveryOwnerDevice',
-    'exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding',
-    'acknowledgeRecoveryOwnerAlert', 'issueRecoveryGrant', 'consumeRecoveryGrant',
-    'cancelRecoveryRequest', 'cancelRecoveryPhoneChange', 'activateRecoveryPhoneChange']) assert.ok(workflow.includes(callable));
+  assert.equal(inventory.callables.length, 12);
+  assert.ok(inventory.callables.every(name => /^[A-Za-z0-9_-]+$/.test(name)));
 });
 
 
