@@ -1,7 +1,7 @@
 # Gate 3 — Authentication and Staging Security Qualification Scope
 
 **Status:** Scope established; implementation and qualification are NOT complete.
-**Candidate branch:** `work/gate-3-google-email-link`
+**Gate 3 controller branch:** `work/gate-3-google-email-link`
 **Base:** `integration/ledger-patch`
 
 ## In-scope authentication methods
