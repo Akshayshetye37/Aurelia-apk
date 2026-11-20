@@ -299,8 +299,8 @@ test('Gate 3 controller is isolated and Gate 4 consumes the same frozen candidat
   assert.match(staging, /gate-3-google-email-link-staging\.yml@refs\/heads\/\{1\}/);
   assert.match(staging, /vars\.GATE_CONTROL_BRANCH \|\| 'work\/gate-3-google-email-link'/);
   assert.match(gate3, /--branch "fix\/backup-consolidated-integration"/);
-  assert.match(gate4, /CANDIDATE_BRANCH: \$\{\{ vars\.CANDIDATE_BRANCH \|\| 'fix\/backup-consolidated-integration' \}\}/);
-  assert.match(gate4, /GATE3_CONTROL_BRANCH: work\/gate-3-google-email-link/);
+  assert.match(gate4, /CANDIDATE_BRANCH: fix\/backup-consolidated-integration/);
+  assert.match(gate4, /GATE3_CONTROL_BRANCH: \$\{\{ vars\.GATE3_CONTROL_BRANCH \|\| 'work\/gate-3-google-email-link' \}\}/);
 });
 
 
