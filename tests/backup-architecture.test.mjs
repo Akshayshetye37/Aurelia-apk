@@ -71,3 +71,13 @@ test('cached backup keys cannot bypass manifest hash, size and record-count veri
   assert.match(html, /finally\{cachedPlain\.fill\(0\)\}/);
   assert.match(html, /finally\{plain\.fill\(0\)\}/);
 });
+
+test('encrypted backup imports validate filename identity, canonical base64 and strict manifest counts', () => {
+  assert.match(html, /const validName=name=>typeof name==='string'&&\/^aurelia-backup-\\\\d\{4\}-\\\\d\{2\}-\\\\d\{2\}-\[a-f0-9\]\{64\}\\\\.json\$\/i\.test\(name\)/);
+  assert.match(html, /decryptBackupEnvelope\(raw,filename\)/);
+  assert.match(html, /function decodeBackupField/);
+  assert.match(html, /backupB64\(bytes\)!==value/);
+  assert.match(html, /await validateBackupManifest\(envelope\.manifest,envelope\.name\)/);
+  assert.match(html, /Number\.isSafeInteger\(manifest\.recordCounts\[field\]\)/);
+  assert.match(html, /manifest\.recordCounts\[field\]<0/);
+});
