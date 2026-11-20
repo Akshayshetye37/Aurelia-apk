@@ -75,7 +75,7 @@ A future Pay Bridge backup must use a distinct application identifier and its ow
 - The current installation caches a non-extractable Web Crypto data key in IndexedDB so automatic snapshots do not require repeated password prompts. Each backup includes a password-wrapped copy of that data key.
 - A replacement installation imports the encrypted file and prompts for the recovery password. Successful decryption imports the non-extractable key into its local vault.
 - Existing plaintext v4 backups remain readable for migration; all newly generated backups are encrypted. Do not treat legacy files as meeting the new encryption policy.
-- Password rotation is deliberately not exposed until a rewrapping/re-encryption migration can update every retained recovery point safely.
+- Recovery-password rotation changes the local vault wrapper for future backups but does not re-encrypt existing backup files. Every retained older backup still requires the password that was active when that file was created. If an old password is leaked, it continues to decrypt those older files; changing the current password does not revoke it. Re-encrypt or securely retire older recovery points before treating password rotation as revocation.
 
 ## Direct Google Drive candidate — integration and qualification status
 
