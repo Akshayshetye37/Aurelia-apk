@@ -28,6 +28,7 @@ const functions = [
   "async function sha256Hex", "function constantTimeHexEqual",
   "async function verifyBackupManifestPayload", "async function decryptBackupEnvelope", "async function decryptBackupPayload"
 ].map(extractFunction);
+const debugDecryptSource=functions.at(-1).replace("async function decryptBackupEnvelope","async function debugDecryptBackupEnvelope").replace("catch(_){throw fail()}","catch(error){throw error}").replace("  throw fail();\n }\n}","  throw error;\n }\n}");
 const source = `const BACKUP_KDF_ITERATIONS=600000;\n${functions.join("\n")}\n`;
 const context = vm.createContext({
   crypto: webcrypto, window: { crypto: webcrypto, TextEncoder }, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, JSON, Math,
@@ -37,7 +38,7 @@ const context = vm.createContext({
   writeBackupVault: async () => {},
   prompt: () => "correct horse battery staple"
 });
-vm.runInContext(source + "\nthis.decryptBackupEnvelope=decryptBackupEnvelope;this.decryptBackupPayload=decryptBackupPayload;this.backupPasswordKey=backupPasswordKey;this.backupB64=backupB64;this.sha256Hex=sha256Hex;", context);
+vm.runInContext(source + "\nthis.decryptBackupEnvelope=decryptBackupEnvelope;this.debugDecryptBackupEnvelope=debugDecryptBackupEnvelope;this.decryptBackupPayload=decryptBackupPayload;this.backupPasswordKey=backupPasswordKey;this.backupB64=backupB64;this.sha256Hex=sha256Hex;", context);
 
 const password = "correct horse battery staple";
 const payload = JSON.stringify({ v: 4, data: { rooms: [], b: [], g: [], t: [], sales: [], exp: [], inv: [], led: [], aud: [] } });
@@ -60,7 +61,7 @@ async function fixture(version = 3) {
 
 test("v3 encrypted backup decrypts with the correct recovery password", async () => {
   const f = await fixture();
-  assert.equal(await context.decryptBackupEnvelope(f.envelope, f.envelope.name), payload);
+  assert.equal(await context.debugDecryptBackupEnvelope(f.envelope, f.envelope.name), payload);
 });
 
 
