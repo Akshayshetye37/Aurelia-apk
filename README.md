@@ -452,7 +452,7 @@ Cloud onboarding is not complete until the following are verified:
 - **Phone/SMS callables:** `registerRecoveryPhone`, `activateRecoveryPhoneChange`, and `cancelRecoveryPhoneChange` are explicitly excluded from Gate 3 deployment and probes. Additional recovery-device callables are also excluded.
 - **Workflow:** `.github/workflows/gate-3-google-email-link-staging.yml`, dispatched from `work/gate-3-google-email-link`.
 - **Frozen candidate:** candidate SHA must equal the current HEAD of `fix/backup-consolidated-integration`; it is validated before deployment and before PASS evidence.
-- **Gate 3 status:** **NOT QUALIFIED**. Automated deployment, App Check negative probes, authenticated Google Sign-In/Email-Link, exact-SHA evidence and physical-device matrix are not all complete.
+- **Gate 3 status:** **NOT QUALIFIED**. The current candidate's Android App Link filter is broader than Firebase's documented `/__/auth/links` path; Gate 3 preflight now blocks it. Google Sign-In client flow, live WIF, staging deployment, authenticated Email-Link exchange, exact-SHA evidence and physical-device matrix are also incomplete.
 
 The former SMS-named Gate 3 workflow and qualification document are retired. Gate 2 OTP/recovery instrumentation remains a separate gate and is not Gate 3 evidence.
 
