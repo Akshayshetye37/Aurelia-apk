@@ -24,7 +24,7 @@ test('rejects missing APK hash', () => assert.throws(() => validateGate3Evidence
 test('rejects unexplained exclusions', () => assert.throws(() => validateGate3Evidence({ probes, details: { ...details, excluded: [{ probe: 'x' }] }, candidateSha: sha }), /exclusion must include/));
 test('rejects duplicate probes', () => assert.throws(() => validateGate3Evidence({ probes: [...probes, probes[0]], details, candidateSha: sha }), /duplicate probe/));
 test('physical matrix requires exact candidate SHA and signoff', () => {
-  const matrix = { candidateSha: sha, status: 'QUALIFIED', signoff: { reviewer: 'reviewer', signedAt: '2026-11-21T00:00:00Z' } };
+  const matrix = { candidateSha: sha, status: 'QUALIFIED', signoff: { reviewer: 'reviewer', signedAt: '2026-11-21T00:00:00Z', commit: 'c'.repeat(40) } };
   const status = validateGate3Evidence({ probes, details, candidateSha: sha, physicalMatrix: matrix });
   assert.equal(status.PHYSICAL_SMS_RECOVERY, 'QUALIFIED');
   assert.equal(status.GATE_3_OVERALL, 'QUALIFIED');
