@@ -34,11 +34,10 @@ export function validateGate3Evidence({ probes, details, candidateSha, physicalM
   for (const [callable, cases] of byCallable) {
     for (const required of REQUIRED_PROBE_CASES) if (!cases.has(required)) throw new Error(`callable ${callable} missing probe: ${required}`);
   }
-  if (details.callables && Array.isArray(details.callables)) {
-    const expected = [...details.callables].sort();
-    const actual = [...byCallable.keys()].sort();
-    if (JSON.stringify(expected) !== JSON.stringify(actual)) throw new Error('probe callable inventory mismatch');
-  }
+  if (!Array.isArray(details.callables) || details.callables.length === 0) throw new Error('callable inventory is missing from evidence details');
+  const expected = [...details.callables].sort();
+  const actual = [...byCallable.keys()].sort();
+  if (JSON.stringify(expected) !== JSON.stringify(actual)) throw new Error('probe callable inventory mismatch');
   const physical = physicalMatrix && physicalMatrix.candidateSha === candidateSha &&
     physicalMatrix.status === 'QUALIFIED' && physicalMatrix.signoff &&
     typeof physicalMatrix.signoff.reviewer === 'string' && physicalMatrix.signoff.reviewer.trim() &&
