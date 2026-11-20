@@ -51,7 +51,7 @@ test("all new backup destinations receive a portable AES-256-GCM envelope", () =
   assert.match(html, /BACKUP_KDF_ITERATIONS=600000/);
   assert.match(html, /encryptBackupPayload\(snap\.payload,snap\.name\)/);
   assert.match(html, /decryptBackupPayload\(payload,fileName\)/);
-  assert.match(html, /manifest=\{formatVersion:3,name,payloadSha256/);
+  assert.ok(html.includes("manifest={formatVersion:3,name,payloadSha256"));
   assert.ok(html.includes("backup-v3|'+envelope.v+'|'+filename+'|'+JSON.stringify(manifest)"));
   assert.match(html, /envelope.v>=2/);
   assert.match(html, /Backup manifest verification failed/);
