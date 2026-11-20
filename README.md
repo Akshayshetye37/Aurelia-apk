@@ -448,7 +448,7 @@ Cloud onboarding is not complete until the following are verified:
 - **Decision:** Google Sign-In is primary; Firebase Email-Link is fallback. Numeric email OTP is not part of this gate.
 - **Encryption boundary:** account authentication cannot unlock, derive, replace or recover the local DEK. PIN, biometric and offline recovery-key mechanisms remain separate.
 - **Implementation status:** Google Sign-In end-to-end and Email-Link client flow are **NOT QUALIFIED**. The backend email-link exchange callable exists, but source presence is not proof of client implementation or successful authenticated staging exchange.
-- **Staging deployment allowlist:** `scripts/gates/callables.json` includes only `exchangeOwnerEmailLink` and `confirmRecoveryOwnerBinding`. The workflow deploys named functions only; it does not deploy the full Functions package.
+- **Staging deployment allowlist:** `scripts/gates/callables.json` includes only `exchangeOwnerEmailLink` and `confirmRecoveryOwnerBinding`. The workflow deploys named functions only; it does not deploy the full Functions package, and removes previously deployed excluded recovery/phone callables from staging.
 - **Phone/SMS callables:** `registerRecoveryPhone`, `activateRecoveryPhoneChange`, and `cancelRecoveryPhoneChange` are explicitly excluded from Gate 3 deployment and probes. Additional recovery-device callables are also excluded.
 - **Workflow:** `.github/workflows/gate-3-google-email-link-staging.yml`, dispatched from `work/gate-3-google-email-link`.
 - **Frozen candidate:** candidate SHA must equal the current HEAD of `fix/backup-consolidated-integration`; it is validated before deployment and before PASS evidence.
