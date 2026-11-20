@@ -445,10 +445,14 @@ test('Firebase Auth + Firestore emulator enforce alert acknowledgement, 24h hold
     grant: legacyGrant, nonce, deviceIdHash: recoveryDeviceHash
   }, ownerAuth(ownerUid, tenantId)), 'legacy grant without uid rejected');
 
-  const consumed = await callable(functions.consumeRecoveryGrant, {
-    grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
-  }, ownerAuth(ownerUid, tenantId));
-  assert.equal(consumed.consumed, true);
+  const concurrentConsumes = await Promise.allSettled(Array.from({ length: 20 }, () =>
+    callable(functions.consumeRecoveryGrant, {
+      grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
+    }, ownerAuth(ownerUid, tenantId))));
+  const consumeSuccesses = concurrentConsumes.filter(result => result.status === 'fulfilled' && result.value?.consumed === true);
+  assert.equal(consumeSuccesses.length, 1, 'exactly one of 20 concurrent grant-consumption attempts may win the Firestore transaction');
+  assert.equal(concurrentConsumes.filter(result => result.status === 'rejected').length, 19,
+    'the other concurrent grant-consumption attempts must reject');
   await assert.rejects(callable(functions.consumeRecoveryGrant, {
     grant: issued.grant, nonce, deviceIdHash: recoveryDeviceHash
   }, ownerAuth(ownerUid, tenantId)), 'replayed JTI rejected');
@@ -911,6 +915,28 @@ test('phone, tenant and device rate limits lock out repeated OTP grant attempts'
     phoneIdToken: await phoneAuthToken(phone)
   }, null, '203.0.113.111'), error => error.code === 'resource-exhausted',
   'sixth hourly attempt is rate-limited and locked out');
+});
+
+test('20 concurrent recovery attempts cannot exceed the transactional rate limit', async () => {
+  const tenantId = 'tenant-emulator-concurrent-rate-limit';
+  const ownerUid = 'owner-emulator-concurrent-rate-limit';
+  const phone = '+15555550116';
+  const recoveryDeviceHash = deviceHashFor(tenantId + ':recovery');
+  await seedTenant({ tenantId, phone, ownerUid, recoveryDeviceHash,
+    ownerDeviceHashes: [recoveryDeviceHash, deviceHashFor(tenantId + ':owner')] });
+  const proofs = await Promise.all(Array.from({ length: 20 }, () => phoneAuthToken(phone)));
+  const attempts = await Promise.allSettled(proofs.map((phoneIdToken, index) =>
+    callable(functions.issueRecoveryGrant, {
+      tenantId, deviceIdHash: recoveryDeviceHash,
+      nonce: createHash('sha256').update(tenantId + ':' + index).digest('base64url'),
+      phoneIdToken
+    }, null, '203.0.113.116')));
+  const accepted = attempts.filter(result => result.status === 'fulfilled' &&
+    ['COOLDOWN', 'ISSUED'].includes(result.value?.status));
+  assert.ok(accepted.length <= 5, `concurrent attempts accepted ${accepted.length}; expected at most 5`);
+  assert.equal(attempts.length, 20);
+  assert.ok(attempts.some(result => result.status === 'rejected' || result.value?.status === 'RATE_LIMITED'),
+    'concurrent excess attempts must be rejected or rate limited');
 });
 
 test('owner acknowledgement token expires after fifteen minutes', async () => {
