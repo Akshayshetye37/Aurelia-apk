@@ -369,7 +369,7 @@ The following is a high-level map of the current integration branch. It is inten
 | Multi-tenant recovery isolation | Draft workstream | Tenant isolation and cross-tenant tests are qualification work, not production approval. |
 | Public SaaS identity/tenancy | Architecture/documentation workstream | Account, tenant, property, membership and authorization foundations are not a complete SaaS implementation. |
 | Payment backend and settlement | In progress | Canonical intent/evidence/ledger/settlement boundaries exist; live providers require merchant acceptance and security qualification. |
-| Gate 3 Google Sign-In + Email-Link staging | Not qualified | Staging WIF/configuration, allowlisted email-link deployment, authenticated owner flows, exact-SHA evidence and physical-device matrix remain required. SMS/phone is excluded. |
+| Gate 3 selected PMS authentication | Not built / not qualified | Google Sign-In and Firebase Email-Link app authentication are not implemented in the candidate. Existing email-link callables are recovery-owner verification only. Staging WIF, security tests, exact-SHA evidence and physical-device matrix remain outstanding. SMS/phone is excluded. |
 | Gates 4–6 | Not release-qualified | Physical-device qualification, production security audit and release sign-off depend on preceding evidence. |
 
 Draft PRs and parallel branches are not merged functionality. Before integration, review their diffs, run tests, and reconcile overlapping architecture—especially backup orchestration versus cloud-provider abstraction and local-first repositories versus legacy UI paths.
@@ -380,12 +380,12 @@ The repository contains a six-gate qualification pipeline. Gates are evidence-dr
 
 1. **Gate 1 — Encrypted storage:** candidate/source and encrypted-storage evidence.
 2. **Gate 2 — Recovery runtime:** recovery instrumentation, runtime/flag checks and evidence.
-3. **Gate 3 — Google Sign-In + Email-Link staging:** frozen candidate, staging preflight, restricted cloud identity, allowlisted email-link callables, App Check probes and retained evidence. SMS/phone is excluded.
+3. **Gate 3 — selected PMS authentication:** Google Sign-In primary + Firebase Email-Link fallback. The candidate app flows are NOT BUILT. Recovery-owner email-link callables are a separate recovery feature and do not qualify PMS app authentication. SMS/phone is excluded.
 4. **Gate 4 — Physical device:** approved physical-device recovery/lifecycle qualification.
 5. **Gate 5 — Production security:** read-only production configuration, IAM, secrets, App Check and recovery-flag audit.
 6. **Gate 6 — Release sign-off:** exact-candidate evidence, approvals and release authorization.
 
-Gate 3 has a separate controller branch and authoritative Google Sign-In + Firebase Email-Link scope. It remains NOT QUALIFIED: provider sign-in/client flow, live WIF, staging deployment, positive email-link exchange, exact-SHA evidence and physical-device tests are outstanding. Production recovery remains disabled until its explicit authorization and release gates are satisfied.
+Gate 3 has a separate controller branch and authoritative Google Sign-In + Firebase Email-Link product decision. Both PMS app authentication flows remain NOT BUILT; the candidate only has a recovery-owner email-link exchange. Gate 3 remains NOT QUALIFIED: client auth implementation, live WIF, staging deployment, positive app sign-in tests, exact-SHA evidence and physical-device tests are outstanding. Production recovery remains disabled until its explicit authorization and release gates are satisfied.
 
 ## Security and operational defaults
 
@@ -447,12 +447,12 @@ Cloud onboarding is not complete until the following are verified:
 
 - **Decision:** Google Sign-In is primary; Firebase Email-Link is fallback. Numeric email OTP is not part of this gate.
 - **Encryption boundary:** account authentication cannot unlock, derive, replace or recover the local DEK. PIN, biometric and offline recovery-key mechanisms remain separate.
-- **Implementation status:** Google Sign-In end-to-end and Email-Link client flow are **NOT QUALIFIED**. The backend email-link exchange callable exists, but source presence is not proof of client implementation or successful authenticated staging exchange.
+- **Implementation status:** Google Sign-In and Firebase Email-Link PMS app sign-in are **NOT BUILT**. `exchangeOwnerEmailLink` is a recovery-owner verification callable and is not the PMS app sign-in fallback.
 - **Staging deployment allowlist:** `scripts/gates/callables.json` includes only `exchangeOwnerEmailLink` and `confirmRecoveryOwnerBinding`. The workflow deploys named functions only; it does not deploy the full Functions package, and removes previously deployed excluded recovery/phone callables from staging.
 - **Phone/SMS callables:** `registerRecoveryPhone`, `activateRecoveryPhoneChange`, and `cancelRecoveryPhoneChange` are explicitly excluded from Gate 3 deployment and probes. Additional recovery-device callables are also excluded.
 - **Workflow:** `.github/workflows/gate-3-google-email-link-staging.yml`, dispatched from `work/gate-3-google-email-link`.
 - **Frozen candidate:** candidate SHA must equal the current HEAD of `fix/backup-consolidated-integration`; it is validated before deployment and before PASS evidence.
-- **Gate 3 status:** **NOT QUALIFIED**. The current candidate's Android App Link filter is broader than Firebase's documented `/__/auth/links` path; Gate 3 preflight now blocks it. Google Sign-In client flow, live WIF, staging deployment, authenticated Email-Link exchange, exact-SHA evidence and physical-device matrix are also incomplete.
+- **Gate 3 status:** **NOT QUALIFIED**. The current candidate's Android App Link filter is broader than Firebase's documented `/__/auth/links` path; Gate 3 preflight blocks it. PMS Google Sign-In and Email-Link app sign-in are not implemented. Live WIF, staging deployment, positive app-auth tests, exact-SHA evidence and physical-device matrix are also incomplete.
 
 The former SMS-named Gate 3 workflow and qualification document are retired. Gate 2 OTP/recovery instrumentation remains a separate gate and is not Gate 3 evidence.
 
@@ -470,12 +470,12 @@ These are snapshots, not live statuses. Check the linked Actions runs for final 
 
 ## Gate 3 operational status
 
-**Live staging deployment and authenticated owner-flow qualification are NOT proven.** Final operational evidence must include successful staging deployment, correct staging configuration and identity, and positive owner-verification probes against the deployed environment. Source tests, lint and preflight alone do not make Gate 3 operational.
+**Live staging deployment and PMS app-auth qualification are NOT proven.** Existing recovery-owner email-link callable probes are not PMS sign-in evidence. Final evidence must include implemented Google Sign-In and Email-Link app flows, successful staging deployment, correct staging identity, positive authentication tests and exact-SHA physical-device qualification. Source tests, lint and preflight alone do not make Gate 3 operational.
 
 ## Safety boundaries
 
 - Phone OTP and recovery infrastructure remain in the app and Gate 2.
-- Gate 3 scope migration includes a staging callable allowlist and retirement of excluded phone/recovery callables.
+- Gate 3 controller includes a staging allowlist for recovery-owner email-link callables only; it does not claim PMS app authentication is implemented.
 - Production recovery remains `RECOVERY_ENABLED=false`.
 - Do not enable production recovery or release based on incomplete staging evidence.
 - Gate 1/2 baselines must remain intact.
@@ -487,5 +487,5 @@ These are snapshots, not live statuses. Check the linked Actions runs for final 
 2. Verify CI against the latest branch HEAD after this README update.
 3. Resolve Gate 3 staging Workload Identity Federation and required staging configuration through the authorized repository/cloud owner; do not invent credentials or weaken authentication.
 4. Dispatch Gate 3 staging only after preflight configuration is complete.
-5. Inspect retained staging evidence and prove the Google Sign-In + Firebase Email-Link owner-verification flow.
+5. Inspect retained staging evidence only after Google Sign-In and Firebase Email-Link PMS app authentication have been implemented; recovery-owner callable probes alone cannot qualify Gate 3.
 6. Keep production recovery disabled and Gate 4–6 qualification separate.
