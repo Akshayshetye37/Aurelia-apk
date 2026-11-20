@@ -117,8 +117,7 @@ Draft PRs #49–#52 and the separate Android/Gate 3 fix PR #54 are superseded by
 - Inventory all screens and actions for bookings, guests, rooms, folios, payments, expenses, inventory, restaurant tables/sales, settings and audit records.
 - Prove canonical get/list/create/update/retire or append-only command coverage per domain.
 - Ensure related operations (room + booking; sale + inventory; folio + journal + audit) are one transaction.
-- Ensure startup/restart hydrates every screen from persisted canonical rows, not legacy snapshots or stale in-memory state.
-- Prevent old import/restore/cache replay and compatibility writes after cutover.
+- Ensure startup/restart hydrates every screen from persisted canonical rows, not legacy snapshots or stale in-memory state.- Prevent old import/restore/cache replay and compatibility writes after cutover.
 - Keep posted ledger, journal, payment and audit records append-only.
 - Apply schemas and expected-version validation at every command boundary.
 
@@ -217,7 +216,6 @@ Draft PRs #49–#52 and the separate Android/Gate 3 fix PR #54 are superseded by
 ### 8. Online payment providers are not production-enabled (conditional)
 
 **Problem:** Adapter code or test checkout does not constitute merchant acceptance. This is a release blocker only when live online collection is required; offline/manual folio operations may remain available with gateway features disabled.
-
 **Sub-problems**
 - Merchant-owned sandbox/UAT for each provider selected for activation.
 - Raw webhook signature verification, replay resistance, idempotency and concurrent delivery.
@@ -317,8 +315,7 @@ Owner / Business
             ├── Validate and encrypt data
             ├── Upload only to the connected owner's destination
             ├── Verify integrity and metadata
-            └── Restore on an authorized device
-```
+            └── Restore on an authorized device```
 
 The cloud provider adapter must be replaceable; the backup orchestrator must not depend directly on provider-specific API details. Provider connection state and backup state are separate: connecting a provider does not itself imply that automatic backup is enabled.
 
@@ -417,8 +414,7 @@ Cloud onboarding is not complete until the following are verified:
 - [ ] The owner can confirm the destination before backup is enabled.
 - [ ] The connection belongs to exactly one owner/business context.
 - [ ] Tokens are stored securely and are not shared with another business.
-- [ ] Reopening the app reuses valid authorization without repeatedly asking for credentials.
-- [ ] Revoked/expired authorization produces a clear reauthorization state without data loss.
+- [ ] Reopening the app reuses valid authorization without repeatedly asking for credentials.- [ ] Revoked/expired authorization produces a clear reauthorization state without data loss.
 - [ ] Backup is opt-in and the schedule is owner-controlled.
 - [ ] Encrypted backup is uploaded only to that owner's selected account/destination.
 - [ ] A second owner/device cannot access or overwrite the first owner's backup.
@@ -427,3 +423,46 @@ Cloud onboarding is not complete until the following are verified:
 - [ ] Tests cover account switching, token revocation, provider failure, wrong destination and cross-owner isolation.
 
 **Never use a shared cloud credential, service account, or developer account as the default destination for customer PMS data.** Backend service credentials, if needed for a separately authorized service, must not replace the owner's personal-cloud ownership model or grant broad access to owner files.
+
+# Gate 3 scope correction — authoritative decision (2026-11-21)
+
+**Gate 3 must qualify Google Sign-In and email OTP. SMS OTP and SMS-based recovery are explicitly excluded.** This supersedes the SMS-oriented Gate 3 scope in older documentation and workflows. Do not provision SMS, deploy SMS recovery, or perform real-SMS/physical-SMS qualification for Gate 3.
+
+## Intended Gate 3 scope
+
+- Google Sign-In: real account authentication, account switching, identity/session handling, and authorization boundaries.
+- Email OTP: delivery, verification, expiry, rate limiting, replay resistance, and correct account/owner binding.
+- App Check: positive and negative probes against the relevant staging endpoints.
+- Staging deployment and project isolation: staging must be distinct from production; deployment identity must not access production.
+- Signed candidate APK and exact-SHA evidence.
+- Physical-device qualification of Google Sign-In and email OTP flows, plus security/key lifecycle checks applicable to the candidate.
+- Evidence must be candidate-SHA-bound and must not claim qualification from templates, mocks, or older runs.
+
+## Audit finding: current Gate 3 implementation is scope-invalid
+
+PR #61 (branch `work/gate-3-hardening`) currently hardens the SMS recovery pipeline, including recovery-phone registration, OTP/grant callables, SMS-specific physical-device cases, and the status field `PHYSICAL_SMS_RECOVERY`. Its workflow and documentation still say “Real SMS”, and the callable inventory includes phone/SMS recovery functions. These changes do not qualify the agreed Google Sign-In + email OTP Gate 3.
+
+PR #61 is **not merge-ready for the agreed Gate 3 scope**. Its repository-side validation improvements may be reusable only after they are adapted to the correct endpoints, evidence schema, tests, and qualification matrix. SMS-specific infrastructure, callable inventory, evidence fields, test cases, and deployment behavior must be removed from or isolated outside Gate 3. Do not treat PR #61 CI success as Gate 3 qualification.
+
+## Gate 3 remaining work
+
+1. Freeze and document the Google Sign-In + email OTP contract and explicitly list SMS as excluded.
+2. Audit the app, Firebase Functions, Android templates, workflows, tests, and docs for SMS/phone recovery dependencies that Gate 3 should not deploy or qualify.
+3. Replace the SMS staging workflow with a scope-correct staging workflow for Google Sign-In and email OTP; use an authoritative endpoint inventory and exact candidate SHA.
+4. Define and implement email OTP verification, expiry, rate limits, replay protection, account/owner binding, and abuse controls if any are missing.
+5. Qualify Google Sign-In account selection/switching, token/session validation, unauthorized-account behavior, and tenant/owner isolation.
+6. Configure reviewed WIF trust, staging-only least-privilege IAM, production project identity, and inherited IAM review. These values/evidence must be owner-supplied and verified, not guessed.
+7. Deploy to a separate staging project and execute positive/negative App Check and authentication/authorization probes.
+8. Build and verify the exact candidate APK and signer; run automated tests and physical-device tests for Google Sign-In and email OTP.
+9. Produce candidate-SHA-bound evidence and independently review it. Gate 3 remains NOT QUALIFIED until all required evidence passes.
+
+## Current status
+
+- Gate 3 overall: **NOT QUALIFIED / scope correction required**.
+- Production recovery: **disabled**; no production deployment or enablement is authorized by this documentation.
+- Production project ID and staging IAM role allowlist: still unconfigured pending authoritative owner review.
+- WIF negative test, inherited IAM review, staging deployment, real email OTP testing, physical-device qualification, and final evidence: not completed/verified.
+- Backup crypto/device qualification: separate workstream and **NOT QUALIFIED**.
+
+Repository location: https://github.com/Akshayshetye37/Aurelia-apk
+Current audit branch: `work/gate-3-hardening`; PR #61: https://github.com/Akshayshetye37/Aurelia-apk/pull/61.
