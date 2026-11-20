@@ -24,6 +24,8 @@ test('rejects missing test APK and signer hashes', () => {
   assert.throws(() => validateGate3Evidence({ probes, details: { ...details, signerSha256: '' }, candidateSha: sha, deployedInventory }), /signerSha256/);
 });
 test('rejects missing deployed inventory evidence', () => assert.throws(() => validateGate3Evidence({ probes, details, candidateSha: sha }), /deployed callable inventory evidence is missing/));
+test('rejects staging and production project identity collision', () => assert.throws(() => validateGate3Evidence({ probes, details: { ...details, productionProjectId: details.stagingProjectId }, candidateSha: sha, deployedInventory }), /project identity evidence/));
+test('rejects missing staging deployment run ID', () => assert.throws(() => validateGate3Evidence({ probes, details: { ...details, stagingRunId: 0 }, candidateSha: sha, deployedInventory }), /staging deployment run ID/));
 test('rejects zero probes', () => assert.throws(() => validateGate3Evidence({ probes: [], details, candidateSha: sha }), /at least one probe/));
 test('rejects missing probe type', () => assert.throws(() => validateGate3Evidence({ probes: [probes[0]], details, candidateSha: sha }), /missing probe/));
 test('rejects non-401/403 status', () => assert.throws(() => validateGate3Evidence({ probes: [{ ...probes[0], status: 200 }, probes[1]], details, candidateSha: sha }), /invalid probe result/));
