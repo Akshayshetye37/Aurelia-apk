@@ -14,9 +14,11 @@ export function validateWifProvider(providerConfig, expectedCondition) {
   if (normalizeCondition(providerConfig.attributeCondition) !== normalizeCondition(expectedCondition)) throw new Error('WIF provider condition is not exact repository/ref restriction');
 }
 export function validateWifBindings(policy, expectedMember) {
-  const bindings = (policy.bindings ?? []).filter(binding => binding.role === 'roles/iam.workloadIdentityUser');
-  const members = bindings.flatMap(binding => binding.members ?? []);
-  if (bindings.length !== 1 || members.length !== 1 || members[0] !== expectedMember) throw new Error('WIF service-account policy contains missing or broader workload identity principals');
+  const externalBindings = (policy.bindings ?? []).flatMap(binding =>
+    (binding.members ?? []).filter(member => member.startsWith('principalSet://') || member.startsWith('principal://'))
+      .map(member => ({ role: binding.role, member })));
+  if (externalBindings.length !== 1 || externalBindings[0].role !== 'roles/iam.workloadIdentityUser' ||
+      externalBindings[0].member !== expectedMember) throw new Error('WIF service-account policy contains missing or broader workload identity principals');
 }
 export function validateStagingRoles(actual, allowed) {
   if (!Array.isArray(allowed) || !allowed.length || allowed.includes('UNCONFIGURED')) throw new Error('staging deploy role allowlist is not reviewed/configured');
