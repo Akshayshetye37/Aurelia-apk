@@ -1123,7 +1123,12 @@ function constantTimeHexEqual(left,right){
  for(let i=0;i<64;i++)difference|=left.charCodeAt(i)^right.charCodeAt(i);
  return difference===0;
 }
-async function validateBackupManifest(manifest,name){\n if(!manifest||manifest.formatVersion!==2||manifest.name!==name||!Number.isSafeInteger(manifest.payloadBytes)||manifest.payloadBytes<1||!/^[a-f0-9]{64}$/.test(manifest.payloadSha256||'')||!manifest.recordCounts||typeof manifest.recordCounts!=='object'||Array.isArray(manifest.recordCounts))throw new Error('Encrypted backup manifest is invalid.');\n const expected=['rooms','b','g','t','sales','exp','inv','led','aud'];\n if(Object.keys(manifest.recordCounts).length!==expected.length||expected.some(field=>!Number.isSafeInteger(manifest.recordCounts[field])||manifest.recordCounts[field]<0))throw new Error('Encrypted backup manifest is invalid.');\n}\nasync function verifyBackupManifestPayload(decoded,manifest){
+async function validateBackupManifest(manifest,name){
+ if(!manifest||manifest.formatVersion!==2||manifest.name!==name||!Number.isSafeInteger(manifest.payloadBytes)||manifest.payloadBytes<1||!/^[a-f0-9]{64}$/.test(manifest.payloadSha256||'')||!manifest.recordCounts||typeof manifest.recordCounts!=='object'||Array.isArray(manifest.recordCounts))throw new Error('Encrypted backup manifest is invalid.');
+ const expected=['rooms','b','g','t','sales','exp','inv','led','aud'];
+ if(Object.keys(manifest.recordCounts).length!==expected.length||expected.some(field=>!Number.isSafeInteger(manifest.recordCounts[field])||manifest.recordCounts[field]<0))throw new Error('Encrypted backup manifest is invalid.');
+}
+async function verifyBackupManifestPayload(decoded,manifest){
  if(!manifest||manifest.formatVersion!==2||typeof manifest.name!=='string'||
     !Number.isSafeInteger(manifest.payloadBytes)||manifest.payloadBytes<1||
     !/^[a-f0-9]{64}$/.test(manifest.payloadSha256||'')||
