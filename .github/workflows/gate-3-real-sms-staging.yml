@@ -220,6 +220,7 @@ jobs:
             --arg app "$app_hash" \
             --arg test "$test_hash" \
             --arg project "$STAGING_PROJECT_ID" \
+            --arg production "$PRODUCTION_PROJECT_ID" \
             --arg signer "$signer" \
             --arg candidate "$CANDIDATE_SHA" \
             --arg candidateBranch "$CANDIDATE_BRANCH" \
@@ -230,6 +231,7 @@ jobs:
               apkSha256: $app,
               testApkSha256: $test,
               stagingProjectId: $project,
+              productionProjectId: $production,
               signerSha256: $signer,
               candidateSha: $candidate,
               candidateBranch: $candidateBranch,
