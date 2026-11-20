@@ -71,3 +71,13 @@ test('cached backup keys cannot bypass manifest hash, size and record-count veri
   assert.match(html, /finally\{cachedPlain\.fill\(0\)\}/);
   assert.match(html, /finally\{plain\.fill\(0\)\}/);
 });
+
+test('encrypted backup imports validate filename identity, canonical base64 and strict manifest counts', () => {
+  assert.ok(html.includes('!validName(envelope.name)'));
+  assert.ok(html.includes('decryptBackupEnvelope(raw,filename)'));
+  assert.ok(html.includes('function decodeBackupField'));
+  assert.ok(html.includes('backupB64(bytes)!==value'));
+  assert.ok(html.includes('await validateBackupManifest(envelope.manifest,envelope.name)'));
+  assert.ok(html.includes('Number.isSafeInteger(manifest.recordCounts[field])'));
+  assert.ok(html.includes('manifest.recordCounts[field]<0'));
+});

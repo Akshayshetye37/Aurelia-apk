@@ -1123,24 +1123,40 @@ function constantTimeHexEqual(left,right){
  for(let i=0;i<64;i++)difference|=left.charCodeAt(i)^right.charCodeAt(i);
  return difference===0;
 }
+async function validateBackupManifest(manifest,name){
+ if(!manifest||manifest.formatVersion!==2||manifest.name!==name||!Number.isSafeInteger(manifest.payloadBytes)||manifest.payloadBytes<1||!/^[a-f0-9]{64}$/.test(manifest.payloadSha256||'')||!manifest.recordCounts||typeof manifest.recordCounts!=='object'||Array.isArray(manifest.recordCounts))throw new Error('Encrypted backup manifest is invalid.');
+ const expected=['rooms','b','g','t','sales','exp','inv','led','aud'];
+ if(Object.keys(manifest.recordCounts).length!==expected.length||expected.some(field=>!Number.isSafeInteger(manifest.recordCounts[field])||manifest.recordCounts[field]<0))throw new Error('Encrypted backup manifest is invalid.');
+}
 async function verifyBackupManifestPayload(decoded,manifest){
- const parsed=JSON.parse(decoded),data=parsed.data||{};
+ if(!manifest||manifest.formatVersion!==2||typeof manifest.name!=='string'||
+    !Number.isSafeInteger(manifest.payloadBytes)||manifest.payloadBytes<1||
+    !/^[a-f0-9]{64}$/.test(manifest.payloadSha256||'')||
+    !manifest.recordCounts||typeof manifest.recordCounts!=='object'||Array.isArray(manifest.recordCounts))throw new Error('Backup manifest verification failed.');
+ const parsed=JSON.parse(decoded),data=parsed?.data||{};
  const fields=['rooms','b','g','t','sales','exp','inv','led','aud'];
  const counts=Object.fromEntries(fields.map(field=>[field,Array.isArray(data[field])?data[field].length:0]));
- const countKeys=Object.keys(manifest.recordCounts||{});
+ const countKeys=Object.keys(manifest.recordCounts);
  if(new TextEncoder().encode(decoded).length!==manifest.payloadBytes||
     !constantTimeHexEqual(await sha256Hex(decoded),manifest.payloadSha256)||
     countKeys.length!==fields.length||
-    fields.some(field=>manifest.recordCounts[field]!==counts[field])){
+    fields.some(field=>!Number.isSafeInteger(manifest.recordCounts[field])||manifest.recordCounts[field]<0||manifest.recordCounts[field]!==counts[field])){
   throw new Error('Backup manifest verification failed.');
  }
 }
+function decodeBackupField(value,expectedLength,label){
+ if(typeof value!=='string'||!value||!/^[A-Za-z0-9+/]*={0,2}$/.test(value))throw new Error('Encrypted backup '+label+' is invalid.');
+ const bytes=backupUnB64(value);
+ if(backupB64(bytes)!==value|| (expectedLength!==null&&bytes.length!==expectedLength))throw new Error('Encrypted backup '+label+' is invalid.');
+ return bytes;
+}
 async function decryptBackupEnvelope(envelope,filename){
- if(envelope.format!=='AURELIA-PMS-ENCRYPTED-BACKUP'||![1,2].includes(envelope.v)||envelope.application!=='com.aurelia.pms'||envelope.cipher!=='AES-256-GCM'||envelope.kdf!=='PBKDF2-HMAC-SHA256'||envelope.iterations!==BACKUP_KDF_ITERATIONS||typeof envelope.name!=='string'||(filename&&envelope.name!==filename))throw new Error('Encrypted backup header is invalid or unsupported.');
- const salt=backupUnB64(envelope.salt),iv=backupUnB64(envelope.iv),wrapIv=backupUnB64(envelope.wrapIv),wrappedKey=backupUnB64(envelope.wrappedKey),ciphertext=backupUnB64(envelope.ciphertext);
- if(salt.length!==16||iv.length!==12||wrapIv.length!==12||wrappedKey.length!==48||ciphertext.length<16||ciphertext.length>25*1024*1024)throw new Error('Encrypted backup has invalid cryptographic fields or size.');
+ const validName=name=>typeof name==='string'&&/^aurelia-backup-\d{4}-\d{2}-\d{2}-[a-f0-9]{64}\.json$/i.test(name);
+ if(envelope.format!=='AURELIA-PMS-ENCRYPTED-BACKUP'||![1,2].includes(envelope.v)||envelope.application!=='com.aurelia.pms'||envelope.cipher!=='AES-256-GCM'||envelope.kdf!=='PBKDF2-HMAC-SHA256'||envelope.iterations!==BACKUP_KDF_ITERATIONS||!validName(envelope.name)||(filename&&envelope.name!==filename))throw new Error('Encrypted backup header is invalid or unsupported.');
+ const salt=decodeBackupField(envelope.salt,16,'salt'),iv=decodeBackupField(envelope.iv,12,'nonce'),wrapIv=decodeBackupField(envelope.wrapIv,12,'key-wrap nonce'),wrappedKey=decodeBackupField(envelope.wrappedKey,48,'wrapped key'),ciphertext=decodeBackupField(envelope.ciphertext,null,'ciphertext');
+ if(ciphertext.length<16||ciphertext.length>25*1024*1024)throw new Error('Encrypted backup has invalid cryptographic fields or size.');
+ if(envelope.v===2)await validateBackupManifest(envelope.manifest,envelope.name);
  const aad=new TextEncoder().encode(envelope.v===2?'com.aurelia.pms|backup-v2|'+JSON.stringify(envelope.manifest):'com.aurelia.pms|backup-v1|'+envelope.name);
- if(envelope.v===2&&(!envelope.manifest||envelope.manifest.formatVersion!==2||envelope.manifest.name!==envelope.name||!Number.isSafeInteger(envelope.manifest.payloadBytes)||envelope.manifest.payloadBytes<1||! /^[a-f0-9]{64}$/.test(envelope.manifest.payloadSha256||'')||!envelope.manifest.recordCounts||typeof envelope.manifest.recordCounts!=='object'))throw new Error('Encrypted backup manifest is invalid.');
  let vault=await readBackupVault(),key=null;
  if(vault&&vault.salt===envelope.salt&&vault.format===1)key=vault.key;
  if(key){
@@ -1175,7 +1191,7 @@ async function decryptBackupEnvelope(envelope,filename){
 async function decryptBackupPayload(payload,filename){
  let raw;
  try{raw=JSON.parse(payload)}catch(_){throw new Error('Backup file is not valid JSON.')}
- if(raw&&raw.format==='AURELIA-PMS-ENCRYPTED-BACKUP')return await decryptBackupEnvelope(raw,raw.name);
+ if(raw&&raw.format==='AURELIA-PMS-ENCRYPTED-BACKUP')return await decryptBackupEnvelope(raw,filename);
  if(raw&&raw.v===4&&raw.data){console.warn('Restoring a legacy unencrypted PMS backup. New backups are encrypted.');return payload}
  throw new Error('This file is not a supported Aurelia PMS backup.');
 }
