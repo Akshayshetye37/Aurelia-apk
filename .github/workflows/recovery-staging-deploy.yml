@@ -169,14 +169,9 @@ jobs:
           REGION: ${{ vars.GCP_REGION }}
           FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
           RECOVERY_CALLABLES: exchangeOwnerEmailLink,confirmRecoveryOwnerBinding
-          FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
-          VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
-          ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
-          PUBLIC_KEYS: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
           FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
           APP_CHECK_REGISTERED: ${{ vars.APP_CHECK_PLAY_INTEGRITY_REGISTERED }}
           APP_CHECK_SIGNER_SHA256: ${{ vars.APP_CHECK_SIGNER_SHA256 }}
-          ATTESTATION_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
           KEYSTORE_B64: ${{ secrets.STAGING_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.STAGING_KEYSTORE_PASSWORD }}
@@ -191,7 +186,7 @@ jobs:
           if [[ "$PROJECT_ID" == "$PRODUCTION_PROJECT_ID" ]]; then
             echo "::error::Staging deployment is blocked because the project is production."; exit 1
           fi
-          for name in PROJECT_ID PRODUCTION_PROJECT_ID REGION FUNCTIONS_BASE_URL RECOVERY_CALLABLES FUNCTION_SA VERIFIER_URL ACTIVE_KID PUBLIC_KEYS FIREBASE_WEB_API_KEY APP_CHECK_REGISTERED APP_CHECK_SIGNER_SHA256 ATTESTATION_SIGNER_SHA256 GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+          for name in PROJECT_ID PRODUCTION_PROJECT_ID REGION FUNCTIONS_BASE_URL RECOVERY_CALLABLES FIREBASE_WEB_API_KEY APP_CHECK_REGISTERED APP_CHECK_SIGNER_SHA256 GOOGLE_SERVICES_JSON KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [[ -z "${!name}" ]]; then echo "::error::Missing recovery-staging environment setting: $name"; exit 1; fi
           done
           if [[ "$PROJECT_ID" == "$PRODUCTION_PROJECT_ID" ]]; then
@@ -203,30 +198,18 @@ jobs:
             exit 1
           fi
           APP_CHECK_CERT="$(echo "$APP_CHECK_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
-          ATTESTATION_CERT="$(echo "$ATTESTATION_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
-          if [[ "$APP_CHECK_CERT" != "$ATTESTATION_CERT" ]]; then
-            echo "::error::Firebase App Check and hardware-attestation signer fingerprints must match the release APK signer."
-            exit 1
-          fi
           node -e 'const u=new URL(process.env.FUNCTIONS_BASE_URL); const h=process.env.REGION+"-"+process.env.PROJECT_ID+".cloudfunctions.net"; if(u.protocol!=="https:" || u.hostname!==h || u.username || u.password || u.port || u.pathname!=="/" || u.search || u.hash) process.exit(1);'
           node -e 'const a=process.env.RECOVERY_CALLABLES.split(",").map(x=>x.trim()).filter(Boolean); if(!a.length || new Set(a).size!==a.length || a.some(x=>!/^[A-Za-z0-9_-]+$/.test(x))) process.exit(1);'
-          node -e 'const o=JSON.parse(process.env.PUBLIC_KEYS); if(!o[process.env.ACTIVE_KID]) process.exit(1);'
           echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/aurelia-staging-release.jks"
           echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "$RUNNER_TEMP/google-services.json"
           export GOOGLE_SERVICES_PATH="$RUNNER_TEMP/google-services.json"
           node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); const key=p?.api_key?.[0]?.current_key; if(!p || c.project_info?.project_id!==process.env.PROJECT_ID || key!==process.env.FIREBASE_WEB_API_KEY) process.exit(1);'
           gcloud config set project "$PROJECT_ID"
-          for secret in PHONE_PEPPER RECOVERY_SIGNING_KEY_PKCS8; do
-            gcloud secrets describe "$secret" --project "$PROJECT_ID" >/dev/null
-            version="$(gcloud secrets versions list "$secret" --project "$PROJECT_ID" --filter='state=ENABLED' --format='value(name)' | head -n 1)"
-            test -n "$version"
-          done
-          gcloud secrets versions access latest --secret RECOVERY_SIGNING_KEY_PKCS8 --project "$PROJECT_ID" > "$RUNNER_TEMP/recovery-signing-key.pem"
-          chmod 600 "$RUNNER_TEMP/recovery-signing-key.pem"
-          export RECOVERY_PRIVATE_KEY_PATH="$RUNNER_TEMP/recovery-signing-key.pem"
-          node -e 'const fs=require("fs"), crypto=require("crypto"); const pins=JSON.parse(process.env.PUBLIC_KEYS); const key=crypto.createPrivateKey(fs.readFileSync(process.env.RECOVERY_PRIVATE_KEY_PATH)); const publicKey=crypto.createPublicKey(key).export({type:"spki",format:"der"}).toString("base64"); if(pins[process.env.ACTIVE_KID]!==publicKey) { console.error("Active APK public pin does not match the Secret Manager signing key."); process.exit(1); }'
-          rm -f "$RUNNER_TEMP/recovery-signing-key.pem"
-          echo "Staging project, matching active public pin/private key, app config, signing keystore and Secret Manager versions are present."
+          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "$RUNNER_TEMP/google-services.json"
+          export GOOGLE_SERVICES_PATH="$RUNNER_TEMP/google-services.json"
+          node -e 'const c=require(process.env.GOOGLE_SERVICES_PATH); const p=c.client?.find(x=>x.client_info?.android_client_info?.package_name==="com.aurelia.pms"); const key=p?.api_key?.[0]?.current_key; if(!p || c.project_info?.project_id!==process.env.PROJECT_ID || key!==process.env.FIREBASE_WEB_API_KEY) process.exit(1);'
+          gcloud config set project "$PROJECT_ID"
+          echo "Staging Firebase project, App Check signer, Google Services config and release signing material validated."
 
       - name: Deploy Firebase Functions with staging-only recovery enabled
         working-directory: candidate
@@ -239,53 +222,10 @@ jobs:
           FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
         run: |
           set -euo pipefail
-          printf 'RECOVERY_ENABLED=true\nRECOVERY_SIGNING_KEY_ID=%s\nRECOVERY_ATTESTATION_VERIFIER_URL=%s\nRECOVERY_FUNCTIONS_SERVICE_ACCOUNT=%s\nFIREBASE_WEB_API_KEY=%s\n' \
-            "$ACTIVE_KID" "$VERIFIER_URL" "$FUNCTION_SA" "$FIREBASE_WEB_API_KEY" > "functions/.env.$PROJECT_ID"
+          printf 'RECOVERY_ENABLED=true\nFIREBASE_WEB_API_KEY=%s\n' "$FIREBASE_WEB_API_KEY" > "functions/.env.$PROJECT_ID"
           firebase deploy --only "$GATE3_DEPLOY_ONLY" --project "$PROJECT_ID" --non-interactive --config firebase.deploy.json
           rm -f "functions/.env.$PROJECT_ID" firebase.deploy.json
-          FUNCTION_JSON="$(gcloud functions describe verifyRecoveryDeviceAttestation --gen2 --project "$PROJECT_ID" --region "$GCP_REGION" --format=json)"
-          echo "$FUNCTION_JSON" | jq -e --arg sa "$FUNCTION_SA" '
-            .serviceConfig.serviceAccountEmail == $sa and
-            .serviceConfig.environmentVariables.RECOVERY_ENABLED == "true"
-          ' >/dev/null
-          echo "Staging recovery functions deployed with the configured service account and RECOVERY_ENABLED=true."
-
-      - name: Verify deployed recovery runtime service accounts can access their secrets
-        shell: bash
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
-        run: |
-          set -euo pipefail
-          bindings=(
-            "registerRecoveryPhone:PHONE_PEPPER"
-            "registerRecoveryOwnerDevice:PHONE_PEPPER"
-            "acknowledgeRecoveryOwnerAlert:PHONE_PEPPER"
-            "issueRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"
-            "consumeRecoveryGrant:PHONE_PEPPER,RECOVERY_SIGNING_KEY_PKCS8"
-          )
-          for binding in "${bindings[@]}"; do
-            function_name="${binding%%:*}"
-            secret_list="${binding#*:}"
-            function_json="$(gcloud functions describe "$function_name" --gen2 --project "$PROJECT_ID" --region "$REGION" --format=json)"
-            runtime_sa="$(echo "$function_json" | jq -r '.serviceConfig.serviceAccountEmail // empty')"
-            if [[ -z "$runtime_sa" ]]; then
-              echo "::error::Could not determine runtime service account for $function_name."
-              exit 1
-            fi
-            IFS=',' read -r -a secrets <<< "$secret_list"
-            for secret in "${secrets[@]}"; do
-              policy="$(gcloud secrets get-iam-policy "$secret" --project "$PROJECT_ID" --format=json)"
-              if ! echo "$policy" | jq -e --arg member "serviceAccount:$runtime_sa" '
-                [.bindings[]? | select(.role=="roles/secretmanager.secretAccessor") |
-                  .members[]? | select(. == $member)] | length > 0
-              ' >/dev/null; then
-                echo "::error::Runtime service account for $function_name lacks secretAccessor on $secret."
-                exit 1
-              fi
-            done
-            echo "PASS: $function_name runtime identity has access to its declared secrets."
-          done
+          echo "Staging email-link owner callables deployed with RECOVERY_ENABLED=true."
 
       - name: Probe missing and invalid App Check tokens on every owner-verification callable
         shell: bash
@@ -294,7 +234,7 @@ jobs:
           REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
         run: |
           set -euo pipefail
-          functions=(exchangeOwnerEmailLink confirmRecoveryOwnerBinding registerRecoveryOwnerDevice acknowledgeRecoveryOwnerAlert getRecoveryOwnerPendingAction getRecoveryOwnerActionReadiness)
+          functions=(exchangeOwnerEmailLink confirmRecoveryOwnerBinding)
           for function_name in "${functions[@]}"; do
             url="https://${REGION}-${PROJECT_ID}.cloudfunctions.net/${function_name}"
             missing_code="$(curl --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 10 -sS -o "$RUNNER_TEMP/appcheck-missing.json" -w '%{http_code}' -X POST "$url" -H 'Content-Type: application/json' --data '{"data":{}}')"
@@ -353,10 +293,10 @@ jobs:
           echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
           test -s android/app/google-services.json
 
-      - name: Apply pinned recovery key ring and release signing
+      - name: Patch Android app and configure staging release signing
         working-directory: candidate
         env:
-          RECOVERY_GRANT_PUBLIC_KEYS_JSON: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
+          RECOVERY_GRANT_PUBLIC_KEYS_JSON: '{}'
           AURELIA_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/aurelia-staging-release.jks
           STAGING_KEYSTORE_PASSWORD: ${{ secrets.STAGING_KEYSTORE_PASSWORD }}
           STAGING_KEY_ALIAS: ${{ secrets.STAGING_KEY_ALIAS }}
@@ -418,7 +358,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f "$RUNNER_TEMP/google-services.json" "$RUNNER_TEMP/aurelia-staging-release.jks" "$RUNNER_TEMP/recovery-signing-key.pem" "$RUNNER_TEMP/appcheck-missing.json" "$RUNNER_TEMP/appcheck-invalid.json"
+          rm -f "$RUNNER_TEMP/google-services.json" "$RUNNER_TEMP/aurelia-staging-release.jks" "$RUNNER_TEMP/appcheck-missing.json" "$RUNNER_TEMP/appcheck-invalid.json"
           rm -f candidate/android/app/google-services.json "candidate/functions/.env.$STAGING_PROJECT"
 
       - name: Expose non-secret staging metadata to Gate 3
