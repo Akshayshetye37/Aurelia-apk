@@ -427,3 +427,51 @@ Cloud onboarding is not complete until the following are verified:
 - [ ] Tests cover account switching, token revocation, provider failure, wrong destination and cross-owner isolation.
 
 **Never use a shared cloud credential, service account, or developer account as the default destination for customer PMS data.** Backend service credentials, if needed for a separately authorized service, must not replace the owner's personal-cloud ownership model or grant broad access to owner files.
+
+
+## Authentication decision — 2026-11-21
+
+**Chosen authentication direction:** Google Sign-In as the preferred/primary sign-in, with email-based passwordless sign-in as the fallback. **SMS/phone OTP is excluded from the product authentication plan.**
+
+- **Google Sign-In:** preferred because it uses the user's existing Google identity and avoids managing phone-number/SMS verification. Implement through the supported Android Credential Manager + Firebase Authentication Google provider flow; configure OAuth client IDs and signing certificate fingerprints for the actual distributed app.
+- **Email OTP:** email-based one-time verification is the fallback. Firebase's native passwordless option is **Email Link sign-in** (a one-time email link, not a numeric code). If the product specifically requires a numeric email code, that is a custom OTP implementation and requires a backend with expiration, single-use enforcement, rate limiting, abuse controls and secure verification. Do not describe Firebase Email Link as numeric OTP.
+- **No SMS OTP:** do not require a phone number, SIM, Phone Auth, SMS delivery, SMS recovery, or SMS-based account binding in the intended user flow. Remove or disable phone/SMS-only UI, callable functions, workflows, tests and configuration when the auth implementation is updated. Do not use SMS as a DEK/key recovery mechanism.
+- **Security separation:** account sign-in authenticates the account/session; it does not unlock, derive, replace or recover the local PMS data-encryption key (DEK). Local PIN/biometric/offline recovery-key rules remain separate and local-first.
+- **Owner choice:** Google Sign-In is the recommended default, but do not make cloud/server availability a prerequisite for core local PMS use. Authentication is only needed for features that explicitly require an account.
+
+Implementation status: **decision documented; provider implementation and end-to-end qualification are not claimed by this README update.**
+
+## Gate 3 audit — scope must be redesigned for the selected authentication policy
+
+The current Gate 3 workflow is still **SMS/recovery-phone-specific** and is not a valid qualification gate for the selected Google Sign-In + email passwordless policy. Do not execute it as an SMS qualification or treat its historical evidence as approval for the new auth design.
+
+Current legacy Gate 3 components include:
+
+- `.github/workflows/gate-3-real-sms-staging.yml`: frozen-candidate validation, staging deployment, App Check negative probes, APK signer/hash validation and evidence bundling. The workflow name and acceptance context are SMS-specific.
+- `.github/workflows/recovery-staging-preflight.yml`: requires a physical device/SIM and confirmation of real staging SMS delivery; validates a staging phone number.
+- `.github/workflows/recovery-staging-deploy.yml`: default callable list includes phone registration/change/cancel/activation recovery callables. Staging deployment uses WIF and expects a separate staging Firebase/GCP environment.
+- `scripts/gates/staging-probes.mjs`: probes missing/invalid App Check tokens against configured callable endpoints. This generic App Check check can be retained, but the callable inventory must be updated to exclude phone/SMS-only functions and include only the supported non-SMS endpoints.
+- `docs/GATE-3-REAL-SMS-STAGING-QUALIFICATION.md`: its real-SMS device matrix, test SIM and SMS acceptance criteria are obsolete for the chosen product policy.
+- `docs/GATE-3-WIF-SETUP.md`: WIF/IAM setup remains useful for a staging deployment, but its auth/recovery configuration inventory must be revised to match the new Gate 3 scope.
+
+### Gate 3 blockers and required redesign
+
+1. **Policy mismatch:** phone/SMS recovery callables and SMS preflight must be removed from the intended release scope or explicitly disabled. No SMS OTP should be a release requirement.
+2. **Gate definition:** replace the current real-SMS qualification with a staging authentication/security gate for Google Sign-In and email passwordless sign-in. Include account creation/sign-in, session persistence, sign-out, provider linking/unlinking policy, email-link expiration/replay, wrong-account/device handling, abuse/rate limits, App Check and authorization boundaries.
+3. **WIF remains unconfigured:** the staging Environment must supply the full `GCP_WORKLOAD_IDENTITY_PROVIDER` resource and `STAGING_DEPLOY_SERVICE_ACCOUNT` email, with restricted GitHub-claim trust and staging-only IAM. The workflow's early validation prevents credential guessing but does not prove WIF trust works.
+4. **Project isolation:** configure distinct staging and production project IDs and validate them. Do not deploy Gate 3 against production.
+5. **Configuration and artifact evidence:** staging Firebase config, Android OAuth client/signing fingerprints, approved signer, functions URL/region and required secrets must be owner-configured and validated without printing secret values.
+6. **App Check:** retain missing/invalid-token negative probes for each applicable callable; verify the probe list is non-empty, belongs to the configured staging origin and reflects the redesigned endpoint inventory.
+7. **Qualification evidence:** exact candidate SHA, deployment run, project/region, APK and test APK hashes, signer fingerprint, probe results and attestation must be retained. A preflight or successful deploy alone is not Gate 3 PASS.
+8. **Production stays fail-closed:** `RECOVERY_ENABLED=false` and production recovery/security flags remain disabled until separately authorized and qualified.
+
+**Gate 3 status: NOT QUALIFIED / scope mismatch + staging WIF configuration pending.** The current workflow has not produced valid qualification evidence for Google Sign-In + email passwordless authentication. The Gate 3 workflow/docs/tests need to be revised before the next run.
+
+## Current project location
+
+- Repository: https://github.com/Akshayshetye37/Aurelia-apk
+- Main integration branch: `integration/ledger-patch`
+- Consolidated candidate branch: `fix/backup-consolidated-integration`
+- PR #55: https://github.com/Akshayshetye37/Aurelia-apk/pull/55 (open, unmerged; candidate SHA previously recorded as `5c640b39891463224b5b6643707bbff71204d0ce`).
+
+This README update is being committed to the candidate branch, not directly to the integration branch. Re-check live PR/head and CI before relying on the status above.
