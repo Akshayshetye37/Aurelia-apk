@@ -263,10 +263,12 @@ jobs:
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
         run: |
           set -euo pipefail
           gcloud functions list --gen2 --project "$PROJECT_ID" --region "$REGION" --format=json > "$RUNNER_TEMP/deployed-functions.json"
-          node scripts/gates/check-callable-inventory.mjs scripts/gates/callables.json "$RUNNER_TEMP/deployed-functions.json"
+          node scripts/gates/check-callable-inventory.mjs scripts/gates/callables.json "$RUNNER_TEMP/deployed-functions.json" "$RUNNER_TEMP/callable-inventory.json"
+          cp "$RUNNER_TEMP/callable-inventory.json" "$RUNNER_TEMP/staging-artifacts/callable-inventory.json"
 
       - name: Verify deployed recovery runtime service accounts can access their secrets
         shell: bash
