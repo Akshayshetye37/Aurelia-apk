@@ -116,6 +116,12 @@ export function verifyBundle({ repo, runId, gate, workflowFile, controlBranch, d
       record.runId !== Number(runId) || record.repository !== repo || record.controlSha !== run.head_sha ||
       !SHA_RE.test(record.candidateSha ?? '')) fail(`gate ${gate}: record status/evidence does not qualify or does not match its run`);
   if (record.runAttempt !== Number(run.run_attempt)) fail(`gate ${gate}: run attempt mismatch`);
+  if (String(gate) === '3') {
+    const statuses = record.details?.statuses;
+    const requiredStatuses = ['STAGING_DEPLOYMENT', 'APPCHECK_NEGATIVE_PROBES', 'APK_BUILD_AND_SIGNING', 'PHYSICAL_SMS_RECOVERY', 'GATE_3_OVERALL'];
+    if (!statuses || requiredStatuses.some(name => !['QUALIFIED', 'NOT QUALIFIED'].includes(statuses[name])) ||
+        statuses.GATE_3_OVERALL !== record.status) fail('gate 3: qualification status fields are missing or inconsistent');
+  }
   return record;
 }
 
