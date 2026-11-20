@@ -347,7 +347,7 @@ test('bundle verification accepts trusted push evidence only for Gates 1 and 2',
   const gate1 = runVerifyBundle(t, validCertificate({ trigger: 'push' }), { event: 'push', gate: '1' });
   assert.equal(gate1.status, 0, output(gate1));
   const gate3 = runVerifyBundle(t, validCertificate({ trigger: 'push', workflowFile: 'gate-3-google-email-link-staging.yml' }), {
-    event: 'push', gate: '3', workflowFile: 'gate-3-real-sms-staging.yml',
+    event: 'push', gate: '3', workflowFile: 'gate-3-google-email-link-staging.yml',
   });
   assert.equal(gate3.status, 1);
   assert.match(output(gate3), /unsupported trigger push/);
