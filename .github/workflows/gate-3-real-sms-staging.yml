@@ -224,6 +224,7 @@ jobs:
             --arg candidateBranch "$CANDIDATE_BRANCH" \
             --arg controlBranch "$GITHUB_REF_NAME" \
             --arg deploymentRun "$GITHUB_RUN_ID" \
+            --slurpfile inventory scripts/gates/callables.json \
             '{
               apkSha256: $app,
               testApkSha256: $test,
@@ -232,10 +233,15 @@ jobs:
               candidateSha: $candidate,
               candidateBranch: $candidateBranch,
               controlBranch: $controlBranch,
-              stagingRunId: ($deploymentRun | tonumber)
+              stagingRunId: ($deploymentRun | tonumber),
+              stagingDeployment: "QUALIFIED",
+              apkBuildAndSigning: "QUALIFIED",
+              callables: $inventory[0].callables,
+              excluded: []
             }' > evidence/details.json
 
           test -s evidence/probes.json
+          node scripts/gates/validate-gate3-evidence.mjs
           node scripts/gates/write-evidence.mjs \
             --gate 3 \
             --sha "$CANDIDATE_SHA" \
