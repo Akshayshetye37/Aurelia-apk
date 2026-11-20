@@ -29,7 +29,7 @@ const functions = [
   "async function verifyBackupManifestPayload", "async function decryptBackupEnvelope", "async function decryptBackupPayload"
 ].map(extractFunction);
 const debugDecryptSource=functions.at(-1).replace("async function decryptBackupEnvelope","async function debugDecryptBackupEnvelope").replace("catch(_){throw fail()}","catch(error){throw error}").replace("  throw fail();\n }\n}","  throw error;\n }\n}");
-const source = `const BACKUP_KDF_ITERATIONS=600000;\n${functions.join("\n")}\n`;
+const source = `const BACKUP_KDF_ITERATIONS=600000;\n${functions.join("\n")}\n${debugDecryptSource}\n`;
 const context = vm.createContext({
   crypto: webcrypto, window: { crypto: webcrypto, TextEncoder }, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, JSON, Math,
   atob: value => Buffer.from(value, "base64").toString("binary"),
