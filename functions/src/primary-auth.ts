@@ -71,7 +71,7 @@ export const ensureOwnerMembership = onCall(
         status: "active",
         createdAt: FieldValue.serverTimestamp()
       });
-      tx.set(userRef, {
+      const userData = {
         uid,
         ownerIds: [candidateOwnerId],
         email: typeof request.auth?.token.email === "string" ? request.auth.token.email : null,
@@ -79,7 +79,9 @@ export const ensureOwnerMembership = onCall(
         primaryProvider: "google.com",
         createdAt: current?.createdAt ?? FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
-      });
+      };
+      if (current) tx.update(userRef, userData);
+      else tx.create(userRef, userData);
       return { memberships: [{ ownerId: candidateOwnerId, role: "owner" }], created: true };
     });
   }
