@@ -64,5 +64,5 @@ test('Firebase Storage is configured and README qualification remains pending', 
   const readme = read('README.md');
   assert.match(readme, /CI AND DEVICE QUALIFICATION PENDING/i);
   assert.match(readme, /does not unlock the DEK/i);
-  assert.match(readme, /multi-business selection and invitation management is not yet implemented/i);
+  assert.match(readme, /multi-business selection and invitation management are not yet implemented/i);
 });
