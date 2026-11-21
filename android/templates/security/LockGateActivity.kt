@@ -23,6 +23,7 @@ import com.aurelia.pms.identity.RecoveryGrantClient
 import com.aurelia.pms.identity.RecoveryPhoneStore
 import com.aurelia.pms.identity.RecoveryTenantIdentity
 import com.google.firebase.auth.FirebaseAuth
+import com.aurelia.pms.identity.GooglePrimaryAuthActivity
 
 /**
  * Exported launcher boundary. This Activity contains no WebView and starts the
@@ -35,6 +36,9 @@ class LockGateActivity : FragmentActivity() {
     private lateinit var envelopeStore: AureliaEnvelopeStore
     private lateinit var biometricVault: BiometricVaultManager
     private lateinit var biometricStore: BiometricEnvelopeStore
+    private lateinit var localOwnerBinding: LocalOwnerBindingStore
+    private var primaryUid: String = ""
+    private var primaryOwnerId: String = ""
     private var enrollmentMode = false
     private var pinField: EditText? = null
     private var confirmField: EditText? = null
@@ -52,6 +56,17 @@ class LockGateActivity : FragmentActivity() {
         envelopeStore = AureliaEnvelopeStore(this)
         biometricVault = BiometricVaultManager()
         biometricStore = BiometricEnvelopeStore(this)
+        localOwnerBinding = LocalOwnerBindingStore(this)
+        primaryUid = intent.getStringExtra("primary_uid") ?: FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+        primaryOwnerId = intent.getStringExtra("primary_owner_id").orEmpty()
+        if (primaryUid.isBlank() || primaryOwnerId.isBlank() || FirebaseAuth.getInstance().currentUser?.uid != primaryUid) {
+            showPrimaryIdentityError()
+            return
+        }
+        if (localOwnerBinding.check(primaryUid, primaryOwnerId) == LocalOwnerBindingStore.Result.MISMATCH) {
+            showPrimaryIdentityError()
+            return
+        }
         val enrolled = AureliaSecurityRuntime.isEnrolled()
         val envelopeExists = envelopeStore.exists()
         val databaseExists = encryptedDatabaseExists()
@@ -63,6 +78,30 @@ class LockGateActivity : FragmentActivity() {
         // restored only after PIN/recovery unlock, never by creating a new DEK.
         enrollmentMode = !envelopeExists && !databaseExists && !enrolled && !biometricStore.exists()
         render()
+    }
+
+    private fun showPrimaryIdentityError() {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(32, 48, 32, 48)
+            setBackgroundColor(android.graphics.Color.rgb(5, 17, 13))
+        }
+        root.addView(TextView(this).apply {
+            text = "This local encrypted PMS profile is bound to a different Google owner.\\n\\nSign in with the original account to access its data. Switching accounts does not transfer or unlock local data."
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setTextColor(android.graphics.Color.WHITE)
+        })
+        root.addView(Button(this).apply {
+            text = "Switch Google account"
+            setOnClickListener {
+                startActivity(Intent(this@LockGateActivity, GooglePrimaryAuthActivity::class.java)
+                    .putExtra(GooglePrimaryAuthActivity.EXTRA_SWITCH_ACCOUNT, true))
+                finish()
+            }
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 24 })
+        setContentView(root)
     }
 
     private fun render() {
@@ -124,6 +163,16 @@ class LockGateActivity : FragmentActivity() {
                 setOnClickListener { showRecoveryPrompt() }
             }
             root.addView(forgot, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 8 })
+            val switchAccount = Button(this).apply {
+                text = "Switch Google account"
+                setOnClickListener {
+                    manager.lock()
+                    startActivity(Intent(this@LockGateActivity, GooglePrimaryAuthActivity::class.java)
+                        .putExtra(GooglePrimaryAuthActivity.EXTRA_SWITCH_ACCOUNT, true))
+                    finish()
+                }
+            }
+            root.addView(switchAccount, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 8 })
         }
         setContentView(root)
     }
@@ -145,6 +194,11 @@ class LockGateActivity : FragmentActivity() {
                     return
                 }
                 val enrollment = manager.enroll(first)
+                if (localOwnerBinding.bindIfAbsent(primaryUid, primaryOwnerId) != LocalOwnerBindingStore.Result.MATCH) {
+                    manager.lock()
+                    showPrimaryIdentityError()
+                    return
+                }
                 showRecoveryKey(enrollment.recoveryKey) {
                     writeEnvelope(enrollment.envelopeJson)
                     AureliaSecurityRuntime.markEnrolled()
@@ -152,6 +206,11 @@ class LockGateActivity : FragmentActivity() {
             } else {
                 val envelope = readEnvelope()
                 if (manager.unlock(first, envelope)) {
+                    if (localOwnerBinding.bindIfAbsent(primaryUid, primaryOwnerId) != LocalOwnerBindingStore.Result.MATCH) {
+                        manager.lock()
+                        showPrimaryIdentityError()
+                        return
+                    }
                     if (envelopeStore.hasPreviousEnvelope()) envelopeStore.confirmRecoveryPinUnlock()
                     AureliaSecurityRuntime.markEnrolled()
                     if (first.size < 6) {

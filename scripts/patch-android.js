@@ -187,21 +187,28 @@ for (const permission of permissionsToRemove) {
   }
 }
 
-// Native PIN gate is the only exported launcher. MainActivity remains internal,
-// so ordinary launcher starts cannot instantiate the PMS WebView before PIN auth.
-if (!manifest.includes('com.aurelia.pms.security.LockGateActivity')) {
-  const mainActivityPattern = /<activity\b(?=[^>]*android:name="(?:\.MainActivity|com\.aurelia\.pms\.MainActivity)")([^>]*)>([\s\S]*?)<\/activity>/;
-  const mainMatch = manifest.match(mainActivityPattern);
-  if (!mainMatch) throw new Error('Capacitor MainActivity manifest declaration was not found; native PIN gate cannot be installed.');
-  let mainAttrs = mainMatch[1].replace(/android:exported="[^"]*"/, '').trim();
-  mainAttrs += ' android:exported="false"';
-  let mainBody = mainMatch[2].replace(/<intent-filter>[\s\S]*?<\/intent-filter>/g, block =>
-    /android\.intent\.action\.MAIN/.test(block) && /android\.intent\.category\.LAUNCHER/.test(block) ? '' : block
-  );
-  const internalMain = '<activity ' + mainAttrs + '>' + mainBody + '</activity>';
-  const gateActivity = '<activity android:name="com.aurelia.pms.security.LockGateActivity" android:exported="true" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.NoActionBar"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>';
-  manifest = manifest.replace(mainMatch[0], internalMain + '\n        ' + gateActivity);
+// Google authentication is the exported launcher. PIN gate and WebView remain internal.
+const mainActivityPattern = /<activity\b(?=[^>]*android:name="(?:\.MainActivity|com\.aurelia\.pms\.MainActivity)")([^>]*)>([\s\S]*?)<\/activity>/;
+const mainMatch = manifest.match(mainActivityPattern);
+if (!mainMatch) throw new Error('Capacitor MainActivity manifest declaration was not found.');
+const internalMainAttrs = mainMatch[1].replace(/android:exported="[^"]*"/, '').trim() + ' android:exported="false"';
+const internalMainBody = mainMatch[2].replace(/<intent-filter>[\s\S]*?<\/intent-filter>/g, block =>
+  /android\.intent\.action\.MAIN/.test(block) && /android\.intent\.category\.LAUNCHER/.test(block) ? '' : block);
+manifest = manifest.replace(mainMatch[0], '<activity ' + internalMainAttrs + '>' + internalMainBody + '</activity>');
+
+const lockGatePattern = /<activity\b(?=[^>]*android:name="com\.aurelia\.pms\.security\.LockGateActivity")[^>]*>[\s\S]*?<\/activity>/;
+if (lockGatePattern.test(manifest)) {
+  manifest = manifest.replace(lockGatePattern, block => block
+    .replace(/android:exported="true"/, 'android:exported="false"')
+    .replace(/<intent-filter>[\s\S]*?<\/intent-filter>/g, filter =>
+      /android\.intent\.action\.MAIN/.test(filter) && /android\.intent\.category\.LAUNCHER/.test(filter) ? '' : filter));
+} else {
+  manifest = manifest.replace('</application>', '<activity android:name="com.aurelia.pms.security.LockGateActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.NoActionBar" /></application>');
 }
+const primaryActivityPattern = /<activity\b(?=[^>]*android:name="com\.aurelia\.pms\.identity\.GooglePrimaryAuthActivity")[^>]*>[\s\S]*?<\/activity>/;
+const primaryLauncher = '<activity android:name="com.aurelia.pms.identity.GooglePrimaryAuthActivity" android:exported="true" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.NoActionBar"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>';
+if (primaryActivityPattern.test(manifest)) manifest = manifest.replace(primaryActivityPattern, primaryLauncher);
+else manifest = manifest.replace('</application>', primaryLauncher + '</application>');
 if (!manifest.includes('com.aurelia.pms.identity.RecoveryOwnerAlertActivity')) {
   const googleServicesPath = path.join(appModuleDir, 'google-services.json');
   let recoveryAlertActivity = '<activity android:name="com.aurelia.pms.identity.RecoveryOwnerAlertActivity" android:exported="false" android:excludeFromRecents="true" android:launchMode="singleTask" android:theme="@android:style/Theme.Material.Light.NoActionBar" />';
@@ -438,6 +445,22 @@ if (fs.existsSync(appGradleGroovy)) {
 // versions are owned by the generated Capacitor project's plugin DSL/catalog.
 // Inject Firebase Auth into the app module without rewriting root Gradle plugin
 // management. The Google Services plugin is applied only for a supplied config.
+const primaryAuthTemplate = path.join(androidDir, 'templates', 'GooglePrimaryAuthActivity.kt');
+if (!fs.existsSync(primaryAuthTemplate)) throw new Error('GooglePrimaryAuthActivity.kt template is missing.');
+fs.copyFileSync(primaryAuthTemplate, path.join(identityDir, 'GooglePrimaryAuthActivity.kt'));
+const googleConfigPath = path.join(appModuleDir, 'google-services.json');
+let googleWebClientId = '';
+if (fs.existsSync(googleConfigPath)) {
+  const googleConfig = JSON.parse(fs.readFileSync(googleConfigPath, 'utf8'));
+  const clients = googleConfig.client?.[0]?.oauth_client ?? [];
+  googleWebClientId = clients.find(client => client.client_type === 3)?.client_id ?? '';
+}
+const primaryValuesDir = path.join(appDir, 'res', 'values');
+fs.mkdirSync(primaryValuesDir, { recursive: true });
+fs.writeFileSync(path.join(primaryValuesDir, 'aurelia_primary_auth.xml'),
+  '<?xml version="1.0" encoding="utf-8"?>\n<resources><string name="aurelia_google_web_client_id" translatable="false">' +
+  xmlEscape(googleWebClientId) + '</string></resources>');
+
 const firebaseTemplate = path.join(androidDir, 'templates', 'FirebasePhoneIdentity.kt');
 if (!fs.existsSync(firebaseTemplate)) throw new Error('FirebasePhoneIdentity.kt template is missing.');
 const identityDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms', 'identity');
@@ -488,7 +511,8 @@ for (const file of [
   'PaymentDeviceKeyStore.kt',
   'PaymentDeviceClient.kt',
   'SettlementEnvelopeVerifier.kt',
-  'LockGateActivity.kt'
+  'LockGateActivity.kt',
+  'LocalOwnerBindingStore.kt'
 ]) {
   const source = path.join(securityTemplateDir, file);
   if (!fs.existsSync(source)) throw new Error('Native security template is missing: ' + file);
@@ -514,6 +538,7 @@ function addNativeSecurityDependencies(contents, kotlinDsl) {
     ['androidx.sqlite:sqlite:2.6.2', 'androidx.sqlite:sqlite'],
     ['androidx.credentials:credentials:1.6.0', 'androidx.credentials:credentials'],
     ['androidx.credentials:credentials-play-services-auth:1.6.0', 'androidx.credentials:credentials-play-services-auth'],
+    ['com.google.android.libraries.identity.googleid:googleid:1.1.1', 'com.google.android.libraries.identity.googleid:googleid'],
     ['androidx.lifecycle:lifecycle-runtime-ktx:2.9.4', 'androidx.lifecycle:lifecycle-runtime-ktx']
   ];
   for (const [coordinate, marker] of dependencies) {
@@ -870,7 +895,7 @@ public class MainActivity extends BridgeActivity implements PaymentResultWithDat
     // Check authorization before resuming WebView execution. A fresh process
     // starts locked; the native launcher must authenticate first.
     if (!com.aurelia.pms.security.AureliaSecurityRuntime.INSTANCE.manager(this).onForeground()) {
-      startActivity(new Intent(this, com.aurelia.pms.security.LockGateActivity.class));
+      startActivity(new Intent(this, com.aurelia.pms.identity.GooglePrimaryAuthActivity.class));
       finish();
       return;
     }

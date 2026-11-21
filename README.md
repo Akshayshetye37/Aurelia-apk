@@ -36,6 +36,33 @@ Latest observed native workflow: [Aurelia native SQLite contract run #170](https
 - Release authority guards are in place for selected bootstrap/restore and operational mutation paths. The entire PMS UI has not yet cut over to canonical domain reads/writes.
 - Provider activation and live financial automation are deliberately gated OFF. Staff-confirmed/manual offline folio operations are distinct from live gateway processing.
 
+## Google-only primary authentication and owner isolation
+
+Primary authentication uses Firebase Authentication with Android Credential Manager
+and Google ID tokens. Email Link, Email/Password, SMS and numeric OTP are not
+primary login methods. The existing Phone Auth recovery flow remains isolated in
+its dedicated FirebaseApp; disabling the project-wide Phone provider would break
+that recovery path and is therefore not done by this source change.
+
+The server callable `ensureOwnerMembership` accepts only verified Google-provider
+identity and App Check, generates the initial owner ID and role server-side, and
+creates an idempotent owner membership. Client-supplied owner IDs or roles are
+rejected. Firestore and Storage rules authorize only active owner memberships.
+The local encrypted PMS profile is bound to its first verified owner using an
+Android Keystore AES-GCM protected record; signing into a different Google owner
+does not unlock or reuse the previous owner's local database.
+
+The current implementation establishes one initial business membership per Google UID; multi-business selection and invitation management are not yet implemented.
+
+**Status: IMPLEMENTED IN SOURCE; CI AND DEVICE QUALIFICATION PENDING.** Firebase
+Console must enable Google provider, register debug/release signing fingerprints,
+and provide the Web OAuth client ID in the updated `google-services.json`.
+App Check enforcement for Firestore and Storage is a Firebase Console setting and
+has not been verified by repository source. Real-device Google Sign-In, release
+fingerprints, account-switch isolation, and backend emulator authorization remain
+qualification gates. Successful Google authentication does not unlock the DEK;
+PIN or recovery-key verification remains required.
+
 ## Remaining production blockers
 
 ### 1. Real Android SQLite instrumentation is not qualified

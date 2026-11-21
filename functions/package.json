@@ -12,7 +12,8 @@
     "emulate": "npm run build && firebase emulators:start --only functions,firestore",
     "test:emulator": "node --test test/recovery-emulator-runtime.test.mjs",
     "provision:recovery-owner": "node scripts/provision-recovery-owner.mjs",
-    "test:disabled": "node --test test/recovery-disabled-runtime.test.mjs"
+    "test:disabled": "node --test test/recovery-disabled-runtime.test.mjs",
+    "test:tenant-rules-emulator": "node --test test/tenant-rules-emulator.test.mjs"
   },
   "dependencies": {
     "firebase-admin": "^13.4.0",

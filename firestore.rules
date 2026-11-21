@@ -1,43 +1,52 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Recovery identity, phone HMACs, one-time grants and abuse counters are
-    // server-authoritative. Firebase Admin SDK functions bypass these rules.
-    match /tenants/{tenantId}/security/{document=**} {
-      allow read, write: if false;
+    function signedIn() { return request.auth != null; }
+    function member(ownerId) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/owners/$(ownerId)/members/$(request.auth.uid));
     }
-    match /tenants/{tenantId}/recoveryPasskeys/{passkeyId} {
-      allow read, write: if false;
+    function activeMember(ownerId) {
+      return member(ownerId) &&
+        get(/databases/$(database)/documents/owners/$(ownerId)/members/$(request.auth.uid)).data.status == "active";
     }
-    match /recoveryGrants/{grantId} {
-      allow read, write: if false;
+    function role(ownerId) {
+      return get(/databases/$(database)/documents/owners/$(ownerId)/members/$(request.auth.uid)).data.role;
     }
-    match /usedPhoneProofs/{proofId} {
-      allow read, write: if false;
+    function canWrite(ownerId) {
+      return activeMember(ownerId) && role(ownerId) in ["owner", "admin", "manager"];
     }
-    match /rateLimits/{limitId} {
-      allow read, write: if false;
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
     }
-    match /recoveryCooldowns/{tenantId} {
-      allow read, write: if false;
+    match /owners/{ownerId} {
+      allow read: if activeMember(ownerId);
+      allow write: if false;
     }
-    match /recoverySecurityEvents/{eventId} {
-      allow read, write: if false;
+    match /owners/{ownerId}/members/{uid} {
+      allow read: if activeMember(ownerId) && (request.auth.uid == uid || role(ownerId) == "owner");
+      allow write: if false;
     }
-    match /recoveryOwnerDevices/{deviceId} {
-      allow read, write: if false;
+    match /owners/{ownerId}/data/{collection}/{document=**} {
+      allow read: if activeMember(ownerId);
+      allow create, update: if canWrite(ownerId) &&
+        (!("ownerId" in request.resource.data) || request.resource.data.ownerId == ownerId);
+      allow delete: if canWrite(ownerId);
     }
-    match /recoveryAttestationChallenges/{challengeId} {
-      allow read, write: if false;
-    }
-    match /recoveryPasskeyChallenges/{challengeId} {
-      allow read, write: if false;
-    }
-    match /recoveryPasskeyRateLimits/{limitId} {
-      allow read, write: if false;
-    }
-    match /recoveryDeviceAttestations/{deviceId} {
-      allow read, write: if false;
-    }
+
+    match /tenants/{tenantId}/security/{document=**} { allow read, write: if false; }
+    match /tenants/{tenantId}/recoveryPasskeys/{passkeyId} { allow read, write: if false; }
+    match /recoveryGrants/{grantId} { allow read, write: if false; }
+    match /usedPhoneProofs/{proofId} { allow read, write: if false; }
+    match /rateLimits/{limitId} { allow read, write: if false; }
+    match /recoveryCooldowns/{tenantId} { allow read, write: if false; }
+    match /recoverySecurityEvents/{eventId} { allow read, write: if false; }
+    match /recoveryOwnerDevices/{deviceId} { allow read, write: if false; }
+    match /recoveryAttestationChallenges/{challengeId} { allow read, write: if false; }
+    match /recoveryPasskeyChallenges/{challengeId} { allow read, write: if false; }
+    match /recoveryPasskeyRateLimits/{limitId} { allow read, write: if false; }
+    match /recoveryDeviceAttestations/{deviceId} { allow read, write: if false; }
   }
 }

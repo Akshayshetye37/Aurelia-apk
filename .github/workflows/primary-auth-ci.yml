@@ -1,0 +1,88 @@
+name: Primary Google Auth CI
+on:
+  push:
+    branches:
+      - integration/ledger-patch
+    paths:
+      - 'android/templates/GooglePrimaryAuthActivity.kt'
+      - 'android/templates/security/LocalOwnerBindingStore.kt'
+      - 'android/templates/security/LockGateActivity.kt'
+      - 'scripts/patch-android.js'
+      - 'functions/src/primary-auth.ts'
+      - 'functions/src/index.ts'
+      - 'functions/package.json'
+      - 'firestore.rules'
+      - 'storage.rules'
+      - 'firebase.json'
+      - 'tests/primary-auth-contract.test.mjs'
+      - 'functions/test/primary-auth-emulator.test.mjs'
+      - '.github/workflows/primary-auth-ci.yml'
+  pull_request:
+    paths:
+      - 'android/templates/GooglePrimaryAuthActivity.kt'
+      - 'android/templates/security/LocalOwnerBindingStore.kt'
+      - 'android/templates/security/LockGateActivity.kt'
+      - 'scripts/patch-android.js'
+      - 'functions/src/primary-auth.ts'
+      - 'functions/src/index.ts'
+      - 'functions/package.json'
+      - 'firestore.rules'
+      - 'storage.rules'
+      - 'firebase.json'
+      - 'tests/primary-auth-contract.test.mjs'
+      - 'functions/test/primary-auth-emulator.test.mjs'
+      - '.github/workflows/primary-auth-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: primary-auth-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npm test
+      - name: Compile Cloud Functions
+        run: npm install --ignore-scripts --no-audit --no-fund && npm run build
+        working-directory: functions
+      - name: Run Firestore and Storage emulator acceptance tests
+        run: |
+          npm install --global firebase-tools
+          npm --prefix functions install --no-save firebase @firebase/rules-unit-testing
+          firebase emulators:exec --only firestore,storage --project demo-aurelia-primary-auth "npm --prefix functions run test:primary-auth-emulator && npm --prefix functions run test:tenant-rules-emulator"
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npm run build
+      - name: Preserve Android templates while generating Capacitor project
+        run: |
+          set -euo pipefail
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          mv android/templates "$template_dir"
+          rmdir android
+          npx cap add android
+          mkdir -p android/templates
+          cp -a "$template_dir/." android/templates/
+      - name: Apply native Google auth and security configuration
+        run: node scripts/patch-android.js
+      - run: npx cap sync android
+      - name: Compile Android debug APK
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug

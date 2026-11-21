@@ -792,3 +792,5 @@ export {
   completeRecoveryOwnerPasskeyAction,
   acknowledgeRecoveryOwnerAlert
 } from "./passkeys.js";
+
+export { ensureOwnerMembership } from "./primary-auth.js";
