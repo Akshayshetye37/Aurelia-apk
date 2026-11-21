@@ -445,6 +445,10 @@ if (fs.existsSync(appGradleGroovy)) {
 // versions are owned by the generated Capacitor project's plugin DSL/catalog.
 // Inject Firebase Auth into the app module without rewriting root Gradle plugin
 // management. The Google Services plugin is applied only for a supplied config.
+const firebaseTemplate = path.join(androidDir, 'templates', 'FirebasePhoneIdentity.kt');
+if (!fs.existsSync(firebaseTemplate)) throw new Error('FirebasePhoneIdentity.kt template is missing.');
+const identityDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms', 'identity');
+fs.mkdirSync(identityDir, { recursive: true });
 const primaryAuthTemplate = path.join(androidDir, 'templates', 'GooglePrimaryAuthActivity.kt');
 if (!fs.existsSync(primaryAuthTemplate)) throw new Error('GooglePrimaryAuthActivity.kt template is missing.');
 fs.copyFileSync(primaryAuthTemplate, path.join(identityDir, 'GooglePrimaryAuthActivity.kt'));
@@ -461,10 +465,7 @@ fs.writeFileSync(path.join(primaryValuesDir, 'aurelia_primary_auth.xml'),
   '<?xml version="1.0" encoding="utf-8"?>\n<resources><string name="aurelia_google_web_client_id" translatable="false">' +
   xmlEscape(googleWebClientId) + '</string></resources>');
 
-const firebaseTemplate = path.join(androidDir, 'templates', 'FirebasePhoneIdentity.kt');
-if (!fs.existsSync(firebaseTemplate)) throw new Error('FirebasePhoneIdentity.kt template is missing.');
-const identityDir = path.join(appDir, 'java', 'com', 'aurelia', 'pms', 'identity');
-fs.mkdirSync(identityDir, { recursive: true });
+
 fs.copyFileSync(firebaseTemplate, path.join(identityDir, 'FirebasePhoneIdentity.kt'));
 
 const firebaseBootstrapTemplate = path.join(androidDir, 'templates', 'RecoveryFirebaseAuthFactory.kt');

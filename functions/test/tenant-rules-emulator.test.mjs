@@ -33,7 +33,8 @@ test('Firestore owner A/B read, write and delete isolation', async () => {
   const pathB = 'owners/' + ownerB + '/data/bookings/booking-b';
   await assertSucceeds(getDoc(doc(dbA, pathA)));
   await assertFails(getDoc(doc(dbA, pathB)));
-  await assertSucceeds(setDoc(doc(dbA, pathA), { value: 'A-updated', ownerId: ownerB }));
+  await assertFails(setDoc(doc(dbA, pathA), { value: 'A-updated', ownerId: ownerB }));
+  await assertSucceeds(setDoc(doc(dbA, pathA), { value: 'A-updated', ownerId: ownerA }));
   await assertFails(setDoc(doc(dbA, pathB), { value: 'spoof', ownerId: ownerA }));
   await assertFails(deleteDoc(doc(dbA, pathB)));
   await assertSucceeds(deleteDoc(doc(dbA, pathA)));
@@ -52,6 +53,7 @@ test('Storage owner A/B read, write and delete isolation', async () => {
   await assertSucceeds(getBytes(ref(storageA, pathA)));
   await assertFails(getBytes(ref(storageA, pathB)));
   await assertFails(uploadString(ref(storageA, pathB), 'spoof'));
+  await assertFails(uploadString(ref(storageA, pathA), 'spoof-metadata', 'raw', { customMetadata: { ownerId: ownerB } }));
   await assertFails(deleteObject(ref(storageA, pathB)));
   await assertFails(uploadString(ref(outsider, pathA), 'unauthenticated-owner'));
   await assertSucceeds(deleteObject(ref(storageA, pathA)));
