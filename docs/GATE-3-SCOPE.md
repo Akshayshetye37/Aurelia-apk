@@ -1,0 +1,74 @@
+# Gate 3 — Authentication and Staging Security Qualification Scope
+
+**Status:** Product decision established; app authentication implementation is NOT BUILT; qualification is NOT COMPLETE.
+**Gate 3 controller branch:** `work/gate-3-google-email-link`
+**Base:** `integration/ledger-patch`
+
+## Selected product authentication methods (implementation status: NOT BUILT)
+
+These are the agreed product methods, not currently implemented or qualified in the candidate. Gate 3 must not report authentication qualification until both are implemented and tested end-to-end.
+
+## In-scope authentication methods
+
+1. **Google Sign-In** — primary identity authentication.
+2. **Firebase Email Link (passwordless)** — fallback identity authentication.
+
+Email Link is selected over numeric email OTP for this Gate 3 scope. Numeric email OTP is a separate feature and is not part of this qualification.
+
+## Explicit exclusions
+
+- SMS OTP, phone-number authentication, SIM-based identity, SMS recovery, and phone binding.
+- Recovery-phone callables and phone-change callables.
+- Any authentication flow that unlocks, derives, replaces, rotates, or recovers the local encryption DEK.
+- Production recovery activation. Production `RECOVERY_ENABLED=false` remains mandatory.
+- Production credentials or deployment. Gate 3 uses a distinct staging project and staging identities only.
+
+## Security boundary
+
+Authentication establishes the signed-in account identity. It does **not** authorize access to or recover the local PMS encryption key. Local PIN, biometric, and recovery-key mechanisms remain independent. Google Sign-In or Email Link alone must never unlock encrypted PMS data.
+
+## Required qualification
+
+### Google Sign-In
+- Successful sign-in and token/session validation.
+- Account selection and account switching.
+- Sign-out and reauthentication.
+- Wrong-account and unauthorized-owner/business isolation.
+- App restart and session lifecycle behavior.
+- Missing/invalid App Check rejection for protected staging endpoints.
+
+### Firebase Email Link
+- Link delivery and Android deep-link handling.
+- Correct account binding and wrong-account rejection.
+- Expiry rejection.
+- Single-use consumption and replay rejection.
+- Rate limiting/abuse controls and bounded verification attempts.
+- Link handling after app restart and on a different signed-in account.
+- Missing/invalid App Check rejection for protected staging endpoints.
+
+### Staging and evidence
+- Staging and production Firebase/GCP project identities are distinct and explicitly verified.
+- WIF trust is restricted to the repository and intended branch/workflow; unauthorized branch/fork negative tests must fail.
+- Deployment and runtime IAM are least privilege.
+- Candidate SHA, APK signer, APK hashes, workflow runs, test logs and evidence are bound to the exact qualified commit. The candidate SHA must equal the current HEAD of `fix/backup-consolidated-integration` at qualification time; moving that branch invalidates evidence.
+- Physical-device qualification records device model, Android version/build, app version, candidate SHA and test outcomes.
+
+## Firebase Android Email-Link compatibility
+
+Firebase's current Android guide uses Firebase Hosting-based App Links; the legacy Firebase Dynamic Links email-link flow shut down on **August 25, 2025**. Current Android Authentication SDK guidance requires Firebase Auth Android SDK **23.2.0+** (or Firebase BoM **33.9.0+**) for the migrated Hosting-based flow. The candidate Android patch script pins Firebase BoM **34.12.0**, which is above that documented minimum, and adds Hosting-domain App Link filters for `PROJECT_ID.firebaseapp.com` and `PROJECT_ID.web.app`. However, the inspected candidate currently uses a broad `/__/auth` path prefix instead of the documented `/__/auth/links` path. Gate 3 staging preflight now rejects that candidate until the filter is corrected. The recovery owner activity has a separate email-link handling path and calls `exchangeOwnerEmailLink`; this is recovery-owner authentication, **not** the selected PMS app sign-in fallback. `confirmRecoveryOwnerBinding` is also a recovery binding callable, not app login. These recovery endpoints must not be treated as proof that PMS Google Sign-In or Email-Link app authentication exists. This source-level compatibility check is not an end-to-end qualification.
+
+The source audit did **not** find an implemented Google-provider PMS sign-in flow or an app-level Firebase Email-Link sign-in flow. Google Drive OAuth/authorization is a separate feature and must not be counted as Google Sign-In. Both selected PMS authentication methods remain implementation and qualification blockers.
+
+Gate 3 must verify the staging Firebase Hosting domain, authorized domain configuration, Android package and signing SHA-1/SHA-256, App Link handling, link completion, expiry and replay. Existing recovery-owner email-link callable probes are a separate test surface and cannot satisfy these app-auth requirements. No Firebase Dynamic Links domain or `dynamicLinkDomain` parameter may be used.
+
+References:
+- [Firebase Android Email-Link Authentication](https://firebase.google.com/docs/auth/android/email-link-auth)
+- [Firebase Email-Link Migration from Dynamic Links](https://firebase.google.com/docs/auth/android/email-link-migration)
+
+## Qualification status
+
+Gate 3 remains **NOT QUALIFIED** until implementation, staging deployment, automated security tests, exact-SHA evidence and physical-device matrix all pass. Owner-controlled cloud configuration and physical-device testing are external prerequisites and must not be represented as completed by repository changes.
+
+## Workflow/documentation consistency
+
+Every Gate 3 workflow, callable inventory, evidence schema, test, runbook and README status must follow this scope. Legacy SMS/phone qualification artifacts must be retired or clearly marked obsolete and must not be runnable as current Gate 3.

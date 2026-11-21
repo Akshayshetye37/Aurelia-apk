@@ -123,22 +123,39 @@ test('staging probes reject non-HTTPS and non-staging hosts before network acces
 });
 
 test('Gate 3 is scoped to Google Sign-In and Email-Link owner verification, not SMS qualification', () => {
-  const gate3 = fs.readFileSync(path.join(ROOT, '.github/workflows/gate-3-real-sms-staging.yml'), 'utf8');
+  const gate3 = fs.readFileSync(path.join(ROOT, '.github/workflows/gate-3-google-email-link-staging.yml'), 'utf8');
   const staging = fs.readFileSync(path.join(ROOT, '.github/workflows/recovery-staging-deploy.yml'), 'utf8');
-  const qualification = fs.readFileSync(path.join(ROOT, 'docs/GATE-3-REAL-SMS-STAGING-QUALIFICATION.md'), 'utf8');
+  const qualification = fs.readFileSync(path.join(ROOT, 'docs/GATE-3-STAGING-QUALIFICATION.md'), 'utf8');
   const pipeline = fs.readFileSync(path.join(ROOT, 'docs/RECOVERY-GATE-PIPELINE.md'), 'utf8');
-  assert.match(gate3, /Google Sign-In and Email-Link owner verification/);
-  assert.match(gate3, /--branch "integration\/ledger-patch"/);
-  assert.match(gate3, /CANDIDATE_BRANCH: integration\/ledger-patch/);
-  assert.match(staging, /CANDIDATE_BRANCH: integration\/ledger-patch/);
-  assert.match(staging, /CANDIDATE_BRANCH: integration\/ledger-patch/);
+  assert.match(gate3, /Google Sign-In and Email-Link staging qualification/);
+  assert.match(gate3, /GATE_CONTROL_BRANCH:-work\/gate-3-google-email-link/);
+  assert.match(gate3, /--branch "fix\/backup-consolidated-integration"/);
+  assert.match(gate3, /CANDIDATE_BRANCH: fix\/backup-consolidated-integration/);
+  assert.match(staging, /CANDIDATE_BRANCH: fix\/backup-consolidated-integration/);
+  assert.match(staging, /gate-3-google-email-link-staging\.yml/);
+  assert.doesNotMatch(staging, /workflow_dispatch/);
+  assert.match(staging, /firebase deploy --only "\$GATE3_DEPLOY_ONLY"/);
+  const inventory = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/gates/callables.json'), 'utf8'));
+  assert.deepEqual(inventory.gate3.deploy, ['exchangeOwnerEmailLink', 'confirmRecoveryOwnerBinding']);
+  assert.ok(inventory.gate3.excluded.includes('registerRecoveryPhone'));
   assert.match(staging, /exchangeOwnerEmailLink/);
   assert.match(staging, /confirmRecoveryOwnerBinding/);
   const callableLine = staging.split('\n').find((line) => line.includes('RECOVERY_CALLABLES:')) ?? '';
   assert.doesNotMatch(callableLine, /registerRecoveryPhone|issueRecoveryGrant|consumeRecoveryGrant/);
-  assert.match(qualification, /Phone SMS OTP.*out of Gate 3 qualification scope/);
+  assert.match(qualification, /SMS\/phone authentication.*excluded from Gate 3/);
   assert.match(qualification, /do not constitute a successful authenticated Google Sign-In or Email-Link exchange/);
-  assert.match(pipeline, /Gate 3 does not require real SMS, Blaze SMS quota, a SIM, or a physical SMS test device/);
+  assert.match(pipeline, /Gate 3 controller branch/);
+  assert.match(pipeline, /work\/gate-3-google-email-link/);
+  const gate4 = fs.readFileSync(path.join(ROOT, '.github/workflows/gate-4-physical-device.yml'), 'utf8');
+  const gate6 = fs.readFileSync(path.join(ROOT, '.github/workflows/gate-6-release-signoff.yml'), 'utf8');
+  const fetchGate3 = fs.readFileSync(path.join(ROOT, 'scripts/gates/fetch-gate3.mjs'), 'utf8');
+  const qualificationVerifier = fs.readFileSync(path.join(ROOT, 'scripts/gates/verify-qualification.mjs'), 'utf8');
+  assert.match(fetchGate3, /gate-3-google-email-link-staging\.yml/);
+  assert.match(fetchGate3, /GATE3_CONTROL_BRANCH/);
+  assert.match(gate4, /GATE3_CONTROL_BRANCH/);
+  assert.match(gate6, /GATE3_CONTROL_BRANCH/);
+  assert.match(qualificationVerifier, /gate === '3' \? gate3ControlBranch : controlBranch/);
+  assert.match(qualificationVerifier, /gate-3-google-email-link-staging\.yml/);
 });
 
 test('Gate 3 probe configuration requires Email-Link and excludes SMS/OTP/grant callables', (t) => {
@@ -208,7 +225,7 @@ test('qualification rejects malformed run ID JSON before GitHub API access', (t)
     GITHUB_SHA: SHA_B,
     REPO: 'owner/repo',
     CONTROL_BRANCH: 'integration/ledger-patch',
-    CANDIDATE_BRANCH: 'work/p0-storage-hardening',
+    CANDIDATE_BRANCH: 'fix/backup-consolidated-integration',
     RUN_IDS: '{broken',
   });
   assert.equal(result.status, 1);
@@ -329,8 +346,8 @@ test('bundle verification rejects a certificate from a different run or self-hos
 test('bundle verification accepts trusted push evidence only for Gates 1 and 2', (t) => {
   const gate1 = runVerifyBundle(t, validCertificate({ trigger: 'push' }), { event: 'push', gate: '1' });
   assert.equal(gate1.status, 0, output(gate1));
-  const gate3 = runVerifyBundle(t, validCertificate({ trigger: 'push', workflowFile: 'gate-3-real-sms-staging.yml' }), {
-    event: 'push', gate: '3', workflowFile: 'gate-3-real-sms-staging.yml',
+  const gate3 = runVerifyBundle(t, validCertificate({ trigger: 'push', workflowFile: 'gate-3-google-email-link-staging.yml' }), {
+    event: 'push', gate: '3', workflowFile: 'gate-3-google-email-link-staging.yml',
   });
   assert.equal(gate3.status, 1);
   assert.match(output(gate3), /unsupported trigger push/);
@@ -348,7 +365,7 @@ const args = process.argv.slice(2);
 if (args[0] === 'api') {
   console.log(JSON.stringify({ workflow_runs: [{
     id: 456, run_number: 12, run_attempt: 1,
-    head_sha: '${SHA_A}', head_branch: 'work/p0-storage-hardening',
+    head_sha: '${SHA_A}', head_branch: 'fix/backup-consolidated-integration',
     status: 'in_progress', conclusion: null,
     html_url: 'https://github.com/owner/repo/actions/runs/456',
     updated_at: '2026-11-16T08:00:00Z'
@@ -360,7 +377,7 @@ if (args[0] === 'api') {
     path.join(GATES, 'verify-runs.mjs'), '--sha', SHA_A, '--repo', 'owner/repo', '--group', 'gate1',
   ], {
     cwd: dir,
-    env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, CANDIDATE_BRANCH: 'work/p0-storage-hardening' },
+    env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, CANDIDATE_BRANCH: 'fix/backup-consolidated-integration' },
     encoding: 'utf8', timeout: 15_000, maxBuffer: 2 * 1024 * 1024,
   });
   assert.equal(result.status, 1);

@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - integration/ledger-patch
+      - work/gate-3-google-email-link
   pull_request:
     branches:
       - integration/ledger-patch

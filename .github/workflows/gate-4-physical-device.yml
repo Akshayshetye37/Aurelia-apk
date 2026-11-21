@@ -33,7 +33,8 @@ jobs:
       GATE3_RUN: ${{ inputs.gate3_run_id }}
       DEVICE_LABEL: ${{ inputs.device_label }}
       CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
-      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      GATE3_CONTROL_BRANCH: ${{ vars.GATE3_CONTROL_BRANCH || 'work/gate-3-google-email-link' }}
+      CANDIDATE_BRANCH: fix/backup-consolidated-integration
       REPO: ${{ github.repository }}
       DEVICE_SERIAL: ${{ vars.DEVICE_SERIAL }}
       DEVICE_SERIAL_ALLOWLIST: ${{ vars.DEVICE_SERIAL_ALLOWLIST }}
@@ -173,7 +174,8 @@ jobs:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       GATE3_RUN: ${{ inputs.gate3_run_id }}
       CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
-      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      GATE3_CONTROL_BRANCH: ${{ vars.GATE3_CONTROL_BRANCH || 'work/gate-3-google-email-link' }}
+      CANDIDATE_BRANCH: fix/backup-consolidated-integration
       DEVICE_LABEL: ${{ inputs.device_label }}
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
