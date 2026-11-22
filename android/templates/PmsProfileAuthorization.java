@@ -7,11 +7,24 @@ import com.aurelia.pms.security.LocalOwnerBindingStore;
 
 /** Shared native authorization gate for every local PMS repository operation. */
 final class PmsProfileAuthorization {
-  private final LocalOwnerBindingStore binding;
+  interface BindingAccess {
+    String ownerIdFor(String uid);
+    LocalOwnerBindingStore.Result check(String uid, String ownerId);
+  }
+
+  private final BindingAccess binding;
   private final AureliaAppManager manager;
 
   PmsProfileAuthorization(Context context, AureliaAppManager manager) {
-    this.binding = new LocalOwnerBindingStore(context);
+    this(manager, new BindingAccess() {
+      private final LocalOwnerBindingStore store = new LocalOwnerBindingStore(context);
+      @Override public String ownerIdFor(String uid) { return store.ownerIdFor(uid); }
+      @Override public LocalOwnerBindingStore.Result check(String uid, String ownerId) { return store.check(uid, ownerId); }
+    });
+  }
+
+  PmsProfileAuthorization(AureliaAppManager manager, BindingAccess binding) {
+    this.binding = binding;
     this.manager = manager;
   }
 
