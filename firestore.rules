@@ -2,16 +2,21 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    function memberPath(ownerId) {
+      return /databases/$(database)/documents/owners/$(ownerId)/members/$(request.auth.uid);
+    }
     function member(ownerId) {
-      return signedIn() &&
-        exists(/databases/$(database)/documents/owners/$(ownerId)/members/$(request.auth.uid));
+      return signedIn() && exists(memberPath(ownerId));
     }
     function activeMember(ownerId) {
       return member(ownerId) &&
-        get(/databases/$(database)/documents/owners/$(ownerId)/members/$(request.auth.uid)).data.status == "active";
+        get(memberPath(ownerId)).data.uid == request.auth.uid &&
+        get(memberPath(ownerId)).data.ownerId == ownerId &&
+        get(memberPath(ownerId)).data.status == "active" &&
+        get(memberPath(ownerId)).data.role in ["owner", "admin", "manager", "staff"];
     }
     function role(ownerId) {
-      return get(/databases/$(database)/documents/owners/$(ownerId)/members/$(request.auth.uid)).data.role;
+      return get(memberPath(ownerId)).data.role;
     }
     function canWrite(ownerId) {
       return activeMember(ownerId) && role(ownerId) in ["owner", "admin", "manager"];
