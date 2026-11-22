@@ -11,9 +11,9 @@
 - Snapshot project directory inside ZIP: `Aurelia-apk-integration-ledger-patch/`
 - Local extracted workspace used for this update: `/mnt/data/Aurelia-apk-google-device-credential-implementation/Aurelia-apk-integration-ledger-patch`
 - Local ZIP path: `/mnt/data/Aurelia-apk-google-device-credential-implementation.zip`
-- ZIP SHA-256: `9e6395fe1116dee657eb62d6679209bf5afad882009197c1e609195f6e15c055`
+- ZIP SHA-256: `fdae2308edaacf5ab534a956ae2e6d0b08deb51e8c9df91e558332485e528fca` (checksum sidecar: `Aurelia-apk-google-device-credential-implementation.zip.sha256`)
 
-The local ZIP is available in the ChatGPT workspace. **It has not been uploaded as a binary to this GitHub branch.** This documentation branch therefore does not represent a source-code merge.
+The local ZIP is available in the ChatGPT workspace. **It has not been uploaded as a binary to this GitHub branch.** This documentation branch therefore does not represent a source-code merge. The extracted project is at `/mnt/data/Aurelia-apk-google-device-credential-implementation/Aurelia-apk-integration-ledger-patch`.
 
 ## Product/security decisions
 
@@ -58,8 +58,8 @@ The local ZIP is available in the ChatGPT workspace. **It has not been uploaded 
 | Check | Result | Scope/limitation |
 |---|---|---|
 | `npm run build` | PASS | Web build |
-| Focused auth/security/gate suite | PASS — 114 | Focused tests |
-| Root tests excluding dependency-load failures | PASS — 402 | Not complete `npm test` |
+| Repair-focused tests | PASS — 22 | Android regeneration safety, generator smoke, gate tests |
+| Full root suite | BLOCKED — 404 passed, 25 failed | Missing `fake-indexeddb`/`zod`; npm install timed out |
 | Android generator synthetic smoke | PASS | Synthetic project only |
 | Workflow lint | PASS | Workflow structure |
 | Immutable action pin check | PASS | Action refs |
@@ -69,7 +69,7 @@ The local ZIP is available in the ChatGPT workspace. **It has not been uploaded 
 | Inline JS syntax | PASS | Syntax checks |
 | JSON/Node syntax | PASS | Syntax checks |
 | ZIP integrity | PASS | Archive integrity |
-| Full `npm test` | BLOCKED | 23 test files failed to load `fake-indexeddb` or `zod`; install timed out |
+| Full `npm test` | BLOCKED | Current run: 404 passed, 25 failed to load `fake-indexeddb` or `zod`; install timed out |
 | Android Gradle/Kotlin compile | NOT RUN | SDK/Gradle unavailable |
 | Android instrumentation | NOT RUN | No emulator/SDK |
 | Firebase Functions build/emulator | NOT RUN | Dependencies/emulators unavailable |
@@ -82,12 +82,12 @@ See `docs/IMPLEMENTATION-REPORT-2026-11-22.md`. Do not claim a verified APK or p
 ## Remaining work — exact blockers and required technology
 
 ### P0 — Synchronize snapshot with GitHub source
-**Blocker:** ZIP is not Git-backed and has not been proven pushed to the intended branch.
-**Required:** inspect current branch head, compare all files, integrate without overwriting newer commits, commit source and README, record exact SHA, rebuild ZIP from that commit.
+**Blocker:** ZIP is not Git-backed and has not been reconciled file-by-file with the current GitHub branch head `bd4b987c7c4cfa105c4f627ec8cbeea220dd571c`.
+**Required:** compare files against current branch head, integrate source changes without overwriting newer commits, commit source and README, record exact SHA, rebuild ZIP from that commit.
 **Technology:** Git, diff/merge, GitHub Actions, PR review.
 
 ### P0 — Complete the dependency-backed test suite
-**Blocker:** `fake-indexeddb`/`zod` unavailable; install timed out.
+**Blocker:** dependencies unavailable; registry installation timed out. Direct dependencies are exact-version pins, but no lockfile was generated.
 **Required:** clean dependency install, full `npm test`, `npm run build`, fix all failures and rerun.
 **Technology:** Node.js 22, npm, `node:test`, Zod, fake-indexeddb.
 
@@ -172,7 +172,7 @@ From project root:
 ```bash
 bash scripts/regenerate-android-safe.sh
 ```
-The script runs `npm test` and `npm run build`, backs up the existing `android/` tree, preserves templates and `google-services.json`, regenerates via `npx cap add android`, restores templates/config, applies `scripts/patch-android.js`, then runs `npx cap sync android`. On failure it restores the previous Android directory.
+The script refuses to run if `android/templates` is missing/empty, runs `npm test` and `npm run build`, backs up the existing `android/` tree, preserves templates and `google-services.json`, regenerates via `npx cap add android`, restores templates/config, applies `scripts/patch-android.js`, then runs `npx cap sync android`. On failure it restores the previous Android directory, or removes partial output when no prior Android project existed.
 
 ### Manual debug build
 Prerequisites: Node 22, npm, Java 21, Android SDK/build-tools 35 and a compatible Gradle environment.
