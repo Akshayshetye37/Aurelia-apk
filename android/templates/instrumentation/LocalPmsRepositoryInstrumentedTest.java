@@ -51,10 +51,23 @@ public final class LocalPmsRepositoryInstrumentedTest {
 
   @Test public void guardedRepositoryRejectsIdentityTransitionBeforeAnyReadOrWrite() throws Exception {
     final String[] activeUid = { "uid-A" };
-    final String[] boundUid = { "uid-A" };
-    LocalPmsRepository guarded = new LocalPmsRepository(context, key(), () -> {
-      if (!activeUid[0].equals(boundUid[0])) throw new SecurityException("profile_identity_mismatch");
-    });
+    com.aurelia.pms.security.AureliaAppManager manager = TestFixtures.newManager(context);
+    byte[] sessionKey = key();
+    manager.unlockWithDataKey(sessionKey);
+    Arrays.fill(sessionKey, (byte) 0);
+    PmsProfileAuthorization authorization = new PmsProfileAuthorization(manager,
+      new PmsProfileAuthorization.BindingAccess() {
+        @Override public String ownerIdFor(String uid) {
+          if ("uid-A".equals(uid)) return "owner-A";
+          throw new SecurityException("profile_identity_mismatch");
+        }
+        @Override public com.aurelia.pms.security.LocalOwnerBindingStore.Result check(String uid, String ownerId) {
+          return "uid-A".equals(uid) && "owner-A".equals(ownerId)
+            ? com.aurelia.pms.security.LocalOwnerBindingStore.Result.MATCH
+            : com.aurelia.pms.security.LocalOwnerBindingStore.Result.MISMATCH;
+        }
+      });
+    LocalPmsRepository guarded = new LocalPmsRepository(context, key(), () -> authorization.authorizeUid(activeUid[0]));
     try {
       guarded.initialize();
       guarded.transactBusinessChange("folio", "identity-guard", 0, data("A-only"),
@@ -62,14 +75,14 @@ public final class LocalPmsRepositoryInstrumentedTest {
       activeUid[0] = "uid-B";
       try {
         guarded.getEntity("folio", "identity-guard");
-        fail("Account B must not read Account A's repository through a guarded boundary");
+        fail("Account B must not read Account A's repository through the native authorization gate");
       } catch (SecurityException expected) {
         assertEquals("profile_identity_mismatch", expected.getMessage());
       }
       try {
         guarded.transactBusinessChange("folio", "identity-guard", 1, data("B-write"),
           event("identity-guard-event-B", "folio", "identity-guard", 2));
-        fail("Account B must not write Account A's repository through a guarded boundary");
+        fail("Account B must not write Account A's repository through the native authorization gate");
       } catch (SecurityException expected) {
         assertEquals("profile_identity_mismatch", expected.getMessage());
       }
@@ -77,8 +90,10 @@ public final class LocalPmsRepositoryInstrumentedTest {
       assertEquals("A-only", guarded.getEntity("folio", "identity-guard").getJSONObject("data").getString("value"));
     } finally {
       guarded.close();
+      manager.lock();
     }
   }
+
 
   @Before public void setUp() {
     context = ApplicationProvider.getApplicationContext();
