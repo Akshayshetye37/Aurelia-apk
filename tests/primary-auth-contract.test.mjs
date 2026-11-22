@@ -70,3 +70,10 @@ test('Firebase Storage is configured and README qualification remains pending', 
   assert.match(readme, /does not unlock the DEK/i);
   assert.match(readme, /multi-business selection and invitation management are not yet implemented/i);
 });
+
+test('Firestore membership integrity validates UID, owner ID, active status and known role', () => {
+  assert.match(firestore, /\.data\.uid == request\.auth\.uid/);
+  assert.match(firestore, /\.data\.ownerId == ownerId/);
+  assert.match(firestore, /\.data\.status == "active"/);
+  assert.match(firestore, /\["owner", "admin", "manager", "staff"\]/);
+});
