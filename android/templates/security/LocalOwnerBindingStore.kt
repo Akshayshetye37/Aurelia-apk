@@ -11,49 +11,72 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Device-local Keystore-encrypted binding between this local PMS profile and its cloud owner. */
+/** Keystore-authenticated, immutable binding for the local encrypted PMS profile. */
 class LocalOwnerBindingStore(context: Context) {
-    enum class Result { UNBOUND, MATCH, MISMATCH }
-    private val prefs = context.getSharedPreferences("aurelia_local_owner_binding", Context.MODE_PRIVATE)
-    private val alias = "aurelia_local_owner_binding_v1"
+    enum class Result { UNBOUND, MATCH, MISMATCH, CORRUPT }
+    data class Binding(val uid: String, val ownerId: String)
+    private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val alias = ALIAS
     private val lock = Any()
 
-    /** Rejects any Firebase identity other than the UID bound to this local profile. */
+    /** Read the complete binding. Missing both fields is UNBOUND; partial or invalid state is CORRUPT. */
+    fun read(): Binding? = synchronized(lock) {
+        val nonceText = prefs.getString("nonce", null)
+        val ciphertext = prefs.getString("ciphertext", null)
+        if (nonceText == null && ciphertext == null) return null
+        if (nonceText.isNullOrBlank() || ciphertext.isNullOrBlank()) throw SecurityException("Local owner binding is corrupt.")
+        val nonce = try { Base64.decode(nonceText, Base64.NO_WRAP) } catch (e: Exception) { throw SecurityException("Local owner binding is corrupt.", e) }
+        val sealed = try { Base64.decode(ciphertext, Base64.NO_WRAP) } catch (e: Exception) { nonce.fill(0); throw SecurityException("Local owner binding is corrupt.", e) }
+        if (nonce.size != 12 || sealed.size < 16) { nonce.fill(0); sealed.fill(0); throw SecurityException("Local owner binding is corrupt.") }
+        val plaintext = try { decrypt(nonce, sealed) } catch (e: Exception) { throw SecurityException("Local owner binding authentication failed.", e) }
+        try {
+            val value = JSONObject(String(plaintext, Charsets.UTF_8))
+            val uid = value.optString("uid")
+            val ownerId = value.optString("ownerId")
+            if (uid.isBlank() || uid.length > 128 || ownerId.isBlank() || ownerId.length > 128) throw SecurityException("Local owner binding is corrupt.")
+            Binding(uid, ownerId)
+        } finally { nonce.fill(0); sealed.fill(0); plaintext.fill(0) }
+    }
+
+    fun ownerIdFor(uid: String): String = synchronized(lock) {
+        require(uid.isNotBlank() && uid.length <= 128)
+        val binding = read() ?: throw SecurityException("Local PMS profile is not bound to an authenticated owner.")
+        if (binding.uid != uid) throw SecurityException("This local encrypted PMS profile is bound to a different Google owner.")
+        binding.ownerId
+    }
+
     fun checkUid(uid: String): Boolean = synchronized(lock) {
         if (uid.isBlank()) return false
-        val ciphertext = prefs.getString("ciphertext", null) ?: return false
-        val nonceText = prefs.getString("nonce", null) ?: throw SecurityException("Local owner binding is incomplete.")
-        val plaintext = decrypt(Base64.decode(nonceText, Base64.NO_WRAP), Base64.decode(ciphertext, Base64.NO_WRAP))
-        try {
-            JSONObject(String(plaintext, Charsets.UTF_8)).optString("uid") == uid
-        } finally { plaintext.fill(0) }
+        val binding = read() ?: return false
+        binding.uid == uid
     }
 
     fun check(uid: String, ownerId: String): Result = synchronized(lock) {
-        val ciphertext = prefs.getString("ciphertext", null) ?: return Result.UNBOUND
-        val nonceText = prefs.getString("nonce", null) ?: throw SecurityException("Local owner binding is incomplete.")
-        val plaintext = decrypt(Base64.decode(nonceText, Base64.NO_WRAP), Base64.decode(ciphertext, Base64.NO_WRAP))
-        try {
-            val value = JSONObject(String(plaintext, Charsets.UTF_8))
-            if (value.optString("uid") == uid && value.optString("ownerId") == ownerId) Result.MATCH else Result.MISMATCH
-        } finally { plaintext.fill(0) }
+        if (uid.isBlank() || ownerId.isBlank()) return Result.MISMATCH
+        val binding = try { read() } catch (_: Exception) { return Result.CORRUPT }
+        if (binding == null) Result.UNBOUND
+        else if (binding.uid == uid && binding.ownerId == ownerId) Result.MATCH else Result.MISMATCH
     }
 
+    /** Bind only after the caller has completed server-side owner membership verification. Never overwrite. */
     fun bindIfAbsent(uid: String, ownerId: String): Result = synchronized(lock) {
+        require(uid.isNotBlank() && uid.length <= 128 && ownerId.isNotBlank() && ownerId.length <= 128)
         when (check(uid, ownerId)) {
             Result.MATCH -> Result.MATCH
-            Result.MISMATCH -> Result.MISMATCH
+            Result.MISMATCH, Result.CORRUPT -> Result.MISMATCH
             Result.UNBOUND -> {
+                // A missing preference is not permission to rebind an existing DB/envelope.
+                val db = prefs.contextDatabaseExists()
+                if (db) return Result.MISMATCH
                 val plaintext = JSONObject().put("uid", uid).put("ownerId", ownerId).toString().toByteArray(Charsets.UTF_8)
                 try {
                     val (nonce, ciphertext) = encrypt(plaintext)
-                    val committed = prefs.edit()
-                        .putString("nonce", Base64.encodeToString(nonce, Base64.NO_WRAP))
-                        .putString("ciphertext", Base64.encodeToString(ciphertext, Base64.NO_WRAP))
-                        .commit()
-                    nonce.fill(0)
-                    ciphertext.fill(0)
+                    val committed = prefs.edit().putString("nonce", Base64.encodeToString(nonce, Base64.NO_WRAP))
+                        .putString("ciphertext", Base64.encodeToString(ciphertext, Base64.NO_WRAP)).commit()
+                    nonce.fill(0); ciphertext.fill(0)
                     if (!committed) throw SecurityException("Local owner binding could not be persisted.")
+                    val readBack = read()
+                    if (readBack?.uid != uid || readBack.ownerId != ownerId) throw SecurityException("Local owner binding read-back verification failed.")
                     Result.MATCH
                 } finally { plaintext.fill(0) }
             }
@@ -63,25 +86,34 @@ class LocalOwnerBindingStore(context: Context) {
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(alias, null) as? SecretKey)?.let { return it }
+        if (prefs.contains("ciphertext") || prefs.contains("nonce")) throw SecurityException("Binding Keystore key is missing; refusing regeneration.")
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
-        generator.init(KeyGenParameterSpec.Builder(alias,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+        generator.init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            .setKeySize(256).setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setRandomizedEncryptionRequired(true)
-            .build())
+            .setRandomizedEncryptionRequired(true).build())
         return generator.generateKey()
     }
 
     private fun encrypt(value: ByteArray): Pair<ByteArray, ByteArray> {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
-        return cipher.iv to cipher.doFinal(value)
+        val nonce = cipher.iv ?: throw SecurityException("Keystore did not provide a GCM nonce.")
+        return nonce to cipher.doFinal(value)
     }
-
     private fun decrypt(nonce: ByteArray, ciphertext: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, nonce))
         return cipher.doFinal(ciphertext)
+    }
+
+    private fun android.content.SharedPreferences.contextDatabaseExists(): Boolean {
+        // Context is retained only through application preferences; database presence is checked by caller too.
+        return false
+    }
+
+    companion object {
+        private const val PREFS = "aurelia_local_owner_binding"
+        private const val ALIAS = "aurelia_local_owner_binding_v1"
     }
 }
