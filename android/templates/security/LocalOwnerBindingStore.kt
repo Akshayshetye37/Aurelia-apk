@@ -29,7 +29,7 @@ class LocalOwnerBindingStore(context: Context, aliasOverride: String? = null) {
         val nonce = try { Base64.decode(nonceText, Base64.NO_WRAP) } catch (e: Exception) { throw SecurityException("Local owner binding is corrupt.", e) }
         val sealed = try { Base64.decode(ciphertext, Base64.NO_WRAP) } catch (e: Exception) { nonce.fill(0); throw SecurityException("Local owner binding is corrupt.", e) }
         if (nonce.size != 12 || sealed.size < 16) { nonce.fill(0); sealed.fill(0); throw SecurityException("Local owner binding is corrupt.") }
-        val plaintext = try { decrypt(nonce, sealed) } catch (e: Exception) { throw SecurityException("Local owner binding authentication failed.", e) }
+        val plaintext = try { decrypt(nonce, sealed) } catch (e: Exception) { nonce.fill(0); sealed.fill(0); throw SecurityException("Local owner binding authentication failed.", e) }
         try {
             val value = JSONObject(String(plaintext, Charsets.UTF_8))
             val uid = value.optString("uid")
@@ -60,7 +60,7 @@ class LocalOwnerBindingStore(context: Context, aliasOverride: String? = null) {
     }
 
     /** Bind only after the caller has completed server-side owner membership verification. Never overwrite. */
-    fun bindIfAbsent(uid: String, ownerId: String, allowExistingProfileAfterUnlock: Boolean = false): Result = synchronized(lock) {
+    fun bindIfAbsent(uid: String, ownerId: String): Result = synchronized(lock) {
         require(uid.isNotBlank() && uid.length <= 128 && ownerId.isNotBlank() && ownerId.length <= 128)
         when (check(uid, ownerId)) {
             Result.MATCH -> Result.MATCH
@@ -71,7 +71,7 @@ class LocalOwnerBindingStore(context: Context, aliasOverride: String? = null) {
                 val databaseExists = db.exists() || java.io.File(db.path + "-wal").exists() || java.io.File(db.path + "-shm").exists()
                 val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
                 if (keyStore.containsAlias(alias)) return Result.MISMATCH
-                if (!allowExistingProfileAfterUnlock && (databaseExists || AureliaEnvelopeStore(appContext).exists() || AureliaSecurityRuntime.isEnrolled())) return Result.MISMATCH
+                if (databaseExists || AureliaEnvelopeStore(appContext).exists() || AureliaSecurityRuntime.isEnrolled()) return Result.MISMATCH
                 val plaintext = JSONObject().put("uid", uid).put("ownerId", ownerId).toString().toByteArray(Charsets.UTF_8)
                 try {
                     val (nonce, ciphertext) = encrypt(plaintext)
