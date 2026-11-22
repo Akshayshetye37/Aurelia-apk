@@ -12,6 +12,7 @@ import java.util.concurrent.Executors;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
 import android.content.SharedPreferences;
+import com.google.firebase.auth.FirebaseAuth;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
@@ -31,6 +32,15 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
   @Override public void load() { super.load(); activeInstance = this; }
 
   /** Close the SQLCipher connection and wipe the helper's passphrase copy on every app background. */
+  /** Identity transitions synchronously revoke the in-memory DEK before DB close is queued. */
+  public static void lockForIdentityChange() {
+    CapacitorPmsStoragePlugin active = activeInstance;
+    if (active != null) {
+      com.aurelia.pms.security.AureliaSecurityRuntime.INSTANCE.manager(active.getContext()).lock();
+    }
+    closeForBackground();
+  }
+
   public static void closeForBackground() {
     CapacitorPmsStoragePlugin active = activeInstance;
     if (active == null) return;
@@ -45,6 +55,14 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
   }
 
   private synchronized LocalPmsRepository repository() {
+    String uid = FirebaseAuth.getInstance().getCurrentUser() == null
+      ? null : FirebaseAuth.getInstance().getCurrentUser().getUid();
+    if (uid == null || uid.trim().isEmpty()) {
+      throw new SecurityException("Google identity is required to access the local PMS profile.");
+    }
+    if (!new com.aurelia.pms.security.LocalOwnerBindingStore(getContext()).checkUid(uid)) {
+      throw new SecurityException("This local encrypted PMS profile is bound to a different Google owner.");
+    }
     if (repository != null) return repository;
     byte[] key = com.aurelia.pms.security.AureliaSecurityRuntime.INSTANCE.manager(getContext()).currentDataKeyCopy();
     LocalPmsRepository opened = new LocalPmsRepository(getContext(), key);
