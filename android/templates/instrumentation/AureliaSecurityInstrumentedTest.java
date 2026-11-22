@@ -24,6 +24,7 @@ public final class AureliaSecurityInstrumentedTest {
         LocalOwnerBindingStore store = new LocalOwnerBindingStore(context);
         String prefsName = "aurelia_local_owner_binding";
         SharedPreferences prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE);
+        java.util.Map<String, ?> original = prefs.getAll();
         prefs.edit().clear().commit();
         try {
             assertEquals(LocalOwnerBindingStore.Result.MATCH, store.bindIfAbsent("uid-A", "owner-A"));
@@ -38,7 +39,17 @@ public final class AureliaSecurityInstrumentedTest {
             assertTrue(store.checkUid("uid-A"));
             assertFalse(store.checkUid("uid-B"));
         } finally {
-            prefs.edit().clear().commit();
+            SharedPreferences.Editor restore = prefs.edit().clear();
+            for (java.util.Map.Entry<String, ?> entry : original.entrySet()) {
+                Object value = entry.getValue();
+                if (value instanceof String) restore.putString(entry.getKey(), (String) value);
+                else if (value instanceof Boolean) restore.putBoolean(entry.getKey(), (Boolean) value);
+                else if (value instanceof Integer) restore.putInt(entry.getKey(), (Integer) value);
+                else if (value instanceof Long) restore.putLong(entry.getKey(), (Long) value);
+                else if (value instanceof Float) restore.putFloat(entry.getKey(), (Float) value);
+                else if (value instanceof java.util.Set) restore.putStringSet(entry.getKey(), (java.util.Set<String>) value);
+            }
+            restore.commit();
         }
     }
 
