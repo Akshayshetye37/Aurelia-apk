@@ -15,7 +15,8 @@ import javax.crypto.spec.GCMParameterSpec
 class LocalOwnerBindingStore(context: Context) {
     enum class Result { UNBOUND, MATCH, MISMATCH, CORRUPT }
     data class Binding(val uid: String, val ownerId: String)
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val alias = ALIAS
     private val lock = Any()
 
@@ -66,8 +67,9 @@ class LocalOwnerBindingStore(context: Context) {
             Result.MISMATCH, Result.CORRUPT -> Result.MISMATCH
             Result.UNBOUND -> {
                 // A missing preference is not permission to rebind an existing DB/envelope.
-                val db = prefs.contextDatabaseExists()
-                if (db) return Result.MISMATCH
+                val db = appContext.getDatabasePath("aurelia-pms-encrypted.db")
+                val databaseExists = db.exists() || java.io.File(db.path + "-wal").exists() || java.io.File(db.path + "-shm").exists()
+                if (databaseExists || AureliaEnvelopeStore(appContext).exists() || AureliaSecurityRuntime.isEnrolled()) return Result.MISMATCH
                 val plaintext = JSONObject().put("uid", uid).put("ownerId", ownerId).toString().toByteArray(Charsets.UTF_8)
                 try {
                     val (nonce, ciphertext) = encrypt(plaintext)
@@ -105,11 +107,6 @@ class LocalOwnerBindingStore(context: Context) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, nonce))
         return cipher.doFinal(ciphertext)
-    }
-
-    private fun android.content.SharedPreferences.contextDatabaseExists(): Boolean {
-        // Context is retained only through application preferences; database presence is checked by caller too.
-        return false
     }
 
     companion object {
