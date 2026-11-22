@@ -102,6 +102,18 @@ test('manual Android QA workflow executes instrumentation rather than relying on
 });
 
 
+test('shared PMS profile authorization is generated and used by every native repository boundary', () => {
+  const authorization = read('android/templates/PmsProfileAuthorization.java');
+  const plugin = read('android/templates/CapacitorPmsStoragePlugin.java');
+  const repository = read('android/templates/LocalPmsRepository.java');
+  const patcher = read('scripts/patch-android.js');
+  assert.match(authorization, /ownerIdFor/);
+  assert.match(authorization, /currentDataKeyCopy/);
+  assert.match(plugin, /new PmsProfileAuthorization/);
+  assert.match(repository, /requireAuthorized\(\)/);
+  assert.match(patcher, /PmsProfileAuthorization\.java/);
+});
+
 test('native PMS SQLite uses SQLCipher and ties its key lifetime to the unlock session', () => {
   const repository = read('android/templates/LocalPmsRepository.java');
   const plugin = read('android/templates/CapacitorPmsStoragePlugin.java');
