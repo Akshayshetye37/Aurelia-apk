@@ -80,19 +80,10 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
   private void authorizeCurrentOwner() {
     FirebaseAuth auth = FirebaseAuth.getInstance();
     String uid = auth.getCurrentUser() == null ? null : auth.getCurrentUser().getUid();
-    if (uid == null || uid.trim().isEmpty()) throw new SecurityException("Google identity is required.");
-    com.aurelia.pms.security.LocalOwnerBindingStore bindings =
-      new com.aurelia.pms.security.LocalOwnerBindingStore(getContext());
-    String ownerId = bindings.ownerIdFor(uid);
-    if (bindings.check(uid, ownerId) != com.aurelia.pms.security.LocalOwnerBindingStore.Result.MATCH) {
-      throw new SecurityException("Local PMS owner binding is invalid.");
-    }
     com.aurelia.pms.security.AureliaAppManager manager =
       com.aurelia.pms.security.AureliaSecurityRuntime.INSTANCE.manager(getContext());
-    byte[] key = manager.currentDataKeyCopy();
-    java.util.Arrays.fill(key, (byte) 0);
-    if (auth.getCurrentUser() == null || !uid.equals(auth.getCurrentUser().getUid()) ||
-        bindings.check(uid, ownerId) != com.aurelia.pms.security.LocalOwnerBindingStore.Result.MATCH) {
+    new PmsProfileAuthorization(getContext(), manager).authorizeUid(uid);
+    if (auth.getCurrentUser() == null || !uid.equals(auth.getCurrentUser().getUid())) {
       throw new SecurityException("Google identity changed during PMS authorization.");
     }
   }
