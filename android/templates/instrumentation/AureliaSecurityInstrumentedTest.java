@@ -38,6 +38,11 @@ public final class AureliaSecurityInstrumentedTest {
                 store.bindIfAbsent("uid-B", "owner-B"));
             assertTrue(store.checkUid("uid-A"));
             assertFalse(store.checkUid("uid-B"));
+            prefs.edit().putString("ciphertext", "not-valid-base64").commit();
+            assertEquals("Tampered binding must be surfaced as CORRUPT, never UNBOUND",
+                LocalOwnerBindingStore.Result.CORRUPT, store.check("uid-A", "owner-A"));
+            assertEquals("Corrupt binding must not be silently rebound",
+                LocalOwnerBindingStore.Result.MISMATCH, store.bindIfAbsent("uid-A", "owner-A"));
         } finally {
             SharedPreferences.Editor restore = prefs.edit().clear();
             for (java.util.Map.Entry<String, ?> entry : original.entrySet()) {
