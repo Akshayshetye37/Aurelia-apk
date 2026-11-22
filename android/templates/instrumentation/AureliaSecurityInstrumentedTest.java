@@ -21,7 +21,7 @@ public final class AureliaSecurityInstrumentedTest {
 
     @Test
     public void localOwnerBindingRejectsUidSwitchAndAllowsOriginalUidReturn() {
-        LocalOwnerBindingStore store = new LocalOwnerBindingStore(context);
+        String testAlias = "aurelia_local_owner_binding_instrumentation_test";\n        LocalOwnerBindingStore store = new LocalOwnerBindingStore(context, testAlias);\n        KeyStore bindingKeys = KeyStore.getInstance("AndroidKeyStore");\n        bindingKeys.load(null);\n        if (bindingKeys.containsAlias(testAlias)) bindingKeys.deleteEntry(testAlias);
         String prefsName = "aurelia_local_owner_binding";
         SharedPreferences prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE);
         java.util.Map<String, ?> original = prefs.getAll();
