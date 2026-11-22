@@ -77,7 +77,7 @@ test("recovery emulator still requires KVM and refuses software emulation", () =
   assert.ok(workflow.includes("-accel on"));
 });
 
-test("native SQLCipher candidate executes all 36 repository and recovery-security tests", () => {
+test("native SQLCipher candidate executes dynamically discovered repository and recovery-security tests", () => {
   const repositoryTests = fs.readFileSync(
     "android/templates/instrumentation/LocalPmsRepositoryInstrumentedTest.java", "utf8"
   );
@@ -92,7 +92,7 @@ test("native SQLCipher candidate executes all 36 repository and recovery-securit
   assert.ok(nativeRunner.includes("adb emu finger touch 1"));
   assert.ok(nativeRunner.includes("com.aurelia.pms.LocalPmsRepositoryInstrumentedTest"));
   assert.ok(nativeRunner.includes("com.aurelia.pms.security.AureliaSecurityInstrumentedTest"));
-  assert.ok(nativeWorkflow.includes("totals.tests !== 36"));
+  assert.ok(nativeWorkflow.includes("totals.tests <= 0"));
   assert.ok(nativeWorkflow.includes("totals.failures !== 0"));
   assert.ok(nativeWorkflow.includes("totals.errors !== 0"));
   assert.ok(nativeWorkflow.includes("totals.skipped !== 0"));
