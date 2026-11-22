@@ -39,7 +39,7 @@ test('native SQLite gate executes both selected suites with exactly 36 tests and
   assert.ok(workflow.includes('totals.failures !== 0'));
   assert.ok(workflow.includes('totals.errors !== 0'));
   assert.ok(workflow.includes('totals.skipped !== 0'));
-  assert.ok(workflow.includes('Expected exactly 36 executed repository and recovery-security tests, zero failures, zero errors and zero skipped tests.'));
+  assert.ok(workflow.includes('Expected dynamically discovered instrumentation tests to execute, with zero failures, errors or skipped tests.'));
   assert.ok(workflow.includes('AureliaSecurityInstrumentedTest'));
   assert.ok(emulatorScript.includes('locksettings set-pin'));
   assert.ok(emulatorScript.includes('android.settings.FINGERPRINT_ENROLL'));
