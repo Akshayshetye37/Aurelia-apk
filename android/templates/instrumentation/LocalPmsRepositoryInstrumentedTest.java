@@ -49,6 +49,37 @@ public final class LocalPmsRepositoryInstrumentedTest {
     }
   }
 
+  @Test public void guardedRepositoryRejectsIdentityTransitionBeforeAnyReadOrWrite() throws Exception {
+    final String[] activeUid = { "uid-A" };
+    final String[] boundUid = { "uid-A" };
+    LocalPmsRepository guarded = new LocalPmsRepository(context, key(), () -> {
+      if (!activeUid[0].equals(boundUid[0])) throw new SecurityException("profile_identity_mismatch");
+    });
+    try {
+      guarded.initialize();
+      guarded.transactBusinessChange("folio", "identity-guard", 0, data("A-only"),
+        event("identity-guard-event", "folio", "identity-guard", 1));
+      activeUid[0] = "uid-B";
+      try {
+        guarded.getEntity("folio", "identity-guard");
+        fail("Account B must not read Account A's repository through a guarded boundary");
+      } catch (SecurityException expected) {
+        assertEquals("profile_identity_mismatch", expected.getMessage());
+      }
+      try {
+        guarded.transactBusinessChange("folio", "identity-guard", 1, data("B-write"),
+          event("identity-guard-event-B", "folio", "identity-guard", 2));
+        fail("Account B must not write Account A's repository through a guarded boundary");
+      } catch (SecurityException expected) {
+        assertEquals("profile_identity_mismatch", expected.getMessage());
+      }
+      activeUid[0] = "uid-A";
+      assertEquals("A-only", guarded.getEntity("folio", "identity-guard").getJSONObject("data").getString("value"));
+    } finally {
+      guarded.close();
+    }
+  }
+
   @Before public void setUp() {
     context = ApplicationProvider.getApplicationContext();
     boolean preserveDatabase = Boolean.parseBoolean(InstrumentationRegistry.getArguments().getString("preserveDatabase", "false"));
