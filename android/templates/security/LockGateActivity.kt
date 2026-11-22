@@ -63,7 +63,7 @@ class LockGateActivity : FragmentActivity() {
             showPrimaryIdentityError()
             return
         }
-        if (localOwnerBinding.check(primaryUid, primaryOwnerId) == LocalOwnerBindingStore.Result.MISMATCH) {
+        if (localOwnerBinding.check(primaryUid, primaryOwnerId) in setOf(LocalOwnerBindingStore.Result.MISMATCH, LocalOwnerBindingStore.Result.CORRUPT)) {
             showPrimaryIdentityError()
             return
         }
