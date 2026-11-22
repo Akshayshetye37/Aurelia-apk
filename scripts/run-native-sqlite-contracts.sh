@@ -188,7 +188,7 @@ run_suite() {
 run_suite repository com.aurelia.pms.LocalPmsRepositoryInstrumentedTest
 run_suite security com.aurelia.pms.security.AureliaSecurityInstrumentedTest
 
-# Merge both independently executed suites for the strict 35-test result gate.
+# Merge both independently executed suites for the strict 36-test result gate.
 rm -rf app/build/outputs/androidTest-results/connected
 mkdir -p app/build/outputs/androidTest-results/connected
 cp -a "$results_dir/." app/build/outputs/androidTest-results/connected/
