@@ -13,6 +13,9 @@ import java.util.UUID;
 import java.nio.charset.StandardCharsets;
 import android.content.SharedPreferences;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.android.gms.tasks.Tasks;
+import java.util.concurrent.TimeUnit;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
@@ -54,24 +57,57 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
   }
 
   private synchronized LocalPmsRepository repository() {
-    String uid = FirebaseAuth.getInstance().getCurrentUser() == null
-      ? null : FirebaseAuth.getInstance().getCurrentUser().getUid();
-    if (uid == null || uid.trim().isEmpty()) {
-      throw new SecurityException("Google identity is required to access the local PMS profile.");
-    }
-    if (!new com.aurelia.pms.security.LocalOwnerBindingStore(getContext()).checkUid(uid)) {
-      throw new SecurityException("This local encrypted PMS profile is bound to a different Google owner.");
-    }
+    authorizeCurrentOwner();
     if (repository != null) return repository;
     byte[] key = com.aurelia.pms.security.AureliaSecurityRuntime.INSTANCE.manager(getContext()).currentDataKeyCopy();
-    LocalPmsRepository opened = new LocalPmsRepository(getContext(), key);
+    LocalPmsRepository opened = new LocalPmsRepository(getContext(), key, this::authorizeCurrentOwner);
     try {
       opened.initialize();
+      authorizeCurrentOwner();
       repository = opened;
       return opened;
     } catch (RuntimeException failure) {
       opened.close();
       throw failure;
+    }
+  }
+
+  /**
+   * Authorization is deliberately checked at the native repository boundary on every operation.
+   * The binding is local Keystore-authenticated state; the active membership is re-read from
+   * Firestore under authenticated Firebase rules, and the session DEK must still be unlocked.
+   */
+  private void authorizeCurrentOwner() {
+    FirebaseAuth auth = FirebaseAuth.getInstance();
+    String uid = auth.getCurrentUser() == null ? null : auth.getCurrentUser().getUid();
+    if (uid == null || uid.trim().isEmpty()) throw new SecurityException("Google identity is required.");
+    com.aurelia.pms.security.LocalOwnerBindingStore bindings =
+      new com.aurelia.pms.security.LocalOwnerBindingStore(getContext());
+    String ownerId = bindings.ownerIdFor(uid);
+    if (bindings.check(uid, ownerId) != com.aurelia.pms.security.LocalOwnerBindingStore.Result.MATCH) {
+      throw new SecurityException("Local PMS owner binding is invalid.");
+    }
+    com.aurelia.pms.security.AureliaAppManager manager =
+      com.aurelia.pms.security.AureliaSecurityRuntime.INSTANCE.manager(getContext());
+    byte[] key = manager.currentDataKeyCopy();
+    java.util.Arrays.fill(key, (byte) 0);
+    try {
+      java.util.Map<String, Object> member = Tasks.await(
+        FirebaseFirestore.getInstance().collection("owners").document(ownerId)
+          .collection("members").document(uid).get(), 15, TimeUnit.SECONDS).getData();
+      if (member == null || !uid.equals(member.get("uid")) || !ownerId.equals(member.get("ownerId")) ||
+          !"active".equals(member.get("status")) ||
+          !java.util.Arrays.asList("owner", "admin", "manager", "staff").contains(member.get("role"))) {
+        throw new SecurityException("Server membership verification failed.");
+      }
+      if (auth.getCurrentUser() == null || !uid.equals(auth.getCurrentUser().getUid()) ||
+          bindings.check(uid, ownerId) != com.aurelia.pms.security.LocalOwnerBindingStore.Result.MATCH) {
+        throw new SecurityException("Google identity changed during PMS authorization.");
+      }
+    } catch (SecurityException failure) {
+      throw failure;
+    } catch (Exception failure) {
+      throw new SecurityException("Owner membership could not be verified; PMS access is blocked.", failure);
     }
   }
 
@@ -121,7 +157,7 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
   }
 
   @PluginMethod public void initializeStorage(PluginCall call) {
-    io.execute(() -> { try { repository().getWritableDatabase(); JSObject r=new JSObject();r.put("success",true);r.put("engine","android-sqlite");r.put("contractVersion",1);call.resolve(r); }
+    io.execute(() -> { try { repository().initialize(); JSObject r=new JSObject();r.put("success",true);r.put("engine","android-sqlite");r.put("contractVersion",1);call.resolve(r); }
       catch(Exception e){call.reject("Native SQLite initialization failed","PMS_SQLITE_INIT_FAILED",e);} });
   }
   @PluginMethod public void getEntity(PluginCall call) {
