@@ -5,7 +5,9 @@ service firebase.storage {
     function member(ownerId) {
       return signedIn() &&
         firestore.exists(/databases/(default)/documents/owners/$(ownerId)/members/$(request.auth.uid)) &&
-        firestore.get(/databases/(default)/documents/owners/$(ownerId)/members/$(request.auth.uid)).data.status == "active";
+        firestore.get(/databases/(default)/documents/owners/$(ownerId)/members/$(request.auth.uid)).data.status == "active" &&
+        firestore.get(/databases/(default)/documents/owners/$(ownerId)/members/$(request.auth.uid)).data.uid == request.auth.uid &&
+        firestore.get(/databases/(default)/documents/owners/$(ownerId)/members/$(request.auth.uid)).data.ownerId == ownerId;
     }
     function canWrite(ownerId) {
       return member(ownerId) &&
