@@ -721,6 +721,9 @@ fs.copyFileSync(localPaymentLedgerTemplate, path.join(javaDir, 'LocalPaymentLedg
 const localPmsRepositoryTemplate = path.join(androidDir, 'templates', 'LocalPmsRepository.java');
 if (!fs.existsSync(localPmsRepositoryTemplate)) throw new Error('LocalPmsRepository.java template is missing.');
 fs.copyFileSync(localPmsRepositoryTemplate, path.join(javaDir, 'LocalPmsRepository.java'));
+const pmsProfileAuthorizationTemplate = path.join(androidDir, 'templates', 'PmsProfileAuthorization.java');
+if (!fs.existsSync(pmsProfileAuthorizationTemplate)) throw new Error('PmsProfileAuthorization.java template is missing.');
+fs.copyFileSync(pmsProfileAuthorizationTemplate, path.join(javaDir, 'PmsProfileAuthorization.java'));
 const pmsPlaintextMigrationTemplate = path.join(androidDir, 'templates', 'PmsPlaintextDatabaseMigration.java');
 if (!fs.existsSync(pmsPlaintextMigrationTemplate)) throw new Error('PmsPlaintextDatabaseMigration.java template is missing.');
 fs.copyFileSync(pmsPlaintextMigrationTemplate, path.join(javaDir, 'PmsPlaintextDatabaseMigration.java'));
