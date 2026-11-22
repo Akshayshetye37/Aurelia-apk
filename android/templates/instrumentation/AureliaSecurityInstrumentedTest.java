@@ -20,6 +20,29 @@ public final class AureliaSecurityInstrumentedTest {
     private final Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
     @Test
+    public void localOwnerBindingRejectsUidSwitchAndAllowsOriginalUidReturn() {
+        LocalOwnerBindingStore store = new LocalOwnerBindingStore(context);
+        String prefsName = "aurelia_local_owner_binding";
+        SharedPreferences prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE);
+        prefs.edit().clear().commit();
+        try {
+            assertEquals(LocalOwnerBindingStore.Result.MATCH, store.bindIfAbsent("uid-A", "owner-A"));
+            assertTrue(store.checkUid("uid-A"));
+            assertFalse("Account B must not pass the profile UID boundary", store.checkUid("uid-B"));
+            assertEquals(LocalOwnerBindingStore.Result.MISMATCH, store.check("uid-B", "owner-A"));
+            assertEquals(LocalOwnerBindingStore.Result.MATCH, store.check("uid-A", "owner-A"));
+            assertEquals("Returning to A must preserve the existing binding", LocalOwnerBindingStore.Result.MATCH,
+                store.bindIfAbsent("uid-A", "owner-A"));
+            assertEquals("B must not overwrite A's profile binding", LocalOwnerBindingStore.Result.MISMATCH,
+                store.bindIfAbsent("uid-B", "owner-B"));
+            assertTrue(store.checkUid("uid-A"));
+            assertFalse(store.checkUid("uid-B"));
+        } finally {
+            prefs.edit().clear().commit();
+        }
+    }
+
+    @Test
     public void biometricVaultCanBeReenrolledAfterRecoveryInvalidationOnSecureLockScreen() throws Exception {
         KeyguardManager keyguard = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
         assertNotNull("Keyguard service must be available", keyguard);
