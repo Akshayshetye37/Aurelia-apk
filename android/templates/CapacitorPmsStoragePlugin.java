@@ -31,8 +31,7 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
 
   @Override public void load() { super.load(); activeInstance = this; }
 
-  /** Close the SQLCipher connection and wipe the helper's passphrase copy on every app background. */
-  /** Identity transitions synchronously revoke the in-memory DEK before DB close is queued. */
+  /** Identity transitions revoke the in-memory DEK before the SQLCipher close is queued. */
   public static void lockForIdentityChange() {
     CapacitorPmsStoragePlugin active = activeInstance;
     if (active != null) {
