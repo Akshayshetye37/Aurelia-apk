@@ -1,3 +1,56 @@
+# Current project location and active work — 2026-11-22
+
+> **Current source of truth:** this section supersedes older branch/status snapshots elsewhere in this README. Those historical sections are retained for context and may describe different branches or commits.
+
+- **Repository:** [Aurelia-apk](https://github.com/Akshayshetye37/Aurelia-apk)
+- **Working branch:** `integration/ledger-patch`
+- **Project root:** repository root (`/`)
+- **Latest verified branch commit before this README update:** `b50a5c4b269c607b76581b762bb9b033324ab996`
+- **Commit:** [fix(auth): unblock primary auth build and emulator tests](https://github.com/Akshayshetye37/Aurelia-apk/commit/b50a5c4b269c607b76581b762bb9b033324ab996)
+
+## Current work: Google primary authentication and owner isolation
+
+### Implemented source changes
+- Google-only primary authentication through Firebase Auth and Android Credential Manager.
+- Server-side `ensureOwnerMembership` callable creates the initial owner/membership and rejects client-supplied authority.
+- Owner-scoped Firestore and Storage authorization rules.
+- Android Keystore AES-GCM local owner binding.
+- PIN/recovery remains separate from Google identity; Google sign-in alone does not unlock the DEK.
+- Account switching is intended to lock the previous owner's local profile rather than expose it to the next identity.
+- CI source-contract tests and emulator qualification workflows added.
+
+### Latest repair commit
+Commit `b50a5c4b269c607b76581b762bb9b033324ab996`:
+- Corrected Firestore transaction API usage in owner binding.
+- Added the Android resource import required by Google auth activity.
+- Added the primary-auth emulator test script.
+- Strengthened source contracts for those regressions.
+
+### CI status for that exact commit
+| Workflow | Status at README update |
+|---|---|
+| Gate pipeline lint | **Passed** |
+| R1 local-first required checks | **Passed** |
+| PMS source tests and production web packaging | **Passed** |
+| Primary Google Auth CI | **In progress** |
+| Native SQLite contract | **In progress** |
+| OTP Recovery Android Instrumentation | **In progress** |
+
+See [GitHub Actions](https://github.com/Akshayshetye37/Aurelia-apk/actions) for live results. Do not treat in-progress workflows as passed.
+
+### Strategy / next gates
+1. Stabilize exact-head build and emulator CI.
+2. Expand owner-membership and cross-owner authorization tests.
+3. Configure Firebase Google provider, OAuth Web client ID and signing fingerprints.
+4. Qualify App Check in monitor mode, then enforce after verified legitimate traffic.
+5. Test account switching, offline cache isolation and local encrypted-profile binding.
+6. Qualify debug and Play internal-testing builds on a physical Android device.
+7. Conduct an independent security review before release.
+
+**Release status:** Not production-qualified. Firebase Console configuration, App Check enforcement, emulator authorization, physical-device sign-in, Play signing, account-switch isolation and release approval remain outstanding.
+
+---
+
 # Aurelia PMS — Production readiness blockers
 
 **Status: NOT PRODUCTION READY.** This file separates code already present from release gates that still require automated or physical-device evidence, owner data, or explicit authorization. CI evidence is valid only for the SHA it tested.
