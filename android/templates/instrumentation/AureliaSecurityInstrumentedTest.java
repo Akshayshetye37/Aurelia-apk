@@ -43,6 +43,11 @@ public final class AureliaSecurityInstrumentedTest {
             assertTrue(store.checkUid("uid-A"));
             assertFalse(store.checkUid("uid-B"));
             prefs.edit().putString("ciphertext", "not-valid-base64").commit();
+            assertEquals(LocalOwnerBindingStore.Result.CORRUPT, store.check("uid-A", "owner-A"));
+            prefs.edit().clear().commit();
+            assertEquals(LocalOwnerBindingStore.Result.UNBOUND, store.check("uid-A", "owner-A"));
+            assertEquals("Clearing binding preferences must not enable rebinding while the Keystore alias exists",
+                LocalOwnerBindingStore.Result.MISMATCH, store.bindIfAbsent("uid-A", "owner-A"));
             assertEquals("Tampered binding must be surfaced as CORRUPT, never UNBOUND",
                 LocalOwnerBindingStore.Result.CORRUPT, store.check("uid-A", "owner-A"));
             assertEquals("Corrupt binding must not be silently rebound",
