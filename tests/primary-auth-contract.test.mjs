@@ -55,6 +55,8 @@ test('Firestore and Storage rules authorize by active membership and reject spoo
   assert.match(firestore, /request\.resource\.data\.ownerId == ownerId/);
   assert.match(firestore, /allow write: if false/);
   assert.match(storage, /firestore\.get/);
+  assert.match(storage, /\.data\.uid == request\.auth\.uid/);
+  assert.match(storage, /\.data\.ownerId == ownerId/);
   assert.match(storage, /allow read: if member\(ownerId\)/);
   assert.match(storage, /request\.resource\.size/);
   assert.match(storage, /request\.resource\.metadata\.ownerId == ownerId/);
