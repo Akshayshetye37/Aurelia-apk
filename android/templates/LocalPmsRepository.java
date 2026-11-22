@@ -17,23 +17,30 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   private final Context appContext;
   private final byte[] databaseKey;
+  private final Runnable authorizationGuard;
   private boolean initialized;
   static { System.loadLibrary("sqlcipher"); }
 
-  LocalPmsRepository(Context context, byte[] databaseKey) {
+  LocalPmsRepository(Context context, byte[] databaseKey) { this(context, databaseKey, null); }
+
+  LocalPmsRepository(Context context, byte[] databaseKey, Runnable authorizationGuard) {
     super(context.getApplicationContext(), NAME, databaseKey, null, VERSION, 0, null, null, true);
     if (databaseKey == null || databaseKey.length != 32) throw new IllegalArgumentException("PMS database key must be 256 bits");
     this.appContext = context.getApplicationContext();
     this.databaseKey = databaseKey;
+    this.authorizationGuard = authorizationGuard;
     setWriteAheadLoggingEnabled(true);
   }
 
   synchronized void initialize() {
+    requireAuthorized();
     if (initialized) return;
     SQLiteDatabase encrypted = getWritableDatabase();
     PmsPlaintextDatabaseMigration.migrateIfNeeded(appContext, encrypted);
     initialized = true;
   }
+
+  private void requireAuthorized() { if (authorizationGuard != null) authorizationGuard.run(); }
 
   @Override public synchronized void close() {
     try { super.close(); }
@@ -87,6 +94,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   }
 
   synchronized JSONObject getEntity(String type,String id) {
+    requireAuthorized();
     validateIdentity(type,"entity type"); validateIdentity(id,"entity ID");
     try(Cursor c=getReadableDatabase().rawQuery("SELECT version,data_json,updated_at FROM pms_entities WHERE entity_type=? AND entity_id=?",new String[]{type,id})) {
       if(!c.moveToFirst())return null;
@@ -95,6 +103,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   }
 
   synchronized JSONArray listEntities(String type) {
+    requireAuthorized();
     validateIdentity(type,"entity type"); JSONArray rows=new JSONArray();
     try(Cursor c=getReadableDatabase().rawQuery("SELECT entity_id,version,data_json,updated_at FROM pms_entities WHERE entity_type=? ORDER BY COALESCE(json_extract(data_json,'$.createdAt'),''),entity_id",new String[]{type})) {
       while(c.moveToNext()) { JSONObject row=new JSONObject(); row.put("key",type+":"+c.getString(0)); row.put("type",type); row.put("id",c.getString(0)); row.put("version",c.getLong(1)); row.put("data",new JSONTokener(c.getString(2)).nextValue()); row.put("updatedAt",isoTimestamp(c.getLong(3)));rows.put(row); }
@@ -104,6 +113,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
 
   /** Entity JSON and immutable outbox event are one indivisible SQLite transaction. */
   synchronized JSONObject transactBusinessChange(String type,String id,long expectedVersion,JSONObject nextData,JSONObject event) {
+    requireAuthorized();
     validateIdentity(type,"entity type"); validateIdentity(id,"entity ID");
     if(expectedVersion<0||nextData==null||event==null)throw new IllegalArgumentException("invalid_pms_transaction");
     validateEvent(event,type,id,expectedVersion+1);
@@ -127,6 +137,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
 
   /** Commits multiple entity versions and all corresponding outbox events atomically. */
   synchronized JSONArray transactBusinessBatch(JSONArray changes) {
+    requireAuthorized();
     if(changes==null||changes.length()<2||changes.length()>20)throw new IllegalArgumentException("invalid_business_batch_size");
     java.util.HashSet<String> keys=new java.util.HashSet<>(),eventIds=new java.util.HashSet<>();
     try {
@@ -150,6 +161,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
 
   /** Imports the exact original localStorage payload and every top-level key atomically. */
   synchronized JSONObject migrateLegacySnapshot(String migrationId,String sourceKey,String sourceTimestamp,String rawJson) {
+    requireAuthorized();
     validateIdentity(migrationId,"migration ID");validateIdentity(sourceKey,"source key");
     if(rawJson==null||rawJson.isEmpty()||sourceTimestamp==null||!Double.isFinite(parseDate(sourceTimestamp)))throw new IllegalArgumentException("invalid_legacy_snapshot");
     final JSONObject parsed;
@@ -179,6 +191,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   }
 
   synchronized JSONObject readMigrationSnapshot(String migrationId) {
+    requireAuthorized();
     validateIdentity(migrationId,"migration ID");
     try(Cursor c=getReadableDatabase().rawQuery("SELECT source_key,raw_json,source_timestamp,created_at,format_version FROM pms_migration_snapshots WHERE snapshot_id=?",new String[]{migrationId})) {
       if(!c.moveToFirst())return null;JSONObject out=new JSONObject();out.put("id",migrationId);out.put("sourceKey",c.getString(0));out.put("raw",c.getString(1));out.put("sourceTimestamp",c.getString(2));out.put("importedAt",isoTimestamp(c.getLong(3)));out.put("formatVersion",c.getLong(4));return out;
@@ -187,6 +200,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
 
   /** Claims due events and reclaims expired leases atomically. */
   synchronized JSONArray claimOutboxBatch(String deviceId,int limit,long leaseMs) {
+    requireAuthorized();
     validateIdentity(deviceId,"device ID");if(limit<1||limit>100||leaseMs<1000||leaseMs>3600000)throw new IllegalArgumentException("invalid_outbox_lease");
     SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
     try {
@@ -204,6 +218,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   }
 
   synchronized JSONObject acknowledgeOutbox(String deviceId,JSONArray acknowledgements) {
+    requireAuthorized();
     validateIdentity(deviceId,"device ID");if(acknowledgements==null||acknowledgements.length()<1||acknowledgements.length()>100)throw new IllegalArgumentException("invalid_acknowledgements");
     SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
     try {
@@ -214,9 +229,11 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   }
 
   synchronized boolean retryOutbox(String deviceId,String eventId,String retryAt,String errorCode) {
+    requireAuthorized();
     return updateLeasedEvent(deviceId,eventId,"RETRY",retryAt,errorCode);
   }
   synchronized boolean markOutboxConflict(String deviceId,String eventId,String conflictCode) {
+    requireAuthorized();
     return updateLeasedEvent(deviceId,eventId,"CONFLICT",null,conflictCode);
   }
   private boolean updateLeasedEvent(String deviceId,String eventId,String status,String retryAt,String errorCode) {
