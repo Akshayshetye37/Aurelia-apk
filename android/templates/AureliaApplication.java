@@ -38,6 +38,7 @@ public final class AureliaApplication extends Application {
                 }
                 if (observedUid == null ? uid != null : !observedUid.equals(uid)) {
                     observedUid = uid;
+                    com.aurelia.pms.security.AureliaSecurityRuntime.INSTANCE.manager(AureliaApplication.this).lock();
                     com.aurelia.pms.CapacitorPmsStoragePlugin.lockForIdentityChange();
                 }
             });
