@@ -60,7 +60,7 @@ class LocalOwnerBindingStore(context: Context) {
     }
 
     /** Bind only after the caller has completed server-side owner membership verification. Never overwrite. */
-    fun bindIfAbsent(uid: String, ownerId: String): Result = synchronized(lock) {
+    fun bindIfAbsent(uid: String, ownerId: String, allowExistingProfileAfterUnlock: Boolean = false): Result = synchronized(lock) {
         require(uid.isNotBlank() && uid.length <= 128 && ownerId.isNotBlank() && ownerId.length <= 128)
         when (check(uid, ownerId)) {
             Result.MATCH -> Result.MATCH
@@ -69,7 +69,7 @@ class LocalOwnerBindingStore(context: Context) {
                 // A missing preference is not permission to rebind an existing DB/envelope.
                 val db = appContext.getDatabasePath("aurelia-pms-encrypted.db")
                 val databaseExists = db.exists() || java.io.File(db.path + "-wal").exists() || java.io.File(db.path + "-shm").exists()
-                if (databaseExists || AureliaEnvelopeStore(appContext).exists() || AureliaSecurityRuntime.isEnrolled()) return Result.MISMATCH
+                if (!allowExistingProfileAfterUnlock && (databaseExists || AureliaEnvelopeStore(appContext).exists() || AureliaSecurityRuntime.isEnrolled())) return Result.MISMATCH
                 val plaintext = JSONObject().put("uid", uid).put("ownerId", ownerId).toString().toByteArray(Charsets.UTF_8)
                 try {
                     val (nonce, ciphertext) = encrypt(plaintext)
