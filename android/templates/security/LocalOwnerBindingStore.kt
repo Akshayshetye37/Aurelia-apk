@@ -12,12 +12,12 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** Keystore-authenticated, immutable binding for the local encrypted PMS profile. */
-class LocalOwnerBindingStore(context: Context) {
+class LocalOwnerBindingStore(context: Context, aliasOverride: String? = null) {
     enum class Result { UNBOUND, MATCH, MISMATCH, CORRUPT }
     data class Binding(val uid: String, val ownerId: String)
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private val alias = ALIAS
+    private val alias = aliasOverride ?: ALIAS
     private val lock = Any()
 
     /** Read the complete binding. Missing both fields is UNBOUND; partial or invalid state is CORRUPT. */
@@ -69,6 +69,8 @@ class LocalOwnerBindingStore(context: Context) {
                 // A missing preference is not permission to rebind an existing DB/envelope.
                 val db = appContext.getDatabasePath("aurelia-pms-encrypted.db")
                 val databaseExists = db.exists() || java.io.File(db.path + "-wal").exists() || java.io.File(db.path + "-shm").exists()
+                val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+                if (keyStore.containsAlias(alias)) return Result.MISMATCH
                 if (!allowExistingProfileAfterUnlock && (databaseExists || AureliaEnvelopeStore(appContext).exists() || AureliaSecurityRuntime.isEnrolled())) return Result.MISMATCH
                 val plaintext = JSONObject().put("uid", uid).put("ownerId", ownerId).toString().toByteArray(Charsets.UTF_8)
                 try {
