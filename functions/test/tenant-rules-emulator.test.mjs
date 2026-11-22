@@ -23,6 +23,16 @@ test('Firestore owner A/B read, write and delete isolation', async () => {
     await setDoc(doc(db, 'owners/' + ownerB), { ownerId: ownerB, status: 'active' });
     await setDoc(doc(db, 'owners/' + ownerA + '/members/' + uidA), { uid: uidA, ownerId: ownerA, role: 'owner', status: 'active' });
     await setDoc(doc(db, 'owners/' + ownerB + '/members/' + uidB), { uid: uidB, ownerId: ownerB, role: 'owner', status: 'active' });
+    await setDoc(doc(db, 'owners/inactive-owner/members/inactive-user'), { uid: 'inactive-user', ownerId: 'inactive-owner', role: 'owner', status: 'inactive' });
+    await setDoc(doc(db, 'owners/uid-corrupt/members/uid-corrupt-user'), { uid: 'different-uid', ownerId: 'uid-corrupt', role: 'owner', status: 'active' });
+    await setDoc(doc(db, 'owners/owner-corrupt/members/owner-corrupt-user'), { uid: 'owner-corrupt-user', ownerId: 'wrong-owner', role: 'owner', status: 'active' });
+    await setDoc(doc(db, 'owners/role-corrupt/members/role-corrupt-user'), { uid: 'role-corrupt-user', ownerId: 'role-corrupt', role: 'superuser', status: 'active' });
+    await setDoc(doc(db, 'owners/staff-owner/members/staff-user'), { uid: 'staff-user', ownerId: 'staff-owner', role: 'staff', status: 'active' });
+    await setDoc(doc(db, 'owners/manager-owner/members/manager-user'), { uid: 'manager-user', ownerId: 'manager-owner', role: 'manager', status: 'active' });
+    await setDoc(doc(db, 'owners/admin-owner/members/admin-user'), { uid: 'admin-user', ownerId: 'admin-owner', role: 'admin', status: 'active' });
+    for (const owner of ['inactive-owner','uid-corrupt','owner-corrupt','role-corrupt','staff-owner','manager-owner','admin-owner']) {
+      await setDoc(doc(db, 'owners/' + owner + '/data/booking'), { value: owner });
+    }
     await setDoc(doc(db, 'owners/' + ownerA + '/data/booking-a'), { value: 'A' });
     await setDoc(doc(db, 'owners/' + ownerB + '/data/booking-b'), { value: 'B' });
   });
@@ -59,3 +69,28 @@ test('Storage owner A/B read, write and delete isolation', async () => {
   await assertSucceeds(deleteObject(ref(storageA, pathA)));
 });
 test.after(async () => env.cleanup());
+
+test('Firestore denies inactive and integrity-corrupt membership records', async () => {
+  const cases = [
+    ['inactive-user', 'inactive-owner'],
+    ['uid-corrupt-user', 'uid-corrupt'],
+    ['owner-corrupt-user', 'owner-corrupt'],
+    ['role-corrupt-user', 'role-corrupt']
+  ];
+  for (const [uid, owner] of cases) {
+    const db = env.authenticatedContext(uid).firestore();
+    await assertFails(getDoc(doc(db, 'owners/' + owner + '/data/booking')));
+    await assertFails(setDoc(doc(db, 'owners/' + owner + '/data/new'), { value: 1 }));
+  }
+});
+
+test('Firestore preserves actual role matrix: staff read-only, manager/admin can write', async () => {
+  const staff = env.authenticatedContext('staff-user').firestore();
+  const manager = env.authenticatedContext('manager-user').firestore();
+  const admin = env.authenticatedContext('admin-user').firestore();
+  await assertSucceeds(getDoc(doc(staff, 'owners/staff-owner/data/booking')));
+  await assertFails(setDoc(doc(staff, 'owners/staff-owner/data/new'), { value: 1 }));
+  await assertSucceeds(setDoc(doc(manager, 'owners/manager-owner/data/new'), { value: 1 }));
+  await assertSucceeds(deleteDoc(doc(manager, 'owners/manager-owner/data/booking')));
+  await assertSucceeds(setDoc(doc(admin, 'owners/admin-owner/data/new'), { value: 1 }));
+});
