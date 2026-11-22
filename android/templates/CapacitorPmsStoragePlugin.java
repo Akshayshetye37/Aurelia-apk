@@ -13,9 +13,6 @@ import java.util.UUID;
 import java.nio.charset.StandardCharsets;
 import android.content.SharedPreferences;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.android.gms.tasks.Tasks;
-import java.util.concurrent.TimeUnit;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
@@ -73,9 +70,11 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
   }
 
   /**
-   * Authorization is deliberately checked at the native repository boundary on every operation.
-   * The binding is local Keystore-authenticated state; the active membership is re-read from
-   * Firestore under authenticated Firebase rules, and the session DEK must still be unlocked.
+   * Authorization is checked at the native repository boundary on every operation.
+   * The profile binding was created only after ensureOwnerMembership returned a
+   * server-verified membership. This local UID + full owner-ID + unlocked-DEK
+   * gate intentionally remains usable offline; cloud actions must revalidate
+   * membership independently before they transmit or mutate remote data.
    */
   private void authorizeCurrentOwner() {
     FirebaseAuth auth = FirebaseAuth.getInstance();
@@ -91,23 +90,9 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
       com.aurelia.pms.security.AureliaSecurityRuntime.INSTANCE.manager(getContext());
     byte[] key = manager.currentDataKeyCopy();
     java.util.Arrays.fill(key, (byte) 0);
-    try {
-      java.util.Map<String, Object> member = Tasks.await(
-        FirebaseFirestore.getInstance().collection("owners").document(ownerId)
-          .collection("members").document(uid).get(), 15, TimeUnit.SECONDS).getData();
-      if (member == null || !uid.equals(member.get("uid")) || !ownerId.equals(member.get("ownerId")) ||
-          !"active".equals(member.get("status")) ||
-          !java.util.Arrays.asList("owner", "admin", "manager", "staff").contains(member.get("role"))) {
-        throw new SecurityException("Server membership verification failed.");
-      }
-      if (auth.getCurrentUser() == null || !uid.equals(auth.getCurrentUser().getUid()) ||
-          bindings.check(uid, ownerId) != com.aurelia.pms.security.LocalOwnerBindingStore.Result.MATCH) {
-        throw new SecurityException("Google identity changed during PMS authorization.");
-      }
-    } catch (SecurityException failure) {
-      throw failure;
-    } catch (Exception failure) {
-      throw new SecurityException("Owner membership could not be verified; PMS access is blocked.", failure);
+    if (auth.getCurrentUser() == null || !uid.equals(auth.getCurrentUser().getUid()) ||
+        bindings.check(uid, ownerId) != com.aurelia.pms.security.LocalOwnerBindingStore.Result.MATCH) {
+      throw new SecurityException("Google identity changed during PMS authorization.");
     }
   }
 
