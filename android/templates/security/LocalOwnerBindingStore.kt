@@ -18,6 +18,17 @@ class LocalOwnerBindingStore(context: Context) {
     private val alias = "aurelia_local_owner_binding_v1"
     private val lock = Any()
 
+    /** Rejects any Firebase identity other than the UID bound to this local profile. */
+    fun checkUid(uid: String): Boolean = synchronized(lock) {
+        if (uid.isBlank()) return false
+        val ciphertext = prefs.getString("ciphertext", null) ?: return false
+        val nonceText = prefs.getString("nonce", null) ?: throw SecurityException("Local owner binding is incomplete.")
+        val plaintext = decrypt(Base64.decode(nonceText, Base64.NO_WRAP), Base64.decode(ciphertext, Base64.NO_WRAP))
+        try {
+            JSONObject(String(plaintext, Charsets.UTF_8)).optString("uid") == uid
+        } finally { plaintext.fill(0) }
+    }
+
     fun check(uid: String, ownerId: String): Result = synchronized(lock) {
         val ciphertext = prefs.getString("ciphertext", null) ?: return Result.UNBOUND
         val nonceText = prefs.getString("nonce", null) ?: throw SecurityException("Local owner binding is incomplete.")
