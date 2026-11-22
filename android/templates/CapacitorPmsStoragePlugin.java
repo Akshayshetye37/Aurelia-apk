@@ -37,10 +37,7 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
     if (active != null) {
       com.aurelia.pms.security.AureliaSecurityRuntime.INSTANCE.manager(active.getContext()).lock();
     }
-    closeForBackground();
-  }
-
-  public static void closeForBackground() {
+    // Revoke the SQLCipher key copy synchronously; queued work will fail its session guard.\n    if (active != null) active.closeRepository();\n  }\n\n  public static void closeForBackground() {
     CapacitorPmsStoragePlugin active = activeInstance;
     if (active == null) return;
     try { active.io.execute(active::closeRepository); }
