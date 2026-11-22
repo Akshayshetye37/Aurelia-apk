@@ -1,5 +1,7 @@
 package com.aurelia.pms.identity
 
+import com.aurelia.pms.R
+
 import androidx.activity.ComponentActivity
 import android.content.Intent
 import android.os.Bundle

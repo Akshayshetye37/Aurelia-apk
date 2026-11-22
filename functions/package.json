@@ -13,6 +13,7 @@
     "test:emulator": "node --test test/recovery-emulator-runtime.test.mjs",
     "provision:recovery-owner": "node scripts/provision-recovery-owner.mjs",
     "test:disabled": "node --test test/recovery-disabled-runtime.test.mjs",
+    "test:primary-auth-emulator": "node --test test/primary-auth-emulator.test.mjs",
     "test:tenant-rules-emulator": "node --test test/tenant-rules-emulator.test.mjs"
   },
   "dependencies": {

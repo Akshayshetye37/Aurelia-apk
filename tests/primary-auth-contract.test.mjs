@@ -14,6 +14,7 @@ const firebase = JSON.parse(read('firebase.json'));
 
 test('primary auth uses Credential Manager and Google ID only', () => {
   assert.match(auth, /GetGoogleIdOption/);
+  assert.match(auth, /import com\.aurelia\.pms\.R/);
   assert.match(auth, /GoogleIdTokenCredential/);
   assert.match(auth, /GoogleAuthProvider/);
   assert.match(auth, /FirebaseFunctions/);
@@ -27,6 +28,7 @@ test('owner binding callable is App Check protected and server assigns owner IDs
   assert.match(callable, /randomUUID\(\)/);
   assert.match(callable, /runTransaction/);
   assert.match(callable, /tx\.create\(ownerRef/);
+  assert.doesNotMatch(callable, /tx\.create\(ownerRef,[\s\S]*?\},\s*\{\s*merge:\s*true\s*\}\s*\)/);
   assert.match(callable, /tx\.create\(memberRef/);
   assert.match(callable, /rejectClientAuthority/);
   assert.doesNotMatch(callable, /request\.data\.ownerId|request\.data\.role/);

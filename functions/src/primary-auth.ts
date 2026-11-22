@@ -63,7 +63,7 @@ export const ensureOwnerMembership = onCall(
         status: "active",
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
-      }, { merge: true });
+      });
       tx.create(memberRef, {
         uid,
         ownerId: candidateOwnerId,
