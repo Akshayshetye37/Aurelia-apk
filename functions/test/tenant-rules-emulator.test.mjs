@@ -23,14 +23,14 @@ test('Firestore owner A/B read, write and delete isolation', async () => {
     await setDoc(doc(db, 'owners/' + ownerB), { ownerId: ownerB, status: 'active' });
     await setDoc(doc(db, 'owners/' + ownerA + '/members/' + uidA), { uid: uidA, ownerId: ownerA, role: 'owner', status: 'active' });
     await setDoc(doc(db, 'owners/' + ownerB + '/members/' + uidB), { uid: uidB, ownerId: ownerB, role: 'owner', status: 'active' });
-    await setDoc(doc(db, 'owners/' + ownerA + '/data/bookings/booking-a'), { value: 'A' });
-    await setDoc(doc(db, 'owners/' + ownerB + '/data/bookings/booking-b'), { value: 'B' });
+    await setDoc(doc(db, 'owners/' + ownerA + '/data/booking-a'), { value: 'A' });
+    await setDoc(doc(db, 'owners/' + ownerB + '/data/booking-b'), { value: 'B' });
   });
   const dbA = env.authenticatedContext(uidA).firestore();
   const dbB = env.authenticatedContext(uidB).firestore();
   const outsider = env.authenticatedContext('outsider-test').firestore();
-  const pathA = 'owners/' + ownerA + '/data/bookings/booking-a';
-  const pathB = 'owners/' + ownerB + '/data/bookings/booking-b';
+  const pathA = 'owners/' + ownerA + '/data/booking-a';
+  const pathB = 'owners/' + ownerB + '/data/booking-b';
   await assertSucceeds(getDoc(doc(dbA, pathA)));
   await assertFails(getDoc(doc(dbA, pathB)));
   await assertFails(setDoc(doc(dbA, pathA), { value: 'A-updated', ownerId: ownerB }));
