@@ -8,7 +8,6 @@ import com.aurelia.pms.security.RecoveryGate;
 import com.google.firebase.appcheck.FirebaseAppCheck;
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseAuth.AuthStateListener;
 
 /**
  * Installs Play Integrity App Check before Firebase Auth, Functions or Messaging
@@ -29,6 +28,7 @@ public final class AureliaApplication extends Application {
                 PlayIntegrityAppCheckProviderFactory.getInstance()
             );
             FirebaseAuth auth = FirebaseAuth.getInstance(firebaseApp);
+            // A UID transition (including sign-out) invalidates the in-memory DEK and SQLCipher session.
             auth.addAuthStateListener(current -> {
                 String uid = current.getCurrentUser() == null ? null : current.getCurrentUser().getUid();
                 if (!authStateInitialized) {
