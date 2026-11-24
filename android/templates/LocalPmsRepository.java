@@ -272,8 +272,8 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       result.put("cipherIntegrityErrors",cipherErrors);
       result.put("databaseVersion",db.getVersion());
       return result;
-    } catch(Exception failure) {
-      throw failure instanceof RuntimeException?(RuntimeException)failure:failure("PMS_SQLCIPHER_INTEGRITY_FAILED",failure);
+    } catch(Exception error) {
+      throw error instanceof RuntimeException?(RuntimeException)error:failure("PMS_SQLCIPHER_INTEGRITY_FAILED",error);
     }
   }
 
@@ -286,8 +286,8 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       result.put("migrationId",cursor.isNull(1)?JSONObject.NULL:cursor.getString(1));
       result.put("updatedAt",cursor.getLong(2));
       return result;
-    } catch(Exception failure) {
-      throw failure instanceof RuntimeException?(RuntimeException)failure:failure("PMS_STORAGE_AUTHORITY_READ_FAILED",failure);
+    } catch(Exception error) {
+      throw error instanceof RuntimeException?(RuntimeException)error:failure("PMS_STORAGE_AUTHORITY_READ_FAILED",error);
     }
   }
 
