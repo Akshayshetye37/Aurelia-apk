@@ -416,6 +416,14 @@ public class MainActivity extends BridgeActivity {
       if (!(entry instanceof KeyStore.SecretKeyEntry)) throw new SecurityException("Photo archive key type is invalid.");
       return ((KeyStore.SecretKeyEntry) entry).getSecretKey();
     }
+    java.io.File[] existing = photoDir().listFiles((dir, name) -> name.endsWith(".txt"));
+    if (existing != null) for (java.io.File file : existing) {
+      try (java.io.FileInputStream input = new java.io.FileInputStream(file)) {
+        if (input.read() == PHOTO_ENVELOPE_VERSION) {
+          throw new SecurityException("Photo archive Keystore key is missing; refusing to replace it.");
+        }
+      }
+    }
     KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
     generator.init(new KeyGenParameterSpec.Builder(PHOTO_KEY_ALIAS,
         KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
