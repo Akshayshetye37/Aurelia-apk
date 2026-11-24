@@ -39,13 +39,13 @@ function hardenGroovyReleaseBuild(gradle) {
   if (!match) throw new Error('Android release buildType block was not found; refusing to ship an unhardened release configuration.');
 
   let body = match[2];
-  const setBoolean = (source, key) => {
+  const setBoolean = (source, key, value) => {
     const pattern = new RegExp('(^\\s*' + key + '\\s+)\\w+', 'm');
-    return pattern.test(source) ? source.replace(pattern, '$1true') : source + '\n        ' + key + ' true';
+    return pattern.test(source) ? source.replace(pattern, '$1' + value) : source + '\n        ' + key + ' ' + value;
   };
-  body = setBoolean(body, 'minifyEnabled');
-  body = setBoolean(body, 'shrinkResources');
-  body = setBoolean(body, 'debuggable');
+  body = setBoolean(body, 'minifyEnabled', 'true');
+  body = setBoolean(body, 'shrinkResources', 'true');
+  body = setBoolean(body, 'debuggable', 'false');
   body = body.replace(/getDefaultProguardFile\s*\(\s*['"]proguard-android(?:-optimize)?\.txt['"]\s*\)/,
     "getDefaultProguardFile('proguard-android-optimize.txt')");
   if (!body.includes('proguard-rules.pro')) body += "\n        proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'";
