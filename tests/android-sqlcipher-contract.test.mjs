@@ -151,7 +151,7 @@ test('native print WebView cannot execute JavaScript or load local/network resou
 });
 
 test('native external URL actions reject dangerous URI schemes', () => {
-  assert.match(patch, /scheme\.matches\("https\|http\|tel\|mailto"\)/);
+  assert.match(patch, /scheme\.matches\("https\|tel\|mailto"\)/);
 });
 
 test('direct dependencies meet patched Capacitor and sharp security floors', () => {
