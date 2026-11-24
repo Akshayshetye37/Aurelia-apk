@@ -24,10 +24,10 @@ function stripForbiddenPermissions(manifest) {
 
 function disableManifestBackup(manifest) {
   if (typeof manifest !== 'string') throw new TypeError('Android manifest must be a string');
-  const applicationTag = /<application\\b([^>]*)>/;
+  const applicationTag = /<application\b([^>]*)>/;
   if (!applicationTag.test(manifest)) throw new Error('Android application manifest element was not found.');
   return manifest.replace(applicationTag, (_full, attributes) => {
-    const withoutExisting = attributes.replace(/\\s+android:allowBackup\\s*=\\s*(['"])[\\s\\S]*?\\1/g, '');
+    const withoutExisting = attributes.replace(/\s+android:allowBackup\s*=\s*(['"])[\s\S]*?\1/g, '');
     return '<application' + withoutExisting + ' android:allowBackup="false">';
   });
 }
