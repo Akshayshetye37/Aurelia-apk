@@ -100,6 +100,7 @@ const proguardRules = [
   '-keep class com.aurelia.pms.LocalPmsRepository { *; }',
   '-keep class com.aurelia.pms.PmsDatabaseKeyManager { *; }',
   '-keep class com.aurelia.pms.PmsUnlockManager { *; }',
+  '-keep class com.aurelia.pms.AureliaNativeActionsPlugin { *; }',
   '-keep class net.zetetic.database.** { *; }',
   ''
 ].join('\n');
@@ -108,6 +109,7 @@ fs.writeFileSync(path.join(appModuleDir, 'proguard-rules.pro'), proguardRules);
 const nativeTemplates = [
   'PmsDatabaseKeyManager.java',
   'PmsUnlockManager.java',
+  'AureliaNativeActionsPlugin.java',
   'LocalPmsRepository.java',
   'CapacitorPmsStoragePlugin.java',
   'StorageSerializationException.java'
@@ -135,7 +137,6 @@ import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
-import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
@@ -158,10 +159,10 @@ public class MainActivity extends BridgeActivity {
 
   @Override public void onCreate(Bundle savedInstanceState) {
     registerPlugin(CapacitorPmsStoragePlugin.class);
+    registerPlugin(AureliaNativeActionsPlugin.class);
     super.onCreate(savedInstanceState);
     if (!BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(false);
     prefs = getSharedPreferences("aurelia_storage", MODE_PRIVATE);
-    bridge.getWebView().addJavascriptInterface(new AureliaBridge(), "AureliaNative");
   }
 
   private void js(String script) {
@@ -414,6 +415,11 @@ public class MainActivity extends BridgeActivity {
   private void printHtmlDocument(String html, String title) {
     try {
       android.webkit.WebView printView = new android.webkit.WebView(MainActivity.this);
+      android.webkit.WebSettings printSettings = printView.getSettings();
+      printSettings.setJavaScriptEnabled(false);
+      printSettings.setAllowFileAccess(false);
+      printSettings.setAllowContentAccess(false);
+      printSettings.setBlockNetworkLoads(true);
       printView.setWebViewClient(new android.webkit.WebViewClient() {
         @Override public void onPageFinished(android.webkit.WebView view, String url) {
           try {
@@ -446,8 +452,7 @@ public class MainActivity extends BridgeActivity {
     }
   }
 
-  private class AureliaBridge {
-    @JavascriptInterface public void postMessage(String raw) {
+  public void handleAureliaNativeMessage(String raw) {
       String operationType = "", operationRequestId = "";
       try {
         JSONObject obj = new JSONObject(raw);
@@ -586,7 +591,10 @@ public class MainActivity extends BridgeActivity {
           }
         } else if ("openUrl".equals(type)) {
           String url = obj.optString("url", "");
-          runOnUiThread(() -> { try { Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url)); startActivity(intent); } catch (Exception e) { js("window.aureliaNativeActionResult && window.aureliaNativeActionResult(" + q(requestId) + ",false," + q("Could not open link") + ")"); } });
+          Uri target = Uri.parse(url);
+          String scheme = target.getScheme() == null ? "" : target.getScheme().toLowerCase(java.util.Locale.ROOT);
+          if (!scheme.matches("https|http|tel|mailto")) throw new SecurityException("Unsupported URL scheme");
+          runOnUiThread(() -> { try { Intent intent = new Intent(Intent.ACTION_VIEW, target); startActivity(intent); } catch (Exception e) { js("window.aureliaNativeActionResult && window.aureliaNativeActionResult(" + q(requestId) + ",false," + q("Could not open link") + ")"); } });
         } else if ("shareText".equals(type)) {
           String title = obj.optString("title", "Share");
           String text = obj.optString("text", "");
@@ -613,7 +621,6 @@ public class MainActivity extends BridgeActivity {
         else if ("deviceBackupStatus".equals(operationType)) js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(operationRequestId) + ",false)");
       }
     }
-  }
 
   @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     super.onActivityResult(requestCode, resultCode, data);
