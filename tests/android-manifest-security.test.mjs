@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const require = createRequire(import.meta.url);
+const patchSource = fs.readFileSync(path.resolve('scripts/patch-android.js'), 'utf8');
 const { FORBIDDEN_PERMISSIONS, stripForbiddenPermissions, disableManifestBackup, hardenGroovyReleaseBuild } = require('../scripts/android-manifest-security.cjs');
 
 test('strips camera and legacy shared-storage permissions while preserving required entries', () => {
@@ -67,4 +70,12 @@ test('hardens Groovy release build with R8, resource shrinking and no debuggabil
 
 test('fails closed if release build configuration cannot be found', () => {
   assert.throws(() => hardenGroovyReleaseBuild('android { }'), /release buildType block was not found/);
+});
+
+test('native patch wires manifest policy, R8 rules and release WebView debugging guard', () => {
+  assert.match(patchSource, /stripForbiddenPermissions\(manifest\)/);
+  assert.match(patchSource, /disableManifestBackup\(manifest\)/);
+  assert.match(patchSource, /hardenGroovyReleaseBuild\(gradle\)/);
+  assert.match(patchSource, /proguard-rules\.pro/);
+  assert.match(patchSource, /if \(!BuildConfig\.DEBUG\) WebView\.setWebContentsDebuggingEnabled\(false\)/);
 });
