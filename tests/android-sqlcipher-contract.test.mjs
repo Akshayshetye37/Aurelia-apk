@@ -226,3 +226,28 @@ test('main WebView rejects mixed content and file-origin privilege escalation', 
   assert.match(patch, /setAllowUniversalAccessFromFileURLs\(false\)/);
   assert.match(patch, /setSafeBrowsingEnabled\(true\)/);
 });
+
+test('repository SQL statements do not concatenate caller-controlled values', () => {
+  assert.doesNotMatch(repository, /rawQuery\([^;\n]*\+/);
+  assert.doesNotMatch(repository, /execSQL\([^;\n]*\+/);
+  assert.match(repository, /entity_type=\? AND entity_id=\?/);
+  assert.match(repository, /new String\[\]\{type,id\}/);
+});
+
+test('inspected app and native sources contain no common committed secret formats', () => {
+  const source = [
+    read('index.html'),
+    read('scripts/patch-android.js'),
+    read('android/templates/AureliaNativeActionsPlugin.java'),
+    read('android/templates/CapacitorPmsStoragePlugin.java'),
+    read('android/templates/PmsUnlockManager.java'),
+    read('android/templates/LocalPmsRepository.java')
+  ].join('\n');
+  for (const pattern of [
+    /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+    /\bAKIA[0-9A-Z]{16}\b/,
+    /\bgh[pousr]_[A-Za-z0-9]{30,}\b/,
+    /\bsk_live_[A-Za-z0-9]{16,}\b/,
+    /\bAIza[0-9A-Za-z_-]{30,}\b/
+  ]) assert.doesNotMatch(source, pattern);
+});
