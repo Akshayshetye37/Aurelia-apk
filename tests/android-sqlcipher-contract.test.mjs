@@ -35,6 +35,7 @@ test('PIN, biometric and recovery envelopes independently unlock the same random
   assert.match(unlockManager, /lockout_until_ms/);
   assert.match(keyManager, /PmsUnlockManager\.getUnlockedDatabaseKey/);
   assert.doesNotMatch(keyManager, /requireUnlockedDatabaseKey.*SecureRandom/s);
+  assert.doesNotMatch(unlockManager, /database\.dek\.wrap/);
 });
 
 test('unlock secrets are entered in native dialogs and never passed through WebView arguments', () => {
@@ -78,6 +79,8 @@ test('generic WebView writes cannot mutate domain, outbox, migration or reserved
 test('Android patch installs the SQLCipher dependency and registers the native plugin', () => {
   assert.match(patch, /net\.zetetic:sqlcipher-android:4\.20\.0@aar/);
   assert.match(patch, /androidx\.sqlite:sqlite:2\.7\.0/);
+  assert.match(patch, /androidx\.biometric:biometric:1\.2\.0/);
+  assert.match(patch, /PmsUnlockManager\.java/);
   assert.match(patch, /PmsDatabaseKeyManager\.java/);
   assert.match(patch, /LocalPmsRepository\.java/);
   assert.match(patch, /CapacitorPmsStoragePlugin\.java/);
@@ -106,6 +109,7 @@ test('SQLCipher dependencies are inserted idempotently and native plugin is regi
   assert.ok(register >= 0 && superCreate > register);
   assert.match(patch, /if \(!gradle\.includes\('net\.zetetic:sqlcipher-android:'\)\)/);
   assert.match(patch, /if \(!gradle\.includes\('androidx\.sqlite:sqlite:'\)\)/);
+  assert.match(patch, /if \(!gradle\.includes\('androidx\.biometric:biometric:'\)\)/);
   assert.match(patch, /PmsDatabaseKeyManager/);
   assert.doesNotMatch(patch, /\beval\s*\(/);
 });
