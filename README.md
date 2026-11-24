@@ -569,3 +569,73 @@ These are snapshots, not live statuses. Check the linked Actions runs for final 
 4. Dispatch Gate 3 staging only after preflight configuration is complete.
 5. Inspect retained staging evidence and prove the Google Sign-In + Firebase Email-Link owner-verification flow.
 6. Keep production recovery disabled and Gate 4–6 qualification separate.
+
+
+## Client configuration and cloud credential security
+
+### Safe-to-ship client configuration
+
+The Android APK is inspectable. Treat every value packaged in it as public and extractable. The following are configuration identifiers—not secrets—when used with the required restrictions:
+
+- Firebase client API key and client configuration (including values represented by `google-services.json`): restrict the key to the required APIs and Android package/signing identity where supported. Firebase authorization must rely on server-side security rules, authenticated identity, App Check enforcement and backend authorization—not on API-key secrecy.
+- OAuth client ID: public identifier. Never package an OAuth client secret.
+- Firebase project ID, app ID, package name, registered redirect URI and signing-certificate fingerprint: identifiers/configuration, not credentials.
+- Recovery/verification public keys: public cryptographic material only. Never include corresponding private keys.
+
+A public configuration value is **not automatically safe from abuse**. Apply API restrictions, quotas, App Check, security rules and server-side authorization appropriate to the service. Do not put access tokens or personal/business data in configuration values.
+
+### Never package in the APK or repository
+
+- Service-account private keys, Firebase Admin credentials or privileged backend credentials.
+- OAuth client secrets.
+- Google Drive access/refresh tokens or other user authorization tokens as hard-coded values.
+- Private recovery/signing keys, database encryption keys or key-encryption secrets.
+- Secret Manager values, CI/CD credentials, keystore passwords or signing passwords.
+
+These credentials belong only in an appropriately protected runtime, CI/CD secret store or secure device credential/key store, with least privilege, rotation/revocation and no logging.
+
+### Aurelia cloud ownership model
+
+Aurelia is local-first. Cloud backup is opt-in and must not silently use a shared developer-owned account or credential as the destination for customer business data. The owner must explicitly authorize their own cloud account and confirm the destination. OAuth authorization is used; Aurelia must never ask users to paste their Google/provider password into the app.
+
+The authorization is scoped to the owner's account and destination. Store tokens securely, isolate them per owner/business, reuse valid authorization without repeated prompts, and stop cloud operations when disconnected or revoked. Disconnecting cloud must preserve local PMS data. If cloud is unavailable, continue local operation and report backup status; never silently substitute another account.
+
+Connecting a cloud account and enabling automatic backup are separate choices. Backup schedule, encryption, integrity verification, versioning and restore authorization remain owner-controlled. A connected account does not itself enable automatic backup.
+
+### Backend and OAuth configuration boundary
+
+Public client IDs and Firebase client configuration may be packaged in the app, but privileged backend credentials must remain server-side. App Check is an abuse-protection signal, not a replacement for authentication or authorization. Every sensitive backend operation must independently validate authenticated identity, owner/business/tenant binding, permissions and relevant session freshness. Client-supplied owner claims are never authoritative.
+
+A user-owned cloud account (for example, Google Drive) is distinct from a user-owned Firebase/GCP project or custom backend. The current product requirement is owner-authorized cloud storage for each business; it does **not** require every owner to create a Firebase project, supply OAuth client IDs, or self-host a server. A custom backend/project option is a separate advanced feature and must not be implied as currently implemented.
+
+### Security acceptance criteria
+
+- [ ] APK and repository scans contain no private keys, client secrets, service-account credentials, hard-coded access/refresh tokens or signing passwords.
+- [ ] Client API keys are restricted and are not relied on as secrets.
+- [ ] App Check is enforced where supported and backend authorization remains mandatory.
+- [ ] Cloud OAuth uses provider authorization, not password collection.
+- [ ] Authorization tokens are securely stored, scoped and isolated per owner/business; never logged.
+- [ ] Backup destination/account is displayed and owner-confirmed.
+- [ ] No shared developer credential is used for customer business-data backup.
+- [ ] Cloud disconnect/revocation stops cloud activity without deleting local data.
+- [ ] Cloud failures never cause silent account substitution or loss of local-first operation.
+- [ ] Automatic backup is opt-in and separate from cloud connection.
+- [ ] Encryption, integrity, versioning and restore checks are required before a backup is treated as valid.
+
+**Security rule:** Assume the APK can be reverse-engineered. Protect secrets by keeping them out of the client; protect data through scoped authorization, encryption, server-side validation and owner-controlled cloud authorization.
+
+
+### Backup OAuth scope and token handling
+
+- Request the narrowest Google Drive scope compatible with the backup design. Prefer the app-specific `drive.appdata` scope for hidden app-owned backup files when that meets the product requirements; use `drive.file` only when user-visible files or files explicitly selected/created by the app are required. Do not request broad Drive access by default. Confirm the chosen scope against the implemented restore, file-selection and account-management behavior before release.
+- Use Google's supported Android authorization flow and short-lived access tokens. Do not hard-code tokens. Avoid persisting refresh tokens on-device when the supported Android flow can renew authorization without them; if persistent token material is unavoidable, protect it with Android Keystore-backed encryption and handle revocation/expiry explicitly. Never log tokens.
+- Restrict Firebase/Google API keys using the applicable Android application restriction (package name plus signing-certificate SHA-1) and API restrictions. Restrictions must match the release signing identity; debug and release identities should be configured separately where appropriate. Restrictions do not replace Firebase Rules, App Check or backend authorization.
+
+### Backup encryption and key authority
+
+- Encrypt backup contents **on the device before upload**. Cloud storage must receive ciphertext, not plaintext PMS database or attachment contents.
+- Use authenticated encryption and a versioned backup envelope; verify integrity and metadata before restore.
+- The backup-encryption key must be controlled by the owner through Aurelia's qualified key/recovery design. It must not be derived from Google Sign-In, OAuth tokens, Firebase credentials or the cloud account password.
+- Google Sign-In/Drive authorization grants access to the storage destination only. It is not the authority for decrypting or recovering PMS data.
+- Recovery-key/key-lifecycle requirements remain authoritative: recovery must reopen the same encrypted data key/database, and wrong-key, missing-key, tampered-backup and interrupted-restore cases must fail closed without silently creating a replacement identity or database.
+- Key generation, wrapping, rotation, recovery and second-device restore are implementation and qualification requirements—not completed capabilities merely because they are documented.
