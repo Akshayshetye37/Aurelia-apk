@@ -228,7 +228,7 @@ function guestContactActions(name,phone){
  const p=String(phone||'').replace(/[^\d+]/g,'');
  if(!p)return '';
  const guestName=(name&&typeof name==='object')?String(name.name||name.n||name.guest||name.fullName||name.full_name||'').trim():String(name==null?'':name).trim();
- return '<span class="guest-contact-actions"><button type="button" class="btn sm ghost" onclick="guestCallAction(\''+esc(p)+'\')">Call</button><button type="button" class="btn sm ghost" onclick="guestWhatsAppAction(\''+esc(p.replace(/\D/g,''))+'\',\''+jsArg(guestName)+'\')">WhatsApp</button></span>';
+ return '<span class="guest-contact-actions"><button type="button" class="btn sm ghost" onclick="guestCallAction(\''+esc(p)+'\')">Call</button><button type="button" class="btn sm ghost" onclick="guestWhatsAppAction('+jsArg(p.replace(/\D/g,''))+','+jsArg(guestName)+')">WhatsApp</button></span>';
 }
 </script>
 <script id="aurelia-safe-storage">
@@ -2827,7 +2827,7 @@ function guestPhoneFor(name,source){
 }
 function guestContactActions(name,phone){
  const p=String(phone||'').replace(/[^\d+]/g,'');if(!p)return '';
- return '<span class="guest-contact-actions"><button type="button" class="btn sm ghost" onclick="guestCallAction(\''+esc(p)+'\')">Call</button><button type="button" class="btn sm ghost" onclick="guestWhatsAppAction(\''+esc(p.replace(/\D/g,''))+'\',\''+jsArg(cleanGuestName(name))+'\')">WhatsApp</button></span>';
+ return '<span class="guest-contact-actions"><button type="button" class="btn sm ghost" onclick="guestCallAction(\''+esc(p)+'\')">Call</button><button type="button" class="btn sm ghost" onclick="guestWhatsAppAction('+jsArg(p.replace(/\D/g,''))+','+jsArg(cleanGuestName(name))+')">WhatsApp</button></span>';
 }
 function guestCallAction(phone){
  const p=String(phone||'').replace(/[^\d+]/g,'');if(!p){toast('Add a valid phone number first');return}
