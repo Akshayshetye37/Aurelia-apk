@@ -29,7 +29,7 @@ if (!manifest.includes('androidx.core.content.FileProvider')) {
   if (!manifest.includes('</application>')) {
     throw new Error('Android manifest is missing its application closing tag.');
   }
-  manifest = manifest.replace('</application>', provider + '\\n</application>');
+  manifest = manifest.replace('</application>', provider + '\n</application>');
 }
 fs.mkdirSync(path.join(resDir, 'xml'), { recursive: true });
 fs.writeFileSync(path.join(resDir, 'xml', 'aurelia_file_paths.xml'),
