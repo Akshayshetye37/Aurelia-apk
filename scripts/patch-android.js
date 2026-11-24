@@ -19,7 +19,7 @@ const forbiddenPermissions = new Set([
   'android.permission.WRITE_EXTERNAL_STORAGE',
   'android.permission.MANAGE_EXTERNAL_STORAGE'
 ]);
-manifest = manifest.replace(/<uses-permission\\b[^>]*\\bandroid:name=["']([^"']+)["'][^>]*\\/>/g,
+manifest = manifest.replace(/<uses-permission\b[^>]*\bandroid:name=["']([^"']+)["'][^>]*\/>/g,
   (declaration, permission) => forbiddenPermissions.has(permission) ? '' : declaration);
 fs.writeFileSync(manifestPath, manifest);
 
