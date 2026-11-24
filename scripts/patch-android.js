@@ -151,7 +151,6 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
-import android.util.AtomicFile;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
