@@ -35,6 +35,7 @@ function hardenGroovyReleaseBuild(gradle) {
   };
   body = setBoolean(body, 'minifyEnabled');
   body = setBoolean(body, 'shrinkResources');
+  body = setBoolean(body, 'debuggable');
   body = body.replace(/getDefaultProguardFile\s*\(\s*['"]proguard-android(?:-optimize)?\.txt['"]\s*\)/,
     "getDefaultProguardFile('proguard-android-optimize.txt')");
   if (!body.includes('proguard-rules.pro')) body += "\n        proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'";
