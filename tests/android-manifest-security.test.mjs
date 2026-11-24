@@ -63,7 +63,7 @@ test('hardens Groovy release build with R8, resource shrinking and no debuggabil
   const result = hardenGroovyReleaseBuild(gradle);
   assert.match(result, /minifyEnabled true/);
   assert.match(result, /shrinkResources true/);
-  assert.match(result, /debuggable true/);
+  assert.match(result, /debuggable false/);
   assert.match(result, /proguard-android-optimize\.txt/);
   assert.equal(hardenGroovyReleaseBuild(result), result);
 });
