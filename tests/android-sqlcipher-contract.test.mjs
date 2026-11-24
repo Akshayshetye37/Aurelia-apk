@@ -153,3 +153,11 @@ test('native print WebView cannot execute JavaScript or load local/network resou
 test('native external URL actions reject dangerous URI schemes', () => {
   assert.match(patch, /scheme\.matches\("https\|http\|tel\|mailto"\)/);
 });
+
+test('direct dependencies meet patched Capacitor and sharp security floors', () => {
+  const manifest = JSON.parse(read('package.json'));
+  assert.match(manifest.dependencies['@capacitor/android'], /^\^7\.6\.9$/);
+  assert.match(manifest.dependencies['@capacitor/core'], /^\^7\.6\.9$/);
+  assert.match(manifest.devDependencies['@capacitor/cli'], /^\^7\.6\.9$/);
+  assert.match(manifest.devDependencies.sharp, /^\^0\.35\.5$/);
+});
