@@ -22,7 +22,7 @@ Local business rules are not confidential. Licensing secrets, signing private ke
 
 ## 2. Canonical storage
 
-**Android target:** encrypted native SQLite is the canonical store. IndexedDB and browser storage are cache/compatibility layers only; they are not authoritative for financial records.
+**Android target:** SQLCipher-encrypted native SQLite is intended to become the canonical store. The current HTML app still uses browser storage; no canonical cutover has occurred. IndexedDB and browser storage must remain compatibility/cache layers, not the authority for financial records.
 
 The native SQLite implementation must not be promoted to canonical until all of the following are implemented and verified:
 
@@ -33,7 +33,15 @@ The native SQLite implementation must not be promoted to canonical until all of 
 - Failed initialization, migration or integrity checks fail closed without silently falling back to weaker storage.
 - Backup/restore verifies authentication, integrity, record counts and financial ledger continuity.
 
-Until this gate passes, the existing storage remains legacy/compatibility storage. Do not claim native SQLite is active or migrate live user data.
+### Implemented native foundation (not a production cutover)
+
+The generated Android project now includes SQLCipher for Android 4.20.0 and AndroidX SQLite 2.7.0, following the upstream [SQLCipher Android integration guide](https://github.com/sqlcipher/sqlcipher-android). A random 256-bit DEK is encrypted using AES-256-GCM under a non-exportable Android Keystore key and stored as an authenticated envelope in app-private preferences. The envelope is versioned and AAD-bound to the Aurelia app/database purpose. If the envelope or Keystore key is missing while database files exist, initialization fails closed; it never creates a replacement key over existing data.
+
+The repository opens through SQLCipher's `SQLiteOpenHelper`, verifies `PRAGMA cipher_status`, `PRAGMA integrity_check` and `PRAGMA cipher_integrity_check`, and enables SQLCipher memory sanitization. See the [SQLCipher integrity and status PRAGMAs](https://www.zetetic.net/sqlcipher/sqlcipher-api/). Generic WebView writes are restricted to non-domain metadata/backup stores; WebView-accessible database wipe and authority-promotion methods are not exposed.
+
+This is only a device-bound at-rest key envelope. It does **not** yet satisfy the complete user unlock design: PIN, biometric and recovery-key envelopes must independently wrap and unwrap this same DEK; OTP must remain outside that key path. Those flows are not yet integrated. The native repository is not wired into live UI/domain reads and writes, and no legacy migration or rollback has been run.
+
+Until all gates pass, existing browser storage remains the live compatibility store. Do not claim native SQLCipher is canonical or migrate live user data.
 
 ## 3. Financial and booking invariants
 
