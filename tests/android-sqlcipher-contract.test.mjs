@@ -161,3 +161,16 @@ test('direct dependencies meet patched Capacitor and sharp security floors', () 
   assert.match(manifest.devDependencies['@capacitor/cli'], /^\^7\.6\.9$/);
   assert.match(manifest.devDependencies.sharp, /^\^0\.35\.5$/);
 });
+
+test('native guest photos are encrypted at rest with a per-install Keystore AES-GCM key', () => {
+  assert.match(patch, /PHOTO_KEY_ALIAS/);
+  assert.match(patch, /PHOTO_ENVELOPE_VERSION/);
+  assert.match(patch, /KeyProperties\.BLOCK_MODE_GCM/);
+  assert.match(patch, /AES\/GCM\/NoPadding/);
+  assert.match(patch, /photoAad\(key\)/);
+  assert.match(patch, /android\.util\.AtomicFile/);
+  assert.match(patch, /writePhoto\(file, key, legacy\)/);
+  assert.match(patch, /Photo archive Keystore key is missing; refusing to replace it/);
+  assert.match(patch, /validatePhotoData/);
+  assert.doesNotMatch(patch, /writeText\(photoFile|readText\(file\)/);
+});
