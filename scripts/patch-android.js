@@ -20,15 +20,8 @@ const forbiddenPermissions = [
   'android.permission.MANAGE_EXTERNAL_STORAGE'
 ];
 for (const permission of forbiddenPermissions) {
-  const declaration = new RegExp('\\\\s*<uses-permission\\\\b(?=[^>]*android:name=["\\\\']' + permission.replace(/[.*+?^${}()|[\\\\]\\\\]/g, '\\\\if (!manifest.includes('android.permission.READ_EXTERNAL_STORAGE')) {
-  manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <application');
-}
-if (!manifest.includes('android.permission.CAMERA')) {
-  manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="android.permission.CAMERA" />\n    <application');
-}
-if (!manifest.includes('android.permission.WRITE_EXTERNAL_STORAGE')) {
-  manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />\n    <application');
-}') + '["\\\\'])[^>]*/>', 'g');
+  const escaped = permission.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+  const declaration = new RegExp('\\\\s*<uses-permission\\\\b(?=[^>]*android:name=["\\\\']' + escaped + '["\\\\'])[^>]*/>', 'g');
   manifest = manifest.replace(declaration, '');
 }
 fs.writeFileSync(manifestPath, manifest);
