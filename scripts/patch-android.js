@@ -66,10 +66,10 @@ if (fs.existsSync(appGradleGroovy)) {
   }
   if (!gradle.includes('androidx.sqlite:sqlite:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match =>
-      match + "\n    implementation 'androidx.sqlite:sqlite:2.7.0'");
+      match + "\n    implementation 'androidx.sqlite:sqlite:2.7.0'\n    implementation 'androidx.biometric:biometric:1.2.0'");
   }
   if (!gradle.includes('net.zetetic:sqlcipher-android:4.20.0@aar') ||
-      !gradle.includes('androidx.sqlite:sqlite:2.7.0')) {
+      !gradle.includes('androidx.sqlite:sqlite:2.7.0') ||\n      !gradle.includes('androidx.biometric:biometric:1.2.0')) {
     throw new Error('SQLCipher Android dependencies could not be installed into the generated Gradle project.');
   }
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
@@ -93,14 +93,14 @@ const proguardRules = [
   '-keep class com.aurelia.pms.MainActivity$AureliaBridge { *; }',
   '-keep class com.aurelia.pms.CapacitorPmsStoragePlugin { *; }',
   '-keep class com.aurelia.pms.LocalPmsRepository { *; }',
-  '-keep class com.aurelia.pms.PmsDatabaseKeyManager { *; }',
+  '-keep class com.aurelia.pms.PmsDatabaseKeyManager { *; }',\n  '-keep class com.aurelia.pms.PmsUnlockManager { *; }',
   '-keep class net.zetetic.database.** { *; }',
   ''
 ].join('\n');
 fs.writeFileSync(path.join(appModuleDir, 'proguard-rules.pro'), proguardRules);
 
 const nativeTemplates = [
-  'PmsDatabaseKeyManager.java',
+  'PmsDatabaseKeyManager.java',\n  'PmsUnlockManager.java',
   'LocalPmsRepository.java',
   'CapacitorPmsStoragePlugin.java',
   'StorageSerializationException.java'
