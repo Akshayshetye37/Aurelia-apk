@@ -144,6 +144,14 @@ import java.io.OutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.KeyStore;
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
+import android.util.AtomicFile;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -395,20 +403,109 @@ public class MainActivity extends BridgeActivity {
   private void photoResult(String id, boolean ok, String payload) {
     js("window.aureliaNativePhotoResult && window.aureliaNativePhotoResult(" + q(id) + "," + ok + "," + q(payload) + ")");
   }
-  private String readText(java.io.File file) throws Exception {
-    try (java.io.FileInputStream in = new java.io.FileInputStream(file);
-         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
-      byte[] buffer = new byte[8192];
-      int count;
-      while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
-      return new String(out.toByteArray(), StandardCharsets.UTF_8);
+  private static final String PHOTO_KEY_ALIAS = "com.aurelia.pms.photo.archive.v1";
+  private static final int PHOTO_ENVELOPE_VERSION = 1;
+  private static final int PHOTO_MAX_CHARS = 20 * 1024 * 1024;
+  private static final int PHOTO_IV_BYTES = 12;
+
+  private SecretKey photoArchiveKey() throws Exception {
+    KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+    store.load(null);
+    if (store.containsAlias(PHOTO_KEY_ALIAS)) {
+      KeyStore.Entry entry = store.getEntry(PHOTO_KEY_ALIAS, null);
+      if (!(entry instanceof KeyStore.SecretKeyEntry)) throw new SecurityException("Photo archive key type is invalid.");
+      return ((KeyStore.SecretKeyEntry) entry).getSecretKey();
+    }
+    KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
+    generator.init(new KeyGenParameterSpec.Builder(PHOTO_KEY_ALIAS,
+        KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+        .setKeySize(256)
+        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+        .setRandomizedEncryptionRequired(true)
+        .build());
+    return generator.generateKey();
+  }
+
+  private byte[] photoAad(String key) {
+    if (key == null || !key.matches("[A-Za-z0-9_-]{1,120}")) throw new IllegalArgumentException("Invalid photo key");
+    return ("com.aurelia.pms|photo-archive|" + key + "|v1").getBytes(StandardCharsets.UTF_8);
+  }
+
+  private void validatePhotoData(String value) {
+    if (value == null || value.length() > PHOTO_MAX_CHARS ||
+        !value.matches("(?i)^data:image/(png|jpeg|webp);base64,[a-z0-9+/]*={0,2}$")) {
+      throw new IllegalArgumentException("Photo must be a bounded PNG, JPEG or WebP data URL.");
     }
   }
-  private void writeText(java.io.File file, String value) throws Exception {
-    try (java.io.FileOutputStream out = new java.io.FileOutputStream(file)) {
-      out.write(value.getBytes(StandardCharsets.UTF_8));
-      out.flush();
-      out.getFD().sync();
+
+  private void writePhoto(java.io.File file, String key, String value) throws Exception {
+    validatePhotoData(value);
+    byte[] plain = value.getBytes(StandardCharsets.UTF_8);
+    byte[] encrypted = null, iv = null, packed = null;
+    android.util.AtomicFile atomic = new android.util.AtomicFile(file);
+    java.io.FileOutputStream output = null;
+    try {
+      Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+      cipher.init(Cipher.ENCRYPT_MODE, photoArchiveKey());
+      cipher.updateAAD(photoAad(key));
+      iv = cipher.getIV();
+      encrypted = cipher.doFinal(plain);
+      if (iv == null || iv.length != PHOTO_IV_BYTES) throw new SecurityException("Photo encryption IV is invalid.");
+      packed = new byte[1 + PHOTO_IV_BYTES + encrypted.length];
+      packed[0] = (byte) PHOTO_ENVELOPE_VERSION;
+      System.arraycopy(iv, 0, packed, 1, PHOTO_IV_BYTES);
+      System.arraycopy(encrypted, 0, packed, 1 + PHOTO_IV_BYTES, encrypted.length);
+      output = atomic.startWrite();
+      output.write(packed);
+      output.flush();
+      output.getFD().sync();
+      atomic.finishWrite(output);
+      output = null;
+    } catch (Exception error) {
+      if (output != null) atomic.failWrite(output);
+      throw error;
+    } finally {
+      java.util.Arrays.fill(plain, (byte) 0);
+      if (encrypted != null) java.util.Arrays.fill(encrypted, (byte) 0);
+      if (iv != null) java.util.Arrays.fill(iv, (byte) 0);
+      if (packed != null) java.util.Arrays.fill(packed, (byte) 0);
+    }
+  }
+
+  private String readPhoto(java.io.File file, String key) throws Exception {
+    byte[] packed = null, iv = null, encrypted = null, plain = null;
+    try (java.io.FileInputStream input = new android.util.AtomicFile(file).openRead();
+         java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+      byte[] buffer = new byte[8192];
+      int count;
+      while ((count = input.read(buffer)) != -1) {
+        if (output.size() + count > PHOTO_MAX_CHARS + 64) throw new SecurityException("Photo archive file exceeds its size limit.");
+        output.write(buffer, 0, count);
+      }
+      packed = output.toByteArray();
+      if (packed.length == 0) throw new SecurityException("Photo archive file is empty.");
+      if (packed[0] != (byte) PHOTO_ENVELOPE_VERSION) {
+        String legacy = new String(packed, StandardCharsets.UTF_8);
+        validatePhotoData(legacy);
+        writePhoto(file, key, legacy);
+        return legacy;
+      }
+      if (packed.length < 1 + PHOTO_IV_BYTES + 16) throw new SecurityException("Encrypted photo envelope is truncated.");
+      iv = java.util.Arrays.copyOfRange(packed, 1, 1 + PHOTO_IV_BYTES);
+      encrypted = java.util.Arrays.copyOfRange(packed, 1 + PHOTO_IV_BYTES, packed.length);
+      Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+      cipher.init(Cipher.DECRYPT_MODE, photoArchiveKey(), new GCMParameterSpec(128, iv));
+      cipher.updateAAD(photoAad(key));
+      plain = cipher.doFinal(encrypted);
+      String value = new String(plain, StandardCharsets.UTF_8);
+      validatePhotoData(value);
+      return value;
+    } finally {
+      if (packed != null) java.util.Arrays.fill(packed, (byte) 0);
+      if (iv != null) java.util.Arrays.fill(iv, (byte) 0);
+      if (encrypted != null) java.util.Arrays.fill(encrypted, (byte) 0);
+      if (plain != null) java.util.Arrays.fill(plain, (byte) 0);
     }
   }
 
@@ -462,20 +559,20 @@ public class MainActivity extends BridgeActivity {
         if ("photoStore".equals(type)) {
           String key = obj.optString("key", "");
           String data = obj.optString("data", "");
-          if (!data.startsWith("data:image/")) throw new IllegalArgumentException("Invalid photo data");
-          writeText(photoFile(key), data);
+          validatePhotoData(data);
+          writePhoto(photoFile(key), key, data);
           photoResult(requestId, true, "stored");
         } else if ("photoLoad".equals(type)) {
           String key = obj.optString("key", "");
           java.io.File file = photoFile(key);
           if (!file.isFile()) photoResult(requestId, false, "Original photo not found on this device");
-          else photoResult(requestId, true, readText(file));
+          else photoResult(requestId, true, readPhoto(file, key));
         } else if ("photoArchive".equals(type)) {
           JSONObject archive = new JSONObject();
           java.io.File[] files = photoDir().listFiles((dir, name) -> name.endsWith(".txt"));
           if (files != null) for (java.io.File file : files) {
             String key = file.getName().substring(0, file.getName().length() - 4);
-            archive.put(key, readText(file));
+            archive.put(key, readPhoto(file, key));
           }
           photoResult(requestId, true, archive.toString());
         } else if ("photoRestore".equals(type)) {
@@ -486,24 +583,25 @@ public class MainActivity extends BridgeActivity {
           java.util.LinkedHashMap<String, java.io.File> staged = new java.util.LinkedHashMap<>();
           java.io.File archiveDir = photoDir();
           java.io.File[] existingPhotos = archiveDir.listFiles((dir, name) -> name.endsWith(".txt"));
-          if (existingPhotos != null) for (java.io.File existing : existingPhotos) previous.put(existing.getName().substring(0, existing.getName().length() - 4), readText(existing));
+          if (existingPhotos != null) for (java.io.File existing : existingPhotos) previous.put(existing.getName().substring(0, existing.getName().length() - 4), readPhoto(existing, existing.getName().substring(0, existing.getName().length() - 4)));
           java.io.File stageDir = new java.io.File(archiveDir, ".restore-" + System.currentTimeMillis());
           if (!stageDir.mkdirs()) throw new IllegalStateException("Could not create photo restore staging area");
           try {
             java.util.Iterator<String> keys = archive.keys();
             while (keys.hasNext()) {
               String key = keys.next(), data = archive.optString(key, "");
-              if (key == null || !key.matches("[A-Za-z0-9_-]{1,120}") || !data.startsWith("data:image/")) throw new IllegalArgumentException("Invalid archived image or photo key");
+              if (key == null || !key.matches("[A-Za-z0-9_-]{1,120}")) throw new IllegalArgumentException("Invalid archived photo key");
+              validatePhotoData(data);
               incoming.put(key, data);
               java.io.File temp = new java.io.File(stageDir, key + ".txt");
-              writeText(temp, data);
-              if (!data.equals(readText(temp))) throw new IllegalStateException("Staged photo verification failed for " + key);
+              writePhoto(temp, key, data);
+              if (!data.equals(readPhoto(temp, key))) throw new IllegalStateException("Staged photo verification failed for " + key);
               staged.put(key, temp);
             }
             for (java.util.Map.Entry<String, java.io.File> entry : staged.entrySet()) {
-              String data = readText(entry.getValue());
-              writeText(photoFile(entry.getKey()), data);
-              if (!data.equals(readText(photoFile(entry.getKey())))) throw new IllegalStateException("Restored photo verification failed for " + entry.getKey());
+              String key = entry.getKey(), data = readPhoto(entry.getValue(), key);
+              writePhoto(photoFile(key), key, data);
+              if (!data.equals(readPhoto(photoFile(key), key))) throw new IllegalStateException("Restored photo verification failed for " + entry.getKey());
             }
             java.io.File[] currentPhotos = archiveDir.listFiles((dir, name) -> name.endsWith(".txt"));
             if (currentPhotos != null) for (java.io.File current : currentPhotos) {
@@ -517,7 +615,7 @@ public class MainActivity extends BridgeActivity {
           } catch (Exception restoreError) {
             Exception rollbackError = null;
             for (java.util.Map.Entry<String, String> entry : previous.entrySet()) {
-              try { writeText(photoFile(entry.getKey()), entry.getValue()); }
+              try { writePhoto(photoFile(entry.getKey()), entry.getKey(), entry.getValue()); }
               catch (Exception e) { rollbackError = e; }
             }
             for (String key : incoming.keySet()) if (!previous.containsKey(key)) {
