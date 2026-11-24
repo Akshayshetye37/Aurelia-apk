@@ -34,6 +34,17 @@ This source-level audit was performed against `main`. Findings are ranked by imp
 8. **MEDIUM — dynamic HTML and inline event handlers remain an XSS attack surface.** Added JSON-string encoding for dynamic inline-handler arguments in guest contact, reservation, room and menu-category flows; escaped room, guest, menu, logo and booking preview values; and escaped confirmation dialog text while constraining callback names/arguments. The codebase still contains many `innerHTML` renderers and permits inline scripts in CSP; this is a partial mitigation, not a complete XSS audit. Continue migrating renderers to DOM APIs and test backup-imported strings.
 9. **NOT FOUND IN REVIEWED QUERIES — SQL injection and committed static secrets.** Reviewed SQL queries use bound parameters for dynamic values; schema `execSQL` statements are static. No common hard-coded key/token patterns were found in the inspected app and native source. This is not a complete repository-history secret scan.
 
+## Verification performed
+
+- Executed the source contract test cases through a repository-backed JavaScript harness: **27 passed, 0 failed**.
+- Executed manifest/release-helper behavior checks: **7 passed, 0 failed**.
+- Parsed the Android patch script and manifest helper JavaScript successfully.
+- Parsed all **18** inline JavaScript blocks in `index.html` successfully.
+- Exercized the HTTPS booking-URL validator and hostile inline-handler argument round-trip cases.
+- Confirmed the current `main` head has no reported combined-status checks. The GitHub connector returned no workflow-run records for this commit.
+
+**Not verified:** the actual `npm test` command, lockfile-based `npm audit`, Java/Gradle compilation, merged Android manifest, APK build, physical-device biometric/Keystore behavior, backup encryption, or a full Git-history secret scan. No APK was built during this audit.
+
 ## Address before production
 
 1. **UPI QR generation uses a third-party endpoint.** The QR image URL includes an encoded UPI payment URI. That URI can contain the payee, amount, guest-related text, and transaction reference. Prefer generating QR images locally or in a trusted backend, and avoid sending guest/payment details to third-party URL services.
