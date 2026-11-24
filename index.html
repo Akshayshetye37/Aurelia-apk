@@ -1702,12 +1702,25 @@ body:has(#sh.show) #hor-book, body:has(#sh.show) #hor-search{display:none!import
    * no payments ledger beyond amounts on the booking, no exports of other modules.
    */
 
+  function validatedBookingApiBaseUrl(value) {
+    try {
+      var parsed = new URL(String(value || "").trim());
+      if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password) return "";
+      parsed.search = "";
+      parsed.hash = "";
+      return parsed.href.replace(/\/+$/, "");
+    } catch (e) {
+      return "";
+    }
+  }
+
   function bookingApiCfg() {
     var s = (window.S && S.set) || {};
+    var baseUrl = validatedBookingApiBaseUrl(s.bookingApiUrl);
     return {
-      enabled: !!s.bookingApiEnabled,
-      baseUrl: (s.bookingApiUrl || "").replace(/\/$/, ""),
-      apiKey: s.bookingApiKey || "",
+      enabled: !!s.bookingApiEnabled && !!baseUrl,
+      baseUrl: baseUrl,
+      apiKey: baseUrl ? (s.bookingApiKey || "") : "",
       includePast: s.bookingApiIncludePast !== false,
       includeCurrent: s.bookingApiIncludeCurrent !== false
     };
