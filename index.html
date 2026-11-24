@@ -629,7 +629,7 @@ S.rooms.forEach(x=>x.demo=1);S.b.forEach(x=>{x.demo=1;x.pays=[]});S.g.forEach((g
 S.b[1].pays=[{a:1000,m:'UPI',r:'',at:new Date().toISOString()}];
 const gOf=n=>S.g.find(g=>g.n===n),paid=b=>(b.pays||[]).reduce((a,x)=>a+x.a,0),catOf=x=>x[2]||(/dining|dinner|breakfast|lunch/i.test(x[0])?'din':'ext');
 const lines=b=>[[`Room ${esc(String(b.room))} · ${nts(b)} night${nts(b)>1?'s':''}`,nts(b)*(rm(b.room)||{r:0}).r],...b.ch];
-const ask=(t,m,l,c)=>openS(`<h2 class="foil">${t}</h2><p class="lab">${m}</p><div class="row"><button class="btn ghost sm" onclick="closeS()">Keep it</button><button class="btn sm" onclick="closeS();${c}">${l}</button></div>`);
+const ask=(t,m,l,c)=>{if(!/^[A-Za-z_$][A-Za-z0-9_$]*\((?:\d+)?\);?$/.test(String(c||""))){toast("Confirmation action is invalid");return}openS(`<h2 class="foil">${esc(t)}</h2><p class="lab">${esc(m)}</p><div class="row"><button class="btn ghost sm" onclick="closeS()">Keep it</button><button class="btn sm" onclick="closeS();${c}">${esc(l)}</button></div>`)};
 const syncT=()=>{types.length=0;const m=new Map();S.rooms.forEach(r=>{if(!m.has(r.t))m.set(r.t,r.r)});m.forEach((r,t)=>types.push([t,r]))};
 const free=(n,a,z,ex)=>!S.b.some(b=>b.id!==ex&&b.room===n&&b.st!=='done'&&b.in<z&&b.out>a);
 const idMissing=g=>{if(!g)return'the guest profile is missing';if(!g.idn||!g.img)return'the primary guest has no ID photo or number';const o=(g.occ||[]).findIndex(x=>!x.idn||!x.img);return o>=0?`occupant ${o+1} has no ID photo or number`:''};
