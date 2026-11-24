@@ -219,3 +219,10 @@ test('guest WhatsApp handler arguments are JSON encoded without nested single-qu
   assert.match(html, /guestWhatsAppAction\('\+jsArg\(p\.replace/);
   assert.doesNotMatch(html, /guestWhatsAppAction\(\\\\''\+esc\(p\.replace/);
 });
+
+test('main WebView rejects mixed content and file-origin privilege escalation', () => {
+  assert.match(patch, /MIXED_CONTENT_NEVER_ALLOW/);
+  assert.match(patch, /setAllowFileAccessFromFileURLs\(false\)/);
+  assert.match(patch, /setAllowUniversalAccessFromFileURLs\(false\)/);
+  assert.match(patch, /setSafeBrowsingEnabled\(true\)/);
+});
