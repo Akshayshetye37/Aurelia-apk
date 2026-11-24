@@ -31,7 +31,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
 
   private static byte[] loadDatabaseKey(Context context) {
     System.loadLibrary("sqlcipher");
-    return PmsDatabaseKeyManager.getOrCreateDatabaseKey(context);
+    return PmsDatabaseKeyManager.requireUnlockedDatabaseKey(context);
   }
 
   @Override public synchronized void close() {
