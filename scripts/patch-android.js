@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { stripForbiddenPermissions, hardenGroovyReleaseBuild } = require('./android-manifest-security.cjs');
+const { stripForbiddenPermissions, disableManifestBackup, hardenGroovyReleaseBuild } = require('./android-manifest-security.cjs');
 
 const androidDir = path.join(__dirname, '..', 'android');
 const appDir = path.join(androidDir, 'app', 'src', 'main');
@@ -14,6 +14,7 @@ if (!manifest.includes('android.permission.INTERNET')) {
 }
 // Use Android Photo Picker and Storage Access Framework; remove broad permissions.
 manifest = stripForbiddenPermissions(manifest);
+manifest = disableManifestBackup(manifest);
 fs.writeFileSync(manifestPath, manifest);
 
 
