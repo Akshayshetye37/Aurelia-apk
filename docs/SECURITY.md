@@ -116,3 +116,14 @@ Do not process real guest data or payments until client-side secrets have been r
 ### Production release gate
 
 Do not process real guest identity data or real payments until the active store has enforced unlock/authorization, backup exports are encrypted and authenticated, client-held bearer tokens are removed, dynamic HTML/XSS risk is comprehensively addressed, external QR metadata transmission is removed or formally accepted, dependency lockfile/audit gates pass, and exact-SHA Android plus physical-device verification succeeds.
+
+
+## Verification correction — 25 November 2026
+
+The first successful run of the initial Gitleaks workflow (run 45478310828) **did not scan full repository history**. Its log reports that the Gitleaks Action ignored the supplied `args` input and executed a PR-range scan limited to three commits (`8b057555c314703a3e287e13cecfd11060031158^..050f11556bd84f939519b151ee7273fecc2cd446`). It reported no leaks in that limited range only. It is not evidence that all branches, tags or historical commits are clean.
+
+The workflow has been corrected to install Gitleaks CLI v8.24.3 and run `gitleaks git --log-opts="--all --full-history"` after a full-depth checkout with tags. **The corrected full-history scan is pending and must pass before this PR can be treated as having completed its history scan.** If it finds a credential, treat it as compromised and rotate/revoke it at the issuer regardless of whether the credential remains active in the current tree.
+
+The booking API bearer token must also be rotated at its issuing service regardless of the Gitleaks result. The token is stored in browser-backed application state and could have been included in distributed app state or plaintext backup exports. A clean repository scan cannot establish that a previously distributed app or backup never exposed it. The repository change does not itself revoke a credential at an external issuer.
+
+The source inventory figures in the 25 November audit section (43 `.innerHTML =`, 7 `insertAdjacentHTML`, 2 `document.write`, 280 inline event handlers) are the authoritative current baseline. Earlier approximate counts in the 24 November preliminary review are historical notes, not the current ratchet baseline.
