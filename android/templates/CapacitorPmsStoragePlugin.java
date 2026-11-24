@@ -5,7 +5,7 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;\nimport androidx.biometric.BiometricPrompt;\nimport androidx.biometric.BiometricManager;\nimport androidx.core.content.ContextCompat;\nimport androidx.fragment.app.FragmentActivity;\nimport java.util.concurrent.Executor;
-import android.database.sqlite.SQLiteFullException;
+import android.database.sqlite.SQLiteFullException;\nimport android.app.AlertDialog;\nimport android.text.InputType;\nimport android.widget.EditText;\nimport android.widget.LinearLayout;\nimport android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.concurrent.ExecutorService;
@@ -74,29 +74,71 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
   }
 
   @PluginMethod public void setupDatabaseUnlock(PluginCall call) {
-    String pin=call.getString("pin");
-    io.execute(() -> { try {
-      String recovery=PmsUnlockManager.setup(getContext(),pin);
-      JSObject result=new JSObject(); result.put("configured",true); result.put("recoveryKey",recovery);
-      result.put("pinPolicy","8-12 digits"); result.put("kdf","PBKDF2-HMAC-SHA256-600000");
-      call.resolve(result);
-    } catch(Exception e) { call.reject("PMS unlock setup failed", "PMS_UNLOCK_SETUP_FAILED", e); } });
+    getActivity().runOnUiThread(() -> {
+      LinearLayout layout=new LinearLayout(getContext()); layout.setOrientation(LinearLayout.VERTICAL);
+      int pad=(int)(20*getContext().getResources().getDisplayMetrics().density);
+      layout.setPadding(pad,pad,pad,0);
+      EditText pin=new EditText(getContext()); pin.setHint("New 8-12 digit PIN");
+      pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+      EditText confirm=new EditText(getContext()); confirm.setHint("Confirm PIN");
+      confirm.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+      layout.addView(pin); layout.addView(confirm);
+      AlertDialog dialog=new AlertDialog.Builder(getActivity()).setTitle("Secure Aurelia PMS")
+        .setMessage("Create a database PIN. Your recovery key will be shown once.")
+        .setView(layout).setNegativeButton("Cancel",(d,w)->call.reject("Unlock setup cancelled","PMS_UNLOCK_CANCELLED"))
+        .setPositiveButton("Create secure key",null).create();
+      dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+        String first=pin.getText().toString(),second=confirm.getText().toString();
+        if(!first.equals(second)){confirm.setError("PIN entries do not match");return;}
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+        io.execute(()->{try{
+          String recovery=PmsUnlockManager.setup(getContext(),first);
+          getActivity().runOnUiThread(()->{
+            TextView code=new TextView(getContext()); code.setText(recovery); code.setTextIsSelectable(true);
+            code.setTextSize(16); code.setPadding(pad,pad,pad,pad);
+            new AlertDialog.Builder(getActivity()).setTitle("Save your recovery key")
+              .setMessage("This key is shown once. Store it offline. Anyone with this key can unlock the encrypted PMS database.")
+              .setView(code).setCancelable(false).setPositiveButton("I saved it",(d,w)->{
+                JSObject result=new JSObject();result.put("configured",true);result.put("recoveryKeyDisplayed",true);
+                result.put("pinPolicy","8-12 digits");result.put("kdf","PBKDF2-HMAC-SHA256-600000");call.resolve(result);
+              }).show();
+          });
+        }catch(Exception e){getActivity().runOnUiThread(()->{dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);confirm.setError(e.getMessage());});}
+        });
+      }));
+      dialog.show();
+    });
   }
 
   @PluginMethod public void unlockDatabaseWithPin(PluginCall call) {
-    String pin=call.getString("pin");
-    io.execute(() -> { try {
-      PmsUnlockManager.unlockWithPin(getContext(),pin);
-      JSObject result=new JSObject(); result.put("unlocked",true); result.put("factor","pin"); call.resolve(result);
-    } catch(Exception e) { call.reject("PIN unlock failed", "PMS_PIN_UNLOCK_FAILED", e); } });
+    promptUnlockSecret(call,true);
   }
 
   @PluginMethod public void unlockDatabaseWithRecovery(PluginCall call) {
-    String recovery=call.getString("recoveryKey");
-    io.execute(() -> { try {
-      PmsUnlockManager.unlockWithRecovery(getContext(),recovery);
-      JSObject result=new JSObject(); result.put("unlocked",true); result.put("factor","recovery"); call.resolve(result);
-    } catch(Exception e) { call.reject("Recovery-key unlock failed", "PMS_RECOVERY_UNLOCK_FAILED", e); } });
+    promptUnlockSecret(call,false);
+  }
+
+  private void promptUnlockSecret(PluginCall call,boolean pinMode) {
+    getActivity().runOnUiThread(()->{
+      EditText input=new EditText(getContext());
+      input.setHint(pinMode?"Enter database PIN":"Enter recovery key");
+      input.setInputType(pinMode?InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD:
+          InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+      AlertDialog dialog=new AlertDialog.Builder(getActivity())
+        .setTitle(pinMode?"Unlock Aurelia PMS":"Recover Aurelia PMS")
+        .setView(input).setNegativeButton("Cancel",(d,w)->call.reject("Unlock cancelled","PMS_UNLOCK_CANCELLED"))
+        .setPositiveButton("Unlock",null).create();
+      dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+        String secret=input.getText().toString();dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+        io.execute(()->{try{
+          if(pinMode)PmsUnlockManager.unlockWithPin(getContext(),secret);
+          else PmsUnlockManager.unlockWithRecovery(getContext(),secret);
+          JSObject result=new JSObject();result.put("unlocked",true);result.put("factor",pinMode?"pin":"recovery");call.resolve(result);
+          getActivity().runOnUiThread(dialog::dismiss);
+        }catch(Exception e){getActivity().runOnUiThread(()->{dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);input.setError("Unlock failed or temporarily rate-limited");});}});
+      }));
+      dialog.show();
+    });
   }
 
   @PluginMethod public void enableBiometricUnlock(PluginCall call) {
