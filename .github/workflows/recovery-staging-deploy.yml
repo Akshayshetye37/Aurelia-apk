@@ -137,7 +137,7 @@ jobs:
             echo "::error::GCP_WORKLOAD_IDENTITY_PROVIDER must be a full Google WIF provider resource name."
             exit 1
           fi
-          if [[ ! "$DEPLOY_SERVICE_ACCOUNT" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.iam\\.gserviceaccount\\.com$ ]]; then
+          if [[ ! "$DEPLOY_SERVICE_ACCOUNT" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$ ]]; then
             echo "::error::STAGING_DEPLOY_SERVICE_ACCOUNT must be a Google service-account email."
             exit 1
           fi
