@@ -251,3 +251,27 @@ test('inspected app and native sources contain no common committed secret format
     /\bAIza[0-9A-Za-z_-]{30,}\b/
   ]) assert.doesNotMatch(source, pattern);
 });
+
+test('booking API URL validator rejects HTTP, credentials and strips query/fragment', () => {
+  const html = read('index.html');
+  const match = html.match(/function validatedBookingApiBaseUrl\(value\) \{[\s\S]*?\n  \}/);
+  assert.ok(match, 'booking URL validator is present');
+  const validate = new Function(match[0] + '\nreturn validatedBookingApiBaseUrl;')();
+  assert.equal(validate('https://api.example.com/v1'), 'https://api.example.com/v1');
+  assert.equal(validate('http://api.example.com'), '');
+  assert.equal(validate('https://user:pass@example.com'), '');
+  assert.equal(validate('https://api.example.com/v1?secret=1#frag'), 'https://api.example.com/v1');
+});
+
+test('JSON handler encoder round-trips hostile strings without breaking inline JavaScript context', () => {
+  const html = read('index.html');
+  const match = html.match(/^const esc=.*\nconst jsArg=.*$/m);
+  assert.ok(match, 'HTML and JavaScript context encoders are present');
+  const encode = new Function(match[0] + '\nreturn jsArg;')();
+  const input = "O'Brian \" </script> <img src=x onerror=alert(1)> &\n";
+  const encoded = encode(input);
+  const decoded = encoded.replace(/&(quot|lt|gt|amp);/g, (_, entity) => ({
+    quot: '"', lt: '<', gt: '>', amp: '&'
+  })[entity]);
+  assert.equal(JSON.parse(decoded), input);
+});
