@@ -15,7 +15,7 @@ import java.nio.charset.StandardCharsets;
 /** Durable local entity, migration-snapshot and transactional outbox store. */
 final class LocalPmsRepository extends SQLiteOpenHelper {
   private static final String NAME = "aurelia-pms.db";
-  private static final int VERSION = 5;
+  private static final int VERSION = 6;
   private static final String MIGRATION_KEY = "legacy-localstorage";
   private static final String[] LEGACY_ARRAYS = {"rooms","b","g","t","exp","inv","led","aud"};
   private final byte[] databaseKey;
@@ -43,8 +43,8 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   @Override public void onCreate(SQLiteDatabase db) {
     db.execSQL("PRAGMA foreign_keys=ON");
     db.execSQL("CREATE TABLE pms_entities(entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,version INTEGER NOT NULL CHECK(version>=1),data_json TEXT NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(entity_type,entity_id))");
-    db.execSQL("CREATE TABLE pms_outbox(event_id TEXT PRIMARY KEY NOT NULL,tenant_id TEXT NOT NULL,property_id TEXT NOT NULL,device_id TEXT NOT NULL,entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence>=1),event_type TEXT NOT NULL,schema_version INTEGER NOT NULL,occurred_at TEXT NOT NULL,payload_json TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('PENDING','IN_FLIGHT','ACKNOWLEDGED','RETRY','CONFLICT')),attempts INTEGER NOT NULL DEFAULT 0,retry_at TEXT,lease_owner TEXT,lease_until INTEGER,last_error_code TEXT,created_at INTEGER NOT NULL,acknowledged_at INTEGER,UNIQUE(entity_type,entity_id,sequence))");
-    db.execSQL("CREATE INDEX pms_outbox_delivery_idx ON pms_outbox(status,retry_at,created_at)");
+    db.execSQL("CREATE TABLE pms_outbox(event_id TEXT PRIMARY KEY NOT NULL,tenant_id TEXT NOT NULL,property_id TEXT NOT NULL,device_id TEXT NOT NULL,entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence>=1),event_type TEXT NOT NULL,schema_version INTEGER NOT NULL,occurred_at TEXT NOT NULL,payload_json TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('PENDING','IN_FLIGHT','ACKNOWLEDGED','RETRY','CONFLICT')),attempts INTEGER NOT NULL DEFAULT 0,retry_at_ms INTEGER,lease_owner TEXT,lease_until INTEGER,last_error_code TEXT,created_at INTEGER NOT NULL,acknowledged_at INTEGER,UNIQUE(entity_type,entity_id,sequence))");
+    db.execSQL("CREATE INDEX pms_outbox_delivery_idx ON pms_outbox(status,retry_at_ms,created_at)");
     db.execSQL("CREATE TABLE pms_migrations(migration_key TEXT PRIMARY KEY NOT NULL,migration_id TEXT NOT NULL,source_key TEXT NOT NULL,completed_at INTEGER NOT NULL,entity_count INTEGER NOT NULL)");
     db.execSQL("CREATE TABLE pms_migration_snapshots(snapshot_id TEXT PRIMARY KEY NOT NULL,source_key TEXT NOT NULL,raw_json TEXT NOT NULL,source_timestamp TEXT NOT NULL,created_at INTEGER NOT NULL,format_version INTEGER NOT NULL)");
     db.execSQL("CREATE TABLE pms_meta(meta_key TEXT PRIMARY KEY NOT NULL,value_json TEXT NOT NULL,updated_at INTEGER NOT NULL)");
@@ -66,6 +66,21 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       db.execSQL("INSERT OR IGNORE INTO pms_authority(singleton,state,migration_id,updated_at) VALUES(1,'legacy',NULL,0)");
     }
     if(oldVersion<5) db.execSQL("CREATE TABLE IF NOT EXISTS pms_migration_checkpoints(migration_id TEXT NOT NULL,table_name TEXT NOT NULL,last_id TEXT NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(migration_id,table_name))");
+    if(oldVersion<6) {
+      db.execSQL("ALTER TABLE pms_outbox ADD COLUMN retry_at_ms INTEGER");
+      try(Cursor legacy=db.rawQuery("SELECT event_id,retry_at FROM pms_outbox WHERE retry_at IS NOT NULL",null)) {
+        while(legacy.moveToNext()) {
+          double parsed=parseDate(legacy.getString(1));
+          if(!Double.isFinite(parsed)||parsed<0d||parsed>9007199254740991d)
+            throw new IllegalStateException("legacy_outbox_retry_timestamp_invalid");
+          ContentValues migrated=new ContentValues();migrated.put("retry_at_ms",(long)parsed);
+          if(db.update("pms_outbox",migrated,"event_id=?",new String[]{legacy.getString(0)})!=1)
+            throw new IllegalStateException("legacy_outbox_retry_migration_mismatch");
+        }
+      }
+      db.execSQL("DROP INDEX IF EXISTS pms_outbox_delivery_idx");
+      db.execSQL("CREATE INDEX pms_outbox_delivery_idx ON pms_outbox(status,retry_at_ms,created_at)");
+    }
     if(newVersion>VERSION) throw new IllegalStateException("Explicit versioned PMS repository migration required");
   }
 
@@ -200,9 +215,9 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     validateIdentity(deviceId,"device ID");if(limit<1||limit>100||leaseMs<1000||leaseMs>3600000)throw new IllegalArgumentException("invalid_outbox_lease");
     SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
     try {
-      long now=System.currentTimeMillis(),until=now+leaseMs;String isoNow=isoTimestamp(now);
+      long now=System.currentTimeMillis(),until=now+leaseMs;
       JSONArray rows=new JSONArray();
-      try(Cursor c=db.rawQuery("SELECT event_id,tenant_id,property_id,device_id,entity_type,entity_id,sequence,event_type,schema_version,occurred_at,payload_json,status,attempts,retry_at,lease_owner,lease_until,last_error_code,created_at,acknowledged_at FROM pms_outbox WHERE status='PENDING' OR (status='RETRY' AND (retry_at IS NULL OR retry_at<=?)) OR (status='IN_FLIGHT' AND lease_until<=?) ORDER BY created_at ASC,sequence ASC LIMIT ?",new String[]{isoNow,String.valueOf(now),String.valueOf(limit)})) {
+      try(Cursor c=db.rawQuery("SELECT event_id,tenant_id,property_id,device_id,entity_type,entity_id,sequence,event_type,schema_version,occurred_at,payload_json,status,attempts,retry_at_ms,lease_owner,lease_until,last_error_code,created_at,acknowledged_at FROM pms_outbox WHERE status='PENDING' OR (status='RETRY' AND (retry_at_ms IS NULL OR retry_at_ms<=?)) OR (status='IN_FLIGHT' AND lease_until<=?) ORDER BY created_at ASC,sequence ASC LIMIT ?",new String[]{String.valueOf(now),String.valueOf(now),String.valueOf(limit)})) {
         while(c.moveToNext()) {
           String eventId=c.getString(0);ContentValues update=new ContentValues();update.put("status","IN_FLIGHT");update.put("lease_owner",deviceId);update.put("lease_until",until);update.put("attempts",c.getInt(12)+1);db.update("pms_outbox",update,"event_id=?",new String[]{eventId});
           rows.put(outboxRow(c,deviceId,until,c.getInt(12)+1));
@@ -217,7 +232,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     validateIdentity(deviceId,"device ID");if(acknowledgements==null||acknowledgements.length()<1||acknowledgements.length()>100)throw new IllegalArgumentException("invalid_acknowledgements");
     SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
     try {
-      for(int i=0;i<acknowledgements.length();i++){JSONObject a=acknowledgements.getJSONObject(i);String id=a.getString("eventId");long seq=a.getLong("sequence");ContentValues v=new ContentValues();v.put("status","ACKNOWLEDGED");v.put("acknowledged_at",System.currentTimeMillis());v.put("lease_owner",(String)null);v.put("lease_until",(Long)null);v.put("retry_at",(String)null);v.put("last_error_code",(String)null);int changed=db.update("pms_outbox",v,"event_id=? AND sequence=? AND status='IN_FLIGHT' AND lease_owner=? AND lease_until>?",new String[]{id,String.valueOf(seq),deviceId,String.valueOf(System.currentTimeMillis())});if(changed!=1)throw new IllegalStateException("OUTBOX_LEASE_MISMATCH");}
+      for(int i=0;i<acknowledgements.length();i++){JSONObject a=acknowledgements.getJSONObject(i);String id=a.getString("eventId");long seq=a.getLong("sequence");ContentValues v=new ContentValues();v.put("status","ACKNOWLEDGED");v.put("acknowledged_at",System.currentTimeMillis());v.put("lease_owner",(String)null);v.put("lease_until",(Long)null);v.putNull("retry_at_ms");v.put("last_error_code",(String)null);int changed=db.update("pms_outbox",v,"event_id=? AND sequence=? AND status='IN_FLIGHT' AND lease_owner=? AND lease_until>?",new String[]{id,String.valueOf(seq),deviceId,String.valueOf(System.currentTimeMillis())});if(changed!=1)throw new IllegalStateException("OUTBOX_LEASE_MISMATCH");}
       db.setTransactionSuccessful();JSONObject result=new JSONObject();result.put("acknowledged",acknowledgements.length());return result;
     } catch(Exception e){throw e instanceof RuntimeException?(RuntimeException)e:failure("outbox_ack_failed",e);}
     finally{db.endTransaction();}
@@ -233,12 +248,12 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     validateIdentity(deviceId,"device ID");validateIdentity(eventId,"event ID");validateIdentity(errorCode,"error code");
     if("RETRY".equals(status)&& (retryAt==null||!Double.isFinite(parseDate(retryAt))))throw new IllegalArgumentException("invalid_retry_timestamp");
     SQLiteDatabase db=getWritableDatabase();db.beginTransactionNonExclusive();
-    try {ContentValues v=new ContentValues();v.put("status",status);v.put("retry_at",retryAt);v.put("last_error_code",errorCode);v.put("lease_owner",(String)null);v.put("lease_until",(Long)null);int changed=db.update("pms_outbox",v,"event_id=? AND status='IN_FLIGHT' AND lease_owner=? AND lease_until>?",new String[]{eventId,deviceId,String.valueOf(System.currentTimeMillis())});if(changed!=1)throw new IllegalStateException("OUTBOX_LEASE_MISMATCH");db.setTransactionSuccessful();return true;}
+    try {ContentValues v=new ContentValues();v.put("status",status);if(retryAt==null){v.putNull("retry_at_ms");}else{double retryAtMs=parseDate(retryAt);if(!Double.isFinite(retryAtMs)||retryAtMs<0d||retryAtMs>9007199254740991d)throw new IllegalArgumentException("invalid_retry_at");v.put("retry_at_ms",(long)retryAtMs);}v.put("last_error_code",errorCode);v.put("lease_owner",(String)null);v.put("lease_until",(Long)null);int changed=db.update("pms_outbox",v,"event_id=? AND status='IN_FLIGHT' AND lease_owner=? AND lease_until>?",new String[]{eventId,deviceId,String.valueOf(System.currentTimeMillis())});if(changed!=1)throw new IllegalStateException("OUTBOX_LEASE_MISMATCH");db.setTransactionSuccessful();return true;}
     finally{db.endTransaction();}
   }
 
   private static JSONObject outboxRow(Cursor c,String owner,long leaseUntil,int attempts) throws Exception {
-    JSONObject x=new JSONObject();x.put("eventId",c.getString(0));x.put("tenantId",c.getString(1));x.put("propertyId",c.getString(2));x.put("deviceId",c.getString(3));x.put("entityType",c.getString(4));x.put("entityId",c.getString(5));x.put("sequence",c.getLong(6));x.put("eventType",c.getString(7));x.put("schemaVersion",c.getLong(8));x.put("occurredAt",c.getString(9));x.put("payload",new JSONTokener(c.getString(10)).nextValue());x.put("status","IN_FLIGHT");x.put("attempts",attempts);x.put("retryAt",c.isNull(13)?JSONObject.NULL:c.getString(13));x.put("leaseOwner",owner);x.put("leaseUntil",isoTimestamp(leaseUntil));x.put("acknowledgedAt",c.isNull(18)?JSONObject.NULL:isoTimestamp(c.getLong(18)));x.put("lastErrorCode",c.isNull(16)?JSONObject.NULL:c.getString(16));x.put("createdAt",isoTimestamp(c.getLong(17)));return x;
+    JSONObject x=new JSONObject();x.put("eventId",c.getString(0));x.put("tenantId",c.getString(1));x.put("propertyId",c.getString(2));x.put("deviceId",c.getString(3));x.put("entityType",c.getString(4));x.put("entityId",c.getString(5));x.put("sequence",c.getLong(6));x.put("eventType",c.getString(7));x.put("schemaVersion",c.getLong(8));x.put("occurredAt",c.getString(9));x.put("payload",new JSONTokener(c.getString(10)).nextValue());x.put("status","IN_FLIGHT");x.put("attempts",attempts);x.put("retryAt",c.isNull(13)?JSONObject.NULL:isoTimestamp(c.getLong(13)));x.put("leaseOwner",owner);x.put("leaseUntil",isoTimestamp(leaseUntil));x.put("acknowledgedAt",c.isNull(18)?JSONObject.NULL:isoTimestamp(c.getLong(18)));x.put("lastErrorCode",c.isNull(16)?JSONObject.NULL:c.getString(16));x.put("createdAt",isoTimestamp(c.getLong(17)));return x;
   }
   private static JSONObject storageOutboxRow(Cursor c) throws Exception {
     JSONObject row=new JSONObject();row.put("eventId",c.getString(0));row.put("tenantId",c.getString(1));row.put("propertyId",c.getString(2));row.put("deviceId",c.getString(3));row.put("entityType",c.getString(4));row.put("entityId",c.getString(5));row.put("sequence",c.getLong(6));row.put("eventType",c.getString(7));row.put("schemaVersion",c.getLong(8));row.put("occurredAt",c.getString(9));row.put("payload",new JSONTokener(c.getString(10)).nextValue());row.put("status",c.getString(11));row.put("attempts",c.getLong(12));row.put("retryAt",c.isNull(13)?JSONObject.NULL:c.getString(13));row.put("leaseOwner",c.isNull(14)?JSONObject.NULL:c.getString(14));row.put("leaseUntil",c.isNull(15)?JSONObject.NULL:isoTimestamp(c.getLong(15)));row.put("lastErrorCode",c.isNull(16)?JSONObject.NULL:c.getString(16));row.put("createdAt",isoTimestamp(c.getLong(17)));row.put("acknowledgedAt",c.isNull(18)?JSONObject.NULL:isoTimestamp(c.getLong(18)));return row;
@@ -298,7 +313,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       if("legacy_backup".equals(store)) { try(Cursor c=getReadableDatabase().rawQuery("SELECT raw_json FROM pms_legacy_backup WHERE backup_id=?",new String[]{key})){return c.moveToFirst()?new JSONObject(c.getString(0)):null;} }
       if("entities".equals(store)) { int split=key.indexOf(':');if(split<1)throw new IllegalArgumentException("invalid_entity_storage_key");return getEntity(key.substring(0,split),key.substring(split+1)); }
       if("migration_snapshots".equals(store))return readMigrationSnapshot(key);
-      if("outbox".equals(store)){try(Cursor c=getReadableDatabase().rawQuery("SELECT event_id,tenant_id,property_id,device_id,entity_type,entity_id,sequence,event_type,schema_version,occurred_at,payload_json,status,attempts,retry_at,lease_owner,lease_until,last_error_code,created_at,acknowledged_at FROM pms_outbox WHERE event_id=?",new String[]{key})){return c.moveToFirst()?storageOutboxRow(c):null;}}
+      if("outbox".equals(store)){try(Cursor c=getReadableDatabase().rawQuery("SELECT event_id,tenant_id,property_id,device_id,entity_type,entity_id,sequence,event_type,schema_version,occurred_at,payload_json,status,attempts,retry_at_ms,lease_owner,lease_until,last_error_code,created_at,acknowledged_at FROM pms_outbox WHERE event_id=?",new String[]{key})){return c.moveToFirst()?storageOutboxRow(c):null;}}
       throw new IllegalArgumentException("unsupported_storage_store");
     } catch(RuntimeException e){throw e;} catch(Exception e){throw failure("storage_get_failed",e);}
   }
@@ -310,7 +325,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
       if("legacy_backup".equals(store)){try(Cursor c=getReadableDatabase().rawQuery("SELECT backup_id,raw_json FROM pms_legacy_backup ORDER BY backup_id",null)){while(c.moveToNext()){JSONObject row=new JSONObject(c.getString(1));row.put("id",c.getString(0));rows.put(row);}return rows;}}
       if("entities".equals(store)){try(Cursor c=getReadableDatabase().rawQuery("SELECT entity_type,entity_id,version,data_json,updated_at FROM pms_entities ORDER BY entity_type,entity_id",null)){while(c.moveToNext()){JSONObject row=new JSONObject();row.put("key",c.getString(0)+":"+c.getString(1));row.put("type",c.getString(0));row.put("id",c.getString(1));row.put("version",c.getLong(2));row.put("data",new JSONTokener(c.getString(3)).nextValue());row.put("updatedAt",isoTimestamp(c.getLong(4)));rows.put(row);}return rows;}}
       if("migration_snapshots".equals(store)){try(Cursor c=getReadableDatabase().rawQuery("SELECT snapshot_id,source_key,raw_json,source_timestamp,created_at,format_version FROM pms_migration_snapshots ORDER BY snapshot_id",null)){while(c.moveToNext()){JSONObject row=new JSONObject();row.put("id",c.getString(0));row.put("sourceKey",c.getString(1));row.put("raw",c.getString(2));row.put("sourceTimestamp",c.getString(3));row.put("importedAt",isoTimestamp(c.getLong(4)));row.put("formatVersion",c.getLong(5));rows.put(row);}return rows;}}
-      if("outbox".equals(store)){try(Cursor c=getReadableDatabase().rawQuery("SELECT event_id,tenant_id,property_id,device_id,entity_type,entity_id,sequence,event_type,schema_version,occurred_at,payload_json,status,attempts,retry_at,lease_owner,lease_until,last_error_code,created_at,acknowledged_at FROM pms_outbox ORDER BY created_at,event_id",null)){while(c.moveToNext())rows.put(storageOutboxRow(c));return rows;}}
+      if("outbox".equals(store)){try(Cursor c=getReadableDatabase().rawQuery("SELECT event_id,tenant_id,property_id,device_id,entity_type,entity_id,sequence,event_type,schema_version,occurred_at,payload_json,status,attempts,retry_at_ms,lease_owner,lease_until,last_error_code,created_at,acknowledged_at FROM pms_outbox ORDER BY created_at,event_id",null)){while(c.moveToNext())rows.put(storageOutboxRow(c));return rows;}}
       throw new IllegalArgumentException("unsupported_storage_store");
     } catch(RuntimeException e){throw e;} catch(Exception e){throw failure("storage_list_failed",e);}
   }
