@@ -34,7 +34,7 @@ These are source-level changes only. No APK build or physical-device verificatio
 - The source HTML structure is complete.
 - HTML and inline JavaScript syntax checks do not establish browser runtime behavior, Android WebView integration, payment correctness, authorization, or backend connectivity.
 - The Android source patch has not been built or exercised on a physical device at the exact current `main` commit. Do not infer build success from helper tests.
-- The six Android manifest/release-hardening contract tests passed locally; they do not validate Gradle, R8 output, native runtime behaviour or storage security.
+- The six Android manifest/release-hardening unit tests passed locally; a seventh source-wiring assertion was added afterwards and has not yet been executed in the repository runtime; they do not validate Gradle, R8 output, native runtime behaviour or storage security.
 - CI evidence applies only to the exact SHA tested. Failed or in-progress runs must not be represented as passing evidence.
 
 ## Release gate
