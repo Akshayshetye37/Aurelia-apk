@@ -68,3 +68,28 @@ test('Android patch installs the SQLCipher dependency and registers the native p
   assert.match(patch, /registerPlugin\(CapacitorPmsStoragePlugin\.class\)/);
   assert.match(patch, /net\.zetetic\.database\.\*\* \{ \*; \}/);
 });
+
+test('outbox retry scheduling uses integer epoch milliseconds and migrates legacy ISO timestamps', () => {
+  assert.match(repository, /VERSION = 6/);
+  assert.match(repository, /retry_at_ms INTEGER/);
+  assert.match(repository, /retry_at_ms<=\?/);
+  assert.match(repository, /legacy_outbox_retry_timestamp_invalid/);
+  assert.doesNotMatch(repository, /retry_at TEXT/);
+});
+
+test('plugin reports encrypted storage contract and never advertises plain SQLite', () => {
+  assert.match(plugin, /android-sqlcipher/);
+  assert.match(plugin, /contractVersion",2/);
+  assert.match(plugin, /android-keystore-aes-gcm/);
+  assert.doesNotMatch(plugin, /android-sqlite/);
+});
+
+test('SQLCipher dependencies are inserted idempotently and native plugin is registered before bridge startup', () => {
+  const register = patch.indexOf('registerPlugin(CapacitorPmsStoragePlugin.class)');
+  const superCreate = patch.indexOf('super.onCreate(savedInstanceState)');
+  assert.ok(register >= 0 && superCreate > register);
+  assert.match(patch, /if \(!gradle\.includes\('net\.zetetic:sqlcipher-android:'\)\)/);
+  assert.match(patch, /if \(!gradle\.includes\('androidx\.sqlite:sqlite:'\)\)/);
+  assert.match(patch, /PmsDatabaseKeyManager/);
+  assert.doesNotMatch(patch, /\beval\s*\(/);
+});
