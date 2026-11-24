@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { stripForbiddenPermissions } = require('./android-manifest-security.cjs');
 
 const androidDir = path.join(__dirname, '..', 'android');
 const appDir = path.join(androidDir, 'app', 'src', 'main');
@@ -11,20 +12,8 @@ if (!manifest.includes('android.permission.INTERNET')) {
   manifest = manifest.replace('<manifest', '<manifest\n    xmlns:tools="http://schemas.android.com/tools"');
   manifest = manifest.replace(/<application\b/, '    <uses-permission android:name="android.permission.INTERNET" />\n    <application');
 }
-// Use Android Photo Picker and Storage Access Framework; do not request broad
-// camera or legacy shared-storage permissions from the user.
-const forbiddenPermissions = new Set([
-  'android.permission.CAMERA',
-  'android.permission.READ_EXTERNAL_STORAGE',
-  'android.permission.WRITE_EXTERNAL_STORAGE',
-  'android.permission.MANAGE_EXTERNAL_STORAGE'
-]);
-manifest = manifest.split(/\\r?\\n/).filter(line => {
-  if (!line.includes('<uses-permission')) return true;
-  return !Array.from(forbiddenPermissions).some(permission =>
-    line.includes('android:name="' + permission + '"') ||
-    line.includes("android:name='" + permission + "'"));
-}).join('\\n');
+// Use Android Photo Picker and Storage Access Framework; remove broad permissions.
+manifest = stripForbiddenPermissions(manifest);
 fs.writeFileSync(manifestPath, manifest);
 
 
