@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { stripForbiddenPermissions } = require('./android-manifest-security.cjs');
+const { stripForbiddenPermissions, hardenGroovyReleaseBuild } = require('./android-manifest-security.cjs');
 
 const androidDir = path.join(__dirname, '..', 'android');
 const appDir = path.join(androidDir, 'app', 'src', 'main');
@@ -61,15 +61,26 @@ if (fs.existsSync(appGradleGroovy)) {
   let gradle = fs.readFileSync(appGradleGroovy, 'utf8');
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
-    fs.writeFileSync(appGradleGroovy, gradle);
   }
+  gradle = hardenGroovyReleaseBuild(gradle);
+  fs.writeFileSync(appGradleGroovy, gradle);
 } else if (fs.existsSync(appGradleKts)) {
-  let gradle = fs.readFileSync(appGradleKts, 'utf8');
-  if (!gradle.includes('com.google.mlkit:text-recognition:')) {
-    gradle = gradle.replace(/dependencies\s*\{/, match => match + '\n    implementation("com.google.mlkit:text-recognition:16.0.1")');
-    fs.writeFileSync(appGradleKts, gradle);
-  }
+  throw new Error('Kotlin DSL Android app builds require an explicit reviewed R8 configuration; refusing an unhardened release build.');
+} else {
+  throw new Error('Android app Gradle build file was not found.');
 }
+
+const proguardRules = [
+  '# Preserve the JavaScript bridge entry points exposed to the WebView.',
+  '-keepattributes *Annotation*',
+  '-keepclassmembers class * {',
+  '    @android.webkit.JavascriptInterface <methods>;',
+  '}',
+  '-keep class com.aurelia.pms.MainActivity { *; }',
+  '-keep class com.aurelia.pms.MainActivity$AureliaBridge { *; }',
+  ''
+].join('\n');
+fs.writeFileSync(path.join(appModuleDir, 'proguard-rules.pro'), proguardRules);
 
 const javaPath = path.join(javaDir, 'MainActivity.java');
 const java = String.raw`
@@ -89,6 +100,7 @@ import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
 import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
 import java.io.OutputStream;
@@ -110,6 +122,7 @@ public class MainActivity extends BridgeActivity {
 
   @Override public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    if (!BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(false);
     prefs = getSharedPreferences("aurelia_storage", MODE_PRIVATE);
     bridge.getWebView().addJavascriptInterface(new AureliaBridge(), "AureliaNative");
   }
