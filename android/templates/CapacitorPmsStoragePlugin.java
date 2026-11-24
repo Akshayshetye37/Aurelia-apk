@@ -143,7 +143,6 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
 
   @PluginMethod public void enableBiometricUnlock(PluginCall call) {
     io.execute(() -> { try {
-      android.security.keystore.UserNotAuthenticatedException ignored = null;
       javax.crypto.Cipher cipher=PmsUnlockManager.prepareBiometricEnrollmentCipher(getContext());
       getActivity().runOnUiThread(() -> authenticateBiometric(call,cipher,true));
     } catch(Exception e) { call.reject("Biometric enrollment could not be prepared", "PMS_BIOMETRIC_SETUP_FAILED", e); } });
