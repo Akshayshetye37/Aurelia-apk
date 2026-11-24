@@ -34,7 +34,7 @@ test('PIN, biometric and recovery envelopes independently unlock the same random
   assert.match(unlockManager, /PMS database is locked/);
   assert.match(unlockManager, /lockout_until_ms/);
   assert.match(keyManager, /PmsUnlockManager\.getUnlockedDatabaseKey/);
-  assert.doesNotMatch(keyManager, /getOrCreateDatabaseKey.*SecureRandom/s);
+  assert.doesNotMatch(keyManager, /requireUnlockedDatabaseKey.*SecureRandom/s);
 });
 
 test('unlock secrets are entered in native dialogs and never passed through WebView arguments', () => {
