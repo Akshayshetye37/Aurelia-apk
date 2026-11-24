@@ -86,10 +86,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
-import android.Manifest;
-import android.content.pm.PackageManager;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 import android.provider.DocumentsContract;
 import android.database.Cursor;
 import android.util.Base64;
@@ -112,8 +108,6 @@ import java.util.concurrent.Executors;
 public class MainActivity extends BridgeActivity {
   private static final int PICK_BACKUP_FOLDER = 7101;
   private static final int CREATE_BACKUP_FILE = 7102;
-  private static final int REQUEST_CAMERA_PERMISSION = 7103;
-  private String cameraPermissionRequestId = "";
   private String folderRequestId = "";
   private String pendingFileRequestId = "";
   private byte[] pendingBytes = new byte[0];
@@ -489,15 +483,6 @@ public class MainActivity extends BridgeActivity {
             if (stagedFiles != null) for (java.io.File stagedFile : stagedFiles) try { stagedFile.delete(); } catch (Exception ignored) { }
             try { stageDir.delete(); } catch (Exception ignored) { }
           }
-        } else if ("requestCameraPermission".equals(type)) {
-          runOnUiThread(() -> {
-            cameraPermissionRequestId = requestId;
-            if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-              js("window.aureliaCameraPermissionResult && window.aureliaCameraPermissionResult(" + q(requestId) + ",true)");
-            } else {
-              ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_PERMISSION);
-            }
-          });
         } else if ("chooseDeviceBackupFolder".equals(type)) {
           runOnUiThread(() -> {
             folderRequestId = requestId;
@@ -584,14 +569,6 @@ public class MainActivity extends BridgeActivity {
         else if ("recoverLatestBackup".equals(operationType)) recoveryResult(operationRequestId, false, message, "");
         else if ("deviceBackupStatus".equals(operationType)) js("window.aureliaNativeDeviceBackupStatusResult && window.aureliaNativeDeviceBackupStatusResult(" + q(operationRequestId) + ",false)");
       }
-    }
-  }
-
-  @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-    super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-    if (requestCode == REQUEST_CAMERA_PERMISSION) {
-      boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
-      js("window.aureliaCameraPermissionResult && window.aureliaCameraPermissionResult(" + q(cameraPermissionRequestId) + "," + granted + ")");
     }
   }
 
