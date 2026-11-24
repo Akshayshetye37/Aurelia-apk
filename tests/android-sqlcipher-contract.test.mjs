@@ -43,7 +43,8 @@ test('unlock secrets are entered in native dialogs and never passed through WebV
   assert.match(plugin, /new AlertDialog\.Builder/);
   assert.match(plugin, /recoveryKeyDisplayed/);
   assert.doesNotMatch(plugin, /call\.getString\("(?:pin|recoveryKey)"/);
-  assert.doesNotMatch(plugin, /sms|otp|one.time.password/i);\n  assert.doesNotMatch(unlockManager, /unlockWithOtp|deriveOtp|otpToDek/i);
+  assert.doesNotMatch(plugin, /sms|otp|one.time.password/i);
+  assert.doesNotMatch(unlockManager, /unlockWithOtp|deriveOtp|otpToDek/i);
 });
 
 test('database initialization checks SQLCipher encryption state and page authentication', () => {
