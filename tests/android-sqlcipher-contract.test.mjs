@@ -26,23 +26,23 @@ test('PIN, biometric and recovery envelopes independently unlock the same random
   assert.match(unlockManager, /PIN_ENVELOPE/);
   assert.match(unlockManager, /RECOVERY_ENVELOPE/);
   assert.match(unlockManager, /BIO_ENVELOPE/);
-  assert.match(unlockManager, /setUserAuthenticationRequired\\(true\\)/);
-  assert.match(unlockManager, /setUserAuthenticationValidityDurationSeconds\\(-1\\)/);
-  assert.match(unlockManager, /MessageDigest\\.isEqual/);
-  assert.match(unlockManager, /databaseArtifactsExist\\(context\\)/);
+  assert.match(unlockManager, /setUserAuthenticationRequired\(true\)/);
+  assert.match(unlockManager, /setUserAuthenticationValidityDurationSeconds\(-1\)/);
+  assert.match(unlockManager, /MessageDigest\.isEqual/);
+  assert.match(unlockManager, /databaseArtifactsExist\(context\)/);
   assert.match(unlockManager, /refusing to replace the DEK/);
   assert.match(unlockManager, /PMS database is locked/);
   assert.match(unlockManager, /lockout_until_ms/);
-  assert.match(keyManager, /PmsUnlockManager\\.getUnlockedDatabaseKey/);
+  assert.match(keyManager, /PmsUnlockManager\.getUnlockedDatabaseKey/);
   assert.doesNotMatch(keyManager, /getOrCreateDatabaseKey.*SecureRandom/s);
 });
 
 test('unlock secrets are entered in native dialogs and never passed through WebView arguments', () => {
   assert.match(plugin, /setupDatabaseUnlock/);
   assert.match(plugin, /promptUnlockSecret/);
-  assert.match(plugin, /new AlertDialog\\.Builder/);
+  assert.match(plugin, /new AlertDialog\.Builder/);
   assert.match(plugin, /recoveryKeyDisplayed/);
-  assert.doesNotMatch(plugin, /call\\.getString\\("(?:pin|recoveryKey)"/);
+  assert.doesNotMatch(plugin, /call\.getString\("(?:pin|recoveryKey)"/);
   assert.doesNotMatch(plugin, /sms|otp|one.time.password/i);
 });
 
