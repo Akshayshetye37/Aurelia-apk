@@ -68,15 +68,17 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     if(oldVersion<5) db.execSQL("CREATE TABLE IF NOT EXISTS pms_migration_checkpoints(migration_id TEXT NOT NULL,table_name TEXT NOT NULL,last_id TEXT NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(migration_id,table_name))");
     if(oldVersion<6) {
       db.execSQL("ALTER TABLE pms_outbox ADD COLUMN retry_at_ms INTEGER");
+      java.util.ArrayList<String[]> legacyRetries=new java.util.ArrayList<>();
       try(Cursor legacy=db.rawQuery("SELECT event_id,retry_at FROM pms_outbox WHERE retry_at IS NOT NULL",null)) {
-        while(legacy.moveToNext()) {
-          double parsed=parseDate(legacy.getString(1));
-          if(!Double.isFinite(parsed)||parsed<0d||parsed>9007199254740991d)
-            throw new IllegalStateException("legacy_outbox_retry_timestamp_invalid");
-          ContentValues migrated=new ContentValues();migrated.put("retry_at_ms",(long)parsed);
-          if(db.update("pms_outbox",migrated,"event_id=?",new String[]{legacy.getString(0)})!=1)
-            throw new IllegalStateException("legacy_outbox_retry_migration_mismatch");
-        }
+        while(legacy.moveToNext())legacyRetries.add(new String[]{legacy.getString(0),legacy.getString(1)});
+      }
+      for(String[] legacyRow:legacyRetries) {
+        double parsed=parseDate(legacyRow[1]);
+        if(!Double.isFinite(parsed)||parsed<0d||parsed>9007199254740991d)
+          throw new IllegalStateException("legacy_outbox_retry_timestamp_invalid");
+        ContentValues migrated=new ContentValues();migrated.put("retry_at_ms",(long)parsed);
+        if(db.update("pms_outbox",migrated,"event_id=?",new String[]{legacyRow[0]})!=1)
+          throw new IllegalStateException("legacy_outbox_retry_migration_mismatch");
       }
       db.execSQL("DROP INDEX IF EXISTS pms_outbox_delivery_idx");
       db.execSQL("CREATE INDEX pms_outbox_delivery_idx ON pms_outbox(status,retry_at_ms,created_at)");
