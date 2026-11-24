@@ -18,6 +18,21 @@ This document records a preliminary static review of Aurelia PMS source. It is n
 
 These are source-level changes only. No APK build or physical-device verification is claimed for the current commit. R8 does not minify or obfuscate index.html JavaScript.
 
+## Security audit — 24 November 2026
+
+This source-level audit was performed against `main`. Findings are ranked by impact and exploitability. The Android source has not been compiled or penetration-tested on a device.
+
+### Findings
+
+1. **HIGH — WebView native bridge exposed to every frame.** The previous `addJavascriptInterface` bridge could read/restore guest photos and backups, write files, launch intents and print content. Android confirms the interface is visible to all frames and the caller frame's origin cannot be reliably identified. Replaced it with a registered Capacitor `AureliaNativeActions` plugin, removed the JavaScript interface, added a 32 MiB message limit and operation allowlist, and blocked iframe/object content through CSP. The print-only WebView now disables JavaScript, file/content access and network loads.
+2. **HIGH — guest records remain in browser storage.** The active HTML application still stores PMS state and guest/ID data in browser storage; the SQLCipher repository is not the live authority. This is not fixed by the native database foundation. Do not store production guest identity documents or process real payments until the live storage cutover and device tests are complete.
+3. **HIGH — native photo archive is plaintext at rest.** The native photo bridge writes base64 ID images into app-private files without encryption. The bridge is now scoped, but file encryption and legacy-photo migration remain open.
+4. **MEDIUM — QR image service receives payment metadata.** The QR URL sends the UPI intent, including payee and amount, to `api.qrserver.com`. Guest names were removed from the transaction note, but payee/amount metadata still leaves the device. Prefer local QR generation before production.
+5. **MEDIUM — client-configured booking API token is stored in browser state.** `bookingApiKey` is read from settings and sent as a Bearer token. A browser-delivered app cannot keep a privileged shared secret confidential. Move privileged access behind an authenticated backend and use short-lived, narrowly scoped tokens.
+6. **MEDIUM — dependency reproducibility and vulnerability monitoring are incomplete.** There is no committed `package-lock.json`; dependencies use caret ranges. A previous workflow reported one high npm advisory, but this audit did not have a current lockfile-based `npm audit` result. Commit a reviewed lockfile and run SCA against the resolved Android and Node dependency graphs.
+7. **LOW — dynamic HTML and inline event handlers increase XSS risk.** Added JSON-string encoding for dynamic inline-handler arguments in guest contact, reservation, room and menu-category flows; escaped menu item text before HTML insertion. The codebase still contains many `innerHTML` renderers; continue migrating them to DOM APIs and test backup-imported strings.
+8. **NOT FOUND IN REVIEWED QUERIES — SQL injection and committed static secrets.** Reviewed SQL queries use bound parameters for dynamic values; schema `execSQL` statements are static. No common hard-coded key/token patterns were found in the inspected app and native source. This is not a complete repository-history secret scan.
+
 ## Address before production
 
 1. **UPI QR generation uses a third-party endpoint.** The QR image URL includes an encoded UPI payment URI. That URI can contain the payee, amount, guest-related text, and transaction reference. Prefer generating QR images locally or in a trusted backend, and avoid sending guest/payment details to third-party URL services.
