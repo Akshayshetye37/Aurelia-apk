@@ -47,8 +47,9 @@ jobs:
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       RUN_IDS: ${{ inputs.run_ids }}
-      CANDIDATE_BRANCH: ${{ vars.CANDIDATE_BRANCH || 'work/p0-storage-hardening' }}
+      CANDIDATE_BRANCH: fix/backup-consolidated-integration
       CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
+      GATE3_CONTROL_BRANCH: ${{ vars.GATE3_CONTROL_BRANCH || 'work/gate-3-google-email-link' }}
       REPO: ${{ github.repository }}
       ACTOR: ${{ github.triggering_actor }}
       GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,24 @@
+{
+  "gate3": {
+    "scope": "Recovery-owner Email-Link verification callables only; NOT PMS app sign-in. No SMS/phone authentication.",
+    "deploy": [
+      "exchangeOwnerEmailLink",
+      "confirmRecoveryOwnerBinding"
+    ],
+    "probe": [
+      "exchangeOwnerEmailLink",
+      "confirmRecoveryOwnerBinding"
+    ],
+    "excluded": [
+      "createRecoveryAttestationChallenge",
+      "verifyRecoveryDeviceAttestation",
+      "registerRecoveryPhone",
+      "registerRecoveryOwnerDevice",
+      "issueRecoveryGrant",
+      "consumeRecoveryGrant",
+      "cancelRecoveryRequest",
+      "cancelRecoveryPhoneChange",
+      "activateRecoveryPhoneChange"
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-name: Gate 3 - Google Sign-In and Email-Link owner verification
+name: Gate 3 - Google Sign-In and Email-Link staging qualification
 
 on:
   workflow_dispatch:
@@ -28,13 +28,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          expected_ref="refs/heads/${GATE_CONTROL_BRANCH:-integration/ledger-patch}"
+          expected_ref="refs/heads/${GATE_CONTROL_BRANCH:-work/gate-3-google-email-link}"
           if [[ "$GITHUB_REF" != "$expected_ref" ]]; then
             echo "::error::Gate 3 must be dispatched from $expected_ref (received $GITHUB_REF)."
             exit 1
           fi
         env:
-          GATE_CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
+          GATE_CONTROL_BRANCH: ${{ vars.GATE_CONTROL_BRANCH || 'work/gate-3-google-email-link' }}
 
       - name: Checkout trusted control-branch tooling
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -58,7 +58,7 @@ jobs:
           node scripts/gates/check-candidate.mjs \
             --sha "$CANDIDATE_SHA" \
             --repo "$REPO" \
-            --branch "integration/ledger-patch"
+            --branch "fix/backup-consolidated-integration"
           echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
 
   staging-deploy:
@@ -87,7 +87,7 @@ jobs:
       attestations: write
     env:
       CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
-      CANDIDATE_BRANCH: integration/ledger-patch
+      CANDIDATE_BRANCH: fix/backup-consolidated-integration
       REPO: ${{ github.repository }}
       STAGING_PROJECT: ${{ needs.staging-deploy.outputs.staging_project_id }}
       PRODUCTION_PROJECT: ${{ needs.staging-deploy.outputs.production_project_id }}
@@ -141,8 +141,8 @@ jobs:
             exit 1
           fi
 
-          if [[ "$CANDIDATE_BRANCH" != "integration/ledger-patch" ]]; then
-            echo "::error::Unexpected candidate branch."
+          if [[ "$CANDIDATE_BRANCH" != "fix/backup-consolidated-integration" ]]; then
+            echo "::error::Unexpected frozen-candidate branch."
             exit 1
           fi
 
