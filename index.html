@@ -1750,9 +1750,8 @@ body:has(#sh.show) #hor-book, body:has(#sh.show) #hor-search{display:none!import
         return {
           name: o.n || "",
           relation: o.rel || "",
-          idType: o.idt || "",
-          idNumber: o.idn || "",
-          idPhoto: o.img || null
+          name: o.n || "",
+          relation: o.rel || ""
         };
       });
     }
@@ -1780,13 +1779,10 @@ body:has(#sh.show) #hor-book, body:has(#sh.show) #hor-search{display:none!import
         name: (guest && guest.n) || b.g || "",
         phone: (guest && guest.ph) || "",
         email: (guest && guest.em) || "",
-        idType: (guest && guest.idt) || "",
-        idNumber: (guest && guest.idn) || "",
-        idPhoto: (guest && guest.img) || null,
         vehicles: vehicles,
         occupants: occupants
       },
-      _scope: "booking-guest-stay-identity-only"
+      _scope: "booking-guest-stay-contact-only"
     };
   }
 
@@ -1814,7 +1810,7 @@ function listBookingsForApi(filter) {
     });
     return {
       ok: true,
-      scope: "booking-guest-stay-identity-only",
+      scope: "booking-guest-stay-contact-only",
       generatedAt: new Date().toISOString(),
       count: out.length,
       currentCount: out.filter(function (x) { return x.status === "res" || x.status === "in"; }).length,
@@ -1825,8 +1821,8 @@ function listBookingsForApi(filter) {
 
   function getBookingForApi(id) {
     var all = listBookingsForApi({ bookingId: id });
-    if (!all.bookings.length) return { ok: false, error: "Booking not found", scope: "booking-guest-stay-identity-only" };
-    return { ok: true, scope: "booking-guest-stay-identity-only", booking: all.bookings[0] };
+    if (!all.bookings.length) return { ok: false, error: "Booking not found", scope: "booking-guest-stay-contact-only" };
+    return { ok: true, scope: "booking-guest-stay-contact-only", booking: all.bookings[0] };
   }
 
   /** Push booking snapshot to remote URL when enabled (optional later) */
@@ -1836,9 +1832,9 @@ function listBookingsForApi(filter) {
       return { ok: false, error: "Enable Booking API and set Base URL in Settings" };
     }
     var payload = listBookingsForApi();
-    // Booking records contain sensitive guest identity data; send only to a configured endpoint.
+    // Booking feed is opt-in and contains guest contact/stay data, never government ID numbers or ID photos.
     var body = {
-      scope: "booking-guest-stay-identity-only",
+      scope: "booking-guest-stay-contact-only",
       propertyName: (S.set && S.set.name) || "",
       generatedAt: payload.generatedAt,
       bookings: payload.bookings
@@ -1870,15 +1866,15 @@ function listBookingsForApi(filter) {
           '<div class="ln"><span>#' +
           b.bookingId +
           " · " +
-          (b.status || "") +
+          esc(String(b.status || "")) +
           " · " +
-          ((b.guest && b.guest.name) || "") +
+          esc(String((b.guest && b.guest.name) || "")) +
           " · Rm " +
-          (b.roomNumber || "") +
+          esc(String(b.roomNumber || "")) +
           "</span><span>" +
-          (b.stay && b.stay.arrivalLabel) +
+          esc(String((b.stay && b.stay.arrivalLabel) || "")) +
           " → " +
-          (b.stay && b.stay.departureLabel) +
+          esc(String((b.stay && b.stay.departureLabel) || "")) +
           "</span></div>"
         );
       })
@@ -1886,12 +1882,12 @@ function listBookingsForApi(filter) {
     if (typeof openS === "function") {
       openS(
         '<h2 class="foil">Booking API preview</h2>' +
-          '<div class="lab">Scope: <b>guest, stay and identity data only</b> · Current: ' +
+          '<div class="lab">Scope: <b>guest contact and stay data only</b> · Current: ' +
           data.currentCount +
           " · Past: " +
           data.pastCount +
           "</div>" +
-          '<div class="lab" style="margin-top:6px">Includes guest contact details, identification details/photos, occupants, vehicle registrations and stay/check-in/check-out details. No room charges, payments, balances or restaurant sales are included.</div>' +
+          '<div class="lab" style="margin-top:6px">Includes guest name/contact, occupant names/relations, vehicle registrations and stay/check-in/check-out details. Government ID numbers, ID photos, room charges, payments, balances and restaurant sales are excluded.</div>' +
           '<div style="margin:12px 0;max-height:50vh;overflow:auto">' +
           (rows || '<div class="empty">No bookings</div>') +
           "</div>" +
@@ -1945,7 +1941,7 @@ function listBookingsForApi(filter) {
       var s = S.set || {};
       var extra =
         '<div class="card" style="margin-top:14px"><h2>Booking API</h2>' +
-        '<div class="lab">Booking feed includes current and past stays, contacts, ID photos, occupants, vehicle registrations, check-in/out times, charges, payments and balances. Treat this as sensitive personal and financial data. <b>Includes financial details</b> (room rate, charges, payments and balance due).</div>' +
+        '<div class="lab">Booking feed includes current and past stays, guest contact details, occupant names/relations, vehicle registrations and check-in/out times. Government ID numbers/photos and all payment/financial details are excluded. This remains sensitive personal data; send only to a trusted HTTPS endpoint.</div>' +
         '<label class="fld"><span>Enable Booking API</span><select data-s="bookingApiEnabled">' +
         '<option value="false"' +
         (!s.bookingApiEnabled ? " selected" : "") +
