@@ -34,7 +34,7 @@ These are source-level changes only. No APK build or physical-device verificatio
 - The source HTML structure is complete.
 - HTML and inline JavaScript syntax checks do not establish browser runtime behavior, Android WebView integration, payment correctness, authorization, or backend connectivity.
 - The Android source patch has not been built or exercised on a physical device at the exact current `main` commit. Do not infer build success from helper tests.
-- The manifest/release-hardening and SQLCipher source-contract test files have been added. They have not been executed against a complete repository checkout in this session; they do not validate Java compilation, Gradle dependency resolution, R8 output, native runtime behaviour or storage security.
+- Six direct checks of the manifest/release helper behaviour passed: forbidden-permission filtering, preservation of INTERNET, backup disabling, R8/resource-shrink configuration, release debuggability and idempotent/fail-closed behaviour. The complete `npm test` suite and SQLCipher source-contract tests were not run in a Node checkout. None of these checks validates Java compilation, Gradle dependency resolution, R8 output, native runtime behaviour or storage security.
 - CI evidence applies only to the exact SHA tested. Failed or in-progress runs must not be represented as passing evidence.
 
 ## Release gate
