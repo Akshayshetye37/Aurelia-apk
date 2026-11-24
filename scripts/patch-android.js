@@ -699,7 +699,7 @@ public class MainActivity extends BridgeActivity {
           String url = obj.optString("url", "");
           Uri target = Uri.parse(url);
           String scheme = target.getScheme() == null ? "" : target.getScheme().toLowerCase(java.util.Locale.ROOT);
-          if (!scheme.matches("https|http|tel|mailto")) throw new SecurityException("Unsupported URL scheme");
+          if (!scheme.matches("https|tel|mailto")) throw new SecurityException("Unsupported URL scheme");
           runOnUiThread(() -> { try { Intent intent = new Intent(Intent.ACTION_VIEW, target); startActivity(intent); } catch (Exception e) { js("window.aureliaNativeActionResult && window.aureliaNativeActionResult(" + q(requestId) + ",false," + q("Could not open link") + ")"); } });
         } else if ("shareText".equals(type)) {
           String title = obj.optString("title", "Share");
