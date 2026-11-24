@@ -67,3 +67,42 @@ This source-level audit was performed against `main`. Findings are ranked by imp
 ## Release gate
 
 Do not process real guest data or payments until client-side secrets have been removed, third-party data flows have been reviewed, dependency advisories have been resolved, Android permission and native bridge boundaries have been verified, and browser plus Android end-to-end tests have passed.
+
+## Independent security audit — 25 November 2026
+
+**Scope:** `main` application entry point `index.html`, package manifest, Android bridge/template sources, build/release workflows, and existing security contract tests. Audit baseline: `0f967b48323cd1f9ed967b24d083b9ae694cda1b`.
+
+### Findings ranked by severity
+
+1. **CRITICAL — Active PMS state lacks an effective authentication boundary.** `index.html` persists active PMS state under `aurelia_lodge_v2` through `localStorage` (with an in-memory fallback). Native SQLCipher storage is not canonical for live reads/writes, and no startup PIN/biometric gate protects the active browser store. Same-origin script execution or device/profile access can expose or alter guest and financial records. **Fix:** make the authenticated native repository the only canonical store; gate startup, resume and background access; migrate existing records transactionally; and verify rollback/recovery before cutover. This is not safe as a UI-only patch.
+2. **HIGH — Booking API bearer token is persisted in browser settings.** `bookingApiKey` is saved in the ordinary app state and sent as a Bearer credential by `pushBookingsToRemote`. HTTPS protects transport, not the confidentiality of a browser-held shared secret. The feed includes guest name, phone/email, vehicle registrations, occupant names/relations and stay dates. **Fix:** remove privileged shared credentials from the client and move synchronization behind an authenticated backend with per-user authorization and short-lived scoped tokens.
+3. **HIGH — Backup exports contain sensitive data in plaintext.** Snapshots serialize guest, identity metadata, booking, payment, accounting and photo-archive data as JSON. The SHA-256 digest is unkeyed and does not authenticate the backup; a modified backup can be rehashed. **Fix:** use a versioned AEAD envelope (AES-GCM or equivalent) with a user-held high-entropy recovery secret, strict format/version/size checks, authenticated metadata and tamper/negative tests. Legacy imports must be explicit and gated.
+4. **HIGH — Large dynamic HTML surface remains an XSS risk.** Static inspection counted approximately 321 inline event-handler attributes, 43 `.innerHTML =` assignments and 7 `insertAdjacentHTML` calls in `index.html`. Existing escaping mitigates selected flows but does not prove safety for every imported, restored or locally persisted value. CSP still permits `'unsafe-inline'`. **Fix:** migrate renderers to DOM APIs and `textContent`, use delegated listeners and strict URL/attribute validation, remove inline script allowances using external scripts or hashes/nonces, and test hostile imported backups.
+5. **MEDIUM — Payment QR service receives payment request metadata.** `dynamicUpiQr` and `exactUPIBox` place the UPI URI (payee VPA, property/payee name, amount, currency and transaction reference) into a third-party image-service URL. Current transaction note is generic and excludes guest name, but payee and amount still leave the device. **Fix:** generate QR locally and remove the external QR host from CSP once all call sites are replaced.
+6. **MEDIUM — Dependency graph is not reproducible.** `package.json` uses version ranges and no `package-lock.json` is committed. CI creates a transient lock and runs `npm audit`; developers and release builds may resolve different transitive versions. **Fix:** commit a reviewed lockfile, use `npm ci` in all workflows, and retain high/critical advisory gates.
+7. **MEDIUM — Build/runtime security evidence is incomplete.** Current main SHA has no reported commit statuses and the workflow-run query returned no runs. Actual npm tests/audit, Java/Gradle compilation, merged-manifest inspection, APK build and physical-device tests are not verified. Treat these gates as open until CI passes for the exact candidate SHA.
+8. **LOW / HARDENING — CSP and third-party resources.** Inline scripts are allowed; Google Fonts and the invoice renderer are network dependencies; `connect-src https:` is broad. Tighten required origins, self-host or pin resources where practical, and configure CSP as an HTTP response header in production.
+
+### Controls confirmed in source
+
+- CSP denies frames, objects and base-URI changes; the external invoice renderer is version-pinned and integrity-checked.
+- No dynamic `eval()` or `new Function()` calls were found in `index.html`.
+- Android uses a Capacitor plugin rather than `addJavascriptInterface`; plugin operations are allowlisted and request size is bounded.
+- Main WebView disables mixed content and file-origin universal access and enables Safe Browsing where supported.
+- Reviewed SQLCipher repository query methods use bound parameters; no dynamic-value SQL concatenation was found in reviewed SQL source.
+- Android release patch disables manifest backup and configures release minification/resource shrinking.
+- Direct Capacitor and sharp version ranges meet the patch floors recorded by the prior audit. This does not prove the resolved transitive graph is free of advisories.
+- UPI-only collection policy remains intact. No provider gateway, automatic settlement or payment cutover is enabled by this audit.
+
+### Verification status and limitations
+
+- Audited baseline: `0f967b48323cd1f9ed967b24d083b9ae694cda1b`.
+- Static scan: 321 inline event-handler attributes, 43 `.innerHTML =` assignment sites, 7 `insertAdjacentHTML` calls, zero `eval()` and zero `new Function()` calls in `index.html`.
+- Confirmed by source review: live browser persistence, client-held booking token flow and third-party QR call sites.
+- GitHub combined status for baseline: no reported statuses. Workflow-run query: no returned runs.
+- **Not run in this environment:** `npm test`, `npm audit`, dependency installation, browser integration tests, Android Gradle compilation, merged-manifest/security inspection, APK assembly, runtime instrumentation, physical-device tests, encrypted-backup round-trip/tamper tests, full Git-history secret scanning or penetration testing.
+- No changes to `main`; provider gateways, live payments, automatic settlement and native storage authority cutover remain disabled.
+
+### Production release gate
+
+Do not process real guest identity data or real payments until the active store has enforced unlock/authorization, backup exports are encrypted and authenticated, client-held bearer tokens are removed, dynamic HTML/XSS risk is comprehensively addressed, external QR metadata transmission is removed or formally accepted, dependency lockfile/audit gates pass, and exact-SHA Android plus physical-device verification succeeds.
