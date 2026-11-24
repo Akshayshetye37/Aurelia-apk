@@ -4,7 +4,7 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
-import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.CapacitorPlugin;\nimport androidx.biometric.BiometricPrompt;\nimport androidx.biometric.BiometricManager;\nimport androidx.core.content.ContextCompat;\nimport androidx.fragment.app.FragmentActivity;\nimport java.util.concurrent.Executor;
 import android.database.sqlite.SQLiteFullException;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -71,6 +71,90 @@ public final class CapacitorPmsStoragePlugin extends Plugin {
     if(p.length!=2)throw new IllegalStateException("Encrypted identity format is invalid");
     Cipher c=Cipher.getInstance("AES/GCM/NoPadding"); c.init(Cipher.DECRYPT_MODE,identityKey(),new GCMParameterSpec(128,Base64.decode(p[0],Base64.NO_WRAP)));
     return new String(c.doFinal(Base64.decode(p[1],Base64.NO_WRAP)),StandardCharsets.UTF_8);
+  }
+
+  @PluginMethod public void setupDatabaseUnlock(PluginCall call) {
+    String pin=call.getString("pin");
+    io.execute(() -> { try {
+      String recovery=PmsUnlockManager.setup(getContext(),pin);
+      JSObject result=new JSObject(); result.put("configured",true); result.put("recoveryKey",recovery);
+      result.put("pinPolicy","8-12 digits"); result.put("kdf","PBKDF2-HMAC-SHA256-600000");
+      call.resolve(result);
+    } catch(Exception e) { call.reject("PMS unlock setup failed", "PMS_UNLOCK_SETUP_FAILED", e); } });
+  }
+
+  @PluginMethod public void unlockDatabaseWithPin(PluginCall call) {
+    String pin=call.getString("pin");
+    io.execute(() -> { try {
+      PmsUnlockManager.unlockWithPin(getContext(),pin);
+      JSObject result=new JSObject(); result.put("unlocked",true); result.put("factor","pin"); call.resolve(result);
+    } catch(Exception e) { call.reject("PIN unlock failed", "PMS_PIN_UNLOCK_FAILED", e); } });
+  }
+
+  @PluginMethod public void unlockDatabaseWithRecovery(PluginCall call) {
+    String recovery=call.getString("recoveryKey");
+    io.execute(() -> { try {
+      PmsUnlockManager.unlockWithRecovery(getContext(),recovery);
+      JSObject result=new JSObject(); result.put("unlocked",true); result.put("factor","recovery"); call.resolve(result);
+    } catch(Exception e) { call.reject("Recovery-key unlock failed", "PMS_RECOVERY_UNLOCK_FAILED", e); } });
+  }
+
+  @PluginMethod public void enableBiometricUnlock(PluginCall call) {
+    io.execute(() -> { try {
+      android.security.keystore.UserNotAuthenticatedException ignored = null;
+      javax.crypto.Cipher cipher=PmsUnlockManager.prepareBiometricEnrollmentCipher(getContext());
+      getActivity().runOnUiThread(() -> authenticateBiometric(call,cipher,true));
+    } catch(Exception e) { call.reject("Biometric enrollment could not be prepared", "PMS_BIOMETRIC_SETUP_FAILED", e); } });
+  }
+
+  @PluginMethod public void unlockDatabaseWithBiometric(PluginCall call) {
+    io.execute(() -> { try {
+      javax.crypto.Cipher cipher=PmsUnlockManager.prepareBiometricUnlockCipher(getContext());
+      getActivity().runOnUiThread(() -> authenticateBiometric(call,cipher,false));
+    } catch(Exception e) { call.reject("Biometric unlock could not be prepared", "PMS_BIOMETRIC_UNLOCK_FAILED", e); } });
+  }
+
+  private void authenticateBiometric(PluginCall call, javax.crypto.Cipher cipher, boolean enrolling) {
+    if (!(getActivity() instanceof FragmentActivity)) {
+      call.reject("Biometric authentication host is unavailable", "PMS_BIOMETRIC_HOST_UNAVAILABLE"); return;
+    }
+    Executor executor=ContextCompat.getMainExecutor(getContext());
+    BiometricPrompt prompt=new BiometricPrompt((FragmentActivity)getActivity(),executor,
+      new BiometricPrompt.AuthenticationCallback() {
+        @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+          super.onAuthenticationSucceeded(result);
+          io.execute(() -> { try {
+            javax.crypto.Cipher authenticated=result.getCryptoObject()==null?null:result.getCryptoObject().getCipher();
+            if(authenticated==null) throw new SecurityException("Authenticated cipher was not returned.");
+            if(enrolling) PmsUnlockManager.saveBiometricEnvelope(authenticated);
+            else PmsUnlockManager.finishBiometricUnlock(authenticated);
+            JSObject out=new JSObject(); out.put(enrolling?"configured":"unlocked",true);
+            out.put("factor","biometric"); call.resolve(out);
+          } catch(Exception e) { call.reject("Biometric DEK operation failed", "PMS_BIOMETRIC_CRYPTO_FAILED", e); } });
+        }
+        @Override public void onAuthenticationError(int code, CharSequence message) {
+          super.onAuthenticationError(code,message);
+          call.reject("Biometric authentication cancelled or unavailable", "PMS_BIOMETRIC_AUTH_ERROR");
+        }
+        @Override public void onAuthenticationFailed() { super.onAuthenticationFailed(); }
+      });
+    BiometricPrompt.PromptInfo info=new BiometricPrompt.PromptInfo.Builder()
+      .setTitle(enrolling?"Enable Aurelia biometric unlock":"Unlock Aurelia PMS")
+      .setSubtitle("Authenticate to protect the same encrypted PMS database key")
+      .setNegativeButtonText("Cancel")
+      .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+      .build();
+    prompt.authenticate(info,new BiometricPrompt.CryptoObject(cipher));
+  }
+
+  @PluginMethod public void lockDatabase(PluginCall call) {
+    io.execute(() -> { try {
+      synchronized(this) {
+        if(repository!=null) { repository.close(); repository=null; }
+      }
+      PmsUnlockManager.lock();
+      JSObject result=new JSObject(); result.put("locked",true); call.resolve(result);
+    } catch(Exception e) { call.reject("PMS database lock failed", "PMS_LOCK_FAILED", e); } });
   }
 
   @PluginMethod public void initializeStorage(PluginCall call) {
