@@ -105,7 +105,8 @@ const proguardRules = [
 fs.writeFileSync(path.join(appModuleDir, 'proguard-rules.pro'), proguardRules);
 
 const nativeTemplates = [
-  'PmsDatabaseKeyManager.java',\n  'PmsUnlockManager.java',
+  'PmsDatabaseKeyManager.java',
+  'PmsUnlockManager.java',
   'LocalPmsRepository.java',
   'CapacitorPmsStoragePlugin.java',
   'StorageSerializationException.java'
