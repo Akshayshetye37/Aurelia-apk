@@ -194,3 +194,28 @@ test('user-controlled inline handler arguments use JSON string encoding and room
   assert.doesNotMatch(html, /onclick="roomS\('\$\{r\.n\}'\)"/);
   assert.doesNotMatch(html, /onclick="cat='\$\{c\}';render\(\)"/);
 });
+
+test('booking API omits government ID numbers and ID photos and escapes preview data', () => {
+  const html = read('index.html');
+  const start = html.indexOf('function bookingPublicView');
+  const end = html.indexOf('function listBookingsForApi', start);
+  const view = html.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.doesNotMatch(view, /idNumber|idPhoto|idType/);
+  assert.match(view, /booking-guest-stay-contact-only/);
+  assert.match(html, /esc\(String\(b\.bookingId\)\)/);
+  assert.match(html, /esc\(String\(\(b\.guest && b\.guest\.name\) \|\| ""\)\)/);
+});
+
+test('confirmation dialogs escape content and accept only constrained internal callbacks', () => {
+  const html = read('index.html');
+  assert.match(html, /Confirmation action is invalid/);
+  assert.match(html, /<h2 class="foil">\$\{esc\(t\)\}<\/h2><p class="lab">\$\{esc\(m\)\}<\/p>/);
+  assert.match(html, /\$\{esc\(l\)\}<\/button>/);
+});
+
+test('guest WhatsApp handler arguments are JSON encoded without nested single-quote wrappers', () => {
+  const html = read('index.html');
+  assert.match(html, /guestWhatsAppAction\('\+jsArg\(p\.replace/);
+  assert.doesNotMatch(html, /guestWhatsAppAction\(\\\\''\+esc\(p\.replace/);
+});
