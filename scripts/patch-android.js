@@ -13,17 +13,14 @@ if (!manifest.includes('android.permission.INTERNET')) {
 }
 // Use Android Photo Picker and Storage Access Framework; do not request broad
 // camera or legacy shared-storage permissions from the user.
-const forbiddenPermissions = [
+const forbiddenPermissions = new Set([
   'android.permission.CAMERA',
   'android.permission.READ_EXTERNAL_STORAGE',
   'android.permission.WRITE_EXTERNAL_STORAGE',
   'android.permission.MANAGE_EXTERNAL_STORAGE'
-];
-for (const permission of forbiddenPermissions) {
-  const escaped = permission.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
-  const declaration = new RegExp('\\\\s*<uses-permission\\\\b(?=[^>]*android:name=["\\\\']' + escaped + '["\\\\'])[^>]*/>', 'g');
-  manifest = manifest.replace(declaration, '');
-}
+]);
+manifest = manifest.replace(/<uses-permission\\b[^>]*\\bandroid:name=["']([^"']+)["'][^>]*\\/>/g,
+  (declaration, permission) => forbiddenPermissions.has(permission) ? '' : declaration);
 fs.writeFileSync(manifestPath, manifest);
 
 
