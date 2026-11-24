@@ -170,6 +170,13 @@ public class MainActivity extends BridgeActivity {
     registerPlugin(AureliaNativeActionsPlugin.class);
     super.onCreate(savedInstanceState);
     if (!BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(false);
+    if (bridge != null && bridge.getWebView() != null) {
+      android.webkit.WebSettings appSettings = bridge.getWebView().getSettings();
+      appSettings.setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+      appSettings.setAllowFileAccessFromFileURLs(false);
+      appSettings.setAllowUniversalAccessFromFileURLs(false);
+      if (Build.VERSION.SDK_INT >= 26) appSettings.setSafeBrowsingEnabled(true);
+    }
     prefs = getSharedPreferences("aurelia_storage", MODE_PRIVATE);
   }
 
