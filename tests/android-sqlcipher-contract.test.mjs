@@ -6,6 +6,7 @@ const read = path => fs.readFileSync(path, 'utf8');
 const repository = read('android/templates/LocalPmsRepository.java');
 const plugin = read('android/templates/CapacitorPmsStoragePlugin.java');
 const keyManager = read('android/templates/PmsDatabaseKeyManager.java');
+const unlockManager = read('android/templates/PmsUnlockManager.java');
 const patch = read('scripts/patch-android.js');
 
 test('native repository uses SQLCipher classes, not platform SQLite classes', () => {
@@ -17,18 +18,32 @@ test('native repository uses SQLCipher classes, not platform SQLite classes', ()
   assert.match(repository, /super\(context\.getApplicationContext\(\), NAME, key, null, VERSION, 0, null, null, true\)/);
 });
 
-test('database key is random 256-bit material wrapped by Android Keystore AES-GCM', () => {
-  assert.match(keyManager, /KEY_BYTES = 32/);
-  assert.match(keyManager, /new byte\[KEY_BYTES\]/);
-  assert.match(keyManager, /SecureRandom/);
-  assert.match(keyManager, /AndroidKeyStore/);
-  assert.match(keyManager, /AES\/GCM\/NoPadding/);
-  assert.match(keyManager, /setKeySize\(256\)/);
-  assert.match(keyManager, /setRandomizedEncryptionRequired\(true\)/);
-  assert.match(keyManager, /MessageDigest\.isEqual/);
-  assert.match(keyManager, /databaseArtifactsExist\(app\)/);
-  assert.match(keyManager, /refusing to replace the key/);
-  assert.match(keyManager, /refusing to regenerate it/);
+test('PIN, biometric and recovery envelopes independently unlock the same random 256-bit DEK', () => {
+  assert.match(unlockManager, /DEK_BYTES = 32/);
+  assert.match(unlockManager, /SecureRandom/);
+  assert.match(unlockManager, /PBKDF2WithHmacSHA256/);
+  assert.match(unlockManager, /ITERATIONS = 600000/);
+  assert.match(unlockManager, /PIN_ENVELOPE/);
+  assert.match(unlockManager, /RECOVERY_ENVELOPE/);
+  assert.match(unlockManager, /BIO_ENVELOPE/);
+  assert.match(unlockManager, /setUserAuthenticationRequired\\(true\\)/);
+  assert.match(unlockManager, /setUserAuthenticationValidityDurationSeconds\\(-1\\)/);
+  assert.match(unlockManager, /MessageDigest\\.isEqual/);
+  assert.match(unlockManager, /databaseArtifactsExist\\(context\\)/);
+  assert.match(unlockManager, /refusing to replace the DEK/);
+  assert.match(unlockManager, /PMS database is locked/);
+  assert.match(unlockManager, /lockout_until_ms/);
+  assert.match(keyManager, /PmsUnlockManager\\.getUnlockedDatabaseKey/);
+  assert.doesNotMatch(keyManager, /getOrCreateDatabaseKey.*SecureRandom/s);
+});
+
+test('unlock secrets are entered in native dialogs and never passed through WebView arguments', () => {
+  assert.match(plugin, /setupDatabaseUnlock/);
+  assert.match(plugin, /promptUnlockSecret/);
+  assert.match(plugin, /new AlertDialog\\.Builder/);
+  assert.match(plugin, /recoveryKeyDisplayed/);
+  assert.doesNotMatch(plugin, /call\\.getString\\("(?:pin|recoveryKey)"/);
+  assert.doesNotMatch(plugin, /sms|otp|one.time.password/i);
 });
 
 test('database initialization checks SQLCipher encryption state and page authentication', () => {
@@ -80,7 +95,7 @@ test('outbox retry scheduling uses integer epoch milliseconds and migrates legac
 test('plugin reports encrypted storage contract and never advertises plain SQLite', () => {
   assert.match(plugin, /android-sqlcipher/);
   assert.match(plugin, /contractVersion",2/);
-  assert.match(plugin, /android-keystore-aes-gcm/);
+  assert.match(plugin, /user-unlock-envelopes/);
   assert.doesNotMatch(plugin, /android-sqlite/);
 });
 
