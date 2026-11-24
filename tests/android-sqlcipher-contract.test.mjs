@@ -130,7 +130,7 @@ test('native actions use the scoped Capacitor bridge, not frame-exposed Javascri
   assert.match(actionsPlugin, /@CapacitorPlugin\(name = "AureliaNativeActions"\)/);
   assert.match(actionsPlugin, /MAX_MESSAGE_CHARS/);
   assert.match(actionsPlugin, /AURELIA_NATIVE_UNSUPPORTED_ACTION/);
-  assert.match(plugin, /AureliaNativeActions/);
+  assert.match(patch, /registerPlugin\\(AureliaNativeActionsPlugin\\.class\\)/);
 });
 
 test('web security policy blocks frames and pins the only dynamically loaded script', () => {
