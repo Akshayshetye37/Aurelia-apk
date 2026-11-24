@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { FORBIDDEN_PERMISSIONS, stripForbiddenPermissions } = require('../scripts/android-manifest-security.cjs');
+const { FORBIDDEN_PERMISSIONS, stripForbiddenPermissions, disableManifestBackup, hardenGroovyReleaseBuild } = require('../scripts/android-manifest-security.cjs');
 
 test('strips camera and legacy shared-storage permissions while preserving required entries', () => {
   const manifest = [
@@ -37,4 +37,34 @@ test('preserves CRLF manifest line endings', () => {
 
 test('rejects non-string manifest input', () => {
   assert.throws(() => stripForbiddenPermissions(null), TypeError);
+});
+
+test('forces Android application backups off without duplicating the attribute', () => {
+  const result = disableManifestBackup('<manifest><application android:allowBackup="true" android:label="Aurelia PMS"></application></manifest>');
+  assert.match(result, /android:allowBackup="false"/);
+  assert.equal((result.match(/android:allowBackup=/g) || []).length, 1);
+  assert.match(result, /android:label="Aurelia PMS"/);
+});
+
+test('hardens Groovy release build with R8, resource shrinking and no debuggability', () => {
+  const gradle = [
+    'android {',
+    '  buildTypes {',
+    '    release {',
+    '      minifyEnabled false',
+    "      proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'",
+    '    }',
+    '  }',
+    '}'
+  ].join('\n');
+  const result = hardenGroovyReleaseBuild(gradle);
+  assert.match(result, /minifyEnabled true/);
+  assert.match(result, /shrinkResources true/);
+  assert.match(result, /debuggable true/);
+  assert.match(result, /proguard-android-optimize\.txt/);
+  assert.equal(hardenGroovyReleaseBuild(result), result);
+});
+
+test('fails closed if release build configuration cannot be found', () => {
+  assert.throws(() => hardenGroovyReleaseBuild('android { }'), /release buildType block was not found/);
 });
