@@ -59,9 +59,13 @@ The maintained application name, package name, app title, and Capacitor app name
 
 Open `index.html` in a modern browser for an initial inspection. Android-specific features require a compatible Capacitor/native wrapper and its implemented bridge.
 
-## Security and release status
+## Architecture and security baseline
 
-This repository is a source project, not a declaration of production readiness. Review [docs/SECURITY.md](docs/SECURITY.md), verify the Android build and test on supported physical devices before release. Do not place provider secrets in browser storage, source files, APK resources or client-side configuration.
+The accepted offline-first, local-versus-server, storage, financial-integrity, offline-licensing and anti-cloning decisions are documented in [docs/ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md). Android release patching now enables R8 minification/resource shrinking, disables release debuggability and WebView debugging, disables Android automatic app-data backup, and removes broad camera/legacy shared-storage permissions. Contract tests cover the manifest and release-hardening helpers (`npm test`).
+
+These changes do **not** mean encrypted native SQLite, signed offline licensing, server-side Play Integrity, JavaScript minification/obfuscation, or the legacy-data migration have been completed. The current HTML application still contains extractable JavaScript and legacy browser persistence. Do not treat the native SQLite target as active until the encrypted database, Keystore key lifecycle, migration, rollback, and physical-device acceptance gates in the decision record pass.
+
+This repository is a source project, not a declaration of production readiness. Review [docs/SECURITY.md](docs/SECURITY.md), verify the exact release build and test on supported physical devices before distribution. Do not place provider secrets in browser storage, source files, APK resources or client-side configuration.
 
 ## Payment policy verification
 
