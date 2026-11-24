@@ -66,11 +66,16 @@ if (fs.existsSync(appGradleGroovy)) {
   }
   if (!gradle.includes('androidx.sqlite:sqlite:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match =>
-      match + "\n    implementation 'androidx.sqlite:sqlite:2.7.0'\n    implementation 'androidx.biometric:biometric:1.2.0'");
+      match + "\n    implementation 'androidx.sqlite:sqlite:2.7.0'");
+  }
+  if (!gradle.includes('androidx.biometric:biometric:')) {
+    gradle = gradle.replace(/dependencies\s*\{/, match =>
+      match + "\n    implementation 'androidx.biometric:biometric:1.2.0'");
   }
   if (!gradle.includes('net.zetetic:sqlcipher-android:4.20.0@aar') ||
-      !gradle.includes('androidx.sqlite:sqlite:2.7.0') ||\n      !gradle.includes('androidx.biometric:biometric:1.2.0')) {
-    throw new Error('SQLCipher Android dependencies could not be installed into the generated Gradle project.');
+      !gradle.includes('androidx.sqlite:sqlite:2.7.0') ||
+      !gradle.includes('androidx.biometric:biometric:1.2.0')) {
+    throw new Error('Required SQLCipher and biometric Android dependencies could not be installed into the generated Gradle project.');
   }
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
