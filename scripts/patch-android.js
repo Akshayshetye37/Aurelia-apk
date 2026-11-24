@@ -85,6 +85,7 @@ const proguardRules = [
   '-keep class com.aurelia.pms.MainActivity$AureliaBridge { *; }',
   '-keep class com.aurelia.pms.CapacitorPmsStoragePlugin { *; }',
   '-keep class com.aurelia.pms.LocalPmsRepository { *; }',
+  '-keep class com.aurelia.pms.PmsDatabaseKeyManager { *; }',
   '-keep class net.zetetic.database.** { *; }',
   ''
 ].join('\n');
