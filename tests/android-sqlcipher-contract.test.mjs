@@ -7,6 +7,7 @@ const repository = read('android/templates/LocalPmsRepository.java');
 const plugin = read('android/templates/CapacitorPmsStoragePlugin.java');
 const keyManager = read('android/templates/PmsDatabaseKeyManager.java');
 const unlockManager = read('android/templates/PmsUnlockManager.java');
+const actionsPlugin = read('android/templates/AureliaNativeActionsPlugin.java');
 const patch = read('scripts/patch-android.js');
 
 test('native repository uses SQLCipher classes, not platform SQLite classes', () => {
@@ -119,4 +120,37 @@ test('native repository opens lazily so an unavailable key does not crash app st
   assert.match(plugin, /load\(\) \{ super\.load\(\); \}/);
   assert.match(plugin, /private synchronized LocalPmsRepository repository\(\)/);
   assert.match(plugin, /if \(repository == null\) repository = new LocalPmsRepository\(getContext\(\)\)/);
+});
+
+test('native actions use the scoped Capacitor bridge, not frame-exposed JavascriptInterface', () => {
+  assert.doesNotMatch(patch, /addJavascriptInterface|@JavascriptInterface/);
+  assert.match(patch, /registerPlugin\(AureliaNativeActionsPlugin\.class\)/);
+  assert.match(patch, /handleAureliaNativeMessage/);
+  assert.match(patch, /AureliaNativeActionsPlugin\.java/);
+  assert.match(actionsPlugin, /@CapacitorPlugin\(name = "AureliaNativeActions"\)/);
+  assert.match(actionsPlugin, /MAX_MESSAGE_CHARS/);
+  assert.match(actionsPlugin, /AURELIA_NATIVE_UNSUPPORTED_ACTION/);
+  assert.match(plugin, /AureliaNativeActions/);
+});
+
+test('web security policy blocks frames and pins the only dynamically loaded script', () => {
+  const html = read('index.html');
+  assert.match(html, /frame-src 'none'/);
+  assert.match(html, /child-src 'none'/);
+  assert.match(html, /object-src 'none'/);
+  assert.match(html, /sha256-6H5VB5QyLldKH9oMFUmjxw2uWpPZETQXpCkBaDjquMs=/);
+  assert.match(html, /crossOrigin='anonymous'/);
+  assert.doesNotMatch(html, /window\.AureliaNative/);
+  assert.match(html, /Capacitor\.Plugins\.AureliaNativeActions/);
+});
+
+test('native print WebView cannot execute JavaScript or load local/network resources', () => {
+  assert.match(patch, /printSettings\.setJavaScriptEnabled\(false\)/);
+  assert.match(patch, /printSettings\.setAllowFileAccess\(false\)/);
+  assert.match(patch, /printSettings\.setAllowContentAccess\(false\)/);
+  assert.match(patch, /printSettings\.setBlockNetworkLoads\(true\)/);
+});
+
+test('native external URL actions reject dangerous URI schemes', () => {
+  assert.match(patch, /scheme\.matches\("https\|http\|tel\|mailto"\)/);
 });
