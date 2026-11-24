@@ -6,11 +6,13 @@ on:
       - 'index.html'
       - 'package.json'
       - 'capacitor.config.json'
+      - 'android/templates/**'
       - 'scripts/**'
       - '.github/workflows/build-apk.yml'
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -20,23 +22,50 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-      - name: Prepare app and install Capacitor
+      - name: Install Node dependencies
+        run: npm install --no-audit --no-fund
+      - name: Prepare web app
+        run: npm run build
+      - name: Generate Android project and restore Aurelia native templates
+        shell: bash
         run: |
-          npm install
-          npm run build
+          set -euo pipefail
+          template_dir="$RUNNER_TEMP/aurelia-android-templates"
+          if [[ -d android/templates ]]; then
+            mv android/templates "$template_dir"
+          fi
+          if [[ -d android ]]; then
+            rmdir android
+          fi
           npx cap add android
-          node scripts/patch-android.js
-          npx cap sync android
+          if [[ -d "$template_dir" ]]; then
+            mkdir -p android/templates
+            cp -a "$template_dir/." android/templates/
+          fi
+          test -f android/gradlew
+          test -f android/app/build.gradle
+      - name: Apply Aurelia native Android configuration
+        run: node scripts/patch-android.js
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+      - name: Verify generated native project
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f android/app/src/main/AndroidManifest.xml
+          test -f android/app/src/main/java/com/aurelia/pms/MainActivity.java
+          grep -q 'AureliaNative' android/app/src/main/java/com/aurelia/pms/MainActivity.java
       - name: Build debug APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew --no-daemon assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
