@@ -28,6 +28,7 @@ test('PIN, biometric and recovery envelopes independently unlock the same random
   assert.match(unlockManager, /BIO_ENVELOPE/);
   assert.match(unlockManager, /setUserAuthenticationRequired\(true\)/);
   assert.match(unlockManager, /setUserAuthenticationValidityDurationSeconds\(-1\)/);
+  assert.match(unlockManager, /KeyPermanentlyInvalidatedException/);
   assert.match(unlockManager, /MessageDigest\.isEqual/);
   assert.match(unlockManager, /databaseArtifactsExist\(context\)/);
   assert.match(unlockManager, /refusing to replace the DEK/);
