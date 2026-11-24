@@ -69,6 +69,7 @@ jobs:
       - name: Checkout trusted workflow control revision
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          ref: ${{ vars.GATE_CONTROL_BRANCH || 'integration/ledger-patch' }}
           persist-credentials: false
       - name: Verify exact candidate source before staging deployment
         shell: bash
@@ -82,6 +83,31 @@ jobs:
               test "$CANDIDATE_SHA" = "$GITHUB_SHA" ;;
             *) echo "::error::Untrusted workflow ref cannot invoke staging deployment."; exit 1 ;;
           esac
+      - name: Preflight staging environment and Workload Identity Federation inputs
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
+          FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
+          FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
+          VERIFIER_URL: ${{ vars.RECOVERY_ATTESTATION_VERIFIER_URL }}
+          ACTIVE_KID: ${{ vars.RECOVERY_SIGNING_KEY_ID }}
+          PUBLIC_KEYS: ${{ vars.RECOVERY_GRANT_PUBLIC_KEYS_JSON }}
+          FIREBASE_WEB_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
+          APP_CHECK_REGISTERED: ${{ vars.APP_CHECK_PLAY_INTEGRITY_REGISTERED }}
+          APP_CHECK_SIGNER_SHA256: ${{ vars.APP_CHECK_SIGNER_SHA256 }}
+          ATTESTATION_SIGNER_SHA256: ${{ vars.ATTESTATION_APP_SIGNER_SHA256 }}
+          RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'createRecoveryAttestationChallenge,verifyRecoveryDeviceAttestation,registerRecoveryPhone,exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,issueRecoveryGrant,consumeRecoveryGrant,cancelRecoveryRequest,cancelRecoveryPhoneChange,activateRecoveryPhoneChange' }}
+          WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.STAGING_DEPLOY_SERVICE_ACCOUNT }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          KEYSTORE_B64: ${{ secrets.STAGING_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.STAGING_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.STAGING_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.STAGING_KEY_PASSWORD }}
+        run: node scripts/gates/staging-preflight.mjs
+
       - name: Checkout candidate source as build input
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -151,12 +177,42 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
 
+      - name: Verify Workload Identity Federation and deployment identity are staging-owned
+        shell: bash
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
+          WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.STAGING_DEPLOY_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          provider_project_number="${WIF_PROVIDER#projects/}"
+          provider_project_number="${provider_project_number%%/*}"
+          staging_project_number="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+          test -n "$staging_project_number"
+          if [[ "$provider_project_number" != "$staging_project_number" ]]; then
+            echo "::error::Workload Identity Federation provider is not owned by the staging project."
+            exit 1
+          fi
+          gcloud iam service-accounts describe "$DEPLOY_SERVICE_ACCOUNT" --project "$PROJECT_ID" >/dev/null
+          active_account="$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+          if [[ "$active_account" != "$DEPLOY_SERVICE_ACCOUNT" ]]; then
+            echo "::error::Authenticated identity does not match the configured staging deploy service account."
+            exit 1
+          fi
+          production_policy="$(gcloud projects get-iam-policy "$PRODUCTION_PROJECT_ID" --format=json)"
+          if echo "$production_policy" | jq -e --arg member "serviceAccount:$DEPLOY_SERVICE_ACCOUNT" '[.bindings[]? | select(.members[]? == $member)] | length > 0' >/dev/null; then
+            echo "::error::Staging deploy service account has a direct IAM binding in production."
+            exit 1
+          fi
+          echo "Staging WIF provider and deployment identity ownership verified; direct production project bindings absent."
+
       - name: Validate staging configuration without printing secrets
         shell: bash
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           PRODUCTION_PROJECT_ID: ${{ vars.PRODUCTION_GCP_PROJECT_ID }}
-          REGION: ${{ vars.GCP_REGION }}
+          REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
           FUNCTIONS_BASE_URL: ${{ vars.STAGING_FUNCTIONS_BASE_URL }}
           RECOVERY_CALLABLES: ${{ vars.RECOVERY_CALLABLES || 'exchangeOwnerEmailLink,confirmRecoveryOwnerBinding,registerRecoveryOwnerDevice,acknowledgeRecoveryOwnerAlert,getRecoveryOwnerPendingAction,getRecoveryOwnerActionReadiness' }}
           FUNCTION_SA: ${{ vars.RECOVERY_FUNCTIONS_SERVICE_ACCOUNT }}
