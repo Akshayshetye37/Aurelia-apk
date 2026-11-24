@@ -50,7 +50,7 @@ Until all gates pass, existing browser storage remains the live compatibility st
 - Payment collection remains **Aurelia UPI only**. A generated QR, UPI intent, notification or device callback is not proof of settlement. Record settlement only after staff verifies receipt or a trusted verification source confirms it.
 - Room availability validation and reservation insertion must execute in the same database transaction under a uniqueness/locking strategy that prevents double booking.
 - Stay dates are date-only values interpreted in the property's configured IANA timezone. Do not convert check-in/check-out dates through device-local midnight timestamps.
-- Every outbox event has a globally unique idempotency/event key, tenant/property/device scope, schema version and stable sequence.
+- Every outbox event has a globally unique idempotency/event key, tenant/property/device scope, schema version and stable sequence. Store retry scheduling and lease deadlines as integer UTC epoch milliseconds (`retry_at_ms`, `lease_until`); convert to ISO-8601 only at the JavaScript/API boundary. Legacy ISO retry timestamps must be migrated transactionally and rejected if malformed.
 - Financial and booking conflicts require explicit review. Do not apply last-write-wins to payments, folios, booking occupancy or room allocation.
 - Role checks in an offline client are defense-in-depth only. Enforce authorization in domain/repository boundaries locally and independently on every server endpoint.
 
