@@ -29,6 +29,34 @@ Booking folios, payment history, guest balances, cancellation records and accoun
 
 A UPI intent/QR is a payment request, not independent proof of settlement. Staff must verify receipt in the receiving UPI/bank account before recording a payment as received.
 
+## Branch audit and adoption policy — 24 November 2026
+
+A branch inventory identified 73 branches. Many feature, integration, backup and release branches are deeply diverged from `main`; branch commit counts and compare totals are not evidence that all changes are complete. GitHub compare responses for several large branches were capped at 300 changed files.
+
+### Reviewed candidate work
+
+- **PMS canonical persistence:** `feature/phase-7-pms-persistence` and `fix/p0-storage-authority` contain IndexedDB/native repository, migration, identity, outbox, and bootstrap work with dedicated tests. The code is a candidate architecture, not an adopted or production-qualified UI cutover. Its own documentation keeps synchronous UI cutover separate.
+- **Folio and booking lifecycle:** `work/folio-booking-lifecycle` contains cancellation policy and folio/accounting tests. It needs domain integration and regression verification against the current UI before adoption.
+- **Local payment receipt and proof:** `work/local-ledger-receipt` and `work/payment-ack-proof-hardening` contain local receipt/outbox and acknowledgement-vs-posting work. Any future adoption must be constrained to Aurelia UPI and must never interpret a QR/intent or device acknowledgement as settlement proof.
+- **Encrypted backup and recovery:** `fix/backup-consolidated-integration`, `feature/owner-google-drive-backup-v2`, and related branches contain backup/restore and recovery work. They remain unqualified for production until native build, encryption negative cases, owner authorization, restore, and physical-device tests pass.
+- **Authentication, Gate 3/5 and SaaS work:** these branches have open/draft reviews and staging/emulator/physical-device gates. They are not considered fully implemented merely because source code exists.
+
+### Explicitly excluded from the active main application
+
+Do not import multi-provider payment adapters, gateway SDKs, provider onboarding, Pay Bridge, gateway webhooks, or automatic settlement from `feature/multi-provider-payment-backend`, `feature/payment-provider-production-adapters`, `feature/pay-bridge-platform`, or similar historical branches. The active payment collection boundary remains Aurelia UPI only. Those branches are retained as historical development material and do not enable payment rails on `main`.
+
+### Main-branch APK workflow repair
+
+On 24 November 2026, the APK workflow was repaired directly on `main` after the run failed because:
+1. the repository stores only `android/templates`, not a generated `android/app` project, so native templates must be moved aside before `npx cap add android` and restored afterwards; and
+2. the repository has no npm lockfile, so `setup-node` npm caching cannot be enabled.
+
+The workflow now generates the Capacitor Android project while preserving templates, applies the Aurelia native patch, verifies the generated bridge files, and builds the debug APK. Check the exact-head Actions result before treating this repair as verified.
+
+### Branding
+
+The maintained application name, package name, app title, and Capacitor app name are `Aurelia PMS` / `aurelia-pms`. Third-party platform names in security and integration notes refer to dependencies or disabled historical integrations, not alternate application branding or enabled payment methods.
+
 ## Run locally
 
 Open `index.html` in a modern browser for an initial inspection. Android-specific features require a compatible Capacitor/native wrapper and its implemented bridge.
