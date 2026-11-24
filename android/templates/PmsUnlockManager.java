@@ -119,6 +119,7 @@ final class PmsUnlockManager {
     SecretKey key = biometricKey(true);
     Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
     cipher.init(Cipher.ENCRYPT_MODE, key);
+    cipher.updateAAD((AAD_PREFIX + "biometric|v1").getBytes(StandardCharsets.UTF_8));
     return cipher;
   }
 
@@ -166,6 +167,7 @@ final class PmsUnlockManager {
       try {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.DECRYPT_MODE, biometricKey(false), new GCMParameterSpec(TAG_BITS, iv));
+        cipher.updateAAD((AAD_PREFIX + "biometric|v1").getBytes(StandardCharsets.UTF_8));
         return cipher;
       } finally { Arrays.fill(iv, (byte) 0); }
     } finally { Arrays.fill(packed, (byte) 0); }
@@ -174,7 +176,7 @@ final class PmsUnlockManager {
   static synchronized void finishBiometricUnlock(Cipher cipher) throws Exception {
     byte[] encoded = prefsFromUnlockedContext().getString(BIO_ENVELOPE, "").isEmpty()
         ? null : Base64.decode(prefsFromUnlockedContext().getString(BIO_ENVELOPE, ""), Base64.NO_WRAP);
-    if (encoded == null || encoded.length != 1 + IV_BYTES + DEK_BYTES + 16) {
+    if (encoded == null || encoded.length != 1 + IV_BYTES + DEK_BYTES + 16 || encoded[0] != VERSION) {
       throw new SecurityException("Biometric envelope is missing or invalid.");
     }
     byte[] encrypted = Arrays.copyOfRange(encoded, 1 + IV_BYTES, encoded.length);
