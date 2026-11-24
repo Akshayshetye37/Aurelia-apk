@@ -61,8 +61,16 @@ const appGradleKts = path.join(appModuleDir, 'build.gradle.kts');
 if (fs.existsSync(appGradleGroovy)) {
   let gradle = fs.readFileSync(appGradleGroovy, 'utf8');
   if (!gradle.includes('net.zetetic:sqlcipher-android:')) {
-    gradle = gradle.replace(/dependencies\s*\{/, match => match +
-      "\n    implementation 'net.zetetic:sqlcipher-android:4.20.0@aar'\n    implementation 'androidx.sqlite:sqlite:2.7.0'");
+    gradle = gradle.replace(/dependencies\s*\{/, match =>
+      match + "\n    implementation 'net.zetetic:sqlcipher-android:4.20.0@aar'");
+  }
+  if (!gradle.includes('androidx.sqlite:sqlite:')) {
+    gradle = gradle.replace(/dependencies\s*\{/, match =>
+      match + "\n    implementation 'androidx.sqlite:sqlite:2.7.0'");
+  }
+  if (!gradle.includes('net.zetetic:sqlcipher-android:4.20.0@aar') ||
+      !gradle.includes('androidx.sqlite:sqlite:2.7.0')) {
+    throw new Error('SQLCipher Android dependencies could not be installed into the generated Gradle project.');
   }
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
