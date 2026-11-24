@@ -45,13 +45,11 @@ A branch inventory identified 73 branches. Many feature, integration, backup and
 
 Do not import multi-provider payment adapters, gateway SDKs, provider onboarding, Pay Bridge, gateway webhooks, or automatic settlement from `feature/multi-provider-payment-backend`, `feature/payment-provider-production-adapters`, `feature/pay-bridge-platform`, or similar historical branches. The active payment collection boundary remains Aurelia UPI only. Those branches are retained as historical development material and do not enable payment rails on `main`.
 
-### Main-branch APK workflow repair
+### APK workflow and verification boundary
 
-On 24 November 2026, the APK workflow was repaired directly on `main` after the run failed because:
-1. the repository stores only `android/templates`, not a generated `android/app` project, so native templates must be moved aside before `npx cap add android` and restored afterwards; and
-2. the repository has no npm lockfile, so `setup-node` npm caching cannot be enabled.
+The workflow at `.github/workflows/build-apk.yml` is configured to run for changes to the application entry point, package/Capacitor configuration, Android templates, build scripts, or the workflow itself. A README-only update does not match its path filters and does not start an APK build.
 
-The workflow now generates the Capacitor Android project while preserving templates, applies the Aurelia native patch, verifies the generated bridge files, and builds the debug APK. Check the exact-head Actions result before treating this repair as verified.
+The workflow preserves `android/templates` while generating the Capacitor Android project, applies the native patch, verifies generated bridge files, and then runs the debug APK build. A successful run on an earlier commit is not proof that later native-patch changes build successfully. Treat build evidence as valid only for the exact commit SHA reported by GitHub Actions. No APK build is being requested or represented as verified by this documentation update.
 
 ### Branding
 
