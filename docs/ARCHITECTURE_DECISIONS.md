@@ -39,7 +39,7 @@ The generated Android project now includes SQLCipher for Android 4.20.0 and Andr
 
 The repository opens through SQLCipher's `SQLiteOpenHelper`, verifies `PRAGMA cipher_status`, `PRAGMA integrity_check` and `PRAGMA cipher_integrity_check`, and enables SQLCipher memory sanitization. See the [SQLCipher integrity and status PRAGMAs](https://www.zetetic.net/sqlcipher/sqlcipher-api/). Generic WebView writes are restricted to non-domain metadata/backup stores; WebView-accessible database wipe and authority-promotion methods are not exposed.
 
-This is only a device-bound at-rest key envelope. It does **not** yet satisfy the complete user unlock design: PIN, biometric and recovery-key envelopes must independently wrap and unwrap this same DEK; OTP must remain outside that key path. Those flows are not yet integrated. The native repository is not wired into live UI/domain reads and writes, and no legacy migration or rollback has been run.
+This is only a device-bound at-rest key envelope. It does **not** yet satisfy the complete user unlock design: the PIN, biometric credential and high-entropy recovery key must each independently wrap and unwrap this same DEK. OTP is an identity/recovery-authorization factor only: it must never derive, replace, wrap or regenerate the DEK; SMS alone cannot restore database access. Those independent envelopes and native unlock flows are not yet integrated. The native repository is not wired into live UI/domain reads and writes, and no legacy migration or rollback has been run.
 
 Until all gates pass, existing browser storage remains the live compatibility store. Do not claim native SQLCipher is canonical or migrate live user data.
 
