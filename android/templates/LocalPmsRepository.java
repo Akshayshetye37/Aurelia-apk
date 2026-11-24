@@ -38,7 +38,7 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
     try { super.close(); } finally { java.util.Arrays.fill(databaseKey, (byte) 0); }
   }
 
-  @Override public void onConfigure(SQLiteDatabase db) { super.onConfigure(db); db.setForeignKeyConstraintsEnabled(true); try(Cursor mode=db.rawQuery("PRAGMA journal_mode=WAL",null)){if(!mode.moveToFirst()||!"wal".equalsIgnoreCase(mode.getString(0)))throw new IllegalStateException("SQLite WAL mode could not be enabled");} db.execSQL("PRAGMA synchronous=FULL"); }
+  @Override public void onConfigure(SQLiteDatabase db) { super.onConfigure(db); db.setForeignKeyConstraintsEnabled(true); try(Cursor mode=db.rawQuery("PRAGMA journal_mode=WAL",null)){if(!mode.moveToFirst()||!"wal".equalsIgnoreCase(mode.getString(0)))throw new IllegalStateException("SQLite WAL mode could not be enabled");} db.execSQL("PRAGMA synchronous=FULL"); db.execSQL("PRAGMA cipher_memory_security=ON"); }
 
   @Override public void onCreate(SQLiteDatabase db) {
     db.execSQL("PRAGMA foreign_keys=ON");
@@ -242,6 +242,53 @@ final class LocalPmsRepository extends SQLiteOpenHelper {
   }
   private static JSONObject storageOutboxRow(Cursor c) throws Exception {
     JSONObject row=new JSONObject();row.put("eventId",c.getString(0));row.put("tenantId",c.getString(1));row.put("propertyId",c.getString(2));row.put("deviceId",c.getString(3));row.put("entityType",c.getString(4));row.put("entityId",c.getString(5));row.put("sequence",c.getLong(6));row.put("eventType",c.getString(7));row.put("schemaVersion",c.getLong(8));row.put("occurredAt",c.getString(9));row.put("payload",new JSONTokener(c.getString(10)).nextValue());row.put("status",c.getString(11));row.put("attempts",c.getLong(12));row.put("retryAt",c.isNull(13)?JSONObject.NULL:c.getString(13));row.put("leaseOwner",c.isNull(14)?JSONObject.NULL:c.getString(14));row.put("leaseUntil",c.isNull(15)?JSONObject.NULL:isoTimestamp(c.getLong(15)));row.put("lastErrorCode",c.isNull(16)?JSONObject.NULL:c.getString(16));row.put("createdAt",isoTimestamp(c.getLong(17)));row.put("acknowledgedAt",c.isNull(18)?JSONObject.NULL:isoTimestamp(c.getLong(18)));return row;
+  }
+
+  synchronized JSONObject storageIntegrityCheck() {
+    SQLiteDatabase db=getReadableDatabase();
+    JSONObject result=new JSONObject();
+    try {
+      int cipherStatus=0;
+      try(Cursor status=db.rawQuery("PRAGMA cipher_status",null)) {
+        if(!status.moveToFirst())throw new SecurityException("SQLCipher status pragma returned no result.");
+        cipherStatus=status.getInt(0);
+      }
+      if(cipherStatus!=1)throw new SecurityException("Database connection is not confirmed as SQLCipher encrypted.");
+      try(Cursor integrity=db.rawQuery("PRAGMA integrity_check",null)) {
+        if(!integrity.moveToFirst())throw new IllegalStateException("SQLite integrity_check returned no result.");
+        do {
+          String value=integrity.getString(0);
+          if(!"ok".equalsIgnoreCase(value))throw new SecurityException("SQLite integrity_check detected database corruption.");
+        } while(integrity.moveToNext());
+      }
+      int cipherErrors=0;
+      try(Cursor cipher=db.rawQuery("PRAGMA cipher_integrity_check",null)) {
+        while(cipher.moveToNext())cipherErrors++;
+      }
+      if(cipherErrors!=0)throw new SecurityException("SQLCipher page authentication check detected invalid pages.");
+      result.put("ok",true);
+      result.put("engine","sqlcipher-android");
+      result.put("cipherStatus",cipherStatus);
+      result.put("cipherIntegrityErrors",cipherErrors);
+      result.put("databaseVersion",db.getVersion());
+      return result;
+    } catch(Exception failure) {
+      throw failure instanceof RuntimeException?(RuntimeException)failure:failure("PMS_SQLCIPHER_INTEGRITY_FAILED",failure);
+    }
+  }
+
+  synchronized JSONObject storageAuthority() {
+    SQLiteDatabase db=getReadableDatabase();
+    try(Cursor cursor=db.rawQuery("SELECT state,migration_id,updated_at FROM pms_authority WHERE singleton=1",null)) {
+      if(!cursor.moveToFirst())throw new IllegalStateException("PMS storage authority record is missing.");
+      JSONObject result=new JSONObject();
+      result.put("state",cursor.getString(0));
+      result.put("migrationId",cursor.isNull(1)?JSONObject.NULL:cursor.getString(1));
+      result.put("updatedAt",cursor.getLong(2));
+      return result;
+    } catch(Exception failure) {
+      throw failure instanceof RuntimeException?(RuntimeException)failure:failure("PMS_STORAGE_AUTHORITY_READ_FAILED",failure);
+    }
   }
 
   synchronized JSONObject storageGet(String store,String key) {
