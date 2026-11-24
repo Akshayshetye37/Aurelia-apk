@@ -60,6 +60,10 @@ const appGradleGroovy = path.join(appModuleDir, 'build.gradle');
 const appGradleKts = path.join(appModuleDir, 'build.gradle.kts');
 if (fs.existsSync(appGradleGroovy)) {
   let gradle = fs.readFileSync(appGradleGroovy, 'utf8');
+  if (!gradle.includes('net.zetetic:sqlcipher-android:')) {
+    gradle = gradle.replace(/dependencies\s*\{/, match => match +
+      "\n    implementation 'net.zetetic:sqlcipher-android:4.20.0@aar'\n    implementation 'androidx.sqlite:sqlite:2.7.0'");
+  }
   if (!gradle.includes('com.google.mlkit:text-recognition:')) {
     gradle = gradle.replace(/dependencies\s*\{/, match => match + "\n    implementation 'com.google.mlkit:text-recognition:16.0.1'");
   }
@@ -79,9 +83,24 @@ const proguardRules = [
   '}',
   '-keep class com.aurelia.pms.MainActivity { *; }',
   '-keep class com.aurelia.pms.MainActivity$AureliaBridge { *; }',
+  '-keep class com.aurelia.pms.CapacitorPmsStoragePlugin { *; }',
+  '-keep class com.aurelia.pms.LocalPmsRepository { *; }',
+  '-keep class net.zetetic.database.** { *; }',
   ''
 ].join('\n');
 fs.writeFileSync(path.join(appModuleDir, 'proguard-rules.pro'), proguardRules);
+
+const nativeTemplates = [
+  'PmsDatabaseKeyManager.java',
+  'LocalPmsRepository.java',
+  'CapacitorPmsStoragePlugin.java',
+  'StorageSerializationException.java'
+];
+for (const templateName of nativeTemplates) {
+  const source = path.join(androidDir, 'templates', templateName);
+  if (!fs.existsSync(source)) throw new Error('Required Aurelia PMS native template is missing: ' + templateName);
+  fs.copyFileSync(source, path.join(javaDir, templateName));
+}
 
 const javaPath = path.join(javaDir, 'MainActivity.java');
 const java = String.raw`
@@ -122,6 +141,7 @@ public class MainActivity extends BridgeActivity {
   private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor();
 
   @Override public void onCreate(Bundle savedInstanceState) {
+    registerPlugin(CapacitorPmsStoragePlugin.class);
     super.onCreate(savedInstanceState);
     if (!BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(false);
     prefs = getSharedPreferences("aurelia_storage", MODE_PRIVATE);
