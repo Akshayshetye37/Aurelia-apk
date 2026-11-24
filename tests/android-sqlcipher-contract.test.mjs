@@ -174,3 +174,23 @@ test('native guest photos are encrypted at rest with a per-install Keystore AES-
   assert.match(patch, /validatePhotoData/);
   assert.doesNotMatch(patch, /writeText\(photoFile|readText\(file\)/);
 });
+
+test('booking API bearer token is disabled unless the configured endpoint is HTTPS', () => {
+  const html = read('index.html');
+  assert.match(html, /function validatedBookingApiBaseUrl/);
+  assert.match(html, /parsed\.protocol !== "https:"/);
+  assert.match(html, /parsed\.username \|\| parsed\.password/);
+  assert.match(html, /enabled: !!s\.bookingApiEnabled && !!baseUrl/);
+  assert.match(html, /apiKey: baseUrl \? \(s\.bookingApiKey \|\| ""\) : ""/);
+});
+
+test('user-controlled inline handler arguments use JSON string encoding and room/menu text is escaped', () => {
+  const html = read('index.html');
+  assert.match(html, /const jsArg=value=>esc\(JSON\.stringify/);
+  assert.match(html, /roomS\(\$\{jsArg\(r\.n\)\}\)/);
+  assert.match(html, /cat=\$\{jsArg\(c\)\}/);
+  assert.match(html, /resv\(\$\{jsArg\(r\.n\)\}/);
+  assert.match(html, /<b>\$\{esc\(m\[0\]\)\}<\/b>/);
+  assert.doesNotMatch(html, /onclick="roomS\('\$\{r\.n\}'\)"/);
+  assert.doesNotMatch(html, /onclick="cat='\$\{c\}';render\(\)"/);
+});
