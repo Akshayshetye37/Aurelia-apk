@@ -67,17 +67,30 @@ See [GitHub Actions](https://github.com/Akshayshetye37/Aurelia-apk/actions) for 
 - Provider integration inventory in the project: Razorpay, Cashfree, PayU, PhonePe, Paytm, JioPay and CCAvenue. Adapter/test-checkout coverage is not merchant production acceptance.
 - The branch API reports `protected=false` for this work branch. Base-branch protection could not be read with the connected GitHub permission; its state is unverified.
 
+## Branch CI history audit (2026-11-20)
+
+The queried GitHub Actions history for `integration/ledger-patch` contains 308 workflow runs across the returned pages: 230 success, 54 failure and 24 cancelled. These are repeated runs across different SHAs, not 308 independent suites.
+
+Latest branch SHA `749561011664707629d0f37288363a39c14bb4c1` has four successful checks: PMS source tests/web packaging, Gate lint, R1 local-first checks and native SQLite contract.
+
+Historical failures still relevant:
+- Gate 3 staging deployment failed at Workload Identity Federation authentication in runs [44505319033](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44505319033) and [44397260341](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44397260341). Deployment and qualification jobs were skipped. This is staging identity/configuration, not evidence of a source-code failure.
+- Gate 3 run [44501533230](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44501533230) failed its frozen-candidate SHA check before deployment.
+- Older source-test/native-contract failures occurred on earlier SHAs, including `bed3044` and `9bee0ef`; later branch commits superseded them. They remain historical failures and are not current-head evidence.
+- The current Drive candidate's exact-head Android recovery instrumentation failure is recorded in the active PR status above; it is not a failure on the integration branch's latest SHA.
+
+Do not treat cancelled runs as passing. Do not reuse older SHA evidence to qualify a newer candidate.
+
 ## Exact-head CI evidence
 
-Latest observed native workflow: [Aurelia native SQLite contract run #170](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/42786247933).
+Latest observed integration-branch SHA: `749561011664707629d0f37288363a39c14bb4c1`.
 
-- Run was triggered against commit `b71b7917736ea7502851c260af7907ef8e1ffcac`; it is **not** evidence for the README update commit unless it is rerun or independently verified at that new SHA.
-- On `b71b7917736ea7502851c260af7907ef8e1ffcac`, `npm test` passed and `npm run build` passed.
-- On that same SHA, Android project generation, Capacitor sync, Android 34 SDK installation, Kotlin test-runtime alignment, native compilation, app/instrumentation APK assembly and SQLCipher x86_64 / test-runner APK-content checks passed.
-- Android 34 AVD creation and emulator process startup passed.
-- Emulator boot completion (`sys.boot_completed=1`) was still in progress at last inspection; SQLite instrumentation and the nonzero-test gate had not yet run.
-- Do not claim native SQLite instrumentation as passed until the connected AndroidJUnitRunner suite completes with a nonzero test count and retained XML/diagnostic artifacts.
-- Exact-head R1, payment-backend and other independent CI checks have not been evidenced in this inspection.
+- [PMS source tests and production web packaging](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44597294887): **success**.
+- [Gate pipeline lint](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44597292961): **success**.
+- [R1 local-first required checks](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44597292873): **success**.
+- [Native SQLite contract](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44597292884): **success**.
+
+These checks are evidence for the exact integration-branch SHA above. They do not qualify draft Drive-backup code on another SHA or the physical-device/Gate 3 release requirements.
 
 ## Implemented code foundations (not production approval)
 
@@ -373,10 +386,12 @@ The cloud provider adapter must be replaceable; the backup orchestrator must not
 ### Current cloud implementation status
 
 - Personal-cloud connection and local sync coordinator foundations exist in `src/sync/`.
-- A generic provider abstraction and cloud-provider work exist on separate/draft development workstreams; integration and qualification are still pending.
-- The Google Drive OAuth/app-data backup work is currently a draft workstream and is **not represented as a completed, integrated feature on this branch**.
-- The `src/storage/personal-cloud-storage.mjs` file on this branch is currently a placeholder; do not treat it as a production cloud adapter.
-- Owner-specific authorization, token isolation, account display, disconnect behavior, backup scheduling, encryption, restore qualification, and cross-owner isolation tests are acceptance requirements for the implementation.
+- A direct Google Drive OAuth/app-data backup candidate is available in draft PR [#49](https://github.com/Akshayshetye37/Aurelia-apk/pull/49), with hardening work in draft PR [#50](https://github.com/Akshayshetye37/Aurelia-apk/pull/50) and related draft PR [#51](https://github.com/Akshayshetye37/Aurelia-apk/pull/51). These PRs overlap and are **not merged into this branch**; review and consolidate them before integration.
+- PR #49 currently reports candidate head `a189a36f8541f7cbd095980869ef548985339385`. On that exact SHA, PMS source tests/web packaging, R1, Gate lint, settlement foundation and Recovery Functions CI passed; OTP Recovery Android Instrumentation failed. See [run 44603803426](https://github.com/Akshayshetye37/Aurelia-apk/actions/runs/44603803426).
+- The candidate implements direct OAuth with `drive.appdata`, encrypted-envelope-only uploads, owner-selected scheduling, history/restore-point selection, seven-point retention and transient token handling. Real-account OAuth, live upload/download, account switching, revocation and second-device restore are not qualified.
+- Scheduled backups are foreground/catch-up only because the authoritative snapshot and key boundary remain WebView-owned. Do not advertise guaranteed unattended WhatsApp-equivalent backup.
+- `src/storage/personal-cloud-storage.mjs` remains a placeholder for the separate generic cloud-provider abstraction; it is not the Drive adapter.
+- Owner-specific authorization, token isolation, account display, disconnect behavior, backup scheduling, encryption, restore qualification, and cross-owner isolation remain acceptance requirements.
 
 ## Repository structure
 
@@ -391,6 +406,7 @@ The following is a high-level map of the current integration branch. It is inten
 │   │                                  # recovery, security and migration templates
 │   └── ...                            # Generated/Android project resources
 ├── src/
+│   ├── backup/                          # candidate PR #49; not integrated on this branch
 │   ├── bookings/                      # Booking policies/domain helpers
 │   ├── features/
 │   │   └── payments/                  # Payment UI/feature modules
@@ -444,7 +460,7 @@ The following is a high-level map of the current integration branch. It is inten
 | Local-first PMS persistence | In progress | Repository/adapter foundations exist; full UI cutover and parity qualification remain outstanding. |
 | Encrypted Android storage | In progress / qualification required | Native implementation and workflows exist; exact-head instrumentation and physical-device evidence are required. |
 | Backup vault and restore | Foundation present | End-to-end encrypted second-device restore and integrity qualification remain outstanding. |
-| Owner-controlled cloud backup | Design requirement; implementation integration pending | Each owner must authorize their own provider account. Draft provider work is not integrated here. |
+| Owner-controlled cloud backup | Draft candidate; not integrated | PR #49 is the current candidate; PR #50/#51 overlap. Candidate CI is mostly green, but Android recovery instrumentation failed and real OAuth/Drive/device restore remain unqualified. |
 | Cloud-provider abstraction | Draft workstream | Contract and provider integration need convergence with backup orchestration. |
 | Multi-tenant recovery isolation | Draft workstream | Tenant isolation and cross-tenant tests are qualification work, not production approval. |
 | Public SaaS identity/tenancy | Architecture/documentation workstream | Account, tenant, property, membership and authorization foundations are not a complete SaaS implementation. |
