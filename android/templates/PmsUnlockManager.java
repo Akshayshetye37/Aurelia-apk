@@ -118,7 +118,14 @@ final class PmsUnlockManager {
     requireUnlocked();
     SecretKey key = biometricKey(true);
     Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-    cipher.init(Cipher.ENCRYPT_MODE, key);
+    try {
+      cipher.init(Cipher.ENCRYPT_MODE, key);
+    } catch (android.security.keystore.KeyPermanentlyInvalidatedException invalidated) {
+      KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+      store.load(null);
+      store.deleteEntry(BIO_ALIAS);
+      cipher.init(Cipher.ENCRYPT_MODE, biometricKey(true));
+    }
     cipher.updateAAD((AAD_PREFIX + "biometric|v1").getBytes(StandardCharsets.UTF_8));
     return cipher;
   }
