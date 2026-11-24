@@ -1862,7 +1862,7 @@ function listBookingsForApi(filter) {
       .map(function (b) {
         return (
           '<div class="ln"><span>#' +
-          b.bookingId +
+          esc(String(b.bookingId)) +
           " · " +
           esc(String(b.status || "")) +
           " · " +
