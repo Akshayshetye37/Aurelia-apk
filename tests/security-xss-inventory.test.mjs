@@ -20,7 +20,7 @@ test('HTML sink inventory does not regress beyond the reviewed baseline', () => 
 test('shared HTML escaper encodes an attacker-controlled guest name payload', () => {
   const match = html.match(/const esc\s*=\s*(s=>String\(s\)\.replace\([\s\S]*?\);)/);
   assert.ok(match, 'shared esc helper must remain present');
-  const esc = vm.runInNewContext(`(${match[1]})`);
+  const esc = vm.runInNewContext(`(${match[1].replace(/;$/, '')})`);
   const payload = '\"><img src=x onerror=alert(1)>';
   const escaped = esc(payload);
   assert.equal(escaped, '&quot;&gt;&lt;img src=x onerror=alert(1)&gt;');
