@@ -317,7 +317,7 @@ function renderControls() {
   const observerTime = observer.lastConnectedAt ? "Last connected: " + new Date(observer.lastConnectedAt).toLocaleString() : "Optional; the workspace works without notification access.";
   return '<section class="au-page-heading"><div><span class="au-kicker">AURELIA UPI CONFIGURATION</span><h3>Controls and device status</h3><p>One receiving VPA. No gateway accounts, provider keys or external payment adapters.</p></div></section>' +
     '<div class="au-columns"><section class="au-panel"><span class="au-kicker">RECEIVING ACCOUNT</span><h3>' + esc(config.name || "Aurelia") + '</h3>' +
-    '<div class="au-config-preview"><span>Configured Aurelia UPI ID</span><strong>' + esc(vpa() || "Not configured") + '</strong><small>Change this in More → Settings → Hotel identity.</small></div>' +
+    '<div class="au-config-preview"><span>Configured Aurelia UPI ID</span><strong>' + esc(vpa() || "Not configured") + '</strong><small>Change this in Vault → Settings → Hotel identity.</small></div>' +
     '<button class="au-secondary au-wide" type="button" data-upi-action="copy-vpa">Copy UPI ID</button>' +
     '<div class="au-footnote">Currency is fixed to INR. The VPA is used to create direct UPI intents and amount-specific QR codes.</div></section>' +
     '<section class="au-panel"><span class="au-kicker">ANDROID OBSERVER</span><h3>Incoming notification evidence</h3>' +
