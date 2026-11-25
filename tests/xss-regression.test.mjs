@@ -28,4 +28,5 @@ test('secret scanning checks the complete reachable Git history', async () => {
   assert.match(workflow, /fetch-depth:\s*0/);
   assert.match(workflow, /gitleaks\/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e/);
   assert.match(workflow, /persist-credentials:\s*false/);
+  assert.match(workflow, /gitleaks detect --source \. --redact --verbose --exit-code 2 --log-opts='--all'/);
 });
