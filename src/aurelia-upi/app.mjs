@@ -543,6 +543,14 @@ async function confirmEvidence(id) {
   evidence.transactionReference = utr || null;
   if (evidence.native) await repository.updateNativeNotificationEvidence(evidence.id, "CONFIRMED", "Verified by local operator");
   await repository.saveEvidence(evidence, "AURELIA_UPI_EVIDENCE_REVIEWED");
+  for (const sibling of state.evidence.filter(row => row.id !== evidence.id && row.suggestedSessionId === session.id &&
+    !["CONFIRMED", "REJECTED", "DUPLICATE", "CONFLICT"].includes(row.status))) {
+    sibling.status = "DUPLICATE";
+    sibling.matchDecision = "DUPLICATE";
+    sibling.matchReason = "collection_already_settled";
+    if (sibling.native) await repository.updateNativeNotificationEvidence(sibling.id, "DUPLICATE", "Aurelia UPI collection already settled");
+    await repository.saveEvidence(sibling, "AURELIA_UPI_DUPLICATE_EVIDENCE_LINKED");
+  }
   await repository.savePayment(payment, "AURELIA_UPI_PAYMENT_APPLIED");
   state.sessions = state.sessions.map(row => row.id === confirmedSession.id ? confirmedSession : row);
   state.evidence = state.evidence.map(row => row.id === evidence.id ? evidence : row);
