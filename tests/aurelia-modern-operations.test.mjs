@@ -57,3 +57,21 @@ test('Aurelia UPI uses one configured VPA and no demo receiving address', () => 
   assert.match(html, /Aurelia UPI ID \(VPA\)/);
   assert.doesNotMatch(html, /hariom@upi/);
 });
+
+test('Sovereign shell uses the supplied mobile navigation and a local-only asset policy', () => {
+  assert.match(html, /aurelia-shell-header/);
+  assert.match(html, /AURELIA LOCAL NODE/);
+  assert.match(html, /INR · AURELIA UPI ONLY/);
+  assert.match(html, /aurelia-theme-switch/);
+  assert.match(html, /aurelia-profile-button/);
+  assert.match(html, /const TABS=\[\['home','Overview'\],\['rooms','Chambers'\],\['stays','Stays'\],\['dining','Dining'\],\['more','Vault'\],\['upi','Aurelia UPI'\]\]/);
+  assert.doesNotMatch(html, /cdn\.tailwindcss\.com|fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.jsdelivr\.net/);
+});
+
+test('Sovereign shell theme is packaged locally without external font or CSS runtime', async () => {
+  const theme = await readFile(new URL('../assets/aurelia-sovereign-theme.css', import.meta.url), 'utf8');
+  assert.match(theme, /--gold:#f7d387/);
+  assert.match(theme, /--em:#68dbad/);
+  assert.match(theme, /grid-template-columns:repeat\(6,minmax\(0,1fr\)\)/);
+  assert.match(theme, /body\[data-theme="light"\]/);
+});
