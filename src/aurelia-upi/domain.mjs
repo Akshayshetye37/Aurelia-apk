@@ -233,23 +233,51 @@ const CREDIT_WORDS = ["credited", "received", "received from", "paid you", "mone
 const DEBIT_WORDS = ["debited", "you paid", "sent to", "money sent", "payment failed", "declined", "reversed", "refund", "otp"];
 
 export function parseIncomingUpiNotification(input = {}) {
-  const text = String(input.text || "").trim().slice(0, 4000);
-  const normalized = text.toLowerCase();
-  if (!text || DEBIT_WORDS.some(word => normalized.includes(word))) {
-    return { ok: false, reason: "not_an_incoming_credit" };
+  const text = String(input.text || "").trim().slice(0, 4096);
+  if (!text) return { ok: false, reason: "empty_alert" };
+  const normalized = text.replace(/\\s+/g, " ");
+  const lower = normalized.toLowerCase();
+  const creditPattern = /\\b(?:credited|received|deposit(?:ed)?|payment\\s+received|money\\s+received|upi\\/cr|paid you|transferred\\s+to\\s+(?:your\\s+)?(?:a\\/c|account|wallet)|added\\s+to\\s+(?:your\\s+)?(?:account|wallet))\\b/i;
+  const creditMatch = creditPattern.exec(normalized);
+  if (!creditMatch) return { ok: false, reason: "credit_language_missing" };
+  const debitMatch = /\\b(?:debited|withdrawn|deducted|spent|paid\\s+to|sent\\s+to|money\\s+sent)\\b/i.exec(normalized);
+  if (debitMatch && debitMatch.index < creditMatch.index) return { ok: false, reason: "debit_alert_rejected" };
+
+  // Remove balance/limit clauses before amount extraction so an available balance is not mistaken for the credit.
+  const balancePattern = /(?:(?:avl|avail|available|tot|total|ledger|clear|curr|current)(?:\\s+(?:bal|balance|limit))?|bal|balance)\\b[\\s:=-]*(?:(?:rs\\.?|inr|₹)\\s*)?\\b\\d[\\d,]{0,15}(?:\\.\\d{1,2})?/gi;
+  const sanitized = normalized.replace(balancePattern, " ").trim();
+  const amountPatterns = [
+    /(?:credited\\s*(?:with|by|for)?|received|deposit(?:ed)?)\\s*[:=-]?\\s*(?:(?:rs\\b\\.?|inr\\b)|₹)?[\\s:=-]*([\\d,]+(?:\\.\\d{1,2})?)/i,
+    /(?:(?:rs\\b\\.?|inr\\b)|₹)[\\s:=-]*([\\d,]+(?:\\.\\d{1,2})?)/i,
+    /(?:^|[^\\w.])([\\d,]+(?:\\.\\d{1,2})?)[\\s:=-]*(?:(?:rs\\b\\.?|inr\\b)|₹)/i,
+    /(?:credited|received|deposit|cr)[\\s\\w:]*?([\\d,]+(?:\\.\\d{1,2})?)|([\\d,]+(?:\\.\\d{1,2})?)[\\s\\w:]*?(?:credited|received|deposit|cr)/i,
+    /\\b(\\d{1,6}\\.\\d{2})\\b/
+  ];
+  let amountText = null;
+  for (const pattern of amountPatterns) {
+    const match = pattern.exec(sanitized);
+    if (match) {
+      amountText = match[1] || match[2] || null;
+      if (amountText) break;
+    }
   }
-  if (!CREDIT_WORDS.some(word => normalized.includes(word))) {
-    return { ok: false, reason: "credit_language_missing" };
-  }
-  if (!/\bupi\b|vpa|utr|rrn|ref(?:erence)?\s*(?:no|number)/i.test(text)) {
-    return { ok: false, reason: "upi_reference_missing" };
-  }
-  const amountMatch = /(?:₹|INR\s*|Rs\.?\s*)([0-9,]+(?:\.[0-9]{1,2})?)/i.exec(text);
-  if (!amountMatch) return { ok: false, reason: "amount_missing" };
+  if (!amountText) return { ok: false, reason: "amount_missing" };
   let amountPaise;
-  try { amountPaise = parseMoneyToPaise(amountMatch[1]); }
+  try { amountPaise = parseMoneyToPaise(amountText.replace(/,/g, "")); }
   catch { return { ok: false, reason: "amount_invalid" }; }
-  const utrMatch = /\b(?:UTR|UPI\s*(?:Ref(?:erence)?|ID)|RRN|Ref(?:erence)?\s*(?:No\.?|Number)?)\s*[:#-]?\s*([A-Z0-9]{8,30})\b/i.exec(text);
+
+  const utrPatterns = [
+    /(?:upi\\s*ref(?:erence)?\\s*(?:no\\.?|num)?|utr(?:\\s*no\\.?)?|rrn(?:\\s*no\\.?)?|txn\\s*(?:id|ref|#)?|transaction\\s*id|ref\\s*no\\.?)[\\s:=-]+([a-zA-Z0-9_-]{6,35})/i,
+    /(?:upi\\/(?:[0-9]+\\/|cr\\/)([a-zA-Z0-9_-]{6,35}))/i,
+    /\\b([0-9]{12})\\b/
+  ];
+  let utr = null;
+  for (const pattern of utrPatterns) {
+    const match = pattern.exec(normalized);
+    if (match?.[1]) { utr = match[1].trim().toUpperCase(); break; }
+  }
+  const vpaMatch = /(?:from|by|vpa|upi\\s*id)[\\s:]+(?:[a-zA-Z\\s]+[\\(\\[])?([a-zA-Z0-9._-]{2,64}@[a-zA-Z0-9._-]{2,32})/i.exec(normalized);
+  const parsedAt = input.receivedAt ? new Date(input.receivedAt) : new Date();
   return {
     ok: true,
     evidence: {
@@ -258,9 +286,10 @@ export function parseIncomingUpiNotification(input = {}) {
       sourcePackage: String(input.sourcePackage || "").slice(0, 160),
       amountPaise,
       currency: "INR",
-      utr: utrMatch ? utrMatch[1].toUpperCase() : null,
-      receivedAt: input.receivedAt || new Date().toISOString(),
-      rawText: text,
+      utr,
+      senderVpa: vpaMatch ? vpaMatch[1].trim() : null,
+      receivedAt: Number.isFinite(parsedAt.getTime()) ? parsedAt.toISOString() : new Date().toISOString(),
+      rawText: normalized,
       status: "UNMATCHED",
       suggestedSessionId: null,
       createdAt: new Date().toISOString()
