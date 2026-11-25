@@ -221,6 +221,7 @@ input[type=date]{max-width:100%;min-width:0}
  .avail>.btn{grid-column:1/-1;min-width:0;width:100%;min-height:46px;padding:8px 12px;white-space:normal;line-height:1.15}
 }
 </style><link rel="stylesheet" href="./assets/aurelia-upi.css">
+<link rel="stylesheet" href="./assets/aurelia-sovereign-theme.css">
 </head><body>
 
 <script id="guest-contact-actions-early">
@@ -354,7 +355,28 @@ window.AureliaAdsBridge = {
 </script>
 
 
-<div class="app"><div class="top"><div class="crest" id="crest"></div><div class="pill"><i></i>Front desk online</div></div><main id="v"></main></div>
+<div class="app">
+<header class="aurelia-shell-header" aria-label="Aurelia PMS header">
+  <div class="aurelia-header-main">
+    <div class="aurelia-brand">
+      <div class="aurelia-brand-mark" id="crest" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2.8 19.2 6v5.4c0 4.6-3 8.2-7.2 9.8-4.2-1.6-7.2-5.2-7.2-9.8V6L12 2.8Z"/><path d="M8.1 14.8 12 8l3.9 6.8M9.5 12.5h5"/></svg></div>
+      <div class="aurelia-brand-copy"><strong>AURELIA</strong><small id="aurelia-property-name">SOVEREIGN HOSPITALITY</small></div>
+    </div>
+    <div class="aurelia-header-actions">
+      <button class="aurelia-header-action" id="aurelia-currency-button" type="button" aria-label="Currency"><span id="aurelia-currency-value">₹ INR</span></button>
+      <button class="aurelia-header-action" id="aurelia-language-button" type="button" aria-label="Language">EN</button>
+      <button class="aurelia-header-action" id="aurelia-theme-switch" type="button" aria-label="Theme Switcher"><svg id="aurelia-theme-icon" viewBox="0 0 24 24"><path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4m0-12.8L17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="4"/></svg></button>
+      <button class="aurelia-header-action profile" id="aurelia-profile-button" type="button" aria-label="Open profile and settings"><span id="aurelia-profile-initials">A</span></button>
+    </div>
+  </div>
+  <div class="aurelia-status-row" aria-label="System status">
+    <span class="aurelia-status-pill">AURELIA LOCAL NODE</span>
+    <span class="aurelia-status-pill gold">INR · AURELIA UPI ONLY</span>
+    <span class="aurelia-status-clock" id="aurelia-shell-clock" aria-live="off">--:--</span>
+  </div>
+</header>
+<main id="v"></main>
+</div>
 <nav class="dock" id="dock" style="--i:0"></nav>
 <div class="sheet" id="sh"><div class="scrim" onclick="closeS()"></div><div class="pan" id="pan"></div></div><div id="toast"></div>
 <script>
@@ -381,8 +403,8 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 const jsArg=value=>esc(JSON.stringify(String(value==null?'':value)));
 const K=n=>(S.set&&S.set.cur||'K')+(Number.isFinite(Number(n))?Math.round(Number(n)):0).toLocaleString('en-US');
 const D=n=>{const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()+n);return d},fd=n=>D(n).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-const IC={home:'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',stays:'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',rooms:'M3 19V6M3 14h18v5M21 14v-2a3 3 0 0 0-3-3h-7v5M7 11h.01',dining:'M7 3v7M5 3v4a2 2 0 0 0 4 0V3M7 10v11M17 21V3c-2 1-3 4-3 7s1 4 3 4'};
-const TABS=[['home','Home'],['stays','Stays'],['rooms','Rooms'],['dining','Dining']];
+const IC={home:'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',stays:'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',rooms:'M3 19V6M3 14h18v5M21 14v-2a3 3 0 0 0-3-3h-7v5M7 11h.01',dining:'M7 3v7M5 3v4a2 2 0 0 0 4 0V3M7 10v11M17 21V3c-2 1-3 4-3 7s1 4 3 4',more:'M4 4h16v16H4zM8 8h8M8 12h8M8 16h5'};
+const TABS=[['home','Overview'],['rooms','Chambers'],['stays','Stays'],['dining','Dining'],['more','Vault'],['upi','Aurelia UPI']];
 const types=[['Standard',850],['Deluxe',1200],['Executive Suite',1800],['Family Chalet',2200]],rn=[['101','102','103','104'],['201','202','203','204'],['301','302'],['401','402']];
 let id=0;const S={tab:'home',f:'all',tb:3,rooms:[],b:[],t:[],g:[],exp:[],inv:[],aud:[],cancelled:[],financialLedger:[],sig:[],sales:[],menu:{},today:23650,hist:[41200,38600,52400,47900,61300,56800],set:{name:'Hari Om Retreat',tag:'Peace, comfort and mindful hospitality.',cur:'₹',upi:'',phone:'',addr:''},au:{},bk:{}};
 types.forEach((t,i)=>rn[i].forEach(n=>S.rooms.push({n,t:t[0],r:t[1],s:'ready'})));
@@ -529,7 +551,7 @@ async function shr(i){const b=bk(i);if(!b){toast('Booking not found');return}con
 /* More menu and modules */
 const TL=[['guests','Guests','Profiles, IDs, occupants and vehicles','Guests'],['hk','Housekeeping','Cleaning and release','Housekeeping'],['inv','Inventory','Stock, purchases and issues','POS'],['exp','Expenses','Record and void','Expenses'],['rep','Reports','Takings, collections, balances','Reports'],['aud','Audit','Every recorded action','Audit'],['io','Import and export','Copies of your data','Import/Export'],['set','Settings','Identity, controls, terms, health','']];
 const SUB={
-menu:()=>`<h2 style="margin-top:6px;font-size:36px">More</h2><div class="rooms" style="grid-template-columns:repeat(2,1fr)">${TL.filter(t=>!t[3]||on(t[3])).map(t=>`<div class="card room" onclick="S.sub='${t[0]}';render()"><h3>${t[1]}</h3><div class="lab" style="margin-top:6px">${t[2]}</div></div>`).join('')}</div>`,
+menu:()=>`<h2 style="margin-top:6px;font-size:36px">Vault</h2><div class="rooms" style="grid-template-columns:repeat(2,1fr)">${TL.filter(t=>!t[3]||on(t[3])).map(t=>`<div class="card room" onclick="S.sub='${t[0]}';render()"><h3>${t[1]}</h3><div class="lab" style="margin-top:6px">${t[2]}</div></div>`).join('')}</div>`,
 guests:()=>hd('Guests')+`<button class="btn sm" onclick="gopen()">Add guest</button><div class="grid">${S.g.map((g,i)=>`<div class="card" style="cursor:pointer" onclick="gopen(${i})"><div class="item" style="padding:0"><div class="av">${esc(g.n[0]||'?')}</div><div class="f"><b>${esc(g.n)}</b><small>${esc(g.ph||'No phone')} · ${esc(g.idt)}</small></div><span class="lab">${S.b.filter(b=>b.g===g.n).length} stays</span></div><div class="lab" style="margin-top:8px">${g.occ.length} occupants · ${g.veh.length} vehicles</div></div>`).join('')}</div>`,
 hk:()=>hd('Housekeeping')+`<div class="card"><div class="list">${S.rooms.filter(r=>r.s!=='occ').map(r=>`<div class="item"><div class="f"><b>Room ${esc(r.n)}</b><small>${esc(r.t)}</small></div><span class="tag ${esc(r.s)}">${{ready:'Ready',clean:'Cleaning',out:'Out of service'}[r.s]}</span>${r.s==='ready'?`<button class="btn sm ghost" onclick="rs(${jsArg(r.n)},'clean')">Mark cleaning</button>`:`<button class="btn sm" onclick="rs(${jsArg(r.n)},'ready')">${r.s==='clean'?'Release':'Return to service'}</button>`}</div>`).join('')}</div></div>`,
 inv:()=>hd('Inventory')+`<button class="btn sm" onclick="invNew()">Add item</button><div class="grid">${S.inv.map((x,i)=>`<div class="card"><div class="row"><h3>${esc(x.n)}</h3>${x.q<=x.ro?'<span class="tag out">Low stock</span>':''}</div><div class="lab">${x.q} in stock · reorder at ${x.ro} · worth ${K(x.q*x.u)}${x.sellable?' · For sale at '+K(x.price||0):' · Internal stock'}</div><div class="bar"><i style="width:${Math.min(100,x.q/(x.ro*2)*100)}%"></i></div><div class="row" style="margin-top:12px"><button class="btn sm ghost" onclick="invOp(${i},1)">Purchase</button><button class="btn sm ghost" onclick="invOp(${i},-1)">Issue</button></div></div>`).join('')}</div><h2 style="margin:20px 0 8px">Ledger</h2><div class="card"><div class="list">${S.led.map(l=>`<div class="item"><div class="f"><b>${esc(l[0])}</b><small>${tmf(l[3])}</small></div><span>${l[1]>0?'+':''}${l[1]}</span></div>`).join('')||'<div class="empty">Purchases and issues appear here.</div>'}</div></div>`,
@@ -3609,5 +3631,55 @@ window.printGuestPreview=function(){
 <script src="./assets/qrcode.min.js"></script>
 <script type="module" src="./src/aurelia-upi/app.mjs"></script>
 
+<script id="aurelia-sovereign-shell">
+(function(){
+  const $id = id => document.getElementById(id);
+  function syncShell(){
+    const name=String(S.set?.name||'SOVEREIGN HOSPITALITY').trim();
+    const property=$id('aurelia-property-name');
+    if(property)property.textContent=name.toUpperCase();
+    const currency=$id('aurelia-currency-value');
+    if(currency)currency.textContent=(S.set?.cur||'₹')+' INR';
+    const initials=name.split(/\\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase()||'A';
+    const profile=$id('aurelia-profile-initials');
+    if(profile)profile.textContent=initials;
+    const theme=S.set?.theme==='light'?'light':'dark';
+    document.body.dataset.theme=theme;
+    const icon=$id('aurelia-theme-icon');
+    if(icon)icon.innerHTML=theme==='dark'
+      ?'<path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4m0-12.8L17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="4"/>'
+      :'<path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.7 8.7 0 1 0 20.5 14.2Z"/>';
+  }
+  function tickClock(){
+    const clock=$id('aurelia-shell-clock');
+    if(clock)clock.textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  }
+  const originalRender=window.render;
+  if(typeof originalRender==='function'&&!originalRender.__aureliaSovereignShell){
+    const wrappedRender=function(){
+      const result=originalRender.apply(this,arguments);
+      syncShell();
+      return result;
+    };
+    wrappedRender.__aureliaSovereignShell=true;
+    window.render=wrappedRender;
+  }
+  $id('aurelia-theme-switch')?.addEventListener('click',()=>{
+    S.set.theme=S.set.theme==='light'?'dark':'light';
+    if(typeof persist==='function')persist();
+    syncShell();
+  });
+  $id('aurelia-profile-button')?.addEventListener('click',()=>{
+    S.tab='more';S.sub='set';render();
+  });
+  $id('aurelia-currency-button')?.addEventListener('click',()=>{
+    if(typeof toast==='function')toast('Aurelia UPI collection currency is fixed to INR.');
+  });
+  $id('aurelia-language-button')?.addEventListener('click',()=>{
+    if(typeof toast==='function')toast('English interface is active.');
+  });
+  syncShell();tickClock();window.setInterval(tickClock,30000);
+})();
+</script>
 </body>
 </html>
