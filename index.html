@@ -79,6 +79,17 @@ h2{font-size:26px;margin-bottom:12px}h3{font-size:21px}
 .dock::before{content:"";position:absolute;top:6px;bottom:6px;left:6px;width:calc((100% - 12px)/5);border-radius:20px;background:linear-gradient(160deg,rgba(217,183,110,.28),rgba(217,183,110,.08));box-shadow:inset 0 0 0 1px var(--ln),0 0 24px rgba(217,183,110,.25);transform:translateX(calc(var(--i)*100%));transition:transform .55s cubic-bezier(.3,1.4,.4,1)}
 .dock button{position:relative;display:grid;justify-items:center;gap:2px;padding:9px 0 7px;font-size:12px;color:var(--mu);border-radius:20px;overflow:hidden;transition:color .3s}
 .dock button.on{color:var(--gold)}.dock svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;transition:transform .4s cubic-bezier(.3,1.6,.4,1)}.dock .on svg{transform:translateY(-2px) scale(1.12)}
+.all-sections-menu{display:none;position:absolute;left:0;right:0;bottom:calc(100% + 10px);max-height:min(62vh,520px);overflow:auto;padding:14px;border:1px solid var(--ln);border-radius:22px;background:rgba(8,26,19,.98);box-shadow:0 18px 48px #000b;text-align:left}
+.all-sections-menu.open{display:block}
+.all-sections-heading{padding:7px 4px;color:var(--gold);font:500 16px var(--serif);letter-spacing:.04em}
+.all-sections-primary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:8px}
+.all-sections-modules{display:grid;grid-template-columns:1fr;gap:6px}
+.all-sections-menu button{min-width:0;min-height:44px;padding:9px 11px;border:1px solid var(--ln);border-radius:12px;background:rgba(255,255,255,.035);text-align:left;color:var(--tx)}
+.all-sections-menu button:focus-visible,.all-nav-trigger:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.all-sections-modules button{display:flex;flex-direction:column;gap:1px}
+.all-sections-modules small{color:var(--mu);font-size:11.5px}
+.dock .all-nav-trigger{font-weight:500}
+@media(min-width:760px){.all-sections-menu{left:auto;right:0;width:min(440px,calc(100vw - 32px))}.all-sections-modules{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .fab{position:fixed;right:18px;bottom:calc(100px + env(safe-area-inset-bottom,0px));z-index:25}
 .view{animation:vin .7s cubic-bezier(.2,.8,.2,1)}
 @keyframes vin{from{opacity:0;filter:blur(10px);transform:translateY(14px)}}
@@ -396,8 +407,18 @@ const inh=()=>S.b.filter(b=>b.st==='in'),nts=b=>Math.max(1,b.out-b.in),rm=n=>S.r
 const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t.h);t.h=setTimeout(()=>t.classList.remove('show'),2400)};
 const openS=h=>{$('#pan').innerHTML=h;$('#sh').classList.add('show')},closeS=()=>$('#sh').classList.remove('show');
 const row=b=>`<div class="item"><div class="av">${esc(b.g[0])}</div><div class="f"><b>${esc(b.g)}</b><small>Room ${esc(String(b.room))} · ${fd(b.in)} to ${fd(b.out)}</small></div>`;
-function nav(){$('#dock').style.setProperty('--i',TABS.findIndex(t=>t[0]===S.tab));$('#dock').innerHTML=TABS.map(([k,l])=>`<button class="${k===S.tab?'on':''}" onclick="go('${k}')"><svg viewBox="0 0 24 24"><path d="${IC[k]}"/></svg>${l}</button>`).join('')}
-function go(t){S.tab=t;S.sub=null;try{closeS()}catch(e){}window.scrollTo({top:0,behavior:'auto'});render()}
+function nav(){
+ const primary=TABS.filter(([key])=>key!=='more');
+ const active=S.tab==='more'?primary.length:Math.max(0,primary.findIndex(([key])=>key===S.tab));
+ $('#dock').style.setProperty('--i',active);
+ const primaryButtons=primary.map(([key,label])=>'<button type="button" class="'+(key===S.tab?'on':'')+'" aria-current="'+(key===S.tab?'page':'false')+'" onclick="goSection(\''+key+'\')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+IC[key]+'"/></svg><span>'+esc(label)+'</span></button>').join('');
+ const moduleButtons=TL.filter(item=>!item[3]||on(item[3])).map(([key,label,description])=>'<button type="button" role="menuitem" onclick="goSection(\'more\',\''+key+'\')"><b>'+esc(label)+'</b><small>'+esc(description)+'</small></button>').join('');
+ const mainMenu=primary.map(([key,label])=>'<button type="button" role="menuitem" onclick="goSection(\''+key+'\')">'+esc(label)+'</button>').join('');
+ const modules=moduleButtons||'<div class="lab">No additional sections are enabled.</div>';
+ $('#dock').innerHTML=primaryButtons+'<button type="button" class="all-nav-trigger '+(S.tab==='more'?'on':'')+'" aria-haspopup="menu" aria-controls="all-sections-menu" aria-expanded="'+(S.navOpen===true?'true':'false')+'" onclick="S.navOpen=!S.navOpen;render()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+IC.more+'"/></svg><span>All</span></button><div id="all-sections-menu" class="all-sections-menu '+(S.navOpen===true?'open':'')+'" role="menu" aria-label="All application sections"><div class="all-sections-heading">Main workspace</div><div class="all-sections-primary">'+mainMenu+'</div><div class="all-sections-heading">Operations &amp; administration</div><div class="all-sections-modules">'+modules+'</div></div>';
+}
+function goSection(tab,sub){S.tab=tab;S.sub=tab==='more'?(sub||null):null;S.navOpen=false;try{closeS()}catch(e){}window.scrollTo({top:0,behavior:'auto'});render()}
+function go(t){S.tab=t;S.sub=null;S.navOpen=false;try{closeS()}catch(e){}window.scrollTo({top:0,behavior:'auto'});render()}
 function render(){try{if(!S||typeof S!=='object')throw new Error('App state is unavailable');['rooms','b','g','t','exp','inv','aud','cancelled','financialLedger','sig','sales'].forEach(k=>{if(!Array.isArray(S[k]))S[k]=[]});if(!S.set||typeof S.set!=='object')S.set={name:'Hari Om Retreat',tag:'Peace, comfort and mindful hospitality.',cur:'₹',upi:'',phone:'',addr:''};if(!S.au||typeof S.au!=='object')S.au={};if(!S.menu||typeof S.menu!=='object')S.menu={};if(!S.bk||typeof S.bk!=='object')S.bk={};if(!V[S.tab])S.tab='home';nav();$('#v').innerHTML=`<div class="view">${V[S.tab]()}</div>`;$$('[data-c]').forEach(e=>{const to=+e.dataset.c,p=e.dataset.p||'',s=e.dataset.s||'',t0=performance.now();(function f(t){const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches,duration=reduced?0:420,x=duration?Math.min(1,(t-t0)/duration):1,v=to*(1-Math.pow(2,-10*x));e.textContent=p+Math.round(x>=1?to:v).toLocaleString('en-US')+s;if(x<1)requestAnimationFrame(f)})(t0)});requestAnimationFrame(()=>$$('[data-d]').forEach(e=>{try{e.setAttribute('stroke-dasharray',e.dataset.d)}catch(_){}}));if($('#cv'))motes()}catch(err){console.error('Aurelia render failed',err);const v=$('#v');if(v)v.innerHTML='<div class="card" style="margin:24px;padding:20px"><h2>Recovery needed</h2><p class="lab">Render failed. Error details:</p><pre style="white-space:pre-wrap;font-size:12px;color:#df7c70;max-height:180px;overflow:auto">'+String(err&&(err.stack||err.message||err)).replace(/</g,'&lt;')+'</pre><p class="lab">Your saved records were not intentionally deleted.</p><button class="btn" onclick="S.tab=\'home\';location.reload()">Reload app</button><button class="btn ghost" onclick="S.tab=\'more\';S.sub=\'backup\';location.reload()">Open backup after reload</button></div>'}}
 const kpi=(l,v,p,s,n)=>`<div class="card"><div class="lab">${l}</div><div class="k" data-c="${v}" data-p="${p}" data-s="${s}">0</div><div class="up">${n}</div></div>`;
 function chart(v){const W=320,H=130,m=(Math.max(...v)*1.1)||1,P=v.map((y,i)=>[i*W/6,H-18-y/m*(H-36)]);let d=`M${P[0]}`;for(let i=1;i<7;i++){const a=P[i-1],b=P[i],x=(a[0]+b[0])/2;d+=`C${x},${a[1]} ${x},${b[1]} ${b}`}S.P=P;
@@ -549,7 +570,7 @@ function gadd(k){gread();S.gd[k].push(k==='occ'?{n:'',dob:'',rel:''}:{reg:'',ty:
 function gsheet(){
  const matchedGuest=(Array.isArray(S.g)?S.g:[]).find(x=>x&&x.n&&S.gd.n&&x.n.toLowerCase()===S.gd.n.toLowerCase());
  const retainedPhoto=(matchedGuest&&matchedGuest.img)||S.gd.img||'';const g=S.gd,f=(id,l,v,t='text')=>`<label class="fld"><span>${l}</span><input id="${id}" type="${t}" value="${esc(v)}"></label>`,c='style="display:grid;grid-template-columns:2fr 1.4fr 1fr;gap:6px;margin-top:6px"',ip='style="min-width:0;padding:10px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--ln);color-scheme:dark"';
-openS(`<h2 class="foil">${g.n?esc(g.n):'New guest'}</h2>${f('g1','Name',g.n)}${f('g2','Phone',g.ph,'tel')}${f('g3','Email',g.em,'email')}<label class="fld"><span>ID type</span><select id="g4">${['Aadhaar (UIDAI)','PAN card','Passport','Voter ID (EPIC)','Driving licence','Ration card (supporting ID only)','Government employee ID','Other government-issued photo ID','Foreign passport + visa','NRC / National ID (other country)'].map(t=>`<option ${t===g.idt?'selected':''}>${t}</option>`).join('')}</select></label>${f('g5','ID number',g.idn)}<label class="fld"><span>ID photo</span><input type="file" accept="image/*" capture="environment" onchange="pv(this,'gp')"></label><img id="gp" alt="" style="max-height:110px;${retainedPhoto ? "display:block" : "display:none"};border-radius:12px" ${retainedPhoto ? `src="${retainedPhoto}"` : ""}><div class="lab">Text recognition runs in the Android app. Check every field by hand here.</div><h3 style="margin-top:16px">Occupants</h3>${g.occ.map(o=>`<div class="oc" ${c}><input ${ip} placeholder="Name" value="${esc(o.n)}"><input ${ip} type="date" value="${o.dob}"><input ${ip} placeholder="Relation" value="${esc(o.rel)}"></div>`).join('')}<button class="btn sm ghost" style="margin-top:8px" onclick="gadd('occ')">Add occupant</button><h3 style="margin-top:16px">Vehicles</h3>${g.veh.map(v=>`<div class="vh" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px"><input ${ip} placeholder="Registration" value="${esc(v.reg)}"><input ${ip} placeholder="Type" value="${esc(v.ty)}"></div>`).join('')}<button class="btn sm ghost" style="margin-top:8px" onclick="gadd('veh')">Add vehicle</button>${g.n?`<h3 style="margin-top:16px">History</h3>${S.b.filter(b=>b.g===g.n).map(b=>`<div class="ln"><span>Room ${esc(String(b.room))}</span><span class="lab">${fd(b.in)} to ${fd(b.out)}</span></div>`).join('')||'<div class="lab">No stays yet.</div>'}`:''}<div class="row" style="margin-top:18px">${g.ph?`<a class="btn sm ghost" style="text-decoration:none" href="tel:${esc(g.ph)}">Call</a>`:''}${g.ph&&on('WhatsApp actions')?`<button class="btn sm ghost" onclick="nat({type:'openUrl',url:'https://wa.me/${esc(g.ph.replace(/\D/g,''))}'})||(window.location.href='https://wa.me/${esc(g.ph.replace(/\D/g,''))}')">Message on WhatsApp</button>`:''}<button class="btn sm" onclick="gsave()">Save guest</button></div>`)}
+openS(`<h2 class="foil">${g.n?esc(g.n):'New guest'}</h2>${f('g1','Name',g.n)}${f('g2','Phone',g.ph,'tel')}${f('g3','Email',g.em,'email')}<label class="fld"><span>ID type</span><select id="g4">${['Aadhaar (UIDAI)','PAN card','Passport','Voter ID (EPIC)','Driving licence','Ration card (supporting ID only)','Government employee ID','Other government-issued photo ID','Foreign passport + visa','NRC / National ID (other country)'].map(t=>`<option ${t===g.idt?'selected':''}>${t}</option>`).join('')}</select></label>${f('g5','ID number',g.idn)}<label class="fld"><span>ID photo</span><input type="file" accept="image/*" capture="environment" onchange="pv(this,'gp')"></label><img id="gp" alt="" style="max-height:110px;${retainedPhoto ? "display:block" : "display:none"};border-radius:12px" ${retainedPhoto ? `src="${retainedPhoto}"` : ""}><div class="lab">On-device OCR supports Latin and Devanagari. Only explicitly labelled holder names and format-validated ID candidates are suggested. Aadhaar is masked before saving; use a UIDAI-masked copy or authorised offline e-KYC and verify every field before saving.</div><h3 style="margin-top:16px">Occupants</h3>${g.occ.map(o=>`<div class="oc" ${c}><input ${ip} placeholder="Name" value="${esc(o.n)}"><input ${ip} type="date" value="${o.dob}"><input ${ip} placeholder="Relation" value="${esc(o.rel)}"></div>`).join('')}<button class="btn sm ghost" style="margin-top:8px" onclick="gadd('occ')">Add occupant</button><h3 style="margin-top:16px">Vehicles</h3>${g.veh.map(v=>`<div class="vh" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px"><input ${ip} placeholder="Registration" value="${esc(v.reg)}"><input ${ip} placeholder="Type" value="${esc(v.ty)}"></div>`).join('')}<button class="btn sm ghost" style="margin-top:8px" onclick="gadd('veh')">Add vehicle</button>${g.n?`<h3 style="margin-top:16px">History</h3>${S.b.filter(b=>b.g===g.n).map(b=>`<div class="ln"><span>Room ${esc(String(b.room))}</span><span class="lab">${fd(b.in)} to ${fd(b.out)}</span></div>`).join('')||'<div class="lab">No stays yet.</div>'}`:''}<div class="row" style="margin-top:18px">${g.ph?`<a class="btn sm ghost" style="text-decoration:none" href="tel:${esc(g.ph)}">Call</a>`:''}${g.ph&&on('WhatsApp actions')?`<button class="btn sm ghost" onclick="nat({type:'openUrl',url:'https://wa.me/${esc(g.ph.replace(/\D/g,''))}'})||(window.location.href='https://wa.me/${esc(g.ph.replace(/\D/g,''))}')">Message on WhatsApp</button>`:''}<button class="btn sm" onclick="gsave()">Save guest</button></div>`)}
 function gsave(){gread();if(!S.gd.n.trim()){toast('Enter the guest’s name');return}if(S.gi==null)S.g.push(S.gd);else S.g[S.gi]=S.gd;aud('Guest saved',S.gd.n);closeS();render();toast('Guest saved')}
 function invOp(i,d){const x=S.inv[i];openS(`<h2 class="foil">${d>0?'Purchase':'Issue'} · ${esc(x.n)}</h2><label class="fld"><span>Quantity</span><input id="iq" type="number" min="1" value="1"></label><button class="btn" style="width:100%" onclick="invGo(${i},${d})">Confirm</button>`)}
 function invGo(i,d){const x=S.inv[i],q=Math.floor(+$('#iq').value);if(!(q>0)){toast('Enter a quantity');return}if(d<0&&q>x.q){toast('Only '+x.q+' in stock');return}x.q+=d*q;S.led.unshift([x.n,d*q,'',new Date()]);aud('Stock '+(d>0?'purchase':'issue'),x.n+' · '+q);closeS();render();if(d<0&&x.q<=x.ro)toast(x.n+' is low on stock')}
@@ -1248,10 +1269,10 @@ window.addEventListener('DOMContentLoaded',()=>{render();auto();},{once:true});
 window.__aureliaOcrTargets=window.__aureliaOcrTargets||{};
 function detectIndianIdType(raw){
  const t=String(raw||'').toUpperCase();
- if(/UNIQUE IDENTIFICATION AUTHORITY|UIDAI|AADHAAR|आधार|आधार संख्या|VID\s*[:#]/i.test(t))return 'Aadhaar (UIDAI)';
+ if(/UNIQUE IDENTIFICATION AUTHORITY|UIDAI|AADHAAR|आधार|आधार संख्या|आधार क्रमांक|VID\s*[:#]/i.test(t))return 'Aadhaar (UIDAI)';
  if(/INCOME TAX DEPARTMENT|PERMANENT ACCOUNT NUMBER|\bPAN\s*(?:CARD|NO|NUMBER)?\b/i.test(t))return 'PAN card';
- if(/ELECTION COMMISSION OF INDIA|ELECTOR PHOTO IDENTITY|VOTER(?:'S)? ID|VOTER IDENTITY|EPIC|निर्वाचक पहचान|मतदाता पहचान|নির্বাচন কমিশন/i.test(t))return 'Voter ID (EPIC)';
- if(/DRIVING LICEN[CS]E|MOTOR VEHICLE DEPARTMENT|TRANSPORT DEPARTMENT|\bDL\s*(?:NO|NUMBER)\b|चालक अनुज्ञप्ति/i.test(t))return 'Driving licence';
+ if(/ELECTION COMMISSION OF INDIA|ELECTOR PHOTO IDENTITY|VOTER(?:'S)? ID|VOTER IDENTITY|EPIC|निर्वाचक पहचान|मतदाता पहचान|भारत निर्वाचन आयोग|मतदार ओळखपत्र|निवडणूक आयोग|নির্বাচন কমিশন/i.test(t))return 'Voter ID (EPIC)';
+ if(/DRIVING LICEN[CS]E|MOTOR VEHICLE DEPARTMENT|TRANSPORT DEPARTMENT|\bDL\s*(?:NO|NUMBER)\b|चालक अनुज्ञप्ति|वाहनचालक परवाना|वाहनचालक अनुज्ञप्ती/i.test(t))return 'Driving licence';
  if(/PASSPORT|P<[A-Z]{3}|REPUBLIC OF INDIA/i.test(t))return 'Passport';
  if(/RATION CARD|FOOD AND CIVIL SUPPLIES|PUBLIC DISTRIBUTION SYSTEM/i.test(t))return 'Ration card (supporting ID only)';
  if(/UNIQUE DISABILITY ID|UDID CARD/i.test(t))return 'UDID (Disability ID)';
@@ -1281,8 +1302,8 @@ function parseIdOcrText(raw, spatialLines){
  const lines=(structured.length?structured.map(v=>v.text):text.split('\n')).map(v=>v.replace(/[|]/g,'I').replace(/[ \t]+/g,' ').trim()).filter(Boolean);
  const joined=lines.join('\n'),type=detectIndianIdType(joined),compact=lines.join(' ').toUpperCase();
  const excluded=/GOVERNMENT|REPUBLIC|AUTHORITY|IDENTITY|NATIONAL|PASSPORT|DRIVING|LICEN[CS]E|DATE OF BIRTH|\bDOB\b|\bMALE\b|\bFEMALE\b|ADDRESS|INDIA|INDIAN|SIGNATURE|NRC CARD|REGISTRATION CARD|ELECTION COMMISSION|INCOME TAX|UNIQUE IDENTIFICATION|ELECTOR PHOTO|VOTER ID|PERMANENT ACCOUNT|AADHAAR|UIDAI|RATION CARD|DATE OF ISSUE|VALIDITY|BLOOD GROUP|ORGAN DONOR/i;
- const relation=/^(?:father(?:'s)? name|mother(?:'s)? name|husband(?:'s)? name|wife(?:'s)? name|guardian(?:'s)? name|relative(?:'s)? name|पिता का नाम|पति का नाम|মাতার নাম|পিতার নাম)\b/i;
- const label=/^(?:(?:elector(?:'s)?|card ?holder(?:'s)?|applicant(?:'s)?|full|holder(?:'s)?|individual(?:'s)?|candidate(?:'s)?)\s+)?(?:full\s*)?name(?:\s+of\s+(?:the\s+)?(?:holder|elector|applicant))?|elector(?:'s)?\s+name|card ?holder(?:'s)?\s+name|applicant(?:'s)?\s+name|name\s+of\s+(?:the\s+)?(?:holder|elector|applicant)|given\s+names?|surname|family\s+name|forenames?|नाम|नामांकित व्यक्ति/i;
+ const relation=/^(?:father(?:'s)? name|mother(?:'s)? name|husband(?:'s)? name|wife(?:'s)? name|guardian(?:'s)? name|relative(?:'s)? name|पिता का नाम|पति का नाम|वडिलांचे नाव|आईचे नाव|पतीचे नाव|पालकाचे नाव|মাতার নাম|পিতার নাম)\b/i;
+ const label=/^(?:(?:elector(?:'s)?|card ?holder(?:'s)?|applicant(?:'s)?|full|holder(?:'s)?|individual(?:'s)?|candidate(?:'s)?)\s+)?(?:full\s*)?name(?:\s+of\s+(?:the\s+)?(?:holder|elector|applicant))?|elector(?:'s)?\s+name|card ?holder(?:'s)?\s+name|applicant(?:'s)?\s+name|name\s+of\s+(?:the\s+)?(?:holder|elector|applicant)|given\s+names?|surname|family\s+name|forenames?|नाम|नामांकित व्यक्ति|पूर्ण नाम|कार्डधारकाचे नाव|धारकाचे नाव|मतदाराचे नाव|नाव/i;
  const cleanName=v=>String(v||'').replace(/^[\s:;#.,-]+|[\s:;#.,-]+$/g,'').replace(/[^\p{L} .'’-]/gu,' ').replace(/\s+/g,' ').trim();
  const names=[];
  for(let i=0;i<lines.length;i++){
@@ -1304,6 +1325,7 @@ function parseIdOcrText(raw, spatialLines){
    if(!excluded.test(next)&&!relation.test(next)&&next.length>=2&&next.length<=70&&!/\d/.test(next)&&/^[\p{L}][\p{L} .'’-]+$/u.test(next))names.push({v:cleanName(next),score:6});
   }
  }
+ const nameExplicit=names.some(candidate=>candidate.score>=7);
  let name=names.sort((a,b)=>b.score-a.score)[0]?.v||'';
  if(!name){
   const candidate=lines.find(v=>v.length>=5&&v.length<=60&&!excluded.test(v)&&!relation.test(v)&&!/[0-9@]/.test(v)&&/^[\p{L}][\p{L} .'’-]+$/u.test(v)&&v.split(/\s+/).length>=2);
@@ -1343,7 +1365,7 @@ function parseIdOcrText(raw, spatialLines){
   const candidates=compact.match(/\b[A-Z0-9][A-Z0-9/-]{5,}\b/g)||[];
   id=candidates.find(v=>/\d/.test(v)&&!/^(\d{1,2}[-/]){2}\d{2,4}$/.test(v))||'';
  }
- return {name,id,text:lines.join('\n'),type,checksumVerified,formatVerified,confidence:id?(checksumVerified?'high':formatVerified?'medium':'low'):'low'};
+ return {name,id,text:lines.join('\n'),type,checksumVerified,formatVerified,nameExplicit,confidence:id?(checksumVerified?'high':formatVerified?'medium':'low'):'low'};
 }
 
 async function ocrUploadedId(file,target){
@@ -1371,12 +1393,15 @@ function applyUploadedOcr(target,d){
  else if(String(target).startsWith('occ:'))destination=dr.oc[Number(String(target).split(':')[1])];
  if(!destination){toast('Matching guest form is no longer open.');return}
  const parsed=parseIdOcrText(d.text||'',d.lines);
- const name=String(d.name||d.fullName||parsed.name||'').replace(/\s+/g,' ').trim();
- const idNumber=String(d.id||d.idNumber||parsed.id||'').replace(/\s+/g,' ').trim();
  const detectedType=d.type||parsed.type||'';
+ const name=parsed.nameExplicit?String(d.name||d.fullName||parsed.name||'').replace(/\s+/g,' ').trim():'';
+ const rawId=String(d.id||d.idNumber||parsed.id||'').replace(/\s+/g,' ').trim();
+ // Never persist a complete Aadhaar number. Require checksum validation and mask it.
+ const isAadhaar=detectedType==='Aadhaar (UIDAI)';
+ const idNumber=isAadhaar?(parsed.checksumVerified?'XXXX-XXXX-'+rawId.replace(/\D/g,'').slice(-4):''):(parsed.formatVerified||parsed.checksumVerified?rawId:'');
  if(name)destination.n=name;
  if(idNumber)destination.idn=idNumber;
- if(d.type&&d.type!=='Not confidently identified')destination.idt=d.type;
+ if(detectedType&&detectedType!=='Not confidently identified')destination.idt=detectedType;
  dsheet();
  const panel=$('#pan');
  if(panel&&panel.classList.contains('show')){
