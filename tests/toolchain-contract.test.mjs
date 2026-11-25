@@ -65,3 +65,9 @@ test('generated MainActivity matches Capacitor BridgeActivity public lifecycle v
   assert.match(patch, /@Override public void onDestroy\(\)/);
   assert.doesNotMatch(patch, /@Override protected void onDestroy\(\)/);
 });
+
+
+test('backup retention treats corrupt or oversized historical files as invalid candidates', async () => {
+  const patch = await readFile(new URL('../scripts/patch-android.js', import.meta.url), 'utf8');
+  assert.match(patch, /catch \(Exception invalidOrOversized\) \{ valid = false; \}/);
+});
