@@ -1154,7 +1154,7 @@ async function restoreGo(){
   id=Math.max(id,0,...S.b.map(b=>+b.id||0));
   LOCAL_STATE_STATUS='missing';
   if(!persist())throw new Error('Restored records could not be queued for durable storage.');
-  if(!await flushAppStateWrites())throw new Error('Restored records could not be committed to durable device storage.');
+  if(!APP_STATE_LOCAL_SAVED&&!await flushAppStateWrites())throw new Error('Restored records could not be committed to durable device storage.');
   let savedRaw=null;
   if(APP_STATE_LOCAL_SAVED)savedRaw=(window.__aureliaStorage||localStorage).getItem(SK);
   else savedRaw=(await readAppStateDb())?.payload||null;
@@ -3549,7 +3549,7 @@ window.printGuestPreview=function(){
       oldAudit=S.aud.slice();
       Object.assign(booking,result.booking);
       aud('Stay extended',booking.g+' · Room '+booking.room+' · '+result.addedNights+' night(s) · '+K(result.addedCharge)+' · checkout '+date+' '+time);
-      if(!persist()||!await flushAppStateWrites()){
+      if(!persist()||(!APP_STATE_LOCAL_SAVED&&!await flushAppStateWrites())){
         Object.keys(booking).forEach(key=>delete booking[key]);
         Object.assign(booking,oldBooking);
         S.aud=oldAudit;
