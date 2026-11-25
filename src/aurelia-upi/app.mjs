@@ -310,32 +310,6 @@ function renderControls() {
     '<div class="au-footnote">A QR scan, UPI app launch, SMS, notification, UTR text or email cannot independently settle a payment.</div></section>';
 }
 
-function renderActiveView() {
-  switch (state.view) {
-    case "collect": return renderCollect();
-    case "activity": return renderActivity();
-    case "review": return renderReview();
-    case "refunds": return renderRefunds();
-    case "controls": return renderControls();
-    default: return renderOverview();
-  }
-}
-
-function render(ctx) {
-  context = ctx || context;
-  ensureLoaded();
-  const mode = repository.isNative ? "Encrypted device" : "Preview only";
-  return '<div class="au-shell"><header class="au-header"><div class="au-brand"><span class="au-monogram">A</span><div><span class="au-kicker">AURELIA PAYMENT DESK</span><h2>Aurelia UPI</h2></div></div><div class="au-header-right"><span class="au-mode">' + esc(mode) + '</span><span class="au-rail">DIRECT · INR</span></div></header>' +
-    renderTabs() + (state.storageError ? '<div class="au-storage-warning" role="status">' + esc(state.storageError) + '</div>' : "") +
-    renderActiveView() + '</div>';
-}
-
-function persistSessionChanges(before, after, eventType) {
-  const previous = new Map(before.map(row => [row.id, JSON.stringify(row)]));
-  const changed = after.filter(row => previous.get(row.id) !== JSON.stringify(row));
-  return Promise.all(changed.map(row => repository.saveSession(row, eventType)));
-}
-
 async function createCollection(form) {
   const config = settings();
   const data = new FormData(form);
@@ -659,8 +633,8 @@ function renderQrNodes(root = document) {
   });
 }
 
-function render() {
-  context = context || globalThis.AureliaPmsContext;
+function render(ctx) {
+  context = ctx || context || globalThis.AureliaPmsContext;
   ensureLoaded();
   return renderView();
 }
