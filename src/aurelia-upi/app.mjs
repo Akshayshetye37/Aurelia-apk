@@ -383,7 +383,7 @@ async function importEvidence() {
   const parsed = parseIncomingUpiNotification({ text, source: "MANUAL_IMPORT" });
   if (!parsed.ok) throw new Error("Alert not accepted: " + parsed.reason.replaceAll("_", " ") + ".");
   const evidence = parsed.evidence;
-  const normalizedText = evidence.rawText.toLowerCase().replace(/\\s+/g, " ").trim();
+  const normalizedText = evidence.rawText.toLowerCase().replace(/\s+/g, " ").trim();
   evidence.fingerprint = [evidence.amountPaise, evidence.utr || "", normalizedText].join("|").slice(0, 4200);
   const duplicate = state.evidence.find(row => evidence.utr && row.utr &&
     String(row.utr).toUpperCase() === String(evidence.utr).toUpperCase());
