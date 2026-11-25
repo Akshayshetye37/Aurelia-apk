@@ -448,6 +448,52 @@ async function assignEvidence(id) {
   rerender();
 }
 
+async function importSignal(signal = {}) {
+  const amountPaise = Number(signal.amountPaise);
+  if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) throw new Error("Legacy UPI signal has an invalid amount.");
+  const evidence = {
+    id: "legacy_" + String(signal.id || globalThis.crypto?.randomUUID?.() || Date.now()).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 100),
+    source: "LEGACY_NOTIFICATION",
+    sourcePackage: String(signal.source || "AURELIA_LEGACY_SIGNAL").slice(0, 160),
+    amountPaise,
+    currency: "INR",
+    utr: String(signal.utr || "").trim().toUpperCase().slice(0, 30) || null,
+    receivedAt: Number.isFinite(Date.parse(signal.receivedAt || "")) ? new Date(signal.receivedAt).toISOString() : new Date().toISOString(),
+    rawText: String(signal.rawText || ("UPI payment received INR " + (amountPaise / 100).toFixed(2))).slice(0, 4000),
+    status: "UNMATCHED"
+  };
+  const normalizedText = evidence.rawText.toLowerCase().replace(/\s+/g, " ").trim();
+  evidence.fingerprint = [evidence.amountPaise, evidence.utr || "", normalizedText].join("|").slice(0, 4200);
+  const duplicate = state.evidence.find(row => evidence.utr && row.utr && String(row.utr).toUpperCase() === evidence.utr);
+  const sameFingerprint = state.evidence.find(row => row.fingerprint && row.fingerprint === evidence.fingerprint);
+  const match = matchEvidenceToSessions(evidence, state.sessions);
+  if (sameFingerprint || (duplicate && Number(duplicate.amountPaise) === amountPaise)) {
+    evidence.matchDecision = "DUPLICATE"; evidence.matchReason = "duplicate_evidence"; evidence.status = "DUPLICATE";
+  } else if (duplicate && Number(duplicate.amountPaise) !== amountPaise) {
+    evidence.matchDecision = "CONFLICT"; evidence.matchReason = "same_utr_different_amount"; evidence.status = "CONFLICT";
+  } else {
+    evidence.matchDecision = match.decision; evidence.matchReason = match.reason;
+    evidence.suggestedSessionId = match.suggestedSessionId || null;
+    evidence.candidateSessionIds = match.candidates.map(row => row.id);
+    evidence.status = match.decision;
+  }
+  await repository.saveEvidence(evidence, "AURELIA_UPI_LEGACY_SIGNAL_IMPORTED");
+  state.evidence.unshift(evidence);
+  if (evidence.suggestedSessionId) {
+    const session = state.sessions.find(row => row.id === evidence.suggestedSessionId);
+    if (session && [SESSION_STATUS.ACTIVE, SESSION_STATUS.EXPIRED, SESSION_STATUS.CANCELLED].includes(session.status)) {
+      const updated = transitionSession(session, SESSION_STATUS.REVIEW_REQUIRED, { observedEvidenceId: evidence.id });
+      await repository.saveSession(updated, "AURELIA_UPI_LEGACY_SIGNAL_MATCHED");
+      state.sessions = state.sessions.map(row => row.id === updated.id ? updated : row);
+    }
+  }
+  audit("Legacy payment signal imported for review", evidence.utr || evidence.id);
+  state.view = "review";
+  context?.go?.("upi");
+  rerender();
+  return evidence;
+}
+
 async function confirmEvidence(id) {
   const evidence = state.evidence.find(row => row.id === id);
   if (!evidence) throw new Error("Payment evidence was not found.");
@@ -799,6 +845,7 @@ if (typeof document !== "undefined") initialize();
 globalThis.AureliaUPI = Object.freeze({
   render,
   openCollection,
+  importSignal,
   refresh: refreshData,
   renderQrNodes,
   getPolicy: () => AURELIA_UPI_POLICY,
