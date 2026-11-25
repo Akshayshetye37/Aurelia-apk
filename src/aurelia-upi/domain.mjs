@@ -326,6 +326,29 @@ export function createRefundRecord({ paymentId, amountPaise, capturedPaise, reas
   };
 }
 
+export function completeRefundRecord(refund, {
+  transferReference, manualVerified
+} = {}, nowMs = Date.now()) {
+  if (!refund || refund.status !== "MANUAL_TRANSFER_REQUIRED") {
+    throw new TypeError("Only an outstanding manual Aurelia UPI refund can be completed.");
+  }
+  if (manualVerified !== true) {
+    throw new TypeError("Refund completion requires explicit operator verification.");
+  }
+  const reference = safeText(transferReference, 30, "Refund transfer reference").toUpperCase();
+  if (!/^[A-Z0-9]{8,30}$/.test(reference)) {
+    throw new TypeError("Enter a valid bank transfer UTR or reference.");
+  }
+  return {
+    ...refund,
+    status: "REFUND_RECORDED",
+    transferReference: reference,
+    confirmedBy: "LOCAL_OPERATOR",
+    manualVerified: true,
+    completedAt: new Date(nowMs).toISOString()
+  };
+}
+
 export function isLegalSessionTransition(from, to) {
   return !!TRANSITIONS[from]?.has(to);
 }
