@@ -185,3 +185,13 @@ test('stay extension refuses to commit a zero-rate room without an explicit tari
     roomRate: 0, bookings: [active]
   }), error => error.message.includes('greater than zero'));
 });
+
+
+test('app reset cannot be undone by the pagehide persistence handler', () => {
+  const persistStart = html.indexOf('function persist()');
+  const resetStart = html.indexOf('async function resetAll()');
+  assert.ok(persistStart >= 0 && resetStart > persistStart);
+  assert.ok(html.slice(persistStart, persistStart + 180).includes('if(APP_STATE_RESETTING)return true'));
+  assert.ok(html.slice(resetStart, resetStart + 600).includes('APP_STATE_RESETTING=true'));
+  assert.ok(html.includes("window.addEventListener('pagehide',()=>{persist()})"));
+});
