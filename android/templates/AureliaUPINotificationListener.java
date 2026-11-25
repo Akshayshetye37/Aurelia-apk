@@ -24,22 +24,50 @@ import java.util.regex.Pattern;
  */
 public final class AureliaUPINotificationListener extends NotificationListenerService {
   private static final String TAG = "AureliaUPIObserver";
+  // Curated from the upstream YouPI-PG banking-app allowlist; alerts are still content-filtered.
   private static final Set<String> ALLOWED_PACKAGES = new HashSet<>(Arrays.asList(
-    "com.google.android.apps.nbu.paisa.user",
-    "com.phonepe.app",
-    "net.one97.paytm",
-    "in.org.npci.upiapp",
-    "com.sbi.lotusintouch",
-    "com.csam.icici.bank.imobile",
-    "com.snapwork.hdfc",
     "com.axis.mobile",
-    "com.kotak811",
-    "com.bankofbaroda.mpassbook",
+    "com.bankofbaroda.mconnect",
+    "com.bankofbaroda.upi",
+    "com.canarabank.mobility",
+    "com.csam.icici.bank.imobile",
+    "com.dreamplug.androidapp",
+    "com.epifi.paisa",
+    "com.fampay.in",
+    "com.fedmobile",
+    "com.fisglobal.bandhanupi.app",
+    "com.freecharge.android",
+    "com.google.android.apps.messaging",
+    "com.google.android.apps.nbu.paisa.user",
+    "com.hdfcbank.payzapp",
+    "com.icicibank.pockets",
     "com.idfcfirstbank.optimus",
-    "com.fss.pnbpsp"
+    "com.infrasoft.uboi",
+    "com.infrasofttech.indianbank",
+    "com.mgs.induspsp",
+    "com.mobikwik_new",
+    "com.msf.kbank.mobile",
+    "com.myairtelapp",
+    "com.nextbillion.groww",
+    "com.phonepe.app",
+    "com.samsung.android.messaging",
+    "com.samsung.android.spay",
+    "com.sbi.lotusintouch",
+    "com.sbi.upi",
+    "com.snapwork.hdfc",
+    "com.tatadigital.tcp",
+    "com.truecaller",
+    "com.upi.axispay",
+    "in.amazon.mshop.android.shopping",
+    "in.gokiwi.kiwitpap",
+    "in.org.npci.upiapp",
+    "indwin.c3.shareapp",
+    "money.jupiter",
+    "net.one97.paytm"
   ));
-  private static final Pattern AMOUNT = Pattern.compile("(?:₹|INR\\s*|Rs\\.?\\s*)([0-9,]+(?:\\.[0-9]{1,2})?)", Pattern.CASE_INSENSITIVE);
-  private static final Pattern UTR = Pattern.compile("\\b(?:UTR|UPI\\s*(?:Ref(?:erence)?|ID)|RRN|Ref(?:erence)?\\s*(?:No\\.?|Number)?)\\s*[:#-]?\\s*([A-Z0-9]{8,30})\\b", Pattern.CASE_INSENSITIVE);
+  private static final Pattern AMOUNT = Pattern.compile("(?:₹|INR\\s*|Rs\\.?\\s*)([0-9,]+(?:\\.[0-9]{1,2})?)|([0-9,]+(?:\\.[0-9]{1,2})?)\\s*(?:INR|Rs\\.?)", Pattern.CASE_INSENSITIVE);
+  private static final Pattern UTR = Pattern.compile("\\b(?:UTR|UPI\\s*(?:Ref(?:erence)?|ID|Txn)|RRN|Ref(?:erence)?\\s*(?:No\\.?|Number)?)\\s*[:#-]?\\s*([A-Z0-9_-]{6,35})\\b", Pattern.CASE_INSENSITIVE);
+  private static final Pattern VPA = Pattern.compile("([A-Za-z0-9._-]{2,64}@[A-Za-z0-9.-]{2,64})");
   private static final String[] CREDIT = {"credited", "received", "received from", "paid you", "money received", "payment successful"};
   private static final String[] EXCLUDE = {"debited", "you paid", "sent to", "money sent", "payment failed", "declined", "reversed", "refund", "otp"};
   private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -75,7 +103,7 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
     worker.execute(() -> {
       try (LocalPmsRepository repository = new LocalPmsRepository(this)) {
         repository.enqueueUpiEvidence(evidenceId, packageName, parsed.amountPaise,
-          parsed.utr, text, receivedAt, fingerprint);
+          parsed.utr, parsed.senderVpa, text, receivedAt, fingerprint);
       } catch (Exception error) {
         // The database is intentionally not unlocked by the observer. If PMS is locked,
         // evidence is not persisted and no plaintext fallback is created.
@@ -114,7 +142,9 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
       if (paise <= 0L || paise > 100000000000L) return null;
       Matcher utrMatcher = UTR.matcher(text);
       String utr = utrMatcher.find() ? utrMatcher.group(1).toUpperCase(Locale.ROOT) : null;
-      return new ParsedCredit(paise, utr);
+      Matcher vpaMatcher = VPA.matcher(text);
+      String senderVpa = vpaMatcher.find() ? vpaMatcher.group(1) : null;
+      return new ParsedCredit(paise, utr, senderVpa);
     } catch (Exception ignored) {
       return null;
     }
@@ -136,9 +166,11 @@ public final class AureliaUPINotificationListener extends NotificationListenerSe
   private static final class ParsedCredit {
     final long amountPaise;
     final String utr;
-    ParsedCredit(long amountPaise, String utr) {
+    final String senderVpa;
+    ParsedCredit(long amountPaise, String utr, String senderVpa) {
       this.amountPaise = amountPaise;
       this.utr = utr;
+      this.senderVpa = senderVpa;
     }
   }
 }
