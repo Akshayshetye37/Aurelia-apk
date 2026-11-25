@@ -13,7 +13,9 @@ import {
   promoteNextSession,
   parseIncomingUpiNotification,
   matchEvidenceToSessions,
-  createRefundRecord
+  createRefundRecord,
+  completeRefundRecord,
+  markCustomerPaid
 } from '../src/aurelia-upi/domain.mjs';
 
 const base = {
@@ -33,6 +35,8 @@ test('Aurelia UPI policy is direct, INR-only and has no external gateway', () =>
   assert.equal(AURELIA_UPI_POLICY.externalPaymentGateways, false);
   assert.equal(AURELIA_UPI_POLICY.automaticSettlement, false);
   assert.equal(AURELIA_UPI_POLICY.currency, 'INR');
+  assert.equal(AURELIA_UPI_POLICY.paymentWindowMs, 300000);
+  assert.equal(AURELIA_UPI_POLICY.verificationWindowMs, 30000);
 });
 
 test('amount parsing uses integer paise and rejects ambiguous or zero values', () => {
@@ -89,6 +93,29 @@ test('illegal state changes are rejected and notifications cannot confirm a paym
   assert.equal(confirmed.manualVerified, true);
 });
 
+test('customer-paid signal starts a 30-second verification window but cannot settle', () => {
+  const active = enqueueSession([], createPaymentSession({ ...base, id: 'timer' }, Date.parse(base.createdAt)), {
+    nowMs: Date.parse(base.createdAt)
+  })[0];
+  const processing = markCustomerPaid(active, Date.parse(base.createdAt) + 1000, 30000);
+  assert.equal(processing.status, SESSION_STATUS.PROCESSING);
+  assert.equal(Date.parse(processing.verificationExpiresAt) - Date.parse(base.createdAt) - 1000, 30000);
+  assert.throws(() => transitionSession(processing, SESSION_STATUS.CONFIRMED, { manualVerified: true }), /Illegal Aurelia UPI transition/);
+  const review = transitionSession(processing, SESSION_STATUS.REVIEW_REQUIRED);
+  const confirmed = transitionSession(review, SESSION_STATUS.CONFIRMED, { manualVerified: true });
+  assert.equal(confirmed.status, SESSION_STATUS.CONFIRMED);
+});
+
+test('FIFO queue remains blocked while a customer payment claim is being verified', () => {
+  const now = Date.parse(base.createdAt);
+  const first = enqueueSession([], createPaymentSession({ ...base, id: 'timer-owner' }, now), { nowMs: now })[0];
+  const processing = markCustomerPaid(first, now + 1000, 30000);
+  const second = createPaymentSession({ ...base, id: 'timer-queued', reference: 'AUR-TEST-1003' }, now + 2000);
+  const queued = enqueueSession([processing], second, { nowMs: now + 2000 });
+  assert.equal(queued.find(row => row.id === 'timer-queued').status, SESSION_STATUS.QUEUED);
+  assert.equal(promoteNextSession(queued, 'aurelia@okaxis', { nowMs: now + 40000 }).promoted, null);
+});
+
 test('incoming credit parser rejects debits, failed transactions and OTPs', () => {
   const incoming = parseIncomingUpiNotification({
     source: 'MANUAL_IMPORT',
@@ -142,4 +169,14 @@ test('refunds are records for manual bank transfer, not an API transfer', () => 
     amountPaise: 130000,
     capturedPaise: 125050
   }));
+  assert.throws(() => completeRefundRecord(refund, {
+    transferReference: '123456789012',
+    manualVerified: false
+  }), /explicit operator verification/);
+  const completed = completeRefundRecord(refund, {
+    transferReference: '123456789012',
+    manualVerified: true
+  });
+  assert.equal(completed.status, 'REFUND_RECORDED');
+  assert.equal(completed.transferReference, '123456789012');
 });
