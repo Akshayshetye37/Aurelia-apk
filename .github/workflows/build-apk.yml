@@ -1,14 +1,12 @@
 name: Build Aurelia PMS APK
+
+# Deliberately manual only. APK builds require explicit owner approval.
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'index.html'
-      - 'package.json'
-      - 'capacitor.config.json'
-      - 'android/templates/**'
-      - 'scripts/**'
-      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,7 +19,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
