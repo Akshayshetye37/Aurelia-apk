@@ -3520,7 +3520,7 @@ window.printGuestPreview=function(){
       <label class="fld"><span>New checkout time</span><input id="stay-extension-time" type="time" value="${esc(booking.checkOutTime||defCheckOutTime())}" onchange="previewStayExtension(${booking.id})" required></label>
       <div id="stay-extension-preview" class="card" style="margin:12px 0;padding:12px"></div>
       <p class="lab">The existing booking is updated; no duplicate booking is created. The actual arrival and check-in time remain unchanged. The additional room charge is added to the same folio.</p>
-      <button class="btn" style="width:100%" onclick="confirmStayExtension(${booking.id})">Confirm stay extension</button>
+      <button id="confirm-stay-extension" class="btn" style="width:100%" onclick="confirmStayExtension(${booking.id})">Confirm stay extension</button>
       <button class="btn ghost" style="width:100%;margin-top:8px" onclick="closeS()">Cancel</button>`);
     previewStayExtension(booking.id);
   };
@@ -3528,14 +3528,18 @@ window.printGuestPreview=function(){
   window.previewStayExtension=function(id){
     const booking=bk(Number(id)),date=document.getElementById('stay-extension-date'),box=document.getElementById('stay-extension-preview');
     if(!booking||!date||!box)return;
-    if(!date.value){box.textContent='Select the new checkout date.';return}
+    const confirm=document.getElementById('confirm-stay-extension');
+    const reject=message=>{box.textContent=message;if(confirm)confirm.disabled=true};
+    if(confirm)confirm.disabled=true;
+    if(!date.value){reject('Select the new checkout date.');return}
     const newOut=offOf(date.value),nights=newOut-Number(booking.out),room=rm(booking.room);
-    if(!Number.isInteger(newOut)||nights<1){box.textContent='Choose a checkout date later than '+ymd(booking.out)+'.';return}
+    if(!Number.isInteger(newOut)||nights<1){reject('Choose a checkout date later than '+ymd(booking.out)+'.');return}
     const conflict=AureliaStayExtension.findStayExtensionConflict(booking,newOut,S.b);
-    if(conflict){box.textContent='Unavailable: room '+booking.room+' is already booked for '+conflict.g+' from '+fd(conflict.in)+' to '+fd(conflict.out)+'.';return}
+    if(conflict){reject('Unavailable: room '+booking.room+' is already booked for '+conflict.g+' from '+fd(conflict.in)+' to '+fd(conflict.out)+'.');return}
     const rate=Number(room&&room.r)||0;
-    if(!(rate>0)){box.textContent='Set a valid nightly rate for this room before extending the stay.';return}
+    if(!(rate>0)){reject('Set a valid nightly rate for this room before extending the stay.');return}
     box.textContent=nights+' additional night'+(nights===1?'':'s')+' · Additional room charge: '+K(nights*rate)+'. No overlapping booking found.';
+    if(confirm)confirm.disabled=false;
   };
 
   window.confirmStayExtension=async function(id){
