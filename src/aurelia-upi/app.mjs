@@ -28,6 +28,7 @@ const state = {
   loaded: false,
   loading: false,
   storageError: "",
+  observerStatus: null,
   mode: repository.isNative ? "NATIVE" : "PREVIEW",
   lastRefresh: null
 };
@@ -80,19 +81,21 @@ async function refreshData() {
   if (state.loading) return;
   state.loading = true;
   try {
-    const [sessions, evidence, payments, refunds, auditRows, nativeEvidence] = await Promise.all([
+    const [sessions, evidence, payments, refunds, auditRows, nativeEvidence, observerStatus] = await Promise.all([
       repository.listSessions(),
       repository.listEvidence(),
       repository.listPayments(),
       repository.listRefunds(),
       repository.listAudit(),
-      repository.listNativeNotificationEvidence()
+      repository.listNativeNotificationEvidence(),
+      repository.getUpiObserverStatus().catch(() => ({ available: false, notificationAccessEnabled: false, listenerConnected: false, lastConnectedAt: 0 }))
     ]);
     state.sessions = sessions.map(row => row.data || row);
     state.evidence = evidence.map(row => row.data || row);
     state.payments = payments.map(row => row.data || row);
     state.refunds = refunds.map(row => row.data || row);
     state.audit = auditRows.map(row => row.data || row);
+    state.observerStatus = observerStatus;
     for (const item of nativeEvidence) {
       const normalized = {
         id: item.evidenceId || item.id,
@@ -307,20 +310,25 @@ function renderRefunds() {
 
 function renderControls() {
   const config = settings();
+  const observer = state.observerStatus || {};
+  const observerState = !observer.available ? "Available in the installed Android app" :
+    observer.notificationAccessEnabled ? (observer.listenerConnected ? "Access enabled · listener connected" : "Access enabled · listener status unavailable") :
+    "Notification Access is not enabled";
+  const observerTime = observer.lastConnectedAt ? "Last connected: " + new Date(observer.lastConnectedAt).toLocaleString() : "Optional; the workspace works without notification access.";
   return '<section class="au-page-heading"><div><span class="au-kicker">AURELIA UPI CONFIGURATION</span><h3>Controls and device status</h3><p>One receiving VPA. No gateway accounts, provider keys or external payment adapters.</p></div></section>' +
     '<div class="au-columns"><section class="au-panel"><span class="au-kicker">RECEIVING ACCOUNT</span><h3>' + esc(config.name || "Aurelia") + '</h3>' +
     '<div class="au-config-preview"><span>Configured Aurelia UPI ID</span><strong>' + esc(vpa() || "Not configured") + '</strong><small>Change this in More → Settings → Hotel identity.</small></div>' +
     '<button class="au-secondary au-wide" type="button" data-upi-action="copy-vpa">Copy UPI ID</button>' +
     '<div class="au-footnote">Currency is fixed to INR. The VPA is used to create direct UPI intents and amount-specific QR codes.</div></section>' +
     '<section class="au-panel"><span class="au-kicker">ANDROID OBSERVER</span><h3>Incoming notification evidence</h3>' +
-    '<p class="au-copy">Optional Android notification access can capture supported payment alerts. Aurelia stores them as evidence, not as confirmed payments.</p>' +
-    '<button class="au-secondary au-wide" type="button" data-upi-action="notification-settings">Open notification access settings</button>' +
-    '<div class="au-warning">Observer access is optional and sensitive. Grant it only if you want Aurelia to read allowlisted payment notifications. No SMS-read permission is requested. Evidence is persisted only while the encrypted PMS store is unlocked.</div>' +
+    '<p class="au-copy">' + esc(observerState) + '</p><p class="au-muted">' + esc(observerTime) + '</p>' +
+    '<button class="au-secondary au-wide" type="button" data-upi-action="notification-settings">Enable / manage notification access</button>' +
+    '<div class="au-warning">Observer access is optional and sensitive. It may inspect allowlisted payment and message-notification previews. No SMS-read permission is requested. Evidence is persisted only while the encrypted PMS store is unlocked.</div>' +
     '</section></div>' +
     '<section class="au-panel"><div class="au-panel-head"><div><span class="au-kicker">STORAGE</span><h3>' + (repository.isNative ? "Encrypted local repository" : "Preview storage") + '</h3></div>' +
     badge(repository.isNative ? "NATIVE" : "PREVIEW") + '</div>' +
     '<p class="au-copy">' + (state.storageError ? esc(state.storageError) : repository.isNative ? "Sessions, payment events, refunds and audit entries use the SQLCipher-backed Aurelia PMS repository and transactional outbox." : "This browser preview uses volatile memory only. Install the Android app and unlock PMS storage before recording or confirming payments.") + '</p>' +
-    '<div class="au-footnote">A QR scan, UPI app launch, SMS, notification, UTR text or email cannot independently settle a payment.</div></section>';
+    '<div class="au-footnote">A QR scan, UPI app launch, customer claim, notification, UTR text or email cannot independently settle a payment.</div></section>';
 }
 
 async function createCollection(form) {
