@@ -485,7 +485,6 @@ async function confirmEvidence(id) {
     manualVerified: true
   };
   await repository.savePayment(payment);
-  await repository.saveSession(confirmedSession, "AURELIA_UPI_PAYMENT_MANUALLY_CONFIRMED");
 
   try {
     if (session.kind === "folio" && session.bookingId) {
@@ -503,6 +502,7 @@ async function confirmEvidence(id) {
     throw new Error("Bank credit verified and recorded, but PMS posting needs retry: " + (error?.message || "unknown error"));
   }
 
+  await repository.saveSession(confirmedSession, "AURELIA_UPI_PAYMENT_MANUALLY_CONFIRMED");
   evidence.status = "CONFIRMED";
   evidence.matchDecision = "CONFIRMED";
   evidence.reviewedAt = now;
