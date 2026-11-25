@@ -179,6 +179,12 @@ public class MainActivity extends BridgeActivity {
     prefs = getSharedPreferences("aurelia_storage", MODE_PRIVATE);
   }
 
+  @Override public void onStop() {
+    // Backgrounding closes SQLCipher before dropping the in-memory DEK.
+    CapacitorPmsStoragePlugin.lockForLifecycle();
+    super.onStop();
+  }
+
   private void js(String script) {
     runOnUiThread(() -> {
       if (bridge != null && bridge.getWebView() != null) bridge.getWebView().evaluateJavascript(script, null);
