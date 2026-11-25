@@ -195,3 +195,12 @@ test('app reset cannot be undone by the pagehide persistence handler', () => {
   assert.ok(html.slice(resetStart, resetStart + 600).includes('APP_STATE_RESETTING=true'));
   assert.ok(html.includes("window.addEventListener('pagehide',()=>{persist()})"));
 });
+
+
+test('stay extension cannot move checkout into a past calendar day', () => {
+  const active = { id: 30, room: '303', in: -3, out: -1, st: 'in' };
+  assert.throws(() => buildStayExtension(active, {
+    newOut: -0, newCheckoutDate: '2026-11-26', newCheckoutTime: '11:00',
+    roomRate: 1000, bookings: [active], now: '2026-11-26T10:00:00.000Z'
+  }), error => error.message.includes('today or in the future'));
+});
